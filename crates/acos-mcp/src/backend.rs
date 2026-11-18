@@ -106,8 +106,13 @@ impl Capabilities {
 }
 
 /// GLSHIP: `{"provider": "angle-swiftshader" | "none", "detail": "..."}`.
+///
+/// One implementation: the provider contract the launcher itself binds
+/// (`acos-gles-provider`), asked with this server's own resolved guest sysroot.
+/// The MCP server does not link the ART launcher for this.
 fn gles_json() -> Value {
-    let (provider, detail) = acos_art::gles::capability();
+    let sysroot = crate::paths::sysroot();
+    let (provider, detail) = acos_gles_provider::capability_for(sysroot.as_deref());
     json!({ "provider": provider, "detail": detail })
 }
 

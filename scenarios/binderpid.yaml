@@ -1,0 +1,132 @@
+# BINDERPID: the calling identity a binder transaction carries, end to end on
+# real ART.
+#
+# Two guest processes in one session (`proc-a` launched, `proc-b` installed as an
+# extra APK, each at its own uid) exercise both directions:
+#
+# * **guest -> host**: inside a hosted service the caller is the app process.
+#   `Binder.getCallingUid()` is that process's uid and
+#   `Binder.getCallingPid()` the pid the kernel reported on its connection
+#   (`SO_PEERCRED`), which is also what the activity manager's `ProcessRecord`
+#   and `services status` name — not the old `4242` placeholder.
+# * **guest -> guest**: `proc-a` binds `proc-b`'s `EchoService` and transacts. The
+#   peer relays the transaction, and the target must see **A's** uid/pid as the
+#   caller (the kernel reports the calling process, and the relay restamps it),
+#   never `system_server` and never 0.
+# * **per-uid permission**: `Context.checkCallingPermission` asks the permission
+#   service by uid, so the two apps get different answers for one grant
+#   (`system.permissions` grants `INTERNET` to the session's primary package
+#   only).
+#
+# Every line asserted here comes from the guest's own framework
+# (`Process.myUid`, `Binder.getCallingUid/Pid`, `PackageManager.getNameForUid`,
+# `Context.checkSelfPermission`) and is reported by the host services the
+# framework asks.
+#
+# PROCUID: the two processes carry **two different application uids** — the ones
+# the package manager allocated per installed package (10192 for the launched
+# package, 10193 for the extra APK; AOSP's `PackageManagerService` allocates one
+# uid per package and a process runs as its package's uid). Both uids are
+# asserted literally: a regex that admits "any 10xxx" could not tell a
+# per-package uid from a session-wide one, which is exactly the defect this
+# scenario exists to catch.
+#
+# proc-b's process is started by the **bind alone** (MPROC8): no activity is
+# launched in it, so `bindService` is the only reason it exists, exactly like a
+# device.
+version: 1
+name: binderpid
+description: >-
+  proc-a and proc-b (two uids) each report their own binder identity and their
+  per-uid INTERNET permission; proc-b's process starts from proc-a's bind alone
+  and its bound service reports proc-a as the caller of a guest -> guest
+  transaction.
+app: fixtures/build/apps/proc-a.apk
+extra_apks:
+  - fixtures/build/apps/proc-b.apk
+engine: art
+fallback: report-and-escalate
+api_level: 34
+isolation: process
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+capabilities:
+  - lifecycle
+  - ui.offscreen
+  - ui.text
+services:
+  # One runtime-permission table for the session; the grant is for the primary
+  # package (proc-a), so proc-b's uid must answer DENIED for the same permission.
+  - id: system.permissions
+    profile: real
+    config:
+      grant:
+        - android.permission.INTERNET
+expectation: pass
+budgets:
+  memory_mib: 1024
+  wall_ms: 240000
+steps:
+  - launch:
+      activity: dev.acos.fixtures.proca/.ProcAActivity
+      clear_state: true
+
+  - assert_text:
+      selector: {id: bind_b}
+      text: {exact: "Bind B"}
+      timeout_ms: 20000
+
+  # 1. proc-a's own identity: its uid is the package's, its own thread answers
+  #    its own pid, the package manager resolves that uid to its package, and the
+  #    session's runtime grant makes INTERNET granted for *its* uid (0).
+  #    BINDERPID: the placeholder pid (4242) or a uid of 0 fails this pattern.
+  #    PROCUID: this process's own `getDataDir()` (`ApplicationInfo.dataDir`,
+  #    ACOS's `/data/app-data/<pkg>` for the framework's `/data/user/0/<pkg>`)
+  #    exists and the kernel reports it owned by the uid **this process runs
+  #    as** (10192; B below sees the same dir under its own uid, 10193).
+  - assert_log:
+      since_previous_step: false
+      timeout_ms: 20000
+      ordered: true
+      patterns:
+        - '^ACOSPROBE a identity pkg=dev\.acos\.fixtures\.proca uid=10192 pid=[1-9][0-9]* calling-uid=10192 calling-pid=[1-9][0-9]* uid-pkg=dev\.acos\.fixtures\.proca internet=-?[0-9]+ self=0 by-name=0 data=/data/app-data/dev\.acos\.fixtures\.proca data-exists=1 data-owner=10192$'
+
+  # 2. Spawn proc-b with the **bind alone** — no activity: `bindService` is the
+  #    only thing that asks for proc-b's process, exactly like MPROC8
+  #    (`scenarios/mproc8-bind-only.yaml`). `Application.onCreate` runs once per
+  #    process and reports the process's own identity plus the per-uid permission
+  #    answer. (BINDERPID started B's Activity here first, because a bind-only
+  #    spawn used to never receive its create/bind; that workaround is gone.)
+  - tap:
+      selector: {id: bind_b}
+
+  - assert_text:
+      selector: {id: status}
+      text: {exact: "A transact echo:ping"}
+      timeout_ms: 60000
+
+  # 3. B's process reports the identity *it* has: its **own** uid (10193, the one
+  #    the package manager allocated for proc-b), the framework resolving that uid
+  #    to proc-b's package, its own data dir owned by that uid, and a permission
+  #    answer for that uid — not A's. `self=-1` is
+  #    `checkSelfPermission(INTERNET)` denied for proc-b's uid while A above
+  #    answered `self=0` for the same permission: one grant, two apps, two
+  #    answers. Before PROCUID both processes ran as one uid (A's), so B reported
+  #    A's uid, A's package and A's grant.
+  #
+  #    The transaction line follows: A bound B's service and transacted, so B's
+  #    `onTransact` sees A as the caller — A's uid (10192) and A's host-visible
+  #    pid, never 1000 (`system_server`) and never B's uid.
+  - assert_log:
+      since_previous_step: false
+      timeout_ms: 30000
+      ordered: true
+      patterns:
+        - '^ACOSPROBE b identity pkg=dev\.acos\.fixtures\.procb uid=10193 pid=[1-9][0-9]* calling-uid=10193 calling-pid=[1-9][0-9]* uid-pkg=dev\.acos\.fixtures\.procb internet=-?[0-9]+ self=-1 data=/data/app-data/dev\.acos\.fixtures\.procb data-exists=1 data-owner=10193$'
+        - '^ACOSPROBE b transact code=1 in=ping -> out=echo:ping pid=[1-9][0-9]* caller-uid=10192 caller-pid=[1-9][0-9]*$'
+
+  - assert_no_crash:
+      timeout_ms: 5000

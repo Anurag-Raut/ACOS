@@ -169,7 +169,11 @@ pub fn sha256(data: &[u8]) -> [u8; 32] {
 }
 
 pub fn sha256_hex(data: &[u8]) -> String {
-    hex(&sha256(data))
+    // One implementation for the whole tree's staged-artefact digests: the
+    // provider contract (`acos-gles-provider`, which verifies 32 MB of GL
+    // driver by the same hash) owns it; `sha256`/`hex` stay for the callers in
+    // this module that want the raw digest.
+    acos_gles_provider::sha256_hex(data)
 }
 
 fn hex(bytes: &[u8]) -> String {

@@ -1,0 +1,104 @@
+--------- beginning of main
+1794979116680      1  E cutils-trace: Error opening trace file: Permission denied (13)
+1794979116680      2  I : Using CollectorTypeCC GC.
+1794979116680      3  D nativeloader: InitDefaultPublicLibraries for_preload=1: libandroid.so:libaaudio.so:libamidi.so:libbinder_ndk.so:libc.so:libcamera2ndk.so:libdl.so:libEGL.so:libGLESv1_CM.so:libGLESv2.so:libGLESv3.so:libicu.so:libicui18n.so:libicuuc.so:libjnigraphics.so:liblog.so:libmediandk.so:libm.so:libnativehelper.so:libnativewindow.so:libOpenMAXAL.so:libOpenSLES.so:libRS.so:libstdc++.so:libsync.so:libvulkan.so:libwebviewchromium_plat_support.so:libz.so
+1794979116680      4  D : I18n APEX ICU file found: /apex/com.android.i18n/etc/icu/icudt72l.dat
+1794979116680      5  E logdw: Found user/group name 'root' in '/etc/passwd' without required prefix 'system_'
+1794979116680      6  E logdw: Found user/group name 'bin' in '/etc/passwd' without required prefix 'system_'
+1794979116680      7  E logdw: Found user/group name 'daemon' in '/etc/passwd' without required prefix 'system_'
+1794979116680      8  E logdw: Found user/group name 'mail' in '/etc/passwd' without required prefix 'system_'
+1794979116680      9  E logdw: Found user/group name 'ftp' in '/etc/passwd' without required prefix 'system_'
+1794979116680     10  E logdw: Found user/group name 'http' in '/etc/passwd' without required prefix 'system_'
+1794979116680     11  E logdw: Found user/group name 'nobody' in '/etc/passwd' without required prefix 'system_'
+1794979116680     12  E logdw: Found user/group name 'dbus' in '/etc/passwd' without required prefix 'system_'
+1794979116680     13  E logdw: Found user/group name 'systemd-coredump' in '/etc/passwd' without required prefix 'system_'
+1794979116680     14  E logdw: Found user/group name 'systemd-network' in '/etc/passwd' without required prefix 'system_'
+1794979116680     15  E logdw: Found user/group name 'systemd-oom' in '/etc/passwd' without required prefix 'system_'
+1794979116680     16  E logdw: Found user/group name 'systemd-journal-remote' in '/etc/passwd' without required prefix 'system_'
+1794979116680     17  E logdw: Found user/group name 'systemd-resolve' in '/etc/passwd' without required prefix 'system_'
+1794979116680     18  E logdw: Found user/group name 'systemd-timesync' in '/etc/passwd' without required prefix 'system_'
+1794979116680     19  E logdw: Found user/group name 'tss' in '/etc/passwd' without required prefix 'system_'
+1794979116680     20  E logdw: Found user/group name 'uuidd' in '/etc/passwd' without required prefix 'system_'
+1794979116680     21  E logdw: Found user/group name 'alpm' in '/etc/passwd' without required prefix 'system_'
+1794979116680     22  E logdw: Found user/group name 'git' in '/etc/passwd' without required prefix 'system_'
+1794979116680     23  E logdw: Found user/group name 'polkitd' in '/etc/passwd' without required prefix 'system_'
+1794979116680     24  E logdw: Found user/group name 'Qui' in '/etc/passwd' without required prefix 'system_'
+1794979116680     25  E logdw: Found user/group name 'avahi' in '/etc/passwd' without required prefix 'system_'
+1794979116680     26  E logdw: Found user/group name 'brltty' in '/etc/passwd' without required prefix 'system_'
+1794979116680     27  E logdw: Found user/group name 'colord' in '/etc/passwd' without required prefix 'system_'
+1794979116680     28  E logdw: Found user/group name 'flatpak' in '/etc/passwd' without required prefix 'system_'
+1794979116680     29  E logdw: Found user/group name 'gdm' in '/etc/passwd' without required prefix 'system_'
+1794979116680     30  E logdw: Found user/group name 'geoclue' in '/etc/passwd' without required prefix 'system_'
+1794979116680     31  E logdw: Found user/group name 'gnome-remote-desktop' in '/etc/passwd' without required prefix 'system_'
+1794979116680     32  E logdw: Found user/group name 'libvirt-qemu' in '/etc/passwd' without required prefix 'system_'
+1794979116680     33  E logdw: Found user/group name 'qemu' in '/etc/passwd' without required prefix 'system_'
+1794979116680     34  E logdw: Found user/group name 'rtkit' in '/etc/passwd' without required prefix 'system_'
+1794979116680     35  E logdw: Found user/group name 'saned' in '/etc/passwd' without required prefix 'system_'
+1794979116680     36  E logdw: Found user/group name 'usbmux' in '/etc/passwd' without required prefix 'system_'
+1794979116680     37  E logdw: Found user/group name 'nvidia-persistenced' in '/etc/passwd' without required prefix 'system_'
+1794979116680     38  E logdw: Found user/group name 'ollama' in '/etc/passwd' without required prefix 'system_'
+1794979116680     39  E logdw: Found user/group name 'named' in '/etc/passwd' without required prefix 'system_'
+1794979116680     40  E logdw: Found user/group name 'pcscd' in '/etc/passwd' without required prefix 'system_'
+1794979116680     41  E logdw: Found user/group name 'mongodb' in '/etc/passwd' without required prefix 'system_'
+1794979116680     42  E logdw: Found user/group name 'malcontent-timer-ext-agent' in '/etc/passwd' without required prefix 'system_'
+1794979116680     43  E logdw: Found user/group name 'malcontent-timerd' in '/etc/passwd' without required prefix 'system_'
+1794979116680     44  E logdw: Found user/group name 'malcontent-webd' in '/etc/passwd' without required prefix 'system_'
+1794979116680     45  E logdw: Found user/group name 'systemd-imds' in '/etc/passwd' without required prefix 'system_'
+1794979116680     46  E logdw: Found user/group name 'clamav' in '/etc/passwd' without required prefix 'system_'
+1794979116680     47  E logdw: Found user/group name 'dnsmasq' in '/etc/passwd' without required prefix 'system_'
+1794979116680     48  W ziparchive: Unable to open '/data/app/launch-guest/classes.dm': No such file or directory
+1794979116680     49  W ziparchive: Unable to open '/data/app/launch-guest/classes.dm': No such file or directory
+1794979116680     50  I nativeloader: InitApexLibraries skipped: No such file or directory
+1794979116680     51  D nativeloader: InitDefaultPublicLibraries for_preload=0: libandroid.so:libaaudio.so:libamidi.so:libbinder_ndk.so:libc.so:libcamera2ndk.so:libclang_rt.hwasan-aarch64-android.so:libdl.so:libEGL.so:libGLESv1_CM.so:libGLESv2.so:libGLESv3.so:libicu.so:libicui18n.so:libicuuc.so:libjnigraphics.so:liblog.so:libmediandk.so:libm.so:libnativehelper.so:libnativewindow.so:libneuralnetworks.so:libOpenMAXAL.so:libOpenSLES.so:libRS.so:libstdc++.so:libsync.so:libvulkan.so:libwebviewchromium_plat_support.so:libz.so
+1794979116680     52  D nativeloader: Configuring clns-1 for other apk . target_sdk_version=0, uses_libraries=ALL, library_path=/system/lib64, permitted_path=/data:/mnt/expand
+1794979116680     53  D nativeloader: InitExtendedPublicLibraries: 
+1794979116680     54  I nativeloader: InitVendorPublicLibraries skipped: No such file or directory
+1794979116680     55  D nativeloader: InitProductPublicLibraries: 
+1794979116680     56  E ProcessState: Binder driver /dev/binder is unavailable. Using /dev/binder instead.
+1794979116680     57  D CompatibilityChangeReporter: Compat change id reported: 171979766; UID 10192; state: ENABLED
+1794979116680     58  D CompatibilityChangeReporter: Compat change id reported: 242716250; UID 10192; state: ENABLED
+1794979116680     59  I Typeface: Preloading /system/fonts/Roboto-Regular.ttf
+1794979116680     60  I Typeface: Preloading /system/fonts/RobotoStatic-Regular.ttf
+1794979116680     61  D CompatibilityChangeReporter: Compat change id reported: 247079863; UID 10192; state: ENABLED
+1794979116680     62  W ziparchive: Unable to open '/data/app/looper-wake.dm': No such file or directory
+1794979116680     63  W ziparchive: Unable to open '/data/app/looper-wake.dm': No such file or directory
+1794979116680     64  D nativeloader: Configuring clns-2 for other apk /data/app/looper-wake.apk. target_sdk_version=34, uses_libraries=, library_path=/data/app-lib/x86_64, permitted_path=/data:/mnt/expand:/data/app-data/dev.acos.fixtures.looperwake
+1794979116680     65  W ContextImpl: Failed to ensure /data/app-data/dev.acos.fixtures.looperwake/cache: chown failed: EINVAL (Invalid argument)
+1794979116680     66  W ContextImpl: Failed to ensure /data/app-data/dev.acos.fixtures.looperwake/code_cache: chown failed: EINVAL (Invalid argument)
+1794979116680     67  V GraphicsEnvironment: Currently set values for:
+1794979116680     68  V GraphicsEnvironment:   angle_gl_driver_selection_pkgs=[]
+1794979116680     69  V GraphicsEnvironment:   angle_gl_driver_selection_values=[]
+1794979116680     70  V GraphicsEnvironment: ANGLE GameManagerService for dev.acos.fixtures.looperwake: false
+1794979116680     71  V GraphicsEnvironment: dev.acos.fixtures.looperwake is not listed in per-application setting
+1794979116680     72  V GraphicsEnvironment: Neither updatable production driver nor prerelease driver is supported.
+1794979116680     73  W SystemServiceRegistry: No service published for: netstats
+1794979116680     74  E TrafficStats: TrafficStats not initialized, uid=10192
+1794979116680     75  I AcosRot6: ACOSLAUNCH MARK top-finish-watcher-started
+1794979116680     76  I AcosLooperWake: onCreate
+1794979116680     77  D CompatibilityChangeReporter: Compat change id reported: 210923482; UID 10192; state: ENABLED
+1794979116680     78  E logdw: dev.acos.fixtures.looperwake.MainActivity
+1794979116680     79  E logdw: dev.acos.fixtures.looperwake.MainActivity
+1794979116680     80  E logdw: dev.acos.fixtures.looperwake.MainActivity
+1794979116680     81  D CompatibilityChangeReporter: Compat change id reported: 237531167; UID 10192; state: ENABLED
+1794979116680     82  I AcosLooperWake: first-draw frame=1 t=3977835
+1794979116680     83  I AcosLooperWake: pulse.draw n=1 since_invalidate_ms=-1 t=3977852
+1794979116743     84  I AcosLooperWake: pulse.draw n=2 since_invalidate_ms=-1 t=3977870
+1794979118200     85  I AcosLooperWake: bg-post t=3979336
+1794979118200     86  I AcosLooperWake: ui-drain latency_ms=0 t=3979336
+1794979118200     87  I AcosLooperWake: ui-setText t=3979336
+1794979118506     88  I AcosLooperWake: bg-invalidate t=3979586
+1794979118506     89  I AcosLooperWake: pulse.draw n=3 since_invalidate_ms=17 t=3979603
+1794979118666     90  I AcosLooperWake: pulse.draw n=4 since_invalidate_ms=-1 t=3979735
+1794979118666     91  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794979118666     92  I AcosLooperWake: go.click
+1794979118666     93  I AcosLooperWake: bg2-post t=3979737
+1794979118666     94  I AcosLooperWake: pulse.draw n=5 since_invalidate_ms=-1 t=3979752
+1794979118666     95  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794979118666     96  I AcosLooperWake: ui2-drain latency_ms=15 t=3979752
+1794979118666     97  I AcosLooperWake: ui2-setText t=3979752
+1794979118666     98  I AcosLooperWake: pulse.draw n=6 since_invalidate_ms=-1 t=3979768
+1794979118815     99  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794979118815    100  I AcosLooperWake: invalidate.click
+1794979118815    101  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794979119066    102  I AcosLooperWake: bg-invalidate-on-demand t=3980186
+1794979119066    103  I AcosLooperWake: pulse.draw n=7 since_invalidate_ms=16 t=3980202

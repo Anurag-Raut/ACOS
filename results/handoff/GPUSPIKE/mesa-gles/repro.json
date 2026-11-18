@@ -1,0 +1,17 @@
+{
+  "acos_version": "0.3.0",
+  "apk_path": "/home/Qui/.t3/worktrees/acos/t3-4410a241-c6878933394baf1b/fixtures/build/apps/a11y-probe.apk",
+  "apk_sha256": "cb205985337305059a5bec85097770ae05692fd3260f9558cfcb544a696f2f52",
+  "scenario_path": "/home/Qui/.t3/worktrees/acos/t3-4410a241-c6878933394baf1b/scenarios/gles-mesa-host.yaml",
+  "scenario_sha256": "b3b2430284034b4999bea6a6a1f109782c18c750ae33a636829879a632ae90f3",
+  "flags": [],
+  "isolation": "process",
+  "display": {
+    "mode": "offscreen",
+    "width": 1080,
+    "height": 2400,
+    "density_dpi": 420
+  },
+  "fidelity": "art-reference",
+  "backend": "acos-native"
+}

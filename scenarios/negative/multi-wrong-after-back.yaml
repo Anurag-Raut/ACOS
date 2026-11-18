@@ -9,6 +9,12 @@ fallback: forbid
 api_level: 34
 isolation: process
 display: {mode: offscreen, width: 1080, height: 2400, density_dpi: 420}
+# BACKSETTLE: the claim this file is for is now reached. The field was typed
+# into, so the soft input takes the first Back (AOSP layer order, as in
+# `hello-views`/`multi-activity`); the second Back returns to MainActivity and
+# the strict settle binds it. The last `assert_text` then fails strictly
+# (`ASSERTION_FAILED`) on the text that was never typed - a wrong expectation
+# after a real Back must never pass.
 expectation: fail
 steps:
   - launch:
@@ -27,6 +33,10 @@ steps:
   - assert_text:
       selector: {id: received}
       text: {exact: "Received: Hello"}
+  # The soft input takes the first Back; the second reaches the Activity.
+  - key:
+      key: back
+      settle: content
   - back: {}
   - assert_text:
       selector: {id: message}

@@ -561,6 +561,7 @@ public final class LaunchMain {
         String result = "{\"outcome\":\"ok\",\"package\":\"" + esc(sPkg) + "\",\"apk\":\""
                 + esc(sApk) + "\",\"application_created\":true,\"until\":\"" + esc(sUntil)
                 + "\",\"activity_launched\":" + (sActivityResumed ? "true" : "false")
+                + ",\"finish_during_create\":" + (sFinishDuringCreate ? "true" : "false")
                 + ",\"wall_ms\":" + wall + "}";
         write(new File(sOut, "launch.json"), result);
         System.out.println("ACOSLAUNCH " + result);
@@ -2979,6 +2980,8 @@ public final class LaunchMain {
     }
 
     static volatile boolean sActivityResumed;
+    /** SYSUI2: the launch resolved to an Activity that finished inside onCreate. */
+    static volatile boolean sFinishDuringCreate;
     /**
      * S3a: why the last completed first traversal did not draw (null = it drew).
      * Recorded in the `POST_RESUME_NOT_READY` failure so a no-frame relaunch
@@ -3276,6 +3279,50 @@ public final class LaunchMain {
         }
     }
 
+    /**
+     * MPROC8: a process started for a component that is **not an activity**
+     * (`bindService`, `startService`, a provider publish).
+     *
+     * <p>AOSP's `ActiveServices.realStartServiceLocked` runs after
+     * `attachApplicationLocked`: the process attaches (`IApplicationThread` is
+     * known to the host), `handleBindApplication` completes, and then the host
+     * delivers `scheduleCreateService` + `scheduleBindService` onto this
+     * process's looper. There is no launch transaction to wait for — waiting for
+     * one (the old behaviour) made a bind-only process time out and exit before
+     * its caller was ever answered.
+     *
+     * <p>So: report the dispatch checkpoint, write the marker and return to the
+     * looper. The process stays resident (a bound service's process lives as long
+     * as the bind, exactly like a device); the launcher ends it at session end or
+     * when the activity manager's idle rule names it.
+     */
+    static void serviceResident() throws Exception {
+        awaitBindDispatch(5000);
+        write(new File(sOut, "service-resident.marker"),
+                "package=" + sPkg
+                        + "\nuid=" + android.os.Process.myUid()
+                        + "\npid=" + android.os.Process.myPid()
+                        + "\nuntil=" + sUntil
+                        + "\nbind_application_dispatch_finished=" + sBindFinished + "\n");
+        System.out.println("ACOSLAUNCH MARK service-resident package=" + sPkg
+                + " uid=" + android.os.Process.myUid()
+                + " pid=" + android.os.Process.myPid()
+                + " bind-application=" + sBindFinished);
+        System.out.flush();
+    }
+
+    /**
+     * Wait for the framework's own `<<<<< Finished` line for the BIND_APPLICATION
+     * message: that is the proof the real `handleBindApplication` (and therefore
+     * `Instrumentation.callApplicationOnCreate`) returned normally.
+     */
+    static boolean awaitBindDispatch(long ms) throws Exception {
+        long bindDeadline = System.currentTimeMillis() + ms;
+        while (!sBindFinished && System.currentTimeMillis() < bindDeadline) Thread.sleep(5);
+        System.out.println("ACOSLAUNCH MARK bind-application-dispatch-finished=" + sBindFinished);
+        return sBindFinished;
+    }
+
     static void watch(Object thread, Class<?> at, IBinder appThread) throws Exception {
         long deadline = System.currentTimeMillis() + 20000;
         Object app = get(thread, "mInitialApplication");
@@ -3315,14 +3362,20 @@ public final class LaunchMain {
                 + " instrumentation=" + (instr == null ? "null" : instr.getClass().getName()));
         System.out.flush();
 
+        // MPROC8: a bind-only / service-only process (see `serviceResident`).
+        // Checked before the activity paths: it has no activity to launch and
+        // must never run one, and it must not quit while the host's service
+        // deliveries (which arrive right after `attach`) are still in flight.
+        if ("service-resident".equals(sUntil)) {
+            serviceResident();
+            return;
+        }
         if (!"activity-resumed".equals(sUntil) || sActivity == null) {
             // Wait for the framework's own `<<<<< Finished` line for the
             // BIND_APPLICATION message: that is the proof the real
             // `handleBindApplication` (and therefore
             // `Instrumentation.callApplicationOnCreate`) returned normally.
-            long bindDeadline = System.currentTimeMillis() + 5000;
-            while (!sBindFinished && System.currentTimeMillis() < bindDeadline) Thread.sleep(5);
-            System.out.println("ACOSLAUNCH MARK bind-application-dispatch-finished=" + sBindFinished);
+            awaitBindDispatch(5000);
             awaitFrameProbe();
             quit();
             return;
@@ -3347,11 +3400,23 @@ public final class LaunchMain {
             System.out.println("ACOSLAUNCH MARK waiting-for-host-transaction activity="
                     + sActivity);
             System.out.flush();
+            // The milestone is the **host's launch having executed**, not
+            // `mResumed`: `ActivityThread.handleResumeActivity` skips
+            // `performResumeActivity` for an `mFinished` Activity
+            // (`ActivityThread.java:5290` "Skipping resume of ... activity is
+            // finishing"), so an Activity that answers and finishes inside
+            // `onCreate` (the already-granted permission request,
+            // `GrantPermissionsActivity`'s short-circuit) never sets
+            // `mResumed`. Waiting for `mResumed` here timed that *legitimate*
+            // launch out (`host-transaction-timeout`, SYSUI1 finding) and the
+            // `halt(0)` cut the finish/result handshake before the caller got
+            // its result. `mCalled` is the framework's own onCreate/onStart
+            // completion flag on the record the transaction created.
             Object launched = null;
             long hostDeadline = System.currentTimeMillis() + sResumeMs;
             while (launched == null && System.currentTimeMillis() < hostDeadline) {
                 Thread.sleep(5);
-                launched = resumedActivity(thread);
+                launched = launchedActivity(thread);
             }
             if (launched == null) {
                 System.out.println("ACOSLAUNCH MARK host-transaction-timeout activity="
@@ -3367,9 +3432,37 @@ public final class LaunchMain {
             Object hostToken = get(launched, "mToken");
             if (hostToken instanceof IBinder) {
                 sCurrentToken = (IBinder) hostToken;
-                // ROT6: the host delivered the launch, so the server side owns
-                // the rest of the lifecycle; the finish watcher reports it.
+                // ROT6: the Activity is the top of the task and the last one, so
+                // when it finishes (`Activity.finish()`) the **server** owns the
+                // rest of the lifecycle: this watcher delivers the three items
+                // stock sends (`Pause(finished)`, `Stop`, `Destroy`), and the
+                // host turns the app's `activityDestroyed` into the caller's
+                // `ActivityResultItem`. It starts here for a resumed Activity
+                // and for one that already finished inside `onCreate`: both owe
+                // the same destroy before the caller's result can be delivered.
                 startTopFinishWatcher(sCurrentToken);
+            }
+            boolean resumed = Boolean.TRUE.equals(get(launched, "mResumed"));
+            boolean finishedDuringCreate = !resumed
+                    && Boolean.TRUE.equals(get(launched, "mFinished"));
+            if (finishedDuringCreate) {
+                // AOSP's own outcome for an Activity that finishes in onCreate:
+                // created (and started), never resumed, then paused/stopped/
+                // destroyed by the server. Report exactly that, and keep the
+                // real main looper alive: the server drives the rest of the
+                // lifecycle and the caller's `ActivityResultItem` follows the
+                // destroy — a halt here is what lost the result.
+                sActivityResumed = true;
+                sFinishDuringCreate = true;
+                writeResumeMarker(thread, launched,
+                        "finish_during_create=true\n"
+                                + "resume_skipped=finishing-in-onCreate "
+                                + "(ActivityThread.handleResumeActivity)");
+                System.out.println("ACOSLAUNCH MARK activity-resumed activity="
+                        + launched.getClass().getName() + " window=" + get(launched, "mWindow")
+                        + " finish_during_create=true");
+                System.out.flush();
+                return;
             }
             System.out.println("ACOSLAUNCH MARK host-transaction-resumed activity="
                     + launched.getClass().getName()
@@ -3788,6 +3881,27 @@ public final class LaunchMain {
                 + " window=" + get(activity, "mWindow") + " recorded_after=looper-threw");
         System.out.flush();
         return true;
+    }
+
+    /**
+     * SYSUI2: the Activity the host's launch transaction created.
+     *
+     * <p>`mCalled` is what `Instrumentation.callActivityOnCreate`/
+     * `callActivityOnStart` set on the Activity itself, so a record whose
+     * Activity has it is a record whose `onCreate`/`onStart` ran — the proof
+     * the host's `LaunchActivityItem` executed. It is deliberately *not*
+     * `mResumed`: an Activity that finishes inside `onCreate` never reaches
+     * resume (see the call site).
+     */
+    static Object launchedActivity(Object thread) {
+        Object activities = get(thread, "mActivities");
+        if (!(activities instanceof java.util.Map)) return null;
+        for (Object rec : ((java.util.Map<?, ?>) activities).values()) {
+            Object a = get(rec, "activity");
+            if (a == null) continue;
+            if (Boolean.TRUE.equals(get(a, "mCalled"))) return a;
+        }
+        return null;
     }
 
     static Object resumedActivity(Object thread) {
@@ -4835,6 +4949,42 @@ public final class LaunchMain {
     }
 
     /**
+     * LAUNCHEXTRAS: the host-built launch `Intent`, unmarshalled through the
+     * framework's own `Intent.CREATOR`.
+     *
+     * <p>ADR-0029 amendment: the host builds launch transactions. The caller's
+     * `intent_action`, `data` and typed extras are written by the host's
+     * `Intent.writeToParcel` encoder (byte-compared with real Java) and delivered
+     * here as hex; this method only unmarshals them. `null` when the caller
+     * declared nothing, in which case the guest builds the stock
+     * ACTION_MAIN/CATEGORY_LAUNCHER Intent exactly as before.
+     */
+    static android.content.Intent hostLaunchIntent() throws Throwable {
+        String hex = System.getenv("ACOSLAUNCH_INTENT_BYTES");
+        if (hex == null || hex.isEmpty()) return null;
+        int n = hex.length() / 2;
+        byte[] bytes = new byte[n];
+        for (int i = 0; i < n; i++) {
+            bytes[i] = (byte) Integer.parseInt(hex.substring(i * 2, i * 2 + 2), 16);
+        }
+        Parcel p = Parcel.obtain();
+        try {
+            p.unmarshall(bytes, 0, bytes.length);
+            p.setDataPosition(0);
+            android.content.Intent intent =
+                    android.content.Intent.CREATOR.createFromParcel(p);
+            System.out.println("ACOSLAUNCH MARK launch-intent-unmarshalled action="
+                    + intent.getAction() + " data=" + intent.getDataString()
+                    + " component=" + intent.getComponent()
+                    + " extras=" + intent.getExtras() + " bytes=" + bytes.length);
+            System.out.flush();
+            return intent;
+        } finally {
+            p.recycle();
+        }
+    }
+
+    /**
      * The `ClientTransaction` a launch carries: the framework's
      * `LaunchActivityItem` callback plus the `ResumeActivityItem` lifecycle
      * request, keyed on `token` — the same shape `LaunchMain.watch` delivered
@@ -4846,10 +4996,13 @@ public final class LaunchMain {
         Object activityInfo = buildActivityInfoNamed(appInfo, activity);
         Configuration[] cfg = currentAndOverrideConfig(app);
 
-        android.content.Intent intent = new android.content.Intent(android.content.Intent.ACTION_MAIN);
-        intent.addCategory(android.content.Intent.CATEGORY_LAUNCHER);
-        intent.setComponent(new ComponentName(sPkg, activity));
-        intent.setFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK);
+        android.content.Intent intent = hostLaunchIntent();
+        if (intent == null) {
+            intent = new android.content.Intent(android.content.Intent.ACTION_MAIN);
+            intent.addCategory(android.content.Intent.CATEGORY_LAUNCHER);
+            intent.setComponent(new ComponentName(sPkg, activity));
+            intent.setFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK);
+        }
         return buildLaunchTransactionForIntent(client, token, app, intent, activityInfo, cfg);
     }
 

@@ -132,6 +132,54 @@ public final class ClientTransactionCompareMain {
         return intent;
     }
 
+    /**
+     * LAUNCHEXTRAS: the session-start Intent {@code AcosServices::client_transaction::launch_intent}
+     * encodes for a scenario that declares an explicit action, a data URI and
+     * one extra of every supported Java type.
+     *
+     * <p>The data string goes through the framework's own `Uri.parse`, so the
+     * bytes carry whatever this image's Uri implementation writes (a
+     * `StringUri`: type tag 1 + the string) — the host encoder must match it,
+     * not a remembered source shape.
+     */
+    static Intent launchIntentExtras() {
+        Intent intent = new Intent();
+        intent.setAction("dev.acos.fixtures.launchextras.ACTION");
+        intent.setData(android.net.Uri.parse("acos://launch/extras?source=scenario"));
+        intent.setClassName("dev.acos.fixtures.launchextras",
+                "dev.acos.fixtures.launchextras.MainActivity");
+        intent.setFlags(0x10000000);
+        intent.putExtra("probe_string", "hello");
+        intent.putExtra("probe_int", 42);
+        intent.putExtra("probe_long", 5000000000L);
+        // A `long` that fits an int: written as the 8-byte VAL_LONG, which is
+        // what the explicit `{type: long, value: 7}` form must reach.
+        intent.putExtra("probe_long_small", 7L);
+        intent.putExtra("probe_boolean", true);
+        intent.putExtra("probe_float", 1.5f);
+        intent.putExtra("probe_double", 0.25d);
+        intent.putExtra("probe_string_array", new String[]{"alpha", "beta"});
+        return intent;
+    }
+
+    static void checkLaunchIntentExtras(Intent intent) {
+        check(intent.getAction().equals("dev.acos.fixtures.launchextras.ACTION"), "action");
+        check(intent.getDataString().equals("acos://launch/extras?source=scenario"), "data");
+        check(intent.getComponent().getClassName().equals(
+                "dev.acos.fixtures.launchextras.MainActivity"), "component");
+        check(intent.getFlags() == 0x10000000, "flags");
+        check("hello".equals(intent.getStringExtra("probe_string")), "string extra");
+        check(intent.getIntExtra("probe_int", -1) == 42, "int extra");
+        check(intent.getLongExtra("probe_long", -1) == 5000000000L, "long extra");
+        check(intent.getLongExtra("probe_long_small", -1) == 7L, "small long extra");
+        check(intent.getBooleanExtra("probe_boolean", false), "boolean extra");
+        check(intent.getFloatExtra("probe_float", -1f) == 1.5f, "float extra");
+        check(intent.getDoubleExtra("probe_double", -1d) == 0.25d, "double extra");
+        String[] array = intent.getStringArrayExtra("probe_string_array");
+        check(array != null && array.length == 2 && array[0].equals("alpha")
+                && array[1].equals("beta"), "string array extra");
+    }
+
     /** `bind_app::build_config`: locale en-US, 420 dpi, 411x842 dp, portrait. */
     static Configuration configuration() throws Exception {
         Configuration c = new Configuration();
@@ -246,6 +294,7 @@ public final class ClientTransactionCompareMain {
             }
         }
         emit("intent", p -> intent().writeToParcel(p, 0));
+        emit("launch_intent_extras", p -> launchIntentExtras().writeToParcel(p, 0));
         emit("configuration", p -> configuration().writeToParcel(p, 0));
         emit("activity_info", p -> launchInfo.writeToParcel(p, 0));
         emit("result_info", p -> resultInfo().writeToParcel(p, 0));
@@ -295,6 +344,11 @@ public final class ClientTransactionCompareMain {
                     case "intent":
                         got = Intent.CREATOR.createFromParcel(p);
                         break;
+                    case "launch_intent_extras": {
+                        got = Intent.CREATOR.createFromParcel(p);
+                        checkLaunchIntentExtras((Intent) got);
+                        break;
+                    }
                     case "configuration":
                         got = Configuration.CREATOR.createFromParcel(p);
                         break;

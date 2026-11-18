@@ -8,6 +8,7 @@ import android.content.pm.ActivityInfo;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.InstrumentationInfo;
 import android.content.pm.PackageInfo;
+import android.content.pm.PermissionGroupInfo;
 import android.content.pm.PermissionInfo;
 import android.content.pm.ResolveInfo;
 import android.content.pm.ServiceInfo;
@@ -705,6 +706,19 @@ public final class ParcelableCompareMain {
                         got = PermissionInfo.CREATOR.createFromParcel(p);
                         check(((PermissionInfo) got).group.equals("android.permission-group.NETWORK"),
                                 "permission_info group");
+                        break;
+                    case "permission_group_info":
+                        got = PermissionGroupInfo.CREATOR.createFromParcel(p);
+                        check(((PermissionGroupInfo) got).name.equals(
+                                        "android.permission-group.CAMERA"),
+                                "permission_group_info name");
+                        check(((PermissionGroupInfo) got).loadLabel(null).toString().equals(
+                                        "Camera"),
+                                "permission_group_info nonLocalizedLabel");
+                        check(((PermissionGroupInfo) got).descriptionRes == 0,
+                                "permission_group_info descriptionRes");
+                        check(((PermissionGroupInfo) got).priority == 700,
+                                "permission_group_info priority");
                         break;
                     case "resolve_info":
                         got = ResolveInfo.CREATOR.createFromParcel(p);

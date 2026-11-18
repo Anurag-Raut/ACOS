@@ -1,0 +1,17 @@
+{
+  "acos_version": "0.3.0",
+  "apk_path": "/home/Qui/.t3/worktrees/acos/t3-121d3058-b4fc4c69978d9127/fixtures/build/apps/perm-probe.apk",
+  "apk_sha256": "6ebac38d6c3f9711dab015fa46331cfdc6df8c1ca33d6610450cb44d5288dd74",
+  "scenario_path": "/home/Qui/.t3/worktrees/acos/t3-121d3058-b4fc4c69978d9127/scenarios/sysui1-permission-deny.yaml",
+  "scenario_sha256": "2c5713df6181176719a832d797f00ee5f144fce347684a8754c055edeff22015",
+  "flags": [],
+  "isolation": "process",
+  "display": {
+    "mode": "offscreen",
+    "width": 1080,
+    "height": 2400,
+    "density_dpi": 420
+  },
+  "fidelity": "art-reference",
+  "backend": "acos-native"
+}

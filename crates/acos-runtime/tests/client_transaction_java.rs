@@ -288,6 +288,57 @@ fn case_intent() -> Parcelable {
     )
 }
 
+/// LAUNCHEXTRAS: the session-start Intent a scenario declares — explicit
+/// action, data URI and one extra of every supported Java type. The Java case
+/// builds the same Intent with the framework's own setters, so the bytes prove
+/// the host's `launch_intent` encoder (including the image's `Uri.parse`
+/// StringUri shape and the typed Bundle tags).
+fn case_launch_intent_extras() -> Parcelable {
+    let extras = std::collections::BTreeMap::from([
+        (
+            "probe_string".to_string(),
+            acos_protocol::ExtraValue::String("hello".to_string()),
+        ),
+        ("probe_int".to_string(), acos_protocol::ExtraValue::Int(42)),
+        (
+            "probe_long".to_string(),
+            acos_protocol::ExtraValue::Long(5_000_000_000),
+        ),
+        // A long that fits an int: the explicit form, and 8 bytes on the wire.
+        (
+            "probe_long_small".to_string(),
+            acos_protocol::ExtraValue::Long(7),
+        ),
+        (
+            "probe_boolean".to_string(),
+            acos_protocol::ExtraValue::Boolean(true),
+        ),
+        (
+            "probe_float".to_string(),
+            acos_protocol::ExtraValue::Float(1.5),
+        ),
+        (
+            "probe_double".to_string(),
+            acos_protocol::ExtraValue::Double(0.25),
+        ),
+        (
+            "probe_string_array".to_string(),
+            acos_protocol::ExtraValue::StringArray(vec!["alpha".to_string(), "beta".to_string()]),
+        ),
+    ]);
+    let intent = acos_protocol::LaunchIntent {
+        action: Some("dev.acos.fixtures.launchextras.ACTION".to_string()),
+        data: Some("acos://launch/extras?source=scenario".to_string()),
+        extras,
+    };
+    ctx::launch_intent(
+        "dev.acos.fixtures.launchextras",
+        "dev.acos.fixtures.launchextras.MainActivity",
+        &intent,
+    )
+    .expect("launch Intent")
+}
+
 fn case_result_info() -> Parcelable {
     ctx::result_info(
         Some("dev.acos.fixtures.multiactivity.MainActivity"),
@@ -339,6 +390,7 @@ fn real_java_client_transaction_matches_the_host_encoder() {
     );
     let values: Vec<(&str, Parcelable)> = vec![
         ("intent", case_intent()),
+        ("launch_intent_extras", case_launch_intent_extras()),
         ("configuration", ctx::process_configuration()),
         ("activity_info", activity_info.clone()),
         ("result_info", case_result_info()),

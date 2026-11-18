@@ -127,6 +127,12 @@ pub struct LaunchOpts {
     /// manifest table, exactly as the launched APK is. Empty (and then free)
     /// for every single-package launch: nothing is staged, bound or installed.
     pub extra_apks: Vec<PathBuf>,
+    /// LAUNCHEXTRAS: the launch `Intent` the caller declared (action, data URI
+    /// and typed extras). The host encodes it with the exact
+    /// `Intent.writeToParcel` bytes and the guest's first launch transaction
+    /// carries that Intent, so `Activity.getIntent()` observes it unchanged.
+    /// Empty (the default) keeps the guest-built `ACTION_MAIN` Intent.
+    pub intent: acos_protocol::LaunchIntent,
     /// MPROC5c: idle kill. A **lazily spawned** secondary process that has held
     /// nothing for this long — no started activity, no started/bound service,
     /// no visible window — is killed (stock
@@ -152,6 +158,7 @@ impl Default for LaunchOpts {
             animations: Animations::On,
             services: Vec::new(),
             extra_apks: Vec::new(),
+            intent: acos_protocol::LaunchIntent::default(),
             idle_kill_secs: 30,
         }
     }
@@ -538,6 +545,32 @@ struct ExtraApk {
     uid: Option<i32>,
 }
 
+/// MPROC8: what a lazily spawned process was started for.
+///
+/// AOSP distinguishes an activity launch from a component that runs without an
+/// activity (`ActiveServices.realStartServiceLocked` for a started or bound
+/// service, a provider publish). The guest's stop point and its launch argv
+/// follow from it: an activity process marshals/wait for its launch transaction,
+/// a service process attaches, stays resident and waits for the host's
+/// `scheduleCreateService`/`scheduleBindService` deliveries.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SpawnKind {
+    /// `startActivity`: the process launches the requested activity.
+    Activity,
+    /// `bindService`/`startService`/`getContentProvider`: no activity.
+    Service,
+}
+
+impl SpawnKind {
+    /// The `until` stop point the guest runs to (`LaunchMain`'s 4th argument).
+    fn until(self) -> &'static str {
+        match self {
+            Self::Activity => "activity-resumed",
+            Self::Service => "service-resident",
+        }
+    }
+}
+
 /// MPROC4 step 3b: one secondary app process this session can start.
 ///
 /// Built from the session's own recipe (`launch_session`): the extra APK is
@@ -563,6 +596,12 @@ struct SecondarySpec {
     guest_lib_dir: String,
     /// `ApplicationInfo.uid` the package manager assigned.
     uid: Option<i32>,
+    /// MPROC8: what this process was started for (activity vs service-only).
+    kind: SpawnKind,
+    /// The service class the spawn request named (empty when the request was an
+    /// activity launch). The host delivers the create/bind to the process; the
+    /// guest never launches it.
+    service: String,
     /// The activity this process launches (the requested component, else the
     /// APK's launcher activity).
     activity: String,
@@ -642,7 +681,7 @@ impl SecondaryShared {
             spec.guest_apk.clone(),
             spec.package.clone(),
             "/data/out/launch".to_string(),
-            "activity-resumed".to_string(),
+            spec.kind.until().to_string(),
             spec.activity.clone(),
             spec.app_class.clone(),
             spec.theme.to_string(),
@@ -669,6 +708,16 @@ impl SecondaryShared {
             sb.with_image(Some(image.clone()));
         }
         sb.run_root(&spec.run_root);
+        // UID: this process carries **its package's** uid (AOSP allocates one
+        // per installed package), not the session's. A spawn whose package has
+        // no allocated uid is refused instead of running as another app's uid.
+        let Some(uid) = spec.uid else {
+            return Err(Error::Layout(format!(
+                "process tag {}: the package manager allocated no uid for {}",
+                spec.tag, spec.package
+            )));
+        };
+        sb.app_uid(uid as u32);
         sb.seccomp_guest(true);
         sb.with_shim(false);
         sb.ro_bind(&self.art_shim, "/data/shim/libartshim.so");
@@ -865,6 +914,9 @@ struct SecondaryPool {
     /// thread blocked in a service handler, a suppressed close, an immediate
     /// respawn under the same tag).
     atms: Arc<std::sync::Mutex<acos_services::atms::AtmsState>>,
+    /// SYSUI2: the session's **primary** package (tag 0). A spawn request for it
+    /// is a start into a process that already runs, not a package to start.
+    primary_package: String,
     started: Instant,
 }
 
@@ -873,6 +925,7 @@ impl SecondaryPool {
         specs: Vec<SecondarySpec>,
         shared: SecondaryShared,
         atms: Arc<std::sync::Mutex<acos_services::atms::AtmsState>>,
+        primary_package: String,
     ) -> Self {
         Self {
             specs,
@@ -883,6 +936,7 @@ impl SecondaryPool {
             failures: Vec::new(),
             kills: Vec::new(),
             atms,
+            primary_package,
             started: Instant::now(),
         }
     }
@@ -903,6 +957,22 @@ impl SecondaryPool {
         probe_state: &Arc<std::sync::Mutex<ProbeState>>,
         compositor: Arc<std::sync::Mutex<acos_services::surface_client::SurfaceState>>,
     ) {
+        // SYSUI2: the session's own app **is** a running process (`tag 0`). A
+        // start of one of its Activities (the notification's content sender, an
+        // app's own second Activity) records the launch and the peer delivers it
+        // to that process (`Peer::take_host_transactions`); the launcher must not
+        // try to start a package it never installed as a secondary.
+        if !self.primary_package.is_empty() && request.package == self.primary_package {
+            self.records.push(serde_json::json!({
+                "package": request.package,
+                "component": request.component,
+                "reason": request.reason,
+                "tag": 0,
+                "spawned": false,
+                "note": "the session's primary process (tag 0); the launch goes to it",
+            }));
+            return;
+        }
         if let Some(tag) = self.running_tag(&request.package) {
             self.records.push(serde_json::json!({
                 "package": request.package,
@@ -935,23 +1005,46 @@ impl SecondaryPool {
             );
             return;
         };
-        // The requested activity is what the process launches: on a device the
-        // process starts empty and AMS schedules the launch transaction; here
-        // the guest marshals its own launch transaction for the activity the
-        // request named, so a spawn is always for a real component.
-        if let Some(class) = request.component.split_once('/').map(|(_, class)| class) {
-            if !class.is_empty() {
-                let fqcn = if class.starts_with('.') {
-                    format!("{}{}", spec.package, class)
-                } else {
-                    class.to_string()
-                };
-                spec.activity = fqcn;
+        // MPROC8: what the process is being started *for* decides its stop
+        // point. AOSP's `ActivityManagerService` starts one process object for
+        // both cases and hands the work to the component's own path: an
+        // activity gets a launch transaction, a service gets
+        // `realStartServiceLocked` after `attachApplication`. A service
+        // component is never launched as an Activity, and the process does not
+        // wait for a launch transaction it will never receive.
+        let class = request
+            .component
+            .split_once('/')
+            .map(|(_, class)| class)
+            .unwrap_or_default();
+        let fqcn = if class.is_empty() {
+            String::new()
+        } else if class.starts_with('.') {
+            format!("{}{}", spec.package, class)
+        } else {
+            class.to_string()
+        };
+        spec.kind = match request.reason.as_str() {
+            "bindService" | "startService" | "getContentProvider" => SpawnKind::Service,
+            _ => SpawnKind::Activity,
+        };
+        match spec.kind {
+            SpawnKind::Activity => {
+                if !fqcn.is_empty() {
+                    spec.activity = fqcn;
+                }
+            }
+            SpawnKind::Service => {
+                spec.service = fqcn;
+                spec.activity = String::new();
             }
         }
         // Per-process `ProviderInfoList` + application `<meta-data>`, from this
-        // package's own manifest (the same two facts the primary receives).
-        let (app_meta, providers) = acos_services::pms::PmsState::from_apk(&spec.staged)
+        // package's own manifest (the same two facts the primary receives), with
+        // this package's own uid.
+        let (app_meta, providers) = spec
+            .uid
+            .and_then(|uid| acos_services::pms::PmsState::from_apk_with_uid(&spec.staged, uid).ok())
             .map(|state| {
                 let app_meta = meta_spec(&state.app().meta_data);
                 let providers = provider_spec_of(&state);
@@ -992,6 +1085,12 @@ impl SecondaryPool {
                     "reason": request.reason,
                     "tag": spec.tag,
                     "pid": pid,
+                    "uid": spec.uid,
+                    "kind": match spec.kind {
+                        SpawnKind::Activity => "activity",
+                        SpawnKind::Service => "service",
+                    },
+                    "service": spec.service,
                     "activity": spec.activity,
                     "spawned": true,
                     "since_ms": self.started.elapsed().as_millis() as u64,
@@ -1134,7 +1233,13 @@ impl SecondaryPool {
                     "tag": tag,
                     "package": guest.spec.package,
                     "pid": guest.pid,
+                    "uid": guest.spec.uid,
+                    "kind": match guest.spec.kind {
+                        SpawnKind::Activity => "activity",
+                        SpawnKind::Service => "service",
+                    },
                     "activity": guest.spec.activity,
+                    "service": guest.spec.service,
                     "alive": matches!(guest.child.try_wait(), Ok(None)),
                 })
             })
@@ -1712,6 +1817,18 @@ pub(crate) fn launch_session(
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .attach_delivery_wake(Arc::clone(&delivery_wake));
+        // SYSUI3A: name the session's primary process (tag 0) the way stock AMS
+        // names it in `startProcessLocked`, before any attach. `attachApplication`
+        // carries no package and the primary never sends the peer's handshake,
+        // so without this `Peer::package_of(0)` had no package to ask
+        // `pending_launch_for` with: a `startActivity` into the already-running
+        // primary (a notification's content sender) was recorded and never
+        // delivered. The launcher is the component that knows what it started.
+        if !host.seed_primary_package(&package) {
+            eprintln!(
+                "acos-art: launch: the activity service did not take the primary package {package}"
+            );
+        }
         // K3d: the PMS publishes the APK path the **guest** can open
         // (`/data/app/<name>.apk`, read-only bound by the sandbox), not the host
         // file. `PackageManager.getResourcesForApplication` builds `Resources`
@@ -1773,9 +1890,17 @@ pub(crate) fn launch_session(
                 }
             }
         }
-        (host, handles, registry)
+        // UID: the uid the package manager allocated for the launched package.
+        // AOSP allocates one uid per installed package, and this process must
+        // run as **its** uid (a second package in the same session gets its
+        // own). `None` only when the package manager never registered the
+        // package (then the historical fixture uid stays the default, and a
+        // guest that asks for its own `ApplicationInfo` fails loudly on its
+        // own).
+        let primary_uid = host.package_uid(&package).map(|uid| uid as u32);
+        (host, handles, registry, primary_uid)
     };
-    let (peer_host, live, peer_registry) = live_handles;
+    let (peer_host, live, peer_registry, primary_uid) = live_handles;
     let service_control = Arc::new(ServiceControl::default());
     // A live module request wakes the peer's idle wait (see `ServiceControl`).
     service_control.set_wake(peer_wakeup.write);
@@ -1807,6 +1932,11 @@ pub(crate) fn launch_session(
             // live module-control channel, both on the thread that owns the
             // service table. A spawn request crosses to the launcher, which owns
             // the processes and their tags.
+            // SYSUI1: a control op can start an activity (the permission
+            // dialog, the shade). Its resolution may need a process the launcher
+            // owns, and no guest frame follows to drain the request, so the pump
+            // hands it over the same way the serve loop does.
+            let pump_spawns = spawn_tx.clone();
             let mut sink = |request: acos_services::ams::ProcessSpawnRequest| {
                 let _ = spawn_tx.send(request);
             };
@@ -1816,6 +1946,13 @@ pub(crate) fn launch_session(
                     let reply = service_request(peer, &mut peer_registry, &request);
                     let debug_reply = reply.to_string();
                     peer_control.reply(id, reply);
+                    for spawn in peer.take_spawn_requests() {
+                        eprintln!(
+                            "acos-binder-peer: control op: {} needs a process for {} ({})",
+                            spawn.package, spawn.component, spawn.reason
+                        );
+                        let _ = pump_spawns.send(spawn);
+                    }
                     // A live `ctl` op can queue `system -> app` deliveries (an
                     // SMS, a call-state event, a location fix, an auth result).
                     // No binder transaction follows to flush them, so do it here
@@ -1968,6 +2105,40 @@ pub(crate) fn launch_session(
         .as_ref()
         .map(|l| l.label.clone())
         .unwrap_or_default();
+    // LAUNCHEXTRAS: the host builds the launch Intent (ADR-0029 amendment). The
+    // bytes come from `Intent.writeToParcel` as this image writes it (the
+    // parcelable codec, real-Java differential in acos-runtime); the guest
+    // unmarshals them with the framework's own `Intent.CREATOR` and hands the
+    // Intent to the real `LaunchActivityItem`. A `Parcelable` extra is refused
+    // by name before any guest exists.
+    let launch_intent_hex = if opts.intent.is_empty() {
+        None
+    } else {
+        if let Some(detail) = opts.intent.unsupported_detail() {
+            return Err(Error::Layout(format!("UNSUPPORTED_ANDROID_API: {detail}")));
+        }
+        let Some(activity_class) = activity.as_deref() else {
+            return Err(Error::Layout(
+                "intent_action/data/extras need `--until activity-resumed`: a launch that stops \
+                 before an Activity cannot carry an Intent"
+                    .to_string(),
+            ));
+        };
+        let bytes = acos_services::client_transaction::encode_launch_intent(
+            &package,
+            activity_class,
+            &opts.intent,
+        )
+        .map_err(|error| Error::Layout(format!("launch Intent: {error}")))?;
+        eprintln!(
+            "acos-art: launch: host-built launch Intent action={} data={} extras={} bytes={}",
+            opts.intent.action.as_deref().unwrap_or("android.intent.action.MAIN"),
+            opts.intent.data.as_deref().unwrap_or("none"),
+            opts.intent.extras.len(),
+            bytes.len()
+        );
+        Some(hex_bytes(&bytes))
+    };
     // W31: `ApplicationInfo.flags` from the parsed manifest. `PmsState::from_apk`
     // is the host's `PackageParser` equivalent (`acos-apk`'s typed manifest);
     // its `AppInfo.flags` is what a package manager hands the framework, and
@@ -2121,7 +2292,13 @@ pub(crate) fn launch_session(
     let mut secondary_specs: Vec<SecondarySpec> = Vec::new();
     for (index, extra) in extras.iter().enumerate() {
         let tag = (index as u32) + 1;
-        let facts = acos_services::pms::PmsState::from_apk(&extra.staged).ok();
+        // UID: this package's **own** uid (the package manager allocated it at
+        // install time), so every fact built from its APK carries the uid the
+        // process runs as — never the fixture uid of the launched package.
+        let facts = match extra.uid {
+            Some(uid) => acos_services::pms::PmsState::from_apk_with_uid(&extra.staged, uid).ok(),
+            None => acos_services::pms::PmsState::from_apk(&extra.staged).ok(),
+        };
         let launcher = apk_launcher_activity(&extra.staged).ok();
         let labels = acos_services::pms::manifest_labels(&extra.staged).ok();
         let run_root = run.path().join("secondary").join(format!("tag-{tag}"));
@@ -2136,6 +2313,11 @@ pub(crate) fn launch_session(
             guest_lib_root: extra.guest_lib_root.clone(),
             guest_lib_dir: extra.guest_lib_dir.clone(),
             uid: extra.uid,
+            // A spec starts as an activity process (MPROC4's lazy `startActivity`
+            // spawn); a request for a service component switches it to
+            // `SpawnKind::Service` at spawn time.
+            kind: SpawnKind::Activity,
+            service: String::new(),
             activity: launcher
                 .as_ref()
                 .map(|l| l.component.clone())
@@ -2203,7 +2385,12 @@ pub(crate) fn launch_session(
         live_probe: interactive,
     };
     let mut secondary_pool =
-        SecondaryPool::new(secondary_specs, secondary_shared, Arc::clone(&live.atms));
+        SecondaryPool::new(
+            secondary_specs,
+            secondary_shared,
+            Arc::clone(&live.atms),
+            package.clone(),
+        );
     if !interactive && !secondary_pool.specs.is_empty() {
         eprintln!(
             "acos-art: launch: {} secondary package(s) installed; a non-interactive session has \
@@ -2217,6 +2404,21 @@ pub(crate) fn launch_session(
         sb.with_image(Some(image.dir.clone()));
     }
     sb.run_root(run.path());
+    // UID: this guest runs as the launched package's uid (AOSP: one uid per
+    // installed package, shared by that package's processes). The secondary
+    // processes below carry *their* package's uid the same way, so two processes
+    // of two packages in one session have two uids — `Process.myUid()`,
+    // `getPackageUid()`, `getNameForUid()` and the per-uid permission answer all
+    // agree on both sides of the socket.
+    match primary_uid {
+        Some(uid) => {
+            sb.app_uid(uid);
+        }
+        None => eprintln!(
+            "acos-art: launch: the package manager has no uid for {package}; the guest keeps the \
+             session default (per-package identity is unavailable)"
+        ),
+    }
     // NET3/NET4: the relay session is named after the session id the engine
     // published (`ACOS_ART_SESSION_ID`) — for an `acos serve` session and for a
     // one-shot `verify` run alike — so the live session API's `acos_net` controls
@@ -2321,6 +2523,11 @@ pub(crate) fn launch_session(
     sb.env("ACOS_PROCESS_TAG", "0");
     sb.env("ACOS_PROCESS_NAME", &package);
     sb.env("ACOSLAUNCH_RESUME_MS", &resume_ms.to_string());
+    // LAUNCHEXTRAS: the host-built Intent bytes, unmarshalled by the guest's
+    // first `LaunchActivityItem` (never rebuilt there from loose fields).
+    if let Some(hex) = &launch_intent_hex {
+        sb.env("ACOSLAUNCH_INTENT_BYTES", hex);
+    }
     // ADR-0029 item 1: the framework initializers the attached modules declare
     // (`ModuleManifest::process_initializers`). On a device the mainline
     // module's own process installs them before any app starts; ACOS has no such
@@ -2692,11 +2899,16 @@ pub(crate) fn launch_session(
     // Bounded capture (R1): a guest that loops on printf costs at most the cap.
     let cap = stream_cap_from_env();
     let (otx, orx) = mpsc::channel::<(u8, TailBuffer)>();
-    let probe_state = Arc::new(std::sync::Mutex::new(ProbeState {
-        top_process: Arc::clone(&live.top_process),
-        ..ProbeState::default()
-    }));
-    let probe_state = Arc::new(std::sync::Mutex::new(ProbeState::default()));
+    // MERGEFIX: one construction, and it is wired to ATMS's `top_process`.
+    // The merge of main (PERF4's probe state + wake) into modules (MPROC5's
+    // per-process samples) kept **both** declarations: the wired one was
+    // immediately shadowed by `ProbeState::default()`, whose own
+    // `top_process` Arc nothing ever writes. Every session then served the
+    // primary process's sample, so a cross-process launch (`mproc3`) never saw
+    // the second process's window and its log/probe lines looked absent.
+    let probe_state = Arc::new(std::sync::Mutex::new(ProbeState::for_session(
+        Arc::clone(&live.top_process),
+    )));
     // PERF4: the probe state uses the wake the peer thread already signals, so
     // one condvar covers both fact sources (a parsed guest sample and an applied
     // transaction). Nothing has subscribed to `ProbeState::default()`'s own wake
@@ -3462,6 +3674,10 @@ struct ProbeState {
     by_process: std::collections::BTreeMap<u32, ProbeSample>,
     /// MPROC5: the foreground process tag (`LiveHandles::top_process`), written
     /// by ATMS whenever the top-of-task moves.
+    ///
+    /// It is the **same** `Arc` ATMS publishes into, never a private copy: the
+    /// sample that is served must be the one of the process the activity
+    /// manager calls foreground (`ProbeState::for_session`).
     top_process: Arc<std::sync::atomic::AtomicU32>,
     /// MPROC7: per-process probe-sequence bases. A guest's probe counter starts
     /// at 1 in every **process**, so a respawned process's samples (1, 2, ...)
@@ -3514,6 +3730,29 @@ struct ProbeState {
     wake_failures: u64,
     stale_samples: u64,
     stall_pending_ms: Option<u64>,
+}
+
+impl ProbeState {
+    /// The probe state a session serves its trees from.
+    ///
+    /// MERGEFIX: this constructor is the **only** way a session's probe state is
+    /// built, so the foreground tag it reads is by construction the one ATMS
+    /// writes. The merge of main into modules had two declarations (a wired one
+    /// and a default one) and the second shadowed the first, which silently
+    /// pinned `top_process` to 0: every tree reply described the primary
+    /// process, however far the foreground had moved (`mproc3-two-process`).
+    fn for_session(top_process: Arc<std::sync::atomic::AtomicU32>) -> Self {
+        Self {
+            top_process,
+            ..Self::default()
+        }
+    }
+
+    /// The tag this state treats as foreground (diagnostics/tests).
+    #[cfg(test)]
+    fn published_top(&self) -> u32 {
+        self.top_process.load(std::sync::atomic::Ordering::Relaxed)
+    }
 }
 
 /// W59 latency trace: `elapsed_us tag text` per line, written under one lock
@@ -5173,6 +5412,10 @@ struct SettleTiming {
     pixels_changed: Option<bool>,
     /// ROT8: the step ended with the app's task finished (`window-gone`).
     task_finished: bool,
+    /// BACKSETTLE: `(window token, its stored frame number)` when the step bound
+    /// on a host-recorded window-forest change (the top window became an
+    /// existing window whose composited frame is complete) instead of a draw.
+    window_reshown: Option<(u64, u64)>,
 }
 
 /// REL3H: the settle `reason` of an input whose every published event the app
@@ -5306,6 +5549,218 @@ impl UnhandledSettleGate {
     }
 }
 
+/// BACKSETTLE: the LAYER1 window forest as the host observed it, plus the frame
+/// the compositor holds for the top window.
+///
+/// `order` is the `acos-wm` layer stack (bottom first, the same order
+/// composition, input and `assert_windows` read), `top_frame` is the newest
+/// buffer the C1 compositor stored for the top window's surface (the frame the
+/// host composites), and `generation` is C1's own store counter at that
+/// observation.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+struct WindowForest {
+    order: Vec<u64>,
+    top_frame: Option<u64>,
+    generation: u64,
+}
+
+impl WindowForest {
+    fn top(&self) -> Option<u64> {
+        self.order.last().copied()
+    }
+}
+
+/// Read the host's window forest: the LAYER1 stack plus the top window's stored
+/// frame.
+fn window_forest(live: &acos_services::registry::LiveHandles) -> WindowForest {
+    let order: Vec<u64> = {
+        let wms = live.wms.lock().unwrap_or_else(|e| e.into_inner());
+        wms.wm
+            .layer_stack()
+            .ordered()
+            .iter()
+            .map(|entry| entry.window)
+            .collect()
+    };
+    let (top_frame, generation) = {
+        let state = live.compositor.lock().unwrap_or_else(|e| e.into_inner());
+        let top_z = order.len().checked_sub(1).map(|index| index as i32);
+        let frame = top_z.and_then(|z| top_window_frame(&state, z));
+        (frame, state.latest_generation())
+    };
+    WindowForest {
+        order,
+        top_frame,
+        generation,
+    }
+}
+
+/// BACKSETTLE: the newest **complete** buffer stored for the top window's layer
+/// subtree - the frame the host composites on top of the display.
+///
+/// The window's own `SurfaceControl` layer carries the WMS placement
+/// (`placement.z` is the LAYER1 stack index) but the pixels arrive on its BLAST
+/// child layers, so the frame is looked up in the subtree rather than on the
+/// root record alone. A hidden layer is not composited and a layer without a
+/// stored buffer has no frame, so `None` here means "no frame the host could
+/// have composited" - the placeholder this rule must never bind.
+fn top_window_frame(state: &acos_services::surface_client::SurfaceState, top_z: i32) -> Option<u64> {
+    let root = state
+        .layers()
+        .find(|layer| !layer.hidden && layer.placement.map(|placement| placement.z) == Some(top_z))?;
+    let mut subtree = vec![root.handle.0];
+    // Walk the parent links until no new child appears (BLAST children are
+    // direct, a deeper buffer chain is followed too).
+    loop {
+        let mut grew = false;
+        for layer in state.layers() {
+            let handle = layer.handle.0;
+            if subtree.contains(&handle) {
+                continue;
+            }
+            if layer.parent.is_some_and(|parent| subtree.contains(&parent.0)) {
+                subtree.push(handle);
+                grew = true;
+            }
+        }
+        if !grew {
+            break;
+        }
+    }
+    state
+        .layers()
+        .filter(|layer| !layer.hidden && subtree.contains(&layer.handle.0))
+        .filter_map(|layer| {
+            layer.latest.as_ref().and_then(|buffer| {
+                (buffer.frame_number > 0 && buffer.width > 0 && buffer.height > 0)
+                    .then_some((layer.latest_generation, buffer.frame_number))
+            })
+        })
+        .max_by_key(|(generation, _)| *generation)
+        .map(|(_, frame)| frame)
+}
+
+/// BACKSETTLE: settle on a host-recorded window-forest change.
+///
+/// Back can end in a screen transition the app does not draw: the framework
+/// finishes the top Activity and the window below - which is still alive, its
+/// surface still holding its last drawn frame - becomes the top window again.
+/// Nothing in the guest traverses or draws, so the strict rule's
+/// "a draw after the action" requirement could only time out
+/// (`no-draw-after-action`) on an honest, fully composited screen.
+///
+/// The observable effect of that action **is** the window-forest change, and it
+/// is a host fact the settle can require:
+///
+/// * the top window changed to a window that **already existed** when the
+///   gesture's acks had all arrived (the baseline is taken at the ack, so a
+///   change that landed before it can never bind: it is not this action's),
+/// * that window's frame is the one the host composites - its surface stored a
+///   complete buffer and the layer is visible (no placeholder binds; the
+///   ADR-0032 amendment 1 rule still applies unchanged, the guest tree of the
+///   now-top window is part of the bind),
+/// * the change stays the newest fact for one confirmation window
+///   (`ACOS_STRICT_SETTLE_CONFIRM_MS`, the strict rule's own window) **and no
+///   newer C1 store landed**: if the app does draw afterwards within the
+///   settle window, that newer frame wins and the normal rule binds it,
+/// * the guest sample that supplies the tree is newer than the change and is
+///   not the empty `window_gone` forest.
+///
+/// A window this action *created* becoming top is not a re-show: it has no
+/// frame yet, and its draw is what the normal strict rule waits for.
+#[derive(Debug)]
+struct WindowReshownGate {
+    baseline: WindowForest,
+    confirm: Duration,
+    /// `(top window, its frame, when it was first seen)` of the candidate.
+    candidate: Option<(u64, u64, Instant)>,
+    /// The first host time the changed top window was observed.
+    changed_at_ms: Option<u64>,
+}
+
+/// What [`WindowReshownGate`] decided about one observation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ReshownOutcome {
+    /// Bind `(window token, its stored frame number)`.
+    Bind(u64, u64),
+    /// Keep waiting; the string is the settle trace's `last_reason`.
+    Wait(&'static str),
+}
+
+impl WindowReshownGate {
+    fn new(baseline: WindowForest, confirm: Duration) -> Self {
+        WindowReshownGate {
+            baseline,
+            confirm,
+            candidate: None,
+            changed_at_ms: None,
+        }
+    }
+
+    /// Judge the forest now. `None` means the caller must not bind on this
+    /// observation and should let the shipped rule decide.
+    fn observe(&mut self, forest: &WindowForest, now: Instant, now_ms: u64) -> ReshownOutcome {
+        let Some(top) = forest.top() else {
+            self.candidate = None;
+            return ReshownOutcome::Wait(WINDOW_GONE_REASON);
+        };
+        if forest == &self.baseline {
+            self.candidate = None;
+            return ReshownOutcome::Wait(WINDOW_UNCHANGED_REASON);
+        }
+        if Some(top) == self.baseline.top() {
+            // The forest changed below the top (a window was added below, or a
+            // sibling went away): the top window did not change, so this is not
+            // a re-show.
+            self.candidate = None;
+            return ReshownOutcome::Wait(WINDOW_SAME_TOP_REASON);
+        }
+        if !self.baseline.order.contains(&top) {
+            // A window that did not exist at the ack became top: a new window,
+            // whose draw the normal rule waits for.
+            self.candidate = None;
+            return ReshownOutcome::Wait(WINDOW_NEW_TOP_REASON);
+        }
+        let Some(frame) = forest.top_frame else {
+            // The re-shown window has no complete stored frame: binding its
+            // "frame" would be a placeholder claim.
+            self.candidate = None;
+            return ReshownOutcome::Wait(WINDOW_NO_FRAME_REASON);
+        };
+        if forest.generation != self.baseline.generation {
+            // The app drew after the action: that newer frame is the settle's
+            // frame (the shipped rule binds it), never the re-shown one.
+            self.candidate = None;
+            return ReshownOutcome::Wait(WINDOW_SUPERSEDED_REASON);
+        }
+        match self.candidate {
+            Some((window, seen_frame, since)) if window == top && seen_frame == frame => {
+                if now.saturating_duration_since(since) >= self.confirm {
+                    ReshownOutcome::Bind(top, frame)
+                } else {
+                    ReshownOutcome::Wait(WINDOW_CONFIRM_REASON)
+                }
+            }
+            _ => {
+                self.candidate = Some((top, frame, now));
+                if self.changed_at_ms.is_none() {
+                    self.changed_at_ms = Some(now_ms);
+                }
+                ReshownOutcome::Wait(WINDOW_CONFIRM_REASON)
+            }
+        }
+    }
+}
+
+/// BACKSETTLE: settle trace reasons (never user-visible on their own).
+const WINDOW_UNCHANGED_REASON: &str = "window-unchanged";
+const WINDOW_SAME_TOP_REASON: &str = "window-same-top";
+const WINDOW_NEW_TOP_REASON: &str = "window-new-top";
+const WINDOW_NO_FRAME_REASON: &str = "window-frame-missing";
+const WINDOW_SUPERSEDED_REASON: &str = "window-reshown-superseded";
+const WINDOW_CONFIRM_REASON: &str = "window-reshown-confirm";
+const WINDOW_GONE_REASON: &str = "window-forest-empty";
+
 /// REL3H2: settle trace reason - the sample predates the gesture's last ack.
 const UNHANDLED_ACK_FLOOR_REASON: &str = "unhandled-ack-floor";
 /// REL3H2: settle trace reason - the confirmation window has not elapsed.
@@ -5328,6 +5783,17 @@ impl SettleTiming {
             if let Some(map) = value.as_object_mut() {
                 map.insert("task_finished".into(), serde_json::json!(true));
                 map.insert("window_gone".into(), serde_json::json!(true));
+            }
+        }
+        if let Some((token, frame)) = self.window_reshown {
+            if let Some(map) = value.as_object_mut() {
+                // The token names the window that is on top now; the frame is
+                // the one C1 holds for it (the frame the host composites).
+                map.insert("window_reshown".into(), serde_json::json!(format!("{token:#x}")));
+                map.insert(
+                    "window_reshown_frame".into(),
+                    serde_json::json!(frame),
+                );
             }
         }
         if let Some(rule) = self.rule {
@@ -5452,6 +5918,11 @@ fn wait_for_event_settled(
     // ack of the same gesture said `finishInputEvent(handled) = false`; the
     // window it acted on is gone, so it is never reported `INPUT_UNHANDLED`.
     window_removal: Option<(acos_parcel::BinderId, u64)>,
+    // BACKSETTLE: the host's window forest at the moment this gesture's acks had
+    // all arrived. `Some` only for a strict input action; a top-window change
+    // away from that baseline may settle the step as `window_reshown` (see
+    // [`WindowReshownGate`]). `None` keeps every other caller byte-identical.
+    window_reshown: Option<WindowForest>,
 ) -> SettleEnd {
     let confirm = Duration::from_millis(env_u64("ACOS_STRICT_SETTLE_CONFIRM_MS", 24));
     // Owner decision (2026-11-12): the pixel-unchanged guard is OFF by default.
@@ -5520,6 +5991,9 @@ fn wait_for_event_settled(
     // entry, so the ack floor is a fixed point: samples older than it are never
     // eligible, however long the wait runs.
     let mut unhandled_gate = unhandled_ack_floor.map(|floor| UnhandledSettleGate::new(floor, confirm));
+    // BACKSETTLE: the baseline is the forest at the ack, so a change that landed
+    // before the action's input ack can never bind (it is not this action's).
+    let mut reshown_gate = window_reshown.map(|baseline| WindowReshownGate::new(baseline, confirm));
     let mut first_change_ms: Option<u64> = None;
     let mut last_reason = String::from("no-probe");
     let mut last_pixels_changed: Option<bool> = None;
@@ -5529,6 +6003,10 @@ fn wait_for_event_settled(
     // a sample the host ignored. Trace-only (`ACOS_ART_INPUT_TRACE`); no reply
     // changes.
     let mut traced_reason = String::new();
+    // BACKSETTLE: the window-forest observation's own trace line follows the same
+    // rule (only when its decision changes), so a `window-reshown` bind and the
+    // draw that superseded it are both readable in the session trace.
+    let mut traced_forest_reason = String::new();
     trace_host(
         probe_state,
         &format!(
@@ -5572,6 +6050,53 @@ fn wait_for_event_settled(
         // not because the app drew.
         let removal_binds = window_removal
             .is_some_and(|(token, mark)| live.input.window_removed_since(token, mark));
+        // BACKSETTLE: judge the host's window forest once per observation. The
+        // gate is only built for an input action whose acks had all arrived
+        // before the wait began (`window_reshown`), so a tree/launch wait keeps
+        // its shipped semantics exactly.
+        let forest = match reshown_gate {
+            Some(_) => window_forest(live),
+            None => WindowForest::default(),
+        };
+        let reshown = reshown_gate
+            .as_mut()
+            .map(|gate| gate.observe(&forest, Instant::now(), host_ms()));
+        let reshown_changed_at = reshown_gate
+            .as_ref()
+            .and_then(|gate| gate.changed_at_ms)
+            .unwrap_or(u64::MAX);
+        if let Some(outcome) = reshown {
+            let reason = match outcome {
+                ReshownOutcome::Bind(token, frame) => format!("bind {token:#x}/{frame}"),
+                ReshownOutcome::Wait(reason) => reason.to_string(),
+            };
+            if reason != traced_forest_reason {
+                traced_forest_reason = reason.clone();
+                trace_host(
+                    probe_state,
+                    &format!(
+                        "settle forest reason={reason} top={} frame={:?} gen={} base_top={} \
+                         base_gen={} changed_at={}",
+                        forest
+                            .top()
+                            .map(|token| format!("{token:#x}"))
+                            .unwrap_or_else(|| "none".into()),
+                        forest.top_frame,
+                        forest.generation,
+                        reshown_gate
+                            .as_ref()
+                            .and_then(|gate| gate.baseline.top())
+                            .map(|token| format!("{token:#x}"))
+                            .unwrap_or_else(|| "none".into()),
+                        reshown_gate
+                            .as_ref()
+                            .map(|gate| gate.baseline.generation)
+                            .unwrap_or(0),
+                        reshown_changed_at,
+                    ),
+                );
+            }
+        }
         let mut valid: Option<ProbeSample> = None;
         match &probe {
             None => last_reason = "no-probe".to_string(),
@@ -5604,6 +6129,7 @@ fn wait_for_event_settled(
                         reason: None,
                         pixels_changed: Some(false),
                         task_finished: true,
+                        window_reshown: None,
                     };
                     trace_host(
                         probe_state,
@@ -5652,6 +6178,7 @@ fn wait_for_event_settled(
                             reason: None,
                             pixels_changed: None,
                             task_finished: false,
+                            window_reshown: None,
                         };
                         trace_host(
                             probe_state,
@@ -5674,6 +6201,57 @@ fn wait_for_event_settled(
                         .first()
                         .cloned()
                         .unwrap_or_else(|| "unsettled".to_string());
+                } else if let Some((token, frame)) =
+                    reshown_bind(reshown, sample, reshown_changed_at)
+                {
+                    // BACKSETTLE: this action's observable effect is the host's
+                    // own window-forest fact (the top window became an existing
+                    // window whose frame is complete), and the app has not drawn
+                    // since. Bind that state, with the guest tree of the now-top
+                    // window, instead of charging the action a draw it never
+                    // owed. When the gate does not bind, the shipped arms below
+                    // decide exactly as before.
+                    //
+                    // `pixels_changed` is measured against the caller's
+                    // pre-action capture exactly like the shipped rule measures
+                    // it, so `expect_change: true` still has to earn its pass on
+                    // this bind (`false` fails it).
+                    let pixels_changed = match previous_fnv {
+                        None => true,
+                        Some(previous) => {
+                            let current = {
+                                let state =
+                                    live.compositor.lock().unwrap_or_else(|e| e.into_inner());
+                                state.capture_latest().map(|c| c.fnv1a)
+                            };
+                            current != Some(previous) && current.is_some()
+                        }
+                    };
+                    let timing = SettleTiming {
+                        mode: SettleMode::Strict,
+                        first_change_ms: Some(sample.at_ms.saturating_sub(publish_epoch_ms)),
+                        frame_ms: None,
+                        state_changed: None,
+                        bound: "window-reshown",
+                        rule: Some("event"),
+                        reason: None,
+                        pixels_changed: Some(pixels_changed),
+                        task_finished: false,
+                        window_reshown: Some((token, frame)),
+                    };
+                    trace_host(
+                        probe_state,
+                        &format!(
+                            "settle window-reshown ready gen={generation} probe_seq={} \
+                             window={token:#x} frame={frame}",
+                            sample.seq
+                        ),
+                    );
+                    return SettleEnd::Settled(Settled {
+                        probe: sample.clone(),
+                        generation,
+                        timing,
+                    });
                 } else if publish_epoch_ms != 0
                     && sample.draw_ms < publish_epoch_ms
                     && !removal_binds
@@ -5737,6 +6315,7 @@ fn wait_for_event_settled(
                             reason: Some(SETTLE_UNHANDLED_INPUT.to_string()),
                             pixels_changed: Some(pixels_changed),
                             task_finished: false,
+                            window_reshown: None,
                         };
                         trace_host(
                             probe_state,
@@ -5829,6 +6408,7 @@ fn wait_for_event_settled(
                         reason: None,
                         pixels_changed: last_pixels_changed,
                         task_finished: false,
+                        window_reshown: None,
                     };
                     trace_host(
                         probe_state,
@@ -5943,6 +6523,7 @@ fn wait_for_event_settled(
                     reason: Some(last_reason),
                     pixels_changed: Some(pixels_changed),
                     task_finished: false,
+                    window_reshown: None,
                 },
             };
         }
@@ -5993,6 +6574,8 @@ fn wait_for_settled_observation(
     // it; `None` keeps the strict draw requirement for every other caller.
     // Precedence over the unhandled shortcut: see [`wait_for_event_settled`].
     window_removal: Option<(acos_parcel::BinderId, u64)>,
+    // BACKSETTLE: see [`wait_for_event_settled`].
+    window_reshown: Option<WindowForest>,
 ) -> SettleEnd {
     if mode == SettleMode::Strict {
         return wait_for_event_settled(
@@ -6010,6 +6593,7 @@ fn wait_for_settled_observation(
             unhandled_ack_floor,
             entry_fnv,
             window_removal,
+            window_reshown,
         );
     }
     // ---- fast (P1): first probe tree that differs from the pre-action baseline.
@@ -6136,6 +6720,7 @@ fn wait_for_settled_observation(
                 reason: None,
                 pixels_changed: None,
                 task_finished: false,
+                window_reshown: None,
             };
             trace_host(
                 probe_state,
@@ -6198,6 +6783,7 @@ fn wait_for_settled_observation(
                         reason: None,
                         pixels_changed: None,
                         task_finished: false,
+                        window_reshown: None,
                     };
                     trace_host(
                         probe_state,
@@ -6232,6 +6818,7 @@ fn wait_for_settled_observation(
                     reason: None,
                     pixels_changed: None,
                     task_finished: false,
+                    window_reshown: None,
                 },
             };
         }
@@ -6297,6 +6884,43 @@ fn sample_own_draw_is_stored(
 /// involved: that is the strict rule, unchanged.
 /// ROT8: a sample proves the task finished only when the guest says so AND it
 /// is internally consistent: settled, with an empty window forest.
+/// BACKSETTLE: `true` when the sample's tree has no node at all (an empty
+/// window forest). A `window_reshown` bind needs the tree of the now-top window,
+/// so an empty forest is never its evidence.
+fn tree_is_empty(tree: &serde_json::Value) -> bool {
+    tree.get("nodes")
+        .and_then(|nodes| nodes.as_array())
+        .map(|nodes| nodes.is_empty())
+        .unwrap_or(true)
+}
+
+/// BACKSETTLE: may this observation bind as `window-reshown`?
+///
+/// The gate decides the forest fact (a stable change to an existing top window
+/// with a complete composited frame); this adds the observation half: the sample
+/// must be **settled** (the guest has no pending traversal, so its tree is the
+/// state the screen is in), newer than the change, and its tree must be the one
+/// of the now-top window (non-empty, not a finished task). Anything less keeps
+/// the shipped rule in charge: an unsettled sample is a screen in motion, never
+/// evidence that this action's effect is complete.
+fn reshown_bind(
+    outcome: Option<ReshownOutcome>,
+    sample: &ProbeSample,
+    changed_at_ms: u64,
+) -> Option<(u64, u64)> {
+    match outcome {
+        Some(ReshownOutcome::Bind(token, frame))
+            if sample.settled
+                && sample.at_ms >= changed_at_ms
+                && !sample.window_gone
+                && !tree_is_empty(&sample.tree) =>
+        {
+            Some((token, frame))
+        }
+        _ => None,
+    }
+}
+
 fn window_gone_shape(sample: &ProbeSample) -> bool {
     sample.window_gone
         && sample.settled
@@ -7230,6 +7854,7 @@ fn interactive_serve(
                         None,
                         None,
                         None,
+                        None,
                     );
                     match settled {
                         SettleEnd::Settled(settled) => {
@@ -7817,46 +8442,19 @@ fn interactive_serve(
                 // v0.3.0 M8 regression. See `unhandled_entry_fnv` below for where
                 // the value is taken now and why moving it changes nothing.
                 let injected = match (cmd, key_code) {
-                    ("tap", _) => {
-                        // LAYER1: the ART/`verify` path routes a tap through the
-                        // WMS layer stack, not `WindowManagerGlobal` insertion
-                        // order. The request carries **display** coordinates
-                        // (the same space the UI tree reports); the target is
-                        // the topmost touchable window at that point, and the
-                        // published point is that window's own local space
-                        // (the `InputChannel` transform).
-                        let point = acos_wm::geom::PointI::new(x as i32, y as i32);
-                        let (target, origin) = {
-                            let wm = live
-                                .wms
-                                .lock()
-                                .unwrap_or_else(std::sync::PoisonError::into_inner);
-                            match wm.wm.hit_test(point) {
-                                Some(window) => (
-                                    Some(window),
-                                    wm.wm
-                                        .windows
-                                        .get(&window)
-                                        .map(|record| (record.frame.left, record.frame.top))
-                                        .unwrap_or((0, 0)),
-                                ),
-                                None => (None, (0, 0)),
-                            }
-                        };
-                        match target {
-                            Some(window) => live.input.tap_window(
-                                acos_parcel::binder::BinderId(window),
-                                x - origin.0 as f32,
-                                y - origin.1 as f32,
-                                ack_wait,
-                            ),
-                            None => Err(
-                                acos_services::input_channel::ChannelError::Malformed(
-                                    "no touchable window at the tap point (the layer-stack hit test found none)",
-                                ),
-                            ),
-                        }
-                    }
+                    // WVTAP: one input routing rule, owned by `InputHost`:
+                    //   * touch (tap, swipe) goes to the window **under the
+                    //     point** (`InputDispatcher::findTouchedWindowAt`: the
+                    //     topmost touchable window containing it), and the
+                    //     point is converted into that window's space;
+                    //   * keys/text go to the **focused** window
+                    //     (`dispatchKeyLocked`).
+                    // The request carries **display** coordinates (the same
+                    // space the UI tree reports). Choosing the target here as
+                    // well would be a second implementation of the rule; this
+                    // arm used to be a dead duplicate of the `hit_test` one
+                    // below it, and `swipe` went to the focused window (a
+                    // touch routed by focus).
                     ("tap", _) => live.input.tap(x, y, ack_wait),
                     ("swipe", _) => live
                         .input
@@ -7949,6 +8547,12 @@ fn interactive_serve(
                     }
                     _ => None,
                 };
+                // BACKSETTLE: the window forest as it is **now** - every ack of
+                // this gesture has arrived (the collect above returned), so a
+                // top-window change observed later is this gesture's, and one
+                // that already happened is not. Strict inputs only: `fast` is a
+                // navigation rule that never binds a frame.
+                let window_reshown = (mode == SettleMode::Strict).then(|| window_forest(live));
                 let settled = wait_for_settled_observation(
                     child,
                     cgroup,
@@ -7966,6 +8570,7 @@ fn interactive_serve(
                     unhandled_ack_floor,
                     entry_fnv,
                     Some((injected.token, removal_mark)),
+                    window_reshown,
                 );
                 let (settled_probe, g1, p1, settle_timing) = match settled {
                     SettleEnd::Settled(settled) => (
@@ -9470,6 +10075,18 @@ fn apk_launcher_activity(apk: &Path) -> Result<acos_services::manifest_resolve::
     })
 }
 
+/// Lowercase hex of `bytes`: the `ACOSLAUNCH_INTENT_BYTES` spelling (the guest
+/// unmarshals the Intent payload from it, so an env value never carries a NUL
+/// byte or a quoting hazard).
+fn hex_bytes(bytes: &[u8]) -> String {
+    use std::fmt::Write as _;
+    let mut out = String::with_capacity(bytes.len() * 2);
+    for byte in bytes {
+        let _ = write!(out, "{byte:02x}");
+    }
+    out
+}
+
 /// Read one `key=value` field from a marker file's lines. The guest writes one
 /// field per line, so the value is the rest of that line.
 fn marker_field<'a>(marker: &'a str, key: &str) -> Option<&'a str> {
@@ -9549,6 +10166,74 @@ mod probe_line_tests {
                 touch_traced: self.touch_traced,
             }
         }
+    }
+
+    /// MERGEFIX (mproc3): the served tree is the **foreground** process's
+    /// sample.
+    ///
+    /// The launcher builds its probe state with `ProbeState::for_session(top)`,
+    /// and that `Arc` is the one ATMS writes when the top-of-task moves. The
+    /// merge of main into modules kept *two* declarations — the wired one and
+    /// `ProbeState::default()` — and the second shadowed the first, so
+    /// `top_process` was a private 0 that nothing ever wrote: every tree reply
+    /// described the primary process however far the foreground had moved.
+    /// `mproc3-two-process` then timed out on `wait_for id=="finish"`, because
+    /// proc-b's window was never the served one.
+    ///
+    /// ATMS publishes through the same `Arc`; no other wiring step may be
+    /// needed for the served sample to follow it.
+    #[test]
+    fn the_served_sample_is_the_foreground_processes() {
+        let atms_top = Arc::new(std::sync::atomic::AtomicU32::new(0));
+        let state = Arc::new(std::sync::Mutex::new(ProbeState::for_session(Arc::clone(
+            &atms_top,
+        ))));
+        let sample = |window: &str| {
+            format!(
+                "ACOSPROBE {{\"seq\":1,\"tree\":{{\"nodes\":[],\"window\":\"{window}\"}}}}\n"
+            )
+        };
+        let a = sample("proca");
+        let b = sample("procb");
+        drain_stdout_lines(
+            std::io::Cursor::new(a.into_bytes()),
+            4096,
+            Arc::clone(&state),
+            None,
+            0,
+        );
+        drain_stdout_lines(
+            std::io::Cursor::new(b.into_bytes()),
+            4096,
+            Arc::clone(&state),
+            None,
+            1,
+        );
+        let served_window = |state: &Arc<std::sync::Mutex<ProbeState>>| {
+            latest_probe(state).expect("a sample").tree["window"]
+                .as_str()
+                .unwrap_or_default()
+                .to_string()
+        };
+        assert_eq!(
+            served_window(&state),
+            "proca",
+            "while the primary is the top, its sample is the served one"
+        );
+        // ATMS's `publish_top(1)`: one store into the `Arc` the session was
+        // built with. Nothing else may be needed — this is the wiring the merge
+        // lost.
+        atms_top.store(1, std::sync::atomic::Ordering::Relaxed);
+        assert_eq!(
+            served_window(&state),
+            "procb",
+            "a cross-process launch serves the new foreground process's tree"
+        );
+        assert_eq!(
+            state.lock().unwrap().published_top(),
+            1,
+            "the session's top is ATMS's Arc, not a private copy"
+        );
     }
 
     /// Teeth for the W32 misinterpretation: a two-window sample is larger than
@@ -9739,6 +10424,7 @@ mod probe_line_tests {
             reason: None,
             pixels_changed: Some(false),
             task_finished: true,
+            window_reshown: None,
         };
         let json = timing.to_json(true, 5);
         assert_eq!(json["bound"], "window-gone");
@@ -10503,6 +11189,7 @@ mod rel3h_unhandled_input_tests {
             reason: Some(SETTLE_UNHANDLED_INPUT.to_string()),
             pixels_changed: Some(false),
             task_finished: false,
+            window_reshown: None,
         };
         let json = timing.to_json(true, 7);
         assert_eq!(json["mode"], serde_json::json!("strict"));
@@ -10544,5 +11231,339 @@ mod final_logd_tests {
             .collect();
         assert_eq!(seqs, vec![8, 9]);
         let _ = std::fs::remove_dir_all(&dir);
+    }
+}
+
+/// BACKSETTLE: the `window_reshown` settle rule, on its own.
+///
+/// Every test states one of the guards the rule must not be able to skip, so a
+/// future change that widens it fails here instead of turning a timeout into a
+/// false pass:
+///
+/// * the change is measured against the forest at the gesture's **ack**, so a
+///   change that already happened before the action can never bind;
+/// * the re-shown window's frame must be a complete stored buffer (no
+///   placeholder), and the tree that is bound must be newer than the change and
+///   non-empty;
+/// * if the app draws after the action within the settle window, that newer
+///   frame wins and the re-show never binds;
+/// * a window the action *created* becoming top is not a re-show;
+/// * `bound: "window-reshown"` carries the token and the frame the host
+///   composites, and still reports the measured `pixels_changed`, so an
+///   `expect_change: true` claim fails on an unchanged screen.
+#[cfg(test)]
+mod backsettle_tests {
+    use super::*;
+
+    const CONFIRM_MS: u64 = 24;
+
+    /// The forest at the ack: two windows, the upper one (0x20) on top with
+    /// frame 7 stored, C1 at generation 5.
+    fn baseline_two_windows() -> WindowForest {
+        WindowForest {
+            order: vec![0x10, 0x20],
+            top_frame: Some(7),
+            generation: 5,
+        }
+    }
+
+    fn gate() -> WindowReshownGate {
+        WindowReshownGate::new(baseline_two_windows(), Duration::from_millis(CONFIRM_MS))
+    }
+
+    /// The upper window went away; the existing one below is the top window now
+    /// and its last drawn frame (3) is what the host composites.
+    fn after_removal_top_is_below() -> WindowForest {
+        WindowForest {
+            order: vec![0x10],
+            top_frame: Some(3),
+            generation: 5,
+        }
+    }
+
+    #[test]
+    fn a_host_window_change_binds_the_existing_top_window_and_its_frame() {
+        let mut gate = gate();
+        let now = Instant::now();
+        assert_eq!(
+            gate.observe(&after_removal_top_is_below(), now, 1_000),
+            ReshownOutcome::Wait(WINDOW_CONFIRM_REASON),
+            "the change must be the newest fact for one confirmation window"
+        );
+        assert_eq!(
+            gate.observe(
+                &after_removal_top_is_below(),
+                now + Duration::from_millis(CONFIRM_MS),
+                1_000 + CONFIRM_MS
+            ),
+            ReshownOutcome::Bind(0x10, 3),
+            "the token and the frame the host composites are the bind"
+        );
+        // The bound frame/token are reported as settle evidence, not inferred by
+        // the reader.
+        let timing = SettleTiming {
+            mode: SettleMode::Strict,
+            first_change_ms: Some(250),
+            frame_ms: None,
+            state_changed: None,
+            bound: "window-reshown",
+            rule: Some("event"),
+            reason: None,
+            pixels_changed: Some(false),
+            task_finished: false,
+            window_reshown: Some((0x10, 3)),
+        };
+        let json = timing.to_json(true, 9);
+        assert_eq!(json["bound"], serde_json::json!("window-reshown"));
+        assert_eq!(json["window_reshown"], serde_json::json!("0x10"));
+        assert_eq!(json["window_reshown_frame"], serde_json::json!(3));
+        assert_eq!(json["pixels_changed"], serde_json::json!(false));
+        assert!(
+            json.get("task_finished").is_none(),
+            "a re-show is not a finished task"
+        );
+    }
+
+    /// Guard: the baseline is the forest at the **ack**. A top window that is
+    /// already the top window then is not a change of this action, however the
+    /// forest changes elsewhere.
+    #[test]
+    fn a_top_window_that_was_already_top_at_the_ack_never_binds() {
+        let mut gate = gate();
+        let now = Instant::now();
+        // The same top window, a different window below it: the forest differs,
+        // but the top window did not change.
+        let below_changed = WindowForest {
+            order: vec![0x11, 0x20],
+            top_frame: Some(7),
+            generation: 5,
+        };
+        for step in 0..40u64 {
+            assert_eq!(
+                gate.observe(
+                    &below_changed,
+                    now + Duration::from_millis(step * 10),
+                    1_000 + step * 10
+                ),
+                ReshownOutcome::Wait(WINDOW_SAME_TOP_REASON)
+            );
+        }
+    }
+
+    /// Guard: the re-shown window's frame must be the one the host composites.
+    /// A window with no complete stored buffer (never drew, or the layer is
+    /// hidden) is a placeholder, never a bind - the ADR-0032 amendment 1 rule.
+    #[test]
+    fn a_re_shown_window_without_a_complete_frame_never_binds() {
+        let mut gate = gate();
+        let now = Instant::now();
+        let no_frame = WindowForest {
+            order: vec![0x10],
+            top_frame: None,
+            generation: 5,
+        };
+        for step in 0..40u64 {
+            assert_eq!(
+                gate.observe(
+                    &no_frame,
+                    now + Duration::from_millis(step * 10),
+                    1_000 + step * 10
+                ),
+                ReshownOutcome::Wait(WINDOW_NO_FRAME_REASON)
+            );
+        }
+    }
+
+    /// Guard: a window this action created is not a re-show. It was not in the
+    /// forest at the ack, and its first draw is what the normal rule waits for.
+    #[test]
+    fn a_window_created_by_the_action_never_binds_as_reshown() {
+        let mut gate = gate();
+        let now = Instant::now();
+        let new_top = WindowForest {
+            order: vec![0x10, 0x99],
+            top_frame: Some(1),
+            generation: 6,
+        };
+        for step in 0..40u64 {
+            assert_eq!(
+                gate.observe(
+                    &new_top,
+                    now + Duration::from_millis(step * 10),
+                    1_000 + step * 10
+                ),
+                ReshownOutcome::Wait(WINDOW_NEW_TOP_REASON)
+            );
+        }
+    }
+
+    /// Guard: if the app draws afterwards within the settle window, the newer
+    /// frame wins. A C1 store after the ack supersedes the re-show for good.
+    #[test]
+    fn a_draw_after_the_action_supersedes_the_re_shown_frame() {
+        let mut gate = gate();
+        let now = Instant::now();
+        assert_eq!(
+            gate.observe(&after_removal_top_is_below(), now, 1_000),
+            ReshownOutcome::Wait(WINDOW_CONFIRM_REASON)
+        );
+        let drawn = WindowForest {
+            order: vec![0x10],
+            top_frame: Some(9),
+            generation: 6,
+        };
+        assert_eq!(
+            gate.observe(
+                &drawn,
+                now + Duration::from_millis(CONFIRM_MS),
+                1_000 + CONFIRM_MS
+            ),
+            ReshownOutcome::Wait(WINDOW_SUPERSEDED_REASON),
+            "the re-shown frame is not the newest state once the app drew"
+        );
+        // Even after the newer store is no longer the newest one (a later store
+        // on the same draw keeps the generation above the baseline), the re-show
+        // never comes back.
+        for step in 1..10u64 {
+            assert_eq!(
+                gate.observe(
+                    &drawn,
+                    now + Duration::from_millis(CONFIRM_MS * 2 + step * 10),
+                    2_000 + step * 10
+                ),
+                ReshownOutcome::Wait(WINDOW_SUPERSEDED_REASON)
+            );
+        }
+    }
+
+    /// Negative: no window change at all keeps today's semantics - the rule
+    /// never binds, so Back's `INPUT_UNHANDLED` / `no-draw-after-action`
+    /// outcomes are unchanged.
+    #[test]
+    fn an_unchanged_window_forest_keeps_the_shipped_semantics() {
+        let mut gate = gate();
+        let now = Instant::now();
+        for step in 0..40u64 {
+            assert_eq!(
+                gate.observe(
+                    &baseline_two_windows(),
+                    now + Duration::from_millis(step * 10),
+                    1_000 + step * 10
+                ),
+                ReshownOutcome::Wait(WINDOW_UNCHANGED_REASON)
+            );
+        }
+    }
+
+    /// Negative: an empty forest is the `window-gone` shape, never a re-show.
+    #[test]
+    fn an_empty_forest_is_not_a_re_show() {
+        let mut gate = gate();
+        let now = Instant::now();
+        for step in 0..10u64 {
+            assert_eq!(
+                gate.observe(
+                    &WindowForest::default(),
+                    now + Duration::from_millis(step * 10),
+                    1_000 + step * 10
+                ),
+                ReshownOutcome::Wait(WINDOW_GONE_REASON)
+            );
+        }
+    }
+
+    /// A second change restarts the confirmation window: the rule binds the
+    /// state that is still there after the window, not the first one it saw.
+    #[test]
+    fn a_second_window_change_restarts_the_confirmation_window() {
+        // Three windows at the ack: 0x10 (bottom), 0x11, 0x20 (top). Both lower
+        // windows therefore already existed when the action's acks arrived.
+        let mut gate = WindowReshownGate::new(
+            WindowForest {
+                order: vec![0x10, 0x11, 0x20],
+                top_frame: Some(7),
+                generation: 5,
+            },
+            Duration::from_millis(CONFIRM_MS),
+        );
+        let now = Instant::now();
+        assert_eq!(
+            gate.observe(&after_removal_top_is_below(), now, 1_000),
+            ReshownOutcome::Wait(WINDOW_CONFIRM_REASON)
+        );
+        // 0x10 went away too; 0x11 (also present at the ack) is top now with a
+        // different frame.
+        let next = WindowForest {
+            order: vec![0x11],
+            top_frame: Some(2),
+            generation: 5,
+        };
+        assert_eq!(
+            gate.observe(&next, now + Duration::from_millis(10), 1_010),
+            ReshownOutcome::Wait(WINDOW_CONFIRM_REASON)
+        );
+        assert_eq!(
+            gate.observe(
+                &next,
+                now + Duration::from_millis(10 + CONFIRM_MS),
+                1_010 + CONFIRM_MS
+            ),
+            ReshownOutcome::Bind(0x11, 2)
+        );
+    }
+
+    /// The tree half of the contract: a re-show binds the tree of the now-top
+    /// window, so an empty forest or a sample taken before the change cannot
+    /// satisfy it.
+    #[test]
+    fn an_empty_tree_is_not_a_bindable_observation() {
+        assert!(tree_is_empty(&serde_json::json!({"nodes": []})));
+        assert!(tree_is_empty(&serde_json::json!({})));
+        assert!(!tree_is_empty(&serde_json::json!({"nodes": [{"id": "title"}]})));
+    }
+
+    /// The observation half, on a real sample: only a **settled** sample taken
+    /// after the change, with the now-top window's non-empty tree, converts the
+    /// gate's bind into a settle. An unsettled sample is a screen in motion and
+    /// must fall through to the shipped rule (which keeps waiting for it).
+    #[test]
+    fn only_a_settled_post_change_sample_binds_the_re_shown_window() {
+        fn probe(settled: bool, at_ms: u64, nodes: serde_json::Value) -> ProbeSample {
+            ProbeSample {
+                seq: 9,
+                tree: serde_json::json!({"nodes": nodes}),
+                at_ms,
+                generation: 5,
+                draw_ms: 0,
+                draw_seq: 0,
+                settled,
+                pending: if settled { Vec::new() } else { vec!["traversal".into()] },
+                window_gone: false,
+                animations_on: None,
+            }
+        }
+        let bind = Some(ReshownOutcome::Bind(0x10, 3));
+        let node = serde_json::json!([{"id": "title"}]);
+        assert_eq!(
+            reshown_bind(bind, &probe(true, 1_000, node.clone()), 1_000),
+            Some((0x10, 3)),
+            "a settled post-change sample with the now-top tree is the bind"
+        );
+        assert_eq!(
+            reshown_bind(bind, &probe(false, 1_000, node.clone()), 1_000),
+            None,
+            "an unsettled sample is a screen in motion, never a settle"
+        );
+        assert_eq!(
+            reshown_bind(bind, &probe(true, 999, node.clone()), 1_000),
+            None,
+            "a sample taken before the change cannot describe it"
+        );
+        assert_eq!(
+            reshown_bind(bind, &probe(true, 1_000, serde_json::json!([])), 1_000),
+            None,
+            "an empty forest is the window-gone shape, not a re-show"
+        );
+        assert_eq!(reshown_bind(None, &probe(true, 1_000, node), 1_000), None);
     }
 }

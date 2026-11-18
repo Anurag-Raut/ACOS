@@ -168,9 +168,113 @@ public final class MainActivity extends Activity {
                     + "," + (px.get(2) & 255) + "," + (px.get(3) & 255) + " glErr=0x"
                     + Integer.toHexString(android.opengl.GLES20.glGetError()));
         }
+        if (mc && name.equals("default")) {
+            try {
+                bench(name, dpy, cfgs[0], ctx);
+            } catch (Throwable t) {
+                p(name + ": bench threw " + t);
+            }
+        }
         EGL14.eglMakeCurrent(dpy, EGL14.EGL_NO_SURFACE, EGL14.EGL_NO_SURFACE, EGL14.EGL_NO_CONTEXT);
         EGL14.eglDestroyContext(dpy, ctx);
         EGL14.eglTerminate(dpy);
+    }
+
+    /**
+     * GPUSPIKE: per-frame cost on a window-sized (1080x2400) pbuffer, so the same
+     * numbers can be compared between providers (SwiftShader vs the host GPU).
+     * Three loops, each time-boxed to 1.5 s: clear-only frame (the floor), one
+     * full-screen draw with a 24-iteration ALU loop in the fragment shader (a
+     * stand-in for a heavy UI frame), and a full-surface glReadPixels (what a
+     * compositor-side copy costs). Each frame ends in glFinish so GPU time is
+     * included. Lines: `bench: <what> n=<frames> mean_ms=<x> p50_ms=<x> max_ms=<x>`.
+     */
+    static void bench(String name, EGLDisplay dpy, EGLConfig cfg, EGLContext ctx) {
+        final int W = 1080, H = 2400;
+        int[] pb = {EGL14.EGL_WIDTH, W, EGL14.EGL_HEIGHT, H, EGL14.EGL_NONE};
+        EGLSurface s = EGL14.eglCreatePbufferSurface(dpy, cfg, pb, 0);
+        if (s == null || s == EGL14.EGL_NO_SURFACE || !EGL14.eglMakeCurrent(dpy, s, s, ctx)) {
+            p(name + ": bench: no 1080x2400 pbuffer err=" + err());
+            return;
+        }
+        android.opengl.GLES20.glViewport(0, 0, W, H);
+        // --- clear-only ---
+        benchLoop("clear", 1500, new Runnable() {
+            public void run() {
+                android.opengl.GLES20.glClearColor(0.2f, 0.4f, 0.6f, 1f);
+                android.opengl.GLES20.glClear(0x4000);
+                android.opengl.GLES20.glFinish();
+            }
+        });
+        // --- full-screen ALU draw ---
+        String vs = "attribute vec2 a; varying vec2 v; void main(){ v=a*0.5+0.5; gl_Position=vec4(a,0.,1.); }";
+        String fs = "precision mediump float; varying vec2 v; void main(){ vec2 p=v; float acc=0.;"
+                + " for(int i=0;i<24;i++){ p=vec2(sin(p.y*3.1+acc), cos(p.x*2.7-acc)); acc+=p.x*p.y*0.1; }"
+                + " gl_FragColor=vec4(0.5+0.5*sin(acc),v.x,v.y,1.); }";
+        int prog = android.opengl.GLES20.glCreateProgram();
+        int v = shader(0x8B31, vs), f = shader(0x8B30, fs);
+        android.opengl.GLES20.glAttachShader(prog, v);
+        android.opengl.GLES20.glAttachShader(prog, f);
+        android.opengl.GLES20.glBindAttribLocation(prog, 0, "a");
+        long t0 = System.nanoTime();
+        android.opengl.GLES20.glLinkProgram(prog);
+        int[] ok = new int[1];
+        android.opengl.GLES20.glGetProgramiv(prog, 0x8B82, ok, 0);
+        p(name + ": bench: program link ok=" + ok[0] + " took_ms=" + (System.nanoTime() - t0) / 1e6);
+        android.opengl.GLES20.glUseProgram(prog);
+        java.nio.FloatBuffer quad = java.nio.ByteBuffer.allocateDirect(32)
+                .order(java.nio.ByteOrder.nativeOrder()).asFloatBuffer();
+        quad.put(new float[] {-1, -1, 1, -1, -1, 1, 1, 1}).position(0);
+        android.opengl.GLES20.glEnableVertexAttribArray(0);
+        android.opengl.GLES20.glVertexAttribPointer(0, 2, 0x1406, false, 0, quad);
+        benchLoop("alu24", 1500, new Runnable() {
+            public void run() {
+                android.opengl.GLES20.glDrawArrays(5, 0, 4);
+                android.opengl.GLES20.glFinish();
+            }
+        });
+        // pixel sanity: the shader output is deterministic, the centre pixel must not be the clear colour.
+        java.nio.ByteBuffer one = java.nio.ByteBuffer.allocateDirect(4);
+        android.opengl.GLES20.glReadPixels(W / 2, H / 2, 1, 1, 0x1908, 0x1401, one);
+        p(name + ": bench: alu24 centre rgba=" + (one.get(0) & 255) + "," + (one.get(1) & 255) + ","
+                + (one.get(2) & 255) + "," + (one.get(3) & 255) + " glErr=0x"
+                + Integer.toHexString(android.opengl.GLES20.glGetError()));
+        // --- full-surface readback ---
+        final java.nio.ByteBuffer full = java.nio.ByteBuffer.allocateDirect(W * H * 4);
+        benchLoop("readback_1080x2400", 1500, new Runnable() {
+            public void run() {
+                android.opengl.GLES20.glReadPixels(0, 0, W, H, 0x1908, 0x1401, full);
+            }
+        });
+        EGL14.eglMakeCurrent(dpy, EGL14.EGL_NO_SURFACE, EGL14.EGL_NO_SURFACE, EGL14.EGL_NO_CONTEXT);
+        EGL14.eglDestroySurface(dpy, s);
+    }
+
+    static int shader(int type, String src) {
+        int sh = android.opengl.GLES20.glCreateShader(type);
+        android.opengl.GLES20.glShaderSource(sh, src);
+        android.opengl.GLES20.glCompileShader(sh);
+        int[] ok = new int[1];
+        android.opengl.GLES20.glGetShaderiv(sh, 0x8B81, ok, 0);
+        if (ok[0] == 0) p("bench: shader compile failed: " + android.opengl.GLES20.glGetShaderInfoLog(sh));
+        return sh;
+    }
+
+    static void benchLoop(String what, long budgetMs, Runnable frame) {
+        for (int i = 0; i < 3; i++) frame.run(); // warm-up
+        java.util.ArrayList<Double> ms = new java.util.ArrayList<Double>();
+        long end = System.nanoTime() + budgetMs * 1000000L;
+        while (System.nanoTime() < end && ms.size() < 400) {
+            long a = System.nanoTime();
+            frame.run();
+            ms.add((System.nanoTime() - a) / 1e6);
+        }
+        java.util.Collections.sort(ms);
+        double sum = 0;
+        for (double d : ms) sum += d;
+        p("bench: " + what + " n=" + ms.size() + " mean_ms=" + String.format("%.3f", sum / ms.size())
+                + " p50_ms=" + String.format("%.3f", ms.get(ms.size() / 2))
+                + " max_ms=" + String.format("%.3f", ms.get(ms.size() - 1)));
     }
 
     static void probe() {

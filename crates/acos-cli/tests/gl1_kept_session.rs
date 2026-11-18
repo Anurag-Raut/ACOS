@@ -105,6 +105,10 @@ impl Daemon {
             .arg("300")
             .env("ACOS_RUNTIME_DIR", scratch.dir.join("runtime"))
             .env("ACOS_CACHE_DIR", scratch.dir.join("cache"))
+            // FB2c confines an observe screenshot to the session's artifacts
+            // directory; name that root explicitly so the test knows it (the
+            // default is the daemon's runtime directory).
+            .env("ACOS_SERVE_ARTIFACTS", scratch.dir.join("artifacts"))
             .env("ACOS_SESSION_SOCKET", scratch.socket())
             .envs(env.iter().copied())
             .stdout(Stdio::from(
@@ -309,10 +313,19 @@ fn a_kept_session_survives_the_launching_client() {
         "the tap from a second process must increment the counter: {after:#?}"
     );
 
-    let shot = daemon.scratch.log("kept.png");
-    let shot_arg = shot.display().to_string();
-    let observe = daemon.call(&["session", "observe", "--screenshot", &shot_arg, "--json"]);
-    ok_calls(&observe);
+    // The destination is caller input and FB2c confines it to the session's
+    // artifacts directory: a *relative* name resolves against that directory's
+    // `screenshots/` dir, and the reply reports the absolute path. The test
+    // reads the path the daemon chose instead of writing outside the sandbox
+    // (the pre-FB2c form passed `<scratch>/kept.png` and became INVALID_ARGUMENT).
+    let observe = daemon.call(&["session", "observe", "--screenshot", "kept.png", "--json"]);
+    let observed = ok_calls(&observe);
+    let shot = PathBuf::from(
+        observed["screenshot"]["path"]
+            .as_str()
+            .expect("the observe reply names the screenshot path"),
+    );
+    assert!(shot.is_file(), "the screenshot exists: {}", shot.display());
     let mut head = [0u8; 8];
     let mut file = std::fs::File::open(&shot).expect("the screenshot exists");
     file.read_exact(&mut head)
@@ -378,21 +391,38 @@ fn a_sigkilled_daemon_takes_its_guests_with_it() {
         started.elapsed().as_millis()
     );
     let _ = daemon.child.wait();
-    // Every guest pid the test saw must be gone (or a reaped zombie).
+    // Every guest pid the test saw must be gone (or a reaped zombie). The scan
+    // above can be satisfied by a guest whose `/proc/<pid>/cmdline` is already
+    // empty while it is still in its exit path, so the pids captured *before*
+    // the kill are the authoritative set: wait for them, bounded, and name the
+    // state/cmdline of one that outlives the daemon (a real leak).
     for guest in guests {
-        let alive = std::fs::read_to_string(format!("/proc/{guest}/status"))
-            .ok()
-            .and_then(|status| {
-                status
+        let gone = wait_until(Duration::from_secs(2), || {
+            let state = std::fs::read_to_string(format!("/proc/{guest}/status"))
+                .ok()
+                .and_then(|status| {
+                    status
+                        .lines()
+                        .find(|line| line.starts_with("State:"))
+                        .and_then(|line| line.split_whitespace().nth(1).map(str::to_string))
+                });
+            // Gone or a reaped zombie: both mean it is not executing code.
+            state.is_none() || state.as_deref() == Some("Z")
+        });
+        assert!(
+            gone,
+            "guest {guest} is still running after the daemon died: {}",
+            std::fs::read_to_string(format!("/proc/{guest}/status"))
+                .map(|status| status
                     .lines()
                     .find(|line| line.starts_with("State:"))
-                    .and_then(|line| line.split_whitespace().nth(1).map(str::to_string))
-            })
-            .map(|state| state != "Z")
-            .unwrap_or(false);
-        assert!(
-            !alive,
-            "guest {guest} is still running after the daemon died"
+                    .unwrap_or("State: <missing>")
+                    .to_string()
+                    + " cmdline="
+                    + &std::fs::read(format!("/proc/{guest}/cmdline"))
+                        .map(|raw| String::from_utf8_lossy(&raw).replace('\0', " "))
+                        .unwrap_or_else(|error| format!("<{error}>")))
+                .unwrap_or_else(|error| format!("<{error}>"))
         );
     }
 }

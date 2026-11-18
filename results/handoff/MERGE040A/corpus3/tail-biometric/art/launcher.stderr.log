@@ -1,0 +1,400 @@
+# MERGE040A: trimmed to the last 400 lines (full run kept in the corpus log)
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {920a6a} dev.acos.art.LaunchMain$13$1$1@556eb5b: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {920a6a} dev.acos.art.LaunchMain$13$1$1@556eb5b
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {be1e32b} dev.acos.art.LaunchMain$8$1@51a1ff8: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {be1e32b} dev.acos.art.LaunchMain$8$1@51a1ff8
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {3ad5cd1} dev.acos.art.LaunchMain$13$1$1@dbe6336: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {3ad5cd1} dev.acos.art.LaunchMain$13$1$1@dbe6336
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {be1e32b} dev.acos.art.LaunchMain$8$1@e0ee237: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {be1e32b} dev.acos.art.LaunchMain$8$1@e0ee237
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {2cd43a4} dev.acos.art.LaunchMain$13$1$1@d9f50d: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {2cd43a4} dev.acos.art.LaunchMain$13$1$1@d9f50d
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {a857cc2} dev.acos.art.LaunchMain$13$1$1@6e56ad3: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {a857cc2} dev.acos.art.LaunchMain$13$1$1@6e56ad3
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {be1e32b} dev.acos.art.LaunchMain$8$1@86cf610: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {be1e32b} dev.acos.art.LaunchMain$8$1@86cf610
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {9bdd509} dev.acos.art.LaunchMain$13$1$1@ab2a30e: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {9bdd509} dev.acos.art.LaunchMain$13$1$1@ab2a30e
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {be1e32b} dev.acos.art.LaunchMain$8$1@691e12f: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {be1e32b} dev.acos.art.LaunchMain$8$1@691e12f
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {813633c} dev.acos.art.LaunchMain$13$1$1@4e5b8c5: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {813633c} dev.acos.art.LaunchMain$13$1$1@4e5b8c5
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {179e21a} dev.acos.art.LaunchMain$13$1$1@de5614b: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {179e21a} dev.acos.art.LaunchMain$13$1$1@de5614b
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {be1e32b} dev.acos.art.LaunchMain$8$1@9517728: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {be1e32b} dev.acos.art.LaunchMain$8$1@9517728
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {aee1c41} dev.acos.art.LaunchMain$13$1$1@f4405e6: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {aee1c41} dev.acos.art.LaunchMain$13$1$1@f4405e6
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {be1e32b} dev.acos.art.LaunchMain$8$1@fa6c727: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {be1e32b} dev.acos.art.LaunchMain$8$1@fa6c727
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {9daddd4} dev.acos.art.LaunchMain$13$1$1@7bf3b7d: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {9daddd4} dev.acos.art.LaunchMain$13$1$1@7bf3b7d
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {3a9a72} dev.acos.art.LaunchMain$13$1$1@a2eaec3: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {3a9a72} dev.acos.art.LaunchMain$13$1$1@a2eaec3
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {be1e32b} dev.acos.art.LaunchMain$8$1@cf20340: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {be1e32b} dev.acos.art.LaunchMain$8$1@cf20340
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {3891279} dev.acos.art.LaunchMain$13$1$1@793ebbe: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {3891279} dev.acos.art.LaunchMain$13$1$1@793ebbe
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {be1e32b} dev.acos.art.LaunchMain$8$1@ec3741f: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {be1e32b} dev.acos.art.LaunchMain$8$1@ec3741f
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {594136c} dev.acos.art.LaunchMain$13$1$1@f7f5d35: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {594136c} dev.acos.art.LaunchMain$13$1$1@f7f5d35
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {39f05ca} dev.acos.art.LaunchMain$13$1$1@2b5333b: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {39f05ca} dev.acos.art.LaunchMain$13$1$1@2b5333b
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {be1e32b} dev.acos.art.LaunchMain$8$1@764fa58: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {be1e32b} dev.acos.art.LaunchMain$8$1@764fa58
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {25597b1} dev.acos.art.LaunchMain$13$1$1@68fb496: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {25597b1} dev.acos.art.LaunchMain$13$1$1@68fb496
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {be1e32b} dev.acos.art.LaunchMain$8$1@639c817: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {be1e32b} dev.acos.art.LaunchMain$8$1@639c817
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {a5b6404} dev.acos.art.LaunchMain$13$1$1@7afded: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {a5b6404} dev.acos.art.LaunchMain$13$1$1@7afded
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {a8422} dev.acos.art.LaunchMain$13$1$1@d08ceb3: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {a8422} dev.acos.art.LaunchMain$13$1$1@d08ceb3
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {be1e32b} dev.acos.art.LaunchMain$8$1@d2cbc70: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {be1e32b} dev.acos.art.LaunchMain$8$1@d2cbc70
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {c168be9} dev.acos.art.LaunchMain$13$1$1@370c06e: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {c168be9} dev.acos.art.LaunchMain$13$1$1@370c06e
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {be1e32b} dev.acos.art.LaunchMain$8$1@4b7a30f: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {be1e32b} dev.acos.art.LaunchMain$8$1@4b7a30f
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.app.ActivityThread$H) {3f0b58b} android.hardware.biometrics.BiometricPrompt$1$$ExternalSyntheticLambda0@2792f9c: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.app.ActivityThread$H) {3f0b58b} android.hardware.biometrics.BiometricPrompt$1$$ExternalSyntheticLambda0@2792f9c
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {be1e32b} dev.acos.art.LaunchMain$8$1@8c2fda5: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {be1e32b} dev.acos.art.LaunchMain$8$1@8c2fda5
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {6ec757a} dev.acos.art.LaunchMain$13$1$1@4d5612b: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {6ec757a} dev.acos.art.LaunchMain$13$1$1@4d5612b
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {be1e32b} dev.acos.art.LaunchMain$8$1@4b7a988: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {be1e32b} dev.acos.art.LaunchMain$8$1@4b7a988
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.ViewRootImpl$ViewRootHandler) {2e3d46a} android.view.View$PerformClick@42a4cd0: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.ViewRootImpl$ViewRootHandler) {2e3d46a} android.view.View$PerformClick@42a4cd0
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.ViewRootImpl$ViewRootHandler) {2e3d46a} android.view.View$UnsetPressedState@d4d925c: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.ViewRootImpl$ViewRootHandler) {2e3d46a} android.view.View$UnsetPressedState@d4d925c
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {be1e32b} dev.acos.art.LaunchMain$8$1@c4d6dff: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {be1e32b} dev.acos.art.LaunchMain$8$1@c4d6dff
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {6b5b7cc} dev.acos.art.LaunchMain$13$1$1@d279a15: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {6b5b7cc} dev.acos.art.LaunchMain$13$1$1@d279a15
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {be1e32b} dev.acos.art.LaunchMain$8$1@df4c291: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {be1e32b} dev.acos.art.LaunchMain$8$1@df4c291
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {1a535f6} dev.acos.art.LaunchMain$13$1$1@c0d1df7: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {1a535f6} dev.acos.art.LaunchMain$13$1$1@c0d1df7
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {aeba293} dev.acos.art.LaunchMain$13$1$1@28f32d0: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {aeba293} dev.acos.art.LaunchMain$13$1$1@28f32d0
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {be1e32b} dev.acos.art.LaunchMain$8$1@55432c9: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {be1e32b} dev.acos.art.LaunchMain$8$1@55432c9
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {cc90dce} dev.acos.art.LaunchMain$13$1$1@f23d4ef: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {cc90dce} dev.acos.art.LaunchMain$13$1$1@f23d4ef
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {be1e32b} dev.acos.art.LaunchMain$8$1@cfcabfc: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {be1e32b} dev.acos.art.LaunchMain$8$1@cfcabfc
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {4e43285} dev.acos.art.LaunchMain$13$1$1@46c38da: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {4e43285} dev.acos.art.LaunchMain$13$1$1@46c38da
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {e02d10b} dev.acos.art.LaunchMain$13$1$1@c668be8: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {e02d10b} dev.acos.art.LaunchMain$13$1$1@c668be8
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {be1e32b} dev.acos.art.LaunchMain$8$1@3ba7201: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {be1e32b} dev.acos.art.LaunchMain$8$1@3ba7201
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {2e508a6} dev.acos.art.LaunchMain$13$1$1@a8b72e7: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {2e508a6} dev.acos.art.LaunchMain$13$1$1@a8b72e7
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {be1e32b} dev.acos.art.LaunchMain$8$1@c7e94: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {be1e32b} dev.acos.art.LaunchMain$8$1@c7e94
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {e5b2d3d} dev.acos.art.LaunchMain$13$1$1@ec90932: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {e5b2d3d} dev.acos.art.LaunchMain$13$1$1@ec90932
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {b125683} dev.acos.art.LaunchMain$13$1$1@97cf000: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {b125683} dev.acos.art.LaunchMain$13$1$1@97cf000
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {be1e32b} dev.acos.art.LaunchMain$8$1@b526039: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {be1e32b} dev.acos.art.LaunchMain$8$1@b526039
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {7a867e} dev.acos.art.LaunchMain$13$1$1@c99d7df: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {7a867e} dev.acos.art.LaunchMain$13$1$1@c99d7df
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {be1e32b} dev.acos.art.LaunchMain$8$1@2c10c2c: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {be1e32b} dev.acos.art.LaunchMain$8$1@2c10c2c
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {3efc6f5} dev.acos.art.LaunchMain$13$1$1@2348c8a: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {3efc6f5} dev.acos.art.LaunchMain$13$1$1@2348c8a
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {fee12fb} dev.acos.art.LaunchMain$13$1$1@b48bf18: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {fee12fb} dev.acos.art.LaunchMain$13$1$1@b48bf18
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {be1e32b} dev.acos.art.LaunchMain$8$1@cc2dd71: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {be1e32b} dev.acos.art.LaunchMain$8$1@cc2dd71
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {4d6e756} dev.acos.art.LaunchMain$13$1$1@c80e3d7: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {4d6e756} dev.acos.art.LaunchMain$13$1$1@c80e3d7
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {be1e32b} dev.acos.art.LaunchMain$8$1@796b4c4: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {be1e32b} dev.acos.art.LaunchMain$8$1@796b4c4
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {9d6dfad} dev.acos.art.LaunchMain$13$1$1@57222e2: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {9d6dfad} dev.acos.art.LaunchMain$13$1$1@57222e2
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {505e673} dev.acos.art.LaunchMain$13$1$1@fac5930: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {505e673} dev.acos.art.LaunchMain$13$1$1@fac5930
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {be1e32b} dev.acos.art.LaunchMain$8$1@aaec9a9: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {be1e32b} dev.acos.art.LaunchMain$8$1@aaec9a9
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {f938b2e} dev.acos.art.LaunchMain$13$1$1@9ce76cf: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {f938b2e} dev.acos.art.LaunchMain$13$1$1@9ce76cf
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {be1e32b} dev.acos.art.LaunchMain$8$1@835d85c: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {be1e32b} dev.acos.art.LaunchMain$8$1@835d85c
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {a015765} dev.acos.art.LaunchMain$13$1$1@8512c3a: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {a015765} dev.acos.art.LaunchMain$13$1$1@8512c3a
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {4e5b0eb} dev.acos.art.LaunchMain$13$1$1@2761e48: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {4e5b0eb} dev.acos.art.LaunchMain$13$1$1@2761e48
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {be1e32b} dev.acos.art.LaunchMain$8$1@d3504e1: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {be1e32b} dev.acos.art.LaunchMain$8$1@d3504e1
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {e15d206} dev.acos.art.LaunchMain$13$1$1@bec70c7: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {e15d206} dev.acos.art.LaunchMain$13$1$1@bec70c7
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {be1e32b} dev.acos.art.LaunchMain$8$1@ef2d6f4: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {be1e32b} dev.acos.art.LaunchMain$8$1@ef2d6f4
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {f9c0e1d} dev.acos.art.LaunchMain$13$1$1@92d0892: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {f9c0e1d} dev.acos.art.LaunchMain$13$1$1@92d0892
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {3b55263} dev.acos.art.LaunchMain$13$1$1@ee06e60: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {3b55263} dev.acos.art.LaunchMain$13$1$1@ee06e60
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {be1e32b} dev.acos.art.LaunchMain$8$1@5706f19: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {be1e32b} dev.acos.art.LaunchMain$8$1@5706f19
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {90f1bde} dev.acos.art.LaunchMain$13$1$1@1a0b1bf: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {90f1bde} dev.acos.art.LaunchMain$13$1$1@1a0b1bf
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {be1e32b} dev.acos.art.LaunchMain$8$1@4e108c: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {be1e32b} dev.acos.art.LaunchMain$8$1@4e108c
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {28fe3d5} dev.acos.art.LaunchMain$13$1$1@a6d17ea: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {28fe3d5} dev.acos.art.LaunchMain$13$1$1@a6d17ea
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {6b8aadb} dev.acos.art.LaunchMain$13$1$1@111a978: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {6b8aadb} dev.acos.art.LaunchMain$13$1$1@111a978
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {be1e32b} dev.acos.art.LaunchMain$8$1@f7e851: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {be1e32b} dev.acos.art.LaunchMain$8$1@f7e851
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {1fcc8b6} dev.acos.art.LaunchMain$13$1$1@8d19b7: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {1fcc8b6} dev.acos.art.LaunchMain$13$1$1@8d19b7
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {be1e32b} dev.acos.art.LaunchMain$8$1@473e524: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {be1e32b} dev.acos.art.LaunchMain$8$1@473e524
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {301b88d} dev.acos.art.LaunchMain$13$1$1@804ba42: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {301b88d} dev.acos.art.LaunchMain$13$1$1@804ba42
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {bcf9a53} dev.acos.art.LaunchMain$13$1$1@79c2f90: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {bcf9a53} dev.acos.art.LaunchMain$13$1$1@79c2f90
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {be1e32b} dev.acos.art.LaunchMain$8$1@d5e5089: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {be1e32b} dev.acos.art.LaunchMain$8$1@d5e5089
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {a8388e} dev.acos.art.LaunchMain$13$1$1@4af88af: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {a8388e} dev.acos.art.LaunchMain$13$1$1@4af88af
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {be1e32b} dev.acos.art.LaunchMain$8$1@bcb4bc: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {be1e32b} dev.acos.art.LaunchMain$8$1@bcb4bc
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {4d26c45} dev.acos.art.LaunchMain$13$1$1@cf34f9a: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {4d26c45} dev.acos.art.LaunchMain$13$1$1@cf34f9a
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {f600cb} dev.acos.art.LaunchMain$13$1$1@4fe60a8: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {f600cb} dev.acos.art.LaunchMain$13$1$1@4fe60a8
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {be1e32b} dev.acos.art.LaunchMain$8$1@bb287c1: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {be1e32b} dev.acos.art.LaunchMain$8$1@bb287c1
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {a6cb66} dev.acos.art.LaunchMain$13$1$1@fe1dea7: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {a6cb66} dev.acos.art.LaunchMain$13$1$1@fe1dea7
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {12cdf54} dev.acos.art.LaunchMain$13$1$1@b1edefd: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {12cdf54} dev.acos.art.LaunchMain$13$1$1@b1edefd
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {be1e32b} dev.acos.art.LaunchMain$8$1@8c437f2: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {be1e32b} dev.acos.art.LaunchMain$8$1@8c437f2
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {bc3be43} dev.acos.art.LaunchMain$13$1$1@1229cc0: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {bc3be43} dev.acos.art.LaunchMain$13$1$1@1229cc0
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {be1e32b} dev.acos.art.LaunchMain$8$1@3ff6df9: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {be1e32b} dev.acos.art.LaunchMain$8$1@3ff6df9
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {ed9e13e} dev.acos.art.LaunchMain$13$1$1@959fb9f: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {ed9e13e} dev.acos.art.LaunchMain$13$1$1@959fb9f
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {1f4c4ec} dev.acos.art.LaunchMain$13$1$1@3bff0b5: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {1f4c4ec} dev.acos.art.LaunchMain$13$1$1@3bff0b5
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {be1e32b} dev.acos.art.LaunchMain$8$1@50ed34a: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {be1e32b} dev.acos.art.LaunchMain$8$1@50ed34a
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {ecb2bb} dev.acos.art.LaunchMain$13$1$1@adf43d8: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {ecb2bb} dev.acos.art.LaunchMain$13$1$1@adf43d8
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {be1e32b} dev.acos.art.LaunchMain$8$1@8cbe331: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {be1e32b} dev.acos.art.LaunchMain$8$1@8cbe331
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {6eeda16} dev.acos.art.LaunchMain$13$1$1@d29bf97: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {6eeda16} dev.acos.art.LaunchMain$13$1$1@d29bf97
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {8f0c584} dev.acos.art.LaunchMain$13$1$1@2ca816d: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {8f0c584} dev.acos.art.LaunchMain$13$1$1@2ca816d
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {be1e32b} dev.acos.art.LaunchMain$8$1@af681a2: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {be1e32b} dev.acos.art.LaunchMain$8$1@af681a2
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {bc0be33} dev.acos.art.LaunchMain$13$1$1@976b5f0: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {bc0be33} dev.acos.art.LaunchMain$13$1$1@976b5f0
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {be1e32b} dev.acos.art.LaunchMain$8$1@a9ac769: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {be1e32b} dev.acos.art.LaunchMain$8$1@a9ac769
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {df15ee} dev.acos.art.LaunchMain$13$1$1@bbf0a8f: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {df15ee} dev.acos.art.LaunchMain$13$1$1@bbf0a8f
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {f29411c} dev.acos.art.LaunchMain$13$1$1@e0f7125: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {f29411c} dev.acos.art.LaunchMain$13$1$1@e0f7125
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {be1e32b} dev.acos.art.LaunchMain$8$1@8aaa2fa: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {be1e32b} dev.acos.art.LaunchMain$8$1@8aaa2fa
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {5abc0ab} dev.acos.art.LaunchMain$13$1$1@e175308: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {5abc0ab} dev.acos.art.LaunchMain$13$1$1@e175308
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {be1e32b} dev.acos.art.LaunchMain$8$1@b6afaa1: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {be1e32b} dev.acos.art.LaunchMain$8$1@b6afaa1
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {e6ff4c6} dev.acos.art.LaunchMain$13$1$1@963bc87: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {e6ff4c6} dev.acos.art.LaunchMain$13$1$1@963bc87
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {a5297b4} dev.acos.art.LaunchMain$13$1$1@89b9fdd: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {a5297b4} dev.acos.art.LaunchMain$13$1$1@89b9fdd
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {be1e32b} dev.acos.art.LaunchMain$8$1@6e69752: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {be1e32b} dev.acos.art.LaunchMain$8$1@6e69752
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {db59a23} dev.acos.art.LaunchMain$13$1$1@55b7b20: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {db59a23} dev.acos.art.LaunchMain$13$1$1@55b7b20
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {be1e32b} dev.acos.art.LaunchMain$8$1@2375cd9: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {be1e32b} dev.acos.art.LaunchMain$8$1@2375cd9
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {8b2d69e} dev.acos.art.LaunchMain$13$1$1@dbdb57f: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {8b2d69e} dev.acos.art.LaunchMain$13$1$1@dbdb57f
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {64d294c} dev.acos.art.LaunchMain$13$1$1@e37ed95: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {64d294c} dev.acos.art.LaunchMain$13$1$1@e37ed95
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {be1e32b} dev.acos.art.LaunchMain$8$1@e71beaa: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {be1e32b} dev.acos.art.LaunchMain$8$1@e71beaa
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {22a9b} dev.acos.art.LaunchMain$13$1$1@8c98e38: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {22a9b} dev.acos.art.LaunchMain$13$1$1@8c98e38
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {be1e32b} dev.acos.art.LaunchMain$8$1@e76ce11: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {be1e32b} dev.acos.art.LaunchMain$8$1@e76ce11
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {d851b76} dev.acos.art.LaunchMain$13$1$1@34ed577: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {d851b76} dev.acos.art.LaunchMain$13$1$1@34ed577
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {ea555e4} dev.acos.art.LaunchMain$13$1$1@ee93a4d: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {ea555e4} dev.acos.art.LaunchMain$13$1$1@ee93a4d
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {be1e32b} dev.acos.art.LaunchMain$8$1@d9f7902: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {be1e32b} dev.acos.art.LaunchMain$8$1@d9f7902
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {d515213} dev.acos.art.LaunchMain$13$1$1@53ec50: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {d515213} dev.acos.art.LaunchMain$13$1$1@53ec50
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {be1e32b} dev.acos.art.LaunchMain$8$1@b9c2e49: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {be1e32b} dev.acos.art.LaunchMain$8$1@b9c2e49
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {d10234e} dev.acos.art.LaunchMain$13$1$1@6f4fc6f: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {d10234e} dev.acos.art.LaunchMain$13$1$1@6f4fc6f
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.view.Choreographer$FrameHandler) {29f9f8} android.view.Choreographer$FrameDisplayEventReceiver@9d92ed1
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {be1e32b} dev.acos.art.LaunchMain$8$1@8137d7c: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {be1e32b} dev.acos.art.LaunchMain$8$1@8137d7c
+acos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {be1e32b} dev.acos.art.LaunchMain$8$1@a706605: 0
+acos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {be1e32b} dev.acos.art.LaunchMain$8$1@a706605
+acos-art: peer: processes=[0] peak_connections=1 accepted=1 refused=0 closed=0 frames=858/402 unroutable=0
+acos-art: launch wall=4546ms until=activity-resumed application_created=true activity_resumed=true txn=None/false reverse_replies=221 reverse_failed=0 logd=294 (logd: 294 entries) peer_resource_limits=0
+acos-art: shared-boot-image: /home/Qui/.cache/acos/art/boot-images/fixed-ff39b037f1d6b9ff (ACOS_ART_BOOT_IMAGE=shared-fixed; -Ximage:/data/img/boot.art -Xnorelocate; fixed base 0x70000000, no image ASLR; cache hit)
+acos-art: boot_image: mode=shared-fixed cache=hit dir=/home/Qui/.cache/acos/art/boot-images/fixed-ff39b037f1d6b9ff input=ff39b037f1d6b9ff base=0x70000000
+acos-art: cgroup: memory.max=2048MiB swap=0 pids.max=512 peak=71MiB oom_kills=0 (/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p1262222-i1280091.scope)
+acos-art: seccomp: OK guard=active insns=83 / OK landlock=active abi=10 rules=15 skipped=0
+acos-art: logd: 294 entries
+acos-art: webview: module `webview` is off (no `com.android.webview` provider package, no gate socket): `WebView` takes Android's own no-provider path. Attach it with `services: [{id: webview, profile: real}]`.

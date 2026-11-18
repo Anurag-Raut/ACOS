@@ -1,0 +1,1 @@
+verify: ASSERTION_FAILED (assertion): tap: the settled frame is pixel-identical to the pre-action frame (`settle.pixels_changed:false`); the step proved no visual change [class=assertion, retryable=false]

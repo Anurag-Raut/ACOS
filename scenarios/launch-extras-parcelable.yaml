@@ -1,0 +1,35 @@
+# launch-extras-parcelable: a Parcelable extra is refused by name.
+#
+# The one extra type the ART launcher genuinely cannot carry from a scenario:
+# a `Parcelable` needs the app's own class loader and a payload a scenario
+# cannot express. Silently dropping it would be the old WVFAIR bug (the app
+# asserted against an Intent it never received), so the launch step fails with
+# `UNSUPPORTED_ANDROID_API` naming the key and the class, before any guest
+# starts. `expect_error` pins the code: an app crash, a missing fixture or a
+# harness error all stay a mismatch, so this control cannot pass for another
+# reason.
+version: 1
+name: launch-extras-parcelable
+description: >-
+  A launch step that declares a Parcelable extra is a structured
+  UNSUPPORTED_ANDROID_API naming the key and class, never a run against an
+  Intent that silently lacks the declared value.
+app: fixtures/build/apps/launch-extras-probe.apk
+engine: native-preferred
+fallback: forbid
+api_level: 34
+isolation: process
+display: {mode: offscreen, width: 1080, height: 2400, density_dpi: 420}
+expectation: unsupported
+expectation_reason: >-
+  ACOS cannot build a Parcelable extra from a scenario (it needs the app's own
+  class loader and a payload); the field is refused by name rather than
+  silently dropped.
+expect_error: {code: UNSUPPORTED_ANDROID_API}
+budgets: {memory_mib: 512, wall_ms: 60000}
+steps:
+  - launch:
+      activity: dev.acos.fixtures.launchextras/.MainActivity
+      extras:
+        device: {type: parcelable, value: android.os.Bundle}
+      clear_state: true

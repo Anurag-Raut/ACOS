@@ -1,0 +1,952 @@
+{
+  "animations": "off",
+  "app": {
+    "package": "dev.acos.fixtures.touchprobe",
+    "path": "/home/Qui/.t3/worktrees/acos/t3-7941bd5d-f2cbf7e1581aeebb/fixtures/build/apps/touch-probe.apk",
+    "sha256": "988929a3f3c9f0168ada4cd2ddc15fef91b4ab89e683a3ea770aa55b5e2443ba"
+  },
+  "backend": "acos-native",
+  "certification": "certified-with-limits",
+  "certification_limits": {
+    "doc": "docs/SANDBOX_CERTIFICATION.md",
+    "section": "§8.7"
+  },
+  "certification_policy": {
+    "doc": "docs/SANDBOX_CERTIFICATION.md",
+    "policy": "opt-in untrusted: trusted is the default, an explicit --untrusted or `trust: untrusted` is allowed",
+    "section": "§8.8"
+  },
+  "engine": "art",
+  "evidence": {
+    "artifacts": "/home/Qui/.t3/worktrees/acos/t3-7941bd5d-f2cbf7e1581aeebb/results/handoff/MERGE040B/art/touchdisp-dispatch-probe/art",
+    "engine_report": "/home/Qui/.t3/worktrees/acos/t3-7941bd5d-f2cbf7e1581aeebb/results/handoff/MERGE040B/art/touchdisp-dispatch-probe/art/engine.json",
+    "pruned_session_captures": 2,
+    "retention": "/home/Qui/.t3/worktrees/acos/t3-7941bd5d-f2cbf7e1581aeebb/results/handoff/MERGE040B/art/touchdisp-dispatch-probe/art/retention.json",
+    "verdict": "/home/Qui/.t3/worktrees/acos/t3-7941bd5d-f2cbf7e1581aeebb/results/handoff/MERGE040B/art/touchdisp-dispatch-probe/art/verdict.json"
+  },
+  "evidence_provenance": {
+    "binder_transactions": "host-observed",
+    "crash_reports": "guest-asserted",
+    "frames": "host-observed",
+    "host_input": "host-observed",
+    "input_acks": "guest-asserted",
+    "launch_markers": "guest-asserted",
+    "lifecycle_markers": "guest-asserted",
+    "logs": "guest-asserted",
+    "static_manifest": "host-observed",
+    "tree": "guest-asserted"
+  },
+  "extra_apks": [],
+  "fidelity": "art-reference",
+  "finished_at": "2026-11-18T05:18:39.862Z",
+  "insets": "report",
+  "isolation": "process",
+  "mode": "live",
+  "modules": [
+    {
+      "attach": "at-launch",
+      "details": null,
+      "fidelity": "real",
+      "id": "core",
+      "profile": "real",
+      "reason": null,
+      "state": "attached"
+    },
+    {
+      "attach": "hot",
+      "details": null,
+      "fidelity": "off",
+      "id": "accessibility",
+      "profile": "off",
+      "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"accessibility\", \"profile\": \"real\"}]}",
+      "state": "off"
+    },
+    {
+      "attach": "hot",
+      "details": null,
+      "fidelity": "off",
+      "id": "system.permissions",
+      "profile": "off",
+      "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.permissions\", \"profile\": \"real\"}]}",
+      "state": "off"
+    },
+    {
+      "attach": "hot",
+      "details": null,
+      "fidelity": "off",
+      "id": "system.notifications",
+      "profile": "off",
+      "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.notifications\", \"profile\": \"real\"}]}",
+      "state": "off"
+    },
+    {
+      "attach": "hot",
+      "details": null,
+      "fidelity": "off",
+      "id": "sensors",
+      "profile": "off",
+      "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"sensors\", \"profile\": \"scripted\"}]}",
+      "state": "off"
+    },
+    {
+      "attach": "hot",
+      "details": null,
+      "fidelity": "off",
+      "id": "feedback.vibrator",
+      "profile": "off",
+      "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"feedback.vibrator\", \"profile\": \"scripted\"}]}",
+      "state": "off"
+    },
+    {
+      "attach": "hot",
+      "details": null,
+      "fidelity": "off",
+      "id": "location",
+      "profile": "off",
+      "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"location\", \"profile\": \"scripted\"}]}",
+      "state": "off"
+    },
+    {
+      "attach": "at-launch",
+      "details": null,
+      "fidelity": "off",
+      "id": "net.telephony",
+      "profile": "off",
+      "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"net.telephony\", \"profile\": \"scripted\"}]}",
+      "state": "off"
+    },
+    {
+      "attach": "hot",
+      "details": null,
+      "fidelity": "off",
+      "id": "hw.bluetooth",
+      "profile": "off",
+      "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.bluetooth\", \"profile\": \"scripted\"}]}",
+      "state": "off"
+    },
+    {
+      "attach": "hot",
+      "details": null,
+      "fidelity": "off",
+      "id": "hw.biometric",
+      "profile": "off",
+      "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.biometric\", \"profile\": \"scripted\"}]}",
+      "state": "off"
+    },
+    {
+      "attach": "at-launch",
+      "details": null,
+      "fidelity": "off",
+      "id": "network",
+      "profile": "off",
+      "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"network\", \"profile\": \"real\"}]}",
+      "state": "off"
+    },
+    {
+      "attach": "at-launch",
+      "details": null,
+      "fidelity": "off",
+      "id": "webview",
+      "profile": "off",
+      "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"webview\", \"profile\": \"real\"}]}",
+      "state": "off"
+    },
+    {
+      "attach": "hot",
+      "details": null,
+      "fidelity": "off",
+      "id": "hw.usb",
+      "profile": "off",
+      "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.usb\", \"profile\": \"stub\"}]}",
+      "state": "off"
+    },
+    {
+      "attach": "hot",
+      "details": null,
+      "fidelity": "off",
+      "id": "system.dropbox",
+      "profile": "off",
+      "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.dropbox\", \"profile\": \"stub\"}]}",
+      "state": "off"
+    },
+    {
+      "attach": "hot",
+      "details": null,
+      "fidelity": "off",
+      "id": "hw.nfc",
+      "profile": "off",
+      "reason": "off: no NFC hardware: NfcAdapter throws UnsupportedOperationException before any binder (FEATURE_NFC is absent)",
+      "state": "off"
+    },
+    {
+      "attach": "hot",
+      "details": null,
+      "fidelity": "off",
+      "id": "system.wallpaper",
+      "profile": "off",
+      "reason": "off: no wallpaper service; AOSP's own DisabledWallpaperManager is the working missing path (config_enableWallpaperService is false)",
+      "state": "off"
+    },
+    {
+      "attach": "hot",
+      "details": null,
+      "fidelity": "off",
+      "id": "system.print",
+      "profile": "off",
+      "reason": "off: no print service; the client only resolves the name when FEATURE_PRINTING is reported, and ACOS reports it absent",
+      "state": "off"
+    },
+    {
+      "attach": "hot",
+      "details": null,
+      "fidelity": "off",
+      "id": "system.search",
+      "profile": "off",
+      "reason": "off: no search service and no searchable index; an empty SearchableInfo list would look like an installed search provider",
+      "state": "off"
+    },
+    {
+      "attach": "hot",
+      "details": null,
+      "fidelity": "off",
+      "id": "system.usage",
+      "profile": "off",
+      "reason": "off: nothing records app usage; an empty ParceledListSlice<UsageStats> would be indistinguishable from 'not used'",
+      "state": "off"
+    },
+    {
+      "attach": "hot",
+      "details": null,
+      "fidelity": "off",
+      "id": "system.dpm",
+      "profile": "off",
+      "reason": "off: no managed device or profile; every device-policy answer would be invented policy state",
+      "state": "off"
+    },
+    {
+      "attach": "hot",
+      "details": null,
+      "fidelity": "off",
+      "id": "system.role",
+      "profile": "off",
+      "reason": "off: IRoleManager lives in the Permission APEX; its transaction table is not in the framework dex this build reads, so a stub would guess codes",
+      "state": "off"
+    },
+    {
+      "attach": "hot",
+      "details": null,
+      "fidelity": "off",
+      "id": "geo.country",
+      "profile": "off",
+      "reason": "off: a detected country is a location claim ACOS cannot back",
+      "state": "off"
+    }
+  ],
+  "notes": [
+    "coordinates: UI-tree bounds, tap x/y, assert_region and assert_screenshot.region_masks are display pixels (display 1080x2400, origin [0,0]); frames/<seq>.png is the display area starting at display_origin [0,0], so png_y = display_y - 0 (frame 3 is display [0,0][1080,2400]). Do not compare a tree bound with a PNG pixel without that offset.",
+    "artifacts: referenced (prune-unreferenced): 20 file(s) / 0.5 MiB kept, 2 file(s) / 0.2 MiB pruned; see retention.json",
+    "fidelity: module `accessibility` is off (module is off; attach it: acos_launch {\"services\": [{\"id\": \"accessibility\", \"profile\": \"real\"}]}); behaviour that needs it is unsupported, never a pass",
+    "fidelity: module `system.permissions` is off (module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.permissions\", \"profile\": \"real\"}]}); behaviour that needs it is unsupported, never a pass",
+    "fidelity: module `system.notifications` is off (module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.notifications\", \"profile\": \"real\"}]}); behaviour that needs it is unsupported, never a pass",
+    "fidelity: module `sensors` is off (module is off; attach it: acos_launch {\"services\": [{\"id\": \"sensors\", \"profile\": \"scripted\"}]}); behaviour that needs it is unsupported, never a pass",
+    "fidelity: module `feedback.vibrator` is off (module is off; attach it: acos_launch {\"services\": [{\"id\": \"feedback.vibrator\", \"profile\": \"scripted\"}]}); behaviour that needs it is unsupported, never a pass",
+    "fidelity: module `location` is off (module is off; attach it: acos_launch {\"services\": [{\"id\": \"location\", \"profile\": \"scripted\"}]}); behaviour that needs it is unsupported, never a pass",
+    "fidelity: module `net.telephony` is off (module is off; attach it: acos_launch {\"services\": [{\"id\": \"net.telephony\", \"profile\": \"scripted\"}]}); behaviour that needs it is unsupported, never a pass",
+    "fidelity: module `hw.bluetooth` is off (module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.bluetooth\", \"profile\": \"scripted\"}]}); behaviour that needs it is unsupported, never a pass",
+    "fidelity: module `hw.biometric` is off (module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.biometric\", \"profile\": \"scripted\"}]}); behaviour that needs it is unsupported, never a pass",
+    "fidelity: module `network` is off (module is off; attach it: acos_launch {\"services\": [{\"id\": \"network\", \"profile\": \"real\"}]}); behaviour that needs it is unsupported, never a pass",
+    "fidelity: module `webview` is off (module is off; attach it: acos_launch {\"services\": [{\"id\": \"webview\", \"profile\": \"real\"}]}); behaviour that needs it is unsupported, never a pass",
+    "fidelity: module `hw.usb` is off (module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.usb\", \"profile\": \"stub\"}]}); behaviour that needs it is unsupported, never a pass",
+    "fidelity: module `system.dropbox` is off (module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.dropbox\", \"profile\": \"stub\"}]}); behaviour that needs it is unsupported, never a pass",
+    "fidelity: module `hw.nfc` is off (off: no NFC hardware: NfcAdapter throws UnsupportedOperationException before any binder (FEATURE_NFC is absent)); behaviour that needs it is unsupported, never a pass",
+    "fidelity: module `system.wallpaper` is off (off: no wallpaper service; AOSP's own DisabledWallpaperManager is the working missing path (config_enableWallpaperService is false)); behaviour that needs it is unsupported, never a pass",
+    "fidelity: module `system.print` is off (off: no print service; the client only resolves the name when FEATURE_PRINTING is reported, and ACOS reports it absent); behaviour that needs it is unsupported, never a pass",
+    "fidelity: module `system.search` is off (off: no search service and no searchable index; an empty SearchableInfo list would look like an installed search provider); behaviour that needs it is unsupported, never a pass",
+    "fidelity: module `system.usage` is off (off: nothing records app usage; an empty ParceledListSlice<UsageStats> would be indistinguishable from 'not used'); behaviour that needs it is unsupported, never a pass",
+    "fidelity: module `system.dpm` is off (off: no managed device or profile; every device-policy answer would be invented policy state); behaviour that needs it is unsupported, never a pass",
+    "fidelity: module `system.role` is off (off: IRoleManager lives in the Permission APEX; its transaction table is not in the framework dex this build reads, so a stub would guess codes); behaviour that needs it is unsupported, never a pass",
+    "fidelity: module `geo.country` is off (off: a detected country is a location claim ACOS cannot back); behaviour that needs it is unsupported, never a pass"
+  ],
+  "provenance": {
+    "apk": {
+      "mtime_ns": 1794978189460282226,
+      "path": "/home/Qui/.t3/worktrees/acos/t3-7941bd5d-f2cbf7e1581aeebb/fixtures/build/apps/touch-probe.apk",
+      "sha256": "988929a3f3c9f0168ada4cd2ddc15fef91b4ab89e683a3ea770aa55b5e2443ba",
+      "sha256_12": "988929a3f3c9",
+      "size_bytes": 16852
+    },
+    "engine": "art",
+    "fidelity": "art-reference",
+    "scenario": {
+      "mtime_ns": 1794977545427811516,
+      "path": "/home/Qui/.t3/worktrees/acos/t3-7941bd5d-f2cbf7e1581aeebb/scenarios/touchdisp-dispatch-probe.yaml",
+      "sha256": "db64daaa7d3aa54442668e962f0dda07b5e2becc2193dba8b772e25346bc7974",
+      "sha256_12": "db64daaa7d3a",
+      "size_bytes": 946
+    },
+    "scenario_engine": "art",
+    "warnings": [
+      {
+        "acked": 2,
+        "code": "INPUT_UNHANDLED",
+        "handled": false,
+        "hint": "nothing tappable there: the node at this point is android.widget.TextView \"touch me\" at [42,380][1038,695], which is not clickable and neither is any ancestor, and the app's window answered `finishInputEvent(handled) = false` (no handler consumed the input); tap the nearest clickable android.widget.Button \"Increment\" at [42,1535][273,1661] (centre 157,1598) instead",
+        "message": "step 1 (tap): the gesture was delivered and the app window acknowledged every event `finishInputEvent(handled) = false` - nothing consumed it. The step is `pass` because it made no change claim; it is not evidence that the input reached a control.",
+        "published": 2,
+        "step": 1,
+        "step_kind": "tap",
+        "target": {
+          "hit": {
+            "clickable": false,
+            "consumer": null,
+            "method": "tree-geometry",
+            "node": {
+              "bounds": "[42,380][1038,695]",
+              "class": "android.widget.TextView",
+              "clickable": false,
+              "content_desc": "",
+              "enabled": true,
+              "focused": false,
+              "id": "n4_dev.acos.fixtures.touchprobe:id/label",
+              "password": false,
+              "resource_id": "dev.acos.fixtures.touchprobe:id/label",
+              "scrollable": false,
+              "text": "touch me",
+              "visible_bounds": "[42,380][1038,695]",
+              "window": "main"
+            },
+            "suggest": {
+              "bounds": "[42,1535][273,1661]",
+              "class": "android.widget.Button",
+              "clickable": true,
+              "content_desc": "",
+              "enabled": true,
+              "focused": false,
+              "id": "n5_dev.acos.fixtures.touchprobe:id/inc",
+              "password": false,
+              "resource_id": "dev.acos.fixtures.touchprobe:id/inc",
+              "scrollable": false,
+              "text": "Increment",
+              "visible_bounds": "[42,1535][273,1661]",
+              "window": "main"
+            }
+          },
+          "point": {
+            "x": 540,
+            "y": 537
+          },
+          "selector": {
+            "selector": "id==\"label\""
+          }
+        },
+        "unhandled": [
+          3,
+          4
+        ]
+      },
+      {
+        "acked": 2,
+        "code": "INPUT_UNHANDLED",
+        "handled": false,
+        "hint": "nothing tappable there: the node at this point is dev.acos.fixtures.touchprobe.ProbeView (no name) at [42,695][1038,1115], which is not clickable and neither is any ancestor, and the app's window answered `finishInputEvent(handled) = false` (no handler consumed the input); tap the nearest clickable android.widget.Button \"Increment\" at [42,1535][273,1661] (centre 157,1598) instead",
+        "message": "step 2 (tap): the gesture was delivered and the app window acknowledged every event `finishInputEvent(handled) = false` - nothing consumed it. The step is `pass` because it made no change claim; it is not evidence that the input reached a control.",
+        "published": 2,
+        "step": 2,
+        "step_kind": "tap",
+        "target": {
+          "hit": {
+            "clickable": false,
+            "consumer": null,
+            "method": "tree-geometry",
+            "node": {
+              "bounds": "[42,695][1038,1115]",
+              "class": "dev.acos.fixtures.touchprobe.ProbeView",
+              "clickable": false,
+              "content_desc": "",
+              "enabled": true,
+              "focused": false,
+              "id": "n4_dev.acos.fixtures.touchprobe:id/probe",
+              "password": false,
+              "resource_id": "dev.acos.fixtures.touchprobe:id/probe",
+              "scrollable": false,
+              "text": "",
+              "visible_bounds": "[42,695][1038,1115]",
+              "window": "main"
+            },
+            "suggest": {
+              "bounds": "[42,1535][273,1661]",
+              "class": "android.widget.Button",
+              "clickable": true,
+              "content_desc": "",
+              "enabled": true,
+              "focused": false,
+              "id": "n5_dev.acos.fixtures.touchprobe:id/inc",
+              "password": false,
+              "resource_id": "dev.acos.fixtures.touchprobe:id/inc",
+              "scrollable": false,
+              "text": "Increment",
+              "visible_bounds": "[42,1535][273,1661]",
+              "window": "main"
+            }
+          },
+          "point": {
+            "x": 540,
+            "y": 905
+          },
+          "selector": {
+            "selector": "id==\"probe\""
+          }
+        },
+        "unhandled": [
+          5,
+          6
+        ]
+      }
+    ]
+  },
+  "provenance_rule": "trusted fixture: guest-asserted evidence may corroborate a pass, and its provenance is still recorded",
+  "reproducer": {
+    "acos_version": "0.3.0",
+    "apk_path": "/home/Qui/.t3/worktrees/acos/t3-7941bd5d-f2cbf7e1581aeebb/fixtures/build/apps/touch-probe.apk",
+    "apk_sha256": "988929a3f3c9f0168ada4cd2ddc15fef91b4ab89e683a3ea770aa55b5e2443ba",
+    "backend": "acos-native",
+    "display": {
+      "density_dpi": 420,
+      "height": 2400,
+      "mode": "offscreen",
+      "width": 1080
+    },
+    "fidelity": "art-reference",
+    "flags": [],
+    "isolation": "process",
+    "scenario_path": "/home/Qui/.t3/worktrees/acos/t3-7941bd5d-f2cbf7e1581aeebb/scenarios/touchdisp-dispatch-probe.yaml",
+    "scenario_sha256": "db64daaa7d3aa54442668e962f0dda07b5e2becc2193dba8b772e25346bc7974"
+  },
+  "request_id": "req_86a35_18e90bffa5b98f09",
+  "resources": {
+    "events": 95,
+    "frames_captured": 4,
+    "memory_mib": 14,
+    "peak_rss_bytes": 15659008,
+    "sessions": 1,
+    "steps": 4,
+    "wall_ms": 599
+  },
+  "scenario": {
+    "name": "touchdisp-dispatch-probe",
+    "path": "/home/Qui/.t3/worktrees/acos/t3-7941bd5d-f2cbf7e1581aeebb/scenarios/touchdisp-dispatch-probe.yaml",
+    "sha256": "db64daaa7d3aa54442668e962f0dda07b5e2becc2193dba8b772e25346bc7974"
+  },
+  "schema_version": 1,
+  "session_exit": {
+    "abi": null,
+    "cgroup": "cgroup: memory.max=2048MiB swap=0 pids.max=512 peak=66MiB oom_kills=0 (/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p551486-i580627.scope)",
+    "code": null,
+    "disk_free_bytes": 191005855744,
+    "guest_crash": null,
+    "guest_exit": 0,
+    "guest_signal": null,
+    "native_crash": null,
+    "native_crash_path": null,
+    "outcome": "ok",
+    "panic": null,
+    "path": "/home/Qui/.t3/worktrees/acos/t3-7941bd5d-f2cbf7e1581aeebb/results/handoff/MERGE040B/art/touchdisp-dispatch-probe/art/art-frames/session-exit.json",
+    "retryable": false,
+    "stage": "teardown-evidence"
+  },
+  "session_id": "s_art_touch-probe",
+  "started_at": "2026-11-18T05:18:39.263Z",
+  "status": "pass",
+  "steps": [
+    {
+      "assertions": [],
+      "duration_ms": 114,
+      "evidence": [
+        {
+          "kind": "step",
+          "path": "steps/00-launch.json"
+        }
+      ],
+      "index": 0,
+      "provenance": {
+        "frame": "host-observed",
+        "launch_markers": "guest-asserted",
+        "lifecycle_markers": "guest-asserted",
+        "tree": "guest-asserted"
+      },
+      "status": "pass",
+      "step": "launch"
+    },
+    {
+      "assertions": [
+        {
+          "actual": {
+            "acks": 2,
+            "delivered": true,
+            "handled": false,
+            "visual_change": false
+          },
+          "expected": {
+            "delivered": true,
+            "handled": false
+          },
+          "kind": "input_delivery",
+          "matched_node_ids": [],
+          "message": "the app's window did not consume this tap (`finishInputEvent(handled) = false`, 2 guest ack(s)); nothing was handled, so no state change is expected or claimed - the target/hit-test in the input evidence names what the point hit and, when the tree shows one, the clickable node to tap",
+          "passed": true
+        }
+      ],
+      "duration_ms": 108,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/3.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/3.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/01-tap.json"
+        }
+      ],
+      "frame_seq": 3,
+      "index": 1,
+      "input": {
+        "expect_change": "auto",
+        "handled": false,
+        "handled_evidence": {
+          "acked": 2,
+          "published": 2,
+          "source": "guest",
+          "unhandled": [
+            3,
+            4
+          ]
+        },
+        "handled_hint": "nothing tappable there: the node at this point is android.widget.TextView \"touch me\" at [42,380][1038,695], which is not clickable and neither is any ancestor, and the app's window answered `finishInputEvent(handled) = false` (no handler consumed the input); tap the nearest clickable android.widget.Button \"Increment\" at [42,1535][273,1661] (centre 157,1598) instead",
+        "target": {
+          "hit": {
+            "clickable": false,
+            "consumer": null,
+            "method": "tree-geometry",
+            "node": {
+              "bounds": "[42,380][1038,695]",
+              "class": "android.widget.TextView",
+              "clickable": false,
+              "content_desc": "",
+              "enabled": true,
+              "focused": false,
+              "id": "n4_dev.acos.fixtures.touchprobe:id/label",
+              "password": false,
+              "resource_id": "dev.acos.fixtures.touchprobe:id/label",
+              "scrollable": false,
+              "text": "touch me",
+              "visible_bounds": "[42,380][1038,695]",
+              "window": "main"
+            },
+            "suggest": {
+              "bounds": "[42,1535][273,1661]",
+              "class": "android.widget.Button",
+              "clickable": true,
+              "content_desc": "",
+              "enabled": true,
+              "focused": false,
+              "id": "n5_dev.acos.fixtures.touchprobe:id/inc",
+              "password": false,
+              "resource_id": "dev.acos.fixtures.touchprobe:id/inc",
+              "scrollable": false,
+              "text": "Increment",
+              "visible_bounds": "[42,1535][273,1661]",
+              "window": "main"
+            }
+          },
+          "point": {
+            "x": 540,
+            "y": 537
+          },
+          "selector": {
+            "selector": "id==\"label\""
+          }
+        }
+      },
+      "provenance": {
+        "frame": "host-observed",
+        "host_input": "host-observed",
+        "input_acks": "guest-asserted",
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "ack_ms": 5,
+        "animating": false,
+        "bound": "unhandled-input",
+        "first_change_ms": null,
+        "frame_ms": null,
+        "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
+        "mode": "strict",
+        "pixels_changed": false,
+        "reason": "unhandled_input",
+        "settled": true,
+        "state_changed": null,
+        "strict_rule": "event",
+        "waited_ms": 108,
+        "waited_ms_source": "step"
+      },
+      "status": "pass",
+      "step": "tap",
+      "warnings": [
+        {
+          "acked": 2,
+          "code": "INPUT_UNHANDLED",
+          "handled": false,
+          "hint": "nothing tappable there: the node at this point is android.widget.TextView \"touch me\" at [42,380][1038,695], which is not clickable and neither is any ancestor, and the app's window answered `finishInputEvent(handled) = false` (no handler consumed the input); tap the nearest clickable android.widget.Button \"Increment\" at [42,1535][273,1661] (centre 157,1598) instead",
+          "message": "step 1 (tap): the gesture was delivered and the app window acknowledged every event `finishInputEvent(handled) = false` - nothing consumed it. The step is `pass` because it made no change claim; it is not evidence that the input reached a control.",
+          "published": 2,
+          "step": 1,
+          "step_kind": "tap",
+          "target": {
+            "hit": {
+              "clickable": false,
+              "consumer": null,
+              "method": "tree-geometry",
+              "node": {
+                "bounds": "[42,380][1038,695]",
+                "class": "android.widget.TextView",
+                "clickable": false,
+                "content_desc": "",
+                "enabled": true,
+                "focused": false,
+                "id": "n4_dev.acos.fixtures.touchprobe:id/label",
+                "password": false,
+                "resource_id": "dev.acos.fixtures.touchprobe:id/label",
+                "scrollable": false,
+                "text": "touch me",
+                "visible_bounds": "[42,380][1038,695]",
+                "window": "main"
+              },
+              "suggest": {
+                "bounds": "[42,1535][273,1661]",
+                "class": "android.widget.Button",
+                "clickable": true,
+                "content_desc": "",
+                "enabled": true,
+                "focused": false,
+                "id": "n5_dev.acos.fixtures.touchprobe:id/inc",
+                "password": false,
+                "resource_id": "dev.acos.fixtures.touchprobe:id/inc",
+                "scrollable": false,
+                "text": "Increment",
+                "visible_bounds": "[42,1535][273,1661]",
+                "window": "main"
+              }
+            },
+            "point": {
+              "x": 540,
+              "y": 537
+            },
+            "selector": {
+              "selector": "id==\"label\""
+            }
+          },
+          "unhandled": [
+            3,
+            4
+          ]
+        }
+      ]
+    },
+    {
+      "assertions": [
+        {
+          "actual": {
+            "acks": 2,
+            "delivered": true,
+            "handled": false,
+            "visual_change": true
+          },
+          "expected": {
+            "delivered": true,
+            "handled": false
+          },
+          "kind": "input_delivery",
+          "matched_node_ids": [],
+          "message": "the app's window did not consume this tap (`finishInputEvent(handled) = false`, 2 guest ack(s)); nothing was handled, so no state change is expected or claimed - the target/hit-test in the input evidence names what the point hit and, when the tree shows one, the clickable node to tap",
+          "passed": true
+        }
+      ],
+      "duration_ms": 227,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/5.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/5.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/02-tap.json"
+        }
+      ],
+      "frame_seq": 5,
+      "index": 2,
+      "input": {
+        "expect_change": "auto",
+        "handled": false,
+        "handled_evidence": {
+          "acked": 2,
+          "published": 2,
+          "source": "guest",
+          "unhandled": [
+            5,
+            6
+          ]
+        },
+        "handled_hint": "nothing tappable there: the node at this point is dev.acos.fixtures.touchprobe.ProbeView (no name) at [42,695][1038,1115], which is not clickable and neither is any ancestor, and the app's window answered `finishInputEvent(handled) = false` (no handler consumed the input); tap the nearest clickable android.widget.Button \"Increment\" at [42,1535][273,1661] (centre 157,1598) instead",
+        "target": {
+          "hit": {
+            "clickable": false,
+            "consumer": null,
+            "method": "tree-geometry",
+            "node": {
+              "bounds": "[42,695][1038,1115]",
+              "class": "dev.acos.fixtures.touchprobe.ProbeView",
+              "clickable": false,
+              "content_desc": "",
+              "enabled": true,
+              "focused": false,
+              "id": "n4_dev.acos.fixtures.touchprobe:id/probe",
+              "password": false,
+              "resource_id": "dev.acos.fixtures.touchprobe:id/probe",
+              "scrollable": false,
+              "text": "",
+              "visible_bounds": "[42,695][1038,1115]",
+              "window": "main"
+            },
+            "suggest": {
+              "bounds": "[42,1535][273,1661]",
+              "class": "android.widget.Button",
+              "clickable": true,
+              "content_desc": "",
+              "enabled": true,
+              "focused": false,
+              "id": "n5_dev.acos.fixtures.touchprobe:id/inc",
+              "password": false,
+              "resource_id": "dev.acos.fixtures.touchprobe:id/inc",
+              "scrollable": false,
+              "text": "Increment",
+              "visible_bounds": "[42,1535][273,1661]",
+              "window": "main"
+            }
+          },
+          "point": {
+            "x": 540,
+            "y": 905
+          },
+          "selector": {
+            "selector": "id==\"probe\""
+          }
+        }
+      },
+      "provenance": {
+        "frame": "host-observed",
+        "host_input": "host-observed",
+        "input_acks": "guest-asserted",
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "ack_ms": 5,
+        "bound": "strict-event",
+        "first_change_ms": 136,
+        "frame_ms": 174,
+        "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
+        "mode": "strict",
+        "pixels_changed": true,
+        "reason": "strict-event",
+        "settled": true,
+        "state_changed": null,
+        "strict_rule": "event",
+        "waited_ms": 227,
+        "waited_ms_source": "step"
+      },
+      "status": "pass",
+      "step": "tap",
+      "warnings": [
+        {
+          "acked": 2,
+          "code": "INPUT_UNHANDLED",
+          "handled": false,
+          "hint": "nothing tappable there: the node at this point is dev.acos.fixtures.touchprobe.ProbeView (no name) at [42,695][1038,1115], which is not clickable and neither is any ancestor, and the app's window answered `finishInputEvent(handled) = false` (no handler consumed the input); tap the nearest clickable android.widget.Button \"Increment\" at [42,1535][273,1661] (centre 157,1598) instead",
+          "message": "step 2 (tap): the gesture was delivered and the app window acknowledged every event `finishInputEvent(handled) = false` - nothing consumed it. The step is `pass` because it made no change claim; it is not evidence that the input reached a control.",
+          "published": 2,
+          "step": 2,
+          "step_kind": "tap",
+          "target": {
+            "hit": {
+              "clickable": false,
+              "consumer": null,
+              "method": "tree-geometry",
+              "node": {
+                "bounds": "[42,695][1038,1115]",
+                "class": "dev.acos.fixtures.touchprobe.ProbeView",
+                "clickable": false,
+                "content_desc": "",
+                "enabled": true,
+                "focused": false,
+                "id": "n4_dev.acos.fixtures.touchprobe:id/probe",
+                "password": false,
+                "resource_id": "dev.acos.fixtures.touchprobe:id/probe",
+                "scrollable": false,
+                "text": "",
+                "visible_bounds": "[42,695][1038,1115]",
+                "window": "main"
+              },
+              "suggest": {
+                "bounds": "[42,1535][273,1661]",
+                "class": "android.widget.Button",
+                "clickable": true,
+                "content_desc": "",
+                "enabled": true,
+                "focused": false,
+                "id": "n5_dev.acos.fixtures.touchprobe:id/inc",
+                "password": false,
+                "resource_id": "dev.acos.fixtures.touchprobe:id/inc",
+                "scrollable": false,
+                "text": "Increment",
+                "visible_bounds": "[42,1535][273,1661]",
+                "window": "main"
+              }
+            },
+            "point": {
+              "x": 540,
+              "y": 905
+            },
+            "selector": {
+              "selector": "id==\"probe\""
+            }
+          },
+          "unhandled": [
+            5,
+            6
+          ]
+        }
+      ]
+    },
+    {
+      "assertions": [
+        {
+          "actual": {
+            "screenshot_changed": true,
+            "tree_changed": true
+          },
+          "expected": {
+            "screenshot_changed": true,
+            "tree_changed": true
+          },
+          "kind": "state_change",
+          "matched_node_ids": [],
+          "message": "UI tree and screenshot both changed",
+          "passed": true
+        }
+      ],
+      "duration_ms": 150,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/7.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/7.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/03-tap.json"
+        }
+      ],
+      "frame_seq": 7,
+      "index": 3,
+      "input": {
+        "expect_change": "auto",
+        "handled": true,
+        "handled_evidence": {
+          "acked": 2,
+          "published": 2,
+          "source": "guest"
+        },
+        "target": {
+          "hit": {
+            "clickable": true,
+            "consumer": {
+              "bounds": "[42,1535][273,1661]",
+              "class": "android.widget.Button",
+              "clickable": true,
+              "content_desc": "",
+              "enabled": true,
+              "focused": false,
+              "id": "n5_dev.acos.fixtures.touchprobe:id/inc",
+              "password": false,
+              "resource_id": "dev.acos.fixtures.touchprobe:id/inc",
+              "scrollable": false,
+              "text": "Increment",
+              "visible_bounds": "[42,1535][273,1661]",
+              "window": "main"
+            },
+            "method": "tree-geometry",
+            "node": {
+              "bounds": "[42,1535][273,1661]",
+              "class": "android.widget.Button",
+              "clickable": true,
+              "content_desc": "",
+              "enabled": true,
+              "focused": false,
+              "id": "n5_dev.acos.fixtures.touchprobe:id/inc",
+              "password": false,
+              "resource_id": "dev.acos.fixtures.touchprobe:id/inc",
+              "scrollable": false,
+              "text": "Increment",
+              "visible_bounds": "[42,1535][273,1661]",
+              "window": "main"
+            },
+            "suggest": null
+          },
+          "point": {
+            "x": 157,
+            "y": 1598
+          },
+          "selector": {
+            "selector": "id==\"inc\""
+          }
+        }
+      },
+      "provenance": {
+        "frame": "host-observed",
+        "host_input": "host-observed",
+        "input_acks": "guest-asserted",
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "ack_ms": 5,
+        "bound": "strict-event",
+        "first_change_ms": 55,
+        "frame_ms": 95,
+        "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
+        "mode": "strict",
+        "pixels_changed": true,
+        "reason": "strict-event",
+        "settled": true,
+        "state_changed": null,
+        "strict_rule": "event",
+        "waited_ms": 150,
+        "waited_ms_source": "step"
+      },
+      "status": "pass",
+      "step": "tap"
+    }
+  ],
+  "trust": "trusted",
+  "unsupported_steps": [],
+  "verdict": "pass"
+}

@@ -41,6 +41,8 @@ re-register after moving the prefix. Other MCP clients get the equivalent
   VERSION, MANIFEST.txt
   .cache/art/sysroot/             ART sysroot, the framework (~860 MB)
   .cache/boot/android-34/         fonts, static overlays, BOOTCLASSPATH (~250 MB)
+    system-apps/                  the system app packages the image ships
+      com.android.webview.apk     the ACOS WebView provider (ADR-0031)
   crates/acos-art/guest/java/     guest sources, compiled at run time
   research/art-feasibility/a-dalvikvm/bootclasspath.txt   (legacy fallback)
 ```
@@ -52,6 +54,30 @@ copy, not a second code path.
 Internal symlinks inside those trees are preserved (some are dangling in the
 source extraction too); the installer fails closed if the copied tree contains a
 link that resolves outside the install root.
+
+### The WebView provider ships in the image
+
+`webview: real` (ADR-0029/ADR-0031) is the only module that installs a **system
+app**: the framework's `WebViewFactory` loads a provider package, and ACOS's
+provider is `com.android.webview`. That APK is part of the image, so a fresh
+install needs no separate build step:
+
+* the image build, `tools/extract-bootclasspath.sh`, builds the provider with
+  `tools/build-webview-provider.sh` and stages it at
+  `.cache/boot/android-34/system-apps/com.android.webview.apk`, listing it in the
+  image's `manifest.json` under `system_apps`. An image built before
+  `system-apps/` existed is upgraded in place by the same script (no
+  re-extraction); `--system-apps-only` forces just that step;
+* the installer copies it with the rest of the image, and if the source image
+  does not have it, the installer builds it into the install root (the one build
+  implementation is `tools/build-webview-provider.sh`); its report says which
+  path it used;
+* the `webview` module resolves the provider as `config.provider_apk` →
+  `ACOS_WEBVIEW_PROVIDER_APK` → the image's copy → the fixture build
+  (`fixtures/build/apps/webview-provider.apk`, what `tools/build-apps.sh`
+  produces for a bare checkout), and its `status` control op names the file it
+  used — a wrong or missing provider is visible in the reply, never a WebView
+  that paints nothing.
 
 ### Mutable state
 

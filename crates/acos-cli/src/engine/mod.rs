@@ -381,6 +381,14 @@ pub trait SessionBackend {
         None
     }
 
+    /// LAUNCHEXTRAS: the launch `Intent` this session started with, when the
+    /// engine delivers one. `None` means the engine has no such concept (the
+    /// Rust VM builds what it builds); the ART engine returns it so a launch
+    /// step can never ask for a different Intent than the process received.
+    fn launch_intent(&self) -> Option<&acos_protocol::LaunchIntent> {
+        None
+    }
+
     /// Start the app and return the first completed frame.
     fn launch(&mut self, apk: &Path) -> Result<LaunchOutcome, BackendError>;
 
@@ -1062,6 +1070,20 @@ impl EngineBackend {
     }
 }
 
+/// LAUNCHEXTRAS: the launch `Intent` a [`LaunchRequest`] declares.
+///
+/// `activity` is deliberately **not** part of it: a scenario names the Activity
+/// it asserts (Gaten's launcher entry is a splash/router alias that starts
+/// `MainActivity`), and the executor already refuses an activity the manifest
+/// does not declare. The Intent fields are action, data URI and typed extras.
+fn request_launch_intent(request: &LaunchRequest) -> acos_protocol::LaunchIntent {
+    acos_protocol::LaunchIntent {
+        action: request.intent_action.clone(),
+        data: request.data.clone(),
+        extras: request.extras.clone(),
+    }
+}
+
 impl Backend for EngineBackend {
     fn id(&self) -> &'static str {
         match self {
@@ -1129,6 +1151,44 @@ impl Backend for EngineBackend {
                 cause_id,
                 ..
             } => {
+                // LAUNCHEXTRAS (WVFAIR finding): a scenario's `intent_action`,
+                // `data` and typed `extras` reach the guest through the
+                // session-start `LaunchActivityItem` Intent (the host builds the
+                // transaction), so the activity's real `getIntent()` carries
+                // them and the run asserts what the app received. Two honest
+                // refusals remain, by name and before anything runs:
+                //
+                // * a `Parcelable` extra: ACOS cannot build that payload from a
+                //   scenario; dropping it would be the old silent bug;
+                // * an Intent that differs from the one the live session was
+                //   started with: the process already received its first Intent
+                //   and a launch step cannot replace it.
+                if session.engine() == Engine::Art {
+                    let declared = request_launch_intent(request);
+                    if let Some(detail) = declared.unsupported_detail() {
+                        return Err(BackendError::Error {
+                            code: acos_protocol::ErrorCode::UnsupportedAndroidApi,
+                            detail,
+                        });
+                    }
+                    if !declared.is_empty() {
+                        if let Some(held) = session.launch_intent() {
+                            if held != &declared {
+                                return Err(BackendError::Error {
+                                    code: acos_protocol::ErrorCode::InvalidArgument,
+                                    detail: format!(
+                                        "this launch declares a different Intent than the one the \
+                                         live session started with (session {}, scenario {}). One \
+                                         guest process receives one first Intent; launch a fresh \
+                                         session (clear_state) for a different one.",
+                                        serde_json::to_string(held).unwrap_or_default(),
+                                        serde_json::to_string(&declared).unwrap_or_default()
+                                    ),
+                                });
+                            }
+                        }
+                    }
+                }
                 *cause_id = request.cause_id.clone();
                 // SE2: the launch's first tree may be bound by the content rule
                 // (a screen whose pixels animate forever); strict stays the
@@ -3126,6 +3186,77 @@ mod engine_tests {
             cause_id: "req_engine_test:launch:0".to_string(),
             settle: acos_protocol::scenario::StepSettle::Strict,
         }
+    }
+
+    /// LAUNCHEXTRAS (WVFAIR finding): a scenario's supported extras are no
+    /// longer refused — they reach the session-start Intent. What stays refused
+    /// is the type ACOS genuinely cannot carry (`Parcelable`), by name, and a
+    /// different Intent than the live session already started with.
+    #[test]
+    fn a_parcelable_extra_is_refused_loudly_not_silently_dropped() {
+        let dir = artifacts("launch-extras");
+        let mut backend = EngineBackend::session(Box::new(FakeSession::live()));
+        let mut request = launch_request(&dir);
+        request.extras.insert(
+            "device".to_string(),
+            acos_protocol::ExtraValue::Parcelable("android.os.Bundle".to_string()),
+        );
+        let err = backend
+            .launch(&request)
+            .expect_err("a Parcelable extra must be refused, not dropped");
+        match err {
+            acos_verify::backend::BackendError::Error { code, detail } => {
+                assert_eq!(code, acos_protocol::ErrorCode::UnsupportedAndroidApi);
+                assert!(detail.contains("device"), "the extra is named: {detail}");
+                assert!(
+                    detail.contains("android.os.Bundle"),
+                    "the class is named: {detail}"
+                );
+            }
+            other => panic!("unexpected error {other:?}"),
+        }
+    }
+
+    /// The pure decision: the normal launch declares nothing; a declared
+    /// Activity is not an Intent field (the executor checks the manifest); and
+    /// a typed extra set is representable. Only a `Parcelable` names a refusal.
+    #[test]
+    fn the_launch_intent_a_session_can_carry_is_named() {
+        let dir = artifacts("launch-intent-fields");
+        let base = launch_request(&dir);
+        assert!(request_launch_intent(&base).is_empty());
+        assert!(request_launch_intent(&base).unsupported_extra().is_none());
+        let mut other = base.clone();
+        other.activity = Some("dev.acos.fixtures.counter/.SecondActivity".to_string());
+        assert!(request_launch_intent(&other).is_empty());
+        let mut action = base.clone();
+        action.intent_action = Some("android.intent.action.SEND".to_string());
+        assert_eq!(
+            request_launch_intent(&action).action.as_deref(),
+            Some("android.intent.action.SEND")
+        );
+        assert!(request_launch_intent(&action).unsupported_extra().is_none());
+        let mut data = base.clone();
+        data.data = Some("content://x/y".to_string());
+        assert_eq!(
+            request_launch_intent(&data).data.as_deref(),
+            Some("content://x/y")
+        );
+        let mut typed = base.clone();
+        typed.extras.insert(
+            "count".to_string(),
+            acos_protocol::ExtraValue::Long(5_000_000_000),
+        );
+        assert!(request_launch_intent(&typed).unsupported_extra().is_none());
+        let mut parcelable = base;
+        parcelable.extras.insert(
+            "device".to_string(),
+            acos_protocol::ExtraValue::Parcelable("android.os.Bundle".to_string()),
+        );
+        assert_eq!(
+            request_launch_intent(&parcelable).unsupported_extra(),
+            Some(("device", "android.os.Bundle"))
+        );
     }
 
     #[test]

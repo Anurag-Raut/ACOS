@@ -1,0 +1,162 @@
+--------- beginning of main
+1794940363885      1  E cutils-trace: Error opening trace file: Permission denied (13)
+1794940363885      2  I : Using CollectorTypeCC GC.
+1794940363885      3  D nativeloader: InitDefaultPublicLibraries for_preload=1: libandroid.so:libaaudio.so:libamidi.so:libbinder_ndk.so:libc.so:libcamera2ndk.so:libdl.so:libEGL.so:libGLESv1_CM.so:libGLESv2.so:libGLESv3.so:libicu.so:libicui18n.so:libicuuc.so:libjnigraphics.so:liblog.so:libmediandk.so:libm.so:libnativehelper.so:libnativewindow.so:libOpenMAXAL.so:libOpenSLES.so:libRS.so:libstdc++.so:libsync.so:libvulkan.so:libwebviewchromium_plat_support.so:libz.so
+1794940363885      4  D : I18n APEX ICU file found: /apex/com.android.i18n/etc/icu/icudt72l.dat
+1794940363885      5  E logdw: Found user/group name 'root' in '/etc/passwd' without required prefix 'system_'
+1794940363885      6  E logdw: Found user/group name 'bin' in '/etc/passwd' without required prefix 'system_'
+1794940363885      7  E logdw: Found user/group name 'daemon' in '/etc/passwd' without required prefix 'system_'
+1794940363885      8  E logdw: Found user/group name 'mail' in '/etc/passwd' without required prefix 'system_'
+1794940363885      9  E logdw: Found user/group name 'ftp' in '/etc/passwd' without required prefix 'system_'
+1794940363885     10  E logdw: Found user/group name 'http' in '/etc/passwd' without required prefix 'system_'
+1794940363885     11  E logdw: Found user/group name 'nobody' in '/etc/passwd' without required prefix 'system_'
+1794940363885     12  E logdw: Found user/group name 'dbus' in '/etc/passwd' without required prefix 'system_'
+1794940363885     13  E logdw: Found user/group name 'systemd-coredump' in '/etc/passwd' without required prefix 'system_'
+1794940363885     14  E logdw: Found user/group name 'systemd-network' in '/etc/passwd' without required prefix 'system_'
+1794940363885     15  E logdw: Found user/group name 'systemd-oom' in '/etc/passwd' without required prefix 'system_'
+1794940363885     16  E logdw: Found user/group name 'systemd-journal-remote' in '/etc/passwd' without required prefix 'system_'
+1794940363885     17  E logdw: Found user/group name 'systemd-resolve' in '/etc/passwd' without required prefix 'system_'
+1794940363885     18  E logdw: Found user/group name 'systemd-timesync' in '/etc/passwd' without required prefix 'system_'
+1794940363885     19  E logdw: Found user/group name 'tss' in '/etc/passwd' without required prefix 'system_'
+1794940363885     20  E logdw: Found user/group name 'uuidd' in '/etc/passwd' without required prefix 'system_'
+1794940363885     21  E logdw: Found user/group name 'alpm' in '/etc/passwd' without required prefix 'system_'
+1794940363885     22  E logdw: Found user/group name 'git' in '/etc/passwd' without required prefix 'system_'
+1794940363885     23  E logdw: Found user/group name 'polkitd' in '/etc/passwd' without required prefix 'system_'
+1794940363885     24  E logdw: Found user/group name 'Qui' in '/etc/passwd' without required prefix 'system_'
+1794940363885     25  E logdw: Found user/group name 'avahi' in '/etc/passwd' without required prefix 'system_'
+1794940363885     26  E logdw: Found user/group name 'brltty' in '/etc/passwd' without required prefix 'system_'
+1794940363885     27  E logdw: Found user/group name 'colord' in '/etc/passwd' without required prefix 'system_'
+1794940363885     28  E logdw: Found user/group name 'flatpak' in '/etc/passwd' without required prefix 'system_'
+1794940363885     29  E logdw: Found user/group name 'gdm' in '/etc/passwd' without required prefix 'system_'
+1794940363885     30  E logdw: Found user/group name 'geoclue' in '/etc/passwd' without required prefix 'system_'
+1794940363885     31  E logdw: Found user/group name 'gnome-remote-desktop' in '/etc/passwd' without required prefix 'system_'
+1794940363885     32  E logdw: Found user/group name 'libvirt-qemu' in '/etc/passwd' without required prefix 'system_'
+1794940363885     33  E logdw: Found user/group name 'qemu' in '/etc/passwd' without required prefix 'system_'
+1794940363885     34  E logdw: Found user/group name 'rtkit' in '/etc/passwd' without required prefix 'system_'
+1794940363885     35  E logdw: Found user/group name 'saned' in '/etc/passwd' without required prefix 'system_'
+1794940363885     36  E logdw: Found user/group name 'usbmux' in '/etc/passwd' without required prefix 'system_'
+1794940363885     37  E logdw: Found user/group name 'nvidia-persistenced' in '/etc/passwd' without required prefix 'system_'
+1794940363885     38  E logdw: Found user/group name 'ollama' in '/etc/passwd' without required prefix 'system_'
+1794940363885     39  E logdw: Found user/group name 'named' in '/etc/passwd' without required prefix 'system_'
+1794940363885     40  E logdw: Found user/group name 'pcscd' in '/etc/passwd' without required prefix 'system_'
+1794940363885     41  E logdw: Found user/group name 'mongodb' in '/etc/passwd' without required prefix 'system_'
+1794940363885     42  E logdw: Found user/group name 'malcontent-timer-ext-agent' in '/etc/passwd' without required prefix 'system_'
+1794940363885     43  E logdw: Found user/group name 'malcontent-timerd' in '/etc/passwd' without required prefix 'system_'
+1794940363885     44  E logdw: Found user/group name 'malcontent-webd' in '/etc/passwd' without required prefix 'system_'
+1794940363885     45  E logdw: Found user/group name 'systemd-imds' in '/etc/passwd' without required prefix 'system_'
+1794940363885     46  E logdw: Found user/group name 'clamav' in '/etc/passwd' without required prefix 'system_'
+1794940363885     47  E logdw: Found user/group name 'dnsmasq' in '/etc/passwd' without required prefix 'system_'
+1794940363885     48  W ziparchive: Unable to open '/data/app/launch-guest/classes.dm': No such file or directory
+1794940363885     49  W ziparchive: Unable to open '/data/app/launch-guest/classes.dm': No such file or directory
+1794940363885     50  I nativeloader: InitApexLibraries skipped: No such file or directory
+1794940363885     51  D nativeloader: InitDefaultPublicLibraries for_preload=0: libandroid.so:libaaudio.so:libamidi.so:libbinder_ndk.so:libc.so:libcamera2ndk.so:libclang_rt.hwasan-aarch64-android.so:libdl.so:libEGL.so:libGLESv1_CM.so:libGLESv2.so:libGLESv3.so:libicu.so:libicui18n.so:libicuuc.so:libjnigraphics.so:liblog.so:libmediandk.so:libm.so:libnativehelper.so:libnativewindow.so:libneuralnetworks.so:libOpenMAXAL.so:libOpenSLES.so:libRS.so:libstdc++.so:libsync.so:libvulkan.so:libwebviewchromium_plat_support.so:libz.so
+1794940363885     52  D nativeloader: Configuring clns-1 for other apk . target_sdk_version=0, uses_libraries=ALL, library_path=/system/lib64, permitted_path=/data:/mnt/expand
+1794940363885     53  D nativeloader: InitExtendedPublicLibraries: 
+1794940363885     54  I nativeloader: InitVendorPublicLibraries skipped: No such file or directory
+1794940363885     55  D nativeloader: InitProductPublicLibraries: 
+1794940363885     56  E ProcessState: Binder driver /dev/binder is unavailable. Using /dev/binder instead.
+1794940363885     57  D CompatibilityChangeReporter: Compat change id reported: 171979766; UID 10192; state: ENABLED
+1794940363885     58  D CompatibilityChangeReporter: Compat change id reported: 242716250; UID 10192; state: ENABLED
+1794940363885     59  I Typeface: Preloading /system/fonts/Roboto-Regular.ttf
+1794940363885     60  I Typeface: Preloading /system/fonts/RobotoStatic-Regular.ttf
+1794940363885     61  D CompatibilityChangeReporter: Compat change id reported: 247079863; UID 10192; state: ENABLED
+1794940363885     62  W ziparchive: Unable to open '/data/app/back-layers.dm': No such file or directory
+1794940363885     63  W ziparchive: Unable to open '/data/app/back-layers.dm': No such file or directory
+1794940363885     64  D nativeloader: Configuring clns-2 for other apk /data/app/back-layers.apk. target_sdk_version=34, uses_libraries=, library_path=/data/app-lib/x86_64, permitted_path=/data:/mnt/expand:/data/app-data/dev.acos.fixtures.backlayers
+1794940363885     65  W ContextImpl: Failed to ensure /data/app-data/dev.acos.fixtures.backlayers/cache: chown failed: EINVAL (Invalid argument)
+1794940363885     66  W ContextImpl: Failed to ensure /data/app-data/dev.acos.fixtures.backlayers/code_cache: chown failed: EINVAL (Invalid argument)
+1794940363885     67  V GraphicsEnvironment: Currently set values for:
+1794940363885     68  V GraphicsEnvironment:   angle_gl_driver_selection_pkgs=[]
+1794940363885     69  V GraphicsEnvironment:   angle_gl_driver_selection_values=[]
+1794940363885     70  V GraphicsEnvironment: ANGLE GameManagerService for dev.acos.fixtures.backlayers: false
+1794940363885     71  V GraphicsEnvironment: dev.acos.fixtures.backlayers is not listed in per-application setting
+1794940363885     72  V GraphicsEnvironment: Neither updatable production driver nor prerelease driver is supported.
+1794940363885     73  W SystemServiceRegistry: No service published for: netstats
+1794940363885     74  E TrafficStats: TrafficStats not initialized, uid=10192
+1794940363885     75  I AcosRot6: ACOSLAUNCH MARK top-finish-watcher-started
+1794940363885     76  I AcosBack: onCreate
+1794940363885     77  D CompatibilityChangeReporter: Compat change id reported: 210923482; UID 10192; state: ENABLED
+1794940363885     78  E logdw: dev.acos.fixtures.backlayers.MainActivity
+1794940363885     79  E logdw: dev.acos.fixtures.backlayers.MainActivity
+1794940363885     80  I AcosBack: onResume
+1794940363885     81  E logdw: dev.acos.fixtures.backlayers.MainActivity
+1794940363885     82  D CompatibilityChangeReporter: Compat change id reported: 237531167; UID 10192; state: ENABLED
+1794940363885     83  I AcosBack: insets_ime visible=false
+1794940363885     84  I AcosBack: insets_ime visible=false
+1794940365043     85  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794940365043     86  D CompatibilityChangeReporter: Compat change id reported: 171228096; UID 10192; state: ENABLED
+1794940365043     87  I AcosBack: dialog_shown
+1794940365043     88  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794940365043     89  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794940365043     90  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794940365043     91  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794940365043     92  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794940365043     93  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794940365043     94  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794940365043     95  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794940365043     96  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794940365043     97  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794940365043     98  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794940365043     99  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794940365043    100  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794940365043    101  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794940365043    102  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794940365043    103  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794940365043    104  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794940365043    105  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794940365043    106  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794940365043    107  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794940365043    108  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794940365043    109  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794940365043    110  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794940365043    111  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794940365043    112  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794940365043    113  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794940365043    114  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794940365043    115  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794940365043    116  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794940365043    117  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794940365043    118  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794940365043    119  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794940365043    120  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794940365043    121  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794940365043    122  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794940365043    123  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794940365043    124  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794940365043    125  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794940365043    126  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794940365043    127  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794940365043    128  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794940365043    129  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794940365043    130  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794940365043    131  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794940365043    132  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794940365043    133  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794940365043    134  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794940365043    135  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794940365043    136  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794940365043    137  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794940367609    138  W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=falsecallback=android.view.ViewRootImpl$$ExternalSyntheticLambda17@7a431f8
+1794940367609    139  W InputEventReceiver: Attempted to finish an input event but the input event receiver has already been disposed.
+1794940367609    140  I AcosBack: dialog_dismissed
+1794940367819    141  D CompatibilityChangeReporter: Compat change id reported: 163400105; UID 10192; state: ENABLED
+1794940367819    142  I AcosBack: input_focus=true ime accepting=true active=true
+1794940367819    143  I ImeTracker: dev.acos.fixtures.backlayers:f6d2dbec: onRequestShow at ORIGIN_CLIENT_SHOW_SOFT_INPUT reason SHOW_SOFT_INPUT
+1794940367819    144  D InputMethodManager: showSoftInput() view=android.widget.EditText{ed5fada VFED..CL. .F.P..ID 42,168-1038,286 #7f010001 app:id/input aid=1073741824} flags=0 reason=SHOW_SOFT_INPUT
+1794940367819    145  D InsetsController: show(ime(), fromIme=true)
+1794940367819    146  E logdw: 0@0@dev.acos.fixtures.backlayers
+1794940367819    147  I AcosBack: insets_ime visible=true
+1794940368218    148  I AcosBack: insets_ime visible=false
+1794940368218    149  E logdw: 1@0@dev.acos.fixtures.backlayers
+1794940368218    150  I ImeTracker: dev.acos.fixtures.backlayers:273759b9: onRequestHide at ORIGIN_CLIENT_HIDE_SOFT_INPUT reason HIDE_SOFT_INPUT_BY_INSETS_API
+1794940368265    151  I AcosBack: dispatchKeyBack action=0 ime accepting=true active=true
+1794940368265    152  I AcosBack: dispatchKeyBack action=1 ime accepting=true active=true
+1794940368265    153  I AcosBack: onBackPressed
+1794940368265    154  I AcosRot6: ACOSLAUNCH MARK activity-destroyed-after-finish token=binder:268f071 order=Pause(finished)->Stop->Destroy
+1794940368265    155  I AcosBack: onPause
+1794940368265    156  E logdw: dev.acos.fixtures.backlayers.MainActivity
+1794940368265    157  E logdw: dev.acos.fixtures.backlayers.MainActivity
+1794940368265    158  W AcosPriority: setpriority(-2) clamped to 0 (host RLIMIT_NICE is below stock init.rc's 40; guest-only adapter, W21)
+1794940368265    159  I AcosBack: onDestroy
+1794940368265    160  E logdw: dev.acos.fixtures.backlayers.MainActivity
+1794940368265    161  W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=falsecallback=android.view.ViewRootImpl$$ExternalSyntheticLambda17@9ed6111

@@ -1,0 +1,118 @@
+# SYSUI2: the notification shade is the guest system app (ADR-0029 amendment).
+#
+# The notification module's `open_shade` control op starts
+# `com.android.systemui/.ShadeActivity` through the system's own start path
+# (`AmsState::start_activity`): the launcher spawns the shade's process lazily and
+# the host delivers the launch, exactly as it does for the permission dialog. The
+# activity's launch extras are the module's posted records (id/tag,
+# `android.title`, `android.text`, the action titles), so the rows the served tree
+# shows are the notifications the system really holds — nothing is invented.
+#
+# Tapping a row answers with that row's key; the host applies the result to the
+# one notification table: it fires the notification's own content
+# `PendingIntent` (`IIntentSender.send`) and cancels the record, which is what
+# systemui's controller does in its own process on a device. The target
+# activity's own log line is the evidence the sender really started it.
+version: 1
+name: sysui1-shade
+description: >-
+  Post a notification, open the shade (the com.android.systemui guest system app),
+  see its row in the served tree, tap it, the notification's content PendingIntent
+  starts the target activity and the record leaves the list.
+app: fixtures/build/apps/notif-perm-probe.apk
+engine: art
+fallback: report-and-escalate
+api_level: 34
+isolation: process
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+capabilities:
+  - ui.offscreen
+  - ui.text
+services:
+  - id: system.permissions
+    profile: real
+    config:
+      grant:
+        - android.permission.POST_NOTIFICATIONS
+  - id: system.notifications
+    profile: real
+expectation: pass
+budgets:
+  memory_mib: 1024
+  wall_ms: 240000
+steps:
+  - launch:
+      activity: dev.acos.fixtures.notifpermprobe/.MainActivity
+      clear_state: true
+
+  # The notification is posted (the gate is open).
+  - wait_for:
+      selector: {id: posted}
+      timeout_ms: 20000
+  - assert_text:
+      selector: {id: posted}
+      text: {exact: "posted: id 7"}
+
+  - service_ctl:
+      module: system.notifications
+      op: list
+      expect:
+        value:
+          posted:
+            - id: 7
+              tag: probe-notification
+              title: Probe title
+              text: Probe text
+
+  # Open the shade: the system app is started with the posted row.
+  - service_ctl:
+      module: system.notifications
+      op: open_shade
+      expect:
+        ok: true
+        op: open_shade
+        value:
+          shade:
+            rows: 1
+            keys: ["7:probe-notification"]
+            start_result: 0
+
+  # The shade's own window is what the tree now serves.
+  - wait_for:
+      selector: {id: shade_row_0}
+      timeout_ms: 30000
+  - assert_windows:
+      order: [application]
+      focus: application
+      focus_type: TYPE_BASE_APPLICATION
+
+  - assert_text:
+      selector: {id: shade_title}
+      text: {exact: "Notifications"}
+  - assert_text:
+      selector: {id: shade_row_0}
+      text: {exact: "Probe title — Probe text · Open"}
+
+  # Tap the row: the system fires that notification's content sender.
+  - tap:
+      selector: {id: shade_row_0}
+
+  - assert_log:
+      since_previous_step: false
+      timeout_ms: 30000
+      ordered: true
+      patterns:
+        - '^tapped key=7:probe-notification action=-1$'
+        - '^TargetActivity opened from=content action=dev\.acos\.fixtures\.notifpermprobe\.OPEN$'
+
+  # The row left the list (the tap dismissed it, like a device's shade does).
+  - service_ctl:
+      module: system.notifications
+      op: list
+      expect:
+        value:
+          posted: []

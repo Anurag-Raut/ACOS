@@ -94,6 +94,39 @@ fn a_transaction_on_the_node_is_forwarded_to_the_owner() {
     assert_eq!(peer.foreign_forwards, 1);
 }
 
+/// BINDERPID: a guest -> guest transaction reaches the owner with the
+/// **caller's** identity, not `system_server`'s.
+///
+/// On a device the kernel delivers `sender_uid`/`sender_pid` straight from the
+/// calling process. Here the peer relays the transaction, so it must restamp the
+/// `F_TXN` with the caller's own uid and host-visible pid; otherwise the target
+/// service's `Binder.getCallingUid()` would answer 1000 for a call that came
+/// from another app.
+#[test]
+fn a_forwarded_transaction_names_the_calling_app_not_the_host() {
+    let mut peer = Peer::new();
+    // The caller is a real connection: tag 1 is announced with the pid the
+    // kernel reported for its socket, and its package's uid comes from the
+    // activity manager's record.
+    peer.register_process_with_pid(1, "dev.acos.fixtures.helloviews", 4242)
+        .expect("tag 1 connects");
+    let (_, node) = app_binder_reply(&mut peer, TAG_PRIMARY);
+    let uid = peer.process_uid(1).expect("the process's uid");
+    let req = Frame::plain(F_REQ, 42, PING_TRANSACTION, 0, node, Vec::new());
+    let out = peer.handle_tagged(1, req);
+    let (dest, forwarded) = out
+        .iter()
+        .find(|(_, f)| f.ty == F_TXN)
+        .expect("the transaction was forwarded");
+    assert_eq!(*dest, 1, "to the process that owns the binder");
+    assert_eq!(
+        (forwarded.sender_euid, forwarded.sender_pid),
+        (uid as u32, 4242),
+        "the owner must see the calling app's uid and pid"
+    );
+    assert_ne!(forwarded.sender_euid, 1000, "not system_server");
+}
+
 #[test]
 fn the_owners_reply_is_relayed_back_as_the_callers_reply() {
     let (mut peer, _, node) = peer_with_a_service();

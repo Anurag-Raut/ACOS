@@ -63,6 +63,40 @@ impl core::fmt::Debug for ServiceTransport {
 /// so a long-lived session cannot grow them without bound (W94-A #10).
 const MAX_BINDER_IDENTITIES: usize = 8192;
 
+/// BINDERREF4: is the binder rooting trace on? (`ACOS_BINDER_TRACE=1`)
+///
+/// The guest-side rooting of a Java `Binder` is the ACOS counterpart of
+/// libbinder's `JavaBBinder` global reference, and it used to be invisible: the
+/// only record that a callback's Java object had been rooted was internal VM
+/// state. With the flag set, every export and every new `native_roots` entry is
+/// written to the VM log sink (tag `acos-binder`), so `acos logs` shows the
+/// exact point a callback object became a GC root — the line an agent needs to
+/// tell "the object was never rooted on this path" from "the object was
+/// collected anyway".
+fn binder_trace() -> bool {
+    // Read every time (an export is rare): the flag must be switchable inside a
+    // test, and it is read by the same process that writes the line.
+    std::env::var_os("ACOS_BINDER_TRACE").is_some()
+}
+
+/// Write the export line into the VM log sink (tag `acos-binder`).
+///
+/// Separate from the env check so a test can assert the sink record without a
+/// live VM: `binder_id_of` calls this for every Java `Binder` it maps.
+pub fn trace_export(id: u64, handle: Handle) {
+    acos_vm::natives::os_log::push_record(3, "acos-binder", &binder_export_line(id, handle), 0);
+}
+
+/// The log line for one `BinderTransport::binder_id_of` export.
+///
+/// `id` is the wire identity the parcel carries, `handle` the Java `Binder`
+/// object that is now a bridge root. Kept as a pure function so the format is
+/// testable without a live VM.
+#[must_use]
+pub fn binder_export_line(id: u64, handle: Handle) -> String {
+    format!("export bind id={id} handle={handle} rooted=strong")
+}
+
 /// Insert into `map`, evicting one arbitrary entry first when it is at `cap`.
 fn insert_bounded(map: &mut HashMap<u64, u32>, id: u64, handle: u32, cap: usize) {
     if map.len() >= cap && !map.contains_key(&id) {
@@ -122,6 +156,9 @@ impl BinderTransport for ServiceTransport {
                 MAX_BINDER_IDENTITIES,
             );
             vm.root_handle(obj);
+            if binder_trace() {
+                trace_export(id.0, obj);
+            }
             // Keep a re-entrancy-safe mirror for reply parcelables read while
             // this transport is already borrowed (e.g. a published provider
             // holder's binder).
@@ -389,6 +426,42 @@ fn code_owns_method(descriptor: Option<&str>, code: u32, owns_method: fn(&str) -
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_export_trace_names_the_rooted_object() {
+        // BINDERREF4: the line an agent reads back with `acos logs` must carry
+        // both identities: the wire id the parcel carries and the Java handle
+        // that is now a GC root (`libbinder`'s JavaBBinder global reference).
+        assert_eq!(
+            binder_export_line(0x1_0000_0009, 4242),
+            "export bind id=4294967305 handle=4242 rooted=strong"
+        );
+    }
+
+    /// BINDERREF4: the export trace must land in the stream `acos logs` reads,
+    /// not just in a formatted string: an agent diagnosing a collected callback
+    /// object looks the line up by tag and wire id.
+    #[test]
+    fn the_export_trace_reaches_the_vm_log_sink() {
+        struct EnvGuard;
+        impl Drop for EnvGuard {
+            fn drop(&mut self) {
+                std::env::remove_var("ACOS_BINDER_TRACE");
+            }
+        }
+        let _guard = EnvGuard;
+        std::env::set_var("ACOS_BINDER_TRACE", "1");
+        let before = acos_vm::natives::os_log::records().len();
+        trace_export(0xB1D4_0001, 5150);
+        let records = acos_vm::natives::os_log::records();
+        let line = super::binder_export_line(0xB1D4_0001, 5150);
+        assert!(
+            records[before..]
+                .iter()
+                .any(|r| r.tag == "acos-binder" && r.msg == line),
+            "the export line must be in the VM log sink: {line}"
+        );
+    }
 
     #[test]
     fn binder_identity_caches_are_bounded() {

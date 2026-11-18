@@ -1,0 +1,17 @@
+{
+  "acos_version": "0.3.0",
+  "apk_path": "/home/Qui/.t3/worktrees/acos/t3-7941bd5d-f2cbf7e1581aeebb/fixtures/build/apps/counter.apk",
+  "apk_sha256": "973932a70fca50e8cf08e2fbb1e6b18f5b919252f08eb3b2de8658086c01c742",
+  "scenario_path": "/home/Qui/.t3/worktrees/acos/t3-7941bd5d-f2cbf7e1581aeebb/scenarios/v2-art-counter.yaml",
+  "scenario_sha256": "cc270776f42796f8a64d9acd4bf507f86b478f34c59dacfba203f2c1e515e2b0",
+  "flags": [],
+  "isolation": "process",
+  "display": {
+    "mode": "offscreen",
+    "width": 1080,
+    "height": 2400,
+    "density_dpi": 420
+  },
+  "fidelity": "art-reference",
+  "backend": "acos-native"
+}

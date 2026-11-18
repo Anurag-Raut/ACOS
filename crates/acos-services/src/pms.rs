@@ -14,6 +14,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
 use acos_aidl::MethodInfo;
+use acos_apk::manifest::DeclaredPermission;
 use acos_parcel::Parcel;
 
 /// The parsed `<meta-data>` model, re-exported so a crate that only depends on
@@ -135,9 +136,27 @@ pub fn cached_activity_info() -> Option<(AppInfo, ActivityInfo)> {
 }
 
 /// ACOS fixture uid (MEASURED `display.txt`: `A=10192`).
+///
+/// It is the uid the package manager allocates to the **first** package of a
+/// session (AOSP allocates 10000+ per installed package); a second package gets
+/// the next free uid, so a multi-process session has one uid per app.
 pub const FIXTURE_UID: i32 = 10192;
+/// `Process.FIRST_APPLICATION_UID`: the first uid the package manager allocates.
+pub const FIRST_APPLICATION_UID: u32 = 10_000;
+/// `Process.LAST_APPLICATION_UID`: the last application uid (`Process`'s range).
+pub const LAST_APPLICATION_UID: u32 = 19_999;
 /// User id used in the `/data/user/<id>/` path.
 pub const FIXTURE_USER: i32 = 0;
+
+/// Whether `uid` is an **application** uid, i.e. a uid the package manager
+/// allocates for an installed package (`Process.isApplicationUid`).
+///
+/// The guest must carry one of these: uid 1000 is `SYSTEM_UID` (the host caller,
+/// and the uid the framework takes privileged branches on).
+#[must_use]
+pub fn is_application_uid(uid: u32) -> bool {
+    (FIRST_APPLICATION_UID..=LAST_APPLICATION_UID).contains(&uid)
+}
 
 /// Typed `ApplicationInfo` values ACOS serves.
 #[derive(Debug, Clone, PartialEq)]
@@ -1117,6 +1136,10 @@ pub struct InstalledPackage {
     pub services: Vec<ServiceInfo>,
     /// Granted permissions (manifest + install `-g`).
     pub granted_permissions: Vec<String>,
+    /// `<permission>` elements the package declares itself (SYSUI3B): the
+    /// `PermissionInfo` an `IPermissionManager.getPermissionInfo` for a custom
+    /// permission answers comes from here.
+    pub declared_permissions: Vec<DeclaredPermission>,
     /// installer package (null = side-loaded).
     pub installer_package: Option<String>,
     /// `sourceDir` the state was built from.
@@ -1227,6 +1250,7 @@ impl InstalledPackage {
             providers,
             services,
             granted_permissions: requested_permissions,
+            declared_permissions: manifest.permissions.clone(),
             installer_package: None,
             apk_path: path.to_path_buf(),
             manifest: crate::ams::PackageRecord::from_manifest(&manifest, uid),
@@ -1338,6 +1362,7 @@ impl PmsState {
                 providers: Vec::new(),
                 services: Vec::new(),
                 granted_permissions: vec!["android.permission.INTERNET".into()],
+                declared_permissions: Vec::new(),
                 installer_package: None,
                 apk_path: apk,
                 manifest,
@@ -1361,10 +1386,23 @@ impl PmsState {
         Self::from_opened(path, &apk)
     }
 
-    /// [`PmsState::from_apk`] for an APK that is already open (`apk` is the open of
-    /// `path`). PERF-REL3c: a launch reads its source APK once.
-    pub fn from_opened(path: impl AsRef<Path>, apk: &acos_apk::Apk) -> Result<Self> {
-        let record = InstalledPackage::from_opened(path, apk, FIXTURE_UID)?;
+    /// [`PmsState::from_apk`] for a package whose uid the package manager has
+    /// **already** allocated (AOSP allocates one uid per installed package).
+    ///
+    /// A package's `ApplicationInfo.uid` must be its own: building an extra
+    /// package's facts with the fixture uid would describe a different app's uid
+    /// while nothing else about the record changed.
+    pub fn from_apk_with_uid(path: impl AsRef<Path>, uid: i32) -> Result<Self> {
+        let path = path.as_ref();
+        let apk = crate::apk_facts::open_shared(path)
+            .map_err(|e| ServiceError::Internal(format!("open {}: {e}", path.display())))?;
+        Self::from_opened_with_uid(path, &apk, uid)
+    }
+
+    /// [`PmsState::from_opened`] for an APK that is already open and a package
+    /// uid the caller owns (see [`PmsState::from_apk_with_uid`]).
+    pub fn from_opened_with_uid(path: impl AsRef<Path>, apk: &acos_apk::Apk, uid: i32) -> Result<Self> {
+        let record = InstalledPackage::from_opened(path, apk, uid)?;
         let uid_packages = vec![(record.app.uid, record.app.package_name.clone())];
         Ok(Self {
             packages: vec![record],
@@ -1375,6 +1413,12 @@ impl PmsState {
             dex_loads: Vec::new(),
             component_settings: Vec::new(),
         })
+    }
+
+    /// [`PmsState::from_apk`] for an APK that is already open (`apk` is the open of
+    /// `path`). PERF-REL3c: a launch reads its source APK once.
+    pub fn from_opened(path: impl AsRef<Path>, apk: &acos_apk::Apk) -> Result<Self> {
+        Self::from_opened_with_uid(path, apk, FIXTURE_UID)
     }
 
     /// Install an extra package into this session: an APK given at launch, or a
@@ -1435,6 +1479,11 @@ impl PmsState {
         self.uid_packages
             .push((uid, record.app.package_name.clone()));
         self.packages.push(record);
+        // BINDERPID: the uid -> package/grant table the per-uid permission check
+        // reads must learn about the new package at the same moment the uid
+        // table does, or `checkCallingPermission` from that package's process
+        // answers from the wrong app's grants.
+        self.publish_uid_grants();
         Ok(uid)
     }
 
@@ -1607,6 +1656,56 @@ impl PmsState {
             .collect()
     }
 
+    /// `IPackageManager.getNameForUid(int uid)`: the package the uid belongs
+    /// to, or `None` (which the wire writes as a null string).
+    ///
+    /// AOSP answers the first package of the uid
+    /// (`PackageManagerService.getNameForUid`) and null for a uid no package
+    /// owns. The framework's permission check path asks this to turn a calling
+    /// uid into a package (`ActivityManager.checkComponentPermission` ->
+    /// `ContextImpl.checkComponentPermission`), so the answer must be the same
+    /// uid table `getPackagesForUid` and the ATMS records use.
+    #[must_use]
+    pub fn name_for_uid(&self, uid: i32) -> Option<String> {
+        self.packages_for_uid(uid).into_iter().next()
+    }
+
+    /// Every installed package's `(uid, package, manifest grants)`.
+    ///
+    /// This is what the one permission table needs to answer
+    /// `IPermissionManager.checkUidPermission` (the framework's
+    /// `Context.checkCallingPermission` path): the question is asked by **uid**,
+    /// and only the package manager can say which package (and therefore which
+    /// install-time grant set) a uid names.
+    #[must_use]
+    pub fn uid_grants(&self) -> Vec<(i32, String, Vec<String>)> {
+        self.packages
+            .iter()
+            .map(|p| {
+                (
+                    p.app.uid,
+                    p.app.package_name.clone(),
+                    p.granted_permissions.clone(),
+                )
+            })
+            .collect()
+    }
+
+    /// Republish [`Self::uid_grants`] into the session's permission table.
+    ///
+    /// Called whenever the installed set changes (first install, extra package):
+    /// the table is shared with `ATMS`, `core`'s `IPermissionManager` and the
+    /// `system.permissions` module, so one publish keeps all of them answering
+    /// per-uid questions from the same data.
+    fn publish_uid_grants(&self) {
+        let Some(store) = self.runtime_permissions.as_ref() else {
+            return;
+        };
+        if let Ok(mut store) = store.lock() {
+            store.set_uid_grants(self.uid_grants());
+        }
+    }
+
     /// `COMPONENT_ENABLED_STATE_DEFAULT` (the stock value of
     /// `PackageManager.COMPONENT_ENABLED_STATE_DEFAULT`).
     pub const COMPONENT_ENABLED_STATE_DEFAULT: i32 = 0;
@@ -1760,7 +1859,39 @@ impl PmsService {
         if let Some(guest) = guest_source_dir {
             state.set_guest_apk_path(guest);
         }
-        *self.state.lock().unwrap() = state;
+        // The session's one permission table outlives a package replacement: it
+        // is the table `ATMS`, `core`'s `IPermissionManager` and the
+        // `system.permissions` module all read (MODNOTIF2), and BINDERPID's
+        // per-uid check reads its uid -> package/grants snapshot. Replacing the
+        // package state without re-publishing would leave both describing the
+        // *previous* APK, which is exactly the kind of silent disagreement the
+        // one table exists to prevent.
+        //
+        // SYSUI1: the runtime-permission table describes the session's one app,
+        // and the in-process package manager is seeded with the `hello-views`
+        // fixture before boot. Binding the table's package identity only at the
+        // first `ensure("package")` (registry) left it named after the fixture
+        // forever, so a permission dialog answered for the wrong app. The install
+        // of the real APK is the moment the identity is knowable, so the table is
+        // re-pointed here, before any guest can ask.
+        let mut guard = self.state.lock().unwrap();
+        state.runtime_permissions = guard.runtime_permissions.clone();
+        state.publish_uid_grants();
+        if let Some(store) = state.runtime_permissions.clone() {
+            let primary = state.primary();
+            let (package, granted, declared) = (
+                primary.package.package_name.clone(),
+                primary.granted_permissions.clone(),
+                primary.declared_permissions.clone(),
+            );
+            let mut store = store
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            store.set_install_time(&package, &granted);
+            store.set_declared_permissions(&package, &declared);
+            store.set_uid_grants(state.uid_grants());
+        }
+        *guard = state;
         Ok(())
     }
 
@@ -1948,6 +2079,35 @@ impl ServiceObject for PmsService {
                 vec![Value::StringArray(Some(
                     packages.into_iter().map(Some).collect(),
                 ))]
+            }
+            // `checkUidPermission(String permission, int uid) -> int`: the
+            // permission answer **for a uid**, which is what the framework's
+            // `ActivityManager.checkComponentPermission` (and therefore
+            // `Context.checkCallingPermission`) asks. Answered from the one
+            // shared table, so it cannot disagree with
+            // `IPermissionManager.checkUidPermission` or `checkPermission`.
+            "checkUidPermission" => {
+                let permission = args.first().and_then(Value::as_str).unwrap_or_default();
+                let uid = args.get(1).and_then(Value::as_int).unwrap_or(0);
+                let answer = state
+                    .runtime_permissions
+                    .as_ref()
+                    .map(|store| {
+                        let store = store
+                            .lock()
+                            .unwrap_or_else(std::sync::PoisonError::into_inner);
+                        store.check_uid_permission(uid as u32, permission)
+                    })
+                    .unwrap_or_else(|| state.check_permission_for(None, permission));
+                vec![Value::Int(answer)]
+            }
+            // `getNameForUid(int uid) -> String`: the uid's package, null when
+            // no package owns it (`PackageManagerService.getNameForUid`).
+            // `Context.checkCallingPermission` reaches it through the framework
+            // to turn the calling uid into a package name.
+            "getNameForUid" => {
+                let uid = args.first().and_then(Value::as_int).unwrap_or(FIXTURE_UID);
+                vec![Value::Str(state.name_for_uid(uid))]
             }
             "getPackageUid" => {
                 let package = args.first().and_then(Value::as_str);
@@ -2262,6 +2422,7 @@ mod tests {
             compile_sdk: Some(34),
             uses_permissions: Vec::new(),
             uses_features: Vec::new(),
+            permissions: Vec::new(),
             application: acos_apk::manifest::ApplicationInfo {
                 name: Some(".MainApplication".into()),
                 label: None,

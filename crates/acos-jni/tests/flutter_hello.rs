@@ -1249,7 +1249,7 @@ fn flutter_hello_under_confinement() {
         "the animated 'Hello ACOS' glyphs never reached the software frame: {text_stage}"
     );
 
-    let out_dir = repo_root().join("results/flutter");
+    let out_dir = acos_test_support::test_artifacts_dir("flutter");
     let _ = std::fs::create_dir_all(&out_dir);
     // Frames the confined child presented: written to its scratch (the only
     // place it may write) and published here by the parent.

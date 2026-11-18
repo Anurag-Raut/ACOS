@@ -1,0 +1,12 @@
+package=dev.acos.fixtures.touchprobe
+activity=dev.acos.fixtures.touchprobe.MainActivity
+lifecycle=onCreate,onStart,onResume
+resumed=true
+called=true
+stopped=false
+window=com.android.internal.policy.PhoneWindow@de5a675
+timeout_ms=12000
+first_traversal=traversed=true app_visible=true skip=traversal:view_not_visible
+draw_skip=traversal:view_not_visible
+back_dispatcher=ahead_of_time=false mDefaultBackCallback=null top_callback=null
+resume_ready=first-traversal

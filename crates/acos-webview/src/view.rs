@@ -15,6 +15,8 @@ use serde_json::{json, Value};
 use crate::ax::{self, AxNode};
 use crate::broker::Browser;
 use crate::error::{Error, Result};
+use crate::cdp::{CdpError, PendingReply};
+use crate::fair::{Attempt, AttemptCtx, FramePriority};
 use crate::wire::{code, FMT_PNG};
 
 /// The page's size in device pixels and the Android density it maps to.
@@ -95,6 +97,63 @@ impl Frames {
     fn latest(&self) -> Option<(Vec<u8>, u32, u32)> {
         self.last.lock().expect("frames").clone()
     }
+}
+
+/// How long one input event is given for its ack before the broker produces the
+/// frame the engine acknowledges input on ([`View::wait_input_ack`]).
+const ACK_WAIT: Duration = Duration::from_millis(150);
+
+/// How many follow-up frames an input event may cost. Measured: one is the
+/// number the engine needs (the ack rides the frame **after** the event's own);
+/// two leaves room for the `Another frame is pending` a preempted attempt leaves
+/// behind, and still bounds an unacknowledged event at a few hundred ms instead
+/// of the 2 s it used to cost.
+const ACK_FRAMES: usize = 2;
+
+/// An ack that took longer than this is worth a line in the broker's log even
+/// when it arrived (the normal case is 1-2 ms).
+const ACK_SLOW: Duration = Duration::from_millis(250);
+
+/// What the engine confirmed for the input events a call dispatched.
+///
+/// `events` is what was sent and `acked` how many the engine acknowledged; the
+/// guest's reply carries both (`delivered` = the events were dispatched and a
+/// compositor frame produced for them, `acked` = the engine confirmed them).
+///
+/// `frame_ms` and `ack_ms` split the time the guest spent inside its touch
+/// dispatch: the compositor frames the gesture needed, and the wait for the
+/// engine's acknowledgement. They are what a slow `input.touch` is diagnosed
+/// from (`slow input` in the broker's log), instead of guessing.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct InputAcks {
+    pub events: u32,
+    pub acked: u32,
+    pub frame_ms: u64,
+    pub ack_ms: u64,
+}
+
+impl InputAcks {
+    #[must_use]
+    pub fn all_acked(self) -> bool {
+        self.acked == self.events
+    }
+
+    /// The whole time the call spent inside the engine, in milliseconds.
+    #[must_use]
+    pub fn total_ms(self) -> u64 {
+        self.frame_ms + self.ack_ms
+    }
+}
+
+/// How one `beginFrame` reply wait ended ([`View::await_reply`]).
+enum Reply {
+    /// A queued input frame needs the engine: the attempt is abandoned (the reply
+    /// is kept as [`View::pending_frame`] and drained by the next attempt).
+    Preempted,
+    /// The attempt's budget is gone, the engine has not answered yet.
+    Late,
+    /// The request failed (the engine said no, or the pipe is gone).
+    Failed(String),
 }
 
 /// Navigation bookkeeping shared with the pump thread. `load_url` waits on it,
@@ -244,6 +303,9 @@ pub struct FrameData {
     pub engine_ms: f64,
 }
 
+/// Process-wide view ids (the fair gate's key, see [`View::uid`]).
+static NEXT_UID: AtomicU64 = AtomicU64::new(1);
+
 /// The JavaScript bridge shim: one binding, one pending table, one installer.
 const JSI_SHIM: &str = r#"
 (() => {
@@ -277,7 +339,12 @@ const JSI_SHIM: &str = r#"
 
 /// One target = one WebView instance.
 pub struct View {
+    /// The guest's id for this view (`render {view}`); unique per session only.
     pub id: i64,
+    /// A process-wide id, unique across sessions: the fair frame gate's key.
+    /// Two sessions may both call their first view `0`, and a gate keyed by the
+    /// guest id would coalesce *their* frames into one pull.
+    pub uid: u64,
     pub browser: Arc<Browser>,
     pub context_id: String,
     pub target_id: String,
@@ -299,6 +366,16 @@ pub struct View {
     pub main_frame: Mutex<Option<String>>,
     /// The newest painted frame (see [`Frames`]).
     pub frames: Frames,
+    /// A `beginFrame` this view issued whose reply nobody waits on any more (the
+    /// fair gate abandoned the attempt at its budget, or an input frame took the
+    /// engine). DevTools has no cancel: the engine still finishes that frame, and
+    /// a **second** `beginFrame` for the same page while this one is outstanding
+    /// is what makes the pinned engine's compositor receive an overlapping
+    /// `IssueExternalBeginFrame` — measured as a GPU-process crash
+    /// (`exit_code=133`), a browser death, and therefore an engine restart that
+    /// empties every session's view map (`results/handoff/WVTAIL/evidence/`). The
+    /// next attempt therefore drains it first and keeps its pixels.
+    pending_frame: Mutex<Option<PendingReply>>,
     pub closed: AtomicBool,
     pub created: Instant,
 }
@@ -337,6 +414,7 @@ impl View {
         let events = cdp.queue(&session);
         let view = Arc::new(Self {
             id,
+            uid: NEXT_UID.fetch_add(1, Ordering::SeqCst),
             browser: Arc::clone(&browser),
             context_id: context_id.to_string(),
             target_id,
@@ -350,6 +428,7 @@ impl View {
             interfaces: Mutex::new(HashMap::new()),
             main_frame: Mutex::new(None),
             frames: Frames::default(),
+            pending_frame: Mutex::new(None),
             closed: AtomicBool::new(false),
             created: Instant::now(),
         });
@@ -978,10 +1057,30 @@ impl View {
     // --- frames ------------------------------------------------------------
 
     /// Deterministic frame: `HeadlessExperimental.beginFrame` renders exactly one
-    /// compositor frame, and the pixels are captured at the View's **device**
-    /// resolution (`Page.captureScreenshot` honours `deviceScaleFactor`;
-    /// `beginFrame`'s own screenshot does not). PNG only (`WIRE.md` §4.2).
-    pub fn render(&self, format: &str, timeout: Duration) -> Result<FrameData> {
+    /// compositor frame. PNG only (`WIRE.md` §4.2).
+    ///
+    /// Frame production is **serialised per engine** (`beginFrame` is a
+    /// browser-global command: two targets asking at once crashed the pinned
+    /// engine), and the serialisation is a *fair* queue with one attempted
+    /// frame in flight per view — see [`crate::fair`]. A guest `render` is a
+    /// pull-priority pull; the frames the input path needs use
+    /// [`Self::render_input`].
+    pub fn render(&self, format: &str, timeout: Duration) -> Result<Arc<FrameData>> {
+        self.render_with(format, timeout, FramePriority::Pull)
+    }
+
+    /// A frame the input path needs (tap/touch/key/setFocus): granted ahead of
+    /// guest pull frames, still behind at most the attempt already running.
+    pub fn render_input(&self, timeout: Duration) -> Result<Arc<FrameData>> {
+        self.render_with("png", timeout, FramePriority::Input)
+    }
+
+    pub fn render_with(
+        &self,
+        format: &str,
+        timeout: Duration,
+        priority: FramePriority,
+    ) -> Result<Arc<FrameData>> {
         if format != "png" {
             return Err(Error::proto(
                 code::UNSUPPORTED,
@@ -990,73 +1089,204 @@ impl View {
                 ),
             ));
         }
+        self.browser
+            .frames
+            .pull(self.uid, priority, timeout, |ctx| self.begin_frame(ctx))
+    }
+
+    /// Exactly one `beginFrame` attempt (the gate bounds it and serialises it).
+    ///
+    /// The reply is awaited **in slices** ([`AttemptCtx::wait_slice`]) so a
+    /// queued input frame takes the engine without waiting for this attempt's
+    /// whole budget: when [`AttemptCtx::preempted`] turns true the attempt is
+    /// abandoned with [`Attempt::Yield`], the frame it would have produced is
+    /// finished by the engine anyway and its reply is dropped, and the pull
+    /// re-enters the fair queue behind the gesture.
+    ///
+    /// `beginFrame` can answer "not attached to an active page" while a
+    /// navigation is committing, `Another frame is pending` while an abandoned
+    /// attempt is still finishing in the engine, and it omits `screenshotData`
+    /// when the compositor produced no new frame. All three are transient: the
+    /// gate re-queues a bounded number of retries (behind every other waiting
+    /// view) rather than hand the guest the previous frame as if it were this
+    /// one, or block it for the whole call timeout.
+    fn begin_frame(&self, ctx: AttemptCtx<'_>) -> Attempt {
         let t0 = Instant::now();
-        // One beginFrame at a time across the whole browser (see Browser).
-        let _render = self.browser.render_lock.lock().expect("render lock");
-        // `beginFrame` can answer "not attached to an active page" while a
-        // navigation is committing, and omits `screenshotData` when the
-        // compositor produced no new frame. Both are transient: retry a few
-        // times (bounded, no invented pixels) rather than hand the guest a
-        // frame-less response or block it for the whole call timeout.
-        // `beginFrame` renders exactly one compositor frame and captures it.
-        // Its screenshot is CSS-sized (the engine has no device-resolution
-        // capture path — see [`Frames`]), so the frame's real size is reported.
-        let mut captured: Option<Vec<u8>> = None;
-        let mut has_damage = true;
-        let mut last_error = String::new();
-        let attempt_timeout = timeout.min(Duration::from_secs(2));
-        for attempt in 0..3 {
-            if attempt > 0 {
-                std::thread::sleep(Duration::from_millis(25));
-            }
-            match self.call(
-                "HeadlessExperimental.beginFrame",
-                json!({"screenshot": {"format": "png", "optimizeForSpeed": true}}),
-                attempt_timeout,
-            ) {
+        // One `beginFrame` per view at a time, always: the request a previous
+        // attempt left behind is drained (and its pixels kept) before a new one
+        // is issued, because two outstanding frames for one page make the
+        // engine's compositor fail. See [`View::pending_frame`].
+        if let Some(outstanding) = self.pending_frame.lock().expect("pending frame").take() {
+            match self.await_reply(&outstanding, &ctx, t0) {
                 Ok(res) => {
-                    has_damage = res["hasDamage"].as_bool().unwrap_or(true);
-                    if let Some(data) = res["screenshotData"].as_str() {
-                        captured = base64_decode(data);
-                        break;
-                    }
-                    last_error =
-                        format!("beginFrame returned no screenshotData (hasDamage={has_damage})");
-                    if !has_damage {
-                        break;
+                    // A guest pull may keep the pixels of the frame an abandoned
+                    // attempt produced — they are real, and newer than the
+                    // surface's last one. A gesture may not: the frame has to be
+                    // the one produced *after* its event was dispatched, or the
+                    // engine routes nothing and the click is lost.
+                    if ctx.prio != FramePriority::Input {
+                        let frame = self.frame_from_begin_frame(&res, t0, ctx.final_attempt);
+                        if let Attempt::Frame(_) = frame {
+                            return frame;
+                        }
                     }
                 }
-                Err(e) => {
-                    last_error = e.to_string();
-                    if !last_error.contains("Not attached to an active page") {
-                        break;
-                    }
+                Err(Reply::Preempted) => {
+                    *self.pending_frame.lock().expect("pending frame") = Some(outstanding);
+                    return Attempt::Yield(format!(
+                        "view {}: frame abandoned after {}ms for a queued input frame",
+                        self.uid,
+                        t0.elapsed().as_millis()
+                    ));
+                }
+                Err(Reply::Late) => {
+                    // Still outstanding: keep it, and do **not** issue a second
+                    // one for this page. The pull retries behind the other views
+                    // and picks the frame up when the engine answers.
+                    *self.pending_frame.lock().expect("pending frame") = Some(outstanding);
+                    return Attempt::Retry(format!(
+                        "view {}: the engine is still finishing the frame this view abandoned",
+                        self.uid
+                    ));
+                }
+                Err(Reply::Failed(message)) => {
+                    return self.engine_error(message, t0, ctx.final_attempt);
                 }
             }
         }
-        let engine_ms = t0.elapsed().as_secs_f64() * 1000.0;
-        // No new frame: the surface still holds the last one. Before the first
-        // paint there is nothing honest to return.
-        let (bytes, png_w, png_h) = match captured {
-            Some(png) => {
-                let (w, h) = png_dimensions(&png).unwrap_or((0, 0));
-                self.frames.store(png.clone(), w, h);
-                (png, w, h)
+        // `beginFrame` renders exactly one compositor frame and captures it.
+        // Its screenshot is CSS-sized (the engine has no device-resolution
+        // capture path — see [`Frames`]), so the frame's real size is reported.
+        let reply = match self.send(
+            "HeadlessExperimental.beginFrame",
+            json!({"screenshot": {"format": "png", "optimizeForSpeed": true}}),
+        ) {
+            Ok(reply) => reply,
+            Err(e) => {
+                return self.engine_error(e.to_string(), t0, ctx.final_attempt);
             }
-            None => self.frames.latest().ok_or_else(|| {
-                Error::proto(
-                    code::FRAME_FAILED,
-                    if last_error.is_empty() {
-                        "no compositor frame yet (the page has not painted once)".to_string()
-                    } else {
-                        last_error
-                    },
-                )
-            })?,
         };
+        match self.await_reply(&reply, &ctx, t0) {
+            Ok(res) => self.frame_from_begin_frame(&res, t0, ctx.final_attempt),
+            Err(Reply::Preempted) => {
+                // The engine keeps finishing this frame; keep the request so the
+                // next attempt for this view can drain it instead of overlaying
+                // a second `beginFrame` on it.
+                *self.pending_frame.lock().expect("pending frame") = Some(reply);
+                Attempt::Yield(format!(
+                    "view {}: frame abandoned after {}ms for a queued input frame",
+                    self.uid,
+                    t0.elapsed().as_millis()
+                ))
+            }
+            Err(Reply::Late) => {
+                *self.pending_frame.lock().expect("pending frame") = Some(reply);
+                self.last_frame_or_retry(
+                    format!(
+                        "view {}: beginFrame did not answer within {:?}",
+                        self.uid, ctx.timeout
+                    ),
+                    t0.elapsed().as_secs_f64() * 1000.0,
+                )
+            }
+            Err(Reply::Failed(message)) => self.engine_error(message, t0, ctx.final_attempt),
+        }
+    }
+
+    /// One `beginFrame` result, turned into an attempt outcome.
+    fn frame_from_begin_frame(&self, res: &Value, t0: Instant, final_attempt: bool) -> Attempt {
+        let engine_ms = t0.elapsed().as_secs_f64() * 1000.0;
+        let has_damage = res["hasDamage"].as_bool().unwrap_or(true);
+        if let Some(png) = res["screenshotData"].as_str().and_then(base64_decode) {
+            return Attempt::Frame(Arc::new(self.store_frame(png, has_damage, engine_ms)));
+        }
+        let message = format!("beginFrame returned no screenshotData (hasDamage={has_damage})");
+        if has_damage && !final_attempt {
+            return Attempt::Retry(message);
+        }
+        self.last_frame_or_retry(message, engine_ms)
+    }
+
+    /// Await one `beginFrame` reply in slices, so a queued input frame takes the
+    /// engine ([`AttemptCtx::preempted`]) and so the attempt's budget is honoured
+    /// (DevTools has no cancel: giving up means the reply arrives later, which is
+    /// why it is handed back to [`View::pending_frame`] and drained, never
+    /// overlapped).
+    fn await_reply(
+        &self,
+        reply: &PendingReply,
+        ctx: &AttemptCtx<'_>,
+        _t0: Instant,
+    ) -> std::result::Result<Value, Reply> {
+        let mut left = ctx.timeout;
+        loop {
+            let slice = ctx.wait_slice(left);
+            match reply.wait_shared(slice) {
+                Ok(res) => return Ok(res),
+                Err(CdpError::Timeout(..)) => {
+                    left = left.saturating_sub(slice);
+                    if ctx.preempted() {
+                        return Err(Reply::Preempted);
+                    }
+                    if left.is_zero() {
+                        return Err(Reply::Late);
+                    }
+                }
+                Err(e) => return Err(Reply::Failed(e.to_string())),
+            }
+        }
+    }
+
+    /// Classify a failed `beginFrame` attempt.
+    ///
+    /// A *transient* engine answer is retried (the gate re-queues behind the
+    /// other views) so the pull gets a frame the engine really produced for it:
+    /// `Not attached to an active page` (a navigation is committing) and
+    /// `Another frame is pending` (an abandoned attempt — this view's, or one an
+    /// input frame preempted — is still finishing inside the engine). On the
+    /// pull's last attempt, or for a permanent error, the surface's last frame is
+    /// the honest answer before the first paint nothing exists and the pull
+    /// fails with the engine's own words.
+    fn engine_error(&self, message: String, t0: Instant, final_attempt: bool) -> Attempt {
+        let engine_ms = t0.elapsed().as_secs_f64() * 1000.0;
+        if !final_attempt && Self::is_transient_engine_error(&message) {
+            return Attempt::Retry(message);
+        }
+        self.last_frame_or_retry(message, engine_ms)
+    }
+
+    fn is_transient_engine_error(message: &str) -> bool {
+        message.contains("Not attached to an active page") || message.contains("Another frame is pending")
+    }
+
+    /// No new frame this attempt: the surface still holds the last one, which
+    /// is real pixels and therefore honest to return. Before the first paint
+    /// there is nothing to return and the pull retries.
+    fn last_frame_or_retry(&self, message: String, engine_ms: f64) -> Attempt {
+        match self.frames.latest() {
+            Some((png, w, h)) => {
+                let _ = (w, h);
+                Attempt::Frame(Arc::new(self.frame_data(png, false, engine_ms)))
+            }
+            None => Attempt::Retry(if message.is_empty() {
+                "no compositor frame yet (the page has not painted once)".to_string()
+            } else {
+                message
+            }),
+        }
+    }
+
+    fn store_frame(&self, png: Vec<u8>, has_damage: bool, engine_ms: f64) -> FrameData {
+        let (w, h) = png_dimensions(&png).unwrap_or((0, 0));
+        self.frames.store(png.clone(), w, h);
+        self.frame_data(png, has_damage, engine_ms)
+    }
+
+    fn frame_data(&self, bytes: Vec<u8>, has_damage: bool, engine_ms: f64) -> FrameData {
+        let (png_w, png_h) = png_dimensions(&bytes).unwrap_or((0, 0));
         let vp = self.viewport();
         let seq = self.seq.fetch_add(1, Ordering::SeqCst) + 1;
-        Ok(FrameData {
+        FrameData {
             seq,
             // The frame's real pixel size: the engine rounds the scaled size
             // down (900x559 for a 900x560 View), so the wire never claims more
@@ -1074,7 +1304,7 @@ impl View {
             has_damage,
             engine_ms,
             bytes,
-        })
+        }
     }
 
     // --- accessibility -----------------------------------------------------
@@ -1100,28 +1330,93 @@ impl View {
         )
     }
 
-    /// Down → frame → up → frame. Under `--enable-begin-frame-control` DevTools
-    /// only routes touch into the page when a compositor frame is produced, and
-    /// the input acks may arrive after that frame; the acks are therefore
-    /// waited for at the end, not per event.
-    pub fn tap(&self, x: f64, y: f64, hold: Duration) -> Result<()> {
+    /// Down → frame → up → frame, then the engine's acks.
+    ///
+    /// Under `--enable-begin-frame-control` DevTools only routes touch into the
+    /// page when a compositor frame is produced, and the ack for an event is
+    /// delivered **on the frame that follows** the event's own frame
+    /// ([`Self::wait_input_ack`]). A tap's `up` frame is exactly that frame for
+    /// the `down`, so the acks are collected at the end, as before; what changed
+    /// in WVTAIL is that a missing ack now costs one follow-up frame instead of
+    /// the whole 2 s wait.
+    pub fn tap(&self, x: f64, y: f64, hold: Duration) -> Result<InputAcks> {
         let (cx, cy) = self.to_css(x, y);
         let down = self.touch_event(
             "touchStart",
             json!([{"x": cx, "y": cy, "radiusX": 4, "radiusY": 4, "force": 1, "id": 1}]),
         )?;
-        let first = self.render("png", self.browser.frame_timeout)?;
+        let t0 = Instant::now();
+        let first = self.render_input(self.browser.frame_timeout)?;
         std::thread::sleep(hold);
         let up = self.touch_event("touchEnd", json!([]))?;
-        let _second = self.render("png", self.browser.frame_timeout)?;
-        for reply in [down, up] {
-            let _ = reply.wait(Duration::from_secs(2));
-        }
+        let _second = self.render_input(self.browser.frame_timeout)?;
         let _ = first;
-        Ok(())
+        let frame_ms = t0.elapsed().as_millis() as u64;
+        let ack_started = Instant::now();
+        let down_acked = self.wait_input_ack(&down, "tap touchStart");
+        let up_acked = self.wait_input_ack(&up, "tap touchEnd");
+        Ok(InputAcks {
+            events: 2,
+            acked: u32::from(down_acked) + u32::from(up_acked),
+            frame_ms,
+            ack_ms: ack_started.elapsed().as_millis() as u64,
+        })
     }
 
-    pub fn touch(&self, action: &str, mut points: Value) -> Result<()> {
+    /// Wait for one dispatched input event's engine ack — producing the
+    /// compositor frame the engine acknowledges input on when it did not arrive
+    /// with the event's own frame.
+    ///
+    /// Measured in `results/handoff/WVTAIL/`: under `--enable-begin-frame-control`
+    /// the renderer routes a dispatched touch event *in* a compositor frame and
+    /// acks it at the end of the frame that **follows** that one. The old code
+    /// waited a flat 2 s for the ack of every event; with a second, expensive
+    /// WebView on the engine the follow-up frame was the guest's own next draw —
+    /// and the guest cannot draw it while it sits inside the touch dispatch, so
+    /// every `input.touch` that did not get its ack inline blocked for 2000 ms:
+    /// a tap measured 2004-2604 ms end to end (`evidence/base/`, `evidence/ops3/`).
+    /// The broker therefore produces that following frame itself (input
+    /// priority, so it is granted ahead of every guest pull) and asks again.
+    ///
+    /// `false` is information, not a failure: the event's own frame is what
+    /// routes a gesture in this engine, so a missing ack is reported to the guest
+    /// (`acked`) and logged instead of being turned into a lost tap.
+    fn wait_input_ack(&self, reply: &PendingReply, what: &str) -> bool {
+        let t0 = Instant::now();
+        let acked = self.wait_input_ack_inner(reply, what);
+        if !acked || t0.elapsed() >= ACK_SLOW {
+            eprintln!(
+                "acos-webview: input {what} on view {} {} after {}ms",
+                self.uid,
+                if acked { "acked" } else { "NOT acked" },
+                t0.elapsed().as_millis()
+            );
+        }
+        acked
+    }
+
+    fn wait_input_ack_inner(&self, reply: &PendingReply, what: &str) -> bool {
+        for attempt in 0..=ACK_FRAMES {
+            match reply.wait_shared(ACK_WAIT) {
+                Ok(_) => return true,
+                Err(CdpError::Timeout(..)) => {}
+                Err(e) => {
+                    eprintln!(
+                        "acos-webview: {what} on view {}: the ack failed: {e}",
+                        self.uid
+                    );
+                    return false;
+                }
+            }
+            if attempt < ACK_FRAMES {
+                // The frame that follows the event's own frame carries the ack.
+                let _ = self.render_input(self.browser.frame_timeout);
+            }
+        }
+        false
+    }
+
+    pub fn touch(&self, action: &str, mut points: Value) -> Result<InputAcks> {
         let kind = match action {
             "down" => "touchStart",
             "move" => "touchMove",
@@ -1147,9 +1442,18 @@ impl View {
             }
         }
         let reply = self.touch_event(kind, points)?;
-        let _ = self.render("png", self.browser.frame_timeout)?;
-        let _ = reply.wait(Duration::from_secs(2));
-        Ok(())
+        // The event's own frame is what routes the touch into the page.
+        let frame_started = Instant::now();
+        let _ = self.render_input(self.browser.frame_timeout)?;
+        let frame_ms = frame_started.elapsed().as_millis() as u64;
+        let ack_started = Instant::now();
+        let acked = self.wait_input_ack(&reply, &format!("touch {kind}"));
+        Ok(InputAcks {
+            events: 1,
+            acked: u32::from(acked),
+            frame_ms,
+            ack_ms: ack_started.elapsed().as_millis() as u64,
+        })
     }
 
     pub fn scroll(&self, x: f64, y: f64, dx: f64, dy: f64) -> Result<()> {

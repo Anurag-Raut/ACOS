@@ -55,8 +55,16 @@ impl ActivityLifecycle {
         use Transition::*;
         match (self, transition) {
             (Uncreated, Create) | (Destroyed, Create) | (Destroyed, Relaunch) => Some(Created),
-            (Created, Start) | (Paused, Start) => Some(Started),
-            (Started, Resume) | (Paused, Resume) => Some(Resumed),
+            // SYSUI2: an Activity can be started/resumed again from `Stopped`.
+            // AOSP's `ActivityThread.handleResumeActivity` for a stopped record
+            // runs `performRestartActivity` + the resume, and the caller of a
+            // finished Activity is exactly that case: the host paused and
+            // stopped it while the permission dialog was the top, then resumes
+            // it with the `ActivityResultItem` (`deliver_result`), which the
+            // guest reports back as `activityResumed`. Refusing
+            // `Stopped -> Resume` dropped the caller's restart.
+            (Created, Start) | (Paused, Start) | (Stopped, Start) => Some(Started),
+            (Started, Resume) | (Paused, Resume) | (Stopped, Resume) => Some(Resumed),
             (Resumed, Pause) => Some(Paused),
             (Paused, Stop) | (Started, Stop) => Some(Stopped),
             (Stopped, Destroy) | (Paused, Destroy) | (Resumed, Destroy) | (Created, Destroy) => {
@@ -275,10 +283,40 @@ pub struct BindApplicationData {
 /// The synthetic activity token used by the in-process launch flow.
 pub const FIXTURE_ACTIVITY_TOKEN: u64 = 0xabc;
 
+/// The **primary** process's tag: the session's own guest, started by the
+/// launcher (`ACOS_PROCESS_TAG` = 0). Its guest marshals its own launches and
+/// mints its own activity tokens, so the host owes it only launches the guest
+/// could not ask for itself (`LaunchOrigin::Host`, MERGEFIX2).
+pub const PRIMARY_PROCESS_TAG: u32 = 0;
+
 /// Bit 32 of a binder id: the peer's `JAVA_TAG` (`acos-binder-peer`), i.e. a
 /// binder object owned by the guest JVM. Activity tokens minted by the guest's
 /// `ActivityThread` arrive with this bit set; host-minted binder ids do not.
 const GUEST_JAVA_BINDER_TAG: u64 = 1 << 32;
+
+/// MPROC5/SYSUI4: one `IApplicationThread` lifecycle call queued for a
+/// specific process's app thread.
+///
+/// The encoded `args` are what the peer writes; the typed `item` and its
+/// `token` are kept too, because AOSP withdraws a pause/stop that has been
+/// superseded by the caller's result delivery **before** it is sent
+/// (`ActivityRecord.sendResult` stores the result while the caller is not
+/// resumed; `TaskFragment.resumeTopActivity` then resumes it with the result in
+/// one transaction, so the server never pauses/stops an activity it is about
+/// to resume).
+#[derive(Debug, Clone, PartialEq)]
+pub struct PendingLifecycleCall {
+    /// Process tag that owns the target `IApplicationThread`.
+    pub tag: u32,
+    /// Activity token the item targets.
+    pub token: u64,
+    /// The typed item (pause/stop/resume/result transaction).
+    pub item: ClientTransactionItem,
+    /// `IApplicationThread` method (always `scheduleTransaction` today).
+    pub method: String,
+    /// Encoded call arguments.
+    pub args: Vec<Value>,
+}
 
 /// One activity record.
 #[derive(Debug, Clone)]
@@ -308,6 +346,11 @@ pub struct ActivityRecord {
     /// MPROC7: `startActivityForResult` request code (`-1`/`0` for a plain
     /// `startActivity`).
     pub request_code: i32,
+    /// SYSUI1: the AIDL `resultWho` string (`Activity.requestPermissions`
+    /// passes `"@android:requestPermissions:"`; a normal launch passes null).
+    /// `Activity.dispatchActivityResult` routes a non-null who through the
+    /// fragment/permission paths instead of `onActivityResult`.
+    pub result_who: Option<String>,
     /// MPROC7: the result `finish(resultCode, data)` set (`RESULT_CANCELED` =
     /// `0` until the app sets one).
     pub result_code: i32,
@@ -335,6 +378,7 @@ impl ActivityRecord {
             saved_clicks: 0,
             result_to: 0,
             request_code: 0,
+            result_who: None,
             result_code: 0,
             result_data: None,
             result_delivered: false,
@@ -358,7 +402,12 @@ pub struct ProcessRecord {
     /// MPROC4 step 3b: the app process's tag (`0` = the launched/primary
     /// process). One record per tag; a tag is what names a process here.
     pub tag: u32,
-    /// Synthetic pid (the reference app pid is not stable across runs).
+    /// The process's pid **in the host's pid namespace** — the number `ps`
+    /// shows and the one the kernel reports through `SO_PEERCRED` on the guest's
+    /// driver socket (BINDERPID). `0` means the pid is not known yet (a host
+    /// test that never connects a guest); it is never a placeholder, because a
+    /// placeholder is indistinguishable from a real pid to every caller of
+    /// `Binder.getCallingPid()`.
     pub pid: i32,
     /// uid.
     pub uid: i32,
@@ -473,10 +522,11 @@ pub struct AtmsState {
     /// process, and it is what the cross-process pause/stop/resume rule reads.
     pub tops: std::collections::BTreeMap<u32, u64>,
     /// MPROC5: lifecycle `ClientTransaction`s queued for a **specific**
-    /// process's `IApplicationThread` (`tag`, method, args). `AtmsService::call`
-    /// encodes them into `PendingDelivery`s; the peer routes each to the
-    /// process that owns the target binder.
-    pub pending_lifecycle_calls: Vec<(u32, String, Vec<Value>)>,
+    /// process's `IApplicationThread`. `AtmsService::call` encodes them into
+    /// `PendingDelivery`s; the peer routes each to the process that owns the
+    /// target binder. Kept typed as well as encoded so a superseded pause/stop
+    /// can be withdrawn before it is sent (SYSUI4).
+    pub pending_lifecycle_calls: Vec<PendingLifecycleCall>,
     /// MPROC5: the activity that was the session's top **before** the current
     /// one (`tag`, token). When the top finishes, stock resumes the activity
     /// below it in the task stack; ACOS keeps one task per process, so the
@@ -504,6 +554,15 @@ pub struct AtmsState {
     /// which case a granted permission answers from `granted_permissions`.
     pub runtime_permissions:
         Option<std::sync::Arc<std::sync::Mutex<crate::permissions::PermissionStore>>>,
+    /// SYSUI2: the result seam for a **system-UI app** (the notification
+    /// shade). Published by the module that owns the app's records
+    /// ([`crate::host::SystemUiResultSink`]); called from
+    /// [`AtmsState::finish_activity`] with the result Intent the app set, and
+    /// answers the content/action `PendingIntent` sender binders the system must
+    /// fire — exactly what systemui's own controller does in its process. The
+    /// module applies its own record changes; the sender table and the activity
+    /// start stay here.
+    pub system_ui_result_sink: crate::host::SystemUiResultSinkSlot,
     /// Logical clock (ms) advanced per event; the VM supplies the real clock.
     clock_ms: u64,
     /// Next event seq.
@@ -527,6 +586,15 @@ pub struct AtmsState {
     /// unrooted the moment the app's own reference goes away, and
     /// `performReceive` would answer `DEAD_OBJECT`.
     pub refs: crate::refs::GuestRefs,
+    /// SYSUI3A: the session's **primary** package, named by the launcher (the
+    /// only component that knows it). Stock AMS learns a process's name in
+    /// `startProcessLocked`, before the fork, and `attachApplication` carries no
+    /// package; ACOS's primary process is started by the launcher, so the
+    /// launcher seeds it here. Without it the primary's `ProcessRecord` keeps an
+    /// empty name, and an empty name cannot answer "what launch is pending for
+    /// this process?" (`Peer::package_of` -> `pending_launch_for`), which is how
+    /// a `startActivity` into the already-running primary was undeliverable.
+    pub primary_package: Option<String>,
 }
 
 impl AtmsState {
@@ -547,6 +615,7 @@ impl AtmsState {
             pending_reverse_calls: Vec::new(),
             granted_permissions: vec!["android.permission.INTERNET".into()],
             runtime_permissions: None,
+            system_ui_result_sink: crate::host::SystemUiResultSinkSlot::default(),
             clock_ms: 1,
             next_seq: 1,
             controller_binder: 0,
@@ -555,6 +624,7 @@ impl AtmsState {
             receiver_registrations: Vec::new(),
             provider_registry: crate::provider::ProviderRegistry::new(),
             refs: crate::refs::GuestRefs::new(),
+            primary_package: None,
         }
     }
 
@@ -715,16 +785,37 @@ impl AtmsState {
     /// MPROC4 step 3b: a process exists because its guest connected with `tag`.
     ///
     /// `ActivityManagerService.startProcessLocked` creates the record when the
-    /// zygote forks; the peer's handshake names the tag and the package, so this
-    /// is the same event at the same point (before any attach). A record that
-    /// already exists keeps its pid/uid (a re-attach is not a new process).
-    pub fn process_started(&mut self, tag: u32, package: &str, uid: i32) {
-        if self.process(tag).is_some() {
+    /// zygote forks; the peer's handshake names the tag, the package and the pid
+    /// the kernel reported, so this is the same event at the same point (before
+    /// any attach). A record that already exists keeps its identity (a re-attach
+    /// is not a new process), except that a pid/uid/package learned later fills
+    /// in what the record did not know: `0`/empty always means "unknown here",
+    /// never a value to keep over a real one.
+    ///
+    /// SYSUI2: the record can exist before the handshake that names the package
+    /// (`attachApplication` carries no package argument, so the attach path
+    /// creates the record with an empty name). The peer's connection handshake
+    /// is the event that knows it, and a record with an empty package cannot
+    /// answer "does this package already run?" (`Peer::package_of` -> the
+    /// pending launch of an Activity started in the running process). A name
+    /// the record already carries is the record's: a second seed never
+    /// contradicts it.
+    pub fn process_started(&mut self, tag: u32, package: &str, uid: i32, pid: i32) {
+        if let Some(existing) = self.process_mut(tag) {
+            if pid != 0 {
+                existing.pid = pid;
+            }
+            if uid != 0 && existing.uid == 0 {
+                existing.uid = uid;
+            }
+            if existing.package_name.is_empty() && !package.is_empty() {
+                existing.package_name = package.to_string();
+            }
             return;
         }
         self.processes.push(ProcessRecord {
             tag,
-            pid: 4242,
+            pid,
             uid,
             package_name: package.to_string(),
             app_thread: None,
@@ -866,8 +957,15 @@ impl AtmsState {
     /// Record an attach for process `tag` and emit `process_started`.
     pub fn attach_application_for(&mut self, tag: u32, app_thread: u64, seq: i64, package: &str) {
         let package = if package.is_empty() {
+            // `attachApplication` carries no package. The record can already name
+            // it (the peer's handshake), and the **primary** process never
+            // connects through a handshake at all: the launcher seeded its
+            // package (`set_primary_package`), and stock AMS already knows the
+            // process name at this point because `startProcessLocked` set it.
             self.process(tag)
                 .map(|p| p.package_name.clone())
+                .filter(|name| !name.is_empty())
+                .or_else(|| (tag == 0).then(|| self.primary_package.clone()).flatten())
                 .unwrap_or_default()
         } else {
             package.to_string()
@@ -883,8 +981,17 @@ impl AtmsState {
         }
         self.processes.push(ProcessRecord {
             tag,
-            pid: 4242,
-            uid: crate::pms::FIXTURE_UID,
+            // No `ProcessRecord` for this tag existed (the branch above), so
+            // no pid was ever reported for it: unknown, never a placeholder.
+            // `process_started` fills it in when the guest's connection names
+            // its credential.
+            pid: 0,
+            // UID: likewise unknown, never another app's uid. AOSP's
+            // `ProcessRecord.uid` is the package's; the peer's handshake
+            // (`Peer::record_process_started` -> `process_started`) is what
+            // names it from the package manager, and `process_started` fills
+            // an unknown (`0`) uid in place.
+            uid: 0,
             package_name: package,
             app_thread: Some(app_thread),
             attach_seq: seq,
@@ -1335,11 +1442,13 @@ impl AtmsState {
             );
             return;
         };
-        self.pending_lifecycle_calls.push((
+        self.pending_lifecycle_calls.push(PendingLifecycleCall {
             tag,
-            "scheduleTransaction".into(),
-            vec![Value::TypedObject(transaction)],
-        ));
+            token,
+            item: item.clone(),
+            method: "scheduleTransaction".into(),
+            args: vec![Value::TypedObject(transaction)],
+        });
         self.log_event(
             "ActivityManagerLifecycle",
             acos_protocol::LogLevel::Debug,
@@ -1428,6 +1537,27 @@ impl AtmsState {
             );
             return Ok(());
         }
+        // SYSUI4: AOSP's `ActivityRecord.activityStopped` only accepts a stop
+        // while the record is stopping (`isStopping`); for anything else it logs
+        // "Activity reported stop, but no longer stopping" and returns. The
+        // guest produces that order itself: `handleStopActivity` defers the
+        // report into a `PendingTransactionActions.StopInfo` runnable, so when
+        // the caller is resumed by its result delivery before that runnable
+        // runs, its stop arrives for a `Resumed` record. With a
+        // start-then-finish-in-`onCreate` dialog this is the normal order, not
+        // an app error (`sysui1-permission-pregranted` measured
+        // `illegal transition Stop from Resumed`).
+        if self.activities[index].lifecycle == ActivityLifecycle::Resumed {
+            self.log_event(
+                "ActivityManagerStopped",
+                acos_protocol::LogLevel::Debug,
+                format!(
+                    "token={token:#x} stop for a resumed activity ignored (stock: no longer \
+                     stopping)"
+                ),
+            );
+            return Ok(());
+        }
         if let Some(clicks) = saved_clicks {
             self.save_instance_state(token, clicks);
         }
@@ -1504,6 +1634,82 @@ impl AtmsState {
         Ok(callback)
     }
 
+    /// Apply a permission dialog's result Intent to the runtime table (SYSUI1).
+    ///
+    /// Only a result that carries both AOSP extras is a dialog answer; anything
+    /// else (a normal activity's `setResult`) is left alone. `never_ask_again`
+    /// is the ACOS system-app extra for "Don't ask again", which a real
+    /// controller expresses with `updatePermissionFlags(FLAG_PERMISSION_USER_FIXED)`
+    /// (see [`crate::permissions::EXTRA_REQUEST_PERMISSIONS_NEVER_ASK_AGAIN`]).
+    fn apply_permission_dialog_result(&mut self, facts: &crate::ams::IntentFacts) {
+        use crate::ams::Extra;
+        let names = match facts.extras.get(crate::permissions::EXTRA_REQUEST_PERMISSIONS_NAMES) {
+            Some(Extra::Strings(names)) => names.clone(),
+            _ => return,
+        };
+        let results = match facts.extras.get(crate::permissions::EXTRA_REQUEST_PERMISSIONS_RESULTS) {
+            Some(Extra::Ints(results)) => results.clone(),
+            _ => return,
+        };
+        let never_ask_again = matches!(
+            facts
+                .extras
+                .get(crate::permissions::EXTRA_REQUEST_PERMISSIONS_NEVER_ASK_AGAIN),
+            Some(Extra::Bool(true))
+        );
+        if let Some(store) = self.runtime_permissions.as_ref() {
+            store
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .apply_dialog_result(&names, &results, never_ask_again);
+        }
+        self.log_event(
+            "ActivityManagerResult",
+            acos_protocol::LogLevel::Debug,
+            format!(
+                "permission dialog answered names={} results={results:?} never_ask_again={never_ask_again}",
+                names.len()
+            ),
+        );
+    }
+
+    /// SYSUI2: apply the result a **system-UI app** answered.
+    ///
+    /// The module published the sink (see
+    /// [`crate::host::SystemUiResultSink`]); it decides what the result means and
+    /// mutates its own records, and answers the sender binders to fire. Firing
+    /// them is this state's job: `IIntentSender.send` is the AMS path, and the
+    /// started activity then follows the same launch/spawn route a guest
+    /// `startActivity` takes.
+    fn apply_system_ui_result(&mut self, token: u64, facts: &crate::ams::IntentFacts) {
+        let Some(sink) = self.system_ui_result_sink.get() else {
+            return;
+        };
+        let senders = sink(facts);
+        if senders.is_empty() {
+            return;
+        }
+        for sender in senders {
+            let outcome = self
+                .ams
+                .send_pending_intent_with_fill_in(sender, 0, crate::pending_intent::FillIn::None);
+            self.log_event(
+                "NotificationShade",
+                acos_protocol::LogLevel::Info,
+                format!(
+                    "shade tap token={token:#x} fired sender={sender}: {}",
+                    match &outcome {
+                        Ok(evidence) => match &evidence.outcome {
+                            Ok(status) => format!("start_result={status}"),
+                            Err(error) => format!("error={error}"),
+                        },
+                        Err(error) => format!("error={error}"),
+                    }
+                ),
+            );
+        }
+    }
+
     /// `finishActivity` (the app asked to finish), with the result the app set.
     ///
     /// `IClientController.finishActivity(IBinder token, int resultCode, Intent
@@ -1535,6 +1741,21 @@ impl AtmsState {
         self.activities[index].result_code = result_code;
         if result_data.is_some() {
             self.activities[index].result_data = result_data;
+        }
+        // SYSUI1: the permission dialog's answer. The controller system app sets
+        // an `ACTION`-less result Intent carrying the AOSP extras
+        // (`EXTRA_REQUEST_PERMISSIONS_NAMES` + `EXTRA_REQUEST_PERMISSIONS_RESULTS`)
+        // exactly as `GrantPermissionsActivity` does; the host applies them to
+        // the one runtime-permission table here, which is what a device's
+        // `IPermissionManager.grantRuntimePermissions` call inside the
+        // controller does.
+        if let Some(facts) = self.activities[index].result_data.clone() {
+            self.apply_permission_dialog_result(&facts);
+            // SYSUI2: a result a **system-UI app** answered (the shade's row
+            // tap). The module decides what the key means and which record
+            // leaves the list; firing the sender is the system's own work, done
+            // here with the sender table this state owns (no second path).
+            self.apply_system_ui_result(token, &facts);
         }
         // Keep `AmsState`'s task stack in step: the finished Activity leaves the
         // task, so the record below it is the new top (what the guest's
@@ -1597,9 +1818,19 @@ impl AtmsState {
         }
         let caller = record.result_to;
         let request_code = record.request_code;
+        let result_who = record.result_who.clone();
         let result_code = record.result_code;
         let data = record.result_data.clone();
         let tag = self.activity_tag(caller);
+        if trace {
+            eprintln!(
+                "ACOSATMS result-route caller={caller:#x} tag={tag} attached={:?}",
+                self.processes
+                    .iter()
+                    .map(|p| (p.tag, p.package_name.clone(), p.attached))
+                    .collect::<Vec<_>>()
+            );
+        }
         if !self.processes.iter().any(|p| p.tag == tag && p.attached) {
             self.log_event(
                 "ActivityManagerResult",
@@ -1630,8 +1861,15 @@ impl AtmsState {
         // `Activity.dispatchActivityResult` treats a non-null `who` as an
         // embedded id and does **not** call `onActivityResult` for it, so an
         // empty string silently swallowed the result (MPROC7).
-        let info =
-            crate::client_transaction::result_info(None, request_code, result_code, data_intent);
+        // SYSUI1: a non-null `who` is what `Activity.dispatchActivityResult`
+        // needs to reach `onRequestPermissionsResult`; it comes from the
+        // caller's `startActivityForResult(who, …)` AIDL argument.
+        let info = crate::client_transaction::result_info(
+            result_who.as_deref(),
+            request_code,
+            result_code,
+            data_intent,
+        );
         let item = crate::client_transaction::activity_result_item(vec![info]);
         let resume = crate::client_transaction::resume_item(2, true, false, false);
         let transaction = crate::client_transaction::client_transaction(
@@ -1644,15 +1882,35 @@ impl AtmsState {
             acos_protocol::LogLevel::Debug,
             format!(
                 "tag={tag} token={caller:#x} ActivityResultItem(request={request_code}, \
-                 code={result_code}) + ResumeActivityItem"
+                 code={result_code}, who={result_who:?}) + ResumeActivityItem"
             ),
         );
-        self.pending_lifecycle_calls.push((
+        // SYSUI4: AOSP's ordering. `ActivityRecord.sendResult` stores the result
+        // while the caller is not resumed; `TaskFragment.resumeTopActivity`
+        // resumes the caller *with* the stored results, so a pause/stop the
+        // server queued earlier but never sent is superseded. A dialog that
+        // starts and finishes inside `onCreate` (the pre-granted arm) makes that
+        // window real: the pause/stop were queued when the dialog became top and
+        // the result arrives before the caller ever ran them. Drop those
+        // undelivered items; the result transaction restarts the caller itself
+        // (`ActivityResultItem` + `ResumeActivityItem`).
+        self.withdraw_pending_pause_stop(tag, caller);
+        self.pending_lifecycle_calls.push(PendingLifecycleCall {
             tag,
-            "scheduleTransaction".into(),
-            vec![Value::TypedObject(transaction)],
-        ));
+            token: caller,
+            item: ClientTransactionItem::ResumeActivity,
+            method: "scheduleTransaction".into(),
+            args: vec![Value::TypedObject(transaction)],
+        });
         self.activities[index].result_delivered = true;
+        // `TaskFragment.resumeTopActivity` calls `next.notifyAppResumed()`
+        // *before* it schedules the result+resume transaction. Model the same:
+        // the caller is resumed from now on, so the guest's deferred
+        // `activityStopped` (posted by `handleStopActivity` as a
+        // `PendingTransactionActions.StopInfo` runnable) is the "reported stop,
+        // but no longer stopping" case AOSP logs and ignores instead of an
+        // illegal transition.
+        self.notify_caller_resumed(caller);
         // The caller is the resumed, foreground activity now (stock: the result
         // transaction resumes it).
         self.tops.insert(tag, caller);
@@ -1660,8 +1918,151 @@ impl AtmsState {
         self.mark_process_active(tag);
     }
 
+    /// SYSUI4: withdraw queued-but-unsent pause/stop items for `token`.
+    ///
+    /// AOSP only ever pauses/stops an activity whose record is not about to be
+    /// resumed with pending results: `ActivityRecord.sendResult` keeps the
+    /// result on the record while the caller is not resumed and
+    /// `TaskFragment.resumeTopActivity` sends `ActivityResultItem` +
+    /// `ResumeActivityItem` in one transaction. ACOS queues the pause/stop when
+    /// the dialog becomes top; when the dialog finishes before those were
+    /// delivered they are stale and must not pause the caller after its result.
+    fn withdraw_pending_pause_stop(&mut self, tag: u32, token: u64) {
+        let is_superseded = |call: &PendingLifecycleCall| {
+            call.tag == tag
+                && call.token == token
+                && matches!(
+                    call.item,
+                    ClientTransactionItem::PauseActivity { .. }
+                        | ClientTransactionItem::StopActivity { .. }
+                )
+        };
+        let withdrawn: Vec<ClientTransactionItem> = self
+            .pending_lifecycle_calls
+            .iter()
+            .filter(|call| is_superseded(call))
+            .map(|call| call.item.clone())
+            .collect();
+        if withdrawn.is_empty() {
+            return;
+        }
+        self.pending_lifecycle_calls
+            .retain(|call| !is_superseded(call));
+        self.log_event(
+            "ActivityManagerResult",
+            acos_protocol::LogLevel::Debug,
+            format!(
+                "tag={tag} token={token:#x} withdrew superseded item(s) {withdrawn:?} \
+                 (the result transaction restarts the caller; stock never pauses it)"
+            ),
+        );
+    }
+
+    /// SYSUI4: `ActivityRecord.notifyAppResumed` for the caller.
+    ///
+    /// The result delivery resumes the caller, so the host's model must say so
+    /// before the guest's reports arrive; otherwise the deferred
+    /// `activityStopped` that `handleStopActivity` posts
+    /// (`PendingTransactionActions.StopInfo`) lands on a `Resumed` record and is
+    /// rejected as `illegal transition Stop from Resumed`. AOSP's
+    /// `ActivityRecord.activityStopped` answers exactly that case with
+    /// "Activity reported stop, but no longer stopping" and ignores it.
+    fn notify_caller_resumed(&mut self, caller: u64) {
+        let Some(index) = self.activities.iter().position(|a| a.token == caller) else {
+            return;
+        };
+        let previous = self.activities[index].lifecycle;
+        if matches!(
+            previous,
+            ActivityLifecycle::Created
+                | ActivityLifecycle::Started
+                | ActivityLifecycle::Paused
+                | ActivityLifecycle::Stopped
+        ) {
+            self.activities[index].lifecycle = ActivityLifecycle::Resumed;
+            self.activities[index].resumed = true;
+            self.log_event(
+                "ActivityManagerResult",
+                acos_protocol::LogLevel::Debug,
+                format!(
+                    "token={caller:#x} notifyAppResumed {previous:?} -> Resumed \
+                     (the result transaction resumes the caller)"
+                ),
+            );
+        }
+    }
+
+    /// SYSUI3A: name the session's **primary** process (tag 0).
+    ///
+    /// The launcher starts the primary process, so it is the component that
+    /// knows the package (`ACOS_PROCESS_NAME`); stock AMS's `ProcessRecord`
+    /// carries the process name from `startProcessLocked` on, before any attach.
+    /// Everything that asks "which package does tag 0 run?" (`Peer::package_of`
+    /// -> `pending_launch_for`, `process_list`, `process_has_work`) reads it from
+    /// here. A record that already exists keeps its uid/app-thread; only the
+    /// name is filled, and never overwritten with a different one.
+    ///
+    /// Returns whether the name is now the primary process's package.
+    pub fn set_primary_package(&mut self, package: &str) -> bool {
+        if package.is_empty() {
+            return false;
+        }
+        match self.processes.iter_mut().find(|p| p.tag == 0) {
+            Some(record) if !record.package_name.is_empty() => {
+                // The record is already named: the name is the record's, and a
+                // second, different seed must not contradict it.
+                record.package_name == package
+            }
+            Some(record) => {
+                record.package_name = package.to_string();
+                self.primary_package = Some(package.to_string());
+                true
+            }
+            // No record yet: `attach_application_for` fills it from
+            // `primary_package` when the guest attaches. First seed wins.
+            None => {
+                if self.primary_package.is_none() {
+                    self.primary_package = Some(package.to_string());
+                }
+                self.primary_package.as_deref() == Some(package)
+            }
+        }
+    }
+
+    /// The primary package the launcher seeded, if any.
+    #[must_use]
+    pub fn primary_package(&self) -> Option<&str> {
+        self.primary_package.as_deref()
+    }
+
     /// `checkPermission`: the shared runtime table first, then install-time.
     #[must_use]
+    /// `IActivityManager.checkPermission`'s answer for one **uid**
+    /// (BINDERPID): AOSP asks the permission state for the calling uid, so two
+    /// apps in one session with different uids get different answers.
+    ///
+    /// A uid the published table cannot resolve (and a caller that passed no
+    /// uid, `-1`) keeps the package-level answer below — the single-package
+    /// policy this state has always had — rather than reporting a grant or a
+    /// denial for a process nobody named.
+    #[must_use]
+    pub fn check_permission_for_uid(&self, permission: &str, uid: i32) -> i32 {
+        if uid >= 0 {
+            if let Some(store) = self.runtime_permissions.as_ref() {
+                let store = store
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner);
+                if !store.uid_grants.is_empty() {
+                    return store.check_uid_permission(uid as u32, permission);
+                }
+                if store.entry(permission).is_some() {
+                    return store.check(permission);
+                }
+            }
+        }
+        self.check_permission(permission)
+    }
+
     pub fn check_permission(&self, permission: &str) -> i32 {
         if let Some(store) = self.runtime_permissions.as_ref() {
             let store = store
@@ -1835,27 +2236,21 @@ impl AtmsService {
     ///
     /// The uid is the uid already recorded for that package, else `0` (never a
     /// guessed uid).
-    pub fn note_process_started(&mut self, tag: u32, package: &str) {
+    pub fn note_process_started(&mut self, tag: u32, package: &str, uid: i32, pid: i32) {
         let Ok(mut state) = self.state.lock() else {
             return;
         };
-        let uid = state
-            .processes
-            .iter()
-            .find(|p| p.package_name == package)
-            .map(|p| p.uid)
-            .unwrap_or(0);
-        state.process_started(tag, package, uid);
+        state.process_started(tag, package, uid, pid);
     }
 
     /// MPROC7: the launch recorded for `package` that the host still owes,
     /// as `(placeholder token, activity class)`.
     #[must_use]
-    pub fn pending_launch_for(&self, package: &str) -> Option<(u64, String)> {
+    pub fn pending_launch_for(&self, tag: u32, package: &str) -> Option<(u64, String)> {
         let state = self.state.lock().ok()?;
         state
             .ams
-            .pending_launch_for(package)
+            .pending_launch_for_tag(tag, package)
             .map(|launch| (launch.token, launch.class.clone()))
     }
 
@@ -1931,6 +2326,27 @@ impl AtmsService {
         if let Ok(mut s) = self.state.lock() {
             s.attach_application(app_thread, seq, package);
         }
+    }
+
+    /// SYSUI3A: name the session's primary process (tag 0).
+    ///
+    /// `ServiceHost::seed_primary_package` is the seam the launcher uses; it is
+    /// the same fact ADR-0029 gives the host for every launch fact it builds
+    /// (the launcher knows what it started).
+    pub fn set_primary_package(&mut self, package: &str) -> bool {
+        self.state
+            .lock()
+            .map(|mut s| s.set_primary_package(package))
+            .unwrap_or(false)
+    }
+
+    /// The seeded primary package (tests/inspection).
+    #[must_use]
+    pub fn primary_package(&self) -> Option<String> {
+        self.state
+            .lock()
+            .ok()
+            .and_then(|s| s.primary_package().map(str::to_string))
     }
 
     /// Seed the component table `startActivity` resolves against (W38).
@@ -2115,8 +2531,16 @@ impl ServiceObject for AtmsService {
         let mut deliveries = Vec::new();
         let reply = match (self.interface, method.name.as_str()) {
             (AtmsInterface::ActivityManager, "checkPermission") => {
+                // `IActivityManager.checkPermission(String permission, int pid,
+                // int uid)`: AOSP's `ActivityManagerService.checkPermission`
+                // delegates to `checkComponentPermission(permission, pid, uid,
+                // -1, true)`, i.e. the answer is the **uid's**, not one package's
+                // (BINDERPID). `Context.checkCallingPermission` reaches this on
+                // the image, so an app's own uid decides the answer.
                 let permission = args.first().and_then(Value::as_str).unwrap_or_default();
-                vec![Value::Int(state.check_permission(permission))]
+                let uid = args.get(2).and_then(Value::as_int).unwrap_or(-1);
+                let answer = state.check_permission_for_uid(permission, uid);
+                vec![Value::Int(answer)]
             }
             (AtmsInterface::ActivityManager, "attachApplication") => {
                 let app_thread = args.first().and_then(Value::as_binder).map(|b| b.0);
@@ -2482,7 +2906,24 @@ impl ServiceObject for AtmsService {
         // them goes to **that** activity's own app thread, never to "the"
         // attached process.
         let lifecycle = std::mem::take(&mut state.pending_lifecycle_calls);
-        for (tag, name, values) in lifecycle {
+        let trace_lifecycle = std::env::var_os("ACOS_ATMS_TRACE").is_some();
+        for PendingLifecycleCall {
+            tag,
+            method: name,
+            args: values,
+            ..
+        } in lifecycle
+        {
+            if trace_lifecycle {
+                eprintln!(
+                    "ACOSATMS deliver tag={tag} method={name} app_thread={:?}",
+                    state
+                        .processes
+                        .iter()
+                        .find(|p| p.tag == tag)
+                        .and_then(|p| p.app_thread)
+                );
+            }
             let Some(app_thread) = state
                 .processes
                 .iter()

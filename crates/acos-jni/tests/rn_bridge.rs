@@ -481,7 +481,7 @@ fn rn_bridge_reaches_uimanager_under_confinement() {
         ops.len()
     );
 
-    let out_dir = repo_root().join("results/rn");
+    let out_dir = acos_test_support::test_artifacts_dir("rn");
     let _ = std::fs::create_dir_all(&out_dir);
     // W153-A: the bridge artifact is `w153a-ops.json`. It carries the captured
     // `ACOS_RN_OP` batch under `ops` plus the full `ACOS_RN_BRIDGE` stage trail

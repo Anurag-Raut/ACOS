@@ -450,6 +450,60 @@ pub type FireSender = Arc<
         + Sync,
 >;
 
+/// SYSUI2: `(the result Intent a system-UI app set) -> the sender binders the
+/// system must fire`.
+///
+/// The shade answers a row tap with `acos.shade.tapped`; the notification layer
+/// owns the record (which notification that key names, and that the row leaves
+/// the list), while the `PendingIntent` sender table and the activity start live
+/// in the AMS. Publishing one closure keeps the notification records out of the
+/// ATMS while still letting the tap fire the real content sender, which is what
+/// systemui's own process does on a device.
+pub type SystemUiResultSink =
+    Arc<dyn Fn(&crate::ams::IntentFacts) -> Vec<u64> + Send + Sync>;
+
+/// The slot an [`crate::atms::AtmsState`] holds for a [`SystemUiResultSink`].
+///
+/// A closure has no `Debug`, and the ATMS state's own `Debug` output is read by
+/// session evidence, so the slot prints whether the seam is set instead of
+/// failing to derive.
+#[derive(Clone, Default)]
+pub struct SystemUiResultSinkSlot(Option<SystemUiResultSink>);
+
+impl SystemUiResultSinkSlot {
+    /// Publish the sink (the module that owns the system app's records).
+    pub fn set(&mut self, sink: SystemUiResultSink) {
+        self.0 = Some(sink);
+    }
+
+    /// Remove it (module detach: ADR-0029 leaves no registration behind).
+    pub fn clear(&mut self) {
+        self.0 = None;
+    }
+
+    /// The sink, when a module published one.
+    #[must_use]
+    pub fn get(&self) -> Option<SystemUiResultSink> {
+        self.0.clone()
+    }
+
+    /// Whether a sink is published.
+    #[must_use]
+    pub fn is_set(&self) -> bool {
+        self.0.is_some()
+    }
+}
+
+impl core::fmt::Debug for SystemUiResultSinkSlot {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(
+            f,
+            "SystemUiResultSinkSlot({})",
+            if self.0.is_some() { "set" } else { "empty" }
+        )
+    }
+}
+
 /// The registration tables as they were at [`ServiceHost::begin_scope`].
 ///
 /// ADR-0029 requires that detaching a module leaves **no** registration behind,
@@ -595,6 +649,10 @@ pub struct ServiceHost {
     /// start live in the AMS, so the registry publishes the delivery here
     /// instead of a module reaching into the ATMS state.
     pending_intent_fire: Option<FireSender>,
+    /// SYSUI2: the session's activity manager. A module that owns a system app
+    /// starts that app's activity and reads its result through this handle (see
+    /// [`ServiceHost::set_atms`]).
+    atms: Option<std::sync::Arc<std::sync::Mutex<crate::atms::AtmsState>>>,
     /// The host paths of this session's WebView endpoints, published by the
     /// launcher (WV8 `webview` module). The module answers `status` from them
     /// instead of recomputing a path the launcher already decided, so the two
@@ -681,6 +739,7 @@ impl ServiceHost {
             a11y_window_token: None,
             permission_store: None,
             pending_intent_fire: None,
+            atms: None,
             webview_gate: None,
             overwrites: Vec::new(),
             delivery_wake: None,
@@ -1104,6 +1163,39 @@ impl ServiceHost {
         held
     }
 
+    /// Apply the reference changes every handler reported outside a binder
+    /// transaction.
+    ///
+    /// A handler's `drain_retained`/`drain_released` runs after both dispatch
+    /// paths, but a module can also answer a pending request from a **control
+    /// op** (`hw.biometric`'s scripted `auth`, a fixture driving a module from
+    /// the harness): there is no transaction to drain after, so without this
+    /// the one-shot release would wait for the guest's next call — the node
+    /// stays rooted (and the app's callback object stays alive) in between.
+    ///
+    /// Returns `(retained, released)` for evidence.
+    pub fn drain_refs(&mut self) -> (Vec<BinderId>, Vec<BinderId>) {
+        let mut retained: Vec<BinderId> = Vec::new();
+        let mut released: Vec<BinderId> = Vec::new();
+        for entry in self.entries.values_mut() {
+            if let Some(object) = entry.object.as_mut() {
+                retained.append(&mut object.drain_retained());
+                released.append(&mut object.drain_released());
+            }
+        }
+        for object in self.dynamic.values_mut() {
+            retained.append(&mut object.drain_retained());
+            released.append(&mut object.drain_released());
+        }
+        for id in &retained {
+            self.retain_binder(*id);
+        }
+        for id in &released {
+            self.release_binder(*id);
+        }
+        (retained, released)
+    }
+
     /// Release **every** reference every live handler holds (session teardown:
     /// the guest process is gone, so its nodes must not stay rooted on a
     /// long-lived peer).
@@ -1389,9 +1481,13 @@ impl ServiceHost {
                 let Some(state) = self.ams_state() else {
                     return;
                 };
-                // The target process, when it is already attached: the same
-                // `ProcessRecord` the activity launch path uses. `None` means
-                // the launcher must spawn it first, exactly like a launch.
+                // The target process, when its `IApplicationThread` is known: the
+                // same `ProcessRecord` the activity launch path uses. `None` means
+                // the launcher must spawn it first, exactly like a launch. It does
+                // not have to have *finished* attaching (AOSP records the service
+                // in `mServices` and starts it at the process's attach — a bind
+                // that lands while the process is attaching is queued behind its
+                // `bindApplication`).
                 let target = {
                     let state = state
                         .lock()
@@ -1409,7 +1505,7 @@ impl ServiceHost {
                     state
                         .processes
                         .iter()
-                        .find(|p| p.package_name == package && p.attached)
+                        .find(|p| p.package_name == package && p.app_thread.is_some())
                         .and_then(|p| p.app_thread.map(|thread| (p.tag, thread)))
                 };
                 let resolved = crate::ams::DeclaredComponent {
@@ -1487,51 +1583,71 @@ impl ServiceHost {
                     .and_then(crate::value::Value::as_binder)
                     .map(|b| b.0)
                     .unwrap_or(0);
-                let Some(state) = self.ams_state() else {
-                    return;
-                };
-                let record = {
+                // AOSP `ActivityManagerService.attachApplicationLocked`: the
+                // process is addressable from the moment it names its
+                // `IApplicationThread`, and `mServices.attachApplicationLocked`
+                // (which is what `realStartServiceLocked` runs from) is in the
+                // **same** method — before the app's `bindApplication` returns.
+                // So the record is found by its app thread, not by "already
+                // finished attaching": a process that exists only because a
+                // `bindService` needed it has no other attach, and waiting for
+                // `finishAttachApplication` there would strand the bind for
+                // ever (measured: a bind-only spawn never received
+                // `scheduleCreateService`, the caller waited out its timeout).
+                let record = self.ams_state().and_then(|state| {
                     let state = state
                         .lock()
                         .unwrap_or_else(std::sync::PoisonError::into_inner);
                     state
                         .processes
                         .iter()
-                        .find(|p| p.app_thread == Some(thread) && p.attached)
+                        .find(|p| p.app_thread == Some(thread))
                         .map(|p| (p.tag, p.package_name.clone()))
-                };
-                let Some((tag, package)) = record else {
-                    return;
-                };
-                let waiting = {
-                    let state = state
-                        .lock()
-                        .unwrap_or_else(std::sync::PoisonError::into_inner);
-                    state.ams.host_services.waiting_for_process(&package)
-                };
-                for (package, class) in waiting {
-                    let Some((info, app)) = self.service_record(&package, &class) else {
-                        continue;
-                    };
-                    let assigned = {
-                        let mut state = state
-                            .lock()
-                            .unwrap_or_else(std::sync::PoisonError::into_inner);
-                        state
-                            .ams
-                            .host_services
-                            .assign_process(tag, thread, &package, &class, &info, &app)
-                    };
-                    match assigned {
-                        Ok(deliveries) => self.deliveries.extend(deliveries),
-                        Err(error) => eprintln!(
-                            "acos-services: cannot bring up {package}/{class} for process {tag}: \
-                             {error}"
-                        ),
-                    }
+                });
+                if let Some((tag, package)) = record {
+                    self.start_waiting_services(tag, thread, &package);
                 }
             }
             _ => {}
+        }
+    }
+
+    /// AOSP `ActiveServices.realStartServiceLocked` for process `tag`: deliver
+    /// `scheduleCreateService` + `scheduleBindService` for every bound service
+    /// of `package` that still waits for its process.
+    ///
+    /// The service table and the package manager are two hosts' state, so the
+    /// records are read (lock released), resolved through the package manager and
+    /// then assigned (lock taken again) — never both under one lock.
+    fn start_waiting_services(&mut self, tag: u32, thread: u64, package: &str) {
+        let Some(state) = self.ams_state() else {
+            return;
+        };
+        let waiting = {
+            let state = state
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            state.ams.host_services.waiting_for_process(package)
+        };
+        for (package, class) in waiting {
+            let Some((info, app)) = self.service_record(&package, &class) else {
+                continue;
+            };
+            let assigned = {
+                let mut state = state
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner);
+                state
+                    .ams
+                    .host_services
+                    .assign_process(tag, thread, &package, &class, &info, &app)
+            };
+            match assigned {
+                Ok(deliveries) => self.deliveries.extend(deliveries),
+                Err(error) => eprintln!(
+                    "acos-services: cannot bring up {package}/{class} for process {tag}: {error}"
+                ),
+            }
         }
     }
 
@@ -1685,6 +1801,30 @@ impl ServiceHost {
         &self,
     ) -> Option<std::sync::Arc<std::sync::Mutex<crate::permissions::PermissionStore>>> {
         self.permission_store.as_ref().map(std::sync::Arc::clone)
+    }
+
+    /// Publish the session's activity manager (called by
+    /// [`crate::registry::install`]).
+    ///
+    /// SYSUI2: a module that owns a **system app** acts as the server's own
+    /// client, which is exactly system_server's role for
+    /// `GrantPermissionsActivity` and the notification shade: it starts that
+    /// app's activity for the system ([`crate::ams::AmsState::start_activity`],
+    /// whose resolution queues the spawn/launch the launcher owns) and reads the
+    /// result the app answered ([`crate::atms::AtmsState::system_ui_result_sink`]).
+    /// Both are the session's existing state, so the module gets the same handle
+    /// the peer thread uses rather than a second copy.
+    pub fn set_atms(
+        &mut self,
+        atms: std::sync::Arc<std::sync::Mutex<crate::atms::AtmsState>>,
+    ) {
+        self.atms = Some(atms);
+    }
+
+    /// The session's activity manager, when a standard set published one.
+    #[must_use]
+    pub fn atms(&self) -> Option<std::sync::Arc<std::sync::Mutex<crate::atms::AtmsState>>> {
+        self.atms.as_ref().map(std::sync::Arc::clone)
     }
 
     /// Publish this session's WebView endpoints (WV8: the launcher binds the
@@ -1960,6 +2100,27 @@ impl ServiceHost {
         Ok(())
     }
 
+    /// SYSUI3A: name the session's primary process (tag 0).
+    ///
+    /// Stock AMS's `ProcessRecord` is created by `startProcessLocked` with the
+    /// process name; ACOS's primary process is started by the **launcher**, so
+    /// the launcher (the only component that knows the session package) is the
+    /// one that records the name. `attachApplication` carries no package, so
+    /// without this the primary record stayed unnamed and
+    /// `Peer::package_of(0)` could not find the launch a `startActivity` into the
+    /// already-running primary had recorded (the notification shade's row tap).
+    /// Returns whether the activity service took the name.
+    pub fn seed_primary_package(&mut self, package: &str) -> bool {
+        let Ok(object) = self.ensure("android.app.IActivityTaskManager") else {
+            return false;
+        };
+        object
+            .as_any_mut()
+            .and_then(|any| any.downcast_mut::<crate::atms::AtmsService>())
+            .map(|service| service.set_primary_package(package))
+            .unwrap_or(false)
+    }
+
     /// The dynamic receiver registrations `IActivityManager`
     /// (`registerReceiver[WithFeature]`) has recorded, with the decoded
     /// `IntentFilter` facts (W28). Oldest first.
@@ -2164,6 +2325,28 @@ impl ServiceHost {
     ) -> Result<i32> {
         let service = self.pms_mut()?;
         service.install_extra_package_from_apk_as(apk_path, guest_source_dir, guest_native_lib_dir)
+    }
+
+    /// The uid the package manager allocated for `package` in this session.
+    ///
+    /// `None` when the package manager is not registered or the package is not
+    /// installed — never a guessed uid. BINDERPID uses it to record the caller
+    /// identity of a guest process: the socket's uid is the sandbox's mapped
+    /// 1000 and says nothing about the app, while this is the uid
+    /// `PackageManager.getPackageUid` and the permission checks answer with.
+    pub fn package_uid(&mut self, package: &str) -> Option<i32> {
+        if package.is_empty() {
+            return None;
+        }
+        let object = self.ensure("android.content.pm.IPackageManager").ok()?;
+        let service = object
+            .as_any_mut()
+            .and_then(|any| any.downcast_mut::<crate::pms::PmsService>())?;
+        let state = service.shared_state();
+        let state = state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        state.lookup(Some(package)).map(|record| record.app.uid)
     }
 
     fn pms_mut(&mut self) -> Result<&mut crate::pms::PmsService> {

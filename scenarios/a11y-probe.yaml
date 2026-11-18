@@ -215,14 +215,15 @@ steps:
       # `key_down` may be logged before or after `global_action back=true`: the
       # claim is that all of these happened, not their interleaving.
       #
-      # `timeout_ms` is required, not a convenience: `performGlobalAction` runs
-      # on the probe's own worker thread and the resulting key reaches the
-      # guest's main looper afterwards, so the app-side lines are logged *after*
-      # the tap step's settle. The log assertion waits for them instead of
-      # sampling once (A11YPACE: measured ~1 s of guest log-pipeline lag on this
-      # screen, which made the one-shot read a race).
-      ordered: false
+      # MERGE040A: `timeout_ms` is required, not a convenience. The button's
+      # listener hands `performGlobalAction` to the probe's own worker thread and
+      # the app reads the published key on a **later** looper iteration than the
+      # one that ran its click handler (MERGEFIX), so the app-side lines are
+      # logged after the tap step's settle (A11YPACE measured ~1 s of guest
+      # log-pipeline lag on this screen). The wait is the effect semantic; a
+      # missing line still fails at the deadline.
       timeout_ms: 30000
+      ordered: false
       patterns:
         - "back_requested"
         - "global_action back=true"

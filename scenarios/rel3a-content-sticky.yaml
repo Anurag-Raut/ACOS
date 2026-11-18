@@ -37,6 +37,9 @@ capabilities:
   - input
 animations: on
 expectation: non_pass
+expectation_reason: >-
+  The forever-animating screen never pixel-settles, so the region capture's
+  strict settle is a truthful TIMEOUT; that is the rule being pinned.
 budgets:
   memory_mib: 512
   wall_ms: 180000

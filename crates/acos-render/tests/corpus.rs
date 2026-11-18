@@ -176,7 +176,7 @@ fn repo_root() -> PathBuf {
 }
 
 fn out_dir() -> PathBuf {
-    let d = repo_root().join("results/render/corpus");
+    let d = acos_test_support::test_artifacts_dir("render/corpus");
     let _ = std::fs::create_dir_all(&d);
     d
 }

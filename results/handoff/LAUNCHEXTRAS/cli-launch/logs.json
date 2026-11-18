@@ -1,0 +1,440 @@
+{
+  "backend": "acos-native",
+  "capabilities_used": [
+    "logs"
+  ],
+  "fidelity": "art-reference",
+  "metrics": {
+    "wall_ms": 0
+  },
+  "ok": true,
+  "request_id": "req_425b2_18e90a07c0192c3f",
+  "result": {
+    "animations": "on",
+    "collapsed": 0,
+    "count": 90,
+    "crash": null,
+    "engine": "art",
+    "engine_frozen": false,
+    "evidence": {
+      "frame": "host-observed",
+      "input_acks": "guest-asserted",
+      "logs": "guest-asserted",
+      "state_change": "host-observed",
+      "tree": "guest-asserted"
+    },
+    "evidence_label": "host-pixel",
+    "extra_apks": [],
+    "filter": {
+      "default_view": false,
+      "dropped": 0,
+      "min_priority": "V",
+      "note": "explicit filter applied; the guest buffer and logs/logcat.txt keep every record",
+      "package": null
+    },
+    "frame": {
+      "buffer_generation": 1,
+      "captured_at": "2026-11-18T04:42:34.803Z",
+      "frame_number": 1,
+      "frame_seq": 1,
+      "identity": "C1 buffer metadata (no pixel copy)",
+      "md5": "",
+      "pixels": false
+    },
+    "insets": "report",
+    "last_frame_seq": 1,
+    "launched": true,
+    "log_path": "/home/Qui/.t3/worktrees/acos/t3-2d2bb735-60949492e8cb8af5/.cache/rt-lx/art-sessions/s_cli/logs/logcat.txt",
+    "logs": [
+      {
+        "line": "V GraphicsEnvironment   angle_gl_driver_selection_values=[]",
+        "message": "  angle_gl_driver_selection_values=[]",
+        "priority": "V",
+        "repeat_count": 1,
+        "seq": 69,
+        "tag": "GraphicsEnvironment"
+      },
+      {
+        "line": "V GraphicsEnvironment ANGLE GameManagerService for dev.acos.fixtures.launchextras: false",
+        "message": "ANGLE GameManagerService for dev.acos.fixtures.launchextras: false",
+        "priority": "V",
+        "repeat_count": 1,
+        "seq": 70,
+        "tag": "GraphicsEnvironment"
+      },
+      {
+        "line": "V GraphicsEnvironment dev.acos.fixtures.launchextras is not listed in per-application setting",
+        "message": "dev.acos.fixtures.launchextras is not listed in per-application setting",
+        "priority": "V",
+        "repeat_count": 1,
+        "seq": 71,
+        "tag": "GraphicsEnvironment"
+      },
+      {
+        "line": "V GraphicsEnvironment Neither updatable production driver nor prerelease driver is supported.",
+        "message": "Neither updatable production driver nor prerelease driver is supported.",
+        "priority": "V",
+        "repeat_count": 1,
+        "seq": 72,
+        "tag": "GraphicsEnvironment"
+      },
+      {
+        "line": "W SystemServiceRegistry No service published for: netstats",
+        "message": "No service published for: netstats",
+        "priority": "W",
+        "repeat_count": 1,
+        "seq": 73,
+        "tag": "SystemServiceRegistry"
+      },
+      {
+        "line": "E TrafficStats TrafficStats not initialized, uid=10192",
+        "message": "TrafficStats not initialized, uid=10192",
+        "priority": "E",
+        "repeat_count": 1,
+        "seq": 74,
+        "tag": "TrafficStats"
+      },
+      {
+        "line": "I AcosRot6 ACOSLAUNCH MARK top-finish-watcher-started",
+        "message": "ACOSLAUNCH MARK top-finish-watcher-started",
+        "priority": "I",
+        "repeat_count": 1,
+        "seq": 75,
+        "tag": "AcosRot6"
+      },
+      {
+        "line": "D CompatibilityChangeReporter Compat change id reported: 210923482; UID 10192; state: ENABLED",
+        "message": "Compat change id reported: 210923482; UID 10192; state: ENABLED",
+        "priority": "D",
+        "repeat_count": 1,
+        "seq": 76,
+        "tag": "CompatibilityChangeReporter"
+      },
+      {
+        "line": "I AcosLaunchExtras ACOSPROBE launch-extras action=dev.acos.fixtures.launchextras.ACTION",
+        "message": "ACOSPROBE launch-extras action=dev.acos.fixtures.launchextras.ACTION",
+        "priority": "I",
+        "repeat_count": 1,
+        "seq": 77,
+        "tag": "AcosLaunchExtras"
+      },
+      {
+        "line": "I AcosLaunchExtras ACOSPROBE launch-extras data=acos://launch/extras?source=cli",
+        "message": "ACOSPROBE launch-extras data=acos://launch/extras?source=cli",
+        "priority": "I",
+        "repeat_count": 1,
+        "seq": 78,
+        "tag": "AcosLaunchExtras"
+      },
+      {
+        "line": "I AcosLaunchExtras ACOSPROBE launch-extras string=hello",
+        "message": "ACOSPROBE launch-extras string=hello",
+        "priority": "I",
+        "repeat_count": 1,
+        "seq": 79,
+        "tag": "AcosLaunchExtras"
+      },
+      {
+        "line": "I AcosLaunchExtras ACOSPROBE launch-extras int=42",
+        "message": "ACOSPROBE launch-extras int=42",
+        "priority": "I",
+        "repeat_count": 1,
+        "seq": 80,
+        "tag": "AcosLaunchExtras"
+      },
+      {
+        "line": "I AcosLaunchExtras ACOSPROBE launch-extras long=0",
+        "message": "ACOSPROBE launch-extras long=0",
+        "priority": "I",
+        "repeat_count": 1,
+        "seq": 81,
+        "tag": "AcosLaunchExtras"
+      },
+      {
+        "line": "I AcosLaunchExtras ACOSPROBE launch-extras long_small=7",
+        "message": "ACOSPROBE launch-extras long_small=7",
+        "priority": "I",
+        "repeat_count": 1,
+        "seq": 82,
+        "tag": "AcosLaunchExtras"
+      },
+      {
+        "line": "I AcosLaunchExtras ACOSPROBE launch-extras boolean=true",
+        "message": "ACOSPROBE launch-extras boolean=true",
+        "priority": "I",
+        "repeat_count": 1,
+        "seq": 83,
+        "tag": "AcosLaunchExtras"
+      },
+      {
+        "line": "I AcosLaunchExtras ACOSPROBE launch-extras float=1.5",
+        "message": "ACOSPROBE launch-extras float=1.5",
+        "priority": "I",
+        "repeat_count": 1,
+        "seq": 84,
+        "tag": "AcosLaunchExtras"
+      },
+      {
+        "line": "I AcosLaunchExtras ACOSPROBE launch-extras double=0.25",
+        "message": "ACOSPROBE launch-extras double=0.25",
+        "priority": "I",
+        "repeat_count": 1,
+        "seq": 85,
+        "tag": "AcosLaunchExtras"
+      },
+      {
+        "line": "I AcosLaunchExtras ACOSPROBE launch-extras string_array=[alpha, beta]",
+        "message": "ACOSPROBE launch-extras string_array=[alpha, beta]",
+        "priority": "I",
+        "repeat_count": 1,
+        "seq": 86,
+        "tag": "AcosLaunchExtras"
+      },
+      {
+        "line": "E logdw    dev.acos.fixtures.launchextras.MainActivity",
+        "message": "dev.acos.fixtures.launchextras.MainActivity",
+        "priority": "E",
+        "repeat_count": 1,
+        "seq": 87,
+        "tag": "logdw"
+      },
+      {
+        "line": "E logdw    dev.acos.fixtures.launchextras.MainActivity",
+        "message": "dev.acos.fixtures.launchextras.MainActivity",
+        "priority": "E",
+        "repeat_count": 1,
+        "seq": 88,
+        "tag": "logdw"
+      },
+      {
+        "line": "E logdw    dev.acos.fixtures.launchextras.MainActivity",
+        "message": "dev.acos.fixtures.launchextras.MainActivity",
+        "priority": "E",
+        "repeat_count": 1,
+        "seq": 89,
+        "tag": "logdw"
+      },
+      {
+        "line": "D CompatibilityChangeReporter Compat change id reported: 237531167; UID 10192; state: ENABLED",
+        "message": "Compat change id reported: 237531167; UID 10192; state: ENABLED",
+        "priority": "D",
+        "repeat_count": 1,
+        "seq": 90,
+        "tag": "CompatibilityChangeReporter"
+      }
+    ],
+    "logs_returned": 22,
+    "logs_truncated": true,
+    "modules": [
+      {
+        "attach": "at-launch",
+        "details": null,
+        "fidelity": "real",
+        "id": "core",
+        "profile": "real",
+        "reason": null,
+        "state": "attached"
+      },
+      {
+        "attach": "hot",
+        "details": null,
+        "fidelity": "off",
+        "id": "accessibility",
+        "profile": "off",
+        "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"accessibility\", \"profile\": \"real\"}]}",
+        "state": "off"
+      },
+      {
+        "attach": "hot",
+        "details": null,
+        "fidelity": "off",
+        "id": "system.permissions",
+        "profile": "off",
+        "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.permissions\", \"profile\": \"real\"}]}",
+        "state": "off"
+      },
+      {
+        "attach": "hot",
+        "details": null,
+        "fidelity": "off",
+        "id": "system.notifications",
+        "profile": "off",
+        "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.notifications\", \"profile\": \"real\"}]}",
+        "state": "off"
+      },
+      {
+        "attach": "hot",
+        "details": null,
+        "fidelity": "off",
+        "id": "sensors",
+        "profile": "off",
+        "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"sensors\", \"profile\": \"scripted\"}]}",
+        "state": "off"
+      },
+      {
+        "attach": "hot",
+        "details": null,
+        "fidelity": "off",
+        "id": "feedback.vibrator",
+        "profile": "off",
+        "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"feedback.vibrator\", \"profile\": \"scripted\"}]}",
+        "state": "off"
+      },
+      {
+        "attach": "hot",
+        "details": null,
+        "fidelity": "off",
+        "id": "location",
+        "profile": "off",
+        "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"location\", \"profile\": \"scripted\"}]}",
+        "state": "off"
+      },
+      {
+        "attach": "at-launch",
+        "details": null,
+        "fidelity": "off",
+        "id": "net.telephony",
+        "profile": "off",
+        "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"net.telephony\", \"profile\": \"scripted\"}]}",
+        "state": "off"
+      },
+      {
+        "attach": "hot",
+        "details": null,
+        "fidelity": "off",
+        "id": "hw.bluetooth",
+        "profile": "off",
+        "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.bluetooth\", \"profile\": \"scripted\"}]}",
+        "state": "off"
+      },
+      {
+        "attach": "hot",
+        "details": null,
+        "fidelity": "off",
+        "id": "hw.biometric",
+        "profile": "off",
+        "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.biometric\", \"profile\": \"scripted\"}]}",
+        "state": "off"
+      },
+      {
+        "attach": "at-launch",
+        "details": null,
+        "fidelity": "off",
+        "id": "network",
+        "profile": "off",
+        "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"network\", \"profile\": \"real\"}]}",
+        "state": "off"
+      },
+      {
+        "attach": "at-launch",
+        "details": null,
+        "fidelity": "off",
+        "id": "webview",
+        "profile": "off",
+        "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"webview\", \"profile\": \"real\"}]}",
+        "state": "off"
+      },
+      {
+        "attach": "hot",
+        "details": null,
+        "fidelity": "off",
+        "id": "hw.usb",
+        "profile": "off",
+        "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.usb\", \"profile\": \"stub\"}]}",
+        "state": "off"
+      },
+      {
+        "attach": "hot",
+        "details": null,
+        "fidelity": "off",
+        "id": "system.dropbox",
+        "profile": "off",
+        "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.dropbox\", \"profile\": \"stub\"}]}",
+        "state": "off"
+      },
+      {
+        "attach": "hot",
+        "details": null,
+        "fidelity": "off",
+        "id": "hw.nfc",
+        "profile": "off",
+        "reason": "off: no NFC hardware: NfcAdapter throws UnsupportedOperationException before any binder (FEATURE_NFC is absent)",
+        "state": "off"
+      },
+      {
+        "attach": "hot",
+        "details": null,
+        "fidelity": "off",
+        "id": "system.wallpaper",
+        "profile": "off",
+        "reason": "off: no wallpaper service; AOSP's own DisabledWallpaperManager is the working missing path (config_enableWallpaperService is false)",
+        "state": "off"
+      },
+      {
+        "attach": "hot",
+        "details": null,
+        "fidelity": "off",
+        "id": "system.print",
+        "profile": "off",
+        "reason": "off: no print service; the client only resolves the name when FEATURE_PRINTING is reported, and ACOS reports it absent",
+        "state": "off"
+      },
+      {
+        "attach": "hot",
+        "details": null,
+        "fidelity": "off",
+        "id": "system.search",
+        "profile": "off",
+        "reason": "off: no search service and no searchable index; an empty SearchableInfo list would look like an installed search provider",
+        "state": "off"
+      },
+      {
+        "attach": "hot",
+        "details": null,
+        "fidelity": "off",
+        "id": "system.usage",
+        "profile": "off",
+        "reason": "off: nothing records app usage; an empty ParceledListSlice<UsageStats> would be indistinguishable from 'not used'",
+        "state": "off"
+      },
+      {
+        "attach": "hot",
+        "details": null,
+        "fidelity": "off",
+        "id": "system.dpm",
+        "profile": "off",
+        "reason": "off: no managed device or profile; every device-policy answer would be invented policy state",
+        "state": "off"
+      },
+      {
+        "attach": "hot",
+        "details": null,
+        "fidelity": "off",
+        "id": "system.role",
+        "profile": "off",
+        "reason": "off: IRoleManager lives in the Permission APEX; its transaction table is not in the framework dex this build reads, so a stub would guess codes",
+        "state": "off"
+      },
+      {
+        "attach": "hot",
+        "details": null,
+        "fidelity": "off",
+        "id": "geo.country",
+        "profile": "off",
+        "reason": "off: a detected country is a location claim ACOS cannot back",
+        "state": "off"
+      }
+    ],
+    "note": "",
+    "session_id": "s_cli",
+    "stage_reached": "first_frame",
+    "timing": {
+      "note": "total_ms is the whole serve verb; the other fields are measured around the acos-art round trip and the host-side absorb",
+      "total_ms": 132
+    },
+    "total": 90,
+    "trust": "trusted"
+  },
+  "session_id": "s_cli",
+  "status": "pass"
+}

@@ -703,6 +703,21 @@ impl ServiceObject for ImeWireService {
             .take_ime_deliveries()
     }
 
+    /// The manager stores an `IInputMethodClient` per `addClient` (and its
+    /// `IRemoteInputConnection`): one strong reference each, reported through
+    /// the one ledger (`crate::refs`) exactly like every other module.
+    fn drain_retained(&mut self) -> Vec<BinderId> {
+        self.generic.drain_retained()
+    }
+
+    fn drain_released(&mut self) -> Vec<BinderId> {
+        self.generic.drain_released()
+    }
+
+    fn release_all_refs(&mut self) -> Vec<BinderId> {
+        self.generic.release_all_refs()
+    }
+
     fn raw_transact(
         &mut self,
         interface: &str,

@@ -459,7 +459,7 @@ pub struct SessionObservation {
 }
 
 /// The parameters for a `launch` step.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct LaunchRequest {
     /// APK to launch.
     pub apk: PathBuf,
@@ -469,8 +469,9 @@ pub struct LaunchRequest {
     pub intent_action: Option<String>,
     /// Intent data URI.
     pub data: Option<String>,
-    /// String extras.
-    pub extras: BTreeMap<String, String>,
+    /// Typed launch extras (`acos_protocol::ExtraValue`); the ART launcher
+    /// refuses a `parcelable` one by name.
+    pub extras: BTreeMap<String, acos_protocol::ExtraValue>,
     /// Clear app data first.
     pub clear_state: bool,
     /// Requested isolation.

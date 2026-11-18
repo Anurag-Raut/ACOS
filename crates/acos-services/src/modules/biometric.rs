@@ -29,6 +29,7 @@
 
 use std::sync::{Arc, Mutex};
 
+use acos_parcel::BinderId;
 use serde_json::{json, Value};
 
 use crate::error::{Result, ServiceError};
@@ -112,6 +113,12 @@ pub struct BiometricState {
     pub cancels: u32,
     /// Calls answered with the structured unsupported error.
     pub unsupported: Vec<String>,
+    /// The strong references the host holds on the callbacks this module
+    /// stored: one per pending `authenticate` (`IBiometricServiceReceiver`).
+    /// On Android storing the receiver in the service *is* `sp<IBinder>`;
+    /// here it keeps the guest's node rooted for exactly as long as the
+    /// request is pending (`crate::refs`).
+    pub refs: crate::refs::GuestRefs,
 }
 
 impl Default for BiometricState {
@@ -123,6 +130,7 @@ impl Default for BiometricState {
             answered: Vec::new(),
             cancels: 0,
             unsupported: Vec::new(),
+            refs: crate::refs::GuestRefs::new(),
         }
     }
 }
@@ -319,6 +327,9 @@ impl ServiceObject for AuthService {
                     .unwrap_or_default();
                 let auth_id = self.next_auth_id;
                 self.next_auth_id += 1;
+                // The service now holds the receiver: a strong reference on the
+                // guest's node for as long as the request is pending.
+                state.refs.hold(BinderId(receiver));
                 state.pending.push(PendingAuth {
                     receiver,
                     operation_id,
@@ -347,6 +358,9 @@ impl ServiceObject for AuthService {
                         auth.receiver
                     });
                 if let Some(receiver) = delivered {
+                    // The request is answered and gone: the reference goes with
+                    // it (one shot, like `location`'s one-shot forms).
+                    state.refs.release(BinderId(receiver));
                     self.queued.push(error_delivery(
                         receiver,
                         TYPE_FINGERPRINT,
@@ -364,6 +378,18 @@ impl ServiceObject for AuthService {
 
     fn drain_raw_deliveries(&mut self) -> Vec<PendingDelivery> {
         std::mem::take(&mut self.queued)
+    }
+
+    fn drain_retained(&mut self) -> Vec<BinderId> {
+        state_of(&self.state).refs.drain_retained()
+    }
+
+    fn drain_released(&mut self) -> Vec<BinderId> {
+        state_of(&self.state).refs.drain_released()
+    }
+
+    fn release_all_refs(&mut self) -> Vec<BinderId> {
+        state_of(&self.state).refs.release_all()
     }
 }
 
@@ -559,7 +585,14 @@ impl Module for BiometricModule {
                 };
                 let pending = {
                     let mut state = state_of(&shared);
-                    state.pending.pop()
+                    let auth = state.pending.pop();
+                    if let Some(auth) = &auth {
+                        // The request is answered from the scripted control op,
+                        // so the reference the service held on its receiver
+                        // goes with it.
+                        state.refs.release(BinderId(auth.receiver));
+                    }
+                    auth
                 };
                 let Some(auth) = pending else {
                     return Err(rejected(
@@ -615,6 +648,7 @@ impl Module for BiometricModule {
             "reset" => {
                 let mut state = state_of(&shared);
                 state.pending.clear();
+                let _ = state.refs.release_all();
                 state.answered.clear();
                 state.cancels = 0;
                 state.unsupported.clear();

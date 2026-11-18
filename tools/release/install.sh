@@ -155,6 +155,35 @@ copy_tree ".cache/boot/android-34" 1
 copy_tree "crates/acos-art/guest/java" 1
 copy_tree "research/art-feasibility/a-dalvikvm/bootclasspath.txt" 0
 
+# ------------------------------------------------- the WebView provider APK
+# The `webview` module (ADR-0031) installs `com.android.webview` as a system app,
+# so the installed tree must *carry* that APK: an installed ACOS has no checkout
+# to build it from, and "run build-apps.sh first" is exactly the separate step a
+# fresh install must not need. The image build
+# (`tools/extract-bootclasspath.sh`) ships it under `system-apps/`, the copy
+# above carries it, and this block is the belt-and-braces: if the source image
+# predates that (or the copy lost it), build it into the install root with the
+# one build implementation.
+PROVIDER_REL=".cache/boot/android-34/system-apps/com.android.webview.apk"
+ensure_webview_provider() {
+    if [ -f "$DEST/$PROVIDER_REL" ]; then
+        printf 'webview provider: %s (%s bytes)\n' "$PROVIDER_REL" \
+            "$(stat -c '%s' "$DEST/$PROVIDER_REL")"
+        return 0
+    fi
+    printf 'webview provider: missing from the image, building it into the install\n'
+    [ -x "$REPO/tools/build-webview-provider.sh" ] ||
+        die "the image has no $PROVIDER_REL and $REPO/tools/build-webview-provider.sh is missing"
+    mkdir -p "$DEST/$(dirname -- "$PROVIDER_REL")"
+    "$REPO/tools/build-webview-provider.sh" --out "$DEST/$PROVIDER_REL" ||
+        die "building the WebView provider into $DEST failed"
+    [ -f "$DEST/$PROVIDER_REL" ] ||
+        die "the WebView provider build produced no APK at $DEST/$PROVIDER_REL"
+    printf 'webview provider: %s (%s bytes, built at install)\n' "$PROVIDER_REL" \
+        "$(stat -c '%s' "$DEST/$PROVIDER_REL")"
+}
+ensure_webview_provider
+
 # Fail closed if the copy still points outside the install root.
 escaped=$(find "$DEST" -type l 2>/dev/null | while read -r link; do
     target=$(readlink -f -- "$link" 2>/dev/null || true)

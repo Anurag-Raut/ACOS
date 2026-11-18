@@ -587,6 +587,47 @@ fn session_tool_spec(name: &str) -> (&'static str, Value) {
                                     reply echoes the list and `result.extra_packages` names each \
                                     package, uid and guest sourceDir/nativeLibraryDir."
                 },
+                "intent_action": {
+                    "type": "string",
+                    "description": "LAUNCHEXTRAS: the Intent action the launched Activity receives \
+                                    (`getIntent().getAction()`). The host builds the launch \
+                                    `LaunchActivityItem` Intent, so the app observes exactly this. \
+                                    Absent keeps the launcher's `android.intent.action.MAIN` (plus \
+                                    CATEGORY_LAUNCHER). ART only, launch-time: a live session cannot \
+                                    replace the Intent its first launch already delivered."
+                },
+                "data": {
+                    "type": "string",
+                    "description": "LAUNCHEXTRAS: the Intent data URI \
+                                    (`getIntent().getDataString()`), written as the image's own \
+                                    `Uri.parse` StringUri. ART only, launch-time."
+                },
+                "extras": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "oneOf": [
+                            {"type": "string", "description": "a string extra"},
+                            {"type": "integer", "description": "an int extra (a long when it does not fit an int)"},
+                            {"type": "number", "description": "a double extra (a plain JSON float)"},
+                            {"type": "boolean", "description": "a boolean extra"},
+                            {"type": "array", "items": {"type": "string"}, "description": "a String[] extra"},
+                            {"type": "object", "required": ["type", "value"],
+                             "properties": {
+                                 "type": {"type": "string", "enum": ["string", "int", "long", "float", "double", "boolean", "string_array", "parcelable"]},
+                                 "value": {}
+                             },
+                             "description": "explicit type: pins long vs int and float vs double; a \
+                                             `parcelable` extra is refused with UNSUPPORTED_ANDROID_API \
+                                             naming the key and class"}
+                        ]
+                    },
+                    "description": "LAUNCHEXTRAS: typed Intent extras (`getIntent().getExtras()`). \
+                                    Plain JSON scalars/arrays infer (string, int, long when it does \
+                                    not fit an int, boolean, double for a float, string array); the \
+                                    `{type, value}` form pins the type. A `parcelable` extra is a \
+                                    structured UNSUPPORTED_ANDROID_API (key + class named) before any \
+                                    guest starts, never a silent drop. ART only, launch-time."
+                },
                 "idle_kill_seconds": {
                     "type": "integer", "minimum": 0, "maximum": 86400,
                     "description": "MPROC7: how long a lazily spawned secondary ART process may sit \

@@ -680,7 +680,7 @@ pub fn system_apks(specs: &[ModuleSpec]) -> Vec<std::path::PathBuf> {
             continue;
         };
         for app in manifest.system_apps {
-            let resolved = crate::modules::webview::system_app_apk(&spec.id, app, &spec.config);
+            let resolved = crate::modules::system_app_apk(&spec.id, app, &spec.config);
             if let Some(path) = resolved {
                 if !out.contains(&path) {
                     out.push(path);
@@ -1810,7 +1810,14 @@ impl ModuleRegistry {
                 ),
             });
         }
-        self.entries[index].module.control(host, op, args)
+        let reply = self.entries[index].module.control(host, op, args);
+        // A control op can answer a request a module was holding a callback
+        // reference for (the scripted biometric result is the one-shot case).
+        // There is no binder transaction to drain after, so the host drains the
+        // reference changes here — otherwise the guest's node stays rooted
+        // until its next call.
+        host.drain_refs();
+        reply
     }
 
     /// Run `f` with the module object for `id` (tests and the launch reply).

@@ -639,7 +639,7 @@ fn check_session_daemon() -> Check {
 /// `warn`, not a `fail`: every app still launches exactly as before, only the
 /// GPU paths (a `Bitmap.Config.HARDWARE` readback) are `UNSUPPORTED_BACKEND`.
 fn check_gles() -> Check {
-    let (label, detail) = acos_art::gles::capability();
+    let (label, detail) = acos_gles_provider::capability_for(crate::root::sysroot().as_deref());
     if label == "none" {
         Check::warn(
             "gles",

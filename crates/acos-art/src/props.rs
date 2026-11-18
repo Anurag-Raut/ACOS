@@ -526,7 +526,10 @@ impl Props {
         // open`, `vulkan.`, measured in the sysroot's libvulkan). Absent when
         // the provider carries no ICD: the property stays unset, exactly as in
         // the image today.
-        if let Some((tag, vulkan)) = crate::gles::selected_tags()? {
+        if let Some((tag, vulkan, extra)) = crate::gles::selected_props()? {
+            for (k, v) in &extra {
+                p.set(k, v);
+            }
             p.set("ro.hardware.egl", &tag);
             // The probe fixtures read this to decide whether to take the GL
             // path at all; an app on a device never needs it (it just draws).

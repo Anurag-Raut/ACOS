@@ -698,24 +698,44 @@ impl ServeEngine {
         };
         // MPROC7: the launcher's idle kill, launch-time like `extra_apks`.
         // `0` disables it. The same value the scenario launch step carries and
-        // `acos-art launch --idle-kill-seconds` takes.
-        let idle_kill_seconds: Option<u64> = match args.get("idle_kill_seconds") {
-            None => None,
-            Some(value) => match value.as_u64() {
-                Some(seconds) if seconds <= 86_400 => Some(seconds),
-                _ => {
-                    return art_failure(
-                        request_id,
-                        Some(id),
-                        trust,
-                        ErrorCode::InvalidArgument,
-                        "idle_kill_seconds must be an integer in 0..=86400 (0 disables the idle                          kill)"
-                            .to_string(),
-                        json!({"field": "idle_kill_seconds", "value": value}),
-                    )
-                }
-            },
+        // `acos-art launch --idle-kill-seconds` takes. An explicit JSON `null`
+        // means "not provided" (JSON has no absent-vs-None distinction for a
+        // client that serialises an `Option` naively), never 0 and never an
+        // invalid integer: the old reading rejected `null` and broke every
+        // `acos launch --keep` (GL1).
+        let idle_kill_seconds = match idle_kill_seconds_arg(args) {
+            Ok(seconds) => seconds,
+            Err(value) => {
+                return art_failure(
+                    request_id,
+                    Some(id),
+                    trust,
+                    ErrorCode::InvalidArgument,
+                    "idle_kill_seconds must be an integer in 0..=86400 (0 disables the idle                          kill)"
+                        .to_string(),
+                    json!({"field": "idle_kill_seconds", "value": value}),
+                )
+            }
         };
+        let idle_kill_requested = idle_kill_seconds.is_some();
+        // LAUNCHEXTRAS: `intent_action`, `data` and typed `extras` are
+        // launch-time like `animations`/`extra_apks`. A `parcelable` extra is
+        // refused by name here, before a guest exists (the encoder cannot send
+        // it and silently dropping it would be the WVFAIR bug again).
+        let (launch_intent, intent_requested) = match launch_intent_arg(args) {
+            Ok(value) => value,
+            Err(error) => return art_error(request_id, Some(id), trust, &error),
+        };
+        if let Some(detail) = launch_intent.unsupported_detail() {
+            return art_failure(
+                request_id,
+                Some(id),
+                trust,
+                ErrorCode::UnsupportedAndroidApi,
+                detail,
+                json!({"field": "extras", "extra_type": "parcelable"}),
+            );
+        }
         let apk = match acos_mcp::safety::validate_path(apk_arg, &ctx.allowed_roots) {
             Ok(path) => path,
             Err(reason) => {
@@ -800,9 +820,7 @@ impl ServeEngine {
                          then acos_launch with the package set you want.",
                     );
                 }
-                if args.get("idle_kill_seconds").is_some()
-                    && session.idle_kill_seconds() != idle_kill_seconds
-                {
+                if idle_kill_requested && session.idle_kill_seconds() != idle_kill_seconds {
                     return with_hint(
                         art_failure(
                             request_id,
@@ -824,6 +842,24 @@ impl ServeEngine {
                         ),
                         "idle_kill_seconds is launch-time: call acos_destroy for this session id, \
                          then acos_launch with the value you want.",
+                    );
+                }
+                if intent_requested && session.intent() != &launch_intent {
+                    return with_hint(
+                        art_failure(
+                            request_id,
+                            Some(id),
+                            held.trust,
+                            ErrorCode::InvalidArgument,
+                            format!(
+                                "session `{id}` was launched with a different Intent and a live                                  session cannot replace it (the activity already received it)"
+                            ),
+                            json!({
+                                "held_intent": session.intent(),
+                                "requested_intent": launch_intent,
+                            }),
+                        ),
+                        "intent_action/data/extras are launch-time: call acos_destroy for this                          session id, then acos_launch with the Intent you want.",
                     );
                 }
                 if args.get("insets").is_some() && session.insets() != insets {
@@ -954,6 +990,7 @@ impl ServeEngine {
             // addresses the network of the session the caller holds.
             Some(id),
             &services,
+            &launch_intent,
         ) {
             Ok(mut session) => {
                 session.set_settle_timeout(settle_timeout_ms);
@@ -3214,6 +3251,82 @@ fn extra_apks_json(extra_apks: &[std::path::PathBuf]) -> Value {
     )
 }
 
+/// MPROC7: read the launch-time `idle_kill_seconds` argument.
+///
+/// Absent and explicit `null` both mean "not provided" (`Ok(None)`); anything
+/// else must be an integer in `0..=86400`, where `0` disables the idle kill.
+/// `Err` carries the offending value so the caller's error can name it.
+fn idle_kill_seconds_arg(args: &Value) -> Result<Option<u64>, Value> {
+    match args.get("idle_kill_seconds") {
+        None => Ok(None),
+        Some(value) if value.is_null() => Ok(None),
+        Some(value) => match value.as_u64() {
+            Some(seconds) if seconds <= 86_400 => Ok(Some(seconds)),
+            _ => Err(value.clone()),
+        },
+    }
+}
+
+/// Parse one `--extra KEY=VALUE` (the CLI spelling).
+///
+/// Delegates to [`acos_protocol::ExtraValue::parse_key_value`], the one parser
+/// `acos-art launch` uses too: two spellings of the same value must not
+/// disagree (a `--extra x=true` that arrived as a string on one surface and a
+/// boolean on the other would be the WVFAIR silent-drop class again).
+pub fn parse_extra_argument(
+    raw: &str,
+) -> Result<(String, acos_protocol::ExtraValue), String> {
+    acos_protocol::ExtraValue::parse_key_value(raw)
+}
+
+/// LAUNCHEXTRAS: read the launch `Intent` arguments (`intent_action`, `data`,
+/// `extras`).
+///
+/// Returns the Intent and whether the caller named any of the three (a live
+/// session cannot replace an Intent it already delivered). An argument of the
+/// wrong JSON type is `INVALID_ARGUMENT` naming the field and the type that
+/// arrived; a malformed extra is the same error, never a silently dropped key.
+fn launch_intent_arg(
+    args: &Value,
+) -> Result<(acos_protocol::LaunchIntent, bool), BackendError> {
+    let field = |name: &str| -> Result<Option<&str>, BackendError> {
+        match args.get(name) {
+            None | Some(Value::Null) => Ok(None),
+            Some(Value::String(value)) => Ok(Some(value.as_str())),
+            Some(other) => Err(BackendError::Failed {
+                code: ErrorCode::InvalidArgument,
+                detail: format!("`{name}` must be a string (got {})", json_kind(other)),
+            }),
+        }
+    };
+    let action = field("intent_action")?;
+    let data = field("data")?;
+    let extras = match args.get("extras") {
+        None | Some(Value::Null) => std::collections::BTreeMap::new(),
+        Some(value) => match serde_json::from_value::<
+            std::collections::BTreeMap<String, acos_protocol::ExtraValue>,
+        >(value.clone())
+        {
+            Ok(extras) => extras,
+            Err(error) => {
+                return Err(BackendError::Failed {
+                    code: ErrorCode::InvalidArgument,
+                    detail: format!("`extras` is not a typed extra map: {error}"),
+                })
+            }
+        },
+    };
+    let requested = action.is_some() || data.is_some() || !extras.is_empty();
+    Ok((
+        acos_protocol::LaunchIntent {
+            action: action.map(str::to_string),
+            data: data.map(str::to_string),
+            extras,
+        },
+        requested,
+    ))
+}
+
 /// The JSON type of an argument, for an error that names what arrived instead of
 /// guessing (FB-series: a mistyped argument is never silently accepted).
 fn json_kind(value: &Value) -> &'static str {
@@ -4431,8 +4544,37 @@ fn sanitize_session_id(id: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{keep_log_record, log_level_rank};
+    use super::{
+        idle_kill_seconds_arg, keep_log_record, launch_intent_arg, log_level_rank,
+        parse_extra_argument,
+    };
     use acos_protocol::LogLevel;
+    use serde_json::json;
+
+    /// GL1/MPROC7: an absent key and an explicit JSON `null` both mean "not
+    /// provided". A client that serialises `Option<u64>` as `null` (the `acos
+    /// launch` CLI did) must not be rejected, and `null` must never be read as
+    /// `0` (which would disable the idle kill).
+    #[test]
+    fn idle_kill_seconds_treats_an_absent_or_null_field_as_not_provided() {
+        assert_eq!(idle_kill_seconds_arg(&json!({})), Ok(None));
+        assert_eq!(idle_kill_seconds_arg(&json!({"idle_kill_seconds": null})), Ok(None));
+        assert_eq!(idle_kill_seconds_arg(&json!({"idle_kill_seconds": 0})), Ok(Some(0)));
+        assert_eq!(
+            idle_kill_seconds_arg(&json!({"idle_kill_seconds": 30})),
+            Ok(Some(30))
+        );
+        assert_eq!(
+            idle_kill_seconds_arg(&json!({"idle_kill_seconds": 86_400})),
+            Ok(Some(86_400))
+        );
+        // Out of range, a string, a float and a negative all name the value.
+        for bad in [json!(86_401), json!("30"), json!(1.5), json!(-1)] {
+            let err = idle_kill_seconds_arg(&json!({"idle_kill_seconds": bad}))
+                .expect_err("must be rejected");
+            assert_eq!(err, bad);
+        }
+    }
 
     /// FB6 (5): the default log view is `W` + the app's own package.
     #[test]
@@ -5527,5 +5669,89 @@ mod tests {
         assert!(
             reject_expect_change_without_pixel_evidence(&json!({"expect_change": true})).is_ok()
         );
+    }
+
+    /// LAUNCHEXTRAS: the `acos_launch`/`acos launch --keep` arguments become the
+    /// `LaunchIntent` the session-start Intent carries, so each extra's Java
+    /// type must arrive unchanged. `float` and a small `long` are the two the
+    /// untyped JSON spelling loses, so they are asserted by type here (the
+    /// protocol write/read is `acos-protocol`'s test; this is the daemon's
+    /// argument reader).
+    #[test]
+    fn launch_intent_arguments_keep_each_extras_java_type() {
+        let (intent, requested) = launch_intent_arg(&json!({
+            "intent_action": "dev.acos.test.ACTION",
+            "data": "acos://x/y",
+            "extras": {
+                "s": "hello",
+                "i": 42,
+                "l": {"type": "long", "value": 7},
+                "b": true,
+                "f": {"type": "float", "value": 1.5},
+                "d": 0.25,
+                "a": ["x", "y"]
+            }
+        }))
+        .expect("a full Intent");
+        assert!(requested);
+        assert_eq!(intent.action.as_deref(), Some("dev.acos.test.ACTION"));
+        assert_eq!(intent.data.as_deref(), Some("acos://x/y"));
+        use acos_protocol::ExtraValue as E;
+        for (key, expected) in [
+            ("s", E::String("hello".to_string())),
+            ("i", E::Int(42)),
+            ("l", E::Long(7)),
+            ("b", E::Boolean(true)),
+            ("f", E::Float(1.5)),
+            ("d", E::Double(0.25)),
+            ("a", E::StringArray(vec!["x".to_string(), "y".to_string()])),
+        ] {
+            assert_eq!(intent.extras.get(key), Some(&expected), "extra `{key}`");
+        }
+        assert!(intent.unsupported_extra().is_none());
+    }
+
+    /// The one honest refusal: a `Parcelable` is named by key and class before
+    /// any guest exists, and a mistyped argument is `INVALID_ARGUMENT`, never
+    /// silently ignored (the WVFAIR silent-drop class).
+    #[test]
+    fn a_parcelable_extra_is_named_and_a_mistyped_argument_is_refused() {
+        let (intent, requested) = launch_intent_arg(&json!({
+            "extras": {"device": {"type": "parcelable", "value": "android.os.Bundle"}}
+        }))
+        .expect("a legal declaration");
+        assert!(requested);
+        assert_eq!(
+            intent.unsupported_extra(),
+            Some(("device", "android.os.Bundle"))
+        );
+        // Nothing declared is not a request (a live session may be re-addressed).
+        assert_eq!(
+            launch_intent_arg(&json!({})).expect("empty"),
+            (Default::default(), false)
+        );
+        assert_eq!(
+            launch_intent_arg(&json!({"intent_action": null})).expect("null"),
+            (Default::default(), false)
+        );
+        let error = launch_intent_arg(&json!({"intent_action": 5})).expect_err("not a string");
+        assert_eq!(error.code(), ErrorCode::InvalidArgument);
+        assert!(error.to_string().contains("intent_action"), "{error}");
+        let error = launch_intent_arg(&json!({"extras": [1, 2]})).expect_err("not a map");
+        assert_eq!(error.code(), ErrorCode::InvalidArgument);
+        let error = launch_intent_arg(&json!({"extras": {"x": {"type": "nope", "value": 1}}}))
+            .expect_err("unknown type");
+        assert_eq!(error.code(), ErrorCode::InvalidArgument);
+        assert!(error.to_string().contains("unknown extra type"), "{error}");
+    }
+
+    /// `--extra` is the same spelling on the CLI and in the launcher.
+    #[test]
+    fn the_cli_extra_argument_is_the_protocol_parser() {
+        assert_eq!(
+            parse_extra_argument("f={\"type\":\"float\",\"value\":1.5}").expect("float"),
+            ("f".to_string(), acos_protocol::ExtraValue::Float(1.5))
+        );
+        assert!(parse_extra_argument("novalue").is_err());
     }
 }

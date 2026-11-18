@@ -28,6 +28,7 @@ pub mod broker;
 pub mod cdp;
 pub mod engine;
 pub mod error;
+pub mod fair;
 pub mod gate;
 pub mod sandbox;
 pub mod server;
@@ -38,10 +39,47 @@ pub use broker::{Broker, BrokerConfig, EngineVersion, Session};
 pub use cdp::{CdpClient, CdpError};
 pub use engine::{EngineCache, ENGINE_URL, ENGINE_VERSION, ENGINE_ZIP_SHA256};
 pub use error::{Error, Result};
+pub use fair::{FrameGate, FramePriority, GateConfig as FrameGateConfig};
 pub use gate::{BrokerSource, Gate, GateConfig, GateStats};
 pub use server::{serve, serve_shared, ServerConfig, ServerHandle, SharedConfig};
 pub use view::{View, Viewport};
 pub use wire::{Blob, ErrorBody, Frame, WireError, PROTO};
+
+/// This crate's version (`workspace.package.version`).
+pub const VERSION: &str = env!("CARGO_PKG_VERSION");
+/// The checkout's `HEAD` at build time (`unknown` without git).
+pub const GIT_SHA: &str = env!("ACOS_BUILD_GIT_SHA");
+/// FNV-1a over every workspace source: identical for every binary of one build,
+/// different for any other code (see `build-support/fingerprint.rs`).
+pub const SOURCE_HASH: &str = env!("ACOS_BUILD_SOURCE_HASH");
+/// Whether the build was made from a dirty tree.
+pub const BUILD_DIRTY: &str = env!("ACOS_BUILD_DIRTY");
+
+/// The build id every ACOS WebView binary ships (WVSCOPE).
+///
+/// `"<version>+g<git sha>.<source hash>[-dirty]"` — the string the gate sends to
+/// the shared broker and the broker reports back, so a daemon left over from
+/// another build can be **refused** instead of silently serving its old
+/// behaviour. It is deliberately *not* a hash of the executable: the gate lives
+/// in the session binary and the broker in `acos-webview`, two files of the same
+/// build, and it is the code they share (this crate) that must match.
+pub fn build_id() -> &'static str {
+    static ID: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+    ID.get_or_init(|| {
+        let suffix = if BUILD_DIRTY == "dirty" { "-dirty" } else { "" };
+        format!("{VERSION}+g{GIT_SHA}.{SOURCE_HASH}{suffix}")
+    })
+}
+
+/// A filesystem-safe tag of [`build_id`], for a build-private socket name.
+///
+/// Eight hex digits of the source hash: the digest is what distinguishes two
+/// builds, and the name goes into a `sockaddr_un`, so it has to stay short
+/// (`broker-<tag>.sock` next to `broker.sock` keeps a long worktree path inside
+/// the `SUN_LEN` limit).
+pub fn build_tag() -> String {
+    SOURCE_HASH[..8].to_string()
+}
 
 /// The engine's identity as a verdict field (ADR-0031 item 3: "verdicts name the
 /// engine version and `fidelity` states it is host Blink").

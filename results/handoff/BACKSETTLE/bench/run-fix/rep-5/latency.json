@@ -1,0 +1,4248 @@
+{
+  "acos": "/home/Qui/.t3/worktrees/acos/t3-6219a35a-eb2ef407add7c3f9/.cache/backsettle-target/release/acos",
+  "binary_sha256": "09866ce283562233e0aae6ab4c622f20f35f9c26c5d4e8d7c829608aecff1616",
+  "bundle_wall_s": 196.731,
+  "checks": {
+    "failed_by_code": {},
+    "failed_steps": 0,
+    "m4_fast": 40,
+    "m4_strict": 20,
+    "m5_good": 20,
+    "m7_fast_good": 20,
+    "m7_strict_good": 20,
+    "m8_counter_expected_count": "62",
+    "m8_counter_final_count": "62",
+    "m8_form_error_text": "Name is required",
+    "mode_wall_s": {
+      "m4-fast": 12.907,
+      "m4-strict": 7.624,
+      "m6-fast": 51.017,
+      "m6-strict": 26.816,
+      "m8-counter-fast": 1.047,
+      "m8-counter-strict": 19.832,
+      "m8-form-fast": 45.029,
+      "m8-form-strict": 24.095
+    },
+    "reference_md5": "7218b3ae7e51e4035c89fd96646d72d7",
+    "reps": {
+      "fast": 40,
+      "other": 20
+    },
+    "teardown_lifecycles": [
+      "lifecycle"
+    ],
+    "teardown_verified": 64
+  },
+  "env": {
+    "ACOS_STRICT_SETTLE": "default",
+    "animations": "on"
+  },
+  "errors": [],
+  "failures": {
+    "failed_by_code": {},
+    "failed_steps": 0,
+    "rows": []
+  },
+  "host_after": {
+    "loadavg1": 5.5,
+    "loadavg15": 5.33,
+    "loadavg5": 5.11,
+    "mem_available_gib": 44.54,
+    "mem_available_mib": 45605.4,
+    "mem_total_gib": 60.46,
+    "mem_total_mib": 61908.7,
+    "noisy": true,
+    "other_acos": [
+      {
+        "cmd": "/bin/bash -c cd /home/Qui/.t3/worktrees/acos/t3-43746ade-7323e343b6e1642d && CARGO_PROFILE_DEV_DEBUG=0 CARGO_PROFILE_TEST_DEBUG=0 CARGO_INCREMENTAL=0 CARGO_TARG",
+        "comm": "bash",
+        "pid": 592282
+      },
+      {
+        "cmd": "bash tools/art-runtime/run-exclusive.sh --task WVTAIL -- tools/guarded.sh --mem 12G --time 1800 -- cargo test --offline -p acos-art -p acos-services",
+        "comm": "bash",
+        "pid": 592283
+      },
+      {
+        "cmd": "bash tools/guarded.sh --mem 12G --time 1800 -- cargo test --offline -p acos-art -p acos-services",
+        "comm": "bash",
+        "pid": 592305
+      },
+      {
+        "cmd": "/usr/bin/timeout -k 5 1800 cargo test --offline -p acos-art -p acos-services",
+        "comm": "timeout",
+        "pid": 592314
+      },
+      {
+        "cmd": "/home/Qui/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/cargo test --offline -p acos-art -p acos-services",
+        "comm": "cargo",
+        "pid": 592315
+      }
+    ],
+    "runnable": "19/2870",
+    "used_mib": 16303.3,
+    "used_pct": 26.33,
+    "utc": "2026-11-18T05:23:26+00:00"
+  },
+  "host_before": {
+    "loadavg1": 5.5,
+    "loadavg15": 5.33,
+    "loadavg5": 5.11,
+    "mem_available_gib": 44.54,
+    "mem_available_mib": 45607.4,
+    "mem_total_gib": 60.46,
+    "mem_total_mib": 61908.7,
+    "noisy": true,
+    "other_acos": [
+      {
+        "cmd": "/bin/bash -c cd /home/Qui/.t3/worktrees/acos/t3-43746ade-7323e343b6e1642d && CARGO_PROFILE_DEV_DEBUG=0 CARGO_PROFILE_TEST_DEBUG=0 CARGO_INCREMENTAL=0 CARGO_TARG",
+        "comm": "bash",
+        "pid": 592282
+      },
+      {
+        "cmd": "bash tools/art-runtime/run-exclusive.sh --task WVTAIL -- tools/guarded.sh --mem 12G --time 1800 -- cargo test --offline -p acos-art -p acos-services",
+        "comm": "bash",
+        "pid": 592283
+      },
+      {
+        "cmd": "bash tools/guarded.sh --mem 12G --time 1800 -- cargo test --offline -p acos-art -p acos-services",
+        "comm": "bash",
+        "pid": 592305
+      },
+      {
+        "cmd": "/usr/bin/timeout -k 5 1800 cargo test --offline -p acos-art -p acos-services",
+        "comm": "timeout",
+        "pid": 592314
+      },
+      {
+        "cmd": "/home/Qui/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/cargo test --offline -p acos-art -p acos-services",
+        "comm": "cargo",
+        "pid": 592315
+      }
+    ],
+    "runnable": "19/2869",
+    "used_mib": 16301.3,
+    "used_pct": 26.33,
+    "utc": "2026-11-18T05:23:26+00:00"
+  },
+  "ok": true,
+  "phase": "latency",
+  "samples": {
+    "cpu_active_tap_strict_pct": {
+      "bad": 0,
+      "extra": [
+        {
+          "cpu_pct": 38.019,
+          "cpu_s": 7.54,
+          "pids": 5,
+          "seconds": 19.832,
+          "wake_pids": 5,
+          "wakeups": 3279,
+          "wakeups_per_s": 165.338
+        }
+      ],
+      "median": 38.019,
+      "n": 1,
+      "ok": 1,
+      "stats": {
+        "ci95_high": null,
+        "ci95_low": null,
+        "cv": null,
+        "max": 38.019,
+        "mean": 38.019,
+        "median": 38.019,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 38.019,
+        "n": 1,
+        "p5": 38.019,
+        "p50": 38.019,
+        "p95": 38.019,
+        "resamples": 0,
+        "spread": null,
+        "spread_pct": null,
+        "stdev": null
+      },
+      "unit": "% of one core",
+      "values": [
+        38.019
+      ]
+    },
+    "m4_launch_fast_ms": {
+      "bad": 0,
+      "extra": [
+        {
+          "animations": "on",
+          "bound": "probe-fresh",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "animations": "on",
+          "bound": "probe-fresh",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "animations": "on",
+          "bound": "probe-fresh",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "animations": "on",
+          "bound": "probe-fresh",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "animations": "on",
+          "bound": "probe-fresh",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "animations": "on",
+          "bound": "probe-fresh",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "animations": "on",
+          "bound": "probe-fresh",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "animations": "on",
+          "bound": "probe-fresh",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "animations": "on",
+          "bound": "probe-fresh",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "animations": "on",
+          "bound": "probe-fresh",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "animations": "on",
+          "bound": "probe-fresh",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "animations": "on",
+          "bound": "probe-fresh",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "animations": "on",
+          "bound": "probe-fresh",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "animations": "on",
+          "bound": "probe-fresh",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "animations": "on",
+          "bound": "probe-fresh",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "animations": "on",
+          "bound": "probe-fresh",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "animations": "on",
+          "bound": "probe-fresh",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "animations": "on",
+          "bound": "probe-fresh",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "animations": "on",
+          "bound": "probe-fresh",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "animations": "on",
+          "bound": "probe-fresh",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "animations": "on",
+          "bound": "probe-fresh",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "animations": "on",
+          "bound": "probe-fresh",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "animations": "on",
+          "bound": "probe-fresh",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "animations": "on",
+          "bound": "probe-fresh",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "animations": "on",
+          "bound": "probe-fresh",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "animations": "on",
+          "bound": "probe-fresh",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "animations": "on",
+          "bound": "probe-fresh",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "animations": "on",
+          "bound": "probe-fresh",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "animations": "on",
+          "bound": "probe-fresh",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "animations": "on",
+          "bound": "probe-fresh",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "animations": "on",
+          "bound": "probe-fresh",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "animations": "on",
+          "bound": "probe-fresh",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "animations": "on",
+          "bound": "probe-fresh",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "animations": "on",
+          "bound": "probe-fresh",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "animations": "on",
+          "bound": "probe-fresh",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "animations": "on",
+          "bound": "probe-fresh",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "animations": "on",
+          "bound": "probe-fresh",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "animations": "on",
+          "bound": "probe-fresh",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "animations": "on",
+          "bound": "probe-fresh",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "animations": "on",
+          "bound": "probe-fresh",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "verify_ok": true
+        }
+      ],
+      "median": 150.629,
+      "n": 40,
+      "ok": 40,
+      "stats": {
+        "ci95_high": 151.03634999999997,
+        "ci95_low": 149.6905,
+        "cv": 0.07221669667696323,
+        "max": 167.898,
+        "mean": 151.68287500000002,
+        "median": 150.629,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 133.094,
+        "n": 40,
+        "p5": 133.63805000000002,
+        "p50": 150.629,
+        "p95": 166.9712,
+        "resamples": 2000,
+        "spread": 0.221293044500063,
+        "spread_pct": 22.129304450006302,
+        "stdev": 10.954036174964731
+      },
+      "unit": "ms",
+      "values": [
+        143.618,
+        166.27,
+        148.576,
+        151.477,
+        165.449,
+        134.483,
+        149.046,
+        165.985,
+        166.047,
+        133.656,
+        165.275,
+        149.736,
+        150.941,
+        167.621,
+        135.018,
+        148.34,
+        133.297,
+        149.645,
+        167.898,
+        133.094,
+        150.555,
+        149.598,
+        165.857,
+        150.857,
+        150.634,
+        150.179,
+        150.185,
+        151.033,
+        150.912,
+        166.175,
+        152.153,
+        150.624,
+        165.768,
+        151.967,
+        150.692,
+        133.865,
+        150.066,
+        166.937,
+        134.403,
+        149.383
+      ]
+    },
+    "m4_launch_strict_ms": {
+      "bad": 0,
+      "extra": [
+        {
+          "animations": "on",
+          "bound": "strict-event",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "animations": "on",
+          "bound": "strict-event",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "animations": "on",
+          "bound": "strict-event",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "animations": "on",
+          "bound": "strict-event",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "animations": "on",
+          "bound": "strict-event",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "animations": "on",
+          "bound": "strict-event",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "animations": "on",
+          "bound": "strict-event",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "animations": "on",
+          "bound": "strict-event",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "animations": "on",
+          "bound": "strict-event",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "animations": "on",
+          "bound": "strict-event",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "animations": "on",
+          "bound": "strict-event",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "animations": "on",
+          "bound": "strict-event",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "animations": "on",
+          "bound": "strict-event",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "animations": "on",
+          "bound": "strict-event",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "animations": "on",
+          "bound": "strict-event",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "animations": "on",
+          "bound": "strict-event",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "animations": "on",
+          "bound": "strict-event",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "animations": "on",
+          "bound": "strict-event",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "animations": "on",
+          "bound": "strict-event",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "verify_ok": true
+        },
+        {
+          "animations": "on",
+          "bound": "strict-event",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "verify_ok": true
+        }
+      ],
+      "median": 299.3675,
+      "n": 20,
+      "ok": 20,
+      "stats": {
+        "ci95_high": 306.120375,
+        "ci95_low": 284.26750000000004,
+        "cv": 0.04235667558687227,
+        "max": 315.308,
+        "mean": 298.02465,
+        "median": 299.3675,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 281.991,
+        "n": 20,
+        "p5": 282.7263,
+        "p50": 299.3675,
+        "p95": 315.10565,
+        "resamples": 2000,
+        "spread": 0.10815920231822106,
+        "spread_pct": 10.815920231822105,
+        "stdev": 12.623333416941152
+      },
+      "unit": "ms",
+      "values": [
+        308.357,
+        312.632,
+        315.308,
+        315.095,
+        314.924,
+        296.354,
+        302.009,
+        284.012,
+        299.606,
+        299.129,
+        299.716,
+        282.894,
+        282.867,
+        283.565,
+        281.991,
+        301.97,
+        284.523,
+        282.765,
+        313.962,
+        298.814
+      ]
+    },
+    "m5_screenshot_ms": {
+      "bad": 0,
+      "extra": [
+        {
+          "png_bytes": 69532
+        },
+        {
+          "png_bytes": 69532
+        },
+        {
+          "png_bytes": 69532
+        },
+        {
+          "png_bytes": 69532
+        },
+        {
+          "png_bytes": 69532
+        },
+        {
+          "png_bytes": 69532
+        },
+        {
+          "png_bytes": 69532
+        },
+        {
+          "png_bytes": 69532
+        },
+        {
+          "png_bytes": 69532
+        },
+        {
+          "png_bytes": 69532
+        },
+        {
+          "png_bytes": 69532
+        },
+        {
+          "png_bytes": 69532
+        },
+        {
+          "png_bytes": 69532
+        },
+        {
+          "png_bytes": 69532
+        },
+        {
+          "png_bytes": 69532
+        },
+        {
+          "png_bytes": 69532
+        },
+        {
+          "png_bytes": 69532
+        },
+        {
+          "png_bytes": 69532
+        },
+        {
+          "png_bytes": 69532
+        },
+        {
+          "png_bytes": 69532
+        }
+      ],
+      "median": 11.952,
+      "n": 20,
+      "ok": 20,
+      "stats": {
+        "ci95_high": 12.281500000000001,
+        "ci95_low": 11.7005,
+        "cv": 0.0309203491727942,
+        "max": 12.451,
+        "mean": 11.9574,
+        "median": 11.952,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 11.367,
+        "n": 20,
+        "p5": 11.414499999999999,
+        "p50": 11.952,
+        "p95": 12.4206,
+        "resamples": 2000,
+        "spread": 0.08417838018741648,
+        "spread_pct": 8.417838018741648,
+        "stdev": 0.36972698319876934
+      },
+      "unit": "ms",
+      "values": [
+        11.486,
+        12.326,
+        11.871,
+        11.367,
+        12.419,
+        11.417,
+        11.653,
+        11.959,
+        11.783,
+        11.515,
+        11.828,
+        11.945,
+        12.382,
+        12.407,
+        12.115,
+        11.573,
+        12.451,
+        12.237,
+        12.35,
+        12.064
+      ]
+    },
+    "m6_reset_fast_ms": {
+      "bad": 0,
+      "extra": [
+        {
+          "after": "0",
+          "animations": "on",
+          "before": "1",
+          "bound": "probe-fresh",
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "after": "0",
+          "animations": "on",
+          "before": "1",
+          "bound": "probe-fresh",
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "after": "0",
+          "animations": "on",
+          "before": "1",
+          "bound": "probe-fresh",
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "after": "0",
+          "animations": "on",
+          "before": "1",
+          "bound": "probe-fresh",
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "after": "0",
+          "animations": "on",
+          "before": "1",
+          "bound": "probe-fresh",
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "after": "0",
+          "animations": "on",
+          "before": "1",
+          "bound": "probe-fresh",
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "after": "0",
+          "animations": "on",
+          "before": "1",
+          "bound": "probe-fresh",
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "after": "0",
+          "animations": "on",
+          "before": "1",
+          "bound": "probe-fresh",
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "after": "0",
+          "animations": "on",
+          "before": "1",
+          "bound": "probe-fresh",
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "after": "0",
+          "animations": "on",
+          "before": "1",
+          "bound": "probe-fresh",
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "after": "0",
+          "animations": "on",
+          "before": "1",
+          "bound": "probe-fresh",
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "after": "0",
+          "animations": "on",
+          "before": "1",
+          "bound": "probe-fresh",
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "after": "0",
+          "animations": "on",
+          "before": "1",
+          "bound": "probe-fresh",
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "after": "0",
+          "animations": "on",
+          "before": "1",
+          "bound": "probe-fresh",
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "after": "0",
+          "animations": "on",
+          "before": "1",
+          "bound": "probe-fresh",
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "after": "0",
+          "animations": "on",
+          "before": "1",
+          "bound": "probe-fresh",
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "after": "0",
+          "animations": "on",
+          "before": "1",
+          "bound": "probe-fresh",
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "after": "0",
+          "animations": "on",
+          "before": "1",
+          "bound": "probe-fresh",
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "after": "0",
+          "animations": "on",
+          "before": "1",
+          "bound": "probe-fresh",
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "after": "0",
+          "animations": "on",
+          "before": "1",
+          "bound": "probe-fresh",
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "after": "0",
+          "animations": "on",
+          "before": "1",
+          "bound": "probe-fresh",
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "after": "0",
+          "animations": "on",
+          "before": "1",
+          "bound": "probe-fresh",
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "after": "0",
+          "animations": "on",
+          "before": "1",
+          "bound": "probe-fresh",
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "after": "0",
+          "animations": "on",
+          "before": "1",
+          "bound": "probe-fresh",
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "after": "0",
+          "animations": "on",
+          "before": "1",
+          "bound": "probe-fresh",
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "after": "0",
+          "animations": "on",
+          "before": "1",
+          "bound": "probe-fresh",
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "after": "0",
+          "animations": "on",
+          "before": "1",
+          "bound": "probe-fresh",
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "after": "0",
+          "animations": "on",
+          "before": "1",
+          "bound": "probe-fresh",
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "after": "0",
+          "animations": "on",
+          "before": "1",
+          "bound": "probe-fresh",
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "after": "0",
+          "animations": "on",
+          "before": "1",
+          "bound": "probe-fresh",
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "after": "0",
+          "animations": "on",
+          "before": "1",
+          "bound": "probe-fresh",
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "after": "0",
+          "animations": "on",
+          "before": "1",
+          "bound": "probe-fresh",
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "after": "0",
+          "animations": "on",
+          "before": "1",
+          "bound": "probe-fresh",
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "after": "0",
+          "animations": "on",
+          "before": "1",
+          "bound": "probe-fresh",
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "after": "0",
+          "animations": "on",
+          "before": "1",
+          "bound": "probe-fresh",
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "after": "0",
+          "animations": "on",
+          "before": "1",
+          "bound": "probe-fresh",
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "after": "0",
+          "animations": "on",
+          "before": "1",
+          "bound": "probe-fresh",
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "after": "0",
+          "animations": "on",
+          "before": "1",
+          "bound": "probe-fresh",
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "after": "0",
+          "animations": "on",
+          "before": "1",
+          "bound": "probe-fresh",
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "after": "0",
+          "animations": "on",
+          "before": "1",
+          "bound": "probe-fresh",
+          "pixels_changed": null,
+          "settled": true
+        }
+      ],
+      "median": 178.5675,
+      "n": 40,
+      "ok": 40,
+      "stats": {
+        "ci95_high": 188.791,
+        "ci95_low": 174.833,
+        "cv": 0.18209856629479448,
+        "max": 321.386,
+        "mean": 189.57375,
+        "median": 178.5675,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 159.02,
+        "n": 40,
+        "p5": 160.8361,
+        "p50": 178.5675,
+        "p95": 266.3165,
+        "resamples": 2000,
+        "spread": 0.5907032354711805,
+        "spread_pct": 59.07032354711805,
+        "stdev": 34.521108082127796
+      },
+      "unit": "ms",
+      "values": [
+        179.078,
+        161.548,
+        174.833,
+        200.44,
+        243.544,
+        270.107,
+        321.386,
+        191.913,
+        178.413,
+        192.214,
+        183.712,
+        231.205,
+        266.117,
+        214.282,
+        215.943,
+        183.347,
+        178.722,
+        167.99,
+        177.237,
+        167.349,
+        160.686,
+        178.32,
+        194.222,
+        179.846,
+        161.738,
+        195.171,
+        161.371,
+        196.123,
+        176.895,
+        168.191,
+        160.844,
+        159.02,
+        175.007,
+        196.348,
+        177.961,
+        185.669,
+        162.74,
+        162.807,
+        167.919,
+        162.692
+      ]
+    },
+    "m6_reset_strict_ms": {
+      "bad": 0,
+      "extra": [
+        {
+          "after": "0",
+          "animations": "on",
+          "before": "1",
+          "bound": "strict-event",
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "after": "0",
+          "animations": "on",
+          "before": "1",
+          "bound": "strict-event",
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "after": "0",
+          "animations": "on",
+          "before": "1",
+          "bound": "strict-event",
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "after": "0",
+          "animations": "on",
+          "before": "1",
+          "bound": "strict-event",
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "after": "0",
+          "animations": "on",
+          "before": "1",
+          "bound": "strict-event",
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "after": "0",
+          "animations": "on",
+          "before": "1",
+          "bound": "strict-event",
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "after": "0",
+          "animations": "on",
+          "before": "1",
+          "bound": "strict-event",
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "after": "0",
+          "animations": "on",
+          "before": "1",
+          "bound": "strict-event",
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "after": "0",
+          "animations": "on",
+          "before": "1",
+          "bound": "strict-event",
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "after": "0",
+          "animations": "on",
+          "before": "1",
+          "bound": "strict-event",
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "after": "0",
+          "animations": "on",
+          "before": "1",
+          "bound": "strict-event",
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "after": "0",
+          "animations": "on",
+          "before": "1",
+          "bound": "strict-event",
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "after": "0",
+          "animations": "on",
+          "before": "1",
+          "bound": "strict-event",
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "after": "0",
+          "animations": "on",
+          "before": "1",
+          "bound": "strict-event",
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "after": "0",
+          "animations": "on",
+          "before": "1",
+          "bound": "strict-event",
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "after": "0",
+          "animations": "on",
+          "before": "1",
+          "bound": "strict-event",
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "after": "0",
+          "animations": "on",
+          "before": "1",
+          "bound": "strict-event",
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "after": "0",
+          "animations": "on",
+          "before": "1",
+          "bound": "strict-event",
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "after": "0",
+          "animations": "on",
+          "before": "1",
+          "bound": "strict-event",
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "after": "0",
+          "animations": "on",
+          "before": "1",
+          "bound": "strict-event",
+          "pixels_changed": null,
+          "settled": true
+        }
+      ],
+      "median": 318.174,
+      "n": 20,
+      "ok": 20,
+      "stats": {
+        "ci95_high": 319.6245,
+        "ci95_low": 304.416,
+        "cv": 0.04084348615575525,
+        "max": 337.924,
+        "mean": 315.7566,
+        "median": 318.174,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 300.579,
+        "n": 20,
+        "p5": 301.97455,
+        "p50": 318.174,
+        "p95": 337.27230000000003,
+        "resamples": 2000,
+        "spread": 0.11093851163200014,
+        "spread_pct": 11.093851163200014,
+        "stdev": 12.896600320688346
+      },
+      "unit": "ms",
+      "values": [
+        303.379,
+        309.735,
+        318.959,
+        320.071,
+        334.801,
+        321.337,
+        337.238,
+        302.183,
+        304.416,
+        319.178,
+        318.963,
+        302.73,
+        318.114,
+        300.579,
+        304.101,
+        336.037,
+        305.105,
+        302.048,
+        337.924,
+        318.234
+      ]
+    },
+    "m7_tree_fast_ms": {
+      "bad": 0,
+      "extra": [
+        {
+          "bound": "probe-fresh",
+          "count": "0",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "truncated": false
+        },
+        {
+          "bound": "probe-fresh",
+          "count": "0",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "truncated": false
+        },
+        {
+          "bound": "probe-fresh",
+          "count": "0",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "truncated": false
+        },
+        {
+          "bound": "probe-fresh",
+          "count": "0",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "truncated": false
+        },
+        {
+          "bound": "probe-fresh",
+          "count": "0",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "truncated": false
+        },
+        {
+          "bound": "probe-fresh",
+          "count": "0",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "truncated": false
+        },
+        {
+          "bound": "probe-fresh",
+          "count": "0",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "truncated": false
+        },
+        {
+          "bound": "probe-fresh",
+          "count": "0",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "truncated": false
+        },
+        {
+          "bound": "probe-fresh",
+          "count": "0",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "truncated": false
+        },
+        {
+          "bound": "probe-fresh",
+          "count": "0",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "truncated": false
+        },
+        {
+          "bound": "probe-fresh",
+          "count": "0",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "truncated": false
+        },
+        {
+          "bound": "probe-fresh",
+          "count": "0",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "truncated": false
+        },
+        {
+          "bound": "probe-fresh",
+          "count": "0",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "truncated": false
+        },
+        {
+          "bound": "probe-fresh",
+          "count": "0",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "truncated": false
+        },
+        {
+          "bound": "probe-fresh",
+          "count": "0",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "truncated": false
+        },
+        {
+          "bound": "probe-fresh",
+          "count": "0",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "truncated": false
+        },
+        {
+          "bound": "probe-fresh",
+          "count": "0",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "truncated": false
+        },
+        {
+          "bound": "probe-fresh",
+          "count": "0",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "truncated": false
+        },
+        {
+          "bound": "probe-fresh",
+          "count": "0",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "truncated": false
+        },
+        {
+          "bound": "probe-fresh",
+          "count": "0",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "truncated": false
+        }
+      ],
+      "median": 0.509,
+      "n": 20,
+      "ok": 20,
+      "stats": {
+        "ci95_high": 0.5315000000000001,
+        "ci95_low": 0.487,
+        "cv": 0.2005246142813694,
+        "max": 0.944,
+        "mean": 0.53925,
+        "median": 0.509,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 0.461,
+        "n": 20,
+        "p5": 0.46290000000000003,
+        "p50": 0.509,
+        "p95": 0.6542500000000002,
+        "resamples": 2000,
+        "spread": 0.3759332023575642,
+        "spread_pct": 37.59332023575642,
+        "stdev": 0.10813289825122845
+      },
+      "unit": "ms",
+      "values": [
+        0.594,
+        0.944,
+        0.526,
+        0.639,
+        0.466,
+        0.487,
+        0.473,
+        0.487,
+        0.463,
+        0.468,
+        0.492,
+        0.604,
+        0.587,
+        0.537,
+        0.517,
+        0.506,
+        0.512,
+        0.524,
+        0.498,
+        0.461
+      ]
+    },
+    "m7_tree_strict_ms": {
+      "bad": 0,
+      "extra": [
+        {
+          "bound": "strict-event",
+          "count": "0",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "truncated": false
+        },
+        {
+          "bound": "strict-event",
+          "count": "0",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "truncated": false
+        },
+        {
+          "bound": "strict-event",
+          "count": "0",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "truncated": false
+        },
+        {
+          "bound": "strict-event",
+          "count": "0",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "truncated": false
+        },
+        {
+          "bound": "strict-event",
+          "count": "0",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "truncated": false
+        },
+        {
+          "bound": "strict-event",
+          "count": "0",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "truncated": false
+        },
+        {
+          "bound": "strict-event",
+          "count": "0",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "truncated": false
+        },
+        {
+          "bound": "strict-event",
+          "count": "0",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "truncated": false
+        },
+        {
+          "bound": "strict-event",
+          "count": "0",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "truncated": false
+        },
+        {
+          "bound": "strict-event",
+          "count": "0",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "truncated": false
+        },
+        {
+          "bound": "strict-event",
+          "count": "0",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "truncated": false
+        },
+        {
+          "bound": "strict-event",
+          "count": "0",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "truncated": false
+        },
+        {
+          "bound": "strict-event",
+          "count": "0",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "truncated": false
+        },
+        {
+          "bound": "strict-event",
+          "count": "0",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "truncated": false
+        },
+        {
+          "bound": "strict-event",
+          "count": "0",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "truncated": false
+        },
+        {
+          "bound": "strict-event",
+          "count": "0",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "truncated": false
+        },
+        {
+          "bound": "strict-event",
+          "count": "0",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "truncated": false
+        },
+        {
+          "bound": "strict-event",
+          "count": "0",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "truncated": false
+        },
+        {
+          "bound": "strict-event",
+          "count": "0",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "truncated": false
+        },
+        {
+          "bound": "strict-event",
+          "count": "0",
+          "nodes": 14,
+          "pixels_changed": null,
+          "settled": true,
+          "truncated": false
+        }
+      ],
+      "median": 41.3145,
+      "n": 20,
+      "ok": 20,
+      "stats": {
+        "ci95_high": 41.4255,
+        "ci95_low": 41.129000000000005,
+        "cv": 0.005254314999332209,
+        "max": 41.707,
+        "mean": 41.310900000000004,
+        "median": 41.3145,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 41.024,
+        "n": 20,
+        "p5": 41.0297,
+        "p50": 41.3145,
+        "p95": 41.6633,
+        "resamples": 2000,
+        "spread": 0.015336020041389857,
+        "spread_pct": 1.5336020041389857,
+        "stdev": 0.217060481505913
+      },
+      "unit": "ms",
+      "values": [
+        41.382,
+        41.063,
+        41.438,
+        41.356,
+        41.426,
+        41.425,
+        41.234,
+        41.387,
+        41.06,
+        41.03,
+        41.263,
+        41.145,
+        41.491,
+        41.652,
+        41.707,
+        41.273,
+        41.024,
+        41.113,
+        41.661,
+        41.088
+      ]
+    },
+    "m8_tap_counter_fast_ms": {
+      "bad": 0,
+      "extra": [
+        {
+          "ack_ms": 5,
+          "animations": "on",
+          "bound": "state-commit",
+          "first_change_ms": 4,
+          "frame_ms": 5,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "animations": "on",
+          "bound": "state-commit",
+          "first_change_ms": 19,
+          "frame_ms": 19,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "animations": "on",
+          "bound": "state-commit",
+          "first_change_ms": 5,
+          "frame_ms": 5,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "animations": "on",
+          "bound": "state-commit",
+          "first_change_ms": 21,
+          "frame_ms": 21,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "animations": "on",
+          "bound": "state-commit",
+          "first_change_ms": 4,
+          "frame_ms": 5,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "animations": "on",
+          "bound": "state-commit",
+          "first_change_ms": 20,
+          "frame_ms": 20,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "animations": "on",
+          "bound": "state-commit",
+          "first_change_ms": 5,
+          "frame_ms": 5,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "animations": "on",
+          "bound": "state-commit",
+          "first_change_ms": 21,
+          "frame_ms": 21,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "animations": "on",
+          "bound": "state-commit",
+          "first_change_ms": 5,
+          "frame_ms": 5,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "animations": "on",
+          "bound": "state-commit",
+          "first_change_ms": 20,
+          "frame_ms": 20,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "animations": "on",
+          "bound": "state-commit",
+          "first_change_ms": 4,
+          "frame_ms": 5,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "animations": "on",
+          "bound": "state-commit",
+          "first_change_ms": 20,
+          "frame_ms": 20,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "animations": "on",
+          "bound": "state-commit",
+          "first_change_ms": 5,
+          "frame_ms": 5,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "animations": "on",
+          "bound": "state-commit",
+          "first_change_ms": 21,
+          "frame_ms": 21,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "animations": "on",
+          "bound": "state-commit",
+          "first_change_ms": 4,
+          "frame_ms": 5,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "animations": "on",
+          "bound": "state-commit",
+          "first_change_ms": 20,
+          "frame_ms": 20,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "animations": "on",
+          "bound": "state-commit",
+          "first_change_ms": 4,
+          "frame_ms": 5,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "animations": "on",
+          "bound": "state-commit",
+          "first_change_ms": 20,
+          "frame_ms": 20,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "animations": "on",
+          "bound": "state-commit",
+          "first_change_ms": 5,
+          "frame_ms": 5,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "animations": "on",
+          "bound": "state-commit",
+          "first_change_ms": 20,
+          "frame_ms": 20,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "animations": "on",
+          "bound": "state-commit",
+          "first_change_ms": 5,
+          "frame_ms": 6,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "animations": "on",
+          "bound": "state-commit",
+          "first_change_ms": 20,
+          "frame_ms": 20,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "animations": "on",
+          "bound": "state-commit",
+          "first_change_ms": 4,
+          "frame_ms": 5,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "animations": "on",
+          "bound": "state-commit",
+          "first_change_ms": 20,
+          "frame_ms": 20,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "animations": "on",
+          "bound": "state-commit",
+          "first_change_ms": 5,
+          "frame_ms": 5,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "animations": "on",
+          "bound": "state-commit",
+          "first_change_ms": 20,
+          "frame_ms": 20,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "animations": "on",
+          "bound": "state-commit",
+          "first_change_ms": 4,
+          "frame_ms": 5,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "animations": "on",
+          "bound": "state-commit",
+          "first_change_ms": 20,
+          "frame_ms": 20,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "animations": "on",
+          "bound": "state-commit",
+          "first_change_ms": 5,
+          "frame_ms": 5,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "animations": "on",
+          "bound": "state-commit",
+          "first_change_ms": 21,
+          "frame_ms": 21,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "animations": "on",
+          "bound": "state-commit",
+          "first_change_ms": 5,
+          "frame_ms": 6,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "animations": "on",
+          "bound": "state-commit",
+          "first_change_ms": 20,
+          "frame_ms": 20,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "animations": "on",
+          "bound": "state-commit",
+          "first_change_ms": 5,
+          "frame_ms": 5,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "animations": "on",
+          "bound": "state-commit",
+          "first_change_ms": 20,
+          "frame_ms": 20,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "animations": "on",
+          "bound": "state-commit",
+          "first_change_ms": 4,
+          "frame_ms": 5,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "animations": "on",
+          "bound": "state-commit",
+          "first_change_ms": 20,
+          "frame_ms": 20,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "animations": "on",
+          "bound": "state-commit",
+          "first_change_ms": 4,
+          "frame_ms": 5,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "animations": "on",
+          "bound": "state-commit",
+          "first_change_ms": 20,
+          "frame_ms": 20,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "animations": "on",
+          "bound": "state-commit",
+          "first_change_ms": 5,
+          "frame_ms": 6,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "animations": "on",
+          "bound": "state-commit",
+          "first_change_ms": 20,
+          "frame_ms": 20,
+          "pixels_changed": null,
+          "settled": true
+        }
+      ],
+      "median": 24.515,
+      "n": 40,
+      "ok": 40,
+      "stats": {
+        "ci95_high": 32.04600000000001,
+        "ci95_low": 17.4135,
+        "cv": 0.31149488416692445,
+        "max": 33.769,
+        "mean": 24.865625,
+        "median": 24.515,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 16.689,
+        "n": 40,
+        "p5": 16.76025,
+        "p50": 24.515,
+        "p95": 33.26219999999999,
+        "resamples": 2000,
+        "spread": 0.6731368549867426,
+        "spread_pct": 67.31368549867426,
+        "stdev": 7.745514979113182
+      },
+      "unit": "ms",
+      "values": [
+        17.808,
+        31.222,
+        16.83,
+        33.769,
+        17.294,
+        31.678,
+        16.77,
+        33.146,
+        17.466,
+        32.829,
+        17.207,
+        31.948,
+        17.006,
+        33.257,
+        16.727,
+        32.782,
+        17.309,
+        31.989,
+        17.399,
+        32.752,
+        17.223,
+        32.765,
+        17.339,
+        32.008,
+        17.307,
+        32.604,
+        17.545,
+        31.96,
+        16.762,
+        33.361,
+        17.508,
+        32.084,
+        17.387,
+        32.564,
+        17.66,
+        32.133,
+        16.689,
+        32.791,
+        17.428,
+        32.319
+      ]
+    },
+    "m8_tap_counter_strict_ms": {
+      "bad": 0,
+      "extra": [
+        {
+          "ack_ms": 5,
+          "animations": "on",
+          "bound": "strict-event",
+          "first_change_ms": 55,
+          "frame_ms": 920,
+          "pixels_changed": true,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "animations": "on",
+          "bound": "strict-event",
+          "first_change_ms": 55,
+          "frame_ms": 912,
+          "pixels_changed": true,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "animations": "on",
+          "bound": "strict-event",
+          "first_change_ms": 66,
+          "frame_ms": 937,
+          "pixels_changed": true,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "animations": "on",
+          "bound": "strict-event",
+          "first_change_ms": 65,
+          "frame_ms": 946,
+          "pixels_changed": true,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "animations": "on",
+          "bound": "strict-event",
+          "first_change_ms": 55,
+          "frame_ms": 919,
+          "pixels_changed": true,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "animations": "on",
+          "bound": "strict-event",
+          "first_change_ms": 55,
+          "frame_ms": 929,
+          "pixels_changed": true,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "animations": "on",
+          "bound": "strict-event",
+          "first_change_ms": 65,
+          "frame_ms": 936,
+          "pixels_changed": true,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "animations": "on",
+          "bound": "strict-event",
+          "first_change_ms": 75,
+          "frame_ms": 933,
+          "pixels_changed": true,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "animations": "on",
+          "bound": "strict-event",
+          "first_change_ms": 55,
+          "frame_ms": 914,
+          "pixels_changed": true,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "animations": "on",
+          "bound": "strict-event",
+          "first_change_ms": 55,
+          "frame_ms": 935,
+          "pixels_changed": true,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "animations": "on",
+          "bound": "strict-event",
+          "first_change_ms": 65,
+          "frame_ms": 944,
+          "pixels_changed": true,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "animations": "on",
+          "bound": "strict-event",
+          "first_change_ms": 55,
+          "frame_ms": 932,
+          "pixels_changed": true,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "animations": "on",
+          "bound": "strict-event",
+          "first_change_ms": 65,
+          "frame_ms": 936,
+          "pixels_changed": true,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "animations": "on",
+          "bound": "strict-event",
+          "first_change_ms": 65,
+          "frame_ms": 939,
+          "pixels_changed": true,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "animations": "on",
+          "bound": "strict-event",
+          "first_change_ms": 56,
+          "frame_ms": 937,
+          "pixels_changed": true,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "animations": "on",
+          "bound": "strict-event",
+          "first_change_ms": 65,
+          "frame_ms": 943,
+          "pixels_changed": true,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "animations": "on",
+          "bound": "strict-event",
+          "first_change_ms": 55,
+          "frame_ms": 914,
+          "pixels_changed": true,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "animations": "on",
+          "bound": "strict-event",
+          "first_change_ms": 65,
+          "frame_ms": 943,
+          "pixels_changed": true,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "animations": "on",
+          "bound": "strict-event",
+          "first_change_ms": 55,
+          "frame_ms": 913,
+          "pixels_changed": true,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "animations": "on",
+          "bound": "strict-event",
+          "first_change_ms": 66,
+          "frame_ms": 945,
+          "pixels_changed": true,
+          "settled": true
+        }
+      ],
+      "median": 947.2829999999999,
+      "n": 20,
+      "ok": 20,
+      "stats": {
+        "ci95_high": 950.274,
+        "ci95_low": 936.6375,
+        "cv": 0.012273010329762999,
+        "max": 958.089,
+        "mean": 943.8006499999999,
+        "median": 947.2829999999999,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 924.459,
+        "n": 20,
+        "p5": 925.3159,
+        "p50": 947.2829999999999,
+        "p95": 957.0069500000001,
+        "resamples": 2000,
+        "spread": 0.033454680385903705,
+        "spread_pct": 3.3454680385903703,
+        "stdev": 11.583275126687031
+      },
+      "unit": "ms",
+      "values": [
+        933.544,
+        924.459,
+        948.031,
+        958.089,
+        932.195,
+        941.08,
+        948.951,
+        945.9,
+        926.307,
+        946.535,
+        956.95,
+        944.409,
+        948.83,
+        951.404,
+        949.144,
+        955.962,
+        926.801,
+        955.576,
+        925.361,
+        956.485
+      ]
+    },
+    "m8_tap_form_fast_ms": {
+      "bad": 0,
+      "extra": [
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 15,
+          "frame_ms": 15,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 16,
+          "frame_ms": 15,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 15,
+          "frame_ms": 14,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 16,
+          "frame_ms": 15,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 15,
+          "frame_ms": 14,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 16,
+          "frame_ms": 15,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 16,
+          "frame_ms": 16,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 16,
+          "frame_ms": 15,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 16,
+          "frame_ms": 15,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 15,
+          "frame_ms": 15,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 15,
+          "frame_ms": 14,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 16,
+          "frame_ms": 15,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 16,
+          "frame_ms": 15,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 15,
+          "frame_ms": 15,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 15,
+          "frame_ms": 14,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 15,
+          "frame_ms": 14,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 16,
+          "frame_ms": 15,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 15,
+          "frame_ms": 14,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 15,
+          "frame_ms": 14,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 16,
+          "frame_ms": 15,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 16,
+          "frame_ms": 15,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 16,
+          "frame_ms": 15,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 15,
+          "frame_ms": 15,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 15,
+          "frame_ms": 14,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 15,
+          "frame_ms": 14,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 15,
+          "frame_ms": 14,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 15,
+          "frame_ms": 14,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 16,
+          "frame_ms": 15,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 17,
+          "frame_ms": 16,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 16,
+          "frame_ms": 15,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 16,
+          "frame_ms": 15,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 17,
+          "frame_ms": 16,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 15,
+          "frame_ms": 14,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 15,
+          "frame_ms": 14,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 16,
+          "frame_ms": 15,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 16,
+          "frame_ms": 15,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 15,
+          "frame_ms": 14,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 16,
+          "frame_ms": 15,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 15,
+          "frame_ms": 14,
+          "pixels_changed": null,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "bound": "state-commit",
+          "error": "Name is required",
+          "first_change_ms": 29,
+          "frame_ms": 28,
+          "pixels_changed": null,
+          "settled": true
+        }
+      ],
+      "median": 28.0975,
+      "n": 40,
+      "ok": 40,
+      "stats": {
+        "ci95_high": 28.557000000000002,
+        "ci95_low": 27.858,
+        "cv": 0.12404648694297253,
+        "max": 50.094,
+        "mean": 29.000799999999998,
+        "median": 28.0975,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 26.614,
+        "n": 40,
+        "p5": 27.20215,
+        "p50": 28.0975,
+        "p95": 30.59015,
+        "resamples": 2000,
+        "spread": 0.12058012278672485,
+        "spread_pct": 12.058012278672486,
+        "stdev": 3.5974473585357574
+      },
+      "unit": "ms",
+      "values": [
+        27.208,
+        28.905,
+        28.206,
+        27.822,
+        27.614,
+        27.304,
+        28.187,
+        28.068,
+        27.991,
+        27.609,
+        26.614,
+        27.565,
+        27.698,
+        28.127,
+        27.969,
+        27.091,
+        27.856,
+        28.552,
+        29.849,
+        30.532,
+        27.697,
+        30.571,
+        27.455,
+        30.479,
+        30.457,
+        30.106,
+        30.051,
+        28.693,
+        28.562,
+        27.918,
+        28.228,
+        30.954,
+        27.782,
+        28.281,
+        27.57,
+        29.539,
+        27.86,
+        28.996,
+        27.972,
+        50.094
+      ]
+    },
+    "m8_tap_form_strict_ms": {
+      "bad": 0,
+      "extra": [
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "error": "Name is required",
+          "first_change_ms": 56,
+          "frame_ms": 927,
+          "pixels_changed": true,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "error": "Name is required",
+          "first_change_ms": 46,
+          "frame_ms": 906,
+          "pixels_changed": true,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "error": "Name is required",
+          "first_change_ms": 56,
+          "frame_ms": 927,
+          "pixels_changed": true,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "error": "Name is required",
+          "first_change_ms": 55,
+          "frame_ms": 927,
+          "pixels_changed": true,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "error": "Name is required",
+          "first_change_ms": 56,
+          "frame_ms": 927,
+          "pixels_changed": true,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "error": "Name is required",
+          "first_change_ms": 56,
+          "frame_ms": 918,
+          "pixels_changed": true,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "error": "Name is required",
+          "first_change_ms": 56,
+          "frame_ms": 919,
+          "pixels_changed": true,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "error": "Name is required",
+          "first_change_ms": 55,
+          "frame_ms": 906,
+          "pixels_changed": true,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "error": "Name is required",
+          "first_change_ms": 56,
+          "frame_ms": 927,
+          "pixels_changed": true,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "error": "Name is required",
+          "first_change_ms": 56,
+          "frame_ms": 919,
+          "pixels_changed": true,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "error": "Name is required",
+          "first_change_ms": 56,
+          "frame_ms": 907,
+          "pixels_changed": true,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "error": "Name is required",
+          "first_change_ms": 55,
+          "frame_ms": 920,
+          "pixels_changed": true,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "error": "Name is required",
+          "first_change_ms": 56,
+          "frame_ms": 906,
+          "pixels_changed": true,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "error": "Name is required",
+          "first_change_ms": 55,
+          "frame_ms": 917,
+          "pixels_changed": true,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "error": "Name is required",
+          "first_change_ms": 56,
+          "frame_ms": 926,
+          "pixels_changed": true,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "error": "Name is required",
+          "first_change_ms": 56,
+          "frame_ms": 926,
+          "pixels_changed": true,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "error": "Name is required",
+          "first_change_ms": 56,
+          "frame_ms": 917,
+          "pixels_changed": true,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "error": "Name is required",
+          "first_change_ms": 56,
+          "frame_ms": 928,
+          "pixels_changed": true,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "error": "Name is required",
+          "first_change_ms": 56,
+          "frame_ms": 917,
+          "pixels_changed": true,
+          "settled": true
+        },
+        {
+          "ack_ms": 5,
+          "bound": "strict-event",
+          "error": "Name is required",
+          "first_change_ms": 56,
+          "frame_ms": 916,
+          "pixels_changed": true,
+          "settled": true
+        }
+      ],
+      "median": 932.6410000000001,
+      "n": 20,
+      "ok": 20,
+      "stats": {
+        "ci95_high": 939.0435,
+        "ci95_low": 929.5550000000001,
+        "cv": 0.008305185633306242,
+        "max": 940.376,
+        "mean": 932.24545,
+        "median": 932.6410000000001,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 917.853,
+        "n": 20,
+        "p5": 919.6950499999999,
+        "p50": 932.6410000000001,
+        "p95": 940.3693499999999,
+        "resamples": 2000,
+        "spread": 0.022167479233703016,
+        "spread_pct": 2.2167479233703014,
+        "stdev": 7.742471518055113
+      },
+      "unit": "ms",
+      "values": [
+        940.369,
+        917.853,
+        939.018,
+        940.376,
+        939.137,
+        930.681,
+        930.798,
+        919.792,
+        940.031,
+        934.484,
+        920.039,
+        935.636,
+        920.541,
+        929.995,
+        938.977,
+        939.069,
+        930.067,
+        940.046,
+        929.115,
+        928.885
+      ]
+    },
+    "tap_ack_ms": {
+      "bad": 0,
+      "median": 5.0,
+      "n": 120,
+      "ok": 120,
+      "stats": {
+        "ci95_high": 5.0,
+        "ci95_low": 5.0,
+        "cv": 0.0,
+        "max": 5.0,
+        "mean": 5.0,
+        "median": 5.0,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 5.0,
+        "n": 120,
+        "p5": 5.0,
+        "p50": 5.0,
+        "p95": 5.0,
+        "resamples": 2000,
+        "spread": 0.0,
+        "spread_pct": 0.0,
+        "stdev": 0.0
+      },
+      "unit": "ms",
+      "values": [
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0,
+        5.0
+      ]
+    },
+    "teardown_ms": {
+      "bad": 0,
+      "median": 23.0,
+      "n": 64,
+      "ok": 64,
+      "stats": {
+        "ci95_high": 23.0,
+        "ci95_low": 22.0,
+        "cv": 0.10419967507710626,
+        "max": 37.0,
+        "mean": 23.3125,
+        "median": 23.0,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 20.0,
+        "n": 64,
+        "p5": 21.0,
+        "p50": 23.0,
+        "p95": 26.849999999999994,
+        "resamples": 2000,
+        "spread": 0.2543478260869563,
+        "spread_pct": 25.434782608695627,
+        "stdev": 2.4291549252350397
+      },
+      "unit": "ms",
+      "values": [
+        28.0,
+        25.0,
+        25.0,
+        25.0,
+        27.0,
+        23.0,
+        23.0,
+        24.0,
+        24.0,
+        25.0,
+        24.0,
+        24.0,
+        24.0,
+        25.0,
+        22.0,
+        23.0,
+        25.0,
+        25.0,
+        25.0,
+        26.0,
+        23.0,
+        24.0,
+        21.0,
+        24.0,
+        21.0,
+        23.0,
+        23.0,
+        23.0,
+        22.0,
+        23.0,
+        22.0,
+        22.0,
+        21.0,
+        21.0,
+        24.0,
+        22.0,
+        23.0,
+        22.0,
+        22.0,
+        22.0,
+        22.0,
+        22.0,
+        22.0,
+        21.0,
+        22.0,
+        23.0,
+        21.0,
+        22.0,
+        22.0,
+        20.0,
+        23.0,
+        22.0,
+        20.0,
+        22.0,
+        22.0,
+        23.0,
+        22.0,
+        22.0,
+        23.0,
+        24.0,
+        25.0,
+        22.0,
+        28.0,
+        37.0
+      ]
+    },
+    "teardown_wall_ms": {
+      "bad": 0,
+      "median": 23.804000000000002,
+      "n": 64,
+      "ok": 64,
+      "stats": {
+        "ci95_high": 24.2595,
+        "ci95_low": 23.198487500000002,
+        "cv": 0.10021929213423639,
+        "max": 38.262,
+        "mean": 24.272109375,
+        "median": 23.804000000000002,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 21.402,
+        "n": 64,
+        "p5": 22.10415,
+        "p50": 23.804000000000002,
+        "p95": 27.576999999999998,
+        "resamples": 2000,
+        "spread": 0.22991303982523933,
+        "spread_pct": 22.991303982523934,
+        "stdev": 2.4325336201672627
+      },
+      "unit": "ms",
+      "values": [
+        29.326,
+        26.195,
+        26.352,
+        25.471,
+        27.754,
+        24.015,
+        23.794,
+        24.787,
+        24.47,
+        25.724,
+        24.87,
+        24.621,
+        24.595,
+        25.776,
+        22.868,
+        24.183,
+        25.998,
+        26.343,
+        25.973,
+        26.574,
+        23.728,
+        24.719,
+        22.456,
+        24.604,
+        22.071,
+        24.226,
+        24.293,
+        24.113,
+        22.519,
+        24.024,
+        23.417,
+        22.587,
+        21.798,
+        22.378,
+        24.933,
+        23.026,
+        23.534,
+        23.113,
+        23.058,
+        22.982,
+        23.199,
+        23.299,
+        23.003,
+        22.476,
+        22.992,
+        23.832,
+        22.292,
+        22.72,
+        23.114,
+        21.428,
+        23.814,
+        22.747,
+        21.402,
+        23.008,
+        22.379,
+        23.734,
+        23.032,
+        22.593,
+        23.942,
+        24.535,
+        25.704,
+        23.238,
+        29.402,
+        38.262
+      ]
+    }
+  },
+  "schema": "acos-bench-phase/2",
+  "survivors": [],
+  "teardowns": [
+    {
+      "code": null,
+      "label": "m4-strict",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 28,
+      "verified": true,
+      "wall_ms": 29.326
+    },
+    {
+      "code": null,
+      "label": "m4-strict",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 25,
+      "verified": true,
+      "wall_ms": 26.195
+    },
+    {
+      "code": null,
+      "label": "m4-strict",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 25,
+      "verified": true,
+      "wall_ms": 26.352
+    },
+    {
+      "code": null,
+      "label": "m4-strict",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 25,
+      "verified": true,
+      "wall_ms": 25.471
+    },
+    {
+      "code": null,
+      "label": "m4-strict",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 27,
+      "verified": true,
+      "wall_ms": 27.754
+    },
+    {
+      "code": null,
+      "label": "m4-strict",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 23,
+      "verified": true,
+      "wall_ms": 24.015
+    },
+    {
+      "code": null,
+      "label": "m4-strict",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 23,
+      "verified": true,
+      "wall_ms": 23.794
+    },
+    {
+      "code": null,
+      "label": "m4-strict",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 24,
+      "verified": true,
+      "wall_ms": 24.787
+    },
+    {
+      "code": null,
+      "label": "m4-strict",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 24,
+      "verified": true,
+      "wall_ms": 24.47
+    },
+    {
+      "code": null,
+      "label": "m4-strict",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 25,
+      "verified": true,
+      "wall_ms": 25.724
+    },
+    {
+      "code": null,
+      "label": "m4-strict",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 24,
+      "verified": true,
+      "wall_ms": 24.87
+    },
+    {
+      "code": null,
+      "label": "m4-strict",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 24,
+      "verified": true,
+      "wall_ms": 24.621
+    },
+    {
+      "code": null,
+      "label": "m4-strict",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 24,
+      "verified": true,
+      "wall_ms": 24.595
+    },
+    {
+      "code": null,
+      "label": "m4-strict",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 25,
+      "verified": true,
+      "wall_ms": 25.776
+    },
+    {
+      "code": null,
+      "label": "m4-strict",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 22,
+      "verified": true,
+      "wall_ms": 22.868
+    },
+    {
+      "code": null,
+      "label": "m4-strict",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 23,
+      "verified": true,
+      "wall_ms": 24.183
+    },
+    {
+      "code": null,
+      "label": "m4-strict",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 25,
+      "verified": true,
+      "wall_ms": 25.998
+    },
+    {
+      "code": null,
+      "label": "m4-strict",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 25,
+      "verified": true,
+      "wall_ms": 26.343
+    },
+    {
+      "code": null,
+      "label": "m4-strict",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 25,
+      "verified": true,
+      "wall_ms": 25.973
+    },
+    {
+      "code": null,
+      "label": "m4-strict",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 26,
+      "verified": true,
+      "wall_ms": 26.574
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 23,
+      "verified": true,
+      "wall_ms": 23.728
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 24,
+      "verified": true,
+      "wall_ms": 24.719
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 21,
+      "verified": true,
+      "wall_ms": 22.456
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 24,
+      "verified": true,
+      "wall_ms": 24.604
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 21,
+      "verified": true,
+      "wall_ms": 22.071
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 23,
+      "verified": true,
+      "wall_ms": 24.226
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 23,
+      "verified": true,
+      "wall_ms": 24.293
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 23,
+      "verified": true,
+      "wall_ms": 24.113
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 22,
+      "verified": true,
+      "wall_ms": 22.519
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 23,
+      "verified": true,
+      "wall_ms": 24.024
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 22,
+      "verified": true,
+      "wall_ms": 23.417
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 22,
+      "verified": true,
+      "wall_ms": 22.587
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 21,
+      "verified": true,
+      "wall_ms": 21.798
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 21,
+      "verified": true,
+      "wall_ms": 22.378
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 24,
+      "verified": true,
+      "wall_ms": 24.933
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 22,
+      "verified": true,
+      "wall_ms": 23.026
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 23,
+      "verified": true,
+      "wall_ms": 23.534
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 22,
+      "verified": true,
+      "wall_ms": 23.113
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 22,
+      "verified": true,
+      "wall_ms": 23.058
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 22,
+      "verified": true,
+      "wall_ms": 22.982
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 22,
+      "verified": true,
+      "wall_ms": 23.199
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 22,
+      "verified": true,
+      "wall_ms": 23.299
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 22,
+      "verified": true,
+      "wall_ms": 23.003
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 21,
+      "verified": true,
+      "wall_ms": 22.476
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 22,
+      "verified": true,
+      "wall_ms": 22.992
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 23,
+      "verified": true,
+      "wall_ms": 23.832
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 21,
+      "verified": true,
+      "wall_ms": 22.292
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 22,
+      "verified": true,
+      "wall_ms": 22.72
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 22,
+      "verified": true,
+      "wall_ms": 23.114
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 20,
+      "verified": true,
+      "wall_ms": 21.428
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 23,
+      "verified": true,
+      "wall_ms": 23.814
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 22,
+      "verified": true,
+      "wall_ms": 22.747
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 20,
+      "verified": true,
+      "wall_ms": 21.402
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 22,
+      "verified": true,
+      "wall_ms": 23.008
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 22,
+      "verified": true,
+      "wall_ms": 22.379
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 23,
+      "verified": true,
+      "wall_ms": 23.734
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 22,
+      "verified": true,
+      "wall_ms": 23.032
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 22,
+      "verified": true,
+      "wall_ms": 22.593
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 23,
+      "verified": true,
+      "wall_ms": 23.942
+    },
+    {
+      "code": null,
+      "label": "m4-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 24,
+      "verified": true,
+      "wall_ms": 24.535
+    },
+    {
+      "code": null,
+      "label": "m6-strict",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 25,
+      "verified": true,
+      "wall_ms": 25.704
+    },
+    {
+      "code": null,
+      "label": "m6-fast",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 22,
+      "verified": true,
+      "wall_ms": 23.238
+    },
+    {
+      "code": null,
+      "label": "m8-counter",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 28,
+      "verified": true,
+      "wall_ms": 29.402
+    },
+    {
+      "code": null,
+      "label": "m8-form",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 37,
+      "verified": true,
+      "wall_ms": 38.262
+    }
+  ],
+  "utc": "2026-11-18T05:23:26+00:00"
+}

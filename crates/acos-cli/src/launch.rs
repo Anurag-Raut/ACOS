@@ -131,6 +131,23 @@ pub struct LaunchArgs {
     #[arg(long, value_name = "on|off")]
     pub animations: Option<String>,
 
+    /// LAUNCHEXTRAS: the Intent action the launched Activity must receive
+    /// (`Intent.setAction`). ART only: the real host-built `LaunchActivityItem`
+    /// Intent carries it, so `getIntent().getAction()` is this value.
+    #[arg(long = "intent-action", value_name = "ACTION")]
+    pub intent_action: Option<String>,
+
+    /// LAUNCHEXTRAS: the Intent data URI (`Intent.setData(Uri.parse(...))`).
+    /// ART only, same host-built Intent.
+    #[arg(long = "data", value_name = "URI")]
+    pub data: Option<String>,
+
+    /// LAUNCHEXTRAS: one typed extra, `KEY=VALUE` (repeatable). `VALUE` is a
+    /// JSON scalar/array (`42`, `true`, `0.5`, `["a","b"]`) or the explicit
+    /// `{"type":"long","value":7}` form; a bare word is a string. ART only.
+    #[arg(long = "extra", value_name = "KEY=VALUE")]
+    pub extra: Vec<String>,
+
     /// MPROC7: how long a lazily spawned secondary ART process may sit idle
     /// (no started activity, no started/bound service, no visible window)
     /// before the launcher kills it; the next intent respawns it. `0` disables
@@ -222,6 +239,20 @@ pub fn run(args: LaunchArgs) -> ExitCode {
         eprintln!(
             "launch: --extra-apk installs packages into an ART session; add \n\
              `--engine art` (the Rust VM runs one APK and would silently install nothing)."
+        );
+        return ExitCode::FAILURE;
+    }
+    // LAUNCHEXTRAS: the Intent fields are a session-start property of the real
+    // ART launch (the host builds the LaunchActivityItem Intent). The in-process
+    // Rust VM has no such transaction, so it refuses instead of accepting the
+    // flags and launching with its own captured Intent.
+    if (!args.extra.is_empty() || args.intent_action.is_some() || args.data.is_some())
+        && !(args.keep || art)
+    {
+        eprintln!(
+            "launch: --intent-action/--data/--extra are carried by the ART session-start \
+             Intent; add `--engine art` (the in-process Rust VM would launch with its own \
+             Intent and silently drop them)."
         );
         return ExitCode::FAILURE;
     }
@@ -372,11 +403,48 @@ fn run_keep(
             .iter()
             .map(|path| json!(path.display().to_string()))
             .collect::<Vec<_>>(),
-        "idle_kill_seconds": args.idle_kill_seconds,
         "timeout_ms": args.timeout.saturating_mul(1000),
         "services": services,
         "label": args.label.clone(),
     });
+    // Optional wire fields are *omitted*, never sent as JSON null: the daemon's
+    // argument validation treats a present-but-null `idle_kill_seconds` as an
+    // invalid integer (`null` is not a JSON `None` on the wire), so sending the
+    // key unconditionally made every `acos launch --keep` fail with
+    // INVALID_ARGUMENT (GL1 kept-session tests, 2026-11-17). One rule: a field
+    // whose Rust value is `None` is absent from the request.
+    if let Some(seconds) = args.idle_kill_seconds {
+        daemon_args["idle_kill_seconds"] = json!(seconds);
+    }
+    // LAUNCHEXTRAS: the same three fields the MCP tool takes, and only the ones
+    // the caller set (like every other optional wire field above).
+    if let Some(action) = args.intent_action.as_deref() {
+        daemon_args["intent_action"] = json!(action);
+    }
+    if let Some(data) = args.data.as_deref() {
+        daemon_args["data"] = json!(data);
+    }
+    if !args.extra.is_empty() {
+        let mut extras = serde_json::Map::new();
+        for raw in &args.extra {
+            match crate::engine::serve::parse_extra_argument(raw) {
+                Ok((key, value)) => match serde_json::to_value(value) {
+                    Ok(value) => {
+                        extras.insert(key, value);
+                    }
+                    Err(error) => {
+                        eprintln!("launch: --extra {key}: {error}");
+                        return ExitCode::FAILURE;
+                    }
+                },
+                Err(error) => {
+                    eprintln!("launch: {error}");
+                    return ExitCode::FAILURE;
+                }
+            }
+        }
+        daemon_args["extras"] = serde_json::Value::Object(extras);
+    }
     // The engine is forwarded verbatim: the daemon must answer with the engine
     // that actually ran and must never fall back to another one.
     if let Some(engine) = engine {

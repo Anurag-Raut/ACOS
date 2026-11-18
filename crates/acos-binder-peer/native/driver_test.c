@@ -121,9 +121,9 @@ static int peer_read_full(int fd, void* buf, size_t n) {
     return 0;
 }
 
-static int peer_write_frame(uint32_t type, uint32_t seq, uint32_t code, uint32_t flags,
-                            uint64_t target, const void* data, size_t dsize, const void* offs,
-                            size_t osize) {
+static int peer_write_frame_from(uint32_t type, uint32_t seq, uint32_t code, uint32_t flags,
+                                 uint64_t target, const void* data, size_t dsize, const void* offs,
+                                 size_t osize, uint32_t sender_pid, uint32_t sender_euid) {
     struct fhdr h = {0};
     h.type = type;
     h.seq = seq;
@@ -132,6 +132,10 @@ static int peer_write_frame(uint32_t type, uint32_t seq, uint32_t code, uint32_t
     h.target = target;
     h.data_size = dsize;
     h.offsets_size = osize;
+    // v4 (BINDERPID): the sender identity occupies the bytes v3 called
+    // `reserved`, so `sizeof(struct fhdr)` is still 48.
+    h.sender_pid = sender_pid;
+    h.sender_euid = sender_euid;
     struct iovec iov[3];
     int niov = 0;
     iov[niov].iov_base = &h;
@@ -157,6 +161,12 @@ static int peer_write_frame(uint32_t type, uint32_t seq, uint32_t code, uint32_t
     return n > 0 ? 0 : -1;
 }
 
+static int peer_write_frame(uint32_t type, uint32_t seq, uint32_t code, uint32_t flags,
+                            uint64_t target, const void* data, size_t dsize, const void* offs,
+                            size_t osize) {
+    return peer_write_frame_from(type, seq, code, flags, target, data, dsize, offs, osize, 0, 0);
+}
+
 static void* peer_main(void* arg) {
     (void)arg;
     int lfd = g_peer.listen_fd;
@@ -179,7 +189,10 @@ static void* peer_main(void* arg) {
             // A real reply body: 4-byte "no exception" word + an int, so the
             // driver has something to copy into the caller's BR_REPLY.
             uint8_t body[8] = {0, 0, 0, 0, 7, 0, 0, 0};
-            peer_write_frame(F_RSP, h.seq, 0, 0, h.target, body, sizeof(body), NULL, 0);
+            // v4: a reply is sent by the host, so it names the host's identity
+            // (`system_server`: pid 777 here, uid 1000).
+            peer_write_frame_from(F_RSP, h.seq, 0, 0, h.target, body, sizeof(body), NULL, 0, 777,
+                                  1000);
         }
         if (h.type == F_REP) {
             if (h.flags & TF_STATUS_CODE) g_peer.dead_replies++;
@@ -196,13 +209,19 @@ static int peer_ref(uint32_t wire, uint32_t op) {
 }
 
 // The host side of a callback: one F_TXN frame addressed at `wire`.
-static int peer_txn(uint32_t wire, uint32_t code, uint32_t seq) {
+static int peer_txn_from(uint32_t wire, uint32_t code, uint32_t seq, uint32_t sender_pid,
+                         uint32_t sender_euid) {
     uint8_t data[16];
     memset(data, 0, sizeof(data));
     memcpy(data, &code, 4);
-    int rc = peer_write_frame(F_TXN, seq, code, 0 /* sync */, wire, data, sizeof(data), NULL, 0);
+    int rc = peer_write_frame_from(F_TXN, seq, code, 0 /* sync */, wire, data, sizeof(data), NULL,
+                                   0, sender_pid, sender_euid);
     if (rc == 0) g_peer.txns_sent++;
     return rc;
+}
+
+static int peer_txn(uint32_t wire, uint32_t code, uint32_t seq) {
+    return peer_txn_from(wire, code, seq, 0, 0);
 }
 
 // ------------------------------------------------------------ guest side ----
@@ -213,6 +232,8 @@ struct seen {
     uint64_t cookie;
     uint32_t code;
     uint8_t* buffer;    // transaction buffer handed out by the driver
+    int32_t sender_pid; // BR_TRANSACTION/BR_REPLY: tr.sender_pid (BINDERPID)
+    uint32_t sender_euid;
 };
 
 static pthread_mutex_t g_seen_mu = PTHREAD_MUTEX_INITIALIZER;
@@ -221,7 +242,8 @@ static int g_nseen;
 static volatile int g_looper_stop;
 static int g_binder_fd;
 
-static void seen_add(uint32_t cmd, uint64_t ptr, uint64_t cookie, uint32_t code, uint8_t* buffer) {
+static void seen_add_sender(uint32_t cmd, uint64_t ptr, uint64_t cookie, uint32_t code,
+                            uint8_t* buffer, int32_t sender_pid, uint32_t sender_euid) {
     pthread_mutex_lock(&g_seen_mu);
     if (g_nseen < (int)(sizeof(g_seen) / sizeof(g_seen[0]))) {
         g_seen[g_nseen].cmd = cmd;
@@ -229,9 +251,15 @@ static void seen_add(uint32_t cmd, uint64_t ptr, uint64_t cookie, uint32_t code,
         g_seen[g_nseen].cookie = cookie;
         g_seen[g_nseen].code = code;
         g_seen[g_nseen].buffer = buffer;
+        g_seen[g_nseen].sender_pid = sender_pid;
+        g_seen[g_nseen].sender_euid = sender_euid;
         g_nseen++;
     }
     pthread_mutex_unlock(&g_seen_mu);
+}
+
+static void seen_add(uint32_t cmd, uint64_t ptr, uint64_t cookie, uint32_t code, uint8_t* buffer) {
+    seen_add_sender(cmd, ptr, cookie, code, buffer, 0, 0);
 }
 
 static int seen_count(uint32_t cmd) {
@@ -342,8 +370,9 @@ static int guest_read(int fd) {
                 if (pos + sizeof(tr) > bwr.read_consumed) return -1;
                 memcpy(&tr, read_buf + pos, sizeof(tr));
                 pos += sizeof(tr);
-                seen_add(BR_TRANSACTION, (uint64_t)tr.target.ptr, (uint64_t)tr.cookie, tr.code,
-                         (uint8_t*)(uintptr_t)tr.data.ptr.buffer);
+                seen_add_sender(BR_TRANSACTION, (uint64_t)tr.target.ptr, (uint64_t)tr.cookie,
+                                tr.code, (uint8_t*)(uintptr_t)tr.data.ptr.buffer, tr.sender_pid,
+                                tr.sender_euid);
                 // A sync delivery must be answered, like BBinder::transact does,
                 // and the received transaction buffer is freed right after (the
                 // kernel ties it to the receiving thread, so this is the looper
@@ -370,8 +399,9 @@ static int guest_read(int fd) {
                 if (pos + sizeof(tr) > bwr.read_consumed) return -1;
                 memcpy(&tr, read_buf + pos, sizeof(tr));
                 pos += sizeof(tr);
-                seen_add(BR_REPLY, (uint64_t)tr.target.ptr, (uint64_t)tr.cookie, tr.code,
-                         (uint8_t*)(uintptr_t)tr.data.ptr.buffer);
+                seen_add_sender(BR_REPLY, (uint64_t)tr.target.ptr, (uint64_t)tr.cookie, tr.code,
+                                (uint8_t*)(uintptr_t)tr.data.ptr.buffer, tr.sender_pid,
+                                tr.sender_euid);
                 break;
             }
             default:
@@ -580,6 +610,43 @@ int main(void) {
           "libbinder answers BR_INCREFS with incWeak");
     check(seen_flush(BR_ACQUIRE) == 0 && g.n_nodes > 0,
           "BR_ACQUIRE follows BR_INCREFS in the same batch", "no node rooting");
+
+    // 2a. BINDERPID: a reply to the guest's own transaction reports the sender
+    //     the F_RSP header carried, which is what `Binder.getCallingPid()` sees
+    //     inside a `BR_REPLY` (`IPCThreadState` copies `tr.sender_pid`).
+    seen_flush(0);
+    {
+        static int wref2, bb2;
+        uint32_t wire2 = 0;
+        guest_transact_with_binder(fd, (uint64_t)(uintptr_t)&wref2, (uint64_t)(uintptr_t)&bb2,
+                                   &wire2);
+        struct seen rep[4];
+        int nrep = seen_copy(BR_REPLY, rep, 4);
+        snprintf(detail, sizeof(detail), "replies=%d pid=%d uid=%u", nrep,
+                 nrep > 0 ? rep[0].sender_pid : 0, nrep > 0 ? rep[0].sender_euid : 0);
+        check(nrep >= 1 && rep[nrep - 1].sender_pid == 777 && rep[nrep - 1].sender_euid == 1000,
+              "a reply to the guest's transaction reports the F_RSP sender identity", detail);
+        free_all_txn_buffers();
+        seen_flush(0);
+    }
+
+    // 2b. BINDERPID: a delivered transaction carries the sender identity from
+    //     the F_TXN header — the caller's real uid/pid (or `system_server`'s for
+    //     a host delivery), never 0.
+    seen_flush(0);
+    peer_txn_from(wire, 45, 77, 4321, 10192);
+    {
+        int tgot = wait_for_txns(1, 3000);
+        struct seen txn[4];
+        int ntxn = seen_copy(BR_TRANSACTION, txn, 4);
+        snprintf(detail, sizeof(detail), "delivered=%d seen=%d pid=%d uid=%u", tgot, ntxn,
+                 ntxn > 0 ? txn[ntxn - 1].sender_pid : 0,
+                 ntxn > 0 ? txn[ntxn - 1].sender_euid : 0);
+        check(tgot == 1 && ntxn == 1 && txn[0].sender_pid == 4321 && txn[0].sender_euid == 10192,
+              "a host->guest transaction reports the F_TXN sender identity", detail);
+    }
+    free_all_txn_buffers();
+    seen_flush(0);
 
     // 2. a host->guest callback arrives
     seen_flush(0);

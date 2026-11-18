@@ -1,0 +1,3 @@
+package=dev.acos.fixtures.webview
+activity=dev.acos.fixtures.webview.MainActivity
+timeout_ms=12000

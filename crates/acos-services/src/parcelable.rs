@@ -80,6 +80,12 @@ pub enum FieldOp {
     /// `writeSparseArray`. ACOS only models the `null` encoding (`-1`); a
     /// non-null `SparseArray` is a structured `UnsupportedParcelable`.
     SparseArray,
+    /// An `int` size followed by that many **verbatim** bytes:
+    /// `ParcelableParcel.writeToParcel` (`writeInt(mParcel.dataSize())` +
+    /// `appendFrom`, `ParcelableParcel.java:66`). The bytes are a nested parcel
+    /// ACOS carries without interpreting (`TextView.SavedState.editorState`);
+    /// the size is on the wire, which is what [`FieldOp::Raw`] lacks.
+    SizedBlob,
     /// `writeParcelable` (class name + payload).
     Named(&'static str),
     /// `writeTypedObject` (presence marker + payload).
@@ -621,6 +627,40 @@ pub static SPECS: &[ParcelableSpec] = &[
         ],
         verification: Verification::Full,
     },
+    // `PermissionGroupInfo.writeToParcel` (SYSUI3B). The image's own
+    // `classes.dex` was scanned for this order
+    // (`classes.dex` -> `PermissionGroupInfo;->writeToParcel`, 8 calls after
+    // `PackageItemInfo.writeToParcel`): five ints, the
+    // `TextUtils.writeToParcel` description, then flags and priority. The
+    // field names follow `base/core/java/android/content/pm/PermissionGroupInfo.java:192`,
+    // which the image matches byte for byte (the Java differential harness
+    // `crates/acos-runtime/tests/parcelable_java.rs` re-emits these bytes with
+    // the real framework and compares them).
+    ParcelableSpec {
+        class: "android.content.pm.PermissionGroupInfo",
+        fields: &[
+            // PackageItemInfo prefix (super.writeToParcel splice)
+            FieldOp::Str8,         // PackageItemInfo.name
+            FieldOp::Str8,         // packageName
+            FieldOp::Int,          // banner
+            FieldOp::CharSequence, // label
+            FieldOp::Int,          // icon
+            FieldOp::Int,          // labelRes
+            FieldOp::Bundle,       // metaData
+            FieldOp::Int,          // showUser
+            FieldOp::Int,          // showBadge
+            // PermissionGroupInfo
+            FieldOp::Int,          // descriptionRes
+            FieldOp::Int,          // requestRes
+            FieldOp::Int,          // requestDetailResourceId
+            FieldOp::Int,          // backgroundRequestResourceId
+            FieldOp::Int,          // backgroundRequestDetailResourceId
+            FieldOp::CharSequence, // nonLocalizedDescription
+            FieldOp::Int,          // flags
+            FieldOp::Int,          // priority
+        ],
+        verification: Verification::Full,
+    },
     // `ResolveInfo.writeToParcel` (API 34): a component-type marker selects one
     // of `ActivityInfo`/`ServiceInfo`/`ProviderInfo` (1/2/3), then an optional
     // `IntentFilter`, then the scalar match metadata. ACOS models the launcher
@@ -1043,6 +1083,218 @@ pub static SPECS: &[ParcelableSpec] = &[
     ParcelableSpec {
         class: "android.os.IBinder",
         fields: &[FieldOp::Int],
+        verification: Verification::Curated,
+    },
+    // `AbsSavedState.writeToParcel` (API 34, `AbsSavedState.java:79`; the
+    // image's `classes3.dex` write sequence is one `writeParcelable`, checked
+    // with `examples/scan_parcelables.rs`): exactly one super-state parcelable.
+    // `View.onSaveInstanceState` answers the `EMPTY_STATE` singleton for a view
+    // with nothing to save, whose class is the anonymous
+    // `android.view.AbsSavedState$1`; that payload is the one **null**
+    // parcelable, which is why both entries share this op list.
+    //
+    // The framework writes these into the saved-instance-state `Bundle` that
+    // `IActivityClientController.activityStopped` carries, so without a codec a
+    // *finishing* Activity's stop report was refused
+    // (`no parcelable codec for android.view.AbsSavedState$1`, SYSUI1
+    // pre-granted finding) and the caller never received its result.
+    ParcelableSpec {
+        class: "android.view.AbsSavedState",
+        fields: &[FieldOp::Named("android.view.AbsSavedState")],
+        verification: Verification::Curated,
+    },
+    ParcelableSpec {
+        class: "android.view.AbsSavedState$1",
+        fields: &[FieldOp::Named("android.view.AbsSavedState")],
+        verification: Verification::Curated,
+    },
+    // The framework's own `View` saved states, transcribed from the image's
+    // `classes4.dex` write sequences (`examples/scan_parcelables.rs`). Each
+    // `writeToParcel` starts with `super.writeToParcel`, so every entry below
+    // carries the **super's** fields first: `AbsSavedState` writes one
+    // `writeParcelable`, and `View.BaseSavedState` then writes `mSavedData`,
+    // `mStartActivityRequestWho`, `mIsAutofilled`, `mHideHighlight` and
+    // `mAutofillViewId` (five words). A view hierarchy's
+    // `onSaveInstanceState` puts one of these into the Bundle that
+    // `IActivityClientController.activityStopped` carries, and the class name on
+    // the wire is the concrete subclass, so each reachable subclass needs the
+    // full layout (the engine does not splice a super's table in).
+    ParcelableSpec {
+        class: "android.view.View$BaseSavedState",
+        fields: &[
+            FieldOp::Named("android.view.AbsSavedState"),
+            FieldOp::Int,   // mSavedData
+            FieldOp::Str16, // mStartActivityRequestWho
+            FieldOp::Bool,  // mIsAutofilled
+            FieldOp::Bool,  // mHideHighlight
+            FieldOp::Int,   // mAutofillViewId
+        ],
+        verification: Verification::Curated,
+    },
+    ParcelableSpec {
+        // `Toolbar.SavedState`: `expandedMenuItemId`, `isOverflowOpen`.
+        class: "android.widget.Toolbar$SavedState",
+        fields: &[
+            FieldOp::Named("android.view.AbsSavedState"),
+            FieldOp::Int,
+            FieldOp::Str16,
+            FieldOp::Bool,
+            FieldOp::Bool,
+            FieldOp::Int,
+            FieldOp::Int,
+            FieldOp::Int,
+        ],
+        verification: Verification::Curated,
+    },
+    ParcelableSpec {
+        // `ProgressBar.SavedState`: `progress`, `secondaryProgress`.
+        class: "android.widget.ProgressBar$SavedState",
+        fields: &[
+            FieldOp::Named("android.view.AbsSavedState"),
+            FieldOp::Int,
+            FieldOp::Str16,
+            FieldOp::Bool,
+            FieldOp::Bool,
+            FieldOp::Int,
+            FieldOp::Int,
+            FieldOp::Int,
+        ],
+        verification: Verification::Curated,
+    },
+    ParcelableSpec {
+        // `CompoundButton.SavedState`: the super's fields, then
+        // `writeValue(mChecked)`.
+        class: "android.widget.CompoundButton$SavedState",
+        fields: &[
+            FieldOp::Named("android.view.AbsSavedState"),
+            FieldOp::Int,
+            FieldOp::Str16,
+            FieldOp::Bool,
+            FieldOp::Bool,
+            FieldOp::Int,
+            FieldOp::Dynamic,
+        ],
+        verification: Verification::Curated,
+    },
+    // The remaining `View` saved states the framework's own widgets write. Same
+    // shape: the `View.BaseSavedState` super fields, then the subclass's own.
+    ParcelableSpec {
+        // `ScrollView.SavedState` / `AdapterViewAnimator.SavedState`:
+        // `scrollPosition` / `whichChild`.
+        class: "android.widget.ScrollView$SavedState",
+        fields: &[
+            FieldOp::Named("android.view.AbsSavedState"),
+            FieldOp::Int,
+            FieldOp::Str16,
+            FieldOp::Bool,
+            FieldOp::Bool,
+            FieldOp::Int,
+            FieldOp::Int,
+        ],
+        verification: Verification::Curated,
+    },
+    ParcelableSpec {
+        class: "android.widget.AdapterViewAnimator$SavedState",
+        fields: &[
+            FieldOp::Named("android.view.AbsSavedState"),
+            FieldOp::Int,
+            FieldOp::Str16,
+            FieldOp::Bool,
+            FieldOp::Bool,
+            FieldOp::Int,
+            FieldOp::Int,
+        ],
+        verification: Verification::Curated,
+    },
+    ParcelableSpec {
+        // `HorizontalScrollView.SavedState`: `scrollPosition`.
+        class: "android.widget.HorizontalScrollView$SavedState",
+        fields: &[
+            FieldOp::Named("android.view.AbsSavedState"),
+            FieldOp::Int,
+            FieldOp::Str16,
+            FieldOp::Bool,
+            FieldOp::Bool,
+            FieldOp::Int,
+            FieldOp::Int,
+        ],
+        verification: Verification::Curated,
+    },
+    ParcelableSpec {
+        // `AbsSpinner.SavedState`: `selectedId` (long), `position`.
+        class: "android.widget.AbsSpinner$SavedState",
+        fields: &[
+            FieldOp::Named("android.view.AbsSavedState"),
+            FieldOp::Int,
+            FieldOp::Str16,
+            FieldOp::Bool,
+            FieldOp::Bool,
+            FieldOp::Int,
+            FieldOp::Long,
+            FieldOp::Int,
+        ],
+        verification: Verification::Curated,
+    },
+    ParcelableSpec {
+        // `CheckedTextView.SavedState` / `SearchView.SavedState`: super, then
+        // `writeValue(checked)` / `writeValue(query)`.
+        class: "android.widget.CheckedTextView$SavedState",
+        fields: &[
+            FieldOp::Named("android.view.AbsSavedState"),
+            FieldOp::Int,
+            FieldOp::Str16,
+            FieldOp::Bool,
+            FieldOp::Bool,
+            FieldOp::Int,
+            FieldOp::Dynamic,
+        ],
+        verification: Verification::Curated,
+    },
+    ParcelableSpec {
+        class: "android.widget.SearchView$SavedState",
+        fields: &[
+            FieldOp::Named("android.view.AbsSavedState"),
+            FieldOp::Int,
+            FieldOp::Str16,
+            FieldOp::Bool,
+            FieldOp::Bool,
+            FieldOp::Int,
+            FieldOp::Dynamic,
+        ],
+        verification: Verification::Curated,
+    },
+    ParcelableSpec {
+        // `PhoneWindow.PanelFeatureState.SavedState` implements `Parcelable`
+        // directly (no super state): `featureId`, `isOpen`, `isInExpandedMode`
+        // and then — **only when `isOpen`** — `writeBundle(menuState)`
+        // (`PhoneWindow.java:3706`, a branch on an already-written field, so
+        // there is no presence word on the wire for it). A closed panel feature
+        // (the state a stopped window carries) is exactly these three words;
+        // the open form is a documented `PREFIX` gap the length check refuses
+        // by name rather than mis-reading.
+        class: "com.android.internal.policy.PhoneWindow$PanelFeatureState$SavedState",
+        fields: &[FieldOp::Int, FieldOp::Int, FieldOp::Int],
+        verification: Verification::Prefix,
+    },
+    ParcelableSpec {
+        // `TextView.SavedState` (`TextView.java`, `SavedState.writeToParcel`):
+        // the super's fields, then `selStart`, `selEnd`, `frozenWithFocus`, the
+        // text and the two int-presence groups (`error`, `editorState`).
+        class: "android.widget.TextView$SavedState",
+        fields: &[
+            FieldOp::Named("android.view.AbsSavedState"),
+            FieldOp::Int,
+            FieldOp::Str16,
+            FieldOp::Bool,
+            FieldOp::Bool,
+            FieldOp::Int,
+            FieldOp::Int,
+            FieldOp::Int,
+            FieldOp::Int,
+            FieldOp::CharSequence,
+            FieldOp::Cond(&[FieldOp::CharSequence]),
+            FieldOp::Cond(&[FieldOp::SizedBlob]),
+        ],
         verification: Verification::Curated,
     },
     ParcelableSpec {
@@ -2440,6 +2692,21 @@ fn read_field(field: FieldOp, parcel: &mut Parcel) -> Result<Value> {
                 Value::List(Some(out))
             }
         }
+        FieldOp::SizedBlob => {
+            let size = parcel.read_int32()?;
+            if size < 0 {
+                return Err(bad(format!("negative sized blob ({size})")));
+            }
+            let size = usize::try_from(size).map_err(|_| bad("sized blob too large"))?;
+            if size > parcel.remaining() {
+                return Err(ParcelError::BadLength {
+                    len: size,
+                    max: parcel.remaining(),
+                }
+                .into());
+            }
+            Value::ByteArray(Some(parcel.read_raw_bytes(size)?))
+        }
         FieldOp::Dynamic => Value::Dynamic(read_dynamic(parcel)?),
         FieldOp::Cond(fields) => {
             let present = parcel.read_int32()? != 0;
@@ -2872,6 +3139,12 @@ fn write_field(field: FieldOp, parcel: &mut Parcel, value: &Value) -> Result<()>
                 }
             }
             return Ok(());
+        }
+        FieldOp::SizedBlob => {
+            let bytes = expect_byte_array(value)?.ok_or_else(|| bad("sized blob is null"))?;
+            let size = i32::try_from(bytes.len()).map_err(|_| bad("sized blob too large"))?;
+            parcel.write_int32(size);
+            parcel.write_raw_bytes(&bytes);
         }
         FieldOp::Cond(fields) => {
             let Value::Cond { present, values } = value else {
@@ -3377,17 +3650,39 @@ fn write_parceled_list_slice(parcel: &mut Parcel, value: &Parcelable) -> Result<
 const COMPONENT_CLASS: &str = "android.content.ComponentName";
 /// `android.graphics.Rect` (four ints, used for `Intent.mSourceBounds`).
 const RECT_CLASS: &str = "android.graphics.Rect";
-/// `android.net.Uri` — declared on this image only as the **static**
-/// `writeToParcel(Parcel, Uri)`; the body is not decodable from the image, so a
-/// non-null `Intent.mData` is a structured refusal, never a guessed body.
-const URI_CLASS: &str = "android.net.Uri";
+/// `android.net.Uri`.
+///
+/// The image's format (its own framework dex, MPROC6/LAUNCHEXTRAS evidence):
+/// the **static** `Uri.writeToParcel(Parcel, Uri)` writes `writeInt(0)` for a
+/// null Uri and otherwise calls the concrete `Uri.writeToParcel(Parcel, int)`,
+/// which writes its type tag and `writeString8(toString())`:
+///
+/// | tag | class | body |
+/// |---|---|---|
+/// | 0 | null | — |
+/// | 1 | `StringUri` | `writeString8(uriString)` |
+/// | 2 | `OpaqueUri` | `writeString8(toString())` |
+/// | 3 | `HierarchicalUri` | `writeString8(toString())` |
+///
+/// `Uri.parse(String)` on this image always constructs a `StringUri`
+/// (`Uri.parse` -> `new Uri$StringUri`), so a data URI a caller supplies is
+/// written as tag 1 + String8. `Uri.readFrom`/`Uri$1.createFromParcel` reads
+/// exactly that shape back, so the guest's real `Intent` sees the same Uri.
+/// `Uri.CREATOR` type tag: null.
+const URI_TYPE_NULL: i32 = 0;
+/// `Uri.CREATOR` type tag: `Uri$StringUri` (what `Uri.parse` always builds).
+const URI_TYPE_STRING: i32 = 1;
+/// `Uri.CREATOR` type tag: `Uri$OpaqueUri` (`fromParts`).
+const URI_TYPE_OPAQUE: i32 = 2;
+/// `Uri.CREATOR` type tag: `Uri$HierarchicalUri` (`Builder.build`).
+const URI_TYPE_HIERARCHICAL: i32 = 3;
 /// `android.content.ClipData` — no codec exists; a present clip is refused.
 const CLIP_DATA_CLASS: &str = "android.content.ClipData";
 
 /// Field indices in the [`Parcelable::Ordered`] value [`read_intent`] returns
 /// and [`write_intent`] consumes, in `Intent.writeToParcel` order.
 pub const INTENT_ACTION: usize = 0;
-/// `mData` (`Value::Str(None)` = a null `Uri`).
+/// `mData` (`Value::Str(Some(uri))`; `None` = a null `Uri`).
 pub const INTENT_DATA: usize = 1;
 /// `mType`.
 pub const INTENT_TYPE: usize = 2;
@@ -3444,11 +3739,11 @@ pub fn write_intent(parcel: &mut Parcel, value: &Parcelable) -> Result<()> {
     }
     parcel.write_string8_opt(expect_str(&values[INTENT_ACTION])?)?;
     match expect_str(&values[INTENT_DATA])? {
-        // A null `Uri` is `writeInt(0)`; a non-null one goes through the static
-        // `Uri.writeToParcel`, whose body this image does not pin.
+        // A null `Uri` is `writeInt(0)`; a non-null one is a `StringUri` (the
+        // image's `Uri.parse` always builds one): tag 1 + `writeString8`.
         Some(uri) => {
-            let _ = uri;
-            return Err(unsupported(URI_CLASS));
+            parcel.write_int32(URI_TYPE_STRING);
+            parcel.write_string8(uri)?;
         }
         None => parcel.write_int32(0),
     }
@@ -3544,14 +3839,22 @@ fn read_intent_at(parcel: &mut Parcel, depth: usize) -> Result<Parcelable> {
         });
     }
     let action = parcel.read_string8()?;
-    // `Uri`: `readInt` presence, then the static `Uri.writeToParcel` body. The
-    // image's dex does not pin that body, so a non-null `data` Uri is refused
-    // with a structured code instead of a guessed string read that would
-    // misalign every field after it.
-    let data_present = parcel.read_int32()?;
-    if data_present != 0 {
-        return Err(unsupported(URI_CLASS));
-    }
+    // `Uri`: `readInt` type, then `writeString8(toString())` for every non-null
+    // type (1 StringUri, 2 OpaqueUri, 3 HierarchicalUri). A type this image
+    // does not define is a structural error, never a guessed string read that
+    // would misalign every field after it.
+    let uri_type = parcel.read_int32()?;
+    let data = match uri_type {
+        URI_TYPE_NULL => None,
+        URI_TYPE_STRING | URI_TYPE_OPAQUE | URI_TYPE_HIERARCHICAL => parcel.read_string8()?,
+        other => {
+            return Err(ServiceError::BadRequest {
+                interface: INTENT_CLASS.into(),
+                method: "readFromParcel".into(),
+                detail: format!("unknown Uri type {other}"),
+            })
+        }
+    };
     let type_ = parcel.read_string8()?;
     let identifier = parcel.read_string8()?;
     let flags = parcel.read_int32()?;
@@ -3615,7 +3918,7 @@ fn read_intent_at(parcel: &mut Parcel, depth: usize) -> Result<Parcelable> {
         INTENT_CLASS,
         vec![
             Value::Str(action),
-            Value::Str(None),
+            Value::Str(data),
             Value::Str(type_),
             Value::Str(identifier),
             Value::Int(flags),
@@ -4091,7 +4394,18 @@ pub fn read_dynamic(parcel: &mut Parcel) -> Result<crate::value::DynamicValue> {
                 // turns that into a null Parcelable (5006-5011): a null name is
                 // a null value, not a malformed parcel.
                 None => D::Null,
-                Some(class) => D::Parcelable(read_payload(&class, parcel)?),
+                Some(class) => {
+                    let payload = read_payload(&class, parcel)?;
+                    // Name the class when the declared body is not what the
+                    // codec consumed: a bare byte count does not say which
+                    // parcelable's table is short.
+                    check_value_length(parcel, declared, start, val::PARCELABLE).map_err(
+                        |error| {
+                            bad(format!("{class}: {error}"))
+                        },
+                    )?;
+                    D::Parcelable(payload)
+                }
             };
             check_value_length(parcel, declared, start, val::PARCELABLE)?;
             value
@@ -4746,6 +5060,7 @@ pub fn verify_prefix(spec: &ParcelableSpec, scanned: &ScannedWrite) -> (usize, u
 fn field_matches(field: FieldOp, call: &str) -> bool {
     match field {
         FieldOp::BoolCond(_) => call == "writeBoolean",
+        FieldOp::SizedBlob => call == "writeInt",
         FieldOp::Int => call == "writeInt",
         FieldOp::Long => call == "writeLong",
         FieldOp::Float => call == "writeFloat",
@@ -4901,6 +5216,16 @@ fn field_consumes(field: FieldOp, calls: &[String]) -> usize {
             }
             match calls.get(1).map(String::as_str) {
                 Some("writeTypedObject") => 2,
+                _ => 1,
+            }
+        }
+        FieldOp::SizedBlob => {
+            if first != "writeInt" {
+                return 0;
+            }
+            // `writeInt(size)` + `appendFrom(parcel, 0, size)`.
+            match calls.get(1).map(String::as_str) {
+                Some("appendFrom") => 2,
                 _ => 1,
             }
         }

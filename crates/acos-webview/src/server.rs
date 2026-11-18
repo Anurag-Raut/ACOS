@@ -31,6 +31,12 @@ use crate::wire::{
 
 /// How many requests one connection handles concurrently.
 const WORKERS: usize = 4;
+
+/// An op that took at least this long is reported in the broker's log (the
+/// normal `ax`/`render`/`input.*` op is milliseconds; the measured pathologies
+/// are 1-30 s, and an unattributed 30 s wait was exactly what the merge's
+/// `NO_VIEW` investigation could not explain).
+const SLOW_OP_MS: u128 = 1500;
 /// Cap on concurrent `Fetch.requestPaused` round trips per connection.
 const MAX_INTERCEPTS: usize = 16;
 
@@ -231,7 +237,12 @@ fn start_server(
                                 }
                                 continue;
                             }
-                            let Some(session_id) = session_for(&mut stream, &mode) else {
+                            let Some(session_id) = session_for(
+                                &mut stream,
+                                &mode,
+                                live.iter().filter(|c| !c.closed()).count(),
+                                &stop,
+                            ) else {
                                 continue;
                             };
                             let conn = Arc::new(Conn::new(
@@ -332,24 +343,84 @@ fn start_server(
 /// The session id for a freshly accepted connection, answering the attach line
 /// in shared mode. `None` means the peer did not identify itself and the
 /// connection is dropped (it never became a session).
-fn session_for(stream: &mut UnixStream, mode: &AcceptMode) -> Option<String> {
+///
+/// **WVSCOPE:** the line carries the client's build id and the answer carries
+/// this daemon's (`results/handoff/WVB/WIRE.md` §0.1). A client of another build
+/// is refused with `BUILD_MISMATCH`; a daemon that has no session left then stops
+/// itself, so the newer build can start its own broker on the same endpoint
+/// instead of running a second one beside a daemon nobody uses. A client with a
+/// session attached is never signalled: that engine belongs to a live session.
+fn session_for(
+    stream: &mut UnixStream,
+    mode: &AcceptMode,
+    live_sessions: usize,
+    stop: &AtomicBool,
+) -> Option<String> {
     match mode {
         AcceptMode::Single(id) => Some(id.clone()),
         AcceptMode::Attached => {
             let line = read_line(stream, Duration::from_secs(5))?;
             let v: Value = serde_json::from_slice(&line).ok()?;
-            if v["attach"].as_u64() != Some(crate::gate::ATTACH_PROTO as u64) {
-                let _ =
-                    stream.write_all(b"{\"ok\":false,\"error\":\"attach version unsupported\"}\n");
-                return None;
-            }
+            let attach = v["attach"].as_u64();
             let sid = v["session"].as_str().unwrap_or("").to_string();
             let sid = if sid.is_empty() {
                 "session".to_string()
             } else {
                 sid
             };
-            stream.write_all(b"{\"ok\":true}\n").ok()?;
+            match attach {
+                // v1 (a gate that predates the build check). Served, because it
+                // is the *client* that must not trust a stranger; the answer
+                // still names this build so a v2 client can tell.
+                Some(1) => {
+                    eprintln!(
+                        "acos-webview: attach v1 (no build id) from a client of another build; \
+                         serving it (this broker is {})",
+                        crate::build_id()
+                    );
+                }
+                Some(n) if n == crate::gate::ATTACH_PROTO as u64 => {
+                    let client = v["build"].as_str().unwrap_or("");
+                    if client != crate::build_id() {
+                        let exiting = live_sessions == 0;
+                        eprintln!(
+                            "acos-webview: BUILD_MISMATCH: client build {} != broker build {} \
+                             ({} session(s) attached{})",
+                            if client.is_empty() { "<none>" } else { client },
+                            crate::build_id(),
+                            live_sessions,
+                            if exiting { "; exiting, nothing is left to serve" } else { "" }
+                        );
+                        let answer = json!({
+                            "ok": false,
+                            "code": crate::wire::code::BUILD_MISMATCH,
+                            "build": crate::build_id(),
+                            "sessions": live_sessions,
+                            "exiting": exiting,
+                        });
+                        let mut bytes = answer.to_string().into_bytes();
+                        bytes.push(b'\n');
+                        let _ = stream.write_all(&bytes);
+                        let _ = stream.flush();
+                        if exiting {
+                            stop.store(true, Ordering::SeqCst);
+                        }
+                        return None;
+                    }
+                }
+                _ => {
+                    let _ = stream.write_all(
+                        b"{\"ok\":false,\"error\":\"attach version unsupported\"}\n",
+                    );
+                    let _ = stream.flush();
+                    return None;
+                }
+            }
+            let mut bytes = json!({"ok": true, "build": crate::build_id()})
+                .to_string()
+                .into_bytes();
+            bytes.push(b'\n');
+            stream.write_all(&bytes).ok()?;
             stream.flush().ok()?;
             stream.set_read_timeout(None).ok()?;
             Some(sid)
@@ -387,6 +458,9 @@ pub struct Conn {
     closed: AtomicBool,
     unanswered: AtomicU32,
     intercepts: AtomicUsize,
+    /// Frame pulls dispatched on their own threads (bounded, see
+    /// [`Conn::dispatch_render`]).
+    frame_pulls: AtomicUsize,
     pumps: Mutex<Vec<std::thread::JoinHandle<()>>>,
     hello: AtomicBool,
 }
@@ -407,6 +481,7 @@ impl Conn {
             closed: AtomicBool::new(false),
             unanswered: AtomicU32::new(0),
             intercepts: AtomicUsize::new(0),
+            frame_pulls: AtomicUsize::new(0),
             pumps: Mutex::new(Vec::new()),
             hello: AtomicBool::new(false),
         }
@@ -503,15 +578,19 @@ impl Conn {
 
     fn on_engine_restart(&self) {
         if let Some(session) = self.session.lock().expect("session").clone() {
-            let views: Vec<Arc<crate::view::View>> = session
-                .views
-                .lock()
-                .map(|v| v.values().cloned().collect())
-                .unwrap_or_default();
-            for v in views {
-                v.closed.store(true, Ordering::SeqCst);
-            }
-            session.views.lock().map(|mut v| v.clear()).ok();
+            let views = session.drop_views();
+            // Every target died with the engine, so the session's map is empty
+            // from here on: the guest must re-create its views (it is told with
+            // `engine.restarted`). Say so in the log, with the count: a
+            // `NO_VIEW: no view <id>` in a guest log is this line or nothing.
+            eprintln!(
+                "acos-webview: session {}: engine restarted (restart {}, generation {}), \
+                 dropped {} view(s): every target died with the engine",
+                session.id,
+                self.broker.restarts(),
+                session.generation,
+                views.len()
+            );
         }
         self.send_event(
             "engine.restarted",
@@ -599,6 +678,17 @@ impl Conn {
             return;
         }
         if msg.get("op").is_some() {
+            // WVFAIR: a frame pull gets its own thread, never one of the
+            // connection's shared workers. A slow page's `render` used to
+            // occupy a worker for seconds, and input / JavaScript-interface
+            // calls queued behind it on the same channel — the guest's tap ack
+            // arrived 2 s late and the click was lost (WV8 §5). Bounded by
+            // [`Conn::dispatch_render`]; the fair gate
+            // ([`crate::fair::FrameGate`]) bounds the per-view engine work.
+            if msg["op"].as_str() == Some("render") {
+                self.dispatch_render(msg);
+                return;
+            }
             if work.send(msg).is_err() {
                 self.closed.store(true, Ordering::SeqCst);
             }
@@ -617,9 +707,47 @@ impl Conn {
 
     // --- request dispatch -------------------------------------------------
 
+    /// Run a frame pull on its own thread.
+    ///
+    /// In-flight pulls are bounded by the session's view budget (plus a small
+    /// margin): the gate coalesces per view, so the bound is the number of
+    /// views a guest can name, and a guest that floods `render` after its views
+    /// are gone gets a structured `FRAME_FAILED` instead of an unbounded thread
+    /// spawn.
+    fn dispatch_render(self: &Arc<Self>, msg: Value) {
+        let limit = self.broker.config().max_views * 2 + 4;
+        let in_flight = self.frame_pulls.fetch_add(1, Ordering::SeqCst) + 1;
+        if in_flight > limit {
+            self.frame_pulls.fetch_sub(1, Ordering::SeqCst);
+            let id = msg["id"].as_str().unwrap_or("g?").to_string();
+            self.send_value(&err_response(
+                &id,
+                &ErrorBody::new(
+                    crate::wire::code::FRAME_FAILED,
+                    format!(
+                        "{in_flight} frame pulls are already in flight on this session \
+                         (max {limit}); a view has at most one outstanding pull"
+                    ),
+                ),
+            ));
+            return;
+        }
+        let conn = Arc::clone(self);
+        let spawned = std::thread::Builder::new()
+            .name(format!("wv-frame-{}", in_flight))
+            .spawn(move || {
+                conn.dispatch(msg);
+                conn.frame_pulls.fetch_sub(1, Ordering::SeqCst);
+            });
+        if spawned.is_err() {
+            self.frame_pulls.fetch_sub(1, Ordering::SeqCst);
+        }
+    }
+
     fn dispatch(self: &Arc<Self>, req: Value) {
         let id = req["id"].as_str().unwrap_or("g?").to_string();
         let op = req["op"].as_str().unwrap_or("").to_string();
+        let started = Instant::now();
         if op != "hello" && !self.hello.load(Ordering::SeqCst) {
             self.send_value(&err_response(
                 &id,
@@ -630,7 +758,20 @@ impl Conn {
             ));
             return;
         }
-        match self.handle(&op, &req) {
+        let outcome = self.handle(&op, &req);
+        // Honest instrumentation, not a trace switch: an op that took longer
+        // than any op should names itself in the broker's log, so "the engine
+        // answered nothing for 30 s" has a line pointing at what was waiting
+        // (measured: `ax`/`view.evaluateJavascript` on a page whose main thread
+        // is busy in 1.9 s slices, blocked behind a `beginFrame`).
+        let ms = started.elapsed().as_millis();
+        if ms >= SLOW_OP_MS {
+            eprintln!(
+                "acos-webview: slow op {op} view={} id={id} took {ms}ms",
+                req["view"].as_i64().unwrap_or(-1)
+            );
+        }
+        match outcome {
             Ok(Outcome::Value(v)) => {
                 self.send_response(&ok_response(&id, v), None);
             }
@@ -675,6 +816,15 @@ impl Conn {
                 Ok(Outcome::Value(json!({
                     "proto": PROTO,
                     "session": session_id,
+                    // WYSIWYG about *which code* answers (WVSCOPE): a guest that
+                    // reconnects after a broker restart can tell whether it is
+                    // talking to the same build. The gate refuses a broker of
+                    // another build outright (WIRE.md §0.1); this is the same
+                    // fact on the guest wire.
+                    "broker": {
+                        "build": crate::build_id(),
+                        "pid": std::process::id(),
+                    },
                     "engine": {
                         "product": v.product,
                         "version": v.version,
@@ -699,6 +849,7 @@ impl Conn {
             "engineStatus" => {
                 let mut v = self.broker.engine_status();
                 v["unanswered"] = json!(self.unanswered.load(Ordering::SeqCst));
+                v["build"] = json!(crate::build_id());
                 Ok(Outcome::Value(v))
             }
             "memory" => {
@@ -920,7 +1071,7 @@ impl Conn {
                             height: f.height,
                             stride: f.stride,
                             seq: f.seq,
-                            data: f.bytes,
+                            data: f.bytes.clone(),
                         };
                         Ok(Outcome::Frame(meta, blob))
                     }
@@ -936,18 +1087,34 @@ impl Conn {
                         let x = req["x"].as_f64().unwrap_or(0.0);
                         let y = req["y"].as_f64().unwrap_or(0.0);
                         let hold = Duration::from_millis(req["holdMs"].as_u64().unwrap_or(40));
-                        view.tap(x, y, hold)?;
+                        let acks = view.tap(x, y, hold)?;
                         self.emit_focus_event(&view);
                         self.nudge_render(&view, "damage");
-                        Ok(Outcome::Value(json!({"view": view_id, "delivered": true})))
+                        Ok(Outcome::Value(json!({
+                            "view": view_id,
+                            "delivered": true,
+                            "acked": acks.all_acked(),
+                            "events": acks.events,
+                            "acks": acks.acked,
+                            "frameMs": acks.frame_ms,
+                            "ackMs": acks.ack_ms,
+                        })))
                     }
                     "input.touch" => {
                         let action = req["action"].as_str().unwrap_or("down");
-                        view.touch(action, req["points"].clone())?;
+                        let acks = view.touch(action, req["points"].clone())?;
                         if action == "up" || action == "cancel" {
                             self.nudge_render(&view, "damage");
                         }
-                        Ok(Outcome::Value(json!({"view": view_id, "delivered": true})))
+                        Ok(Outcome::Value(json!({
+                            "view": view_id,
+                            "delivered": true,
+                            "acked": acks.all_acked(),
+                            "events": acks.events,
+                            "acks": acks.acked,
+                            "frameMs": acks.frame_ms,
+                            "ackMs": acks.ack_ms,
+                        })))
                     }
                     "input.scroll" => {
                         view.scroll(
@@ -1005,9 +1172,18 @@ impl Conn {
     }
 
     fn view(&self, session: &Arc<Session>, id: i64) -> Result<Arc<crate::view::View>> {
-        let view = session
-            .view(id)
-            .ok_or_else(|| Error::proto(crate::wire::code::NO_VIEW, format!("no view {id}")))?;
+        let view = session.view(id).ok_or_else(|| match session.miss(id) {
+            crate::broker::ViewMiss::Unknown => {
+                Error::proto(crate::wire::code::NO_VIEW, format!("no view {id}"))
+            }
+            crate::broker::ViewMiss::EngineRestarted { generation } => Error::proto(
+                crate::wire::code::ENGINE_RESTARTED,
+                format!(
+                    "view {id} is gone: the engine restarted (generation {generation}) and every \
+                     target died with it; re-create the view (the broker sent engine.restarted)"
+                ),
+            ),
+        })?;
         if view.closed.load(Ordering::SeqCst) || view.browser.generation != self.broker.generation()
         {
             return Err(Error::proto(

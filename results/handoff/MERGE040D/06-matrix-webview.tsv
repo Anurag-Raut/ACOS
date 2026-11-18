@@ -1,0 +1,7 @@
+run_id	scenario	variant	expected	verdict	false_pass	error.class	error.code	wall_ms	first_frame_ms	mem.cgroup_peak_mib	mem.cgroup_gib_min	mem.pss_mib	mem.anon_shmem_settled_mib	host.loadavg1	host.mem_available_mib
+01-webview-probe-r1	scenarios/webview-probe.yaml	good	pass	pass	false			3841.5	None	25.54	0.000808	35.44	None	12.69	52339.8
+02-webview-probe-r2	scenarios/webview-probe.yaml	good	pass	pass	false			2333.4	None	20.14	0.000442	32.63	None	12.69	52139.4
+03-webview-probe-r3	scenarios/webview-probe.yaml	good	pass	pass	false			2634.2	None	19.88	0.000514	33.59	None	12.56	52118.4
+04-webview-fair-r1	scenarios/webview-fair.yaml	good	pass	pass	false			12893.5	None	19.16	0.003122	28.05	None	12.56	52254.6
+05-webview-fair-r2	scenarios/webview-fair.yaml	good	pass	pass	false			12392.3	None	26.46	0.003166	37.69	None	11.1	54076.9
+06-webview-fair-r3	scenarios/webview-fair.yaml	good	pass	pass	false			12387.4	None	18.46	0.0031	33.0	None	11.58	54115.8

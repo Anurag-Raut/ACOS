@@ -151,7 +151,7 @@ fn dexprogs_pass_gc_stress() {
 }
 
 fn write_coverage(names: &[String], executed: &[u64; 256]) {
-    let out_dir = repo_root().join("results/vm");
+    let out_dir = acos_test_support::test_artifacts_dir("vm");
     let _ = std::fs::create_dir_all(&out_dir);
     let unsupported: [u8; 6] = [0xfa, 0xfb, 0xfc, 0xfd, 0xfe, 0xff];
     let mut exec = Vec::new();

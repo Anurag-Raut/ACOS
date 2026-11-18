@@ -1,0 +1,213 @@
+--------- beginning of main
+1794940388851      1  E cutils-trace: Error opening trace file: Permission denied (13)
+1794940388851      2  I : Using CollectorTypeCC GC.
+1794940388851      3  D nativeloader: InitDefaultPublicLibraries for_preload=1: libandroid.so:libaaudio.so:libamidi.so:libbinder_ndk.so:libc.so:libcamera2ndk.so:libdl.so:libEGL.so:libGLESv1_CM.so:libGLESv2.so:libGLESv3.so:libicu.so:libicui18n.so:libicuuc.so:libjnigraphics.so:liblog.so:libmediandk.so:libm.so:libnativehelper.so:libnativewindow.so:libOpenMAXAL.so:libOpenSLES.so:libRS.so:libstdc++.so:libsync.so:libvulkan.so:libwebviewchromium_plat_support.so:libz.so
+1794940388851      4  D : I18n APEX ICU file found: /apex/com.android.i18n/etc/icu/icudt72l.dat
+1794940388851      5  E logdw: Found user/group name 'root' in '/etc/passwd' without required prefix 'system_'
+1794940388851      6  E logdw: Found user/group name 'bin' in '/etc/passwd' without required prefix 'system_'
+1794940388851      7  E logdw: Found user/group name 'daemon' in '/etc/passwd' without required prefix 'system_'
+1794940388851      8  E logdw: Found user/group name 'mail' in '/etc/passwd' without required prefix 'system_'
+1794940388851      9  E logdw: Found user/group name 'ftp' in '/etc/passwd' without required prefix 'system_'
+1794940388851     10  E logdw: Found user/group name 'http' in '/etc/passwd' without required prefix 'system_'
+1794940388851     11  E logdw: Found user/group name 'nobody' in '/etc/passwd' without required prefix 'system_'
+1794940388851     12  E logdw: Found user/group name 'dbus' in '/etc/passwd' without required prefix 'system_'
+1794940388851     13  E logdw: Found user/group name 'systemd-coredump' in '/etc/passwd' without required prefix 'system_'
+1794940388851     14  E logdw: Found user/group name 'systemd-network' in '/etc/passwd' without required prefix 'system_'
+1794940388851     15  E logdw: Found user/group name 'systemd-oom' in '/etc/passwd' without required prefix 'system_'
+1794940388851     16  E logdw: Found user/group name 'systemd-journal-remote' in '/etc/passwd' without required prefix 'system_'
+1794940388851     17  E logdw: Found user/group name 'systemd-resolve' in '/etc/passwd' without required prefix 'system_'
+1794940388851     18  E logdw: Found user/group name 'systemd-timesync' in '/etc/passwd' without required prefix 'system_'
+1794940388851     19  E logdw: Found user/group name 'tss' in '/etc/passwd' without required prefix 'system_'
+1794940388851     20  E logdw: Found user/group name 'uuidd' in '/etc/passwd' without required prefix 'system_'
+1794940388851     21  E logdw: Found user/group name 'alpm' in '/etc/passwd' without required prefix 'system_'
+1794940388851     22  E logdw: Found user/group name 'git' in '/etc/passwd' without required prefix 'system_'
+1794940388851     23  E logdw: Found user/group name 'polkitd' in '/etc/passwd' without required prefix 'system_'
+1794940388851     24  E logdw: Found user/group name 'Qui' in '/etc/passwd' without required prefix 'system_'
+1794940388851     25  E logdw: Found user/group name 'avahi' in '/etc/passwd' without required prefix 'system_'
+1794940388851     26  E logdw: Found user/group name 'brltty' in '/etc/passwd' without required prefix 'system_'
+1794940388851     27  E logdw: Found user/group name 'colord' in '/etc/passwd' without required prefix 'system_'
+1794940388851     28  E logdw: Found user/group name 'flatpak' in '/etc/passwd' without required prefix 'system_'
+1794940388851     29  E logdw: Found user/group name 'gdm' in '/etc/passwd' without required prefix 'system_'
+1794940388851     30  E logdw: Found user/group name 'geoclue' in '/etc/passwd' without required prefix 'system_'
+1794940388851     31  E logdw: Found user/group name 'gnome-remote-desktop' in '/etc/passwd' without required prefix 'system_'
+1794940388851     32  E logdw: Found user/group name 'libvirt-qemu' in '/etc/passwd' without required prefix 'system_'
+1794940388851     33  E logdw: Found user/group name 'qemu' in '/etc/passwd' without required prefix 'system_'
+1794940388851     34  E logdw: Found user/group name 'rtkit' in '/etc/passwd' without required prefix 'system_'
+1794940388851     35  E logdw: Found user/group name 'saned' in '/etc/passwd' without required prefix 'system_'
+1794940388851     36  E logdw: Found user/group name 'usbmux' in '/etc/passwd' without required prefix 'system_'
+1794940388851     37  E logdw: Found user/group name 'nvidia-persistenced' in '/etc/passwd' without required prefix 'system_'
+1794940388851     38  E logdw: Found user/group name 'ollama' in '/etc/passwd' without required prefix 'system_'
+1794940388851     39  E logdw: Found user/group name 'named' in '/etc/passwd' without required prefix 'system_'
+1794940388851     40  E logdw: Found user/group name 'pcscd' in '/etc/passwd' without required prefix 'system_'
+1794940388851     41  E logdw: Found user/group name 'mongodb' in '/etc/passwd' without required prefix 'system_'
+1794940388851     42  E logdw: Found user/group name 'malcontent-timer-ext-agent' in '/etc/passwd' without required prefix 'system_'
+1794940388851     43  E logdw: Found user/group name 'malcontent-timerd' in '/etc/passwd' without required prefix 'system_'
+1794940388851     44  E logdw: Found user/group name 'malcontent-webd' in '/etc/passwd' without required prefix 'system_'
+1794940388851     45  E logdw: Found user/group name 'systemd-imds' in '/etc/passwd' without required prefix 'system_'
+1794940388851     46  E logdw: Found user/group name 'clamav' in '/etc/passwd' without required prefix 'system_'
+1794940388851     47  E logdw: Found user/group name 'dnsmasq' in '/etc/passwd' without required prefix 'system_'
+1794940388851     48  W ziparchive: Unable to open '/data/app/launch-guest/classes.dm': No such file or directory
+1794940388851     49  W ziparchive: Unable to open '/data/app/launch-guest/classes.dm': No such file or directory
+1794940388851     50  I nativeloader: InitApexLibraries skipped: No such file or directory
+1794940388851     51  D nativeloader: InitDefaultPublicLibraries for_preload=0: libandroid.so:libaaudio.so:libamidi.so:libbinder_ndk.so:libc.so:libcamera2ndk.so:libclang_rt.hwasan-aarch64-android.so:libdl.so:libEGL.so:libGLESv1_CM.so:libGLESv2.so:libGLESv3.so:libicu.so:libicui18n.so:libicuuc.so:libjnigraphics.so:liblog.so:libmediandk.so:libm.so:libnativehelper.so:libnativewindow.so:libneuralnetworks.so:libOpenMAXAL.so:libOpenSLES.so:libRS.so:libstdc++.so:libsync.so:libvulkan.so:libwebviewchromium_plat_support.so:libz.so
+1794940388851     52  D nativeloader: Configuring clns-1 for other apk . target_sdk_version=0, uses_libraries=ALL, library_path=/system/lib64, permitted_path=/data:/mnt/expand
+1794940388851     53  D nativeloader: InitExtendedPublicLibraries: 
+1794940388851     54  I nativeloader: InitVendorPublicLibraries skipped: No such file or directory
+1794940388851     55  D nativeloader: InitProductPublicLibraries: 
+1794940388851     56  E ProcessState: Binder driver /dev/binder is unavailable. Using /dev/binder instead.
+1794940388851     57  D CompatibilityChangeReporter: Compat change id reported: 171979766; UID 10192; state: ENABLED
+1794940388851     58  D CompatibilityChangeReporter: Compat change id reported: 242716250; UID 10192; state: ENABLED
+1794940388851     59  I Typeface: Preloading /system/fonts/Roboto-Regular.ttf
+1794940388851     60  I Typeface: Preloading /system/fonts/RobotoStatic-Regular.ttf
+1794940388851     61  D CompatibilityChangeReporter: Compat change id reported: 247079863; UID 10192; state: ENABLED
+1794940388851     62  W ziparchive: Unable to open '/data/app/touch-probe.dm': No such file or directory
+1794940388851     63  W ziparchive: Unable to open '/data/app/touch-probe.dm': No such file or directory
+1794940388851     64  D nativeloader: Configuring clns-2 for other apk /data/app/touch-probe.apk. target_sdk_version=34, uses_libraries=, library_path=/data/app-lib/x86_64, permitted_path=/data:/mnt/expand:/data/app-data/dev.acos.fixtures.touchprobe
+1794940388851     65  W ContextImpl: Failed to ensure /data/app-data/dev.acos.fixtures.touchprobe/cache: chown failed: EINVAL (Invalid argument)
+1794940388851     66  W ContextImpl: Failed to ensure /data/app-data/dev.acos.fixtures.touchprobe/code_cache: chown failed: EINVAL (Invalid argument)
+1794940388851     67  V GraphicsEnvironment: Currently set values for:
+1794940388851     68  V GraphicsEnvironment:   angle_gl_driver_selection_pkgs=[]
+1794940388851     69  V GraphicsEnvironment:   angle_gl_driver_selection_values=[]
+1794940388851     70  V GraphicsEnvironment: ANGLE GameManagerService for dev.acos.fixtures.touchprobe: false
+1794940388851     71  V GraphicsEnvironment: dev.acos.fixtures.touchprobe is not listed in per-application setting
+1794940388851     72  V GraphicsEnvironment: Neither updatable production driver nor prerelease driver is supported.
+1794940388851     73  W SystemServiceRegistry: No service published for: netstats
+1794940388851     74  E TrafficStats: TrafficStats not initialized, uid=10192
+1794940388851     75  I AcosRot6: ACOSLAUNCH MARK top-finish-watcher-started
+1794940388851     76  I AcosTouchProbe: onCreate
+1794940388851     77  D CompatibilityChangeReporter: Compat change id reported: 210923482; UID 10192; state: ENABLED
+1794940388851     78  E logdw: dev.acos.fixtures.touchprobe.MainActivity
+1794940388851     79  E logdw: dev.acos.fixtures.touchprobe.MainActivity
+1794940388851     80  E logdw: dev.acos.fixtures.touchprobe.MainActivity
+1794940388851     81  D CompatibilityChangeReporter: Compat change id reported: 237531167; UID 10192; state: ENABLED
+1794940389754     82  I AcosTouchProbe: activity.dispatchTouchEvent DOWN x=540.0 y=1325.0 src=0x1002
+1794940389754     83  I AcosTouchProbe: gesture.dispatchTouchEvent DOWN x=498.0 y=210.0
+1794940389754     84  I AcosTouchProbe: gesture.onDown
+1794940389754     85  I AcosTouchProbe: gesture.onTouchEvent DOWN detector=true
+1794940389754     86  I AcosTouchProbe: activity.dispatchTouchEvent MOVE x=540.13965 y=1325.0469 src=0x1002
+1794940389754     87  I AcosTouchProbe: gesture.dispatchTouchEvent MOVE x=498.13965 y=210.04688
+1794940389754     88  I AcosTouchProbe: gesture.onTouchEvent MOVE detector=false
+1794940389754     89  I AcosTouchProbe: activity.dispatchTouchEvent MOVE x=540.2793 y=1325.0928 src=0x1002
+1794940389754     90  I AcosTouchProbe: gesture.dispatchTouchEvent MOVE x=498.2793 y=210.09277
+1794940389754     91  I AcosTouchProbe: gesture.onTouchEvent MOVE detector=false
+1794940389754     92  I AcosTouchProbe: activity.dispatchTouchEvent MOVE x=540.41895 y=1325.1396 src=0x1002
+1794940389754     93  I AcosTouchProbe: gesture.dispatchTouchEvent MOVE x=498.41895 y=210.13965
+1794940389754     94  I AcosTouchProbe: gesture.onTouchEvent MOVE detector=false
+1794940389754     95  I AcosTouchProbe: activity.dispatchTouchEvent MOVE x=540.5586 y=1325.1865 src=0x1002
+1794940389754     96  I AcosTouchProbe: gesture.dispatchTouchEvent MOVE x=498.5586 y=210.18652
+1794940389754     97  I AcosTouchProbe: gesture.onTouchEvent MOVE detector=false
+1794940389754     98  I AcosTouchProbe: activity.dispatchTouchEvent MOVE x=540.69727 y=1325.2324 src=0x1002
+1794940389754     99  I AcosTouchProbe: gesture.dispatchTouchEvent MOVE x=498.69727 y=210.23242
+1794940389754    100  I AcosTouchProbe: gesture.onTouchEvent MOVE detector=false
+1794940389754    101  I AcosTouchProbe: activity.dispatchTouchEvent MOVE x=540.8369 y=1325.2793 src=0x1002
+1794940389754    102  I AcosTouchProbe: gesture.dispatchTouchEvent MOVE x=498.8369 y=210.2793
+1794940389754    103  I AcosTouchProbe: gesture.onTouchEvent MOVE detector=false
+1794940389754    104  I AcosTouchProbe: activity.dispatchTouchEvent MOVE x=540.97656 y=1325.3252 src=0x1002
+1794940389754    105  I AcosTouchProbe: gesture.dispatchTouchEvent MOVE x=498.97656 y=210.3252
+1794940389754    106  I AcosTouchProbe: gesture.onTouchEvent MOVE detector=false
+1794940389754    107  I AcosTouchProbe: activity.dispatchTouchEvent MOVE x=541.1162 y=1325.3721 src=0x1002
+1794940389754    108  I AcosTouchProbe: gesture.dispatchTouchEvent MOVE x=499.1162 y=210.37207
+1794940389754    109  I AcosTouchProbe: gesture.onTouchEvent MOVE detector=false
+1794940389754    110  I AcosTouchProbe: activity.dispatchTouchEvent MOVE x=541.25586 y=1325.419 src=0x1002
+1794940389754    111  I AcosTouchProbe: gesture.dispatchTouchEvent MOVE x=499.25586 y=210.41895
+1794940389754    112  I AcosTouchProbe: gesture.onTouchEvent MOVE detector=false
+1794940389754    113  I AcosTouchProbe: activity.dispatchTouchEvent MOVE x=541.3955 y=1325.4648 src=0x1002
+1794940389754    114  I AcosTouchProbe: gesture.dispatchTouchEvent MOVE x=499.3955 y=210.46484
+1794940389754    115  I AcosTouchProbe: gesture.onTouchEvent MOVE detector=false
+1794940389754    116  I AcosTouchProbe: activity.dispatchTouchEvent MOVE x=541.53516 y=1325.5117 src=0x1002
+1794940389754    117  I AcosTouchProbe: gesture.dispatchTouchEvent MOVE x=499.53516 y=210.51172
+1794940389754    118  I AcosTouchProbe: gesture.onTouchEvent MOVE detector=false
+1794940389754    119  I AcosTouchProbe: activity.dispatchTouchEvent MOVE x=541.6748 y=1325.5586 src=0x1002
+1794940389754    120  I AcosTouchProbe: gesture.dispatchTouchEvent MOVE x=499.6748 y=210.5586
+1794940389754    121  I AcosTouchProbe: gesture.onTouchEvent MOVE detector=false
+1794940389754    122  I AcosTouchProbe: activity.dispatchTouchEvent MOVE x=541.81445 y=1325.6045 src=0x1002
+1794940389754    123  I AcosTouchProbe: gesture.dispatchTouchEvent MOVE x=499.81445 y=210.60449
+1794940389754    124  I AcosTouchProbe: gesture.onTouchEvent MOVE detector=false
+1794940389754    125  I AcosTouchProbe: activity.dispatchTouchEvent MOVE x=541.9531 y=1325.6514 src=0x1002
+1794940389754    126  I AcosTouchProbe: gesture.dispatchTouchEvent MOVE x=499.95312 y=210.65137
+1794940389754    127  I AcosTouchProbe: gesture.onTouchEvent MOVE detector=false
+1794940389754    128  I AcosTouchProbe: activity.dispatchTouchEvent MOVE x=542.0928 y=1325.6973 src=0x1002
+1794940389754    129  I AcosTouchProbe: gesture.dispatchTouchEvent MOVE x=500.09277 y=210.69727
+1794940389754    130  I AcosTouchProbe: gesture.onTouchEvent MOVE detector=false
+1794940389754    131  I AcosTouchProbe: activity.dispatchTouchEvent MOVE x=542.2324 y=1325.7441 src=0x1002
+1794940389754    132  I AcosTouchProbe: gesture.dispatchTouchEvent MOVE x=500.23242 y=210.74414
+1794940389754    133  I AcosTouchProbe: gesture.onTouchEvent MOVE detector=false
+1794940389754    134  I AcosTouchProbe: activity.dispatchTouchEvent MOVE x=542.3721 y=1325.791 src=0x1002
+1794940389754    135  I AcosTouchProbe: gesture.dispatchTouchEvent MOVE x=500.37207 y=210.79102
+1794940389754    136  I AcosTouchProbe: gesture.onTouchEvent MOVE detector=false
+1794940389754    137  I AcosTouchProbe: activity.dispatchTouchEvent MOVE x=542.5117 y=1325.8369 src=0x1002
+1794940389754    138  I AcosTouchProbe: gesture.dispatchTouchEvent MOVE x=500.51172 y=210.83691
+1794940389754    139  I AcosTouchProbe: gesture.onTouchEvent MOVE detector=false
+1794940389754    140  I AcosTouchProbe: activity.dispatchTouchEvent MOVE x=542.65137 y=1325.8838 src=0x1002
+1794940389754    141  I AcosTouchProbe: gesture.dispatchTouchEvent MOVE x=500.65137 y=210.88379
+1794940389754    142  I AcosTouchProbe: gesture.onTouchEvent MOVE detector=false
+1794940389754    143  I AcosTouchProbe: activity.dispatchTouchEvent MOVE x=542.93066 y=1325.9766 src=0x1002
+1794940389754    144  I AcosTouchProbe: gesture.dispatchTouchEvent MOVE x=500.93066 y=210.97656
+1794940389754    145  I AcosTouchProbe: gesture.onTouchEvent MOVE detector=false
+1794940389754    146  I AcosTouchProbe: activity.dispatchTouchEvent MOVE x=543.06934 y=1326.0234 src=0x1002
+1794940389754    147  I AcosTouchProbe: gesture.dispatchTouchEvent MOVE x=501.06934 y=211.02344
+1794940389754    148  I AcosTouchProbe: gesture.onTouchEvent MOVE detector=false
+1794940389754    149  I AcosTouchProbe: activity.dispatchTouchEvent MOVE x=543.209 y=1326.0703 src=0x1002
+1794940389754    150  I AcosTouchProbe: gesture.dispatchTouchEvent MOVE x=501.20898 y=211.07031
+1794940389754    151  I AcosTouchProbe: gesture.onTouchEvent MOVE detector=false
+1794940389754    152  I AcosTouchProbe: activity.dispatchTouchEvent MOVE x=543.34863 y=1326.1162 src=0x1002
+1794940389754    153  I AcosTouchProbe: gesture.dispatchTouchEvent MOVE x=501.34863 y=211.11621
+1794940389754    154  I AcosTouchProbe: gesture.onTouchEvent MOVE detector=false
+1794940389754    155  I AcosTouchProbe: gesture.onLongPress x=498.0 y=210.0
+1794940389754    156  I AcosTouchProbe: activity.dispatchTouchEvent MOVE x=543.4883 y=1326.1631 src=0x1002
+1794940389754    157  I AcosTouchProbe: gesture.dispatchTouchEvent MOVE x=501.48828 y=211.16309
+1794940389754    158  I AcosTouchProbe: gesture.onTouchEvent MOVE detector=false
+1794940389754    159  I AcosTouchProbe: activity.dispatchTouchEvent MOVE x=543.6279 y=1326.209 src=0x1002
+1794940389754    160  I AcosTouchProbe: gesture.dispatchTouchEvent MOVE x=501.62793 y=211.20898
+1794940389754    161  I AcosTouchProbe: gesture.onTouchEvent MOVE detector=false
+1794940389754    162  I AcosTouchProbe: activity.dispatchTouchEvent MOVE x=543.7676 y=1326.2559 src=0x1002
+1794940389754    163  I AcosTouchProbe: gesture.dispatchTouchEvent MOVE x=501.76758 y=211.25586
+1794940389754    164  I AcosTouchProbe: gesture.onTouchEvent MOVE detector=false
+1794940389754    165  I AcosTouchProbe: activity.dispatchTouchEvent MOVE x=543.9072 y=1326.3027 src=0x1002
+1794940389754    166  I AcosTouchProbe: gesture.dispatchTouchEvent MOVE x=501.90723 y=211.30273
+1794940389754    167  I AcosTouchProbe: gesture.onTouchEvent MOVE detector=false
+1794940389754    168  I AcosTouchProbe: activity.dispatchTouchEvent MOVE x=544.0469 y=1326.3486 src=0x1002
+1794940389754    169  I AcosTouchProbe: gesture.dispatchTouchEvent MOVE x=502.04688 y=211.34863
+1794940389754    170  I AcosTouchProbe: gesture.onTouchEvent MOVE detector=false
+1794940389754    171  I AcosTouchProbe: activity.dispatchTouchEvent MOVE x=544.1865 y=1326.3955 src=0x1002
+1794940389754    172  I AcosTouchProbe: gesture.dispatchTouchEvent MOVE x=502.18652 y=211.39551
+1794940389754    173  I AcosTouchProbe: gesture.onTouchEvent MOVE detector=false
+1794940389754    174  I AcosTouchProbe: activity.dispatchTouchEvent MOVE x=544.3252 y=1326.4424 src=0x1002
+1794940389754    175  I AcosTouchProbe: gesture.dispatchTouchEvent MOVE x=502.3252 y=211.44238
+1794940389754    176  I AcosTouchProbe: gesture.onTouchEvent MOVE detector=false
+1794940389754    177  I AcosTouchProbe: activity.dispatchTouchEvent MOVE x=544.46484 y=1326.4883 src=0x1002
+1794940389754    178  I AcosTouchProbe: gesture.dispatchTouchEvent MOVE x=502.46484 y=211.48828
+1794940389754    179  I AcosTouchProbe: gesture.onTouchEvent MOVE detector=false
+1794940389754    180  I AcosTouchProbe: activity.dispatchTouchEvent MOVE x=544.6045 y=1326.5352 src=0x1002
+1794940389754    181  I AcosTouchProbe: gesture.dispatchTouchEvent MOVE x=502.6045 y=211.53516
+1794940389754    182  I AcosTouchProbe: gesture.onTouchEvent MOVE detector=false
+1794940389754    183  I AcosTouchProbe: activity.dispatchTouchEvent MOVE x=544.74414 y=1326.581 src=0x1002
+1794940389754    184  I AcosTouchProbe: gesture.dispatchTouchEvent MOVE x=502.74414 y=211.58105
+1794940389754    185  I AcosTouchProbe: gesture.onTouchEvent MOVE detector=false
+1794940389754    186  I AcosTouchProbe: activity.dispatchTouchEvent MOVE x=544.8838 y=1326.6279 src=0x1002
+1794940389754    187  I AcosTouchProbe: gesture.dispatchTouchEvent MOVE x=502.8838 y=211.62793
+1794940389754    188  I AcosTouchProbe: gesture.onTouchEvent MOVE detector=false
+1794940389754    189  I AcosTouchProbe: activity.dispatchTouchEvent MOVE x=545.02344 y=1326.6748 src=0x1002
+1794940389754    190  I AcosTouchProbe: gesture.dispatchTouchEvent MOVE x=503.02344 y=211.6748
+1794940389754    191  I AcosTouchProbe: gesture.onTouchEvent MOVE detector=false
+1794940389754    192  I AcosTouchProbe: activity.dispatchTouchEvent MOVE x=545.1631 y=1326.7207 src=0x1002
+1794940389754    193  I AcosTouchProbe: gesture.dispatchTouchEvent MOVE x=503.1631 y=211.7207
+1794940389754    194  I AcosTouchProbe: gesture.onTouchEvent MOVE detector=false
+1794940389754    195  I AcosTouchProbe: activity.dispatchTouchEvent MOVE x=545.30273 y=1326.7676 src=0x1002
+1794940389754    196  I AcosTouchProbe: gesture.dispatchTouchEvent MOVE x=503.30273 y=211.76758
+1794940389754    197  I AcosTouchProbe: gesture.onTouchEvent MOVE detector=false
+1794940389754    198  I AcosTouchProbe: activity.dispatchTouchEvent MOVE x=545.4414 y=1326.8145 src=0x1002
+1794940389754    199  I AcosTouchProbe: gesture.dispatchTouchEvent MOVE x=503.4414 y=211.81445
+1794940389754    200  I AcosTouchProbe: gesture.onTouchEvent MOVE detector=false
+1794940389754    201  I AcosTouchProbe: activity.dispatchTouchEvent MOVE x=545.58105 y=1326.8604 src=0x1002
+1794940389754    202  I AcosTouchProbe: gesture.dispatchTouchEvent MOVE x=503.58105 y=211.86035
+1794940389754    203  I AcosTouchProbe: gesture.onTouchEvent MOVE detector=false
+1794940389754    204  I AcosTouchProbe: activity.dispatchTouchEvent MOVE x=545.7207 y=1326.9072 src=0x1002
+1794940389754    205  I AcosTouchProbe: gesture.dispatchTouchEvent MOVE x=503.7207 y=211.90723
+1794940389754    206  I AcosTouchProbe: gesture.onTouchEvent MOVE detector=false
+1794940389754    207  I AcosTouchProbe: activity.dispatchTouchEvent MOVE x=545.86035 y=1326.9531 src=0x1002
+1794940389754    208  I AcosTouchProbe: gesture.dispatchTouchEvent MOVE x=503.86035 y=211.95312
+1794940389754    209  I AcosTouchProbe: gesture.onTouchEvent MOVE detector=false
+1794940389754    210  I AcosTouchProbe: activity.dispatchTouchEvent UP x=546.0 y=1327.0 src=0x1002
+1794940389754    211  I AcosTouchProbe: gesture.dispatchTouchEvent UP x=504.0 y=212.0
+1794940389754    212  I AcosTouchProbe: gesture.onTouchEvent UP detector=false

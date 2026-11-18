@@ -16,9 +16,14 @@ path = "src/main.rs"
 
 [dependencies]
 acos-sandbox = { path = "../acos-sandbox" }
+# GLSHIP/GPUSPIKE: the guest GL provider contract (selection rule, manifest,
+# verify cache), shared with `acos doctor` and `acos_capabilities`.
+acos-gles-provider = { path = "../acos-gles-provider" }
 acos-binder-peer = { path = "../acos-binder-peer" }
 acos-render = { path = "../acos-render" }
 acos-services = { path = "../acos-services" }
+# LAUNCHEXTRAS: the typed launch `Intent` (action/data/extras) the host encodes.
+acos-protocol = { path = "../acos-protocol" }
 # WV5b: the lazy WebView gate + the shared broker endpoint contract.
 acos-webview = { path = "../acos-webview" }
 acos-wm = { path = "../acos-wm" }

@@ -25,6 +25,14 @@ capabilities:
   - ui.text
   - input
   - storage
+# BACKSETTLE: green. Two Backs for the same reason as `hello-views`: the message
+# field was typed into, so the soft input is up and AOSP gives the first Back to
+# the IME (the keyboard hides, SecondActivity stays resumed). The second Back is
+# the claim this scenario is about - SecondActivity finishes, MainActivity below
+# is restarted and resumed, and the lifecycle order is the AOSP one from
+# fixtures/reference/multi-activity/art-api34-x86_64/lifecycle-summary.txt
+# (Second.onPause -> Main.onStart -> Main.onResume -> Second.onStop ->
+# Second.onDestroy).
 expectation: pass
 budgets:
   memory_mib: 512
@@ -84,6 +92,13 @@ steps:
       name: second-activity
       format: png
       fresh: true
+
+  # ---- the soft input takes the first Back (AOSP layer order) ------------
+  # The field above was typed into, so the IME is up: this press hides the
+  # keyboard and never reaches SecondActivity (no lifecycle, no frame).
+  - key:
+      key: back
+      settle: content
 
   # ---- Back returns to MainActivity through the back stack ---------------
   # The framework's own Back (IActivityClientController.onBackPressed ->

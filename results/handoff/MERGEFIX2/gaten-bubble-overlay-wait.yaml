@@ -1,0 +1,184 @@
+# gaten-bubble-overlay: Gaten's TYPE_ACCESSIBILITY_OVERLAY bubble — the window,
+# its content, and the switch that shows and hides it (the 2026-11-15 feedback
+# case: "the bubble itself ... ACOS cannot enable or bind an AccessibilityService").
+#
+# What this scenario proves, on real ART:
+#   * the accessibility module binds Gaten's own service and `onServiceConnected`
+#     runs (`gaten-bubble` proves the bind; the service registers its receivers
+#     from there);
+#   * flipping the "Floating button" switch reaches the app: the switch writes
+#     `TriggerPreferences.floatingButtonEnabled`, `GatenTriggerModule
+#     .setFloatingButtonEnabled` sends `com.gaten.app.action.FLOATING_BUTTON_CHANGED`
+#     (`Context.sendBroadcast` -> `IActivityManager.broadcastIntentWithFeature`),
+#     and the **manifest** receiver `com.gaten.app.LookupTriggerReceiver` is
+#     instantiated in the app's own process (`IApplicationThread
+#     .scheduleReceiver` -> `ActivityThread.handleReceiver`), whose `onReceive`
+#     calls `GatenAccessibilityService.syncFloatingButton()`;
+#   * the bubble's two `TYPE_ACCESSIBILITY_OVERLAY` windows are on the stack: the
+#     bubble itself (content description "Screen lookup") and the remove target it
+#     shows while dragging (content description "Remove floating button");
+#   * the bubble's content is visible in the UI tree;
+#   * a **tap on the bubble** starts the app's lookup: the service receives the
+#     gesture and requests a screenshot from the accessibility module, which
+#     serves it from the composited frame (`screenshots: [{display_id: 0,
+#     status: 0}]`, `TAKE_SCREENSHOT_SUCCESS`);
+#   * an **enable-set change** (the accessibility module's `enable`/`disable`
+#     control ops, which write the same two `Settings.Secure` keys the Settings UI
+#     writes) binds and unbinds the service the way
+#     `AccessibilityManagerService.setEnabledServices` does — not only the app's
+#     `AccessibilityManager.addClient` (GATENBOOT2 step 2).
+#
+# `settle: content` on the switch is deliberate: while the bubble is alive the
+# screen keeps changing (the bubble animates its own appearance), so a strict
+# pixel/event settle can never complete; the harness's content-stable rule backs
+# UI/text/window assertions and is the right one for this screen (P12/SE2).
+#
+# What this scenario does NOT cover, and why:
+#   * the lookup's **OCR result sheet**. Capturing and delivering the screenshot
+#     works (the record above), but binding a *strict* observation to the tap
+#     kills the guest: once the app wraps the screenshot `HardwareBuffer` in a
+#     `Bitmap` on a worker thread, a probe request that lands in that window
+#     segfaults in `android::GraphicBufferMapper::getAllocationSize`
+#     (`libui.so`, whose HAL mapper object is null in a gralloc-less guest; the
+#     shim interposes the mapper's own entry points, not this in-library call).
+#     `settle: fast` keeps the assertion off that window; the OCR sheet and the
+#     native allocation-size gap belong to the accessibility/screenshot track
+#     (see results/handoff/GATENBOOT2/README.md §"the tap", which keeps the
+#     crash stack);
+#   * dragging needs paced `dispatchGesture` (A11YPACE) and is not attempted here.
+#
+# Measured stability (2026-11-17/18, 20 consecutive runs): the tap step above is
+# the only timing-sensitive one. Gaten's lookup cannot finish in this image (no
+# ML Kit recognition pack), so the bubble hides for the lookup and re-shows a
+# moment later; the harness requires every tap to change the UI tree, and that
+# hide/re-show can fall between two probe samples (measured 1 in 20). Everything
+# else in the scenario is deterministic (window stack, tree content, the two
+# unbind/bind reconciliations).
+version: 1
+name: gaten-bubble-overlay
+description: >-
+  The TYPE_ACCESSIBILITY_OVERLAY bubble window over Gaten's Settings page, its
+  "Screen lookup" content in the tree, the switch that shows it, and the
+  accessibility module's enable-set bind/unbind on ART.
+app: /home/Qui/Projects/acos/.cache/gaten/gaten-dev-f344272-x86_64-release-unsigned.apk
+engine: native-preferred
+fallback: forbid
+api_level: 34
+isolation: process
+display: {mode: offscreen, width: 1080, height: 2400, density_dpi: 400}
+animations: off
+expectation: pass
+budgets: {memory_mib: 4096, wall_ms: 240000}
+services:
+  # Attached with **nothing** enabled: the state before the user switches a
+  # service on. The service is bound by the `enable` control op below, which
+  # writes the two settings the Settings UI writes — not by the app's
+  # `AccessibilityManager.addClient` (GATENBOOT2 step 2).
+  - id: accessibility
+    profile: real
+    config:
+      enable: []
+steps:
+  - launch: {activity: com.gaten.app.MainActivity, clear_state: true}
+  # Nothing is enabled, so nothing is bound.
+  - service_ctl:
+      module: accessibility
+      op: status
+      expect:
+        id: accessibility
+        op: status
+        value: {enabled: false, service_bound: false}
+  # The Settings UI's "use service" switch: a `Settings.Secure` write, which the
+  # system's settings observer reconciles (`setEnabledServices` -> `bindServices`).
+  - service_ctl:
+      module: accessibility
+      op: enable
+      args: {"services": ["com.gaten/com.gaten.app.GatenAccessibilityService"]}
+  # The guest picks the queued reverse deliveries up on its next transaction; a
+  # no-op touch in the page margin is that transaction (`settle: fast` is
+  # navigation only, so an unchanged screen is not a failed step).
+  - tap: {x: 540, y: 2380, settle: fast}
+  - service_ctl:
+      module: accessibility
+      op: status
+      expect:
+        id: accessibility
+        op: status
+        value:
+          enabled: true
+          service_bound: true
+          enabled_services:
+            - com.gaten/com.gaten.app.GatenAccessibilityService
+  - tap: {selector: {text: {contains: "Set up Gaten"}}, settle_timeout_ms: 5000}
+  - tap: {selector: {text: {exact: Skip}}, settle: fast}
+  - tap: {selector: {text: {exact: Skip}}, settle: fast}
+  - tap: {selector: {text: {exact: Skip}}, settle: fast}
+  - wait_for: {selector: {text: {contains: "Recently looked up"}}, timeout_ms: 30000}
+  - tap: {selector: {content_desc: {exact: Settings}}}
+  - wait_for: {selector: {text: {exact: "Screen lookup"}}, timeout_ms: 30000}
+  - tap: {selector: {text: {exact: "Screen lookup"}}}
+  - wait_for: {selector: {text: {exact: "Floating button"}}, timeout_ms: 30000}
+  # The page before the switch, as a picture (the bubble is not up yet).
+  - capture: {name: gaten-screen-lookup, format: png}
+  # Switching the feature on: the preference is written, the app broadcasts, the
+  # manifest receiver runs in the app's process, and its service adds the bubble.
+  - tap: {selector: {content_desc: {exact: "Floating button"}}, settle: content, settle_timeout_ms: 20000}
+  # The bubble's own windows: the remove target (added hidden) and the bubble.
+  - assert_windows:
+      order: [application, accessibility_overlay, accessibility_overlay]
+      types: [TYPE_BASE_APPLICATION, TYPE_ACCESSIBILITY_OVERLAY, TYPE_ACCESSIBILITY_OVERLAY]
+  # The bubble's visible content, in the tree that the switch left behind.
+  - assert_visible: {selector: {content_desc: {exact: "Screen lookup"}}}
+  # The remove target Gaten shows while dragging: on the stack, not visible.
+  - assert_not_visible: {selector: {content_desc: {exact: "Remove floating button"}, include_invisible: true}}
+  # No post-bubble `capture`: the bubble animates its own appearance, so the
+  # screen never satisfies the strict settle a fresh capture requires. The
+  # window stack + content above are the assertions; the frames the run keeps
+  # (`frames/`) are the pictures.
+  # The bubble draws and its overlay layer takes input a moment after it is
+  # added; a short host-side wait makes the tap land on the bubble rather than
+  # on the page below it.
+  - wait: {ms: 2500}
+  # The tap the feedback describes: Gaten looks up what is on screen. The
+  # gesture reaches the service and the app asks the accessibility module for a
+  # screenshot (`AccessibilityService.takeScreenshot`), which the module serves
+  # from the composited frame (status 0 = TAKE_SCREENSHOT_SUCCESS). `settle:
+  # fast` is the navigation rule: the lookup screen keeps changing while it runs,
+  # so it can never satisfy a strict pixel/event settle. It is also the tap right
+  # after the bubble appears: Gaten's idle fade hides the bubble a few seconds
+  # after the last interaction, and a hidden bubble is not a selector target.
+
+  # A11YPACE: the tap's effect is *transient* — the lookup hides the bubble and
+  # re-shows it a moment later, and the lookup itself cannot finish in this
+  # image (no ML Kit recognition pack), so the post-settle tree can look exactly
+  # like the pre-tap tree. The tap therefore claims delivery only
+  # (`expect_change: false`, the same spelling `expect_change: true` uses for a
+  # pixel claim): the assertion that the tap reached the service is the
+  # screenshot record below, which does not depend on how long the bubble hid.
+  # Without this, the tap's implicit "the tree changed" rule sampled a
+  # hide/re-show and failed 1 run in 20 (GATENBOOT2 §5).
+  - tap:
+      selector: {content_desc: {exact: "Screen lookup"}}
+      settle: fast
+      expect_change: false
+  - wait: {ms: 3000}
+  - service_ctl:
+      module: accessibility
+      op: status
+      expect:
+        id: accessibility
+        op: status
+        value:
+          service_bound: true
+          screenshots: [{display_id: 0, status: 0}]
+  # ... and switching the service off in the settings table unbinds it
+  # (`removeServiceLocked` -> `unbindService` -> `scheduleUnbindService` +
+  # `scheduleStopService`).
+  - service_ctl: {module: accessibility, op: disable}
+  - service_ctl:
+      module: accessibility
+      op: status
+      expect:
+        id: accessibility
+        op: status
+        value: {enabled: false, service_bound: false}

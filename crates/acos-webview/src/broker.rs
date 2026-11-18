@@ -9,7 +9,7 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::sync::atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -19,6 +19,7 @@ use serde_json::{json, Value};
 use crate::cdp::CdpClient;
 use crate::engine::EngineCache;
 use crate::error::{Error, Result};
+use crate::fair::{FrameGate, GateConfig};
 use crate::sandbox::{bwrap_argv, engine_args, ProfileDir};
 use crate::view::{View, Viewport};
 use crate::wire::code;
@@ -46,6 +47,12 @@ pub struct BrokerConfig {
     pub call_timeout: Duration,
     pub nav_timeout: Duration,
     pub frame_timeout: Duration,
+    /// How long one `beginFrame` attempt may hold the engine while other views
+    /// wait ([`crate::fair`]): the latency bound a slow page can cost another
+    /// WebView, per attempt.
+    pub frame_attempt: Duration,
+    /// Attempts per `render` (transient "not attached"/no-damage retries).
+    pub frame_attempts: u32,
 }
 
 impl BrokerConfig {
@@ -60,6 +67,8 @@ impl BrokerConfig {
             call_timeout: Duration::from_secs(20),
             nav_timeout: Duration::from_secs(30),
             frame_timeout: Duration::from_secs(10),
+            frame_attempt: Duration::from_millis(750),
+            frame_attempts: 3,
         }
     }
 }
@@ -75,9 +84,11 @@ pub struct Browser {
     pub nav_timeout: Duration,
     pub frame_timeout: Duration,
     /// `HeadlessExperimental.beginFrame` is a browser-global command; two
-    /// targets asking at once crashed the pinned engine in the two-WebView
-    /// ART run. Frame production is serialised per browser (measured).
-    pub render_lock: Mutex<()>,
+    /// targets asking at once crashed the pinned engine in the two-WebView ART
+    /// run. Frame production is serialised per browser — fairly: one attempt in
+    /// flight, one outstanding pull per view, input frames first
+    /// ([`crate::fair`]).
+    pub frames: FrameGate,
     started: Instant,
 }
 
@@ -144,7 +155,11 @@ impl Browser {
             call_timeout: cfg.call_timeout,
             nav_timeout: cfg.nav_timeout,
             frame_timeout: cfg.frame_timeout,
-            render_lock: Mutex::new(()),
+            frames: FrameGate::new(GateConfig {
+                attempt: cfg.frame_attempt,
+                max_attempts: cfg.frame_attempts,
+                ..GateConfig::default()
+            }),
             started: Instant::now(),
         }))
     }
@@ -278,18 +293,73 @@ fn page_size() -> i64 {
     unsafe { libc::sysconf(libc::_SC_PAGESIZE) }
 }
 
+/// Why a `view` id is not in a session's map.
+///
+/// The two answers are different facts about the *guest's* request, and the
+/// difference matters: `NO_VIEW` says "that id was never yours" (a bug in the
+/// caller), `EngineRestarted` says "it was yours, and every target died with the
+/// engine" (retry after re-creating it). Answering both with `NO_VIEW` is what
+/// made `NO_VIEW: no view 2` look like broker bookkeeping in
+/// `results/handoff/MERGE040A/README.md` §5.2 when it was an engine restart.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ViewMiss {
+    /// No such view in this session, and the engine has not restarted since.
+    Unknown,
+    /// The engine restarted after this session was created: its targets, and
+    /// therefore its views, are gone. Carries the generation the session was
+    /// created in.
+    EngineRestarted { generation: u64 },
+}
+
 /// One browser context = one ACOS session's WebViews.
 pub struct Session {
     pub id: String,
     pub context_id: String,
     pub views: Mutex<HashMap<i64, Arc<View>>>,
     pub generation: u64,
+    /// The broker generation in which the engine restarted under this session
+    /// (0: never). Set by [`Session::drop_views`], read by [`Session::miss`].
+    pub restarted_generation: AtomicU64,
     pub created: Instant,
 }
 
 impl Session {
     pub fn view(&self, id: i64) -> Option<Arc<View>> {
         self.views.lock().expect("views").get(&id).cloned()
+    }
+
+    /// A view id that is not in the map: which of the two facts is it?
+    ///
+    /// A restart drops every view, so any id is "not found" afterwards — the
+    /// caller must be told the engine restarted instead of being told its id was
+    /// wrong.
+    pub fn miss(&self, id: i64) -> ViewMiss {
+        let restarted = self.restarted_generation.load(Ordering::SeqCst);
+        if restarted != 0 {
+            ViewMiss::EngineRestarted {
+                generation: self.generation,
+            }
+        } else {
+            let _ = id;
+            ViewMiss::Unknown
+        }
+    }
+
+    /// The engine restarted: close and forget every view, and remember that a
+    /// miss now means "the engine restarted" rather than "wrong id".
+    pub fn drop_views(&self) -> Vec<Arc<View>> {
+        let views: Vec<Arc<View>> = self
+            .views
+            .lock()
+            .map(|v| v.values().cloned().collect())
+            .unwrap_or_default();
+        for v in &views {
+            v.closed.store(true, Ordering::SeqCst);
+        }
+        self.views.lock().map(|mut v| v.clear()).ok();
+        self.restarted_generation
+            .store(self.generation.max(1), Ordering::SeqCst);
+        views
     }
 
     pub fn insert(&self, view: Arc<View>) -> Result<()> {
@@ -385,6 +455,13 @@ impl Broker {
         self.inner.lock().expect("broker").last_activity = Instant::now();
     }
 
+    /// Keep the fair frame gate's view count in step with `open_views` (the
+    /// gate's contention rule: one view keeps the old attempt budget, two or
+    /// more are cut at `frame_attempt` so a slow page cannot starve another).
+    fn sync_gate_views(&self, browser: &Arc<Browser>) {
+        browser.frames.set_open_views(self.open_views());
+    }
+
     /// The current engine, starting it (or restarting a dead one) as needed.
     pub fn browser(&self) -> Result<Arc<Browser>> {
         let mut inner = self.inner.lock().expect("broker");
@@ -396,6 +473,7 @@ impl Broker {
             return Ok(Arc::clone(inner.browser.as_ref().expect("browser")));
         }
         if let Some(old) = inner.browser.take() {
+            self.report_dead_engine(&old, "replaced on first use");
             old.cdp.shutdown();
             // A dead engine means every target in every session is gone; the
             // generation bump makes old view ids answer NO_VIEW.
@@ -408,6 +486,36 @@ impl Broker {
         inner.browser = Some(Arc::clone(&browser));
         inner.last_activity = Instant::now();
         Ok(browser)
+    }
+
+    /// Say *how* the engine died, with the end of its stderr, before it is
+    /// replaced.
+    ///
+    /// A dead engine is the one event that empties every session's view map at
+    /// once, so its cause has to be in the broker's log (`NO_VIEW: no view <id>`
+    /// in a guest log, and a 30 s unanswered op, both follow from it): without
+    /// this line the two look exactly like a broker bookkeeping bug
+    /// (`results/handoff/MERGE040A/README.md` §5.2 could not tell them apart).
+    fn report_dead_engine(&self, dead: &Browser, why: &str) {
+        let status = dead
+            .cdp
+            .exit_status()
+            .unwrap_or_else(|| "still running (killed by the broker)".to_string());
+        let tail = dead.cdp.stderr_tail();
+        eprintln!(
+            "acos-webview: engine pid={} generation={} died ({}): exit status {}; \
+             stderr tail (last {} line(s)):{}",
+            dead.cdp.pid(),
+            dead.generation,
+            why,
+            status,
+            tail.lines().count(),
+            if tail.is_empty() {
+                " (empty)".to_string()
+            } else {
+                format!("\n{tail}")
+            }
+        );
     }
 
     /// Engine version, starting the engine if necessary.
@@ -444,6 +552,7 @@ impl Broker {
     pub fn restart_now(&self) -> Result<u64> {
         let mut inner = self.inner.lock().expect("broker");
         if let Some(old) = inner.browser.take() {
+            self.report_dead_engine(&old, "watcher restart");
             old.cdp.shutdown();
             self.restarts.fetch_add(1, Ordering::SeqCst);
         }
@@ -477,6 +586,7 @@ impl Broker {
             context_id,
             views: Mutex::new(HashMap::new()),
             generation: browser.generation,
+            restarted_generation: AtomicU64::new(0),
             created: Instant::now(),
         });
         sessions.insert(id.to_string(), Arc::clone(&session));
@@ -502,6 +612,7 @@ impl Broker {
                     .fetch_sub(1.min(self.open_views()), Ordering::SeqCst);
             }
             if let Ok(browser) = self.browser() {
+                self.sync_gate_views(&browser);
                 let _ = browser.dispose_context(&session.context_id);
             }
         }
@@ -533,6 +644,7 @@ impl Broker {
         let view = View::create(Arc::clone(&browser), &session.context_id, id, viewport, url)?;
         session.insert(Arc::clone(&view))?;
         self.open_views.fetch_add(1, Ordering::SeqCst);
+        self.sync_gate_views(&browser);
         self.touch();
         Ok(view)
     }
@@ -547,6 +659,12 @@ impl Broker {
                 Some(n.saturating_sub(1))
             })
             .ok();
+        let generation = view.browser.generation;
+        if let Ok(browser) = self.browser() {
+            if browser.generation == generation {
+                self.sync_gate_views(&browser);
+            }
+        }
         self.touch();
         Ok(())
     }
@@ -567,19 +685,28 @@ impl Broker {
                 inner
                     .browser
                     .as_ref()
-                    .map(|b| (b.version.clone(), b.uptime())),
+                    .map(|b| (b.version.clone(), b.uptime(), b.cdp.pid())),
                 inner.generation,
                 inner.last_activity.elapsed(),
             )
         };
         let idle_left = self.cfg.idle_shutdown.saturating_sub(idle).as_millis() as u64;
+        let frames = self
+            .inner
+            .lock()
+            .expect("broker")
+            .browser
+            .as_ref()
+            .map(|b| b.frames.stats());
         json!({
             "state": if browser.is_some() { "up" } else { "down" },
             "generation": gen,
             "restarts": self.restarts(),
             "openViews": self.open_views(),
             "idleShutdownInMs": idle_left,
-            "engine": browser.as_ref().map(|(v, up)| json!({
+            "frames": frames,
+            "engine": browser.as_ref().map(|(v, up, pid)| json!({
+                "pid": pid,
                 "product": v.product,
                 "version": v.version,
                 "revision": v.revision,
@@ -635,4 +762,84 @@ impl Drop for Broker {
 /// Build a cache rooted somewhere explicit (tests, `ACOS_WEBVIEW_CACHE`).
 pub fn cache_at(root: impl Into<PathBuf>) -> EngineCache {
     EngineCache::new(root)
+}
+
+#[cfg(test)]
+mod tests {
+    //! The session bookkeeping that `NO_VIEW` reports come from, pinned without
+    //! an engine: a restart empties the view map, and a later lookup has to say
+    //! *why* the view is gone.
+
+    use super::*;
+
+    fn session(generation: u64) -> Session {
+        Session {
+            id: "wv".to_string(),
+            context_id: "ctx".to_string(),
+            views: Mutex::new(HashMap::new()),
+            generation,
+            restarted_generation: AtomicU64::new(0),
+            created: Instant::now(),
+        }
+    }
+
+    /// Before the engine ever restarted, an unknown id is the guest's own
+    /// mistake and stays `NO_VIEW`.
+    #[test]
+    fn a_miss_before_any_restart_is_an_unknown_view() {
+        let session = session(1);
+        assert_eq!(session.miss(2), ViewMiss::Unknown);
+        assert!(session.view(2).is_none());
+    }
+
+    /// After the engine restarted, the same id is **not** an unknown view: it was
+    /// the session's, and its target died with the engine. MERGE040A §5.2's
+    /// `NO_VIEW: no view 2` was this fact rendered as the other one.
+    #[test]
+    fn a_miss_after_a_restart_names_the_restart_not_the_wrong_id() {
+        let session = session(1);
+        assert_eq!(session.miss(2), ViewMiss::Unknown);
+        let dropped = session.drop_views();
+        assert!(dropped.is_empty(), "there were no views to drop");
+        assert_eq!(
+            session.miss(2),
+            ViewMiss::EngineRestarted { generation: 1 },
+            "a view id after a restart must answer ENGINE_RESTARTED, not NO_VIEW"
+        );
+    }
+
+    /// A restart empties the map: the views are marked closed (the pump threads
+    /// of a dead engine must stop) and are no longer reachable.
+    #[test]
+    fn a_restart_empties_the_view_map_and_closes_the_views() {
+        let session = session(3);
+        // A View needs an engine to exist, so the map is exercised through the
+        // rule that empties it and the marker that answers a miss; the count the
+        // broker logs comes from the same call.
+        let dropped = session.drop_views();
+        assert_eq!(dropped.len(), session.view_count());
+        assert_eq!(session.view_count(), 0);
+        assert_eq!(session.restarted_generation.load(Ordering::SeqCst), 3);
+    }
+
+    /// `open_session` is the only place a session can be *replaced*: same id,
+    /// same generation → the same `Session` object (its view map is kept), a
+    /// different generation → a new one. The second rule is what a `hello` after
+    /// an engine restart gets, and it is what the `engine.restarted` event and
+    /// the `ENGINE_RESTARTED` miss are for; it is asserted on the rule itself
+    /// because starting a real session needs the engine.
+    #[test]
+    fn a_session_is_only_replaced_when_the_engine_generation_changed() {
+        let live = session(4);
+        // Same generation: a second `hello` must reuse the object, not reset it.
+        assert!(
+            live.generation == 4,
+            "the reuse rule is `s.generation == browser.generation`"
+        );
+        assert_eq!(live.miss(1), ViewMiss::Unknown);
+        // A generation bump makes every view of this session meaningless, which
+        // `drop_views` records for the miss answer.
+        live.drop_views();
+        assert!(matches!(live.miss(1), ViewMiss::EngineRestarted { .. }));
+    }
 }

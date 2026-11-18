@@ -1,0 +1,63 @@
+{
+  "backend": "acos-native",
+  "capabilities_used": [
+    "lifecycle",
+    "static-manifest",
+    "ui.tree"
+  ],
+  "evidence": {
+    "events": "events.jsonl",
+    "log": "logs/logcat.txt",
+    "verdict": "verdict.json"
+  },
+  "fidelity": "art-reference",
+  "isolation": "process",
+  "metrics": {
+    "peak_rss_bytes": 15712256,
+    "wall_ms": 182
+  },
+  "ok": true,
+  "request_id": "req_133fca_18e8e8d7785f7600",
+  "result": {
+    "artifacts_dir": "/home/Qui/.t3/worktrees/acos/t3-121d3058-b4fc4c69978d9127/results/handoff/MERGE040A/corpus3/sensors-off/art",
+    "cap_bytes": 20480,
+    "evidence_provenance": {
+      "binder_transactions": "host-observed",
+      "crash_reports": "guest-asserted",
+      "frames": "host-observed",
+      "host_input": "host-observed",
+      "input_acks": "guest-asserted",
+      "launch_markers": "guest-asserted",
+      "lifecycle_markers": "guest-asserted",
+      "logs": "guest-asserted",
+      "static_manifest": "host-observed",
+      "tree": "guest-asserted"
+    },
+    "note": "this result was larger than the reply cap; only the bulk (tree, steps, logs) was dropped and the full evidence is in the artifacts paths named here",
+    "provenance": {
+      "apk": {
+        "mtime_ns": 1794937476633937420,
+        "path": "/home/Qui/.t3/worktrees/acos/t3-121d3058-b4fc4c69978d9127/fixtures/build/apps/sensor-probe.apk",
+        "sha256": "5da08d6ecaef2f3451335885492a7759cb732e6cddc129a09a37378bb278dc9e",
+        "sha256_12": "5da08d6ecaef",
+        "size_bytes": 16852
+      },
+      "engine": "art",
+      "fidelity": "art-reference",
+      "scenario": {
+        "mtime_ns": 1794936715753554107,
+        "path": "/home/Qui/.t3/worktrees/acos/t3-121d3058-b4fc4c69978d9127/scenarios/sensors-off.yaml",
+        "sha256": "83d853752cae39e248b41cc13ee6ec5fa41b9cebc6ff00a267e4c2d2d7bc617e",
+        "sha256_12": "83d853752cae",
+        "size_bytes": 1458
+      },
+      "scenario_engine": "art",
+      "warnings": []
+    },
+    "reply_capped": true,
+    "verdict_path": "/home/Qui/.t3/worktrees/acos/t3-121d3058-b4fc4c69978d9127/results/handoff/MERGE040A/corpus3/sensors-off/art/verdict.json",
+    "verdict_status": "pass"
+  },
+  "session_id": "s_art_sensor-probe",
+  "status": "pass"
+}

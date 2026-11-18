@@ -150,6 +150,7 @@ impl CapturedIntent {
                     // never dropped from the capture.
                     Extra::Short(short) => serde_json::json!(short),
                     Extra::Strings(items) => serde_json::json!(items),
+                    Extra::Ints(items) => serde_json::json!(items),
                     Extra::Bytes(bytes) => serde_json::json!(bytes),
                     Extra::ByteArrays(items) => serde_json::json!(items),
                     Extra::Parcelable(parcelable) => {

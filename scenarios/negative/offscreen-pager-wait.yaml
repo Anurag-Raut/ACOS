@@ -16,7 +16,15 @@ fallback: forbid
 api_level: 34
 isolation: process
 display: {mode: offscreen, width: 1080, height: 2400, density_dpi: 420}
-expectation: fail
+# SCENHYG: declared honestly. The designed failure is the second `wait_for`'s own
+# 1000 ms deadline (a structured TIMEOUT that names the off-screen match), which
+# is `non_pass` with the code pinned - not a generic `fail`, and not an
+# infrastructure timeout of the harness.
+expectation: non_pass
+expectation_reason: >-
+  The off-screen "Hidden" match must time out the wait_for's own 1000 ms
+  deadline; that structured TIMEOUT is the negative being proven.
+expect_error: {code: TIMEOUT}
 steps:
   - launch:
       activity: dev.acos.fixtures.offscreenpager/.MainActivity

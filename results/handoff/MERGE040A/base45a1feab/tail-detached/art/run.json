@@ -1,0 +1,7 @@
+{
+  "request_id": "req_11acb0_18e8e7cc5b4d7dc5",
+  "started_at": "2026-11-17T18:15:16.398Z",
+  "scenario": "scenarios/tail-detached.yaml",
+  "apk": "",
+  "acos_version": "0.3.0"
+}

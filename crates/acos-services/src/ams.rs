@@ -141,6 +141,9 @@ pub enum Extra {
     /// `putExtra(String[])` — the permission names of a
     /// `REQUEST_PERMISSIONS` intent (`EXTRA_REQUEST_PERMISSIONS_NAMES`).
     Strings(Vec<String>),
+    /// `putExtra(int[])` — the grant results a permission dialog returns
+    /// (`EXTRA_REQUEST_PERMISSIONS_RESULTS`, PARCEL_FIELD `VAL_INTARRAY`).
+    Ints(Vec<i32>),
     /// `putExtra(String, byte[])` (a `VAL_BYTEARRAY` bundle value).
     Bytes(Vec<u8>),
     /// `putExtra(String, Serializable)` of an `Object[]` of `byte[]`: the shape
@@ -406,6 +409,7 @@ fn reduce_extras(bundle: &Bundle) -> BTreeMap<String, Extra> {
             Value::StringArray(Some(items)) => {
                 Extra::Strings(items.iter().filter_map(|item| item.clone()).collect())
             }
+            Value::IntArray(Some(items)) => Extra::Ints(items.clone()),
             Value::Int(i) => Extra::Int(*i),
             Value::Short(s) => Extra::Short(*s),
             Value::Bool(b) => Extra::Bool(*b),
@@ -445,6 +449,7 @@ fn encode_extras(extras: &BTreeMap<String, Extra>) -> Bundle {
                 key,
                 Value::StringArray(Some(items.iter().cloned().map(Some).collect())),
             ),
+            Extra::Ints(items) => bundle.put(key, Value::IntArray(Some(items.clone()))),
             Extra::Bytes(bytes) => bundle.put(key, Value::ByteArray(Some(bytes.clone()))),
             Extra::Parcelable(parcelable) => bundle.put(key, Value::Parcelable(parcelable.clone())),
             Extra::ByteArrays(pdus) => bundle.put(
@@ -1244,8 +1249,34 @@ pub struct ProviderRecord {
     pub binder: u64,
 }
 
-/// A guest `startActivity` the runtime must turn into a real
-/// `ClientTransaction`.
+/// Who asked for a recorded launch (MERGEFIX2).
+///
+/// The two sides of ADR-0029's launch seam own **different** launches, and a
+/// launch must be delivered exactly once:
+///
+/// * [`LaunchOrigin::Guest`] — the guest's own `startActivity`. The guest's
+///   start-activity guard (`LaunchMain`) materialises it in the process that
+///   asked (`start-activity-launched`) and adopts the token it minted, exactly
+///   as `ActivityThread` would after `scheduleTransaction`; a **primary**
+///   process's activity token is a guest `Binder` and is reported back on
+///   `activityResumed`/`finishActivity`, so the host must not mint a second one.
+/// * [`LaunchOrigin::Host`] — `system_server` as the client: a module firing an
+///   `IIntentSender` (the notification shade's row tap), the permission
+///   dialog's start, a scripted result. No guest `startActivity` is behind it,
+///   so only the host can deliver it (`Peer::take_host_transactions`).
+///
+/// A **spawned secondary** process is `ACOSLAUNCH_HOST_SCHEDULES` and waits for
+/// the host's transaction for every origin (MPROC7), which is why the filter is
+/// per origin *and* per process (see [`AmsState::pending_launch_for_tag`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LaunchOrigin {
+    /// The guest asked (`IActivityTaskManager.startActivity…`).
+    Guest,
+    /// The host asked (a module's `IIntentSender`, the dialog's start).
+    Host,
+}
+
+/// A `startActivity` the runtime must turn into a real `ClientTransaction`.
 #[derive(Debug, Clone, PartialEq)]
 pub struct PendingLaunch {
     /// Activity token (`ActivityRecord.token`).
@@ -1262,6 +1293,12 @@ pub struct PendingLaunch {
     pub result_to: u64,
     /// `startActivityForResult` request code.
     pub request_code: i32,
+    /// The AIDL `resultWho` string (`Activity.requestPermissions` passes
+    /// `"@android:requestPermissions:"`; a normal launch passes null), which
+    /// `Activity.dispatchActivityResult` uses to route the result.
+    pub result_who: Option<String>,
+    /// Who asked for this launch (MERGEFIX2): it decides which side delivers it.
+    pub origin: LaunchOrigin,
 }
 
 /// A `bindService` the runtime must deliver to the real `IServiceConnection`.
@@ -1467,6 +1504,63 @@ impl AmsState {
         result_to: u64,
         request_code: i32,
     ) -> Result<i32> {
+        self.start_activity_with_who(intent, flags, result_to, request_code, None)
+    }
+
+    /// [`Self::start_activity`] for a launch **the host asked for**
+    /// (`system_server` as the client: a module firing an `IIntentSender`, the
+    /// permission dialog's start).
+    ///
+    /// The guest never sees this `startActivity` call, so it cannot materialise
+    /// the launch itself; the peer delivers it
+    /// ([`PendingLaunch::origin`], [`Self::pending_launch_for_tag`]).
+    pub fn start_activity_from_host(
+        &mut self,
+        intent: &IntentFacts,
+        flags: i32,
+        result_to: u64,
+        request_code: i32,
+    ) -> Result<i32> {
+        self.start_activity_origin(intent, flags, result_to, request_code, None, LaunchOrigin::Host)
+    }
+
+    /// [`Self::start_activity`] with the AIDL `resultWho` string.
+    ///
+    /// `Activity.requestPermissions` starts the controller with
+    /// `startActivityForResult(REQUEST_PERMISSIONS_WHO_PREFIX, …)`, so the
+    /// caller's result record carries that string as `mResultWho`; the
+    /// `ActivityResultItem` the host builds must hand it back or
+    /// `Activity.dispatchActivityResult` never calls
+    /// `onRequestPermissionsResult`.
+    pub fn start_activity_with_who(
+        &mut self,
+        intent: &IntentFacts,
+        flags: i32,
+        result_to: u64,
+        request_code: i32,
+        result_who: Option<String>,
+    ) -> Result<i32> {
+        self.start_activity_origin(
+            intent,
+            flags,
+            result_to,
+            request_code,
+            result_who,
+            LaunchOrigin::Guest,
+        )
+    }
+
+    /// [`Self::start_activity_with_who`] with the fact of **who** asked.
+    #[allow(clippy::too_many_arguments)]
+    pub fn start_activity_origin(
+        &mut self,
+        intent: &IntentFacts,
+        flags: i32,
+        result_to: u64,
+        request_code: i32,
+        result_who: Option<String>,
+        origin: LaunchOrigin,
+    ) -> Result<i32> {
         // `Instrumentation.execStartActivity` passes `0` as the AIDL
         // `startFlags` argument; the flags the caller set live **in the
         // `Intent`** (`intent.getFlags()`), and stock `ActivityStarter` ORs the
@@ -1537,6 +1631,20 @@ impl AmsState {
             }
             Err(other) => return Err(other),
         };
+        // AOSP's `ActivityStarter` resolves an implicit intent and hands the
+        // launch on with the component set (`intent.setComponent(aInfo
+        // .getComponentName())`); `ActivityThread.performLaunchActivity` reads
+        // `r.intent.getComponent()` and crashes on null. SYSUI1: the permission
+        // request is an implicit action+package intent, so the resolution has to
+        // land on the recorded launch exactly as it does on a device.
+        let intent = if intent.component.is_none() {
+            let mut resolved = intent.clone();
+            resolved.component = Some((component.package.clone(), component.class.clone()));
+            resolved
+        } else {
+            intent.clone()
+        };
+        let intent = &intent;
         let behaviour = if flags & NEW_TASK != 0 || component.launch_mode == 3 {
             LaunchBehaviour::NewTask
         } else {
@@ -1614,8 +1722,98 @@ impl AmsState {
             task_id,
             result_to,
             request_code,
+            result_who,
+            origin,
         });
         Ok(START_SUCCESS)
+    }
+
+    /// True when the framework's permission request can be handed to the guest
+    /// system app (SYSUI1).
+    ///
+    /// Three facts, all from real state: the session's runtime-permission table
+    /// exists, the `permissions` module has dialogs on (`system_ui: dialogs`, the
+    /// `real` profile's default), and an installed package answers
+    /// `ACTION_REQUEST_PERMISSIONS`. When any is missing the caller keeps the
+    /// structured `PERMISSION_UI_UNAVAILABLE` — the honest "the controller is
+    /// not here" answer of MODNOTIF2, not a silent grant.
+    #[must_use]
+    pub fn permission_dialog_available(&self, intent: &IntentFacts) -> bool {
+        let Some(store) = self.runtime_permissions.as_ref() else {
+            return false;
+        };
+        if !store
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .dialogs_enabled()
+        {
+            return false;
+        }
+        self.manifests.resolve_activity(intent).is_ok()
+    }
+
+    /// Record the delivered request in the store (evidence the dialog was
+    /// shown, exactly like `PackageInstaller`'s request log).
+    pub fn record_permission_request(&mut self, request: &crate::permissions::PermissionsRequest) {
+        if let Some(store) = self.runtime_permissions.as_ref() {
+            store
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .record_request(&request.permissions, &request.package);
+        }
+    }
+
+    /// The launch intent the controller receives: the framework's own request
+    /// intent plus the two facts the controller system app cannot read itself
+    /// (it may only query *its own* permissions through `checkSelfPermission`).
+    ///
+    /// * `acos.permission.GRANTED` — permissions already granted, which
+    ///   `GrantPermissionsActivity` skips (`allRequestedPermissionsGranted` →
+    ///   grant + finish without drawing);
+    /// * `acos.permission.FIXED` — denied with `FLAG_PERMISSION_USER_FIXED`
+    ///   ("don't ask again"), which `GrantPermissionsActivity` also skips and
+    ///   answers denied.
+    ///
+    /// A real controller calls `IPermissionManager.getPermissionFlags` for these;
+    /// ACOS passes them in the launch instead because the guest app cannot reach
+    /// the hidden `IPermissionManager` stub. Same facts, one hop earlier.
+    #[must_use]
+    pub fn permission_dialog_intent(
+        &self,
+        request: &crate::permissions::PermissionsRequest,
+        intent: &IntentFacts,
+    ) -> IntentFacts {
+        let mut intent = intent.clone();
+        if let Some(store) = self.runtime_permissions.as_ref() {
+            let store = store
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            let granted: Vec<String> = request
+                .permissions
+                .iter()
+                .filter(|permission| store.check(permission) == crate::permissions::PERMISSION_GRANTED)
+                .cloned()
+                .collect();
+            let fixed: Vec<String> = request
+                .permissions
+                .iter()
+                .filter(|permission| store.never_ask_again(permission))
+                .cloned()
+                .collect();
+            intent.extras.insert(
+                crate::permissions::EXTRA_GRANTED.to_string(),
+                Extra::Strings(granted),
+            );
+            intent.extras.insert(
+                crate::permissions::EXTRA_FIXED.to_string(),
+                Extra::Strings(fixed),
+            );
+            intent.extras.insert(
+                crate::permissions::EXTRA_CALLING_PACKAGE.to_string(),
+                Extra::String(store.package.clone()),
+            );
+        }
+        intent
     }
 
     /// The structured answer to a `REQUEST_PERMISSIONS` intent (MODNOTIF2).
@@ -1698,10 +1896,15 @@ impl AmsState {
         if self.activities.iter().any(|a| a.token == real) {
             return None;
         }
-        if self.pending_launches.is_empty() {
-            return None;
-        }
-        let pending = self.pending_launches.remove(0);
+        // MERGEFIX2: adoption is the **guest's** half of the seam - it binds the
+        // token it minted to the launch it asked for. A host-origin launch (the
+        // shade's sender) was never the guest's to materialise; it stays queued
+        // for the peer's host-built delivery.
+        let index = self
+            .pending_launches
+            .iter()
+            .position(|launch| launch.origin == LaunchOrigin::Guest)?;
+        let pending = self.pending_launches.remove(index);
         for activity in &mut self.activities {
             if activity.token == pending.token {
                 activity.token = real;
@@ -1722,6 +1925,30 @@ impl AmsState {
     #[must_use]
     pub fn pending_launch_for(&self, package: &str) -> Option<&PendingLaunch> {
         self.pending_launches.iter().find(|l| l.package == package)
+    }
+
+    /// MERGEFIX2: the launch of `package` the **host** owes the process `tag`.
+    ///
+    /// Per-process, because the two processes of the ADR-0029 seam own
+    /// different launches:
+    ///
+    /// * `tag 0` is the **primary** process. Its guest marshals its own
+    ///   `LaunchActivityItem` and mints its own activity token (MPROC7's "the
+    ///   primary process keeps the local path"), so the host owes it only what
+    ///   the guest could not ask for itself: a [`LaunchOrigin::Host`] launch.
+    ///   Delivering a guest's own launch again created the same activity
+    ///   **twice** (two `MainActivity` instances, two `Application`-level
+    ///   `React` roots: `gaten-backstack`'s first tap then never settled,
+    ///   because the app re-rendered forever).
+    /// * Any other tag is a spawned secondary: `ACOSLAUNCH_HOST_SCHEDULES` makes
+    ///   its guest wait for the host's transaction, whatever the origin
+    ///   (MPROC7, `LaunchMain`'s `waiting-for-host-transaction`).
+    #[must_use]
+    pub fn pending_launch_for_tag(&self, tag: u32, package: &str) -> Option<&PendingLaunch> {
+        self.pending_launches.iter().find(|launch| {
+            launch.package == package
+                && (tag != crate::atms::PRIMARY_PROCESS_TAG || launch.origin == LaunchOrigin::Host)
+        })
     }
 
     /// MPROC7: take one `onNewIntent` delivery owed to process `tag`
@@ -1907,7 +2134,7 @@ impl AmsState {
                 // which is what a tap/notification sender uses.
                 crate::pending_intent::TYPE_ACTIVITY
                 | crate::pending_intent::TYPE_ACTIVITY_RESULT => self
-                    .start_activity(&intent, 0, 0, record.request_code)
+                    .start_activity_from_host(&intent, 0, 0, record.request_code)
                     .map_err(|e| e.to_string()),
                 crate::pending_intent::TYPE_BROADCAST => self
                     .broadcast(&intent, 0, code, None)
@@ -2307,6 +2534,8 @@ pub struct StartActivityArgs {
     pub intent: usize,
     /// `resultTo` (`IBinder`).
     pub result_to: usize,
+    /// `resultWho` (`String`).
+    pub result_who: usize,
     /// `requestCode` (`int`).
     pub request_code: usize,
     /// `startFlags` (`int`).
@@ -2332,6 +2561,7 @@ pub fn start_activity_args(interface: &str, method: &str) -> Option<StartActivit
     Some(StartActivityArgs {
         intent: 2 + base,
         result_to: 4 + base,
+        result_who: 5 + base,
         request_code: 6 + base,
         flags: 7 + base,
     })
@@ -2373,15 +2603,24 @@ pub fn dispatch(
                 }
             })?;
             let intent = intent(positions.intent)?;
-            // MODNOTIF2: `Activity.requestPermissions` starts an Intent at the
-            // permission controller package. ACOS has no such system app yet
-            // (ADR-0029 amendment: system UI comes from guest system apps), so
-            // the request resolves here, honestly, instead of falling through to
-            // "activity not found" (which looks like an app bug) or, worse, a
-            // silent grant.
-            if let Some(request) = crate::permissions::permission_request(&intent) {
-                return Err(state.permission_ui_unavailable(&request));
-            }
+            // MODNOTIF2 / SYSUI1: `Activity.requestPermissions` starts an Intent
+            // at the permission controller package (`buildRequestPermissionsIntent`,
+            // `PackageManager.java:7049`). ADR-0029 amendment: the dialog is the
+            // `com.android.permissioncontroller` system app. The host routes the
+            // framework's own request there when that package is installed in
+            // this session and the `permissions` module has dialogs on; otherwise
+            // the structured `PERMISSION_UI_UNAVAILABLE` stands (never a silent
+            // grant, never "activity not found", which looks like an app bug).
+            let intent = match crate::permissions::permission_request(&intent) {
+                Some(request) => {
+                    if !state.permission_dialog_available(&intent) {
+                        return Err(state.permission_ui_unavailable(&request));
+                    }
+                    state.record_permission_request(&request);
+                    state.permission_dialog_intent(&request, &intent)
+                }
+                None => intent,
+            };
             let flags = value(positions.flags).and_then(Value::as_int).unwrap_or(0);
             let result_to = value(positions.result_to)
                 .and_then(Value::as_binder)
@@ -2390,7 +2629,16 @@ pub fn dispatch(
             let request_code = value(positions.request_code)
                 .and_then(Value::as_int)
                 .unwrap_or(0);
-            let code = match state.start_activity(&intent, flags, result_to, request_code) {
+            let result_who = value(positions.result_who)
+                .and_then(Value::as_str)
+                .map(str::to_string);
+            let code = match state.start_activity_with_who(
+                &intent,
+                flags,
+                result_to,
+                request_code,
+                result_who,
+            ) {
                 Ok(code) => code,
                 Err(ServiceError::IllegalState { .. }) => START_NOT_FOUND,
                 Err(other) => return Err(other),

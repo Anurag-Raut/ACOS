@@ -1,0 +1,17 @@
+{
+  "acos_version": "0.3.0",
+  "apk_path": "/home/Qui/.t3/worktrees/acos/t3-7941bd5d-f2cbf7e1581aeebb/fixtures/build/apps/location-probe.apk",
+  "apk_sha256": "aad1047f5e9aeec3a62371d57ef0fb30283e5940c5f8f5094af663ddcf7934e1",
+  "scenario_path": "/home/Qui/.t3/worktrees/acos/t3-7941bd5d-f2cbf7e1581aeebb/results/handoff/MODLOC2/location-live-detach.yaml",
+  "scenario_sha256": "de8c92098cb97af181bb547909514b9c611101e22311007e547b97032dc4e9af",
+  "flags": [],
+  "isolation": "process",
+  "display": {
+    "mode": "offscreen",
+    "width": 1080,
+    "height": 2400,
+    "density_dpi": 420
+  },
+  "fidelity": "art-reference",
+  "backend": "acos-native"
+}

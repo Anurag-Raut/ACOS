@@ -1,0 +1,17 @@
+{
+  "acos_version": "0.3.0",
+  "apk_path": "/home/Qui/.t3/worktrees/acos/t3-7941bd5d-f2cbf7e1581aeebb/fixtures/build/apps/counter.apk",
+  "apk_sha256": "973932a70fca50e8cf08e2fbb1e6b18f5b919252f08eb3b2de8658086c01c742",
+  "scenario_path": "/home/Qui/.t3/worktrees/acos/t3-7941bd5d-f2cbf7e1581aeebb/scenarios/negative/rot1-rotate-wrong.yaml",
+  "scenario_sha256": "0f7e3599d3280c9644f5ad1ab74386b566e105a9852f43e75acbf82e4618ba0b",
+  "flags": [],
+  "isolation": "process",
+  "display": {
+    "mode": "offscreen",
+    "width": 1080,
+    "height": 2400,
+    "density_dpi": 420
+  },
+  "fidelity": "art-reference",
+  "backend": "acos-native"
+}

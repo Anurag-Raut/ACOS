@@ -1,0 +1,49 @@
+{
+  "assertions": [],
+  "certification": "certified-with-limits",
+  "certification_limits": {
+    "doc": "docs/SANDBOX_CERTIFICATION.md",
+    "section": "§8.7"
+  },
+  "duration_ms": 205,
+  "evidence": [
+    {
+      "kind": "tree",
+      "path": "tree/136.json"
+    },
+    {
+      "kind": "frame",
+      "path": "frames/136.png"
+    },
+    {
+      "kind": "step",
+      "path": "steps/15-rotate.json"
+    }
+  ],
+  "frame_seq": 136,
+  "index": 15,
+  "provenance": {
+    "frame": "host-observed",
+    "host_input": "host-observed",
+    "input_acks": "guest-asserted",
+    "tree": "guest-asserted"
+  },
+  "settle": {
+    "ack_ms": 10,
+    "bound": "host-window-removal",
+    "first_change_ms": 88,
+    "frame_ms": 216,
+    "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
+    "mode": "strict",
+    "pixels_changed": true,
+    "reason": "host-window-removal",
+    "settled": true,
+    "state_changed": null,
+    "strict_rule": "event",
+    "waited_ms": 205,
+    "waited_ms_source": "step"
+  },
+  "status": "pass",
+  "step": "rotate",
+  "trust": "trusted"
+}

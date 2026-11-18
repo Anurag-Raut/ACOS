@@ -23,25 +23,39 @@
 //!   `updatePermissionFlags` succeed and change the table, exactly as the
 //!   system service does.
 //!
-//! What is **not** here is the dialog. `Activity.requestPermissions` builds an
-//! `Intent` addressed to the permission controller package
-//! (`PackageManager.buildRequestPermissionsIntent`,
+//! ## The dialog (SYSUI1)
+//!
+//! `Activity.requestPermissions` builds an `Intent` addressed to the permission
+//! controller package (`PackageManager.buildRequestPermissionsIntent`,
 //! `base/core/java/android/content/pm/PackageManager.java:7049`) and starts it
-//! for a result. ACOS installs no such system app yet (ADR-0029 amendment:
-//! system UI comes from guest system apps, built on the multi-process work), so
-//! the ATMS resolves that intent to a structured
-//! `PERMISSION_UI_UNAVAILABLE` naming the system-app work, and to
-//! `onRequestPermissionsResult`-equivalent denial nothing. It never grants
-//! silently. A configuration whose permissions are all pre-granted resolves to
-//! the same "already granted" state `GrantPermissionsActivity` would return,
-//! and is reported as such.
+//! for a result. ADR-0029 amendment: that system app is a guest app. This module
+//! declares it (`system_apps: ["com.android.permissioncontroller"]`), the
+//! launcher installs it before the guest boots (`module::system_apks`), and the
+//! host routes the framework's own intent to its `GrantPermissionsActivity` —
+//! lazily spawning the controller's process, launching the dialog with a
+//! host-built `ClientTransaction`, and delivering the activity result back
+//! (MPROC7) so the requesting app's `onRequestPermissionsResult` runs with the
+//! AOSP shape.
+//!
+//! `config: {"system_ui": "dialogs" | "off"}` selects it. The `real` profile's
+//! default is **dialogs on**: a request that the scenario did not pre-decide
+//! shows the dialog; with `off` (or the app's own package when the controller
+//! APK is not installed) the framework answer is MODNOTIF2's structured
+//! `PERMISSION_UI_UNAVAILABLE`, never a silent grant.
+//!
+//! A request whose permissions are all pre-decided never draws: pre-granted ones
+//! are skipped and pre-denied `deny_never_ask_again` ones are answered denied,
+//! which is `GrantPermissionsActivity`'s own short-circuit
+//! (`allRequestedPermissionsGranted`). The dialog app is launched with
+//! `acos.permission.GRANTED`/`acos.permission.FIXED` so it can do the same.
 //!
 //! `control` ops: `grant {permission}`, `deny {permission, never_ask_again?}`,
 //! `revoke {permission}`, `state` (every permission, its flags and rationale).
 //!
 //! Launch config: `{"grant": [...], "deny": [...],
-//! "deny_never_ask_again": [...]}` — pre-grant or pre-deny before the app
-//! starts, which is how the conformance fixture is driven from a scenario.
+//! "deny_never_ask_again": [...], "system_ui": "dialogs"}` — pre-grant or
+//! pre-deny before the app starts, which is how the conformance fixture is
+//! driven from a scenario.
 
 use std::sync::{Arc, Mutex};
 
@@ -54,7 +68,7 @@ use crate::module::{
     SecurityClass, ServiceProvide,
 };
 use crate::permissions::{PermissionStore, PERMISSION_GRANTED};
-use crate::value::Value as WireValue;
+use crate::value::{Parcelable, Value as WireValue};
 
 /// The `ServiceManager` name this module takes over from `core`.
 pub const SERVICE_NAME: &str = "permission";
@@ -62,6 +76,19 @@ pub const SERVICE_NAME: &str = "permission";
 pub const DESCRIPTOR: &str = "android.permission.IPermissionManager";
 /// The module id.
 pub const MODULE_ID: &str = "system.permissions";
+/// The guest system app that answers `ACTION_REQUEST_PERMISSIONS`
+/// (`PackageManager.PERMISSION_CONTROLLER_PACKAGE`), installed by
+/// `module::system_apks` for this module's `real` profile.
+pub const PERMISSION_CONTROLLER_PACKAGE: &str =
+    crate::permissions::PERMISSION_CONTROLLER_PACKAGE;
+/// Where the controller APK is, when the caller names one.
+pub const CONFIG_APK: &str = "apk";
+/// The controller APK's environment override.
+pub const APK_ENV: &str = "ACOS_PERMISSION_CONTROLLER_APK";
+/// Workspace-relative default build output (`tools/build-apps.sh`).
+pub const APK_REL: &str = "fixtures/build/apps/permissioncontroller.apk";
+/// `config: {"system_ui": "dialogs" | "off"}`.
+pub const CONFIG_SYSTEM_UI: &str = "system_ui";
 
 /// The `ServiceManager` name -> descriptor pairs this module serves.
 ///
@@ -96,7 +123,7 @@ fn manifest_ref() -> &'static ModuleManifest {
     static MANIFEST: ModuleManifest = ModuleManifest {
         id: MODULE_ID,
         version: "1.0.0",
-        summary: "runtime permissions: one shared store behind both checkPermission paths, flags, rationale, grant/deny/revoke (no dialog: the controller system app is not built yet)",
+        summary: "runtime permissions: one shared store behind both checkPermission paths, flags, rationale, grant/deny/revoke, and the permission dialog served by the com.android.permissioncontroller system app",
         services: SERVICES,
         replaces: &[SERVICE_NAME],
         process_initializers: &[],
@@ -104,7 +131,9 @@ fn manifest_ref() -> &'static ModuleManifest {
         providers: &[],
         broadcasts: &[],
         windows: &[],
-        system_apps: &[],
+        // SYSUI1: the permission dialog is this module's system app (ADR-0029
+        // amendment: system UI comes from system apps in the guest).
+        system_apps: &[PERMISSION_CONTROLLER_PACKAGE],
         requires: &[],
         requires_host_tools: &[],
         // `real` for the state and every check path; the dialog is the
@@ -218,6 +247,85 @@ impl ServiceObject for PermissionsService {
                 let permission = string(1);
                 vec![WireValue::Int(self.store().check(&permission))]
             }
+            // `getPermissionInfo(String permissionName, String packageName, int userId)`
+            // (code 3). SYSUI1 measured the dialog's `PackageManager.
+            // getPermissionInfo` landing here, not on `IPackageManager`:
+            // `PackageManager` -> `PermissionManager` -> `IPermissionManager`.
+            // The reply is a `PermissionInfo` whose `nonLocalizedLabel` /
+            // `nonLocalizedDescription` carry AOSP's English text, so the
+            // framework's own `PermissionInfo.loadLabel` answers the real label
+            // with no resource resolution. `null` for a permission ACOS cannot
+            // describe (`NameNotFoundException` on the guest side).
+            "getPermissionInfo" => {
+                let permission = string(0);
+                let info = self.store().permission_description(&permission);
+                vec![WireValue::TypedObject(match info {
+                    Some(info) => info.to_parcelable(),
+                    None => Parcelable::Null,
+                })]
+            }
+            // `getPermissionGroupInfo(String groupName, int flags)` (code 2):
+            // a `PermissionGroupInfo` from the same catalog, `null` for an
+            // unknown group.
+            "getPermissionGroupInfo" => {
+                let group = string(0);
+                let info = self.store().group_description(&group);
+                vec![WireValue::TypedObject(match info {
+                    Some(info) => info.to_parcelable(),
+                    None => Parcelable::Null,
+                })]
+            }
+            // `queryPermissionsByGroup(String groupName, int userId)` (code 4):
+            // `ParceledListSlice<PermissionInfo>`; a known group always answers
+            // a (possibly empty) list, an unknown one `null`.
+            "queryPermissionsByGroup" => {
+                let group = string(0);
+                // One guard, one answer: `permissions_in_group` builds owned
+                // rows, so the lock is released before the reply is written.
+                let (known, items) = {
+                    let store = self.store();
+                    let known = store.group_description(&group).is_some();
+                    let items: Vec<WireValue> = store
+                        .permissions_in_group(&group)
+                        .iter()
+                        .map(|info| WireValue::Parcelable(info.to_parcelable()))
+                        .collect();
+                    (known, items)
+                };
+                if !known && items.is_empty() {
+                    return Ok(CallResult {
+                        reply: vec![WireValue::TypedObject(Parcelable::Null)],
+                        deliveries: Vec::new(),
+                    });
+                }
+                vec![WireValue::TypedObject(
+                    crate::parcelable::parceled_list_of(items),
+                )]
+            }
+            // `getAllPermissionGroups(int flags)` (code 1):
+            // `ParceledListSlice<PermissionGroupInfo>`.
+            "getAllPermissionGroups" => {
+                let items = self
+                    .store()
+                    .group_descriptions()
+                    .iter()
+                    .map(|info| WireValue::Parcelable(info.to_parcelable()))
+                    .collect();
+                vec![WireValue::TypedObject(
+                    crate::parcelable::parceled_list_of(items),
+                )]
+            }
+            // `checkUidPermission(int uid, String permissionName, int deviceId)`:
+            // the framework's `Context.checkCallingPermission` path — the caller
+            // is a **uid** (`Binder.getCallingUid()`), and BINDERPID is what
+            // makes that uid the calling app's real one instead of 0.
+            "checkUidPermission" => {
+                let uid = int(0);
+                let permission = string(1);
+                vec![WireValue::Int(
+                    self.store().check_uid_permission(uid as u32, &permission),
+                )]
+            }
             // `isPermissionRevokedByPolicy(...)`: no device policy on ACOS.
             "isPermissionRevokedByPolicy" => vec![WireValue::Bool(false)],
             "getAllowlistedRestrictedPermissions"
@@ -313,6 +421,27 @@ fn apply_config(store: &mut PermissionStore, config: &ModuleConfig) -> Result<Va
     }))
 }
 
+/// The host APK this module's declared **system app** installs
+/// (`crate::module::system_apks`).
+///
+/// `config: {"apk": …}` first, then `ACOS_PERMISSION_CONTROLLER_APK`, then the
+/// workspace build output. `None` when `module`/`app` is not this module's.
+#[must_use]
+pub fn system_app_apk(module: &str, app: &str, config: &ModuleConfig) -> Option<std::path::PathBuf> {
+    if module != MODULE_ID || app != PERMISSION_CONTROLLER_PACKAGE {
+        return None;
+    }
+    if let Some(path) = config.string(CONFIG_APK).filter(|path| !path.is_empty()) {
+        return Some(std::path::PathBuf::from(path));
+    }
+    if let Some(path) = std::env::var_os(APK_ENV) {
+        if !path.is_empty() {
+            return Some(std::path::PathBuf::from(path));
+        }
+    }
+    Some(crate::workspace_path(APK_REL).unwrap_or_else(|| std::path::PathBuf::from(APK_REL)))
+}
+
 impl Module for PermissionsModule {
     fn manifest(&self) -> &'static ModuleManifest {
         manifest_ref()
@@ -343,12 +472,34 @@ impl Module for PermissionsModule {
                 store
             }
         };
-        self.configured = Some(apply_config(
-            &mut store
+        let dialogs = match config.string(CONFIG_SYSTEM_UI) {
+            None | Some("dialogs" | "on" | "true") => true,
+            Some("off" | "false" | "none") => false,
+            Some(other) => {
+                return Err(ServiceError::ModuleRejected {
+                    module: MODULE_ID,
+                    detail: format!(
+                        "system_ui {other:?} is not a value: use \"dialogs\" (the real profile's default) or \"off\""
+                    ),
+                })
+            }
+        };
+        {
+            let mut store = store
                 .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner),
-            config,
-        )?);
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            store.set_dialogs(dialogs);
+        }
+        self.configured = Some({
+            let mut configured = apply_config(
+                &mut store
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner),
+                config,
+            )?;
+            configured["system_ui"] = json!(if dialogs { "dialogs" } else { "off" });
+            configured
+        });
         // Registered through the factory path (`IPermissionManager` is in the
         // decoded `acos-aidl` tables), so the decoded argument list reaches
         // `call` and the reply is written through the same codec the framework's
@@ -369,7 +520,15 @@ impl Module for PermissionsModule {
         // `end_scope` restores core's `IPermissionManager` registration and the
         // host's previous store slot. The table itself is *not* dropped: it is
         // the session's permission state, and `core`'s check paths keep reading
-        // it, which is what "detach restores the core answer" means.
+        // it, which is what "detach restores the core answer" means. Dialogs go
+        // off with the module: a request must not be routed to a controller
+        // whose service layer is detached.
+        if let Some(store) = self.store.as_ref() {
+            store
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .set_dialogs(false);
+        }
         self.store = None;
         self.configured = None;
         self.profile = Profile::Off;
@@ -453,8 +612,19 @@ impl Module for PermissionsModule {
                         .count()
                 })
                 .unwrap_or(0);
+            let dialogs = self.store.as_ref().is_some_and(|store| {
+                store
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .dialogs_enabled()
+            });
             report.reason = Some(format!(
-                "real runtime-permission store: {granted_count} granted permission(s) seen by both checkPermission paths; the request dialog needs the permission-controller system app (PERMISSION_UI_UNAVAILABLE)"
+                "real runtime-permission store: {granted_count} granted permission(s) seen by both checkPermission paths; system UI {}",
+                if dialogs {
+                    "dialogs: requestPermissions is answered by the com.android.permissioncontroller guest system app"
+                } else {
+                    "off: requestPermissions answers the structured PERMISSION_UI_UNAVAILABLE"
+                }
             ));
         }
         report

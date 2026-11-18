@@ -1,0 +1,7 @@
+{
+  "request_id": "req_8da2f_18e90c30ef0ff1a2",
+  "started_at": "2026-11-18T05:22:10.792Z",
+  "scenario": "scenarios/webview-fair.yaml",
+  "apk": "",
+  "acos_version": "0.3.0"
+}

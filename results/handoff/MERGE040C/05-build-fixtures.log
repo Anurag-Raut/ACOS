@@ -1,0 +1,33 @@
+build-fixtures: SDK=/home/Qui/Android/Sdk build-tools=35.0.0
+build-fixtures: source=/home/Qui/.t3/worktrees/acos/t3-2f630078-d1c2107b4b54fe17/fixtures/dexprogs
+  01_hello                     exit=0   stdout_lines=16   dex=1652 bytes
+  02_int_arith                 exit=0   stdout_lines=30   dex=2360 bytes
+  03_long_arith                exit=0   stdout_lines=30   dex=2708 bytes
+  04_float_double              exit=0   stdout_lines=41   dex=4132 bytes
+  05_branches_loops            exit=0   stdout_lines=17   dex=2660 bytes
+  06_switch                    exit=0   stdout_lines=22   dex=2344 bytes
+  07_static_methods_recursion  exit=0   stdout_lines=32   dex=2784 bytes
+  08_arrays                    exit=0   stdout_lines=20   dex=3936 bytes
+  09_strings                   exit=0   stdout_lines=40   dex=5896 bytes
+  10_objects_fields            exit=0   stdout_lines=18   dex=3876 bytes
+  11_inheritance_virtual       exit=0   stdout_lines=17   dex=4016 bytes
+  12_interfaces                exit=0   stdout_lines=16   dex=3924 bytes
+  13_exceptions                exit=0   stdout_lines=20   dex=4608 bytes
+  14_instanceof_casts          exit=0   stdout_lines=17   dex=3672 bytes
+  15_inner_lambda              exit=0   stdout_lines=16   dex=7572 bytes
+  16_enums                     exit=0   stdout_lines=16   dex=5988 bytes
+  17_generics_collections      exit=0   stdout_lines=23   dex=5912 bytes
+  18_string_format_misc        exit=0   stdout_lines=37   dex=5544 bytes
+  19_threads_sync              exit=0   stdout_lines=10   dex=3960 bytes
+  20_uncaught                  exit=1   stdout_lines=2    dex=1620 bytes
+  21_regex_basic               exit=0   stdout_lines=21   dex=3468 bytes
+  22_regex_advanced            exit=0   stdout_lines=30   dex=3720 bytes
+  23_regex_split_replace       exit=0   stdout_lines=23   dex=3860 bytes
+  24_zip_roundtrip             exit=0   stdout_lines=25   dex=5376 bytes
+  25_security_digest           exit=0   stdout_lines=31   dex=5392 bytes
+  26_regex_matrix              exit=0   stdout_lines=386  dex=18372 bytes
+  27_annotations_reflection    exit=0   stdout_lines=37   dex=8148 bytes
+  28_sqlite_basic              exit=1   stdout_lines=0    dex=8152 bytes
+build-fixtures: built 28 programs
+build-fixtures: dex   -> /home/Qui/.t3/worktrees/acos/t3-2f630078-d1c2107b4b54fe17/fixtures/build/dexprogs/<name>/classes.dex
+build-fixtures: ref   -> /home/Qui/.t3/worktrees/acos/t3-2f630078-d1c2107b4b54fe17/fixtures/expected/dexprogs/<name>.{stdout,exit[,stderr]}

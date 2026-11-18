@@ -7,6 +7,7 @@ name = "acos-aidl"
 version = "0.3.0"
 dependencies = [
  "acos-dex",
+ "acos-test-support",
  "serde",
  "serde_json",
  "thiserror",
@@ -39,8 +40,10 @@ name = "acos-art"
 version = "0.3.0"
 dependencies = [
  "acos-binder-peer",
+ "acos-gles-provider",
  "acos-netd",
  "acos-parcel",
+ "acos-protocol",
  "acos-render",
  "acos-sandbox",
  "acos-services",
@@ -74,6 +77,7 @@ dependencies = [
  "acos-apk",
  "acos-art",
  "acos-dex",
+ "acos-gles-provider",
  "acos-jni",
  "acos-mcp",
  "acos-native-loader",
@@ -126,6 +130,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "acos-gles-provider"
+version = "0.3.0"
+dependencies = [
+ "libc",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "acos-jni"
 version = "0.3.0"
 dependencies = [
@@ -148,7 +161,7 @@ dependencies = [
 name = "acos-mcp"
 version = "0.3.0"
 dependencies = [
- "acos-art",
+ "acos-gles-provider",
  "acos-jni",
  "acos-netd",
  "acos-protocol",
@@ -256,6 +269,7 @@ dependencies = [
  "acos-jni",
  "acos-native-loader",
  "acos-parcel",
+ "acos-protocol",
  "acos-render",
  "acos-sandbox",
  "acos-services",

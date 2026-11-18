@@ -908,6 +908,13 @@ impl WindowManager {
         self.layer_stack().hit_test(point)
     }
 
+    /// Every touchable window under `p`, topmost first (`InputDispatcher`'s own
+    /// search order; the input host skips the ones with no live input channel).
+    #[must_use]
+    pub fn hit_test_candidates(&self, point: PointI) -> Vec<WindowId> {
+        self.layer_stack().hit_test_candidates(point)
+    }
+
     /// The window that may take focus: the topmost focusable window.
     #[must_use]
     pub fn focus_target(&self) -> Option<WindowId> {
@@ -1952,6 +1959,38 @@ mod tests {
         assert_eq!(wm.focus_target(), Some(activity));
         // It is still drawn: composition order does not depend on touchability.
         assert_eq!(wm.layer_stack().z_of(0x10), Some(1));
+    }
+
+    /// WVTAP: the input host needs the **ordered** candidates under a point
+    /// (`InputDispatcher` walks the stack from the top and takes the first
+    /// window that can receive the event), not just the topmost one: a window
+    /// whose input channel is gone must be skipped, never replaced by "the
+    /// newest window".
+    #[test]
+    fn hit_test_candidates_lists_the_stack_from_the_top() {
+        use crate::layers::{FLAG_NOT_TOUCHABLE, TYPE_APPLICATION, TYPE_APPLICATION_OVERLAY};
+        let mut wm = WindowManager::new(DisplaySpec::reference_1080x2400());
+        let (sess, _b) = wm.open_session(None);
+        let activity = wm
+            .add_to_display_as_user(sess, BinderId(0x01), overlay_params(TYPE_APPLICATION, 0), 0)
+            .unwrap()
+            .window;
+        let overlay = wm
+            .add_to_display_as_user(sess, BinderId(0x10), overlay_params(TYPE_APPLICATION_OVERLAY, 0), 0)
+            .unwrap()
+            .window;
+        // Both windows cover the display; a point well inside both (a window
+        // frame starts below the status bar under the `report` inset model).
+        let frame = wm.windows[&activity].frame;
+        let point = PointI::new(frame.left + 20, frame.top + 20);
+        assert_eq!(
+            wm.hit_test_candidates(point),
+            vec![overlay, activity],
+            "topmost first"
+        );
+        // A NOT_TOUCHABLE overlay is not a candidate at all (it passes through).
+        wm.windows.get_mut(&overlay).unwrap().params.flags = FLAG_NOT_TOUCHABLE;
+        assert_eq!(wm.hit_test_candidates(point), vec![activity]);
     }
 
     /// LAYER1: two windows in the same policy layer are ordered by creation,

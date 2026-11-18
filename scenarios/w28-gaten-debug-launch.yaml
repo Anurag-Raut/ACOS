@@ -36,7 +36,14 @@ display:
 capabilities:
   - lifecycle
   - ui.text
-expectation: pass
+# SCENHYG: declared honestly. This debug Gaten APK predates the shipped image build and no longer starts; the live Gaten coverage is scenarios/gaten-*.yaml. The launch ends
+# before the first frame (GUEST_EXITED), which is a structured error, not a pass;
+# the scenario pins that code so it cannot go red for something unrelated.
+expectation: non_pass
+expectation_reason: >-
+  The APK cannot start on this image (GUEST_EXITED before the first frame); the
+  scenario proves the structured refusal, never a pass.
+expect_error: {code: GUEST_EXITED}
 budgets:
   memory_mib: 2048
   wall_ms: 300000

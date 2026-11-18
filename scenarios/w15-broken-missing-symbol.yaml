@@ -19,7 +19,14 @@ capabilities:
   - lifecycle
   - ui.text
   - input
-expectation: pass
+# SCENHYG: declared honestly. The fixture is the deliberately broken one (a missing native symbol), so "never pass" is its stated intent. The launch ends
+# before the first frame (GUEST_EXITED), which is a structured error, not a pass;
+# the scenario pins that code so it cannot go red for something unrelated.
+expectation: non_pass
+expectation_reason: >-
+  The APK cannot start on this image (GUEST_EXITED before the first frame); the
+  scenario proves the structured refusal, never a pass.
+expect_error: {code: GUEST_EXITED}
 budgets:
   memory_mib: 512
   wall_ms: 120000

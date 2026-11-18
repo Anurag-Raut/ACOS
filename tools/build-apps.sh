@@ -21,7 +21,10 @@
 #   fixtures/build/apps/multi-package-probe.apk
 #   fixtures/build/apps/sensor-probe.apk   (MODSENS: native sensorservice feed)
 #   fixtures/build/apps/notif-perm-probe.apk (MODNOTIF5: notifications + POST_NOTIFICATIONS gate)
+#   fixtures/build/apps/permissioncontroller.apk (SYSUI1: the permission-controller system app)
+#   fixtures/build/apps/perm-probe.apk   (SYSUI1: requestPermissions -> the dialog)
 #   fixtures/build/apps/net-check.apk  (NET3/NET4: the relay fetch fixture)
+#   fixtures/build/apps/systemui.apk   (SYSUI2: the notification shade system app)
 #
 #
 # `tools/run-matrix.sh` calls this script with ACOS_APP_ONLY for any scenario
@@ -175,70 +178,14 @@ build_apk() {
 
 # --- webview-provider (ADR-0031) --------------------------------------------
 #
-# The WebView provider is not a normal app: the framework's
-# `WebViewFactoryProvider`/`WebViewProvider`/`WebViewDelegate`/`WebView$PrivateAccess`
-# are hidden, so the sources compile against generated compile-time stubs
-# (`tools/gen-webview-provider.py`, from the API-34 image's own dex) instead of
-# against `android.jar` alone. The stubs are **not** dexed: the image's boot
-# classpath supplies those classes at runtime.
+# The provider APK has exactly **one** build implementation,
+# `tools/build-webview-provider.sh`: the image build
+# (`tools/extract-bootclasspath.sh`) calls the same script to ship it under
+# `<image>/system-apps/com.android.webview.apk`, so a fresh install needs no
+# separate step and the two outputs can never drift apart.
 build_provider_apk() {
     local name="$1"
-    local app_dir="$APPS_DIR/$name"
-    local work="$BUILD_DIR/$name"
-    local out="$BUILD_DIR/$name.apk"
-
-    rm -rf "$work"
-    mkdir -p "$work/stub-classes" "$work/classes" "$work/dex"
-
-    echo "build-apps: [$name] generating hidden-API stubs + provider surface"
-    python3 "$ROOT/tools/gen-webview-provider.py"
-
-    echo "build-apps: [$name] compiling hidden-API stubs (compile-time only)"
-    # shellcheck disable=SC2046
-    javac --release 11 -encoding UTF-8 -cp "$ANDROID_JAR" -d "$work/stub-classes" \
-        $(find "$app_dir/hidden-stubs" -name '*.java')
-
-    echo "build-apps: [$name] linking manifest"
-    "$AAPT2" link \
-        -o "$work/base.apk" \
-        -I "$ANDROID_JAR" \
-        --manifest "$app_dir/AndroidManifest.xml" \
-        --min-sdk-version 26 \
-        --target-sdk-version 34
-
-    echo "build-apps: [$name] compiling java (stubs first: they own the hidden names)"
-    # shellcheck disable=SC2046
-    javac --release 11 -encoding UTF-8 \
-        -cp "$work/stub-classes:$ANDROID_JAR" -d "$work/classes" \
-        $(find "$app_dir/src" -name '*.java')
-
-    echo "build-apps: [$name] dexing (provider classes only, never the stubs)"
-    # shellcheck disable=SC2046
-    "$D8" --lib "$ANDROID_JAR" --min-api 26 --output "$work/dex" \
-        $(find "$work/classes" -name '*.class')
-
-    python3 "$APPEND_PY" "$work/base.apk" "$work/dex/classes.dex"
-
-    echo "build-apps: [$name] aligning"
-    rm -f "$out" "$work/aligned.apk"
-    "$ZIPALIGN" -f 4 "$work/base.apk" "$work/aligned.apk"
-
-    echo "build-apps: [$name] signing"
-    "$APKSIGNER" sign \
-        --ks "$KEYSTORE" \
-        --ks-pass "pass:$KEY_PASS" \
-        --key-pass "pass:$KEY_PASS" \
-        --ks-key-alias "$KEY_ALIAS" \
-        --v1-signing-enabled true \
-        --v2-signing-enabled true \
-        --v3-signing-enabled true \
-        --out "$out" \
-        "$work/aligned.apk"
-
-    echo "build-apps: [$name] verifying"
-    "$APKSIGNER" verify --verbose "$out" >/dev/null
-    "$AAPT2" dump badging "$out" | sed 's/^/    /' | head -n 8
-    echo "build-apps: [$name] -> $out ($(stat -c '%s' "$out") bytes)"
+    "$ROOT/tools/build-webview-provider.sh" --out "$BUILD_DIR/$name.apk"
 }
 
 # K5b: `ACOS_APP_ONLY="a b"` builds just the named fixtures, so one app can be
@@ -315,13 +262,29 @@ build_apk native-hostile "$HOSTILE_JNI_WORK:lib"
 # offscreen-pager is the tree-visibility fixture (GR2 W4): a two-page
 # HorizontalScrollView whose second page is warm-mounted one display width off
 # screen, with text that must be reported `visible:false` until you scroll.
+# ONE list, the union of every side (MERGE040A, MERGE040B). The pre-merge tree
+# carried two `for app in` headers here (a MERGE030 artifact): the second one
+# (with looper-wake) shadowed the first, so sensor-probe and notif-perm-probe
+# were silently never built; SCENHYG and PROCUID each found the other half of
+# the same artifact — the pair of `done`-less headers left this loop
+# unterminated, so the whole script died before *any* fixture of the tree could
+# be built (nothing below this point: a11y-probe, tail-probe, location-probe,
+# proc-a/b, scroll-list, back-layers, tap-targets, touch-probe, net-check,
+# keystore-probe, webview-probe, insets-probe, …). sysui3a's side added the
+# SYSUI system apps, launchextras its launch-extras-probe. Deleting any list
+# loses fixtures, so the merged list is the union and there is exactly one loop.
+#
 # looper-wake is the LOOPERWAKE fixture: an idle Activity changed from a
 # non-main thread (plain Thread + runOnUiThread, HandlerThread + main Handler,
 # and View.postInvalidate from a plain thread). Nothing here needs input, so a
 # scenario can prove the main looper is woken by the post itself.
-# sensor-probe (MODSENS) and notif-perm-probe (MODNOTIF5) are the native-feed
-# fixtures; finish-start is the finish()/start() activity pair.
-for app in counter todo-list multi-activity finish-start form-validation settle-lab thread-heavy svg-viewbox offscreen-pager sensor-probe notif-perm-probe looper-wake; do
+# sensor-probe (MODSENS), notif-perm-probe (MODNOTIF5),
+# permissioncontroller + perm-probe (SYSUI1), systemui (SYSUI2),
+# launch-extras-probe (LAUNCHEXTRAS).
+for app in counter todo-list multi-activity finish-start form-validation settle-lab \
+           thread-heavy svg-viewbox offscreen-pager looper-wake sensor-probe \
+           notif-perm-probe permissioncontroller perm-probe systemui \
+           launch-extras-probe; do
     build_apk "$app"
 done
 

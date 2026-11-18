@@ -1,0 +1,81 @@
+{
+  "assertions": [],
+  "certification": "certified-with-limits",
+  "certification_limits": {
+    "doc": "docs/SANDBOX_CERTIFICATION.md",
+    "section": "§8.7"
+  },
+  "duration_ms": 54,
+  "error": {
+    "class": "infra_timeout",
+    "code": "TIMEOUT",
+    "details": {
+      "backend": "acos-art-session",
+      "context": "tap",
+      "reason": "content-not-stable",
+      "settle": {
+        "bound": "content-timeout",
+        "elapsed_ms": 4,
+        "mode": "content",
+        "pixel_evidence": false,
+        "probe_seq": 10,
+        "probe_seq_first": 9,
+        "probe_seq_floor": 8,
+        "settled": false,
+        "signature": "e4638cd392d15bb1",
+        "signature_fields": [
+          "class",
+          "resource_id",
+          "text",
+          "content_desc",
+          "hint",
+          "visible",
+          "enabled",
+          "focused",
+          "clickable",
+          "scrollable",
+          "checked",
+          "selected",
+          "window",
+          "window_kind",
+          "window_z",
+          "package"
+        ],
+        "traversals": 2,
+        "unproven_replies": 0,
+        "window_ms": 300
+      },
+      "traversals": 2,
+      "window_ms": 300
+    },
+    "hint": "Content settle needs the tree's text/content-desc/bounds/state to stop                  changing for the window, on traversals that are provably fresh samples. If                  the screen updates a value continuously (a countdown or a progress                  percentage), no settle rule can prove it: use `settle: fast` for navigation                  only, then assert once you know the value.",
+    "message": "settle content: the UI tree content signature was still changing after                  2 proven traversal(s) / 4 ms (window 300 ms); the screen                  is not content-stable, so nothing it shows is settled",
+    "retryable": true
+  },
+  "evidence": [
+    {
+      "kind": "step",
+      "path": "steps/02-tap.json"
+    }
+  ],
+  "index": 2,
+  "input": {
+    "expect_change": "auto",
+    "handled": true,
+    "handled_evidence": {
+      "acked": 2,
+      "published": 2,
+      "source": "guest"
+    },
+    "target": null
+  },
+  "provenance": {
+    "frame": "host-observed",
+    "host_input": "host-observed",
+    "input_acks": "guest-asserted",
+    "tree": "guest-asserted"
+  },
+  "status": "timeout",
+  "step": "tap",
+  "trust": "trusted"
+}

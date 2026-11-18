@@ -358,7 +358,7 @@ fn rn_hermes_merged_onloads_under_confinement() {
         "child did not report active confinement (fail closed): {summary}\nstderr:\n{stderr}"
     );
 
-    let out_dir = repo_root().join("results/rn");
+    let out_dir = acos_test_support::test_artifacts_dir("rn");
     let _ = std::fs::create_dir_all(&out_dir);
     let _ = std::fs::write(
         out_dir.join("w84a-hermes-probe.json"),

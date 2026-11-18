@@ -1,0 +1,6 @@
+verify: pass (ok=true, backend=acos-native, fidelity=art-reference)
+  engine: art (mode: live)
+  services: core:real, accessibility:real attached; off: system.permissions, system.notifications, sensors, feedback.vibrator, location, net.telephony, hw.bluetooth, hw.biometric, network, webview, hw.usb, system.dropbox, hw.nfc, system.wallpaper, system.print, system.search, system.usage, system.dpm, system.role, geo.country
+  provenance: scenario /home/Qui/.t3/worktrees/acos/t3-43746ade-7323e343b6e1642d/scenarios/a11y-probe.yaml (sha cf39817b7728), apk /home/Qui/.t3/worktrees/acos/t3-43746ade-7323e343b6e1642d/fixtures/build/apps/a11y-probe.apk (sha 0c888a8c51b6), engine art, fidelity art-reference
+  artifacts: results/handoff/WVTAIL/evidence/regress/run2
+  steps: 15

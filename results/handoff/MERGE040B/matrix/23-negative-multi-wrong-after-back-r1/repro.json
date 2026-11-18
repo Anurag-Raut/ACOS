@@ -1,0 +1,17 @@
+{
+  "acos_version": "0.3.0",
+  "apk_path": "/home/Qui/.t3/worktrees/acos/t3-7941bd5d-f2cbf7e1581aeebb/fixtures/build/apps/multi-activity.apk",
+  "apk_sha256": "77d3d9a09f9a6c5ecc966ea8d8c47f86188aa049180f9aa5ad7479c8431cea98",
+  "scenario_path": "/home/Qui/.t3/worktrees/acos/t3-7941bd5d-f2cbf7e1581aeebb/scenarios/negative/multi-wrong-after-back.yaml",
+  "scenario_sha256": "7f67d653f558894fbb46bce74f0c5bd755023f480a7b08738286cff0cc10251f",
+  "flags": [],
+  "isolation": "process",
+  "display": {
+    "mode": "offscreen",
+    "width": 1080,
+    "height": 2400,
+    "density_dpi": 420
+  },
+  "fidelity": "art-reference",
+  "backend": "acos-native"
+}

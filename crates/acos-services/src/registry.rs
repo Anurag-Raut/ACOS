@@ -298,7 +298,13 @@ pub fn install_with_handles_and_insets(
     )));
     let window_id = host.register_aux("android.view.IWindowId");
     let session_state = Arc::clone(&wms_state);
-    let input_host = crate::window_session::input_dispatch::InputHost::from_env();
+    // WVTAP: the input host owns the **one** input routing rule, so it needs the
+    // layer stack: a touch goes to the window under the point
+    // (`InputDispatcher::findTouchedWindowAt`), a key to the focused window.
+    // Passing the stack is what stops each caller from choosing a target by
+    // registration order or focus.
+    let input_host = crate::window_session::input_dispatch::InputHost::from_env()
+        .with_window_stack(Arc::clone(&wms_state));
     // MODA11Y4: `performGlobalAction(GLOBAL_ACTION_BACK)` goes through the same
     // InputChannel as a scenario `back`, so keep a handle before the session
     // service takes the original.
@@ -408,6 +414,10 @@ pub fn install_with_handles_and_insets(
         },
     ));
     host.set_permission_store(Arc::clone(&permissions));
+    // SYSUI2: the activity manager, so a module that owns a system app can start
+    // that app's activity and read the result it answered (the same state the
+    // peer thread serves).
+    host.set_atms(Arc::clone(&atms));
     let display =
         Arc::new(Mutex::new(crate::display::DisplayState::new(
             crate::display::DisplayInfo::hello_views_with(insets.unwrap_or_else(|| {
@@ -511,6 +521,13 @@ pub fn install_with_handles_and_insets(
                         &state.primary().granted_permissions.clone(),
                     );
                 }
+                // SYSUI3B: the same moment publishes the package's own
+                // `<permission>` declarations, so `getPermissionInfo` for a
+                // custom permission and this table's package identity agree.
+                store.set_declared_permissions(
+                    &state.primary().package.package_name.clone(),
+                    &state.primary().declared_permissions.clone(),
+                );
             }
             let pms = Arc::clone(&pms_state);
             Box::new(crate::pms::PmsService::new(pms, w)) as Box<dyn ServiceObject>
@@ -724,10 +741,18 @@ pub fn install_with_handles_and_insets(
     host.register(
         "permission",
         "android.permission.IPermissionManager",
-        move |_w| {
-            Box::new(crate::declared::PermissionService::new(Arc::clone(
-                &permission,
-            ))) as Box<dyn ServiceObject>
+        {
+            // BINDERPID: core's `IPermissionManager` answers
+            // `checkUidPermission` (the `Context.checkCallingPermission` path)
+            // from the session's one permission table, so it cannot disagree with
+            // the `system.permissions` module that takes the name over.
+            let core_store = Arc::clone(&permissions);
+            move |_w| {
+                Box::new(crate::declared::PermissionService::with_store(
+                    Arc::clone(&permission),
+                    Arc::clone(&core_store),
+                )) as Box<dyn ServiceObject>
+            }
         },
     );
     host.register("user", "android.os.IUserManager", move |_w| {

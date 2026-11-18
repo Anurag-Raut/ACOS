@@ -1,0 +1,51 @@
+{
+  "assertions": [
+    {
+      "actual": {
+        "matched_lines": 3,
+        "sample": [
+          "AcosPermController: created names=android.permission.CAMERA,android.permission.ACCESS_FINE_LOCATION granted=android.permission.CAMERA,android.permission.ACCESS_FINE_LOCATION fixed= package=dev.acos.fixtures.permprobe",
+          "AcosPermController: nothing to ask, returning results granted,granted",
+          "AcosPermProbe: result request=7 n=2 m=2 CAMERA=0 LOCATION=0"
+        ]
+      },
+      "expected": {
+        "min_matches": 1,
+        "ordered": true,
+        "patterns": [
+          "^created names=android\\.permission\\.CAMERA,android\\.permission\\.ACCESS_FINE_LOCATION granted=android\\.permission\\.CAMERA,android\\.permission\\.ACCESS_FINE_LOCATION fixed= package=dev\\.acos\\.fixtures\\.permprobe$",
+          "^nothing to ask, returning results granted,granted$",
+          "^result request=7 n=2 m=2 CAMERA=0 LOCATION=0$"
+        ],
+        "since_previous_step": false,
+        "tag": null
+      },
+      "kind": "log",
+      "matched_node_ids": [],
+      "passed": true
+    }
+  ],
+  "certification": "certified-with-limits",
+  "certification_limits": {
+    "doc": "docs/SANDBOX_CERTIFICATION.md",
+    "section": "§8.7"
+  },
+  "duration_ms": 0,
+  "evidence": [
+    {
+      "kind": "log",
+      "path": "logs/logcat.txt"
+    },
+    {
+      "kind": "step",
+      "path": "steps/08-assert_log.json"
+    }
+  ],
+  "index": 8,
+  "provenance": {
+    "logs": "guest-asserted"
+  },
+  "status": "pass",
+  "step": "assert_log",
+  "trust": "trusted"
+}

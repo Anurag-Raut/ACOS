@@ -48,6 +48,60 @@ implementations are unchanged for it:
   event `engine.restarted` (views are gone) and the guest provider must
   re-create its views. The broker never silently continues.
 
+### 0.1 The gate ⇄ shared broker attach handshake (attach **v2**, WVSCOPE)
+
+The per-session gate (`crates/acos-webview/src/gate.rs`) is the shared broker's
+only client, and it is a *different binary* from it: the gate is linked into the
+session launcher, the broker is `acos-webview --shared`. A broker that outlives
+its spawner can therefore be a broker from **another build** — measured
+(WVTAIL §3): the host-wide endpoint was held by a leftover daemon built from an
+earlier branch, so a run of the new code silently measured the old code.
+
+Before any framed byte on the shared socket, the gate sends **one line** (ASCII
+JSON object + `\n`, at most 4096 bytes, never a wire frame):
+
+```
+{"attach":2,"build":"<client build id>","session":"<opaque session label>"}\n
+  build id := "<crate version>+g<git sha>.<source hash>[-dirty]"
+              (a digest of the workspace sources; `acos-webview::build_id()`)
+```
+
+The bytes are exactly that: `serde_json`'s sorted-key object, `attach` then
+`build` then `session`, one `\n`. `gate::encode_attach` is the normative
+implementation and its test pins the bytes.
+
+The daemon answers **one line**:
+
+| answer | meaning |
+|---|---|
+| `{"ok":true,"build":"<daemon build id>"}\n` | same build: the connection is a session; the framed wire follows |
+| `{"ok":false,"code":"BUILD_MISMATCH","build":"<daemon>","sessions":n,"exiting":bool}\n` | another build. `sessions` is the daemon's live session count; `exiting:true` (only when `sessions` is `0`) means it is stopping itself now |
+| `{"ok":false,"error":"attach version unsupported"}\n` | an attach version this daemon does not speak (a pre-v2 daemon answers exactly this to `attach:2`) |
+
+Rules, both sides:
+
+* `BUILD_MISMATCH` is not on the guest wire: the guest never sees it (this is the
+  gate's own handshake; §3's codes are the guest's). The gate names both builds
+  on stderr and in the broker log.
+* A daemon of another build with **live sessions** is left alone (its engine
+  belongs to a session somebody is still using) and the gate attaches to its own
+  endpoint from then on: `<dir>/broker-<source8>.sock` next to `broker.sock`,
+  where `<source8>` is the first 8 hex digits of the source hash — two builds
+  cannot meet on one path by construction.
+* A daemon of another build with **no session** is `exiting:true`: it stops
+  itself, and the gate spawns this build's broker on the same `broker.sock` once
+  the endpoint stops answering. No daemon is left behind, and no second daemon
+  is started beside a dying one.
+* A daemon that answers `ok` **without** a build id is refused like a mismatch:
+  it cannot prove what it is, which is the whole point of the handshake.
+* `attach:1` (a gate that predates v2) is still served by a v2 daemon — it is the
+  *client* that must not trust a stranger, and the answer still names the build —
+  with one line in the broker log saying so. Any other version is refused as
+  above.
+* The guest `hello` result carries the same fact for the guest's benefit (§4.1
+  `broker.build`/`broker.pid`, and `engineStatus.build`), so a provider that
+  reconnects can tell whether it is talking to the same engine build.
+
 ## 1. Framing (normative)
 
 Every message is one **frame**:
@@ -93,14 +147,25 @@ A JSON message has one of three shapes:
   Exceptions that are ordered on the wire: `render` JSON then its BLOB.
 * Unknown `op` → `UNSUPPORTED`. Unknown JSON keys are ignored (forward
   compatibility). Unknown `event` names are ignored by the receiver.
+* Input acks (v1.1, `input.touch`/`input.tap`): under
+  `--enable-begin-frame-control` the engine routes a dispatched event **in** a
+  compositor frame and acknowledges it at the end of the frame that **follows**
+  that one. The broker produces that following frame itself (input priority) and
+  waits for the ack, so `acked` is engine truth, never a guess; `events` is how
+  many were sent, `frameMs`/`ackMs` split the time. `delivered:true` with
+  `acked:false` is honest: the event was dispatched and its frame produced, and
+  the broker says so in its log — it is never reported as a lost tap.
 
 ## 3. Error codes (stable strings)
 
 `BAD_REQUEST` (malformed JSON/params), `BAD_FRAME`, `PROTO_VERSION` (unsupported
 `proto`), `ALREADY_CONNECTED`, `NO_VIEW`, `VIEW_EXISTS`, `INVALID_VIEWPORT`,
 `NAVIGATION_FAILED`, `JS_EXCEPTION`, `TIMEOUT`, `UNSUPPORTED`,
-`ENGINE_UNAVAILABLE`, `ENGINE_CRASHED`, `INTERCEPT_FAILED`, `FRAME_FAILED`,
-`INTERNAL`. `message` is human text (< 2000 chars); `detail` is optional JSON.
+`ENGINE_UNAVAILABLE`, `ENGINE_CRASHED`, `ENGINE_RESTARTED`, `INTERCEPT_FAILED`,
+`FRAME_FAILED`, `INTERNAL`. `message` is human text (< 2000 chars); `detail` is
+optional JSON. `NO_VIEW` and `ENGINE_RESTARTED` are different facts: `NO_VIEW` is
+"this id was never the session's", `ENGINE_RESTARTED` is "it was, and its target
+died with the engine" (re-create it; the broker sent `engine.restarted`).
 An unsupported behaviour is an error, never a fabricated success.
 
 ## 4. Guest → host requests
@@ -117,9 +182,9 @@ DevTools taps `density` times too far right and down).
 
 | op | params | result |
 |---|---|---|
-| `hello` | `{proto:1, client:"acos-webview/<ver>", session?:string}` | `{proto:1, session:"<opaque>", engine:{product, version, revision, protocolVersion, userAgent}, limits:{maxViews, maxFrameBytes}}` |
+| `hello` | `{proto:1, client:"acos-webview/<ver>", session?:string}` | `{proto:1, session:"<opaque>", broker:{build,pid}, engine:{product, version, revision, protocolVersion, userAgent}, limits:{maxViews, maxFrameBytes}}` |
 | `ping` | `{}` | `{pong:true, engineMs:number}` |
-| `engineStatus` | `{}` | `{state:"up"\|"restarting"\|"down", restarts:int, engine:{…}, idleShutdownInMs:int\|null}` |
+| `engineStatus` | `{}` | `{state:"up"\|"restarting"\|"down", restarts:int, build:string, engine:{pid:int, product, version, …}, idleShutdownInMs:int\|null}` |
 | `memory` | `{detail?:bool}` | `{engine:{pssMiB,rssMiB,processes:n}, contexts:n, targets:n, blobBytes:n}` |
 
 ### 4.2 Views
@@ -142,12 +207,52 @@ DevTools taps `density` times too far right and down).
 | `view.history` | `{view, action:"back"\|"forward"\|"clear"}` | `{view, canGoBack, canGoForward}` |
 | `render` | `{view, format:"png"\|"rgba", timeoutMs?, ack?:bool}` | JSON `{view, seq, width, height, density, format, bytes, damage:{x,y,w,h}, engineMs, hasDamage, contentWidth, contentHeight, scrollX, scrollY}` **then** the BLOB (§1); the four scroll/content fields are v1.1. **v2 pixels:** `width`/`height` are the frame's real pixel size as the engine produced it, and the BLOB is exactly that. Measured (WV7): this pinned `chrome-headless-shell` cannot emit a device-resolution frame under `--enable-begin-frame-control` — `HeadlessExperimental.beginFrame`'s own `screenshot` captures at the CSS size and ignores `deviceScaleFactor` (a 900x560 device-pixel View came back 343x213 = /density), `Page.captureScreenshot` never answers (every variant times out), and `Page.screencastFrame` reports/carries the CSS size too. The broker therefore takes frames from the view's screencast (device-*surface* pixels, one `beginFrame` per `render`) and reports their real size; the guest scales them into the View (letterboxing, `FILTER_BITMAP`). A device-resolution PNG needs an engine that honours `deviceScaleFactor` in a capture path, which this one does not. |
 | `ax` | `{view, maxNodes?, includeIgnored?}` | `{view, count, truncated, nodes:[…]}` (§4.4) |
-| `input.touch` | `{view, action:"down"\|"move"\|"up"\|"cancel", points:[{id,x,y,radiusX?,radiusY?,force?}], holdMs?}` | `{view, delivered:true}` |
-| `input.tap` | `{view, x, y, holdMs?}` | `{view, delivered:true}` (convenience: down→frame→up) |
+| `input.touch` | `{view, action:"down"\|"move"\|"up"\|"cancel", points:[{id,x,y,radiusX?,radiusY?,force?}], holdMs?}` | `{view, delivered:true, acked, events, frameMs, ackMs}` |
+| `input.tap` | `{view, x, y, holdMs?}` | `{view, delivered:true, acked, events, frameMs, ackMs}` (convenience: down→frame→up) |
 | `input.scroll` | `{view, x, y, dx, dy}` | `{view, delivered:true}` |
 | `input.key` | `{view, action:"down"\|"up"\|"press", key, code?, keyCode?, modifiers?:[alt,ctrl,meta,shift]}` | `{view, delivered:true}` |
 | `input.text` | `{view, text}` | `{view, delivered:true}` (IME commit → `Input.insertText`) |
 | `input.setFocus` | `{view, focused:bool}` | `{view, focused}` |
+
+### 4.2.1 Frame pulls are fair across views (WVFAIR)
+
+`HeadlessExperimental.beginFrame` is a browser-global command in the pinned
+engine (two targets asking at once crashed it), so frame production is
+**serialised per engine** — but the serialisation is a fair queue
+(`crates/acos-webview/src/fair.rs`), and a guest may rely on:
+
+* **one frame in flight per view**: however many `render` requests name one
+  view, a view has at most one outstanding pull. A request that arrives while
+  another for the same view is in flight joins it and gets the same frame (the
+  counters say so: `engineStatus.frames.coalesced`);
+* **bounded engine time per attempt**: each `beginFrame` attempt may hold the
+  engine for `frame_attempt` (750 ms) while the engine serves another view. Once
+  the engine serves only one view, an attempt gets the full 2 s it always had
+  (`engineStatus.frames.attemptBudgetMs` / `attemptBudgetIdleMs`);
+* **a fair queue**: waiting views are granted the engine in priority order, then
+  FIFO; a transient retry re-enters at the back, so a slow page's retries
+  interleave with other views instead of running back to back;
+* **input first**: the frames `input.tap`/`input.touch`/`input.key` need are
+  granted ahead of guest pull frames. A slow page therefore delays a tap by at
+  most one bounded attempt per frame the tap needs — measured 65 ms on the host
+  (worst-case pull 927 ms) and an end-to-end 3 ms tap→page-click in the ART
+  two-WebView scenario;
+* **no unbounded blocking**: a `render` whose `timeoutMs` elapses while queued
+  fails with `TIMEOUT` (`FRAME_FAILED` when the attempts are used up and the view
+  has never painted), never a silent hang. A view whose page cannot produce a
+  frame inside the budget is answered with its **last real frame**
+  (`hasDamage:false`) — never invented pixels.
+
+`engineStatus` reports the gate's own counters under `frames`
+(`pulls`, `coalesced`, `attempts`, `retries`, `timeouts`, `inputGrants`,
+`contendedAttempts`, `maxWaitMs`, `maxAttemptMs`, `openViews`). They are what a
+fairness claim is checked against.
+
+The guest side mirrors the rule: a view pulls at most one frame at a time
+(`requestFrame`), `evaluateJavascript` answers asynchronously (Android's
+contract — a page that is slow must not block the guest's UI thread), and a
+post-input `ax` read waits at most 250 ms for the engine before serving the last
+snapshot, so one busy page cannot stall the whole screen tree.
 
 `view.loadUrl` and friends are **async at the protocol level** even though the
 response reports `loadMs`: the response is written after `Page.loadEventFired`
@@ -256,7 +361,10 @@ the page (Android's `@JavascriptInterface` rule, enforced host-side).
 * Crash: Chromium's pid and its `--remote-debugging-pipe` EOF are watched. On
   loss the broker restarts the engine, re-`hello`s nothing (the guest keeps its
   socket), emits `engine.restarted`, and every subsequent view op on an old
-  view id answers `NO_VIEW`.
+  view id answers `ENGINE_RESTARTED` — the restart, not `NO_VIEW`: the id was
+  the session's and the engine took the target with it. The broker also logs the
+  engine's exit status and stderr tail, and the number of views it dropped, so
+  the restart cannot be mistaken for a bookkeeping fault.
 * Every response is exactly one JSON frame; the only message that emits two
   frames is `render` (JSON + BLOB).
 
@@ -266,3 +374,8 @@ the page (Android's `@JavascriptInterface` rule, enforced host-side).
 `PROTO_VERSION`; the message names `2`. Additive v1.1 ops/fields are listed at
 the top of this file. Additive ops/fields do not bump the version; a changed
 frame layout, id scheme, or an op whose semantics change does.
+
+The gate ⇄ shared-broker attach line (§0.1) has its **own** version and it is
+independent of `proto`: `attach:2` added the build id, its daemon answer carries
+the daemon's, and a daemon of another build is refused rather than served. The
+guest wire does not change when it moves.

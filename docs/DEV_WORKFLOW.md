@@ -384,7 +384,9 @@ tools/guarded.sh --mem 6G --time 1800 -- tools/build-apps.sh   # already self-wr
 The emulator is started/stopped directly with `tools/oracle/emulator.sh`
 (it self-checks `MemAvailable > 16 GiB`, RAM ≤ 2048 MB, one instance, headless)
 and is **always** shut down afterwards (`pgrep -af qemu` must be empty). Use a
-private `CARGO_TARGET_DIR` when other agents are building concurrently.
+private `CARGO_TARGET_DIR` when other agents are building concurrently, and
+`source tools/agent-env.sh` first (§14) so the build goes through the shared
+compiler cache.
 
 ---
 
@@ -442,3 +444,56 @@ MCP: when the loop must keep one session across calls (an agent that inspects,
 taps and observes in separate requests), run the default `acos-mcp` binary. Its
 `SessionBackend` holds the session in-process; the CLI's session ends with the
 command. See `docs/AGENT_API.md` §18.6.
+
+---
+
+## 14. Shared compiler cache (sccache) — source `tools/agent-env.sh` first
+
+Every agent worktree on this host shares one compiler cache, so a worktree does
+not recompile the crates another worktree already compiled. There is exactly one
+place that sets it up:
+
+```bash
+source tools/agent-env.sh          # in the worktree, before any build
+```
+
+`BRIEF_COMMON` asks agents to create `.cache/env.sh` (a stable path, because
+worktree names are not); make it a one-liner so there is nothing to keep in sync:
+
+```bash
+mkdir -p .cache && echo 'source tools/agent-env.sh' > .cache/env.sh
+```
+
+What it exports:
+
+| variable | value | why |
+|---|---|---|
+| `RUSTC_WRAPPER` | `~/.cargo/bin/sccache` | the cache wrapper |
+| `SCCACHE_DIR` | `/home/Qui/.cache/sccache` | one cache for the host (disk, LRU-evicted) |
+| `SCCACHE_CACHE_SIZE` | `40G` | ~2x a full workspace build |
+| `SCCACHE_BASEDIRS` | `/home/Qui/.t3/worktrees/acos:/home/Qui/Projects/acos/.cache:/home/Qui/Projects/acos` | these are the layouts worktrees are checked out in; they are interchangeable checkouts, so the same sources under any of them hash to one key |
+| `CARGO_INCREMENTAL` | `0` | sccache cannot cache incremental compiles at all |
+| `CARGO_PROFILE_{DEV,TEST,RELEASE}_DEBUG` | `0` | target dirs several times smaller (the brief's rule) |
+| `ACOS_FONT_DIR`, `ACOS_VIEW_TEST_DIR`, `.cache/{boot/android-34,art,gaten}` symlinks | as `BRIEF_COMMON` | the ART/fixture test env |
+
+It does **not** set `CARGO_TARGET_DIR`: keep one target directory per track
+(§12) — the cache is what makes that cheap. It never sets `ACOS_BOOT_DIR` or
+`XDG_RUNTIME_DIR`, and it never touches `ACOS_HOME` or `~/.local`.
+
+Notes:
+
+* The cache is shared by *all* agents on the host, so a crate compiled on one
+  branch is reused on another as long as its sources and flags are identical.
+  Cross-worktree hits are what the patch in `tools/sccache/` exists for; stock
+  sccache only reuses artifacts inside one checkout.
+* A crate that bakes an absolute path into its artifact (`env!("CARGO_MANIFEST_DIR")`
+  — `acos-mcp` does) is never served another checkout's build: its key keeps the
+  real path, so it is recompiled per worktree. That is intentional.
+* `sccache --show-stats` reports hits/misses and the cache size;
+  `sccache --zero-stats` resets the counters. If a build seems uncached, check
+  that `$RUSTC_WRAPPER` is set in the shell that runs `cargo` and that
+  `sccache --show-stats` shows the expected `Base directories`.
+* Rebuild/reinstall the wrapper with `tools/sccache/build.sh` (see
+  `tools/sccache/README.md` for the one patch it applies and why).
+* Measurements (cold vs warm vs a second worktree, hit rates, cache size):
+  `results/handoff/BUILDCACHE/README.md`.
