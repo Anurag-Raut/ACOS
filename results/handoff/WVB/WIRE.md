@@ -48,6 +48,60 @@ implementations are unchanged for it:
   event `engine.restarted` (views are gone) and the guest provider must
   re-create its views. The broker never silently continues.
 
+### 0.1 The gate ⇄ shared broker attach handshake (attach **v2**, WVSCOPE)
+
+The per-session gate (`crates/acos-webview/src/gate.rs`) is the shared broker's
+only client, and it is a *different binary* from it: the gate is linked into the
+session launcher, the broker is `acos-webview --shared`. A broker that outlives
+its spawner can therefore be a broker from **another build** — measured
+(WVTAIL §3): the host-wide endpoint was held by a leftover daemon built from an
+earlier branch, so a run of the new code silently measured the old code.
+
+Before any framed byte on the shared socket, the gate sends **one line** (ASCII
+JSON object + `\n`, at most 4096 bytes, never a wire frame):
+
+```
+{"attach":2,"build":"<client build id>","session":"<opaque session label>"}\n
+  build id := "<crate version>+g<git sha>.<source hash>[-dirty]"
+              (a digest of the workspace sources; `acos-webview::build_id()`)
+```
+
+The bytes are exactly that: `serde_json`'s sorted-key object, `attach` then
+`build` then `session`, one `\n`. `gate::encode_attach` is the normative
+implementation and its test pins the bytes.
+
+The daemon answers **one line**:
+
+| answer | meaning |
+|---|---|
+| `{"ok":true,"build":"<daemon build id>"}\n` | same build: the connection is a session; the framed wire follows |
+| `{"ok":false,"code":"BUILD_MISMATCH","build":"<daemon>","sessions":n,"exiting":bool}\n` | another build. `sessions` is the daemon's live session count; `exiting:true` (only when `sessions` is `0`) means it is stopping itself now |
+| `{"ok":false,"error":"attach version unsupported"}\n` | an attach version this daemon does not speak (a pre-v2 daemon answers exactly this to `attach:2`) |
+
+Rules, both sides:
+
+* `BUILD_MISMATCH` is not on the guest wire: the guest never sees it (this is the
+  gate's own handshake; §3's codes are the guest's). The gate names both builds
+  on stderr and in the broker log.
+* A daemon of another build with **live sessions** is left alone (its engine
+  belongs to a session somebody is still using) and the gate attaches to its own
+  endpoint from then on: `<dir>/broker-<source8>.sock` next to `broker.sock`,
+  where `<source8>` is the first 8 hex digits of the source hash — two builds
+  cannot meet on one path by construction.
+* A daemon of another build with **no session** is `exiting:true`: it stops
+  itself, and the gate spawns this build's broker on the same `broker.sock` once
+  the endpoint stops answering. No daemon is left behind, and no second daemon
+  is started beside a dying one.
+* A daemon that answers `ok` **without** a build id is refused like a mismatch:
+  it cannot prove what it is, which is the whole point of the handshake.
+* `attach:1` (a gate that predates v2) is still served by a v2 daemon — it is the
+  *client* that must not trust a stranger, and the answer still names the build —
+  with one line in the broker log saying so. Any other version is refused as
+  above.
+* The guest `hello` result carries the same fact for the guest's benefit (§4.1
+  `broker.build`/`broker.pid`, and `engineStatus.build`), so a provider that
+  reconnects can tell whether it is talking to the same engine build.
+
 ## 1. Framing (normative)
 
 Every message is one **frame**:
@@ -128,9 +182,9 @@ DevTools taps `density` times too far right and down).
 
 | op | params | result |
 |---|---|---|
-| `hello` | `{proto:1, client:"acos-webview/<ver>", session?:string}` | `{proto:1, session:"<opaque>", engine:{product, version, revision, protocolVersion, userAgent}, limits:{maxViews, maxFrameBytes}}` |
+| `hello` | `{proto:1, client:"acos-webview/<ver>", session?:string}` | `{proto:1, session:"<opaque>", broker:{build,pid}, engine:{product, version, revision, protocolVersion, userAgent}, limits:{maxViews, maxFrameBytes}}` |
 | `ping` | `{}` | `{pong:true, engineMs:number}` |
-| `engineStatus` | `{}` | `{state:"up"\|"restarting"\|"down", restarts:int, engine:{…}, idleShutdownInMs:int\|null}` |
+| `engineStatus` | `{}` | `{state:"up"\|"restarting"\|"down", restarts:int, build:string, engine:{…}, idleShutdownInMs:int\|null}` |
 | `memory` | `{detail?:bool}` | `{engine:{pssMiB,rssMiB,processes:n}, contexts:n, targets:n, blobBytes:n}` |
 
 ### 4.2 Views
@@ -320,3 +374,8 @@ the page (Android's `@JavascriptInterface` rule, enforced host-side).
 `PROTO_VERSION`; the message names `2`. Additive v1.1 ops/fields are listed at
 the top of this file. Additive ops/fields do not bump the version; a changed
 frame layout, id scheme, or an op whose semantics change does.
+
+The gate ⇄ shared-broker attach line (§0.1) has its **own** version and it is
+independent of `proto`: `attach:2` added the build id, its daemon answer carries
+the daemon's, and a daemon of another build is refused rather than served. The
+guest wire does not change when it moves.

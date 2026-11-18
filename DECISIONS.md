@@ -1198,6 +1198,36 @@ the guest's UI thread. The WebView provider APK is now **shipped by the image**
 `.cache/boot/android-34/system-apps/com.android.webview.apk`), so a fresh install needs no separate
 step; the installer carries it and the module resolves it from the image first.
 
+**ADR-0031 amendment (2026-11-16, WVSCOPE).** Two lifetime defects of the one-broker-per-host decision
+(item 3) were closed, both root-caused by WVTAIL §4.3/§3.
+
+1. **The broker no longer shares its spawner's cgroup.** `setsid` changes the session but not the
+   cgroup, so a run harness that tears its session scope down (a scope-wide SIGKILL, which
+   `guarded.sh` and every run script do) killed the host's engine for *every* session — the
+   MERGE040A `NO_VIEW: no view <id>` plus one `render` that never answered, in another agent's run.
+   `gate.rs::spawn_broker` now starts the daemon inside its **own transient scope**
+   (`systemd-run --user --scope --collect --unit=acos-webview-<endpoint tag>-<pid> …`), so the
+   daemon's cgroup is the unit's and nothing a session does can take it down. It keeps its
+   `--idle-shutdown-secs` lifetime rule, and `--collect` unloads the unit when it exits. Where
+   systemd --user is not usable the gate logs a warning and falls back to today's `setsid` (a
+   session teardown then kills the engine for everyone — documented, not silent);
+   `ACOS_WEBVIEW_SCOPE=0` selects that arm explicitly. Measured (host test,
+   `cargo test -p acos-webview --test broker_scope`, both arms with the real engine): with the
+   scope the broker survives its session scope's SIGKILL and a second session gets a real PNG frame
+   from the same engine (`broker_spawns == 0`); with the fallback the broker dies with the scope and
+   the second session has to start a new engine (`broker_spawns == 1`) — the bug, pinned.
+2. **A broker from another build can no longer answer this build's sessions.** A shared daemon
+   outlives the checkouts it was built from: WVTAIL §3 measured a leftover daemon built from an
+   earlier branch holding the host endpoint, so a run of the new code silently measured the old
+   code. The gate ⇄ daemon attach handshake is now `attach:2` and carries a **build id**
+   (`version + git sha + workspace source digest`, one shared implementation in
+   `build-support/fingerprint.rs`, the same identity REL3D uses for `acos serve`); the daemon must
+   report the same one. A daemon of another build with live sessions is left alone and the gate
+   uses its own endpoint (`<dir>/broker-<source8>.sock`); with no session it stops itself and the
+   gate takes `broker.sock` over. An `ok` without a build id is refused like a mismatch. The guest
+   wire is unchanged (`hello.broker.build` / `engineStatus.build` are additive). Normative copy:
+   `results/handoff/WVB/WIRE.md` §0.1; byte-level test: `gate::tests::the_attach_line_is_exactly_the_documented_bytes`.
+
 ## ADR-0032 — Settle is not a pixel rule: content stability for every wait and assertion (REL3A, 2026-11-17)
 
 **Context.** v0.3.0 agent feedback (two independent agents) showed the settle model still leaked into
