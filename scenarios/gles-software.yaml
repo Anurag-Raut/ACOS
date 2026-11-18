@@ -6,16 +6,20 @@
 # search path is the seam: `/vendor/lib64/egl/libEGL_<ro.hardware.egl>.so`
 # (`frameworks/native/opengl/libs/EGL/Loader.cpp`, android-14.0.0_r75).
 #
-# With `ACOS_GUEST_GLES=angle` the launcher binds a staged provider there and
-# sets `ro.hardware.egl=angle` + `acos.guest.gles=angle` in the per-run property
-# table (crates/acos-art/src/gles.rs). This scenario is the app-side proof:
+# GLSHIP: the provider is the **default** — the launcher binds
+# `<sysroot>/gles/angle-swiftshader/lib64` at `/vendor/lib64` and sets
+# `ro.hardware.egl=angle` + `acos.guest.gles=angle` in the per-run property table
+# with no flag set (crates/acos-art/src/gles.rs). `ACOS_GUEST_GLES=off` turns it
+# off, `=mesa-host` is reserved for the GPU track. This scenario is the app-side
+# proof, so it is the gate that a GL-capable image must pass:
 # the probe draws (i) the wrapped a11y screenshot HardwareBuffer, (ii) a PNG
 # decoded straight to `Bitmap.Config.HARDWARE`, and (iii) puts that bitmap in an
 # ImageView, and every draw reports a sampled pixel.
 #
-# Default OFF: without the flag this scenario's extra lines never appear (the
-# probe logs `gles_draw skipped=no_software_gles` instead, which
-# `scenarios/a11y-probe.yaml` asserts). A HARDWARE bitmap with no driver aborts
+# Without a provider (not installed, or `ACOS_GUEST_GLES=off`) this scenario's
+# extra lines never appear (the probe logs `gles_draw skipped=no_software_gles`
+# instead, which `scenarios/a11y-probe.yaml` asserts). A HARDWARE bitmap with no
+# driver aborts
 # the process, so the *absence* of a driver is not something a `catch` can make
 # safe — the gap is a logged skip, never a silent pass.
 version: 1

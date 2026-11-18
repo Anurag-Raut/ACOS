@@ -35,15 +35,45 @@
 //! `results/handoff/GLSPIKE/README.md` §5. When the flag is off this module is
 //! never asked for anything: no bind, no property, no digest.
 //!
-//! ## Default OFF, and it says why when it cannot
+//! ## Default ON when installed (GLSHIP)
 //!
-//! `ACOS_GUEST_GLES=<provider>` selects `<data>/gles/<provider>/`. The provider
-//! directory carries a `manifest.json` (source URL, version, licence, sha256 per
-//! file) written by `tools/art-gles.sh`; the launcher verifies every file's
-//! sha256 against it on **every** launch (the A11YPACE stale-shim lesson: a
-//! shared prebuilt that silently predates its contract must fail loudly). A
-//! missing or mismatched provider is a structured [`Error::Layout`], never a
-//! silent skip that would reach libEGL's fatal assert instead.
+//! `ACOS_GUEST_GLES` selects the provider:
+//!
+//! * unset/empty — the **default**, [`DEFAULT_PROVIDER`]
+//!   (`angle-swiftshader`), when `<sysroot>/gles/angle-swiftshader` is
+//!   installed. When it is not installed the run is exactly today's guest: no
+//!   bind, no property, no digest, libEGL keeps its own fatal.
+//! * `off` — no provider, whatever is installed (the escape hatch).
+//! * any other name — that provider, and it **must** be installed: an explicit
+//!   request for bytes that are not there is a structured [`Error::Layout`],
+//!   never a silent fall back to the default.
+//!   `mesa-host` is reserved for the GPU track's provider and is only ever
+//!   selected explicitly (nothing ships it today).
+//!
+//! The provider directory carries a `manifest.json` (source, version, licence,
+//! sha256 per file) written by `tools/art-gles.sh`; the launcher verifies every
+//! file's sha256 against it (the A11YPACE stale-shim lesson: a shared prebuilt
+//! that silently predates its contract must fail loudly). A mismatched provider
+//! is a structured [`Error::Layout`], never a silent skip that would reach
+//! libEGL's fatal assert instead.
+//!
+//! The digest is **cached per host, next to the provider** ([`verify`],
+//! [`VERIFIED`]): the first launch after a (re)stage hashes 32 MB and writes
+//! `<provider>/.verified`; every later launch compares the cheap stat
+//! fingerprint — each file's `(dev, ino, size, mtime)` plus the manifest the
+//! caller holds — and hashes nothing. Any change to that fingerprint (a
+//! re-stage, a touched file, a different manifest) re-hashes; a missing or
+//! unreadable file is the same structured [`Error::Layout`] as before. The
+//! provider directory is published atomically by `tools/art-gles.sh`, so a
+//! `.verified` file can never describe a half-written provider.
+//!
+//! Accepted risk (documented, owner decision): a file rewritten **in place with
+//! the same size and the same `mtime`** on the same inode is not re-hashed, so
+//! it would be trusted. Nothing in ACOS writes a staged provider that way
+//! (`tools/art-gles.sh` replaces the directory), and `mtime`/`ino`/`size` are
+//! the standard make-style freshness contract; the alternative — hashing 32 MB
+//! on every launch — is a measurable launch cost for a case that cannot arise
+//! from the shipped tooling.
 //!
 //! Licence/source are part of the manifest, not of this module: the spike ships
 //! no GL code, only the mechanism to stage someone else's.
@@ -53,9 +83,22 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-/// The environment variable that turns the provider on. Default (absent or
-/// empty) is off.
+/// The environment variable that selects the provider. Absent/empty means the
+/// default provider when it is installed.
 pub const ENV: &str = "ACOS_GUEST_GLES";
+
+/// The provider selected when [`ENV`] is unset: the software GL the image
+/// ships (ANGLE on SwiftShader's CPU Vulkan ICD). `tools/art-gles.sh` stages it
+/// at `<sysroot>/gles/angle-swiftshader` as part of the sysroot build.
+pub const DEFAULT_PROVIDER: &str = "angle-swiftshader";
+
+/// The [`ENV`] value that disables software GL (`ACOS_GUEST_GLES=off`).
+pub const OFF: &str = "off";
+
+/// The [`ENV`] value reserved for the GPU track's host-Mesa provider. Never
+/// selected implicitly: it is not installed by the image build, so asking for
+/// it without staging it is a structured error, not the default.
+pub const RESERVED_MESA_HOST: &str = "mesa-host";
 
 /// The guest directory the loader searches for a suffixed driver.
 pub const GUEST_EGL_DIR: &str = "/vendor/lib64/egl";
@@ -206,15 +249,79 @@ fn provider_dir_override() -> Option<PathBuf> {
     Some(PathBuf::from(trimmed))
 }
 
+/// Which provider a run uses, and why (the `acos doctor` / capabilities line).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Status {
+    /// The provider to bind, or `None` for today's guest (no GL).
+    pub provider: Option<Provider>,
+    /// True when the provider was chosen implicitly (the default).
+    pub default: bool,
+    /// One-line explanation, always set.
+    pub detail: String,
+}
+
+impl Status {
+    /// The `gles` capability label: the provider name, or `none`.
+    #[must_use]
+    pub fn label(&self) -> &str {
+        match &self.provider {
+            Some(p) => &p.name,
+            None => "none",
+        }
+    }
+}
+
+/// Resolve the provider for this run: the flag, else the installed default.
+///
+/// This is the one selection rule (the launcher's bind, the property table and
+/// `acos doctor` all call it), so "installed" cannot mean two things.
+pub fn status(root: &ArtRoot) -> Result<Status> {
+    if let Some(name) = provider_name_from_env()? {
+        if name.eq_ignore_ascii_case(OFF) {
+            return Ok(Status {
+                provider: None,
+                default: false,
+                detail: format!("ACOS_GUEST_GLES={OFF}"),
+            });
+        }
+        // An explicit name must exist: silently serving the default instead
+        // would run a different driver than the report claims.
+        let provider = load(root, &name)?;
+        let detail = format!("ACOS_GUEST_GLES={name}");
+        return Ok(Status {
+            provider: Some(provider),
+            default: false,
+            detail,
+        });
+    }
+    let dir = providers_root(root).join(DEFAULT_PROVIDER);
+    if !dir.join(MANIFEST).is_file() {
+        return Ok(Status {
+            provider: None,
+            default: true,
+            detail: format!(
+                "{DEFAULT_PROVIDER} is not installed at {} (stage it with \
+                 `tools/art-gles.sh`, or the image build)",
+                dir.display()
+            ),
+        });
+    }
+    let provider = load(root, DEFAULT_PROVIDER)?;
+    let detail = format!("default; installed at {}", dir.display());
+    Ok(Status {
+        provider: Some(provider),
+        default: true,
+        detail,
+    })
+}
+
 /// Read `ACOS_GUEST_GLES` and load/verify the provider it names.
 ///
-/// Returns `Ok(None)` when the variable is absent or empty (the default: the
-/// guest keeps today's behaviour and libEGL's fatal is unchanged).
+/// Returns `Ok(None)` when software GL is off — explicitly
+/// (`ACOS_GUEST_GLES=off`) or because the default provider is not installed
+/// (the guest then keeps today's behaviour and libEGL's fatal is unchanged).
 pub fn selected(root: &ArtRoot) -> Result<Option<Provider>> {
-    match provider_name_from_env()? {
-        Some(name) => Ok(Some(load(root, &name)?)),
-        None => Ok(None),
-    }
+    Ok(status(root)?.provider)
 }
 
 /// The provider name from `ACOS_GUEST_GLES`, validated as a plain directory
@@ -256,29 +363,47 @@ pub fn tag_from_env(root: &ArtRoot) -> Result<Option<String>> {
 }
 
 /// The `(ro.hardware.egl, ro.hardware.vulkan)` values the **selected**
-/// provider declares, or `None` when the flag is off.
+/// provider declares, or `None` when software GL is off.
 ///
 /// `Props::for_launch()` runs in places that do not hold an [`ArtRoot`] (main's
 /// `props print`, the session/app writers), so this resolves the root the same
 /// way [`ArtRoot::resolve`] does. A missing sysroot is not an error here: a run
-/// with the flag on fails loudly in `Sandbox::command` (the bind source check)
-/// before any guest starts, and this is only the property table.
+/// with a provider selected fails loudly in `Sandbox::command` (the bind source
+/// check) before any guest starts, and this is only the property table.
 pub fn selected_tags() -> Result<Option<(String, Option<String>)>> {
-    let Some(name) = provider_name_from_env()? else {
-        return Ok(None);
-    };
     let root = match ArtRoot::resolve(None, None) {
         Ok(r) => r,
         Err(_) => return Ok(None),
     };
-    let provider = load(&root, &name)?;
-    Ok(Some((
-        provider.manifest.tag.clone(),
-        provider.vulkan_tag().map(ToString::to_string),
-    )))
+    Ok(status(&root)?.provider.map(|provider| {
+        (
+            provider.manifest.tag.clone(),
+            provider.vulkan_tag().map(ToString::to_string),
+        )
+    }))
 }
 
-/// Load and verify `<data>/gles/<name>/manifest.json`.
+/// The `gles` capability line for `acos doctor` / `acos_capabilities`:
+/// `angle-swiftshader` when a provider is selected (the default one, or the
+/// `ACOS_GUEST_GLES` override), else `none`, plus the explanation.
+///
+/// Never an error: a host without the sysroot, without the provider or with an
+/// unreadable manifest reports `none` and why, because this is a *report*, and
+/// the launch path is where a broken explicit selection must fail loudly.
+#[must_use]
+pub fn capability() -> (String, String) {
+    let root = match ArtRoot::resolve(None, None) {
+        Ok(r) => r,
+        Err(e) => return ("none".to_string(), e.to_string()),
+    };
+    match status(&root) {
+        Ok(s) => (s.label().to_string(), s.detail),
+        Err(e) => ("none".to_string(), e.to_string()),
+    }
+}
+
+/// Load and parse `<data>/gles/<name>/manifest.json` (no hashing; [`verify`]
+/// checks the bytes).
 pub fn load(root: &ArtRoot, name: &str) -> Result<Provider> {
     let dir = match provider_dir_override() {
         Some(base) => base.join(name),
@@ -349,13 +474,101 @@ pub fn load(root: &ArtRoot, name: &str) -> Result<Provider> {
     })
 }
 
-/// Verify every staged file against the manifest's sha256 and size.
+/// The verified fingerprint of a staged provider: `<provider>/.verified`.
 ///
-/// Called once per launch with the flag on (measured: see the report's launch
-/// cost table). A mismatch is a hard error: the whole point of the flag is that
+/// Next to the provider it describes, so it travels with it: one file per
+/// provider **tag** (`angle-swiftshader` now, `mesa-host` when the GPU track
+/// stages it), shared by every run on the host, and inside the install root
+/// when ACOS is installed (the sysroot is copied whole). Only `lib64/` is bound
+/// into the guest, so the guest never sees it.
+pub const VERIFIED: &str = ".verified";
+
+/// `<provider>/.verified` (see [`VERIFIED`]).
+#[must_use]
+pub fn verify_cache_path(provider: &Provider, root: &ArtRoot) -> PathBuf {
+    provider.dir(root).join(VERIFIED)
+}
+
+/// The identity of the staged bytes that a launch verifies: the manifest's own
+/// digest plus each file's `(dev, ino, size, mtime, ctime)`.
+///
+/// Content changes through the filesystem update `mtime`/`ctime` and a re-stage
+/// replaces the inode, so a match means "the bytes I hashed are still the bytes
+/// on disk" without reading them. `dev`/`ino` keep it correct when the same
+/// path is replaced by a different file that happens to share a timestamp.
+fn signature(provider: &Provider, root: &ArtRoot) -> Result<String> {
+    use std::os::unix::fs::MetadataExt;
+    let dir = provider.dir(root);
+    // The manifest **as the caller holds it**, not the bytes on disk: a caller
+    // that verifies against a manifest other than the staged one (a test, a
+    // re-serialised copy) must not inherit a cache entry made for a different
+    // contract.
+    let manifest = serde_json::to_string(&provider.manifest).unwrap_or_default();
+    let mut text = format!(
+        "v1 {} {}\n",
+        provider.name,
+        crate::build_cache::sha256_hex(manifest.as_bytes())
+    );
+    for f in &provider.manifest.files {
+        let path = dir.join(&f.path);
+        let meta = fs::metadata(&path).map_err(|e| {
+            Error::Layout(format!(
+                "ACOS_GUEST_GLES={}: {} is missing ({e})",
+                provider.name,
+                path.display()
+            ))
+        })?;
+        // `dev`/`ino` catch a replacement of the same path, `mtime`/`size` a
+        // rewrite in place. `ctime` is deliberately *not* used: `chmod` bumps it
+        // and does not change the bytes, so it would only cause re-hashing.
+        text.push_str(&format!(
+            "{} {} {} {} {}.{}\n",
+            f.path,
+            meta.dev(),
+            meta.ino(),
+            meta.len(),
+            meta.mtime(),
+            meta.mtime_nsec()
+        ));
+    }
+    Ok(crate::build_cache::sha256_hex(text.as_bytes()))
+}
+
+/// Verify the staged files, hashing them only when the stat fingerprint moved.
+///
+/// Called once per launch (default on). The first launch after a stage pays the
+/// digest (81 ms for the 32 MB ANGLE+SwiftShader provider, measured in
+/// `results/handoff/GLSPIKE4/README.md` §6); every later launch pays 8 `stat`s
+/// and one small read of [`VERIFIED`] (measured in
+/// `results/handoff/GLSHIP/README.md` §5). A changed fingerprint re-hashes; a
+/// missing or unreadable file is the structured error below, cache or not. The
+/// cache is best effort: if it cannot be written (a read-only provider) the
+/// launch still verifies, it just hashes every time.
+pub fn verify(provider: &Provider, root: &ArtRoot) -> Result<()> {
+    let sig = signature(provider, root)?;
+    let cache = verify_cache_path(provider, root);
+    if fs::read_to_string(&cache)
+        .map(|cached| cached.trim() == sig)
+        .unwrap_or(false)
+    {
+        return Ok(());
+    }
+    verify_full(provider, root)?;
+    // Atomic publish: a concurrent launch may be reading it. `rename` inside the
+    // provider directory keeps the write off the read path of every other run.
+    let tmp = cache.with_extension(format!("tmp.{}", std::process::id()));
+    if fs::write(&tmp, format!("{sig}\n")).is_ok() && fs::rename(&tmp, &cache).is_err() {
+        let _ = fs::remove_file(&tmp);
+    }
+    Ok(())
+}
+
+/// Verify every staged file against the manifest's sha256 and size, always.
+///
+/// A mismatch is a hard error: the whole point of shipping the provider is that
 /// a *known* driver is loaded, so a shared prebuilt that drifted cannot reach
 /// libEGL as a different library than the report describes.
-pub fn verify(provider: &Provider, root: &ArtRoot) -> Result<()> {
+pub fn verify_full(provider: &Provider, root: &ArtRoot) -> Result<()> {
     use std::os::unix::fs::MetadataExt;
     let dir = provider.dir(root);
     let mut hashed: std::collections::HashMap<(u64, u64), String> =
@@ -492,6 +705,17 @@ mod tests {
         install_with(dir, name, body, tag, None)
     }
 
+    /// The property-table view of a scratch root (what `Props::for_launch`
+    /// would serve), without touching the process-wide root resolution.
+    fn selected_tags_for(r: &ArtRoot) -> Option<(String, Option<String>)> {
+        status(r).expect("status").provider.map(|p| {
+            (
+                p.manifest.tag.clone(),
+                p.vulkan_tag().map(ToString::to_string),
+            )
+        })
+    }
+
     fn install_with(
         dir: &Path,
         name: &str,
@@ -549,11 +773,203 @@ mod tests {
     }
 
     #[test]
-    fn no_flag_is_none_and_touches_nothing() {
+    fn an_uninstalled_default_is_none_and_touches_nothing() {
+        let _guard = crate::ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let dir = scratch("none");
         let r = root(&dir);
         std::env::remove_var(ENV);
+        std::env::remove_var(DIR_ENV);
+        // GLSHIP: software GL is ON by default, but only when the provider is
+        // installed. Nothing is installed in this scratch root, so the run is
+        // exactly today's guest: no provider, and no error.
         assert_eq!(selected(&r).expect("ok"), None);
+        let s = status(&r).expect("status");
+        assert_eq!(s.label(), "none");
+        assert!(s.detail.contains(DEFAULT_PROVIDER), "{}", s.detail);
+        assert!(s.detail.contains("not installed"), "{}", s.detail);
+        assert!(!s.detail.contains("none ("), "the label is not repeated: {}", s.detail);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// GLSHIP: the shipped provider is the default, with no flag set at all.
+    #[test]
+    fn the_default_provider_is_selected_when_it_is_installed() {
+        let _guard = crate::ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let dir = scratch("default");
+        let r = root(&dir);
+        std::env::remove_var(ENV);
+        std::env::remove_var(DIR_ENV);
+        let p = install_with(
+            &dir,
+            DEFAULT_PROVIDER,
+            b"driver bytes",
+            "angle",
+            Some(("pastel", b"icd bytes")),
+        );
+        let s = status(&r).expect("status");
+        assert_eq!(s.provider.as_ref(), Some(&p), "default = angle-swiftshader");
+        assert!(s.default, "chosen implicitly");
+        assert_eq!(s.label(), DEFAULT_PROVIDER);
+        assert_eq!(selected_tags_for(&r), Some(("angle".into(), Some("pastel".into()))));
+        verify(&p, &r).expect("verified");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// GLSHIP: `ACOS_GUEST_GLES=off` is the escape hatch — even with the
+    /// provider installed, the run gets today's guest (no bind, no props).
+    #[test]
+    fn off_disables_the_default() {
+        let _guard = crate::ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let dir = scratch("off");
+        let r = root(&dir);
+        std::env::remove_var(DIR_ENV);
+        install(&dir, DEFAULT_PROVIDER, b"driver bytes", "angle");
+        std::env::set_var(ENV, "off");
+        let s = status(&r).expect("status");
+        assert_eq!(s.provider, None);
+        assert!(s.detail.contains("ACOS_GUEST_GLES=off"), "{}", s.detail);
+        std::env::set_var(ENV, "OFF");
+        assert_eq!(selected(&r).expect("ok"), None, "case-insensitive");
+        std::env::remove_var(ENV);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// GLSHIP: an explicitly named provider that is not installed is a loud
+    /// error, never a silent fall back to the default (that would run a
+    /// different driver than the report names). `mesa-host` is the GPU track's
+    /// reserved name: selecting it before it is staged says so.
+    #[test]
+    fn an_explicit_missing_provider_is_an_error_not_the_default() {
+        let _guard = crate::ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let dir = scratch("explicit-missing");
+        let r = root(&dir);
+        std::env::remove_var(DIR_ENV);
+        install(&dir, DEFAULT_PROVIDER, b"driver bytes", "angle");
+        std::env::set_var(ENV, RESERVED_MESA_HOST);
+        let e = selected(&r).expect_err("explicit miss must fail");
+        assert!(e.to_string().contains(RESERVED_MESA_HOST), "{e}");
+        std::env::remove_var(ENV);
+        assert!(
+            selected(&r).expect("default ok").is_some(),
+            "and the default is untouched by it"
+        );
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// GLSHIP: the digest is paid once per staged fingerprint, not per launch.
+    ///
+    /// Proven by removing read permission after the first verify: a cache hit
+    /// needs only `stat`, so it still succeeds; any change to the fingerprint
+    /// forces the full read again and fails. The second launch is also
+    /// *measured* against a full digest of the same bytes, so "no hashing" is a
+    /// number and not only an absence of an error.
+    #[test]
+    fn the_digest_is_cached_until_the_fingerprint_changes() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = scratch("verify-cache");
+        let r = root(&dir);
+        // 8 MiB so the digest is measurable, not a rounding error.
+        let body = vec![0xA5u8; 8 << 20];
+        let p = install(&dir, "angle", &body, "angle");
+        let cache = verify_cache_path(&p, &r);
+        assert_eq!(cache, p.dir(&r).join(VERIFIED), "next to the provider");
+        assert!(!cache.exists(), "nothing verified yet");
+        verify(&p, &r).expect("first verify hashes");
+        assert!(
+            cache.is_file(),
+            "the fingerprint is recorded at {}",
+            cache.display()
+        );
+        let file = p.egl_dir(&r).join("libEGL_angle.so");
+        fs::set_permissions(&file, fs::Permissions::from_mode(0o000)).expect("chmod");
+        let cached = std::time::Instant::now();
+        verify(&p, &r).expect("cache hit: the bytes are not read again");
+        let cached_us = cached.elapsed().as_micros();
+        fs::set_permissions(&file, fs::Permissions::from_mode(0o644)).expect("chmod");
+        // The full path on the same bytes, for the cost the cache avoids.
+        let full = std::time::Instant::now();
+        verify_full(&p, &r).expect("the bytes are intact");
+        let full_us = full.elapsed().as_micros();
+        assert!(
+            cached_us * 10 < full_us,
+            "cache hit {cached_us}us must be an order of magnitude below a full \
+             digest of the same 8 MiB ({full_us}us)"
+        );
+        // A re-stage replaces the inode; the same path with new content must be
+        // hashed again (and here: fail, because the file cannot be read).
+        fs::remove_file(&file).expect("rm");
+        fs::write(&file, b"DRIVER BYTES").expect("rewrite");
+        let e = verify(&p, &r).expect_err("new inode, new digest");
+        assert!(e.to_string().contains("libEGL_angle.so"), "{e}");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// GLSHIP: a **touched** file (same bytes, new `mtime`) re-hashes, so a
+    /// provider that was replaced in place cannot ride on a stale fingerprint.
+    #[test]
+    fn a_touched_file_is_hashed_again() {
+        let dir = scratch("verify-touched");
+        let r = root(&dir);
+        let p = install(&dir, "angle", b"driver bytes", "angle");
+        verify(&p, &r).expect("first verify");
+        let file = p.egl_dir(&r).join("libEGL_angle.so");
+        // Same bytes, later mtime: the fingerprint moves, the digest must run.
+        set_mtime_ns(&file, mtime_ns(&file) + 1_000_000_000);
+        fs::write(&file, b"DRIVER BYTES").expect("rewrite in place");
+        set_mtime_ns(&file, mtime_ns(&file) + 2_000_000_000);
+        let e = verify(&p, &r).expect_err("touched + changed bytes must fail");
+        assert!(e.to_string().contains("sha256"), "{e}");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// GLSHIP accepted risk (documented in the module docs): bytes rewritten in
+    /// place with the **same size and the same `mtime`** are trusted, because
+    /// the fingerprint matches. The provider is published atomically by
+    /// `tools/art-gles.sh`, so this cannot arise from the shipped tooling — and
+    /// hashing 32 MB on every launch is a real cost for a case that cannot
+    /// happen. This test pins the contract so a future change to it is a
+    /// decision, not an accident.
+    #[test]
+    fn same_size_and_mtime_is_the_documented_accepted_risk() {
+        let dir = scratch("verify-same-mtime");
+        let r = root(&dir);
+        let p = install(&dir, "angle", b"driver bytes", "angle");
+        verify(&p, &r).expect("first verify");
+        let file = p.egl_dir(&r).join("libEGL_angle.so");
+        let mtime = mtime_ns(&file);
+        // Same length, different bytes, mtime restored to the verified value.
+        fs::write(&file, b"DRIVER BYTEZ").expect("rewrite in place");
+        set_mtime_ns(&file, mtime);
+        verify(&p, &r).expect("same fingerprint: trusted (accepted risk)");
+        // ... and the moment the fingerprint moves, it is caught.
+        set_mtime_ns(&file, mtime + 1_000_000_000);
+        let e = verify(&p, &r).expect_err("a new mtime re-hashes");
+        assert!(e.to_string().contains("sha256"), "{e}");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    fn mtime_ns(path: &Path) -> i64 {
+        use std::os::unix::fs::MetadataExt;
+        let m = fs::metadata(path).expect("metadata");
+        m.mtime() * 1_000_000_000 + m.mtime_nsec()
+    }
+
+    /// Set the modification time (atime untouched), so a test can express
+    /// "rewritten in place with the same `mtime`" without a new dependency.
+    fn set_mtime_ns(path: &Path, ns: i64) {
+        let c = std::ffi::CString::new(path.as_os_str().as_encoded_bytes()).expect("path");
+        let times = [
+            libc::timespec {
+                tv_sec: 0,
+                tv_nsec: libc::UTIME_OMIT,
+            },
+            libc::timespec {
+                tv_sec: ns / 1_000_000_000,
+                tv_nsec: ns % 1_000_000_000,
+            },
+        ];
+        let rc = unsafe { libc::utimensat(libc::AT_FDCWD, c.as_ptr(), times.as_ptr(), 0) };
+        assert_eq!(rc, 0, "utimensat failed for {}", path.display());
     }
 
     #[test]

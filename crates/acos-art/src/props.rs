@@ -600,9 +600,9 @@ mod tests {
         ENV_HEAPTARGETUTILIZATION,
     ];
 
-    /// The process environment is global; the heap tests mutate it, so they take
-    /// this lock and run one at a time (and restore what they found).
-    static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    /// The process environment is global; the tests that mutate it take the
+    /// crate-wide lock and run one at a time (and restore what they found).
+    use crate::ENV_LOCK;
 
     fn with_env(vars: &[(&'static str, &str)], f: impl FnOnce()) {
         let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
@@ -623,6 +623,20 @@ mod tests {
                 None => std::env::remove_var(k),
             }
         }
+    }
+
+    /// GLSHIP: software GL is ON by default when the provider is installed, so
+    /// a test that compares the **whole** launch table must pin that seam.
+    /// The caller holds `ENV_LOCK` (directly or through [`with_env`]).
+    fn with_gles_off<T>(f: impl FnOnce() -> T) -> T {
+        let saved = std::env::var("ACOS_GUEST_GLES").ok();
+        std::env::set_var("ACOS_GUEST_GLES", "off");
+        let out = f();
+        match saved {
+            Some(v) => std::env::set_var("ACOS_GUEST_GLES", v),
+            None => std::env::remove_var("ACOS_GUEST_GLES"),
+        }
+        out
     }
 
     #[test]
@@ -650,7 +664,7 @@ mod tests {
     /// the table is byte-identical to the stock one and no override is claimed.
     #[test]
     fn heap_defaults_unchanged() {
-        with_env(&[], || {
+        with_env(&[], || with_gles_off(|| {
             let cfg = HeapConfig::from_env().expect("defaults must validate");
             assert_eq!(cfg, HeapConfig::defaults());
             assert!(cfg.overrides.is_empty());
@@ -670,7 +684,7 @@ mod tests {
             for (k, v) in cfg.properties() {
                 assert_eq!(launch.get(k), Some(v));
             }
-        });
+        }));
     }
 
     /// Each override moves exactly its own property and is recorded as an
@@ -836,40 +850,57 @@ mod tests {
     /// inside libEGL with its own `couldn't find an OpenGL ES implementation`
     /// fatal (measured: results/handoff/GLSPIKE2), one step before the driver.
     /// The ICD the provider stages comes with it as `ro.hardware.vulkan`.
+    ///
+    /// GLSHIP: the provider is the **default** when it is installed, so the
+    /// matrix is (nothing installed | installed) x (no flag | off | named).
     #[test]
     fn the_gles_properties_are_the_manifest_tag_and_its_vulkan_icd() {
         let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let dir = std::env::temp_dir().join(format!("acos-props-gles-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
-        let provider = dir.join("gles/angle-swiftshader");
-        std::fs::create_dir_all(provider.join("lib64/egl")).expect("dirs");
-        std::fs::create_dir_all(provider.join("lib64/hw")).expect("dirs");
-        std::fs::write(provider.join("lib64/egl/libEGL_angle.so"), b"driver").expect("write");
-        std::fs::write(provider.join("lib64/hw/vulkan.pastel.so"), b"icd").expect("write");
-        std::fs::write(provider.join("lib64/vulkan.pastel.so"), b"icd").expect("write");
-        std::fs::write(
-            provider.join("manifest.json"),
-            r#"{"tag":"angle","vulkan_tag":"pastel","provider":"x","source":"y",
-                "version":"0","licence":"z","files":[
-                {"path":"lib64/egl/libEGL_angle.so","sha256":"00","size":6},
-                {"path":"lib64/hw/vulkan.pastel.so","sha256":"00","size":3},
-                {"path":"lib64/vulkan.pastel.so","sha256":"00","size":3}]}"#,
-        )
-        .expect("manifest");
+        let gles = dir.join("gles");
+        std::fs::create_dir_all(&gles).expect("dirs");
         let saved: Vec<(&str, Option<String>)> = ["ACOS_GUEST_GLES", "ACOS_GUEST_GLES_DIR"]
             .iter()
             .map(|k| (*k, std::env::var(k).ok()))
             .collect();
-        for k in ["ACOS_GUEST_GLES", "ACOS_GUEST_GLES_DIR"] {
-            std::env::remove_var(k);
-        }
-        let result = (|| {
-            let off = Props::for_launch().expect("defaults");
-            assert_eq!(off.get("ro.hardware.egl"), None, "flag off: property unset");
+        let result: Props = (|| {
+            // (1) nothing installed, no flag: today's guest, properties unset.
+            std::env::remove_var("ACOS_GUEST_GLES");
+            std::env::set_var("ACOS_GUEST_GLES_DIR", &gles);
+            let none = Props::for_launch().expect("defaults");
+            assert_eq!(none.get("ro.hardware.egl"), None, "not installed: unset");
+            assert_eq!(none.get("ro.hardware.vulkan"), None);
+
+            // (2) installed: the default provider is served with no flag.
+            let provider = gles.join("angle-swiftshader");
+            std::fs::create_dir_all(provider.join("lib64/egl")).expect("dirs");
+            std::fs::create_dir_all(provider.join("lib64/hw")).expect("dirs");
+            std::fs::write(provider.join("lib64/egl/libEGL_angle.so"), b"driver").expect("write");
+            std::fs::write(provider.join("lib64/hw/vulkan.pastel.so"), b"icd").expect("write");
+            std::fs::write(provider.join("lib64/vulkan.pastel.so"), b"icd").expect("write");
+            std::fs::write(
+                provider.join("manifest.json"),
+                r#"{"tag":"angle","vulkan_tag":"pastel","provider":"x","source":"y",
+                    "version":"0","licence":"z","files":[
+                    {"path":"lib64/egl/libEGL_angle.so","sha256":"00","size":6},
+                    {"path":"lib64/hw/vulkan.pastel.so","sha256":"00","size":3},
+                    {"path":"lib64/vulkan.pastel.so","sha256":"00","size":3}]}"#,
+            )
+            .expect("manifest");
+            let default_on = Props::for_launch().expect("default provider");
+            assert_eq!(default_on.get("ro.hardware.egl"), Some("angle"));
+            assert_eq!(default_on.get("ro.hardware.vulkan"), Some("pastel"));
+
+            // (3) `off` wins over an installed provider.
+            std::env::set_var("ACOS_GUEST_GLES", "off");
+            let off = Props::for_launch().expect("off");
+            assert_eq!(off.get("ro.hardware.egl"), None, "ACOS_GUEST_GLES=off: unset");
             assert_eq!(off.get("ro.hardware.vulkan"), None);
+
+            // (4) an explicit name serves the same provider.
             std::env::set_var("ACOS_GUEST_GLES", "angle-swiftshader");
-            std::env::set_var("ACOS_GUEST_GLES_DIR", dir.join("gles"));
-            Props::for_launch()
+            Props::for_launch().expect("a staged provider is valid")
         })();
         for (k, v) in saved {
             match v {
@@ -878,7 +909,7 @@ mod tests {
             }
         }
         let _ = std::fs::remove_dir_all(&dir);
-        let on = result.expect("a staged provider is valid");
+        let on = result;
         assert_eq!(
             on.get("ro.hardware.egl"),
             Some("angle"),

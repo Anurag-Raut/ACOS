@@ -26,6 +26,11 @@
 #   <out>/bootimg/x86_64/boot.{art,oat,vdex}              AOT boot image (optional)
 #   <out>/shim/libacoshw.so                               software gralloc LD_PRELOAD shim
 #                                                        (crates/acos-art/shim/gralloc_shim.c)
+#   <out>/gles/angle-swiftshader/                         software GL provider (GLSHIP):
+#                                                        ANGLE + its SwiftShader Vulkan ICD,
+#                                                        staged by tools/art-gles.sh with a
+#                                                        provenance manifest. ON by default
+#                                                        (`ACOS_GUEST_GLES=off` disables).
 #   <out>/MANIFEST.txt, <out>/READY                       integrity + completion stamps
 #
 # Usage:
@@ -36,6 +41,12 @@
 #   --force              redo the extraction even if READY exists
 #   --no-boot-image      skip the dex2oat64 boot image step
 #   --no-shim            skip building the gralloc LD_PRELOAD shim
+#   --no-gles            skip staging the software GL provider
+#   --gles-icd PATH      SwiftShader ICD (`vulkan.pastel.so`) to stage with it;
+#                        default $ACOS_GLES_ICD, else the first known local copy
+#                        (see gles_icd_candidates). Without one the provider is
+#                        not staged and the guest runs GL-less (today's
+#                        behaviour), with a log line saying so.
 #   --image REL          system image, relative to $ANDROID_HOME
 #                        (default system-images/android-34/google_apis/x86_64)
 #   --keep-work          keep the ~5 GB intermediates (super.img, system.img)
@@ -52,6 +63,8 @@ IMAGE_REL="${ANDROID_IMAGE_REL:-system-images/android-34/google_apis/x86_64}"
 OUT="${ACOS_ART_SYSROOT:-$ROOT/.cache/art/sysroot}"
 BOOT_IMAGE=1
 SHIM=1
+GLES=1
+GLES_ICD="${ACOS_GLES_ICD:-}"
 FORCE=0
 KEEP_WORK=0
 
@@ -65,6 +78,8 @@ while [ $# -gt 0 ]; do
         --force) FORCE=1; shift ;;
         --no-boot-image) BOOT_IMAGE=0; shift ;;
         --no-shim) SHIM=0; shift ;;
+        --no-gles) GLES=0; shift ;;
+        --gles-icd) GLES_ICD="$2"; shift 2 ;;
         --keep-work) KEEP_WORK=1; shift ;;
         -h|--help) sed -n '2,40p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
         *) die "unknown option $1 (try --help)" ;;
@@ -461,6 +476,76 @@ if [ "$SHIM" -eq 1 ]; then
 fi
 
 # ---------------------------------------------------------------------------
+# 5c. software GL provider (GLSHIP: ANGLE on SwiftShader, ON by default)
+# ---------------------------------------------------------------------------
+# The image ships the framework's EGL *loader* but no driver, so without a
+# provider the first HARDWARE-bitmap draw aborts in libEGL. `tools/art-gles.sh`
+# stages the provider; this step makes it part of the sysroot build (like the
+# gralloc shim above), so a fresh extraction is GL-capable with no manual step.
+#
+# The ANGLE libs come from the same SDK system image this script already reads
+# (vendor.img, Apache/BSD, x86_64 bionic). The SwiftShader Vulkan ICD is not in
+# that image: ANGLE has no rasteriser of its own and needs an ICD. Take it from
+# --gles-icd / $ACOS_GLES_ICD, else from a local copy if one exists; if neither,
+# stage nothing and say so — the guest then behaves exactly as before.
+#
+# Idempotent: an installed provider whose manifest lists the expected file
+# digests is kept (re-staging is the explicit `tools/art-gles.sh` call).
+GLES_TAG=angle-swiftshader
+GLES_PROVIDER_DIR="$OUT/gles/$GLES_TAG"
+
+gles_icd_candidates() {
+    # Local copies of the Cuttlefish `guest_swiftshader` ICD (see
+    # results/handoff/GLSPIKE2/README.md §4.1: the official AOSP artifact is not
+    # pinned; these are the images this host already has).
+    printf '%s\n' \
+        "${ACOS_GLES_ICD:-}" \
+        "${ACOS_GLES_ICD_DIR:-}/vulkan.pastel.so" \
+        "$HOME/.cache/acvm/mem-r1/img/vulkan.pastel.so"
+}
+
+stage_gles_provider() {
+    local manifest="$GLES_PROVIDER_DIR/manifest.json"
+    if [ -f "$manifest" ]; then
+        log "GL provider present: $GLES_PROVIDER_DIR ($(python3 -c 'import json,sys; m=json.load(open(sys.argv[1])); print(m["provider"], m["version"])' "$manifest" 2>/dev/null || echo 'manifest unreadable'))"
+        return 0
+    fi
+    local vendor_img="$SDK/$IMAGE_REL/vendor.img"
+    if [ ! -f "$vendor_img" ]; then
+        log "GL provider not staged: no $vendor_img (the SDK system image is missing)"
+        return 0
+    fi
+    local icd=""
+    local cand
+    while read -r cand; do
+        [ -n "$cand" ] || continue
+        if [ -f "$cand" ]; then icd="$cand"; break; fi
+    done < <(gles_icd_candidates)
+    if [ -z "$icd" ]; then
+        log "GL provider not staged: no SwiftShader ICD (pass --gles-icd PATH, or set ACOS_GLES_ICD)"
+        log "  the guest then runs without GL, exactly as before (ACOS_GUEST_GLES=off behaviour)"
+        return 0
+    fi
+    log "staging the software GL provider: $GLES_TAG (ICD $icd)"
+    "$ROOT/tools/art-gles.sh" \
+        --sysroot "$OUT" \
+        --tag "$GLES_TAG" \
+        --egl-tag angle \
+        --vulkan-icd "$icd" \
+        --vulkan-tag pastel \
+        --from-emulator-vendor "$vendor_img" \
+        --provider "ANGLE (Vulkan backend) on SwiftShader's CPU Vulkan ICD ('pastel', Cuttlefish guest_swiftshader)" \
+        --version "ANGLE 2.1.24303 (API-34 SDK system image, $(stat -c %y "$vendor_img" | cut -d' ' -f1)) + SwiftShader ICD" \
+        --licence "BSD-3-Clause (ANGLE), Apache-2.0 (SwiftShader)" \
+        --source "$IMAGE_REL/vendor.img (ANGLE) + $icd (SwiftShader ICD)" \
+        | sed 's/^/    /'
+}
+
+if [ "$GLES" -eq 1 ]; then
+    stage_gles_provider
+fi
+
+# ---------------------------------------------------------------------------
 # 6. manifest + stamps
 # ---------------------------------------------------------------------------
 log "writing MANIFEST.txt"
@@ -483,6 +568,7 @@ log "writing MANIFEST.txt"
     echo "bootclasspath_jars=$(wc -l <"$OUT/BOOTCLASSPATH")"
     echo "boot_image=$([ -f "$OUT/bootimg/x86_64/boot.art" ] && echo yes || echo no)"
     echo "hw_shim=$([ -f "$OUT/shim/libacoshw.so" ] && echo yes || echo no)"
+    echo "gles_provider=$([ -f "$OUT/gles/$GLES_TAG/manifest.json" ] && echo "$GLES_TAG" || echo none)"
     echo "extracted_at=$(date -Is)"
 } >"$OUT/READY"
 

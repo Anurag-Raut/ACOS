@@ -148,6 +148,7 @@ dependencies = [
 name = "acos-mcp"
 version = "0.3.0"
 dependencies = [
+ "acos-art",
  "acos-jni",
  "acos-netd",
  "acos-protocol",

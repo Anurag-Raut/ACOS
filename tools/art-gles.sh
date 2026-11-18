@@ -41,7 +41,18 @@
 # and then the manifest also carries vulkan_tag=<vulkan-tag>, which the launcher
 # turns into ro.hardware.vulkan. `--egl-tag` lets the provider directory be a
 # label (`angle-swiftshader`) while the EGL library names stay `..._angle.so`.
-# It verifies every file against the manifest on every launch with the flag on.
+# It verifies every file against the manifest (once per staged inode set: the
+# launcher caches the digest under <sysroot>/../gles-verify/).
+#
+# GLSHIP: `angle-swiftshader` is the **default** provider when it is installed
+# (`ACOS_GUEST_GLES=off` disables software GL, `=mesa-host` is reserved for the
+# GPU track). This script runs as part of the sysroot build
+# (`tools/art-sysroot.sh`, step 5c) and again from `tools/release/install.sh`
+# is unnecessary: the install copies the whole sysroot, provider included.
+#
+# Provenance: the manifest carries a `provenance` block (the ICD's own sha256 +
+# ELF build id, the EGL source, the upstream projects and their licences) so an
+# installed provider can always be traced back to the bytes it was cut from.
 # lib64/ is bound at /vendor/lib64, so `lib64/egl/libEGL_<tag>.so` (what the
 # loader opens) and `lib64/libGLESv2_<tag>.so` (what the driver NEEDs) both
 # resolve with one mount.
@@ -52,7 +63,9 @@
 #       [--sysroot DIR]
 #   tools/art-gles.sh --tag mesa --from-dir <dir with libEGL_mesa.so ...> ...
 #   tools/art-gles.sh --tag angle-swiftshader --from-dir <dir> \
-#       --egl-tag angle --vulkan-icd <vulkan.pastel.so> --vulkan-tag pastel ...
+#       --egl-tag angle --vulkan-icd <vulkan.pastel.so> --vulkan-tag pastel ... \
+#       --provider "ANGLE on SwiftShader" --version "2.1.24303" \
+#       --licence "BSD-3-Clause (ANGLE), Apache-2.0 (SwiftShader)"
 #
 # The provider lives next to the guest's shared, read-only inputs — the *sysroot*
 # (`<sysroot>/gles/<tag>`, the same add-on path as `<sysroot>/shim/`), which is
@@ -220,11 +233,30 @@ for base in "${DRIVER_FILES[@]}"; do
   ln "$tmp/lib64/egl/${base}_${EGL_TAG}.so" "$tmp/lib64/${base}_${EGL_TAG}.so"
 done
 
+# Provenance of the inputs (GLSHIP): the ICD's own digest and ELF build id, so
+# an installed provider can be traced to the exact bytes it was cut from.
+# What to record as the EGL source: the input the caller named, not the
+# transient extraction directory this script used.
+EGL_SOURCE="$SRC_DIR"
+if [ -n "$FROM_EMULATOR_VENDOR" ]; then
+  EGL_SOURCE="$FROM_EMULATOR_VENDOR (lib64/egl/${EGL_TAG})"
+fi
+
+ICD_SHA=""
+ICD_BUILD_ID=""
+if [ -n "$VULKAN_ICD" ]; then
+  ICD_SHA="$(sha256sum "$VULKAN_ICD" | cut -d' ' -f1)"
+  if command -v readelf >/dev/null 2>&1; then
+    ICD_BUILD_ID="$(readelf -n "$VULKAN_ICD" 2>/dev/null | awk '/Build ID:/{print $3; exit}')"
+  fi
+fi
+
 python3 - "$tmp" "$EGL_TAG" "${PROVIDER:-$TAG}" "${SOURCE:-$SRC_DIR}" \
          "${VERSION:-unknown}" "${LICENCE:-unknown}" \
-         "$VT_ARG" <<'PY'
+         "$VT_ARG" "$EGL_SOURCE" "$VULKAN_ICD" "$ICD_SHA" "$ICD_BUILD_ID" <<'PY'
 import hashlib, json, os, sys
-stage, tag, provider, source, version, licence, vulkan_tag = sys.argv[1:8]
+(stage, tag, provider, source, version, licence, vulkan_tag,
+ egl_source, icd_source, icd_sha256, icd_build_id) = sys.argv[1:12]
 files = []
 for root, _dirs, names in os.walk(os.path.join(stage, 'lib64')):
     for name in sorted(names):
@@ -249,6 +281,25 @@ manifest = {
 }
 if vulkan_tag:
     manifest['vulkan_tag'] = vulkan_tag
+# GLSHIP: provenance, so a staged provider is auditable after the fact. The
+# upstreams are ANGLE (BSD-3-Clause) and SwiftShader (Apache-2.0); `source`
+# above is where *these* bytes came from, which is not always a download.
+manifest['provenance'] = {
+    'egl_source': egl_source,
+    'icd_source': icd_source or None,
+    'icd_sha256': icd_sha256 or None,
+    'icd_elf_build_id': icd_build_id or None,
+    'upstream': {
+        'angle': 'https://chromium.googlesource.com/angle/angle',
+        'swiftshader': 'https://swiftshader.googlesource.com/SwiftShader',
+    },
+    'licences': {
+        'angle': 'BSD-3-Clause',
+        'swiftshader': 'Apache-2.0',
+    },
+    'staged_at': __import__('datetime').datetime.now(
+        __import__('datetime').timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),
+}
 with open(os.path.join(stage, 'manifest.json'), 'w') as f:
     json.dump(manifest, f, indent=2, sort_keys=True)
     f.write('\n')

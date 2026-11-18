@@ -171,6 +171,26 @@ for bin in "${BINS[@]}"; do
     install -m 0755 "$BIN_DIR/$bin" "$DEST/bin/$bin"
 done
 
+# --------------------------------------------------- software GL (GLSHIP)
+# The guest's software GL provider (ANGLE on SwiftShader) is part of the sysroot
+# the copy above already carried (`<root>/.cache/art/sysroot/gles/<provider>/`),
+# so an install is GL-capable with no extra step. Report it, and fail closed if
+# the manifest it ships is unreadable: `acos doctor` verifies the bytes on every
+# launch, so a half-copied provider must not look installed.
+GLES_LINE="none"
+GLES_DIR="$DEST/.cache/art/sysroot/gles/angle-swiftshader"
+if [ -f "$GLES_DIR/manifest.json" ]; then
+    GLES_LINE=$(python3 - "$GLES_DIR/manifest.json" <<'GLESMANIFEST'
+import json, sys
+m = json.load(open(sys.argv[1]))
+total = sum(f["size"] for f in m["files"])
+print(f'{m["provider"]} | {m["version"]} | {m["licence"]} | {total // (1024 * 1024)} MiB staged')
+GLESMANIFEST
+    ) || die "$GLES_DIR/manifest.json is not a provider manifest (the sysroot copy is broken)"
+else
+    printf 'gles: no provider in the sysroot (software GL off; apps run exactly as before)\n'
+fi
+
 # ------------------------------------------------------------- metadata
 
 printf '%s\n' "$VERSION" >"$DEST/VERSION"
@@ -178,6 +198,7 @@ printf '%s\n' "$VERSION" >"$DEST/VERSION"
     printf 'ACOS %s\n' "$VERSION"
     printf 'installed %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
     printf 'source %s\n' "${FROM_TARGET:-$BIN_DIR}"
+    printf 'gles %s\n' "$GLES_LINE"
     printf 'assets:\n'
     ( cd "$DEST" && find bin .cache/art/sysroot .cache/boot/android-34 \
         crates/acos-art/guest/java -type f -print 2>/dev/null | LC_ALL=C sort )
@@ -221,6 +242,7 @@ installed ACOS $VERSION
   size    $SIZE ($FILES files listed in MANIFEST.txt)
   current $SHARE/current -> $VERSION
   wrapper $PREFIX/bin/acos, $PREFIX/bin/acos-mcp
+  gles    $GLES_LINE
 
 Next steps
   1. preflight:   $PREFIX/bin/acos doctor

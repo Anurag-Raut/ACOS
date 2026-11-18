@@ -21,11 +21,14 @@
 # implicitly: `assert_no_crash` is the last step, and a native crash ends the
 # run before it.
 #
-# What this does NOT cover, and why: *drawing* that HARDWARE bitmap needs an
-# OpenGL ES driver. This image has none, so libhwui's GL path makes libEGL abort
-# the process (`results/handoff/A11YPACE/README.md` §4 keeps the stack). A GPU
-# is the graphics track, not the shim's; the app-side wrap call is what a host
-# without a GPU can still make work.
+# What this does NOT cover, and why: *drawing* that HARDWARE bitmap into an
+# ordinary `View` needs a hardware window canvas, not a GL driver. ACOS paints
+# windows on a software `Surface.lockCanvas`, so the framework refuses the draw
+# (`IllegalArgumentException: Software rendering doesn't support hardware
+# bitmaps`) whatever GL provider is installed; `scenarios/gles-software.yaml`
+# keeps that step opt-in and asserts the skip. Reading the bitmap *back* through
+# a real EGL context works, and is asserted here (GLSHIP: the software GL
+# provider is the default, so this scenario runs it with no flag set).
 version: 1
 name: a11y-screenshot-wrap
 description: >-
@@ -71,11 +74,12 @@ steps:
         # `Bitmap.getAllocationByteCount` -> libhwui -> libui's
         # `GraphicBufferMapper::getAllocationSize` -> the shim: 1080*2400*4.
         - "wrap_hardware_buffer allocation=10368000"
-        # GLSPIKE: with no software GLES provider staged, the two GL-only paths
-        # (drawing the wrapped HARDWARE bitmap, decoding a PNG to HARDWARE) are
-        # not taken — they abort the process in libEGL. The skip is *asserted*,
-        # so the gap stays visible on every default run instead of being
-        # silently absent; `scenarios/gles-software.yaml` is the arm that takes
-        # them (`ACOS_GUEST_GLES=angle`).
-        - "gles_draw skipped=no_software_gles"
+        # GLSHIP: the guest's software GL (ANGLE on SwiftShader) is the default
+        # when the image installed it, so the probe takes the GPU readback and
+        # logs the pixels. On a host without the provider it logs the explicit
+        # skip instead — both are *asserted* states, never silence, and
+        # `scenarios/gles-software.yaml` is the arm that requires the GL path
+        # (`gles_draw start=1 provider=angle` + real pixel values), so a GL host
+        # that silently lost its provider fails there.
+        - "gles_draw (start=1 provider=angle|skipped=no_software_gles)"
   - assert_no_crash: {}
