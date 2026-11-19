@@ -4053,6 +4053,7 @@ fn write_final_logd(out: &Path, logs: &[crate::LogEntry], dropped: u64) {
             "prio": entry.prio,
             "tag": entry.tag,
             "message": entry.message,
+            "ts_ms": entry.ts_ms,
         });
         let _ = writeln!(writer, "{line}");
     }
@@ -9963,9 +9964,17 @@ fn build_launch_guest(root: &ArtRoot) -> Result<PathBuf> {
     // under the shared cache lock; subsequent launches (and the other N-1
     // sessions of a cold cohort) install the verified `classes.dex` instead.
     let cache_key = {
-        let mut parts: Vec<Vec<u8>> = vec![b"acos-art/launch-guest/v2".to_vec()];
+        let mut parts: Vec<Vec<u8>> = vec![b"acos-art/launch-guest/v3".to_vec()];
         for p in &sources {
-            parts.push(p.to_string_lossy().as_bytes().to_vec());
+            // The source's place in the guest tree, never its absolute path: a
+            // worktree (or any other prefix) holding the same bytes is the same key.
+            parts.push(
+                p.strip_prefix(&src_dir)
+                    .unwrap_or(p)
+                    .to_string_lossy()
+                    .as_bytes()
+                    .to_vec(),
+            );
             parts.push(fs::read(p)?);
         }
         for tool in [&android_jar, &d8, &javac] {
@@ -11599,8 +11608,8 @@ mod final_logd_tests {
         let dir = std::env::temp_dir().join(format!("final-logd-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let logs = vec![
-            crate::LogEntry { prio: 6, tag: "a".into(), message: "first kept".into() },
-            crate::LogEntry { prio: 7, tag: "b".into(), message: "last".into() },
+            crate::LogEntry { prio: 6, tag: "a".into(), message: "first kept".into(), ts_ms: 0 },
+            crate::LogEntry { prio: 7, tag: "b".into(), message: "last".into(), ts_ms: 0 },
         ];
         write_final_logd(&dir, &logs, 7);
         let text = std::fs::read_to_string(dir.join(FINAL_LOGD_FILE)).unwrap();

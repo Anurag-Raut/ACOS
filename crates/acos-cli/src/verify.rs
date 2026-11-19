@@ -808,9 +808,10 @@ pub(crate) fn merge_final_logd(artifacts: &Path) {
             6 | 7 => 'E',
             _ => 'I',
         };
+        let captured = entry.get("ts_ms").and_then(|v| v.as_u64()).unwrap_or(0);
         current.push_str(&format!(
             "{:>6}  {:>5}  {} {}: {}\n",
-            stamp,
+            if captured > 0 { captured } else { stamp },
             seq,
             level,
             entry.get("tag").and_then(|v| v.as_str()).unwrap_or(""),
@@ -1542,11 +1543,17 @@ mod final_logd_merge_tests {
         merge_final_logd(&dir); // no dump: untouched
         assert_eq!(std::fs::read_to_string(&logcat).unwrap(), head);
         std::fs::write(
+            dir.join("art-frames/session-exit.json"),
+            "{\"utc_ms\":9999}\n",
+        )
+        .unwrap();
+        std::fs::write(
             dir.join("art-frames/logd-final.jsonl"),
             concat!(
-                "{\"seq\":1,\"prio\":4,\"tag\":\"t\",\"message\":\"one\"}\n",
-                "{\"seq\":2,\"prio\":4,\"tag\":\"t\",\"message\":\"two\"}\n",
-                "{\"seq\":3,\"prio\":7,\"tag\":\"x\",\"message\":\"assertion failed: boom\"}\n"
+                "{\"seq\":1,\"prio\":4,\"tag\":\"t\",\"message\":\"one\",\"ts_ms\":1000}\n",
+                "{\"seq\":2,\"prio\":4,\"tag\":\"t\",\"message\":\"two\",\"ts_ms\":1001}\n",
+                "{\"seq\":3,\"prio\":7,\"tag\":\"x\",\"message\":\"assertion failed: boom\",\"ts_ms\":1234}\n",
+                "{\"seq\":4,\"prio\":4,\"tag\":\"x\",\"message\":\"unstamped tail\"}\n"
             ),
         )
         .unwrap();
@@ -1555,7 +1562,8 @@ mod final_logd_merge_tests {
         let text = std::fs::read_to_string(&logcat).unwrap();
         assert_eq!(text.matches("one").count(), 1);
         assert_eq!(text.matches("assertion failed: boom").count(), 1);
-        assert!(text.contains("E x: assertion failed: boom"));
+        assert!(text.contains("  1234      3  E x: assertion failed: boom"));
+        assert!(text.contains("  9999      4  I x: unstamped tail"));
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

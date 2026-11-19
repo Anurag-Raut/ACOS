@@ -639,7 +639,7 @@ impl ArtRoot {
         // so a mount-table change (new extraction, corrected apex names)
         // invalidates an existing ld.config.txt.
         let stamp = self.data.join("linkerconfig/.mounts");
-        let mounts = self.mount_stamp();
+        let mounts = self.linkerconfig_stamp();
         let stamp_ok = fs::read_to_string(&stamp)
             .map(|s| s.trim() == mounts)
             .unwrap_or(false);
@@ -667,9 +667,15 @@ impl ArtRoot {
         // linkerconfig is a bionic binary: without the shim its CHECK failures
         // are invisible (liblog has nowhere to write) and it just aborts.
         crate::build_shim(&self.data.join("shim"))?;
+        // linkerconfig picks its mode from the property table; serve it the
+        // table without the Treble-mode keys so it emits the unisolated config
+        // the runtime is built for (see `props::LINKERCONFIG_MODE_KEYS`).
+        let lc_props = self.data.join(props::LINKERCONFIG_PROPS_FILE);
+        Props::for_linkerconfig()?.write(&lc_props)?;
         let mut sb = self.sandbox();
         sb.staging(true); // host build step: /linkerconfig is regenerated here
         sb.with_shim(true);
+        sb.ro_bind(&lc_props, "/data/acos.properties");
         let mut cmd = sb.command(
             "/apex/com.android.runtime/bin/linkerconfig",
             &["--target".into(), "/linkerconfig".into()],
@@ -696,15 +702,26 @@ impl ArtRoot {
         Ok(())
     }
 
+    /// What the generated `/linkerconfig` tree depends on besides the image:
+    /// the APEX mount table and the **mode** the generator runs in (legacy,
+    /// unisolated; it follows `ro.vndk.version`, see
+    /// `props::LINKERCONFIG_MODE_KEYS`). A tree an older build generated in the
+    /// strict mode carries no such token, so it is regenerated, not reused.
+    fn linkerconfig_stamp(&self) -> String {
+        format!("{}+legacy-v1", self.mount_stamp())
+    }
+
     /// Cache key of the generated `linkerconfig` tree: image digest + APEX mount
-    /// table + the `linkerconfig` binary identity + the invocation.
-    fn linkerconfig_cache_key(&self, mounts: &str) -> String {
+    /// table + generator property table + the `linkerconfig` binary **content**
+    /// + the invocation. Nothing in it names the sysroot's path: the same image
+    /// through another path (a worktree) is the same entry.
+    fn linkerconfig_cache_key(&self, stamp: &str) -> String {
         let tool = self.host_path("/apex/com.android.runtime/bin/linkerconfig");
         crate::build_cache::digest(&[
-            b"acos-art/linkerconfig/v1",
+            b"acos-art/linkerconfig/v2",
             crate::build_cache::image_digest(&self.sysroot).as_bytes(),
-            mounts.as_bytes(),
-            crate::build_cache::file_id(&tool).as_bytes(),
+            stamp.as_bytes(),
+            crate::build_cache::content_id(&tool).as_bytes(),
             b"--target /linkerconfig",
         ])
     }
@@ -869,9 +886,9 @@ impl ArtRoot {
     fn classpath_env_cache_key(&self) -> String {
         let derive = self.host_path("/apex/com.android.sdkext/bin/derive_classpath");
         crate::build_cache::digest(&[
-            b"acos-art/derive-classpath/v1",
+            b"acos-art/derive-classpath/v2",
             crate::build_cache::image_digest(&self.sysroot).as_bytes(),
-            crate::build_cache::file_id(&derive).as_bytes(),
+            crate::build_cache::content_id(&derive).as_bytes(),
         ])
     }
 
@@ -2457,6 +2474,61 @@ mod tests {
     fn fake_home(tag: &str) -> PathBuf {
         let dir = scratch_dir(&format!("home-{tag}"));
         dir
+    }
+
+    /// FLAKEFIX: a sysroot that has the same bytes but another path (a
+    /// worktree reaching the shared image through its own `.cache/art`) must
+    /// hit the same derived-file cache entries; different bytes must not.
+    fn key_sysroot(tag: &str, linkerconfig: &[u8]) -> ArtRoot {
+        let dir = scratch_dir(&format!("keyroot-{tag}"));
+        let sysroot = dir.join("sysroot");
+        let rt = sysroot.join("system/apex/com.android.runtime/bin");
+        let sdk = sysroot.join("system/apex/com.android.sdkext/bin");
+        fs::create_dir_all(&rt).unwrap();
+        fs::create_dir_all(&sdk).unwrap();
+        fs::write(rt.join("linkerconfig"), linkerconfig).unwrap();
+        fs::write(sdk.join("derive_classpath"), b"derive").unwrap();
+        fs::write(sysroot.join("READY"), b"ready").unwrap();
+        fs::write(sysroot.join("MANIFEST.txt"), b"manifest").unwrap();
+        ArtRoot {
+            repo_root: dir.clone(),
+            sysroot,
+            data: dir.join("data"),
+            modules: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn the_derived_file_cache_keys_do_not_name_the_sysroot_path() {
+        let a = key_sysroot("a", b"linkerconfig-bytes");
+        let b = key_sysroot("b-another-path", b"linkerconfig-bytes");
+        assert_ne!(a.sysroot, b.sysroot);
+        // The mtimes differ too (b was written later): content is the identity.
+        let stamp = |r: &ArtRoot| r.linkerconfig_stamp();
+        assert_eq!(
+            a.linkerconfig_cache_key(&stamp(&a)),
+            b.linkerconfig_cache_key(&stamp(&b)),
+            "linkerconfig key must be path-independent"
+        );
+        assert_eq!(
+            a.classpath_env_cache_key(),
+            b.classpath_env_cache_key(),
+            "derive_classpath key must be path-independent"
+        );
+        let c = key_sysroot("c", b"a different linkerconfig");
+        assert_ne!(
+            a.linkerconfig_cache_key(&stamp(&a)),
+            c.linkerconfig_cache_key(&stamp(&c)),
+            "a different linkerconfig binary is a different key"
+        );
+    }
+
+    #[test]
+    fn a_strict_mode_stamp_from_an_older_build_is_not_reused() {
+        let a = key_sysroot("stamp", b"x");
+        let old = a.mount_stamp();
+        assert_ne!(old, a.linkerconfig_stamp());
+        assert!(a.linkerconfig_stamp().starts_with(&old));
     }
 
     #[test]

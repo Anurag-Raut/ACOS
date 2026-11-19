@@ -427,6 +427,7 @@ struct drv {
     int reader_started;
     pthread_mutex_t mu;
     pthread_cond_t cv_txn;   // incoming transaction queued
+    pthread_cond_t cv_own;   // the incoming-queue owner changed (CLOCK_MONOTONIC)
     pthread_cond_t cv_rsp;   // any reply slot filled
     struct inq *in_head, *in_tail;
     // BR_RELEASE + BR_DECREFS owed to the guest: node work is per process (the
@@ -495,6 +496,35 @@ static volatile int g_node_pending;
 // one turn) and keeps ownership until the queue is empty. Any other thread that
 // finds work queued returns and lets the owner continue.
 static volatile pid_t g_queue_owner;
+// FLAKEFIX2: the owner's last delivery was a `oneway` transaction or one of the
+// host's own deliveries (`E3G_TF_ORDERED`: the peer sends every `system -> app`
+// callback as a synchronous frame, whatever the AIDL says), so the owner
+// keeps the queue until it is *back in read*, i.e. until its handler returned.
+//
+// The owner used to give the queue up the moment it was empty, which is before
+// the handler of the delivery it had just made ran (the handler runs in
+// libbinder, after this ioctl returned). A second looper thread then took the
+// next transaction while the first handler was still executing, and the two
+// handlers raced: a broadcast and a NetworkCallback the host sent in that order
+// (`net.wifi` disabling Wi-Fi) reached the app's looper in the scheduler's
+// order, so `modfill-wifi`'s ordered log assertion failed one run in five. The
+// kernel gives one node one active async transaction at a time and frees the
+// next on `BC_FREE_BUFFER`; this driver's rule is stricter (one owner for the
+// whole queue, which MPROC8 needed for cross-node ordering), so it must hold
+// until the handler is done, not until the queue is empty.
+//
+// A plain `sync` delivery (a relayed app -> app call) does not extend the hold:
+// its handler may transact back into this process (a callback that needs another
+// looper thread), which the kernel serves with the waiting thread's transaction
+// stack and this driver cannot. The host's deliveries never nest like that.
+// Liveness: a handler that does not come back within `E3G_OWNER_LEASE_MS` loses
+// the hold (another thread then delivers the next transaction, as before this
+// change) -- a oneway handler that blocks on a later delivery must not wedge the
+// guest.
+#define E3G_TF_ORDERED 0x40000000u  // frame flag only: the host's delivery (never reaches libbinder)
+static int g_owner_held;
+static struct timespec g_owner_since;
+#define E3G_OWNER_LEASE_MS 250
 
 struct tstate {
     int is_looper;
@@ -1291,6 +1321,13 @@ static void driver_init(int fd) {
         g.next_handle = 1;
         pthread_mutex_init(&g.mu, NULL);
         pthread_cond_init(&g.cv_txn, NULL);
+        {
+            pthread_condattr_t own_attr;
+            pthread_condattr_init(&own_attr);
+            pthread_condattr_setclock(&own_attr, CLOCK_MONOTONIC);
+            pthread_cond_init(&g.cv_own, &own_attr);
+            pthread_condattr_destroy(&own_attr);
+        }
         pthread_cond_init(&g.cv_rsp, NULL);
         g.map = mmap(NULL, BINDER_VM_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
         if (g.map == MAP_FAILED) {
@@ -1396,6 +1433,7 @@ static int deliver_incoming(void) {
                              sizeof(status), NULL, 0, NULL, 0);
         if (err != 0) WARN("could not answer seq=%u with DEAD_OBJECT", q->seq);
         pthread_mutex_lock(&g.mu);
+        g_owner_held = 0;
         free(q->data);
         free(q);
         return -1;
@@ -1405,6 +1443,9 @@ static int deliver_incoming(void) {
     memcpy(fds, q->fds, sizeof(int) * (size_t)q->nfds);
     int nfds = q->nfds;
     uint8_t* offs = q->data + dsize;
+    int hold = (q->flags & (TF_ONE_WAY | E3G_TF_ORDERED)) != 0;
+    g_owner_held = hold;
+    if (hold) clock_gettime(CLOCK_MONOTONIC, &g_owner_since);
     pthread_mutex_unlock(&g.mu);
     xform_objects(q->data, dsize, offs, osize, 1, fds, &nfds);
     void* buf = txn_alloc(dsize + 8 + osize + 8);
@@ -1429,6 +1470,7 @@ static int deliver_incoming(void) {
         uint32_t status = (uint32_t)-12;
         send_frame(F_REP, seq, status, TF_STATUS_CODE, 0, &status, sizeof(status), NULL, 0, NULL, 0);
         pthread_mutex_lock(&g.mu);
+        g_owner_held = 0;
         return -1;
     }
     memcpy(buf, q->data, dsize);
@@ -1439,7 +1481,7 @@ static int deliver_incoming(void) {
     tr.target.ptr = local.binder;
     tr.cookie = local.cookie;
     tr.code = q->code;
-    tr.flags = q->flags;
+    tr.flags = q->flags & ~E3G_TF_ORDERED;
     // v4: `Binder.getCallingPid()`/`getCallingUid()` inside the app's
     // `onTransact` read exactly these two fields (`IPCThreadState::
     // executeCommand(BR_TRANSACTION)` -> `setCallingWorkSourceUid`). The peer
@@ -1469,6 +1511,7 @@ static int deliver_incoming(void) {
     free(q->data);
     free(q);
     pthread_mutex_lock(&g.mu);
+    if (hold) clock_gettime(CLOCK_MONOTONIC, &g_owner_since);
     return 0;
 }
 
@@ -1912,6 +1955,20 @@ static int e3g_write_read(struct binder_write_read* bwr) {
     // an F_TXN frame is queued, so an untimed wait cannot miss it and adds no
     // latency; process teardown ends the thread. Non-loopers already returned
     // above and never park here.
+    {
+        // Back in read: the handler of this thread's last delivery returned, so
+        // the queue it owned is free for the next transaction (see
+        // `g_owner_held`). Without this the owner would park below still
+        // holding it.
+        pid_t me = (pid_t)syscall(__NR_gettid);
+        if (g_queue_owner == me) {
+            g_owner_held = 0;
+            if (g.in_head == NULL) {
+                g_queue_owner = 0;
+                pthread_cond_broadcast(&g.cv_own);
+            }
+        }
+    }
     while (g.in_head == NULL && !g_node_pending && g.death_count == 0) {
         pthread_cond_wait(&g.cv_txn, &g.mu);
     }
@@ -1955,16 +2012,47 @@ static int e3g_write_read(struct binder_write_read* bwr) {
         pthread_mutex_lock(&g.mu);
     }
     pid_t self_tid = (pid_t)syscall(__NR_gettid);
-    if (g_queue_owner != 0 && g_queue_owner != self_tid) {
-        // Another thread owns the queue and delivers its transactions in order.
-        pthread_mutex_unlock(&g.mu);
-        bwr->read_consumed = 0;
-        return 0;
+    if (g_queue_owner == self_tid) {
+        // Back in read: the handler of the last delivery returned.
+        g_owner_held = 0;
+    }
+    while (g_queue_owner != 0 && g_queue_owner != self_tid) {
+        if (!g_owner_held) {
+            // Another thread owns the queue and delivers its transactions in order.
+            pthread_mutex_unlock(&g.mu);
+            bwr->read_consumed = 0;
+            return 0;
+        }
+        // The owner is still running the handler of a oneway delivery: the next
+        // transaction waits for it (bounded, see `E3G_OWNER_LEASE_MS`).
+        struct timespec until = g_owner_since;
+        until.tv_nsec += (long)E3G_OWNER_LEASE_MS * 1000000L;
+        until.tv_sec += until.tv_nsec / 1000000000L;
+        until.tv_nsec %= 1000000000L;
+        struct timespec now;
+        clock_gettime(CLOCK_MONOTONIC, &now);
+        if (now.tv_sec > until.tv_sec ||
+            (now.tv_sec == until.tv_sec && now.tv_nsec >= until.tv_nsec)) {
+            WARN("oneway handler on tid %d held the incoming queue for %d ms: delivering the "
+                 "next transaction on tid %d",
+                 (int)g_queue_owner, E3G_OWNER_LEASE_MS, (int)self_tid);
+            break;
+        }
+        pthread_cond_timedwait(&g.cv_own, &g.mu, &until);
+        if (g.in_head == NULL) {
+            // The owner drained the queue while this thread waited.
+            pthread_mutex_unlock(&g.mu);
+            bwr->read_consumed = 0;
+            return 0;
+        }
     }
     g_queue_owner = self_tid;
     int delivered = -1;
     if (g.in_head != NULL) delivered = deliver_incoming();
-    if (g.in_head == NULL) g_queue_owner = 0;
+    if (g.in_head == NULL && !g_owner_held) {
+        g_queue_owner = 0;
+        pthread_cond_broadcast(&g.cv_own);
+    }
     pthread_mutex_unlock(&g.mu);
     // The delivery is in libbinder's hands now, so a release that was held back
     // for that node may run.

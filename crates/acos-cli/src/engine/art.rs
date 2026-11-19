@@ -5554,8 +5554,8 @@ impl SessionBackend for ArtSession {
     /// **absolute ordinal** is `total - kept + index`; that ordinal + 1 is the
     /// record `seq`, which stays stable across snapshots (the executor asks for
     /// "everything after `since`"). The timestamp is the host time at which the
-    /// snapshot was read: the sink carries no guest timestamp, so this is an
-    /// ordering fact, not an emission instant. Entries are guest-asserted
+    /// snapshot was read only for an entry without a capture time; the sink
+    /// stamps each entry (`ts_ms`) when the write arrives. Entries are guest-asserted
     /// (S8 §7): a trusted fixture may use them; an untrusted run must refuse
     /// them (`trust::TrustGuard`).
     fn logs_since(&mut self, since: u64) -> Result<Vec<LogRecord>, BackendError> {
@@ -6205,8 +6205,9 @@ fn fatal_log(reply: &serde_json::Value) -> Option<CrashRecord> {
 ///
 /// The logd sink drops oldest first at its cap, so the absolute ordinal of
 /// `entries[i]` is `total - kept + i`; ordinal + 1 is the record `seq`, stable
-/// across snapshots. `timestamp_ms` is the host read time (the sink carries no
-/// guest timestamp): it orders records, it is not an emission instant.
+/// across snapshots. `timestamp_ms` is the sink's own capture time for the entry
+/// (`ts_ms`, the moment the host received the write); an entry without one (an
+/// older sink) gets `timestamp_ms`, the host read time, which only orders it.
 fn log_records_from_reply(
     reply: &serde_json::Value,
     since: u64,
@@ -6236,9 +6237,10 @@ fn log_records_from_reply(
             6 | 7 => LogLevel::Error,
             _ => LogLevel::Info,
         };
+        let captured = entry.get("ts_ms").and_then(|v| v.as_u64()).unwrap_or(0);
         records.push(LogRecord {
             seq,
-            timestamp_ms,
+            timestamp_ms: if captured > 0 { captured } else { timestamp_ms },
             level,
             tag: entry
                 .get("tag")
@@ -7260,6 +7262,24 @@ mod tests {
         // An empty snapshot is valid (no logs yet).
         let empty = serde_json::json!({"total": 0, "entries": []});
         assert!(log_records_from_reply(&empty, 0, 7, 0).is_empty());
+    }
+
+    #[test]
+    fn log_snapshot_keeps_each_entrys_own_capture_time() {
+        // FLAKEFIX2: the column was the host read time of the whole snapshot, so
+        // one flush gave every line of a session step the same timestamp.
+        let reply = serde_json::json!({
+            "ok": true, "cmd": "logs", "total": 3, "kept": 3, "dropped": 0,
+            "entries": [
+                {"prio": 4, "tag": "a", "message": "one", "ts_ms": 1000},
+                {"prio": 4, "tag": "a", "message": "two", "ts_ms": 1042},
+                {"prio": 4, "tag": "a", "message": "old sink, no stamp"}
+            ]
+        });
+        let all = log_records_from_reply(&reply, 0, 7, 0);
+        assert_eq!(all[0].timestamp_ms, 1000);
+        assert_eq!(all[1].timestamp_ms, 1042);
+        assert_eq!(all[2].timestamp_ms, 7, "an unstamped entry falls back to the read time");
     }
 
     #[test]
