@@ -147,3 +147,45 @@ steps:
       types: [TYPE_BASE_APPLICATION, TYPE_ACCESSIBILITY_OVERLAY, TYPE_ACCESSIBILITY_OVERLAY]
   - assert_not_visible: {selector: {content_desc: {exact: "Close lookup"}}}
   - assert_not_visible: {selector: {text: {exact: "Meanings"}}}
+  # Re-open the lookup and word sheet, then verify the Close lookup button
+  # also dismisses the overlay and restores the floating bubble.
+  - wait: {ms: 1500}
+  - tap:
+      selector: {content_desc: {exact: "Screen lookup"}}
+      settle: fast
+      expect_change: false
+  - service_ctl:
+      module: accessibility
+      op: status
+      timeout_ms: 30000
+      expect:
+        id: accessibility
+        op: status
+        value:
+          service_bound: true
+          screenshots:
+            - {display_id: 0, status: 0}
+            - {display_id: 0, status: 0}
+  - assert_log:
+      tag: native
+      patterns: ['ImageMetadata: 1080x2400']
+      timeout_ms: 60000
+  - wait_for: {selector: {content_desc: {exact: "Circle or tap Japanese text"}}, timeout_ms: 90000}
+  - capture: {name: lookup-index-ready-close-check, format: png, settle: content}
+  - tap: {x: 120, y: 470, settle: fast, expect_change: false}
+  - wait_for: {selector: {content_desc: {exact: "Close lookup"}}, timeout_ms: 60000}
+  - assert_visible: {selector: {text: {exact: "ねこ・ネコ"}}}
+  - assert_visible: {selector: {text: {exact: "Meanings"}}}
+  - assert_visible: {selector: {content_desc: {exact: "Select again"}}}
+  - assert_visible: {selector: {text: {contains: "Cat (esp. the domestic cat"}}}
+  - assert_windows:
+      order: [application, accessibility_overlay]
+      types: [TYPE_BASE_APPLICATION, TYPE_ACCESSIBILITY_OVERLAY]
+  - capture: {name: gaten-word-sheet-close-check, format: png, settle: content}
+  - tap: {selector: {content_desc: {exact: "Close lookup"}}, settle: fast, expect_change: false}
+  - wait_for: {selector: {content_desc: {exact: "Screen lookup"}}, timeout_ms: 30000}
+  - assert_windows:
+      order: [application, accessibility_overlay, accessibility_overlay]
+      types: [TYPE_BASE_APPLICATION, TYPE_ACCESSIBILITY_OVERLAY, TYPE_ACCESSIBILITY_OVERLAY]
+  - assert_not_visible: {selector: {content_desc: {exact: "Close lookup"}}}
+  - assert_not_visible: {selector: {text: {exact: "Meanings"}}}
