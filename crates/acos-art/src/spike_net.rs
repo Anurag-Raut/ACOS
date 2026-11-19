@@ -293,7 +293,15 @@ pub fn relay_wrap(bwrap_argv: &[std::ffi::OsString], session_id: &str) -> Comman
 /// under pasta. `/bin/sh` and `iptables` come from the host (pasta runs outside
 /// the sandbox mount namespace), so they cost the guest nothing.
 pub fn wrap(bwrap_argv: &[std::ffi::OsString]) -> Command {
-    let program = std::env::var(PASTA_ENV).unwrap_or_else(|_| "pasta".to_string());
+    // `ACOS_SPIKE_NET_PASTA` names it verbatim; otherwise the product's one
+    // lookup rule (`acos_netd_ctl::pasta`, which also honours `ACOS_NET_PASTA`
+    // and an install's `libexec/pasta`), else `pasta` on PATH.
+    let program: std::ffi::OsString = match std::env::var_os(PASTA_ENV) {
+        Some(p) => p,
+        None => acos_netd::pasta::resolved_path()
+            .map(std::path::PathBuf::into_os_string)
+            .unwrap_or_else(|| "pasta".into()),
+    };
     let mut c = Command::new(program);
     c.args(pasta_args());
     c.arg("/bin/sh");

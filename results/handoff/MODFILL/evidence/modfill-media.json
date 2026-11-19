@@ -1,0 +1,66 @@
+{
+  "backend": "acos-native",
+  "capabilities_used": [
+    "crash-reports",
+    "input",
+    "lifecycle",
+    "logs",
+    "static-manifest",
+    "ui.tree"
+  ],
+  "evidence": {
+    "events": "events.jsonl",
+    "log": "logs/logcat.txt",
+    "verdict": "verdict.json"
+  },
+  "fidelity": "art-reference",
+  "isolation": "process",
+  "metrics": {
+    "peak_rss_bytes": 19660800,
+    "wall_ms": 5839
+  },
+  "ok": true,
+  "request_id": "req_109c9b_18e91abfb532612a",
+  "result": {
+    "artifacts_dir": "/home/Qui/.t3/worktrees/acos/t3-4ab098ca-0845a8dc5d71e187/results/handoff/MODFILL/evidence/modfill-media",
+    "cap_bytes": 20480,
+    "evidence_provenance": {
+      "binder_transactions": "host-observed",
+      "crash_reports": "guest-asserted",
+      "frames": "host-observed",
+      "host_input": "host-observed",
+      "input_acks": "guest-asserted",
+      "launch_markers": "guest-asserted",
+      "lifecycle_markers": "guest-asserted",
+      "logs": "guest-asserted",
+      "static_manifest": "host-observed",
+      "tree": "guest-asserted"
+    },
+    "note": "this result was larger than the reply cap; only the bulk (tree, steps, logs) was dropped and the full evidence is in the artifacts paths named here",
+    "provenance": {
+      "apk": {
+        "mtime_ns": 1794994506227841338,
+        "path": "/home/Qui/.t3/worktrees/acos/t3-4ab098ca-0845a8dc5d71e187/fixtures/build/apps/media-probe.apk",
+        "sha256": "da9c6ecefd87e5605e53df869172c817eb79043bc56576e4a0cbfc8428fd6914",
+        "sha256_12": "da9c6ecefd87",
+        "size_bytes": 16787
+      },
+      "engine": "art",
+      "fidelity": "art-reference",
+      "scenario": {
+        "mtime_ns": 1794994548684565990,
+        "path": "/home/Qui/.t3/worktrees/acos/t3-4ab098ca-0845a8dc5d71e187/scenarios/modfill-media.yaml",
+        "sha256": "e80eedf50b886a56197be5db1fe1c6eea14e809ba9e361220e98fc26f7701f96",
+        "sha256_12": "e80eedf50b88",
+        "size_bytes": 4825
+      },
+      "scenario_engine": "art",
+      "warnings": []
+    },
+    "reply_capped": true,
+    "verdict_path": "/home/Qui/.t3/worktrees/acos/t3-4ab098ca-0845a8dc5d71e187/results/handoff/MODFILL/evidence/modfill-media/verdict.json",
+    "verdict_status": "pass"
+  },
+  "session_id": "s_art_media-probe",
+  "status": "pass"
+}

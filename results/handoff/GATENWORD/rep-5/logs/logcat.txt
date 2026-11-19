@@ -1,0 +1,616 @@
+--------- beginning of main
+1794995614508      1  E cutils-trace: Error opening trace file: Permission denied (13)
+1794995614508      2  I : Using CollectorTypeCC GC.
+1794995614508      3  D nativeloader: InitDefaultPublicLibraries for_preload=1: libandroid.so:libaaudio.so:libamidi.so:libbinder_ndk.so:libc.so:libcamera2ndk.so:libdl.so:libEGL.so:libGLESv1_CM.so:libGLESv2.so:libGLESv3.so:libicu.so:libicui18n.so:libicuuc.so:libjnigraphics.so:liblog.so:libmediandk.so:libm.so:libnativehelper.so:libnativewindow.so:libOpenMAXAL.so:libOpenSLES.so:libRS.so:libstdc++.so:libsync.so:libvulkan.so:libwebviewchromium_plat_support.so:libz.so
+1794995614508      4  D : I18n APEX ICU file found: /apex/com.android.i18n/etc/icu/icudt72l.dat
+1794995614508      5  E logdw: Found user/group name 'root' in '/etc/passwd' without required prefix 'system_'
+1794995614508      6  E logdw: Found user/group name 'bin' in '/etc/passwd' without required prefix 'system_'
+1794995614508      7  E logdw: Found user/group name 'daemon' in '/etc/passwd' without required prefix 'system_'
+1794995614508      8  E logdw: Found user/group name 'mail' in '/etc/passwd' without required prefix 'system_'
+1794995614508      9  E logdw: Found user/group name 'ftp' in '/etc/passwd' without required prefix 'system_'
+1794995614508     10  E logdw: Found user/group name 'http' in '/etc/passwd' without required prefix 'system_'
+1794995614508     11  E logdw: Found user/group name 'nobody' in '/etc/passwd' without required prefix 'system_'
+1794995614508     12  E logdw: Found user/group name 'dbus' in '/etc/passwd' without required prefix 'system_'
+1794995614508     13  E logdw: Found user/group name 'systemd-coredump' in '/etc/passwd' without required prefix 'system_'
+1794995614508     14  E logdw: Found user/group name 'systemd-network' in '/etc/passwd' without required prefix 'system_'
+1794995614508     15  E logdw: Found user/group name 'systemd-oom' in '/etc/passwd' without required prefix 'system_'
+1794995614508     16  E logdw: Found user/group name 'systemd-journal-remote' in '/etc/passwd' without required prefix 'system_'
+1794995614508     17  E logdw: Found user/group name 'systemd-resolve' in '/etc/passwd' without required prefix 'system_'
+1794995614508     18  E logdw: Found user/group name 'systemd-timesync' in '/etc/passwd' without required prefix 'system_'
+1794995614508     19  E logdw: Found user/group name 'tss' in '/etc/passwd' without required prefix 'system_'
+1794995614508     20  E logdw: Found user/group name 'uuidd' in '/etc/passwd' without required prefix 'system_'
+1794995614508     21  E logdw: Found user/group name 'alpm' in '/etc/passwd' without required prefix 'system_'
+1794995614508     22  E logdw: Found user/group name 'git' in '/etc/passwd' without required prefix 'system_'
+1794995614508     23  E logdw: Found user/group name 'polkitd' in '/etc/passwd' without required prefix 'system_'
+1794995614508     24  E logdw: Found user/group name 'Qui' in '/etc/passwd' without required prefix 'system_'
+1794995614508     25  E logdw: Found user/group name 'avahi' in '/etc/passwd' without required prefix 'system_'
+1794995614508     26  E logdw: Found user/group name 'brltty' in '/etc/passwd' without required prefix 'system_'
+1794995614508     27  E logdw: Found user/group name 'colord' in '/etc/passwd' without required prefix 'system_'
+1794995614508     28  E logdw: Found user/group name 'flatpak' in '/etc/passwd' without required prefix 'system_'
+1794995614508     29  E logdw: Found user/group name 'gdm' in '/etc/passwd' without required prefix 'system_'
+1794995614508     30  E logdw: Found user/group name 'geoclue' in '/etc/passwd' without required prefix 'system_'
+1794995614508     31  E logdw: Found user/group name 'gnome-remote-desktop' in '/etc/passwd' without required prefix 'system_'
+1794995614508     32  E logdw: Found user/group name 'libvirt-qemu' in '/etc/passwd' without required prefix 'system_'
+1794995614508     33  E logdw: Found user/group name 'qemu' in '/etc/passwd' without required prefix 'system_'
+1794995614508     34  E logdw: Found user/group name 'rtkit' in '/etc/passwd' without required prefix 'system_'
+1794995614508     35  E logdw: Found user/group name 'saned' in '/etc/passwd' without required prefix 'system_'
+1794995614508     36  E logdw: Found user/group name 'usbmux' in '/etc/passwd' without required prefix 'system_'
+1794995614508     37  E logdw: Found user/group name 'nvidia-persistenced' in '/etc/passwd' without required prefix 'system_'
+1794995614508     38  E logdw: Found user/group name 'ollama' in '/etc/passwd' without required prefix 'system_'
+1794995614508     39  E logdw: Found user/group name 'named' in '/etc/passwd' without required prefix 'system_'
+1794995614508     40  E logdw: Found user/group name 'pcscd' in '/etc/passwd' without required prefix 'system_'
+1794995614508     41  E logdw: Found user/group name 'mongodb' in '/etc/passwd' without required prefix 'system_'
+1794995614508     42  E logdw: Found user/group name 'malcontent-timer-ext-agent' in '/etc/passwd' without required prefix 'system_'
+1794995614508     43  E logdw: Found user/group name 'malcontent-timerd' in '/etc/passwd' without required prefix 'system_'
+1794995614508     44  E logdw: Found user/group name 'malcontent-webd' in '/etc/passwd' without required prefix 'system_'
+1794995614508     45  E logdw: Found user/group name 'systemd-imds' in '/etc/passwd' without required prefix 'system_'
+1794995614508     46  E logdw: Found user/group name 'clamav' in '/etc/passwd' without required prefix 'system_'
+1794995614508     47  E logdw: Found user/group name 'dnsmasq' in '/etc/passwd' without required prefix 'system_'
+1794995614508     48  W ziparchive: Unable to open '/data/app/launch-guest/classes.dm': No such file or directory
+1794995614508     49  W ziparchive: Unable to open '/data/app/launch-guest/classes.dm': No such file or directory
+1794995614508     50  I nativeloader: InitApexLibraries skipped: No such file or directory
+1794995614508     51  D nativeloader: InitDefaultPublicLibraries for_preload=0: libandroid.so:libaaudio.so:libamidi.so:libbinder_ndk.so:libc.so:libcamera2ndk.so:libclang_rt.hwasan-aarch64-android.so:libdl.so:libEGL.so:libGLESv1_CM.so:libGLESv2.so:libGLESv3.so:libicu.so:libicui18n.so:libicuuc.so:libjnigraphics.so:liblog.so:libmediandk.so:libm.so:libnativehelper.so:libnativewindow.so:libneuralnetworks.so:libOpenMAXAL.so:libOpenSLES.so:libRS.so:libstdc++.so:libsync.so:libvulkan.so:libwebviewchromium_plat_support.so:libz.so
+1794995614508     52  D nativeloader: Configuring clns-1 for other apk . target_sdk_version=0, uses_libraries=ALL, library_path=/system/lib64:/vendor/lib64, permitted_path=/data:/mnt/expand
+1794995614508     53  D nativeloader: InitExtendedPublicLibraries: 
+1794995614508     54  I nativeloader: InitVendorPublicLibraries skipped: No such file or directory
+1794995614508     55  D nativeloader: InitProductPublicLibraries: 
+1794995614508     56  E ProcessState: Binder driver /dev/binder is unavailable. Using /dev/binder instead.
+1794995614508     57  D CompatibilityChangeReporter: Compat change id reported: 171979766; UID 10192; state: ENABLED
+1794995614508     58  D CompatibilityChangeReporter: Compat change id reported: 242716250; UID 10192; state: ENABLED
+1794995614508     59  I Typeface: Preloading /system/fonts/Roboto-Regular.ttf
+1794995614508     60  I Typeface: Preloading /system/fonts/RobotoStatic-Regular.ttf
+1794995614508     61  D CompatibilityChangeReporter: Compat change id reported: 247079863; UID 10192; state: ENABLED
+1794995614508     62  W ziparchive: Unable to open '/data/app/gaten-dev-f344272-x86_64-release-unsigned.dm': No such file or directory
+1794995614508     63  W ziparchive: Unable to open '/data/app/gaten-dev-f344272-x86_64-release-unsigned.dm': No such file or directory
+1794995614508     64  D nativeloader: Configuring clns-2 for other apk /data/app/gaten-dev-f344272-x86_64-release-unsigned.apk. target_sdk_version=34, uses_libraries=, library_path=/data/app-lib/x86_64, permitted_path=/data:/mnt/expand:/data/app-data/com.gaten
+1794995614508     65  W ContextImpl: Failed to ensure /data/app-data/com.gaten/cache: chown failed: EINVAL (Invalid argument)
+1794995614508     66  W ContextImpl: Failed to ensure /data/app-data/com.gaten/code_cache: chown failed: EINVAL (Invalid argument)
+1794995614508     67  V GraphicsEnvironment: Currently set values for:
+1794995614508     68  V GraphicsEnvironment:   angle_gl_driver_selection_pkgs=[]
+1794995614508     69  V GraphicsEnvironment:   angle_gl_driver_selection_values=[]
+1794995614508     70  V GraphicsEnvironment: ANGLE GameManagerService for com.gaten: false
+1794995614508     71  V GraphicsEnvironment: com.gaten is not listed in per-application setting
+1794995614508     72  V GraphicsEnvironment: Neither updatable production driver nor prerelease driver is supported.
+1794995614508     73  W SystemServiceRegistry: No service published for: netstats
+1794995614508     74  E TrafficStats: TrafficStats not initialized, uid=10192
+1794995614508     75  I AcosRot6: ACOSLAUNCH MARK top-finish-watcher-started
+1794995614508     76  E : No implementation found for boolean ai.onnxruntime.telemetry.HttpClient.isDeviceIdCollectionEnabled() (tried Java_ai_onnxruntime_telemetry_HttpClient_isDeviceIdCollectionEnabled and Java_ai_onnxruntime_telemetry_HttpClient_isDeviceIdCollectionEnabled__) - is the library loaded, e.g. System.loadLibrary?
+1794995614508     77  W ORTTelemetry: Unable to initialize telemetry
+java.lang.UnsatisfiedLinkError: No implementation found for boolean ai.onnxruntime.telemetry.HttpClient.isDeviceIdCollectionEnabled() (tried Java_ai_onnxruntime_telemetry_HttpClient_isDeviceIdCollectionEnabled and Java_ai_onnxruntime_telemetry_HttpClient_isDeviceIdCollectionEnabled__) - is the library loaded, e.g. System.loadLibrary?
+	at ai.onnxruntime.telemetry.HttpClient.isDeviceIdCollectionEnabled(Native Method)
+	at ai.onnxruntime.telemetry.HttpClient.<init>(SourceFile:9)
+	at ai.onnxruntime.telemetry.HttpClient.<init>(SourceFile:1)
+	at ai.onnxruntime.TelemetryInitializer.onCreate(Unknown Source:26)
+	at android.content.ContentProvider.attachInfo(ContentProvider.java:2619)
+	at android.content.ContentProvider.attachInfo(ContentProvider.java:2589)
+	at android.app.ActivityThread.installProvider(ActivityThread.java:7765)
+	at android.app.ActivityThread.installContentProviders(ActivityThread.java:7276)
+	at android.app.ActivityThread.handleBindApplication(ActivityThread.java:6983)
+	at android.app.ActivityThread.-$$Nest$mhandleBindApplication(Unknown Source:0)
+	at android.app.ActivityThread$H.handleMessage(ActivityThread.java:2236)
+	at android.os.Handler.dispatchMessage(Handler.java:106)
+	at android.os.Looper.loopOnce(Looper.java:205)
+	at android.os.Looper.loop(Looper.java:294)
+	at dev.acos.art.LaunchMain.run(LaunchMain.java:534)
+	at dev.acos.art.LaunchMain.main(LaunchMain.java:226)
+
+1794995614508     78  E System: Uncaught exception thrown by finalizer
+1794995614508     79  E System: java.lang.IllegalArgumentException: Receiver not registered: null
+	at android.app.LoadedApk.forgetReceiverDispatcher(LoadedApk.java:1662)
+	at android.app.ContextImpl.unregisterReceiver(ContextImpl.java:1872)
+	at android.content.ContextWrapper.unregisterReceiver(ContextWrapper.java:820)
+	at ai.onnxruntime.telemetry.HttpClient.finalize(Unknown Source:16)
+	at java.lang.Daemons$FinalizerDaemon.doFinalize(Daemons.java:339)
+	at java.lang.Daemons$FinalizerDaemon.processReference(Daemons.java:324)
+	at java.lang.Daemons$FinalizerDaemon.runInternal(Daemons.java:300)
+	at java.lang.Daemons$Daemon.run(Daemons.java:145)
+	at java.lang.Thread.run(Thread.java:1012)
+
+1794995614508     80  D CompatibilityChangeReporter: Compat change id reported: 160794467; UID 10192; state: ENABLED
+1794995614508     81  W SoLoader: Initializing SoLoader: 0
+1794995614508     82  W SoLoader: Recording new base apk path: /data/app/gaten-dev-f344272-x86_64-release-unsigned.apk
+Previously recorded 0 base apk paths.
+1794995614508     83  W SoLoader: SoLoader initialized: 0
+1794995614508     84  D jni_lib_merge: Entering merged library JNI_OnLoad.
+
+1794995614508     85  D jni_lib_merge: Preparing 13 pre-merged libs (including stub)
+
+1794995614508     86  D jni_lib_merge: Preparing to register libfabricjni_so.  onload_func: 877b2010
+
+1794995614508     87  D jni_lib_merge: Preparing to register libreact_devsupportjni_so.  onload_func: 87897b70
+
+1794995614508     88  D jni_lib_merge: Preparing to register libreact_featureflagsjni_so.  onload_func: 878aa6a0
+
+1794995614508     89  D jni_lib_merge: Preparing to register libreact_newarchdefaults_so.  onload_func: 878e6680
+
+1794995614508     90  D jni_lib_merge: Preparing to register libreact_tracingjni_so.  onload_func: 879ef170
+
+1794995614508     91  D jni_lib_merge: Preparing to register libreactnativeblob_so.  onload_func: 879f44d0
+
+1794995614508     92  D jni_lib_merge: Preparing to register libreactnativejni_so.  onload_func: 87a009d0
+
+1794995614508     93  D jni_lib_merge: Preparing to register libreactnativejni_common_so.  onload_func: 87a03840
+
+1794995614508     94  D jni_lib_merge: Preparing to register librninstance_so.  onload_func: 87a2b960
+
+1794995614508     95  D jni_lib_merge: Preparing to register libturbomodulejsijni_so.  onload_func: 87ada4c0
+
+1794995614508     96  D jni_lib_merge: Preparing to register libuimanagerjni_so.  onload_func: 87ae1420
+
+1794995614508     97  D jni_lib_merge: Preparing to register libyoga_so.  onload_func: 87ae8b20
+
+1794995614508     98  D jni_lib_merge: About to register 12 actual methods.
+
+1794995614508     99  E logdw: com.gaten.app.LauncherIconLight
+1794995614508    100  I AcosRot6: ACOSLAUNCH MARK activity-destroyed-after-finish token=binder:7b7537f order=Pause(finished)->Stop->Destroy
+1794995614508    101  D jni_lib_merge: Entering merged library JNI_OnLoad.
+
+1794995614508    102  D jni_lib_merge: Preparing 4 pre-merged libs (including stub)
+
+1794995614508    103  D jni_lib_merge: Preparing to register libhermes_executor_so.  onload_func: 953ad1d0
+
+1794995614508    104  D jni_lib_merge: Preparing to register libhermesinstancejni_so.  onload_func: 953b4b10
+
+1794995614508    105  D jni_lib_merge: Preparing to register libjsijniprofiler_so.  onload_func: 953b5350
+
+1794995614508    106  D jni_lib_merge: About to register 3 actual methods.
+
+1794995614508    107  W unknown:BridgelessReact: ReactHost{0}.startSurface(surfaceId = 0): Schedule
+1794995614508    108  W unknown:BridgelessReact: ReactHost{0}.attachSurface(surfaceId = 0)
+1794995614508    109  W unknown:BridgelessReact: ReactHost{0}.getOrCreateReactInstanceTask()
+1794995614508    110  W unknown:BridgelessReact: ReactHost{0}.getOrCreateReactInstanceTask(): Start
+1794995614508    111  W unknown:BridgelessReact: ReactHost{0}.getJSBundleLoader()
+1794995614508    112  W unknown:BridgelessReact: ReactHost{0}.getOrCreateReactInstanceTask(): Creating BridgelessReactContext
+1794995614508    113  W unknown:BridgelessReact: ReactHost{0}.getOrCreateReactInstanceTask(): Creating ReactInstance
+1794995614508    114  E logdw: com.gaten.app.MainActivity
+1794995614508    115  E logdw: com.gaten.app.MainActivity
+1794995614508    116  W AcosPriority: setpriority(-4) clamped to 0 (host RLIMIT_NICE is below stock init.rc's 40; guest-only adapter, W21)
+1794995614508    117  W unknown:BridgelessReact: ReactHost{0}.onHostResume(activity)
+1794995614508    118  W unknown:BridgelessReact: ReactHost{0}.ReactContext.onHostResume()
+1794995614508    119  E LauncherIcon: Could not switch the launcher icon; the entry keeps the one it has.
+java.lang.IllegalArgumentException: bad request for android.content.pm.IPackageManager::setComponentEnabledSettings: arg 0 (TypedList(java.util.List)): no parcelable codec for java.util.List
+	at android.os.Parcel.createExceptionOrNull(Parcel.java:3061)
+	at android.os.Parcel.createException(Parcel.java:3041)
+	at android.os.Parcel.readException(Parcel.java:3024)
+	at android.os.Parcel.readException(Parcel.java:2966)
+	at android.content.pm.IPackageManager$Stub$Proxy.setComponentEnabledSettings(IPackageManager.java:6016)
+	at android.app.ApplicationPackageManager.setComponentEnabledSettings(ApplicationPackageManager.java:3088)
+	at x5.b.c(Unknown Source:0)
+	at y5.f.a(Unknown Source:241)
+	at W1.g.run(Unknown Source:13)
+	at java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1145)
+	at java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:644)
+	at java.lang.Thread.run(Thread.java:1012)
+
+1794995614508    120  E logdw: com.gaten.app.MainActivity
+1794995614508    121  D CompatibilityChangeReporter: Compat change id reported: 237531167; UID 10192; state: ENABLED
+1794995614508    122  W PlayCore: UID: [10192]  PID: [2] PhoneskyVerificationUtils : Play Store package is not found.
+1794995614508    123  E PlayCore: UID: [10192]  PID: [2] AssetPackServiceImpl : onError(-11)
+1794995614508    124  E PlayCore: UID: [10192]  PID: [2] AssetPackServiceImpl : onError(-11)
+1794995614508    125  E PlayCore: UID: [10192]  PID: [2] AssetPackServiceImpl : onError(-11)
+1794995614508    126  E logdw: com.gaten.app.LauncherIconLight
+1794995614508    127  W PlayCore: UID: [10192]  PID: [2] AssetPackManager : Could not sync active asset packs. Q5.k: -11: Asset Pack Download Error(-11): The Play Store app is either not installed or not the official version. (https://developer.android.com/reference/com/google/android/play/core/assetpacks/model/AssetPackErrorCode.html#PLAY_STORE_NOT_FOUND)
+1794995614508    128  W GatenOcr: Could not read the recognition pack's state
+Q5.k: -11: Asset Pack Download Error(-11): The Play Store app is either not installed or not the official version. (https://developer.android.com/reference/com/google/android/play/core/assetpacks/model/AssetPackErrorCode.html#PLAY_STORE_NOT_FOUND)
+	at Q6.p.j(Unknown Source:19)
+	at Q6.p.b(Unknown Source:4)
+	at P0.m.j(Unknown Source:337)
+	at P0.m.invoke(Unknown Source:95)
+	at L8.y.v(Unknown Source:43)
+	at L8.y.A(Unknown Source:77)
+	at q5.S.f(Unknown Source:73)
+	at P0.m.j(Unknown Source:385)
+	at s8.a.b(Unknown Source:7)
+	at L8.F.run(Unknown Source:111)
+	at A2.b.run(Unknown Source:827)
+	at S8.j.run(Unknown Source:2)
+	at S8.a.run(Unknown Source:86)
+
+1794995614508    129  W GatenOcr: Could not read the recognition pack's state
+Q5.k: -11: Asset Pack Download Error(-11): The Play Store app is either not installed or not the official version. (https://developer.android.com/reference/com/google/android/play/core/assetpacks/model/AssetPackErrorCode.html#PLAY_STORE_NOT_FOUND)
+	at Q6.p.j(Unknown Source:19)
+	at Q6.p.b(Unknown Source:4)
+	at P0.m.j(Unknown Source:337)
+	at P0.m.invoke(Unknown Source:95)
+	at L8.y.v(Unknown Source:43)
+	at L8.y.A(Unknown Source:77)
+	at q5.S.f(Unknown Source:73)
+	at com.gaten.app.rn.GatenRecognitionModule.observePack(Unknown Source:79)
+	at com.gaten.app.rn.GatenRecognitionModule.access$observePack(Unknown Source:0)
+	at P0.m.j(Unknown Source:274)
+	at s8.a.b(Unknown Source:7)
+	at L8.F.run(Unknown Source:111)
+	at A2.b.run(Unknown Source:827)
+	at S8.j.run(Unknown Source:2)
+	at S8.a.run(Unknown Source:86)
+
+1794995614508    130  W unknown:BridgelessReact: ReactHost{0}.getOrCreateReactInstanceTask(): Loading JS Bundle
+1794995614508    131  W unknown:BridgelessReact: ReactHost{0}.getOrCreateReactInstanceTask(): DevSupportManager.onNewReactContextCreated()
+1794995614508    132  W unknown:BridgelessReact: ReactHost{0}.startSurface(surfaceId = 0): Execute
+1794995614508    133  I ReactNativeJS: Running "Gaten"
+1794995614508    134  D jni_lib_merge: Entering merged library JNI_OnLoad.
+
+1794995614508    135  D jni_lib_merge: Preparing 13 pre-merged libs (including stub)
+
+1794995614508    136  D jni_lib_merge: Preparing to register libfabricjni_so.  onload_func: 877b2010
+
+1794995614508    137  D jni_lib_merge: Preparing to register libreact_devsupportjni_so.  onload_func: 87897b70
+
+1794995614508    138  D jni_lib_merge: Preparing to register libreact_featureflagsjni_so.  onload_func: 878aa6a0
+
+1794995614508    139  D jni_lib_merge: Preparing to register libreact_newarchdefaults_so.  onload_func: 878e6680
+
+1794995614508    140  D jni_lib_merge: Preparing to register libreact_tracingjni_so.  onload_func: 879ef170
+
+1794995614508    141  D jni_lib_merge: Preparing to register libreactnativeblob_so.  onload_func: 879f44d0
+
+1794995614508    142  D jni_lib_merge: Preparing to register libreactnativejni_so.  onload_func: 87a009d0
+
+1794995614508    143  D jni_lib_merge: Preparing to register libreactnativejni_common_so.  onload_func: 87a03840
+
+1794995614508    144  D jni_lib_merge: Preparing to register librninstance_so.  onload_func: 87a2b960
+
+1794995614508    145  D jni_lib_merge: Preparing to register libturbomodulejsijni_so.  onload_func: 87ada4c0
+
+1794995614508    146  D jni_lib_merge: Preparing to register libuimanagerjni_so.  onload_func: 87ae1420
+
+1794995614508    147  D jni_lib_merge: Preparing to register libyoga_so.  onload_func: 87ae8b20
+
+1794995614508    148  D jni_lib_merge: About to register 12 actual methods.
+
+1794995614508    149  W unknown:BridgelessReact: ReactHost{0}.ReactContext.onHostResume()
+1794995614508    150  W unknown:BridgelessReact: ReactHost{0}.getOrCreateReactInstanceTask(): Executing ReactInstanceEventListeners
+1794995614508    151  D CompatibilityChangeReporter: Compat change id reported: 210923482; UID 10192; state: ENABLED
+1794995614508    152  W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.reactnativekeyboardcontroller.OverKeyboardViewManager
+1794995614508    153  W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class t7.a
+1794995614508    154  W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.reactnativekeyboardcontroller.KeyboardToolbarGroupViewManager
+1794995614508    155  W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.uimanager.i
+1794995614508    156  W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.swmansion.rnscreens.ScreenFooterManager
+1794995614508    157  W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.swmansion.rnscreens.ScreenContainerViewManager
+1794995614508    158  W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.swmansion.rnscreens.ModalScreenViewManager
+1794995614508    159  W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.reactnativekeyboardcontroller.KeyboardGestureAreaViewManager
+1794995614508    160  W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.th3rdwave.safeareacontext.SafeAreaViewManager
+1794995614508    161  W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class j8.n
+1794995614508    162  W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.swmansion.rnscreens.safearea.SafeAreaViewManager
+1794995614508    163  W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.swmansion.rnscreens.ScreenViewManager
+1794995614508    164  W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.swmansion.reanimated.view.REASharedTransitionBoundaryManager
+1794995614508    165  W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.swmansion.rnscreens.ScreenStackViewManager
+1794995614508    166  W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.swmansion.rnscreens.gamma.stack.header.config.StackHeaderConfigViewManager
+1794995614508    167  W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.th3rdwave.safeareacontext.SafeAreaProviderManager
+1794995614508    168  W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.swmansion.rnscreens.SearchBarManager
+1794995614508    169  W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.reactnativekeyboardcontroller.ClippingScrollViewDecoratorViewManager
+1794995614508    170  W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.swmansion.rnscreens.gamma.tabs.host.TabsHostViewManager
+1794995614508    171  W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.swmansion.rnscreens.gamma.stack.header.subview.StackHeaderSubviewViewManager
+1794995614508    172  W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.gaten.app.rn.GatenCardWebViewManager
+1794995614508    173  W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.gaten.app.rn.GatenThemeTransitionManager
+1794995614508    174  W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.reactnativekeyboardcontroller.KeyboardControllerViewManager
+1794995614508    175  W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.swmansion.rnscreens.gamma.scrollviewmarker.ScrollViewMarkerViewManager
+1794995614508    176  W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.swmansion.rnscreens.ScreenStackHeaderConfigViewManager
+1794995614508    177  W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.swmansion.rnscreens.gamma.modals.formsheet.FormSheetContentWrapperViewManager
+1794995614508    178  W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.swmansion.rnscreens.ScreenContentWrapperManager
+1794995614508    179  W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.reactnativepagerview.PagerViewViewManager
+1794995614508    180  W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.swmansion.rnscreens.gamma.stack.host.StackHostViewManager
+1794995614508    181  W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.swmansion.rnscreens.ScreenStackHeaderSubviewManager
+1794995614508    182  W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.swmansion.rnscreens.gamma.stack.screen.StackScreenViewManager
+1794995614508    183  W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.swmansion.rnscreens.gamma.modals.formsheet.FormSheetHostViewManager
+1794995614508    184  W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.reactnativekeyboardcontroller.KeyboardBackgroundViewManager
+1794995614508    185  W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.swmansion.rnscreens.gamma.tabs.screen.TabsScreenViewManager
+1794995614508    186  W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.horcrux.svg.RenderableViewManager$DefsViewManager
+1794995614508    187  W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.horcrux.svg.K0
+1794995614508    188  W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.horcrux.svg.RenderableViewManager$FeMergeManager
+1794995614508    189  W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.safeareaview.ReactSafeAreaViewManager
+1794995614508    190  W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.swmansion.gesturehandler.react.RNGestureHandlerDetectorViewManager
+1794995614508    191  W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.horcrux.svg.RenderableViewManager$LinearGradientManager
+1794995614508    192  W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.horcrux.svg.RenderableViewManager$FeGaussianBlurManager
+1794995614508    193  W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.progressbar.ReactProgressBarViewManager
+1794995614508    194  W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.scroll.ReactHorizontalScrollViewManager
+1794995614508    195  W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.text.ReactTextViewManager
+1794995614508    196  W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.horcrux.svg.RenderableViewManager$FeColorMatrixManager
+1794995614508    197  W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.scroll.ReactHorizontalScrollContainerViewManager
+1794995614508    198  W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.horcrux.svg.RenderableViewManager$ClipPathViewManager
+1794995614508    199  W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.horcrux.svg.RenderableViewManager$SymbolManager
+1794995614508    200  W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.horcrux.svg.RenderableViewManager$PatternManager
+1794995614508    201  W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.horcrux.svg.RenderableViewManager$FeBlendManager
+1794995614508    202  W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.view.ReactViewManager
+1794995614508    203  W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.horcrux.svg.SvgViewManager
+1794995614508    204  W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.switchview.ReactSwitchManager
+1794995614508    205  W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.horcrux.svg.RenderableViewManager$UseViewManager
+1794995614508    206  W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.horcrux.svg.RenderableViewManager$CircleViewManager
+1794995614508    207  W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.horcrux.svg.RenderableViewManager$TSpanViewManager
+1794995614508    208  W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.horcrux.svg.RenderableViewManager$FilterManager
+1794995614508    209  W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.horcrux.svg.RenderableViewManager$MarkerManager
+1794995614508    210  W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.swmansion.gesturehandler.react.RNGestureHandlerButtonViewManager
+1794995614508    211  W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.modal.ReactModalHostManager
+1794995614508    212  W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.horcrux.svg.RenderableViewManager$ForeignObjectManager
+1794995614508    213  W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.horcrux.svg.RenderableViewManager$EllipseViewManager
+1794995614508    214  W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.horcrux.svg.RenderableViewManager$LineViewManager
+1794995614508    215  W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.horcrux.svg.RenderableViewManager$FeFloodManager
+1794995614508    216  W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.horcrux.svg.RenderableViewManager$GroupViewManager
+1794995614508    217  W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.horcrux.svg.RenderableViewManager$TextViewManager
+1794995614508    218  W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.horcrux.svg.RenderableViewManager$ImageViewManager
+1794995614508    219  W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.horcrux.svg.RenderableViewManager$FeCompositeManager
+1794995614508    220  W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.image.ReactImageManager
+1794995614508    221  W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.horcrux.svg.RenderableViewManager$RadialGradientManager
+1794995614508    222  W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.horcrux.svg.RenderableViewManager$MaskManager
+1794995614508    223  W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.unimplementedview.ReactUnimplementedViewManager
+1794995614508    224  W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.horcrux.svg.RenderableViewManager$RectViewManager
+1794995614508    225  W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.horcrux.svg.RenderableViewManager$TextPathViewManager
+1794995614508    226  W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.scroll.ReactScrollViewManager
+1794995614508    227  W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.horcrux.svg.RenderableViewManager$FeOffsetManager
+1794995614508    228  W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.horcrux.svg.RenderableViewManager$PathViewManager
+1794995614508    229  W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.drawer.ReactDrawerLayoutManager
+1794995614508    230  W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.swiperefresh.SwipeRefreshLayoutManager
+1794995614508    231  W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.textinput.ReactTextInputManager
+1794995614508    232  W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.text.SelectableTextViewManager
+1794995614508    233  W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.swmansion.gesturehandler.react.RNGestureHandlerRootViewManager
+1794995614508    234  W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.virtual.view.ReactVirtualViewManager
+1794995614508    235  D CompatibilityChangeReporter: Compat change id reported: 289878283; UID 10192; state: ENABLED
+1794995614508    236  W unknown:ReactNative: StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+1794995614508    237  W unknown:ReactNative: StatusBarModule: Ignored status bar change, current activity is edge-to-edge.
+1794995614508    238  E PlayCore: UID: [10192]  PID: [2] AssetPackServiceImpl : onError(-11)
+1794995614508    239  D CompatibilityChangeReporter: Compat change id reported: 171228096; UID 10192; state: ENABLED
+1794995614508    240  W GatenOcr: Could not read the recognition pack's state
+Q5.k: -11: Asset Pack Download Error(-11): The Play Store app is either not installed or not the official version. (https://developer.android.com/reference/com/google/android/play/core/assetpacks/model/AssetPackErrorCode.html#PLAY_STORE_NOT_FOUND)
+	at Q6.p.j(Unknown Source:19)
+	at Q6.p.b(Unknown Source:4)
+	at P0.m.j(Unknown Source:337)
+	at P0.m.invoke(Unknown Source:95)
+	at L8.y.v(Unknown Source:43)
+	at L8.y.A(Unknown Source:77)
+	at q5.S.f(Unknown Source:73)
+	at com.gaten.app.rn.GatenRecognitionModule.settings(Unknown Source:58)
+	at com.gaten.app.rn.GatenRecognitionModule.access$settings(Unknown Source:0)
+	at D0.r0.j(Unknown Source:522)
+	at s8.a.b(Unknown Source:7)
+	at L8.F.run(Unknown Source:111)
+	at A2.b.run(Unknown Source:827)
+	at S8.j.run(Unknown Source:2)
+	at S8.a.run(Unknown Source:86)
+
+1794995616150    241  E logdw: autofill
+1794995622143    242  I : JIT allocated 90KB for compiled code of void K4.K.e(android.view.View, java.lang.String, java.lang.Object)
+1794995622143    243  I : Compiler allocated 5675KB to compile void K4.K.e(android.view.View, java.lang.String, java.lang.Object)
+1794995622143    244  D CompatibilityChangeReporter: Compat change id reported: 193247900; UID 10192; state: ENABLED
+1794995622143    245  D AutofillManager: view not autofillable - not passing ime action check
+1794995622143    246  D AutofillManager: view not autofillable - not passing ime action check
+1794995622143    247  I ReactNativeJNI: %.*s
+1794995622143    248  D AutofillManager: view not autofillable - not passing ime action check
+1794995622143    249  D AutofillManager: view not autofillable - not passing ime action check
+1794995622143    250  D AutofillManager: view not autofillable - not passing ime action check
+1794995622143    251  D AutofillManager: view not autofillable - not passing ime action check
+1794995623429    252  E PlayCore: UID: [10192]  PID: [2] AssetPackServiceImpl : onError(-11)
+1794995623429    253  W GatenOcr: Could not read the recognition pack's state
+Q5.k: -11: Asset Pack Download Error(-11): The Play Store app is either not installed or not the official version. (https://developer.android.com/reference/com/google/android/play/core/assetpacks/model/AssetPackErrorCode.html#PLAY_STORE_NOT_FOUND)
+	at Q6.p.j(Unknown Source:19)
+	at Q6.p.b(Unknown Source:4)
+	at P0.m.j(Unknown Source:337)
+	at P0.m.invoke(Unknown Source:95)
+	at L8.y.v(Unknown Source:43)
+	at L8.y.A(Unknown Source:77)
+	at q5.S.f(Unknown Source:73)
+	at com.gaten.app.rn.GatenRecognitionModule.settings(Unknown Source:58)
+	at com.gaten.app.rn.GatenRecognitionModule.access$settings(Unknown Source:0)
+	at D0.r0.j(Unknown Source:522)
+	at s8.a.b(Unknown Source:7)
+	at L8.F.run(Unknown Source:111)
+	at A2.b.run(Unknown Source:827)
+	at S8.j.run(Unknown Source:2)
+	at S8.a.run(Unknown Source:86)
+
+1794995623429    254  D AutofillManager: view not autofillable - not passing ime action check
+1794995623429    255  D AutofillManager: view not autofillable - not passing ime action check
+1794995625031    256  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794995625031    257  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794995625031    258  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794995625031    259  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1794995625488    260  E PlayCore: UID: [10192]  PID: [2] AssetPackServiceImpl : onError(-11)
+1794995625488    261  W GatenOcr: Could not read the recognition pack's state
+Q5.k: -11: Asset Pack Download Error(-11): The Play Store app is either not installed or not the official version. (https://developer.android.com/reference/com/google/android/play/core/assetpacks/model/AssetPackErrorCode.html#PLAY_STORE_NOT_FOUND)
+	at Q6.p.j(Unknown Source:19)
+	at Q6.p.b(Unknown Source:4)
+	at P0.m.j(Unknown Source:337)
+	at P0.m.invoke(Unknown Source:95)
+	at L8.y.v(Unknown Source:43)
+	at L8.y.A(Unknown Source:77)
+	at q5.S.f(Unknown Source:73)
+	at com.gaten.app.rn.GatenRecognitionModule.settings(Unknown Source:58)
+	at com.gaten.app.rn.GatenRecognitionModule.access$settings(Unknown Source:0)
+	at D0.r0.j(Unknown Source:522)
+	at s8.a.b(Unknown Source:7)
+	at L8.F.run(Unknown Source:111)
+	at A2.b.run(Unknown Source:827)
+	at S8.j.run(Unknown Source:2)
+	at S8.a.run(Unknown Source:86)
+
+1794995626242    262  D AutofillManager: view not autofillable - not passing ime action check
+1794995626242    263  D AutofillManager: view not autofillable - not passing ime action check
+1794995629147    264  D AutofillManager: view not autofillable - not passing ime action check
+1794995629147    265  D CompatibilityChangeReporter: Compat change id reported: 163400105; UID 10192; state: ENABLED
+1794995629147    266  I ImeTracker: com.gaten:44ce0b19: onRequestShow at ORIGIN_CLIENT_SHOW_SOFT_INPUT reason SHOW_SOFT_INPUT
+1794995629147    267  D InputMethodManager: showSoftInput() view=Z4.g{d90fd3c VFED..CL. .F.P..ID 131,10-920,126 #3b0 aid=1073741826} flags=0 reason=SHOW_SOFT_INPUT
+1794995629147    268  D InsetsController: show(ime(), fromIme=true)
+1794995629147    269  I ImeTracker: com.gaten:48163808: onRequestShow at ORIGIN_CLIENT_SHOW_SOFT_INPUT reason SHOW_SOFT_INPUT
+1794995629147    270  D InputMethodManager: showSoftInput() view=Z4.g{d90fd3c VFED..CL. .F.P.... 131,10-920,126 #3b0 aid=1073741826} flags=0 reason=SHOW_SOFT_INPUT
+1794995629147    271  E logdw: 0@1@com.gaten
+1794995629147    272  D InsetsController: show(ime(), fromIme=true)
+1794995634688    273  W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=falsecallback=android.view.ViewRootImpl$$ExternalSyntheticLambda17@d53158b
+1794995634688    274  W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=falsecallback=android.view.ViewRootImpl$$ExternalSyntheticLambda17@4fcbb49
+1794995634699    275  W AChoreographer: AChoreographer: No JVM provided!
+1794995634699    276  W AChoreographer: JNI environment is unavailable, skipping registration
+1794995634720    277  D libEGL: loaded /vendor/lib64/egl/libEGL_angle.so
+1794995634720    278  D libEGL: loaded /vendor/lib64/egl/libGLESv1_CM_angle.so
+1794995634720    279  D libEGL: loaded /vendor/lib64/egl/libGLESv2_angle.so
+1794995634720    280  E GraphicsEnv: Failed to get gpu service
+1794995634720    281  D libEGL: dlopen (libGLESv2_angle.so) success at 45474713
+1794995634720    282  E GraphicsEnv: Failed to get gpu service
+1794995634720    283  D vulkan: searching for layers in '/data/app-lib/x86_64'
+1794995634720    284  E GraphicsEnv: Failed to get gpu service
+1794995634720    285  E GraphicsEnv: Failed to get gpu service
+1794995634720    286  W libEGL: ANGLE Warn:vulkan_icd.cpp:341 (ChoosePhysicalDevice): Preferred device ICD not found. Using default physicalDevice instead.
+1794995634720    287  E HidlServiceManagement: getService: defaultServiceManager() is null
+1794995634720    288  W SwiftShader: external/swiftshader/src/Vulkan/VkPhysicalDevice.cpp:649 WARNING: UNSUPPORTED: curExtension->sType: 1000338000
+
+1794995634720    289  W SwiftShader: external/swiftshader/src/Vulkan/VkPhysicalDevice.cpp:649 WARNING: UNSUPPORTED: curExtension->sType: 1000437000
+
+1794995634720    290  W SwiftShader: external/swiftshader/src/Vulkan/VkPhysicalDevice.cpp:649 WARNING: UNSUPPORTED: curExtension->sType: 1000338000
+
+1794995634720    291  W SwiftShader: external/swiftshader/src/Vulkan/VkPhysicalDevice.cpp:649 WARNING: UNSUPPORTED: curExtension->sType: 1000437000
+
+1794995634720    292  W SwiftShader: external/swiftshader/src/Vulkan/VkPhysicalDevice.cpp:649 WARNING: UNSUPPORTED: curExtension->sType: 1000338000
+
+1794995634720    293  W SwiftShader: external/swiftshader/src/Vulkan/VkPhysicalDevice.cpp:649 WARNING: UNSUPPORTED: curExtension->sType: 1000437000
+
+1794995634720    294  W SwiftShader: external/swiftshader/src/Vulkan/VkPhysicalDevice.cpp:649 WARNING: UNSUPPORTED: curExtension->sType: 1000338000
+
+1794995634720    295  W SwiftShader: external/swiftshader/src/Vulkan/VkPhysicalDevice.cpp:649 WARNING: UNSUPPORTED: curExtension->sType: 1000437000
+
+1794995634720    296  W SwiftShader: external/swiftshader/src/Vulkan/VkPhysicalDevice.cpp:649 WARNING: UNSUPPORTED: curExtension->sType: 1000338000
+
+1794995634720    297  W SwiftShader: external/swiftshader/src/Vulkan/VkPhysicalDevice.cpp:649 WARNING: UNSUPPORTED: curExtension->sType: 1000437000
+
+1794995634720    298  W SwiftShader: external/swiftshader/src/Vulkan/VkPhysicalDevice.cpp:649 WARNING: UNSUPPORTED: curExtension->sType: 1000338000
+
+1794995634720    299  W SwiftShader: external/swiftshader/src/Vulkan/VkPhysicalDevice.cpp:649 WARNING: UNSUPPORTED: curExtension->sType: 1000437000
+
+1794995634720    300  W SwiftShader: external/swiftshader/src/Vulkan/VkPhysicalDevice.cpp:649 WARNING: UNSUPPORTED: curExtension->sType: 1000338000
+
+1794995634720    301  W SwiftShader: external/swiftshader/src/Vulkan/VkPhysicalDevice.cpp:649 WARNING: UNSUPPORTED: curExtension->sType: 1000437000
+
+1794995634720    302  W SwiftShader: external/swiftshader/src/Vulkan/VkPhysicalDevice.cpp:649 WARNING: UNSUPPORTED: curExtension->sType: 1000338000
+
+1794995634720    303  W SwiftShader: external/swiftshader/src/Vulkan/VkPhysicalDevice.cpp:649 WARNING: UNSUPPORTED: curExtension->sType: 1000437000
+
+1794995634720    304  E GraphicsEnv: Failed to get gpu service
+1794995634720    305  E GraphicsEnv: Failed to get gpu service
+1794995634720    306  E GraphicsEnv: Failed to get gpu service
+1794995634720    307  E GraphicsEnv: Failed to get gpu service
+1794995634720    308  I ANGLE: Version (2.1.24303 git hash: 54447ed6f702), Renderer (Vulkan 1.3.0 (SwiftShader Device (LLVM 10.0.0) (0x0000C0DE)))
+1794995634720    309  E GraphicsEnv: Failed to get gpu service
+1794995634843    310  W WindowOnBackDispatcher: OnBackInvokedCallback is not enabled for the application.
+Set 'android:enableOnBackInvokedCallback="true"' in the application manifest.
+1794995634843    311  W GooglePlayServicesUtil: Google Play services is missing.
+1794995634945    312  I native: I0000 00:00:1794995634.860268     120 asset_manager_util.cc:61] Created global reference to asset manager.
+
+1794995634945    313  D CompatibilityChangeReporter: Compat change id reported: 194532703; UID 10192; state: ENABLED
+1794995634945    314  D CompatibilityChangeReporter: Compat change id reported: 253665015; UID 10192; state: ENABLED
+1794995634945    315  E native: E0000 00:00:1794995634.871046     120 cpu_affinity_thread_pool.cc:38] Failed to set name to thread. Error code 13
+
+1794995634945    316  E native: E0000 00:00:1794995634.871268     120 cpu_affinity_thread_pool.cc:38] Failed to set name to thread. Error code 13
+
+1794995634945    317  I native: I0000 00:00:1794995634.877321     122 text_classifier.cc:32] Creating classifier TfliteTextClassifier
+
+1794995634945    318  I native: I0000 00:00:1794995634.877619     122 common_util.h:41] Resizing Thread Pool: ocr_segm to 3
+
+1794995634945    319  I native: I0000 00:00:1794995634.877756     121 text_detector_thread_pool_context.cc:38] Compute manager max in flight region detector overwrite: 1
+
+1794995634945    320  I native: I0000 00:00:1794995634.877899     121 common_util.h:41] Resizing Thread Pool: ocr_det_0 to 3
+
+1794995634945    321  I native: I0000 00:00:1794995634.878745     122 tflite_lstm_client_base.cc:371] Resizing interpreter pool to 4
+
+1794995634945    322  I tflite: Initialized TensorFlow Lite runtime.
+1794995634945    323  I tflite: Created TensorFlow Lite XNNPACK delegate for CPU.
+1794995634945    324  I tflite: Replacing 44 out of 46 node(s) with delegate (TfLiteXNNPackDelegate) node, yielding 3 partitions for the whole graph.
+1794995634945    325  I native: I0000 00:00:1794995634.880227     122 multi_pass_line_recognition_mutator.cc:342] Preloading recognizers.
+
+1794995634945    326  I native: I0000 00:00:1794995634.880333     121 tflite_detector_client_with_shape_cache.cc:105] Caching size: 10
+
+1794995634945    327  I native: I0000 00:00:1794995634.884610     121 tflite_model_pooled_runner.cc:625] Loading mlkit-google-ocr-models/gocr/layout/line_splitting_custom_ops/model.tflite
+
+1794995634945    328  I native: I0000 00:00:1794995634.884819     121 tflite_model_pooled_runner.cc:836] Resizing interpreter pool to 1
+
+1794995634945    329  I native: I0000 00:00:1794995634.885175     121 tflite_model_pooled_runner.cc:625] Loading mlkit-google-ocr-models/gocr/layout/line_clustering_custom_ops/model.tflite
+
+1794995634945    330  I native: I0000 00:00:1794995634.885369     121 tflite_model_pooled_runner.cc:836] Resizing interpreter pool to 1
+
+1794995634945    331  I native: I0000 00:00:1794995634.886859     132 tflite_model_pooled_runner.cc:625] Loading mlkit-google-ocr-models/gocr/gocr_models/line_recognition_legacy_mobile/Jpan_ctc/optical/conv_model.fb
+
+1794995634945    332  I native: I0000 00:00:1794995634.887203     132 tflite_model_pooled_runner.cc:636] Loading mlkit-google-ocr-models/gocr/gocr_models/line_recognition_legacy_mobile/Jpan_ctc/optical/lstm_model.fb
+
+1794995634945    333  I native: I0000 00:00:1794995634.887778     133 tflite_model_pooled_runner.cc:625] Loading mlkit-google-ocr-models/gocr/gocr_models/line_recognition_legacy_mobile/Latn_ctc/optical/conv_model.fb
+
+1794995634945    334  I native: I0000 00:00:1794995634.888547     133 tflite_model_pooled_runner.cc:636] Loading mlkit-google-ocr-models/gocr/gocr_models/line_recognition_legacy_mobile/Latn_ctc/optical/lstm_model.fb
+
+1794995634945    335  I native: I0000 00:00:1794995634.890109     133 tflite_model_pooled_runner.cc:836] Resizing interpreter pool to 4
+
+1794995634945    336  I native: I0000 00:00:1794995634.890601     134 tflite_model_pooled_runner.cc:625] Loading mlkit-google-ocr-models/gocr/gocr_models/line_recognition_legacy_mobile/Hani_ctc/optical/conv_model.fb
+
+1794995634945    337  I native: I0000 00:00:1794995634.890975     134 tflite_model_pooled_runner.cc:636] Loading mlkit-google-ocr-models/gocr/gocr_models/line_recognition_legacy_mobile/Hani_ctc/optical/lstm_model.fb
+
+1794995634945    338  I native: I0000 00:00:1794995634.892308     133 mobile_langid_v2.cc:58] MobileLangID V2 initialized.
+
+1794995634945    339  I native: I0000 00:00:1794995634.892408     133 multi_pass_line_recognition_mutator.cc:364] Finished preloading a recognizer for "Latn"
+
+1794995634945    340  I native: I0000 00:00:1794995634.892628     132 tflite_model_pooled_runner.cc:836] Resizing interpreter pool to 4
+
+1794995634945    341  I native: I0000 00:00:1794995634.894898     134 tflite_model_pooled_runner.cc:836] Resizing interpreter pool to 4
+
+1794995634945    342  I native: I0000 00:00:1794995634.897935     132 mobile_langid_v2.cc:58] MobileLangID V2 initialized.
+
+1794995634945    343  I native: I0000 00:00:1794995634.898050     132 multi_pass_line_recognition_mutator.cc:364] Finished preloading a recognizer for "Jpan"
+
+1794995634945    344  I native: I0000 00:00:1794995634.900656     134 mobile_langid_v2.cc:58] MobileLangID V2 initialized.
+
+1794995634945    345  I native: I0000 00:00:1794995634.900790     134 multi_pass_line_recognition_mutator.cc:364] Finished preloading a recognizer for "Hani"
+
+1794995634945    346  I native: I0000 00:00:1794995634.900844     122 multi_pass_line_recognition_mutator.cc:398] Finished preloading recognizers.
+
+1794995634945    347  I native: I0000 00:00:1794995634.906598     120 scheduler.cc:693] ImageMetadata: 1080x2400
+
+1794995634945    348  I tflite: Replacing 44 out of 46 node(s) with delegate (TfLiteXNNPackDelegate) node, yielding 3 partitions for the whole graph.
+1794995634945    349  I tflite: Replacing 44 out of 46 node(s) with delegate (TfLiteXNNPackDelegate) node, yielding 3 partitions for the whole graph.
+1794995637231    350  I tflite: Replacing 44 out of 46 node(s) with delegate (TfLiteXNNPackDelegate) node, yielding 3 partitions for the whole graph.
+1794995637231    351  I tflite: Replacing 44 out of 46 node(s) with delegate (TfLiteXNNPackDelegate) node, yielding 3 partitions for the whole graph.
+1794995637231    352  I tflite: Replacing 44 out of 46 node(s) with delegate (TfLiteXNNPackDelegate) node, yielding 3 partitions for the whole graph.
+1794995637231    353  I tflite: Replacing 44 out of 46 node(s) with delegate (TfLiteXNNPackDelegate) node, yielding 3 partitions for the whole graph.
+1794995637431    354  I tflite: Replacing 44 out of 46 node(s) with delegate (TfLiteXNNPackDelegate) node, yielding 3 partitions for the whole graph.
+1794995637431    355  I tflite: Replacing 44 out of 46 node(s) with delegate (TfLiteXNNPackDelegate) node, yielding 3 partitions for the whole graph.
+1794995637431    356  I tflite: Replacing 44 out of 46 node(s) with delegate (TfLiteXNNPackDelegate) node, yielding 3 partitions for the whole graph.
+1794995637431    357  I tflite: Replacing 44 out of 46 node(s) with delegate (TfLiteXNNPackDelegate) node, yielding 3 partitions for the whole graph.
+1794995638095    358  W unknown:BridgelessReact: ReactHost{0}.startSurface(surfaceId = 0): Schedule
+1794995638095    359  W unknown:BridgelessReact: ReactHost{0}.attachSurface(surfaceId = 0)
+1794995638095    360  W unknown:BridgelessReact: ReactHost{0}.getOrCreateReactInstanceTask()
+1794995638095    361  W unknown:BridgelessReact: ReactHost{0}.startSurface(surfaceId = 0): Execute
+1794995638095    362  I ReactNativeJS: Running "GatenLookupSheet"
+1794995638095    363  W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.uimanager.RootViewManager
+1794995638095    364  E ThemeUtils: View class X4.e is an AppCompat widget that can only be used with a Theme.AppCompat theme (or descendant).
+1794995638095    365  E ThemeUtils: View class X4.e is an AppCompat widget that can only be used with a Theme.AppCompat theme (or descendant).
+1794995638095    366  E ThemeUtils: View class X4.e is an AppCompat widget that can only be used with a Theme.AppCompat theme (or descendant).
+1794995638095    367  E ThemeUtils: View class X4.e is an AppCompat widget that can only be used with a Theme.AppCompat theme (or descendant).
+1794995638095    368  E ThemeUtils: View class X4.e is an AppCompat widget that can only be used with a Theme.AppCompat theme (or descendant).
+1794995638095    369  E ThemeUtils: View class X4.e is an AppCompat widget that can only be used with a Theme.AppCompat theme (or descendant).
+1794995638095    370  E ThemeUtils: View class X4.e is an AppCompat widget that can only be used with a Theme.AppCompat theme (or descendant).
+1794995638095    371  E ThemeUtils: View class X4.e is an AppCompat widget that can only be used with a Theme.AppCompat theme (or descendant).
+1794995638095    372  E ThemeUtils: View class X4.e is an AppCompat widget that can only be used with a Theme.AppCompat theme (or descendant).
+1794995638095    373  E ThemeUtils: View class X4.e is an AppCompat widget that can only be used with a Theme.AppCompat theme (or descendant).
+1794995638095    374  E ThemeUtils: View class X4.e is an AppCompat widget that can only be used with a Theme.AppCompat theme (or descendant).
+1794995638095    375  E ThemeUtils: View class X4.e is an AppCompat widget that can only be used with a Theme.AppCompat theme (or descendant).
+1794995638095    376  E ThemeUtils: View class X4.e is an AppCompat widget that can only be used with a Theme.AppCompat theme (or descendant).
+1794995638095    377  E ThemeUtils: View class X4.e is an AppCompat widget that can only be used with a Theme.AppCompat theme (or descendant).
+1794995638095    378  E ThemeUtils: View class X4.e is an AppCompat widget that can only be used with a Theme.AppCompat theme (or descendant).
+1794995638095    379  E ThemeUtils: View class X4.e is an AppCompat widget that can only be used with a Theme.AppCompat theme (or descendant).
+1794995638095    380  E ThemeUtils: View class X4.e is an AppCompat widget that can only be used with a Theme.AppCompat theme (or descendant).
+1794995638095    381  E ThemeUtils: View class X4.e is an AppCompat widget that can only be used with a Theme.AppCompat theme (or descendant).
+1794995638095    382  E ThemeUtils: View class X4.e is an AppCompat widget that can only be used with a Theme.AppCompat theme (or descendant).
+1794995638095    383  E ThemeUtils: View class Z4.g is an AppCompat widget that can only be used with a Theme.AppCompat theme (or descendant).
+1794995638095    384  E ThemeUtils: View class X4.e is an AppCompat widget that can only be used with a Theme.AppCompat theme (or descendant).
+1794995638095    385  E ThemeUtils: View class X4.e is an AppCompat widget that can only be used with a Theme.AppCompat theme (or descendant).
+1794995638095    386  E ThemeUtils: View class X4.e is an AppCompat widget that can only be used with a Theme.AppCompat theme (or descendant).
+1794995638095    387  E ThemeUtils: View class X4.e is an AppCompat widget that can only be used with a Theme.AppCompat theme (or descendant).
+1794995638095    388  E ThemeUtils: View class X4.e is an AppCompat widget that can only be used with a Theme.AppCompat theme (or descendant).
+1794995638095    389  E ThemeUtils: View class X4.e is an AppCompat widget that can only be used with a Theme.AppCompat theme (or descendant).
+1794995638095    390  E ThemeUtils: View class X4.e is an AppCompat widget that can only be used with a Theme.AppCompat theme (or descendant).
+1794995638095    391  E ThemeUtils: View class X4.e is an AppCompat widget that can only be used with a Theme.AppCompat theme (or descendant).
+1794995638095    392  E ThemeUtils: View class X4.e is an AppCompat widget that can only be used with a Theme.AppCompat theme (or descendant).
+1794995638095    393  E ThemeUtils: View class X4.e is an AppCompat widget that can only be used with a Theme.AppCompat theme (or descendant).
+1794995638095    394  E ThemeUtils: View class X4.e is an AppCompat widget that can only be used with a Theme.AppCompat theme (or descendant).
+1794995638095    395  E ThemeUtils: View class X4.e is an AppCompat widget that can only be used with a Theme.AppCompat theme (or descendant).
+1794995638095    396  E ThemeUtils: View class X4.e is an AppCompat widget that can only be used with a Theme.AppCompat theme (or descendant).
+1794995640714    397  W unknown:BridgelessReact: ReactHost{0}.stopSurface(surfaceId = 11): Schedule
+1794995640714    398  W unknown:BridgelessReact: ReactHost{0}.detachSurface(surfaceId = 11)
+1794995640714    399  W unknown:BridgelessReact: ReactHost{0}.stopSurface(surfaceId = 11): Execute
+1794995640714    400  E unknown:SurfaceMountingManager: Stopping surface [11]
+1794995640714    401  E ReactNativeJNI: %.*s
+1794995640714    402  W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=falsecallback=android.view.ViewRootImpl$$ExternalSyntheticLambda17@b4db24c
+1794995640714    403  E unknown:SurfaceMountingManager: Surface [11] was stopped on SurfaceMountingManager.
+1794995640714    404  E unknown:IntBufferBatchMountItem: Skipping batch of MountItems; was stopped [11].
+1794995640714    405  E ReactNativeJNI: %.*s

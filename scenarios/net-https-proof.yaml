@@ -1,0 +1,108 @@
+# NETREAL: real HTTPS from an app, through the relay, with the TLS facts on the
+# screen. v0.4.0 exit item "real-HTTPS network proof".
+#
+# `network:real` with the pinned pasta. The probe app (`net-check`) does one real
+# `HttpsURLConnection` GET of https://example.com (a public host; the request is
+# a bare GET, nothing about the device or a user is sent). The scenario then
+# asserts what only a real TLS session through the relay can produce:
+#   * `HTTP 200` over HTTPS, validated by the image's own CA store and hostname
+#     verifier (the app has no custom TrustManager);
+#   * `tls=ok cipher=TLS_...` and a certificate chain of at least one
+#     certificate whose leaf names example.com... (read from the live session);
+#   * the negative: the same server fetched by IP address is REFUSED by hostname
+#     verification (`tlsneg=rejected ...SSLException`); `tlsneg=ACCEPTED` would be
+#     the bug (an unverified peer let through) and fails this scenario.
+version: 1
+name: net-https-proof
+description: >-
+  Real TLS through the relay: an in-app HTTPS GET of https://example.com returns
+  HTTP 200 validated against the image CA store, the session reports its cipher
+  and certificate chain, and hostname verification still refuses the same server
+  by IP address.
+app: fixtures/build/apps/net-check.apk
+fallback: report-and-escalate
+api_level: 34
+isolation: process
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+capabilities:
+  - lifecycle
+  - ui.offscreen
+  - ui.text
+services:
+  - id: network
+    profile: real
+# SCENHYG: needs a host capability, declared instead of leaving a red row that
+# is not the scenario's fault. This arm attaches network:real, which needs the pinned host pasta binary (ADR-0030).
+# Without pasta the runner skips the file and says so; with pasta the scenario
+# must pass.
+expectation: pass
+needs_env: [pasta]
+expectation_reason: >-
+  Needs the pinned host `pasta` binary for a real session netns; without it the
+  arm cannot be honest, so it is skipped rather than failed.
+budgets:
+  memory_mib: 512
+  wall_ms: 120000
+steps:
+  - launch:
+      activity: dev.acos.fixtures.netcheck/.MainActivity
+      clear_state: true
+
+  - wait_for:
+      selector: {id: status}
+      timeout_ms: 5000
+
+  - assert_text:
+      selector: {id: url}
+      text: {exact: https://example.com}
+
+  # The real fetch: event driven, no fixed sleep.
+  - assert_text:
+      selector: {id: status}
+      text: {exact: HTTP 200}
+      timeout_ms: 60000
+
+  - assert_text:
+      selector: {id: connectivity}
+      text: {contains: "internet=true validated=true"}
+      timeout_ms: 5000
+  - assert_text:
+      selector: {id: connectivity}
+      text: {contains: "addrs=1 dns=1 dnsList=1.1.1.1 routes=1"}
+      timeout_ms: 5000
+
+  - assert_text:
+      selector: {id: dnsprobe}
+      text: {contains: "exists=true"}
+      timeout_ms: 5000
+
+  # The TLS facts of that same connection.
+  - assert_text:
+      selector: {id: tls}
+      text: {contains: "tls=ok cipher=TLS_"}
+      timeout_ms: 10000
+  - assert_text:
+      selector: {id: tls}
+      text: {contains: "example.com"}
+      timeout_ms: 5000
+
+  # Certificate validation is live: the same server by IP is refused.
+  - assert_text:
+      selector: {id: tlsneg}
+      text: {contains: "tlsneg=rejected javax.net.ssl.SSL"}
+      timeout_ms: 30000
+
+  - assert_log:
+      tag: NetCheck
+      since_previous_step: false
+      ordered: true
+      patterns:
+        - '^tls tls=ok cipher=TLS_'
+        - '^fetch result=HTTP 200$'
+        - '^tlsneg=rejected '
+
+  - assert_no_crash: {}

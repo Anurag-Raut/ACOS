@@ -1,0 +1,121 @@
+{
+  "scenario": {
+    "name": "gaten-home",
+    "path": "scenarios/gaten-home.yaml",
+    "sha256": "4f1cc247edef2c1641ad216bad230d16c276b8909ef6b19ea73e49745bff93c4",
+    "package": "com.gaten.app"
+  },
+  "engine": "art",
+  "backend": "acos-native",
+  "fidelity": "art-reference",
+  "isolation": "process",
+  "verdict": "pass",
+  "display": {
+    "density_dpi": 400,
+    "height": 2400,
+    "mode": "offscreen",
+    "width": 1080
+  },
+  "steps": [
+    {
+      "index": 0,
+      "step": "launch",
+      "status": "pass",
+      "frame_seq": null,
+      "error": null
+    },
+    {
+      "index": 1,
+      "step": "tap",
+      "status": "pass",
+      "frame_seq": 3,
+      "error": null
+    },
+    {
+      "index": 2,
+      "step": "tap",
+      "status": "pass",
+      "frame_seq": 4,
+      "error": null
+    },
+    {
+      "index": 3,
+      "step": "tap",
+      "status": "pass",
+      "frame_seq": 5,
+      "error": null
+    },
+    {
+      "index": 4,
+      "step": "tap",
+      "status": "pass",
+      "frame_seq": 6,
+      "error": null
+    },
+    {
+      "index": 5,
+      "step": "wait_for",
+      "status": "pass",
+      "frame_seq": 7,
+      "error": null
+    },
+    {
+      "index": 6,
+      "step": "capture",
+      "status": "pass",
+      "frame_seq": 8,
+      "error": null
+    },
+    {
+      "index": 7,
+      "step": "assert_text",
+      "status": "pass",
+      "frame_seq": 8,
+      "error": null
+    },
+    {
+      "index": 8,
+      "step": "assert_text",
+      "status": "pass",
+      "frame_seq": 8,
+      "error": null
+    },
+    {
+      "index": 9,
+      "step": "assert_text",
+      "status": "pass",
+      "frame_seq": 8,
+      "error": null
+    },
+    {
+      "index": 10,
+      "step": "tap",
+      "status": "pass",
+      "frame_seq": 10,
+      "error": null
+    },
+    {
+      "index": 11,
+      "step": "wait_for",
+      "status": "pass",
+      "frame_seq": 11,
+      "error": null
+    },
+    {
+      "index": 12,
+      "step": "capture",
+      "status": "pass",
+      "frame_seq": 12,
+      "error": null
+    },
+    {
+      "index": 13,
+      "step": "assert_text",
+      "status": "pass",
+      "frame_seq": 12,
+      "error": null
+    }
+  ],
+  "apk_sha256": "e04c7ffcf01209c98e511e1ab01a7f68d6decb178d14a08f2b7f0a6539e2ee29",
+  "artifacts_note": "full artifacts (tree/, frames/, steps/) were produced under .cache/parity1/runs/gaten-home and are not committed"
+}

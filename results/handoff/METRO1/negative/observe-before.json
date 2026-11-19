@@ -1,0 +1,490 @@
+{
+  "backend": "acos-native",
+  "capabilities_used": [
+    "ui.tree"
+  ],
+  "fidelity": "art-reference",
+  "metrics": {
+    "wall_ms": 0
+  },
+  "ok": true,
+  "request_id": "req_21d1c_18e91636ed3374ac",
+  "result": {
+    "animations": "on",
+    "engine": "art",
+    "engine_frozen": false,
+    "evidence": {
+      "frame": "host-observed",
+      "input_acks": "guest-asserted",
+      "logs": "guest-asserted",
+      "state_change": "host-observed",
+      "tree": "guest-asserted"
+    },
+    "evidence_label": "guest-asserted",
+    "extra_apks": [],
+    "frame": {
+      "buffer_generation": 19,
+      "captured_at": "2026-11-18T08:25:51.861Z",
+      "frame_number": 18,
+      "frame_seq": 74,
+      "identity": "C1 buffer metadata (no pixel copy)",
+      "md5": "",
+      "pixels": false
+    },
+    "insets": "report",
+    "last_frame_seq": 74,
+    "max_nodes": 2000,
+    "modules": [
+      {
+        "attach": "at-launch",
+        "details": null,
+        "fidelity": "real",
+        "id": "core",
+        "profile": "real",
+        "reason": null,
+        "state": "attached"
+      },
+      {
+        "attach": "hot",
+        "details": null,
+        "fidelity": "off",
+        "id": "accessibility",
+        "profile": "off",
+        "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"accessibility\", \"profile\": \"real\"}]}",
+        "state": "off"
+      },
+      {
+        "attach": "hot",
+        "details": null,
+        "fidelity": "off",
+        "id": "system.permissions",
+        "profile": "off",
+        "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.permissions\", \"profile\": \"real\"}]}",
+        "state": "off"
+      },
+      {
+        "attach": "hot",
+        "details": null,
+        "fidelity": "off",
+        "id": "system.notifications",
+        "profile": "off",
+        "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.notifications\", \"profile\": \"real\"}]}",
+        "state": "off"
+      },
+      {
+        "attach": "hot",
+        "details": null,
+        "fidelity": "off",
+        "id": "sensors",
+        "profile": "off",
+        "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"sensors\", \"profile\": \"scripted\"}]}",
+        "state": "off"
+      },
+      {
+        "attach": "hot",
+        "details": null,
+        "fidelity": "off",
+        "id": "feedback.vibrator",
+        "profile": "off",
+        "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"feedback.vibrator\", \"profile\": \"scripted\"}]}",
+        "state": "off"
+      },
+      {
+        "attach": "hot",
+        "details": null,
+        "fidelity": "off",
+        "id": "location",
+        "profile": "off",
+        "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"location\", \"profile\": \"scripted\"}]}",
+        "state": "off"
+      },
+      {
+        "attach": "at-launch",
+        "details": null,
+        "fidelity": "off",
+        "id": "net.telephony",
+        "profile": "off",
+        "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"net.telephony\", \"profile\": \"scripted\"}]}",
+        "state": "off"
+      },
+      {
+        "attach": "hot",
+        "details": null,
+        "fidelity": "off",
+        "id": "hw.bluetooth",
+        "profile": "off",
+        "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.bluetooth\", \"profile\": \"scripted\"}]}",
+        "state": "off"
+      },
+      {
+        "attach": "hot",
+        "details": null,
+        "fidelity": "off",
+        "id": "hw.biometric",
+        "profile": "off",
+        "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.biometric\", \"profile\": \"scripted\"}]}",
+        "state": "off"
+      },
+      {
+        "attach": "at-launch",
+        "details": null,
+        "fidelity": "real",
+        "id": "network",
+        "profile": "real",
+        "reason": "real internet through the acos-netd relay; relay session acos-s_cli",
+        "state": "attached"
+      },
+      {
+        "attach": "at-launch",
+        "details": null,
+        "fidelity": "off",
+        "id": "webview",
+        "profile": "off",
+        "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"webview\", \"profile\": \"real\"}]}",
+        "state": "off"
+      },
+      {
+        "attach": "hot",
+        "details": null,
+        "fidelity": "off",
+        "id": "hw.usb",
+        "profile": "off",
+        "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.usb\", \"profile\": \"stub\"}]}",
+        "state": "off"
+      },
+      {
+        "attach": "hot",
+        "details": null,
+        "fidelity": "off",
+        "id": "system.dropbox",
+        "profile": "off",
+        "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.dropbox\", \"profile\": \"stub\"}]}",
+        "state": "off"
+      },
+      {
+        "attach": "hot",
+        "details": null,
+        "fidelity": "off",
+        "id": "hw.nfc",
+        "profile": "off",
+        "reason": "off: no NFC hardware: NfcAdapter throws UnsupportedOperationException before any binder (FEATURE_NFC is absent)",
+        "state": "off"
+      },
+      {
+        "attach": "hot",
+        "details": null,
+        "fidelity": "off",
+        "id": "system.wallpaper",
+        "profile": "off",
+        "reason": "off: no wallpaper service; AOSP's own DisabledWallpaperManager is the working missing path (config_enableWallpaperService is false)",
+        "state": "off"
+      },
+      {
+        "attach": "hot",
+        "details": null,
+        "fidelity": "off",
+        "id": "system.print",
+        "profile": "off",
+        "reason": "off: no print service; the client only resolves the name when FEATURE_PRINTING is reported, and ACOS reports it absent",
+        "state": "off"
+      },
+      {
+        "attach": "hot",
+        "details": null,
+        "fidelity": "off",
+        "id": "system.search",
+        "profile": "off",
+        "reason": "off: no search service and no searchable index; an empty SearchableInfo list would look like an installed search provider",
+        "state": "off"
+      },
+      {
+        "attach": "hot",
+        "details": null,
+        "fidelity": "off",
+        "id": "system.usage",
+        "profile": "off",
+        "reason": "off: nothing records app usage; an empty ParceledListSlice<UsageStats> would be indistinguishable from 'not used'",
+        "state": "off"
+      },
+      {
+        "attach": "hot",
+        "details": null,
+        "fidelity": "off",
+        "id": "system.dpm",
+        "profile": "off",
+        "reason": "off: no managed device or profile; every device-policy answer would be invented policy state",
+        "state": "off"
+      },
+      {
+        "attach": "hot",
+        "details": null,
+        "fidelity": "off",
+        "id": "system.role",
+        "profile": "off",
+        "reason": "off: IRoleManager lives in the Permission APEX; its transaction table is not in the framework dex this build reads, so a stub would guess codes",
+        "state": "off"
+      },
+      {
+        "attach": "hot",
+        "details": null,
+        "fidelity": "off",
+        "id": "geo.country",
+        "profile": "off",
+        "reason": "off: a detected country is a location claim ACOS cannot back",
+        "state": "off"
+      }
+    ],
+    "node_count": 21,
+    "package": "dev.acos.fixtures.rnhello",
+    "session_id": "s_cli",
+    "settle": {
+      "bound": "strict-event",
+      "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
+      "mode": "strict",
+      "probe_seq": 121,
+      "settled": true,
+      "strict_rule": "event",
+      "tree_age_ms": 39
+    },
+    "stage_reached": "first_frame",
+    "timing": {
+      "note": "total_ms is the whole serve verb; the other fields are measured around the acos-art round trip and the host-side absorb",
+      "read": {
+        "absorb_ms": 0,
+        "guest_command_ms": 42
+      },
+      "total_ms": 44
+    },
+    "tree": {
+      "compact": true,
+      "cursor": 0,
+      "max_nodes": 2000,
+      "next_cursor": 10,
+      "node_count": 21,
+      "nodes": [
+        {
+          "bounds": "[0,128][1080,906]",
+          "checked": false,
+          "class": "androidx.appcompat.widget.AppCompatTextView",
+          "clickable": false,
+          "content_desc": "",
+          "enabled": true,
+          "focused": false,
+          "id": "n6_dev.acos.fixtures.rnhello:id/catalyst_redbox_title",
+          "package": "",
+          "password": false,
+          "resource_id": "dev.acos.fixtures.rnhello:id/catalyst_redbox_title",
+          "scrollable": false,
+          "selected": false,
+          "text": "Unable to load script.\n\nMake sure you're running Metro or that your bundle 'index.android.bundle' is packaged correctly for release.\n\nThe device must either be USB connected (with bundler set to \"localhost:8081\") or be on the same Wi-Fi network as your computer (with bundler set to your computer IP) to connect to Metro.\n\nIf you're using USB on a physical device, make sure you also run this command:\n  adb reverse tcp:8081 tcp:8081",
+          "visible": true,
+          "window": "window-2#1"
+        },
+        {
+          "bounds": "[42,927][1038,978]",
+          "checked": false,
+          "class": "androidx.appcompat.widget.AppCompatTextView",
+          "clickable": false,
+          "content_desc": "",
+          "enabled": true,
+          "focused": false,
+          "id": "n7_dev.acos.fixtures.rnhello:id/rn_frame_method",
+          "package": "",
+          "password": false,
+          "resource_id": "dev.acos.fixtures.rnhello:id/rn_frame_method",
+          "scrollable": false,
+          "selected": false,
+          "text": "jniLoadScriptFromAssets",
+          "visible": true,
+          "window": "window-2#1"
+        },
+        {
+          "bounds": "[42,978][1038,1021]",
+          "checked": false,
+          "class": "androidx.appcompat.widget.AppCompatTextView",
+          "clickable": false,
+          "content_desc": "",
+          "enabled": true,
+          "focused": false,
+          "id": "n7_dev.acos.fixtures.rnhello:id/rn_frame_file",
+          "package": "",
+          "password": false,
+          "resource_id": "dev.acos.fixtures.rnhello:id/rn_frame_file",
+          "scrollable": false,
+          "selected": false,
+          "text": "CatalystInstanceImpl.java",
+          "visible": true,
+          "window": "window-2#1"
+        },
+        {
+          "bounds": "[42,1063][1038,1114]",
+          "checked": false,
+          "class": "androidx.appcompat.widget.AppCompatTextView",
+          "clickable": false,
+          "content_desc": "",
+          "enabled": true,
+          "focused": false,
+          "id": "n7_dev.acos.fixtures.rnhello:id/rn_frame_method",
+          "package": "",
+          "password": false,
+          "resource_id": "dev.acos.fixtures.rnhello:id/rn_frame_method",
+          "scrollable": false,
+          "selected": false,
+          "text": "loadScriptFromAssets",
+          "visible": true,
+          "window": "window-2#1"
+        },
+        {
+          "bounds": "[42,1114][1038,1157]",
+          "checked": false,
+          "class": "androidx.appcompat.widget.AppCompatTextView",
+          "clickable": false,
+          "content_desc": "",
+          "enabled": true,
+          "focused": false,
+          "id": "n7_dev.acos.fixtures.rnhello:id/rn_frame_file",
+          "package": "",
+          "password": false,
+          "resource_id": "dev.acos.fixtures.rnhello:id/rn_frame_file",
+          "scrollable": false,
+          "selected": false,
+          "text": "CatalystInstanceImpl.java:245",
+          "visible": true,
+          "window": "window-2#1"
+        },
+        {
+          "bounds": "[42,1199][1038,1250]",
+          "checked": false,
+          "class": "androidx.appcompat.widget.AppCompatTextView",
+          "clickable": false,
+          "content_desc": "",
+          "enabled": true,
+          "focused": false,
+          "id": "n7_dev.acos.fixtures.rnhello:id/rn_frame_method",
+          "package": "",
+          "password": false,
+          "resource_id": "dev.acos.fixtures.rnhello:id/rn_frame_method",
+          "scrollable": false,
+          "selected": false,
+          "text": "loadScript",
+          "visible": true,
+          "window": "window-2#1"
+        },
+        {
+          "bounds": "[42,1250][1038,1293]",
+          "checked": false,
+          "class": "androidx.appcompat.widget.AppCompatTextView",
+          "clickable": false,
+          "content_desc": "",
+          "enabled": true,
+          "focused": false,
+          "id": "n7_dev.acos.fixtures.rnhello:id/rn_frame_file",
+          "package": "",
+          "password": false,
+          "resource_id": "dev.acos.fixtures.rnhello:id/rn_frame_file",
+          "scrollable": false,
+          "selected": false,
+          "text": "JSBundleLoader.kt:33",
+          "visible": true,
+          "window": "window-2#1"
+        },
+        {
+          "bounds": "[42,1335][1038,1386]",
+          "checked": false,
+          "class": "androidx.appcompat.widget.AppCompatTextView",
+          "clickable": false,
+          "content_desc": "",
+          "enabled": true,
+          "focused": false,
+          "id": "n7_dev.acos.fixtures.rnhello:id/rn_frame_method",
+          "package": "",
+          "password": false,
+          "resource_id": "dev.acos.fixtures.rnhello:id/rn_frame_method",
+          "scrollable": false,
+          "selected": false,
+          "text": "runJSBundle",
+          "visible": true,
+          "window": "window-2#1"
+        },
+        {
+          "bounds": "[42,1386][1038,1429]",
+          "checked": false,
+          "class": "androidx.appcompat.widget.AppCompatTextView",
+          "clickable": false,
+          "content_desc": "",
+          "enabled": true,
+          "focused": false,
+          "id": "n7_dev.acos.fixtures.rnhello:id/rn_frame_file",
+          "package": "",
+          "password": false,
+          "resource_id": "dev.acos.fixtures.rnhello:id/rn_frame_file",
+          "scrollable": false,
+          "selected": false,
+          "text": "CatalystInstanceImpl.java:274",
+          "visible": true,
+          "window": "window-2#1"
+        },
+        {
+          "bounds": "[42,1471][1038,1522]",
+          "checked": false,
+          "class": "androidx.appcompat.widget.AppCompatTextView",
+          "clickable": false,
+          "content_desc": "",
+          "enabled": true,
+          "focused": false,
+          "id": "n7_dev.acos.fixtures.rnhello:id/rn_frame_method",
+          "package": "",
+          "password": false,
+          "resource_id": "dev.acos.fixtures.rnhello:id/rn_frame_method",
+          "scrollable": false,
+          "selected": false,
+          "text": "createReactContext",
+          "visible": true,
+          "window": "window-2#1"
+        }
+      ],
+      "note": "compact view: visible text/content_desc nodes in reading order; full tree: /home/Qui/.t3/worktrees/acos/t3-83dd2f70-f6ac528c0c397151/.cache/metro1/rt/art-sessions/s_cli/tree/1.json",
+      "returned": 10,
+      "truncated": false,
+      "windows": [
+        {
+          "bounds": [
+            0,
+            0,
+            1080,
+            2400
+          ],
+          "focus": false,
+          "id": "ea3eadf",
+          "kind": "application",
+          "label": "main",
+          "touchable": true,
+          "type_name": "TYPE_BASE_APPLICATION",
+          "z": 0
+        },
+        {
+          "bounds": [
+            0,
+            0,
+            1080,
+            2400
+          ],
+          "focus": true,
+          "id": "4d5232c",
+          "kind": "application",
+          "label": "window-2#1",
+          "touchable": true,
+          "type_name": "TYPE_APPLICATION",
+          "z": 1
+        }
+      ]
+    },
+    "tree_next_cursor": null,
+    "tree_path": "/home/Qui/.t3/worktrees/acos/t3-83dd2f70-f6ac528c0c397151/.cache/metro1/rt/art-sessions/s_cli/tree/1.json",
+    "truncated": false,
+    "trust": "trusted",
+    "windows": 2
+  },
+  "session_id": "s_cli",
+  "status": "pass"
+}

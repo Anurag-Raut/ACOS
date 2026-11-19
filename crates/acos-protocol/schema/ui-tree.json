@@ -261,6 +261,10 @@
           "description": "The W36 `window` label the nodes carry (kept for compatibility).",
           "type": "string"
         },
+        "renderer_fallback": {
+          "description": "The window asked for `FLAG_HARDWARE_ACCELERATED` but the guest has no window GPU renderer, so it was painted in software (`Canvas. isHardwareAccelerated()` is false). The verdict records a `hardware_renderer_fallback` note for it.",
+          "type": "boolean"
+        },
         "touchable": {
           "default": false,
           "description": "Whether this window receives touches (`!FLAG_NOT_TOUCHABLE`); the value an agent uses to explain why a tap passed through an overlay.",

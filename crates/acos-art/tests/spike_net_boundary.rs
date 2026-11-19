@@ -57,11 +57,17 @@ fn scratch(tag: &str) -> PathBuf {
     dir
 }
 
-/// `pasta` for this run: `ACOS_SPIKE_NET_PASTA`, else the spike's build cache.
+/// `pasta` for this run: `ACOS_SPIKE_NET_PASTA` when named (verbatim), else the
+/// product's own lookup (`acos_netd_ctl::pasta`: `ACOS_NET_PASTA`,
+/// `<root>/libexec/pasta`, `$ACOS_PREFIX`'s `current`, `PATH`), else the spike's
+/// build cache.
 fn pasta_binary() -> Option<PathBuf> {
     if let Some(p) = std::env::var_os("ACOS_SPIKE_NET_PASTA") {
         let p = PathBuf::from(p);
         return p.is_file().then_some(p);
+    }
+    if let Some(p) = acos_netd::pasta::resolved_path() {
+        return Some(p);
     }
     let p = repo_root().join(".cache/spike-net/bin/pasta");
     p.is_file().then_some(p)
@@ -272,7 +278,11 @@ fn probe_root(tag: &str) -> Option<ArtRoot> {
     let root = match ArtRoot::resolve(None, Some(dir.join("data"))) {
         Ok(r) => r,
         Err(e) => {
-            eprintln!("SKIP {tag}: no ART sysroot ({e})");
+            acos_test_support::require_prereq(
+                false,
+                &format!("{tag} (spike net boundary)"),
+                &format!("no ART sysroot ({e}) — run tools/art-sysroot.sh"),
+            )?;
             return None;
         }
     };
@@ -432,6 +442,11 @@ struct Run {
 fn run_guest(tag: &str, mode: &str, timeout: Duration) -> Option<Run> {
     let pasta = pasta_binary()?;
     std::env::set_var("ACOS_SPIKE_NET", "1");
+    // These tests prove the per-session `pasta` arm's boundary shim. The default
+    // arm became the shared relay (NET2/NET4), which needs a session id and its
+    // own supervisor; without naming `base` the tests failed at `sandbox argv`
+    // the first time a pinned pasta was present (NETREAL).
+    std::env::set_var("ACOS_NET_ARM", "base");
     std::env::set_var("ACOS_SPIKE_NET_PASTA", &pasta);
 
     let root = probe_root(tag)?;
@@ -494,14 +509,21 @@ fn rule_set(dump: &str) -> Vec<String> {
 #[test]
 fn guest_cannot_change_the_lan_drop_rules() {
     let _g = guard();
-    if pasta_binary().is_none() {
-        eprintln!(
-            "SKIP: no pasta binary (set ACOS_SPIKE_NET_PASTA or build .cache/spike-net/bin/pasta)"
-        );
+    let skipped_before = acos_test_support::skipped_count();
+    acos_test_support::require_prereq(
+        pasta_binary().is_some(),
+        "spike net boundary (LAN rules)",
+        "no pinned pasta (install it at <checkout>/libexec/pasta or $ACOS_HOME/libexec/pasta, see docs/INSTALL.md \"The network module's transport\"; `acos-netd pasta` says where ACOS looked)",
+    );
+    if acos_test_support::skipped_count() != skipped_before {
         return;
     }
     let Some(run) = run_guest("boundary", "net-guard", Duration::from_secs(90)) else {
-        eprintln!("SKIP: no ART sysroot");
+        acos_test_support::require_prereq(
+            false,
+            "spike net boundary (LAN rules)",
+            "no ART sysroot — run tools/art-sysroot.sh",
+        );
         return;
     };
     eprintln!("--- probe stdout ---\n{}", run.stdout);
@@ -653,14 +675,24 @@ fn guest_cannot_change_the_lan_drop_rules() {
 #[test]
 fn boundary_failure_never_starts_the_guest() {
     let _g = guard();
-    if pasta_binary().is_none() {
-        eprintln!("SKIP: no pasta binary");
+    let skipped_before = acos_test_support::skipped_count();
+    acos_test_support::require_prereq(
+        pasta_binary().is_some(),
+        "spike net boundary (fail-closed)",
+        "no pinned pasta (install it at <checkout>/libexec/pasta or $ACOS_HOME/libexec/pasta, see docs/INSTALL.md \"The network module's transport\"; `acos-netd pasta` says where ACOS looked)",
+    );
+    if acos_test_support::skipped_count() != skipped_before {
         return;
     }
     std::env::set_var("ACOS_SPIKE_NET", "1");
+    std::env::set_var("ACOS_NET_ARM", "base");
     std::env::set_var("ACOS_SPIKE_NET_PASTA", pasta_binary().unwrap());
     let Some(root) = probe_root("boundary-fail") else {
-        eprintln!("SKIP: no ART sysroot");
+        acos_test_support::require_prereq(
+            false,
+            "spike net boundary (fail-closed)",
+            "no ART sysroot — run tools/art-sysroot.sh",
+        );
         return;
     };
     let dir = scratch("boundary-fail-run");

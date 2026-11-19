@@ -1103,7 +1103,7 @@ pub const TOMBSTONES: &[Tombstone] = &[
         module: "net.wifi",
         reason: "no Wi-Fi stack (the network module owns real internet, ADR-0030)",
         reaction: AospReaction::Null,
-        evidence: "packages/modules/Wifi framework/java/android/net/wifi/WifiFrameworkInitializer.java:75-85 registers a context-aware factory that returns null when PMS reports no FEATURE_WIFI, and WifiManager.java:2202-2209 only stores the proxy/looper; ACOS reports no Wi-Fi feature, so Android's real missing path already answers `null` (re-decided from source, 2026-11-16)",
+        evidence: "packages/modules/Wifi framework/java/android/net/wifi/WifiFrameworkInitializer.java:75-85 registers a context-aware factory that returns null when PMS reports no FEATURE_WIFI, and WifiManager.java:2202-2209 only stores the proxy/looper; ACOS publishes `android.hardware.wifi` only while `net.wifi` is attached (the `network` module publishes no Wi-Fi feature, MERGE040H), so with `net.wifi` off PMS reports no Wi-Fi feature and Android's real missing path answers `null` (re-decided from source, 2026-11-16)",
     },
     Tombstone {
         name: "phone",
@@ -1296,6 +1296,8 @@ impl ModuleRegistry {
             Box::new(crate::modules::biometric::BiometricModule::new()),
             Box::new(crate::modules::network::NetworkModule::new()),
             Box::new(crate::modules::webview::WebviewModule::new()),
+            Box::new(crate::modules::wifi::WifiModule::new()),
+            Box::new(crate::modules::media_session::MediaSessionModule::new()),
         ]
         .into_iter()
         .chain(crate::modules::tail_stubs::modules())
@@ -1977,6 +1979,150 @@ impl ModuleRegistry {
         })
     }
 
+    /// The generated `docs/MODULES.md` body (ADR-0029 item 6, root-cause fix D).
+    ///
+    /// Everything here is derived from the registry: the module manifests
+    /// (profiles, attach mode, budget, what each one provides, its control
+    /// ops) and the `TOMBSTONES` decision table. `tests/modules_doc.rs`
+    /// regenerates it and fails when the checked-in copy is stale, so the
+    /// document an agent plans from cannot drift from the build.
+    ///
+    /// Regenerate with
+    /// `cargo run -p acos-services --example gen-modules-docs > docs/MODULES.md`.
+    #[must_use]
+    pub fn modules_markdown(&self) -> String {
+        let mut out = String::new();
+        out.push_str("# Service modules (generated)\n\n");
+        out.push_str(
+            "Generated from `ModuleRegistry::standard()` (ADR-0029). Do not edit this \
+             block by hand: `cargo run -p acos-services --example gen-modules-docs > \
+             docs/MODULES.md`, and `crates/acos-services/tests/modules_doc.rs` fails when \
+             it is stale.\n\n",
+        );
+        out.push_str(
+            "A module is a set of Android system pieces attached to a session. `off` is \
+             always available and is not listed under `profiles`; a profile that is listed \
+             is an implementation, and a verdict that relies on `stub` or `scripted` says \
+             so. `attach` is `at-launch` (only in `acos_launch {services: [...]}`) or `hot` \
+             (also on a live session with `acos_services`).\n\n",
+        );
+        out.push_str("## Modules\n\n");
+        out.push_str(
+            "| module | profiles | attach | security | RAM (MiB) | startup (ms) | summary | provides | controls |\n",
+        );
+        out.push_str("|---|---|---|---|---|---|---|---|---|\n");
+        for manifest in self.manifests() {
+            let provides: Vec<String> = manifest
+                .services
+                .iter()
+                .map(|service| format!("`{}`", service.name))
+                .chain(manifest.features.iter().map(|f| format!("feature `{f}`")))
+                .chain(manifest.providers.iter().map(|p| format!("provider `{p}`")))
+                .chain(
+                    manifest
+                        .broadcasts
+                        .iter()
+                        .map(|b| format!("broadcast `{b}`")),
+                )
+                .chain(manifest.windows.iter().map(|w| format!("window `{w}`")))
+                .chain(manifest.system_apps.iter().map(|a| format!("app `{a}`")))
+                .collect();
+            let controls = if manifest.controls.is_empty() {
+                "\u{2014}".to_string()
+            } else {
+                manifest
+                    .controls
+                    .iter()
+                    .map(|op| format!("`{}`", op.name))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            };
+            let mut profiles = manifest
+                .profiles_with_off()
+                .iter()
+                .map(|profile| format!("`{profile}`"))
+                .collect::<Vec<_>>();
+            if !manifest.requires.is_empty() {
+                profiles.push(format!(
+                    "requires {}",
+                    manifest
+                        .requires
+                        .iter()
+                        .map(|id| format!("`{id}`"))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                ));
+            }
+            if !manifest.requires_host_tools.is_empty() {
+                profiles.push(format!(
+                    "needs {}",
+                    manifest
+                        .requires_host_tools
+                        .iter()
+                        .map(|tool| format!("`{tool}`"))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                ));
+            }
+            out.push_str(&format!(
+                "| `{}` | {} | `{}` | `{}` | {} | {} | {} | {} | {} |\n",
+                manifest.id,
+                profiles.join(", "),
+                manifest.attach.as_str(),
+                manifest.security.as_str(),
+                manifest.budget.ram_mib,
+                manifest.budget.startup_ms,
+                manifest.summary,
+                provides.join(", "),
+                controls
+            ));
+        }
+        out.push_str("\n`RAM` is the manifest's declared attach budget.\n\n");
+
+        out.push_str("## Control operations\n\n");
+        out.push_str(
+            "`acos_service_ctl {module, op, args}` (also `service_ctl:` in a scenario).\n\n",
+        );
+        out.push_str("| module | op | args |\n|---|---|---|\n");
+        let mut any_control = false;
+        for manifest in self.manifests() {
+            for op in manifest.controls {
+                any_control = true;
+                out.push_str(&format!(
+                    "| `{}` | `{}` | {} |\n",
+                    manifest.id, op.name, op.args
+                ));
+            }
+        }
+        if !any_control {
+            out.push_str("| \u{2014} | \u{2014} | no module declares a control op |\n");
+        }
+        out.push('\n');
+
+        out.push_str("## Names with no module attached\n\n");
+        out.push_str(
+            "A name a phone publishes that this build does not. Each row says what the app \
+             observes: a structured `UNSUPPORTED_ANDROID_API` naming the module and the attach \
+             call, or Android's own missing path (`null`) where AOSP builds a working manager \
+             from it.\n\n",
+        );
+        out.push_str("| name | module | answer | why |\n|---|---|---|---|\n");
+        for tombstone in TOMBSTONES {
+            out.push_str(&format!(
+                "| `{}` | `{}` | {} | {} |\n",
+                tombstone.name,
+                tombstone.module,
+                if tombstone.reaction == AospReaction::Tombstone {
+                    "structured `UNSUPPORTED_ANDROID_API`"
+                } else {
+                    "Android's missing path (`null`)"
+                },
+                tombstone.reason
+            ));
+        }
+        out
+    }
+
     /// The generated "service modules" section of the `acos_help` limits topic.
     ///
     /// Markdown, because it is spliced into the agent guide: a table of
@@ -2394,7 +2540,13 @@ pub mod conformance {
             }),
         }
 
-        let default_profile = default_profile(manifest);
+        // A module whose manifest lists no attached profile is an honest `off`:
+        // every name it owns stays on Android's missing path / the tombstone, and
+        // the kit's attach half becomes "every non-off profile is refused". The
+        // alternative (falling back to `Stub`) would demand a profile the
+        // manifest itself says does not exist.
+        let implemented: Option<Profile> = manifest.profiles.iter().copied().max();
+        let default_profile = implemented.unwrap_or(Profile::Off);
         let provides: Vec<&'static str> = manifest.services.iter().map(|s| s.name).collect();
 
         // 2. attach (twice, so check 3 has a second cycle). The tombstones a
@@ -2430,23 +2582,61 @@ pub mod conformance {
             .collect();
         let mut attach_ok = true;
         let mut attach_detail = String::new();
-        for cycle in 0..2 {
-            if let Err(error) = registry.attach(
-                &mut host,
-                module_id,
-                default_profile,
-                &ModuleConfig::default(),
-            ) {
-                attach_ok = false;
-                attach_detail = format!("attach #{cycle} failed: {error}");
-                break;
-            }
-            for name in &provides {
-                if host.check_service(name).ok().flatten().is_none() {
+        if implemented.is_some() {
+            for cycle in 0..2 {
+                if let Err(error) = registry.attach(
+                    &mut host,
+                    module_id,
+                    default_profile,
+                    &ModuleConfig::default(),
+                ) {
+                    attach_ok = false;
+                    attach_detail = format!("attach #{cycle} failed: {error}");
+                    break;
+                }
+                for name in &provides {
+                    if host.check_service(name).ok().flatten().is_none() {
+                        attach_ok = false;
+                        attach_detail = format!(
+                            "attach #{cycle}: module provides {name:?} but checkService answers null"
+                        );
+                    }
+                }
+                let report = registry
+                    .reports()
+                    .into_iter()
+                    .find(|report| report.id == module_id)
+                    .expect("report for a known module");
+                if !report.attached || report.profile != Some(default_profile) {
                     attach_ok = false;
                     attach_detail = format!(
-                        "attach #{cycle}: module provides {name:?} but checkService answers null"
+                        "attach #{cycle}: report says {report:?} after a successful attach"
                     );
+                }
+                if let Err(error) = registry.detach(&mut host, module_id) {
+                    attach_ok = false;
+                    attach_detail = format!("detach #{cycle} failed: {error}");
+                    break;
+                }
+            }
+        } else {
+            // `off`-only module: attaching it at any profile must be refused by
+            // name (never a silent success), a detach is a no-op, and the
+            // report says why the module exists at all.
+            for profile in [Profile::Stub, Profile::Scripted, Profile::Real] {
+                match registry.attach(&mut host, module_id, profile, &ModuleConfig::default()) {
+                    Err(ServiceError::ModuleRejected { .. }) => {}
+                    other => {
+                        attach_ok = false;
+                        attach_detail =
+                            format!("an off-only module accepted profile {profile}: {other:?}");
+                    }
+                }
+            }
+            if attach_ok {
+                if let Err(error) = registry.detach(&mut host, module_id) {
+                    attach_ok = false;
+                    attach_detail = format!("detach of an off-only module failed: {error}");
                 }
             }
             let report = registry
@@ -2454,27 +2644,26 @@ pub mod conformance {
                 .into_iter()
                 .find(|report| report.id == module_id)
                 .expect("report for a known module");
-            if !report.attached || report.profile != Some(default_profile) {
+            if report.attached || report.profile.is_some() {
                 attach_ok = false;
-                attach_detail =
-                    format!("attach #{cycle}: report says {report:?} after a successful attach");
-            }
-            if let Err(error) = registry.detach(&mut host, module_id) {
-                attach_ok = false;
-                attach_detail = format!("detach #{cycle} failed: {error}");
-                break;
+                attach_detail = format!("an off-only module's report claims an attach: {report:?}");
             }
         }
         checks.push(Check {
             name: "attach",
             pass: attach_ok,
-            detail: if attach_ok {
+            detail: if !attach_ok {
+                attach_detail
+            } else if implemented.is_some() {
                 format!(
                     "attached at {default_profile} twice; {} name(s) resolved",
                     provides.len()
                 )
             } else {
-                attach_detail
+                format!(
+                    "off-only: every non-off profile refused; {} name(s) keep their answer",
+                    provides.len()
+                )
             },
         });
 

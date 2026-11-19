@@ -1,0 +1,27 @@
+{
+  "assertions": [],
+  "certification": "certified-with-limits",
+  "certification_limits": {
+    "doc": "docs/SANDBOX_CERTIFICATION.md",
+    "section": "§8.7"
+  },
+  "duration_ms": 1501,
+  "evidence": [
+    {
+      "kind": "step",
+      "path": "steps/26-wait.json"
+    }
+  ],
+  "index": 26,
+  "provenance": {},
+  "settle": {
+    "mode": "unknown",
+    "reason": "unsettled",
+    "requested_ms": 1500,
+    "settled": false,
+    "waited_ms": 1500
+  },
+  "status": "pass",
+  "step": "wait",
+  "trust": "trusted"
+}

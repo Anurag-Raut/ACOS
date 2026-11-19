@@ -1831,6 +1831,10 @@ fn windows_from_json(value: &serde_json::Value) -> Vec<acos_protocol::ui::Window
         };
         info.focus = row.get("focus").and_then(|v| v.as_bool()).unwrap_or(false);
         info.touchable = row.get("touch").and_then(|v| v.as_bool()).unwrap_or(false);
+        info.renderer_fallback = row
+            .get("hw_fallback")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
         info.bounds = row
             .get("bounds")
             .and_then(|v| v.as_str())

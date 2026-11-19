@@ -1,0 +1,117 @@
+# MODFILL: the clipboard proof — `core`'s `IClipboard` on the ART engine, measured.
+#
+# `clipboard` is `core`'s (`crates/acos-services/src/clipboard.rs`) and had no
+# proof scenario (CONFKIT §4). The first run of this scenario found a real gap:
+# on the ART engine `setPrimaryClip`/`getPrimaryClip` answered a structured
+# `UNSUPPORTED_ANDROID_API`/`bad request ... no parcelable codec for
+# android.content.ClipData`, because the `ClipData`-carrying half only existed on
+# the `acos-vm` engine (`acos-runtime::clipboard_java`). MODFILL fixed the cause
+# once: `ClipboardService` now serves those methods through `raw_transact`
+# (`ServiceObject::serves_raw`), keeping the bytes the framework's own
+# `ClipData.writeToParcel` produced and replaying them (`parcelable::
+# read_clip_shape` only *locates* them and reads the facts). Byte-level tests:
+# `crates/acos-services/tests/clipboard_wire.rs`.
+#
+# What this app does, all through the framework's own `ClipboardManager`:
+# set -> primary-clip-changed listener fires -> get/paste -> a second copy ->
+# the description (label/mime/item count) -> clear -> the listener fires again
+# and the clip is gone. Every line is a value the framework returned.
+version: 1
+name: modfill-clipboard
+description: >-
+  ClipboardManager on ART: copy, the primary-clip-changed listener (a oneway
+  binder callback), paste, the clip description, and clear — all through the
+  framework's own client against core's IClipboard.
+app: ../fixtures/build/apps/clip-probe.apk
+api_level: 34
+isolation: process
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+capabilities:
+  - ui.offscreen
+  - ui.text
+  - input
+expectation: pass
+budgets:
+  memory_mib: 512
+  wall_ms: 240000
+steps:
+  - launch:
+      activity: dev.acos.fixtures.clipprobe/.MainActivity
+      clear_state: true
+  - wait_for:
+      selector: {text: {contains: "READY clipboard=present"}}
+      timeout_ms: 20000
+  # Nothing was stored yet.
+  - tap:
+      selector: {text: {exact: "Query"}}
+  - wait_for:
+      selector: {text: {contains: "QUERY hasPrimaryClip=false"}}
+      timeout_ms: 20000
+  # An empty clipboard has no clip to paste.
+  - tap:
+      selector: {text: {exact: "Paste"}}
+  - wait_for:
+      selector: {text: {contains: "PASTED none items=0"}}
+      timeout_ms: 20000
+  # Register the primary-clip-changed listener (a binder the service calls back).
+  - tap:
+      selector: {text: {exact: "Listen"}}
+  - wait_for:
+      selector: {text: {contains: "LISTENER registered"}}
+      timeout_ms: 20000
+  # Copy: the framework marshals a real ClipData, the service stores it, the
+  # listener is called once, and hasPrimaryClip flips.
+  - tap:
+      selector: {text: {exact: "Copy"}}
+  - wait_for:
+      selector: {text: {contains: "COPY ok text=proof-one hasPrimaryClip=true"}}
+      timeout_ms: 20000
+  - wait_for:
+      selector: {text: {contains: "CLIPCHANGED n=1 text=proof-one"}}
+      timeout_ms: 20000
+  # Paste: ClipData.CREATOR reads back what was copied.
+  - tap:
+      selector: {text: {exact: "Paste"}}
+  - wait_for:
+      selector: {text: {contains: "PASTED items=1 text=proof-one"}}
+      timeout_ms: 20000
+  # A second copy replaces the first and fires the listener again.
+  - tap:
+      selector: {text: {exact: "Copy2"}}
+  - wait_for:
+      selector: {text: {contains: "CLIPCHANGED n=2 text=proof-two"}}
+      timeout_ms: 20000
+  # The description comes from the stored clip's own ClipDescription.
+  - tap:
+      selector: {text: {exact: "Describe"}}
+  - wait_for:
+      selector: {text: {contains: "DESCRIBE label=acos items=1 mimes=1"}}
+      timeout_ms: 20000
+  # Clear removes it and announces the change.
+  - tap:
+      selector: {text: {exact: "Clear"}}
+  - wait_for:
+      selector: {text: {contains: "CLEARED hasPrimaryClip=false"}}
+      timeout_ms: 20000
+  - wait_for:
+      selector: {text: {contains: "CLIPCHANGED n=3 text=none"}}
+      timeout_ms: 20000
+  - assert_log:
+      tag: clipprobe
+      since_previous_step: false
+      ordered: true
+      patterns:
+        - "QUERY hasPrimaryClip=false"
+        - "LISTENER registered"
+        - "COPY ok text=proof-one hasPrimaryClip=true"
+        - "CLIPCHANGED n=1 text=proof-one"
+        - "PASTED items=1 text=proof-one"
+        - "CLIPCHANGED n=2 text=proof-two"
+        - "DESCRIBE label=acos items=1 mimes=1"
+        - "CLEARED hasPrimaryClip=false"
+        - "CLIPCHANGED n=3 text=none"
+  - assert_no_crash: {}

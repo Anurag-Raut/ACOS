@@ -1,0 +1,12 @@
+
+running 1 test
+test quiet_process_child ... manifest: PASS system.usage v1.0.0: 1 service(s), profiles off
+attach: PASS off-only: every non-off profile refused; 1 name(s) keep their answer
+detach-restores: PASS baseline Baseline { fds: 68, threads: 2, binders: 116, names: 63 } after Baseline { fds: 68, threads: 2, binders: 116, names: 63 }
+honest-report: PASS 1 name(s) answer null or a tombstone; control refuses; report says off
+negative: PASS unimplemented profile, unknown control op and unknown module id all refused
+budget: PASS 1 MiB / 1 ms declared
+ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 19 filtered out; finished in 0.00s
+

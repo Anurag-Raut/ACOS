@@ -261,6 +261,13 @@ impl Relay {
 
     // -- pasta --------------------------------------------------------------
 
+    /// The `pasta` binary this relay runs.
+    ///
+    /// Order: `--pasta`, `ACOS_NET_PASTA` (both verbatim: a named path that
+    /// does not work must fail *with that path in the error*, never silently use
+    /// another binary), then the one product rule in [`acos_netd_ctl::pasta`]
+    /// (`<root>/libexec/pasta` for an install or a checkout, `$ACOS_PREFIX`'s
+    /// `current`, then `PATH`).
     fn pasta_bin(&self) -> PathBuf {
         if let Some(p) = &self.pasta_override {
             return p.clone();
@@ -268,15 +275,7 @@ impl Relay {
         if let Some(p) = std::env::var_os(plan::PASTA_ENV) {
             return PathBuf::from(p);
         }
-        // The installer's location, then PATH: the spike's binary is a static
-        // build shipped with the install (see `acos doctor`).
-        if let Some(p) = std::env::var_os("ACOS_PREFIX") {
-            let cand = PathBuf::from(p).join("libexec/pasta");
-            if cand.exists() {
-                return cand;
-            }
-        }
-        PathBuf::from("pasta")
+        acos_netd_ctl::pasta::resolved_path().unwrap_or_else(|| PathBuf::from("pasta"))
     }
 
     fn pasta_alive(&mut self) -> bool {
@@ -650,6 +649,11 @@ impl Relay {
                     net.cidr()
                 ));
                 self.sessions.insert(session.clone(), session_state);
+                // The relay's own opt-ins are defaults for every session that
+                // attaches after them: a guest whose *first* request is its
+                // launch traffic (Metro's bundle fetch, METRO1) has no window
+                // between "the netns exists" and "the app connects".
+                self.apply_relay_host_ports(session)?;
                 return Ok((info, ms));
             }
             if !pid_alive(pid) {
@@ -709,6 +713,7 @@ impl Relay {
         };
         let info = s.info();
         self.sessions.insert(session.to_string(), s);
+        self.apply_relay_host_ports(session)?;
         Ok(info)
     }
 
@@ -875,9 +880,14 @@ impl Relay {
         Ok(s.info())
     }
 
-    /// Opt a session (or all attached sessions) in to a named host port. Naming a
-    /// port restarts `pasta` with that forward, and every session that did not
-    /// opt in gets a DROP for it.
+    /// Opt a session (or all attached sessions) in to a named host port.
+    ///
+    /// `session: None` is the relay-level opt-in: it opens the port for every
+    /// attached session **and** becomes the default for sessions that attach
+    /// later ([`Self::apply_relay_host_ports`]), which is what a launcher needs
+    /// when the guest's first request is its launch traffic. A named session is
+    /// the per-session form (NET3), and a session that never opted in gets its
+    /// loopback requests refused.
     pub fn host_port(
         &mut self,
         port: u16,
@@ -937,6 +947,25 @@ impl Relay {
         }
         self.log(&format!("hostport {port} on={on} sessions={:?}", targets));
         Ok(self.status())
+    }
+
+    /// Apply the relay's own host-port opt-ins to one session at attach.
+    ///
+    /// The gate ([`plan::hostport_default_rules`]) is installed with the veth, so
+    /// without this an opted-in port exists only for sessions that were already
+    /// attached when `hostport add` ran, and a session whose first request is its
+    /// launch traffic (React Native's bundle fetch, METRO1) could never use it.
+    /// Fail closed: if a port cannot be opened, the session is detached rather
+    /// than left half-attached.
+    fn apply_relay_host_ports(&mut self, session: &str) -> Result<(), ProtoError> {
+        let ports: Vec<u16> = self.host_ports.iter().copied().collect();
+        for port in ports {
+            if let Err(error) = self.host_port(port, true, Some(session)) {
+                let _ = self.detach(session);
+                return Err(error);
+            }
+        }
+        Ok(())
     }
 
     /// Start the session's loopback forwarder for `port` (idempotent).

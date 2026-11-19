@@ -1,0 +1,63 @@
+{
+  "assertions": [
+    {
+      "actual": {
+        "matched_lines": 15,
+        "sample": [
+          "wifiprobe: READY wifi=present feature=true service=present",
+          "wifiprobe: NETCB available",
+          "wifiprobe: TOGGLE accepted=false enabled=true",
+          "wifiprobe: BCAST rssi=-73",
+          "wifiprobe: BCAST scan_results updated=true"
+        ]
+      },
+      "expected": {
+        "min_matches": 1,
+        "ordered": true,
+        "patterns": [
+          "READY wifi=present",
+          "NETCB available",
+          "TOGGLE accepted=false enabled=true",
+          "BCAST rssi=-73",
+          "BCAST scan_results updated=true",
+          "NETCB lost",
+          "BCAST network=DISCONNECTED ssid=null",
+          "NETCB available",
+          "BCAST network=CONNECTED",
+          "BCAST wifi_state=0 previous=3",
+          "NETCB lost",
+          "BCAST wifi_state=1 previous=0",
+          "SCAN started=false"
+        ],
+        "since_previous_step": false,
+        "tag": "wifiprobe"
+      },
+      "kind": "log",
+      "matched_node_ids": [],
+      "passed": true
+    }
+  ],
+  "certification": "certified-with-limits",
+  "certification_limits": {
+    "doc": "docs/SANDBOX_CERTIFICATION.md",
+    "section": "§8.7"
+  },
+  "duration_ms": 1,
+  "evidence": [
+    {
+      "kind": "log",
+      "path": "logs/logcat.txt"
+    },
+    {
+      "kind": "step",
+      "path": "steps/42-assert_log.json"
+    }
+  ],
+  "index": 42,
+  "provenance": {
+    "logs": "guest-asserted"
+  },
+  "status": "pass",
+  "step": "assert_log",
+  "trust": "trusted"
+}

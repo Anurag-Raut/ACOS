@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- PARITYFIX F1: the node shapes React Native produces, as plain views, so the
+     accessible name ACOS publishes can be checked against what
+     AccessibilityNodeInfo (and so `uiautomator dump`) reports for each shape.
+     See MainActivity for what each id is. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="16dp">
+
+    <!-- RN TextInput: a placeholder (hint) AND an accessibilityLabel
+         (contentDescription), secureTextEntry. -->
+    <EditText
+        android:id="@+id/token"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:hint="Paste your token"
+        android:contentDescription="Personal access token"
+        android:inputType="textPassword" />
+
+    <!-- The same shape, not a password field. -->
+    <EditText
+        android:id="@+id/search"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:hint="Search words"
+        android:contentDescription="Search dictionary"
+        android:inputType="text" />
+
+    <!-- A plain RN Text: text only, no description. -->
+    <TextView
+        android:id="@+id/recent"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Recently looked up" />
+
+    <!-- A TextView with BOTH a text and its own description. -->
+    <TextView
+        android:id="@+id/both"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Connect"
+        android:contentDescription="Connect WaniKani" />
+
+    <!-- RN Pressable: a clickable container with an accessibilityLabel whose
+         child TextView carries the visible words. -->
+    <LinearLayout
+        android:id="@+id/card"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:clickable="true"
+        android:contentDescription="Open card"
+        android:orientation="vertical">
+        <TextView
+            android:id="@+id/card_face"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="card face" />
+    </LinearLayout>
+
+    <!-- ReactAccessibilityDelegate shape: View.getContentDescription() is null;
+         the description only exists on the AccessibilityNodeInfo the delegate
+         fills in. -->
+    <TextView
+        android:id="@+id/delegate_tab"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Analytics" />
+</LinearLayout>

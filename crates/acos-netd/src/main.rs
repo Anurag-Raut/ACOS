@@ -12,6 +12,7 @@
 //! acos-netd hostport add PORT [--session NAME] | hostport del PORT
 //! acos-netd forward --listen 127.0.0.1:P --target ADDR:P   (inside a netns)
 //! acos-netd kill-pasta             fail-closed proof hook
+//! acos-netd pasta [--json]         where the pinned `pasta` is (exit 1: missing)
 //! acos-netd shutdown               stop the supervisor and the relay netns
 //! acos-netd serve | fabric --socket P   internal
 //! ```
@@ -177,6 +178,61 @@ fn run(args: &[String]) -> Result<i32, ProtoError> {
             );
             Ok(0)
         }
+        // Where the pinned transport is (the same rule `acos doctor`, the
+        // supervisor and `tools/release/install.sh` use). Scripts resolve a
+        // scenario's `needs_env: [pasta]` with this instead of re-implementing
+        // the search; the exit code is 1 when nothing was found, so `if
+        // acos-netd pasta` is a valid capability test.
+        "pasta" => {
+            let (found, looked) = acos_netd_ctl::pasta::resolve();
+            let json = rest.iter().any(|a| a == "--json");
+            let searched = acos_netd_ctl::pasta::searched(&looked);
+            match found {
+                Some(resolution) => {
+                    let version = acos_netd_ctl::pasta::version(&resolution.path);
+                    if json {
+                        println!(
+                            "{}",
+                            pretty(&serde_json::json!({
+                                "ok": true,
+                                "path": resolution.path,
+                                "source": resolution.source.as_str(),
+                                "version": version,
+                                "expected": acos_netd_ctl::pasta::TAG,
+                                "pinned": acos_netd_ctl::pasta::is_pinned(version.as_deref()),
+                                "searched": searched,
+                            }))?
+                        );
+                    } else {
+                        println!(
+                            "{} ({}, {})",
+                            resolution.path.display(),
+                            version.as_deref().unwrap_or("version unknown"),
+                            resolution.source.as_str()
+                        );
+                    }
+                    Ok(0)
+                }
+                None => {
+                    if json {
+                        println!(
+                            "{}",
+                            pretty(&serde_json::json!({
+                                "ok": false,
+                                "path": null,
+                                "version": null,
+                                "expected": acos_netd_ctl::pasta::TAG,
+                                "pinned": false,
+                                "searched": searched,
+                            }))?
+                        );
+                    } else {
+                        println!("missing (searched: {searched})");
+                    }
+                    Ok(1)
+                }
+            }
+        }
         "shutdown" => {
             let mut c = Client::connect()?;
             c.shutdown().map(|()| 0)
@@ -267,7 +323,7 @@ fn invalid(msg: &str) -> ProtoError {
 
 fn usage() {
     eprintln!(
-        "usage: acos-netd <up|status|identity|spawn|run|detach|offline|online|delay|clear|hostport|kill-pasta|shutdown|serve|fabric|forward> [args]"
+        "usage: acos-netd <up|status|identity|spawn|run|detach|offline|online|delay|clear|hostport|pasta|kill-pasta|shutdown|serve|fabric|forward> [args]"
     );
 }
 

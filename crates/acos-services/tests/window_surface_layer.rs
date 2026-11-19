@@ -195,3 +195,24 @@ fn relayout_binds_the_window_surface_to_the_compositor_client() {
     assert_eq!(again.client, Some(client));
     assert_eq!(again.layer_binder, Some(layer));
 }
+
+/// GATENWORD: a session that adds and removes many windows (Gaten's bubble, its
+/// lookup overlay, the sheet, dialogs, ...) creates a window layer plus a BLAST
+/// child per window. With the old 16-handle pool the 9th window got no layer, its
+/// `createSurface` failed `UNKNOWN_BINDER` and `BLASTBufferQueue` aborted the guest
+/// (`mSurfaceControl must not be NULL`). 40 layers (20 windows' worth) must be
+/// creatable on one client.
+#[test]
+fn a_session_can_create_many_more_layers_than_sixteen() {
+    let mut host = ServiceHost::standard();
+    let client = host
+        .binder_for_descriptor(ICOMPOSER_CLIENT)
+        .expect("the compositor-client node is installed by registry::install");
+    let (root, _) = create_surface(&mut host, client, "window-0", BinderId(0));
+    let mut seen = std::collections::HashSet::new();
+    seen.insert(root.0);
+    for i in 1..40 {
+        let (handle, _) = create_surface(&mut host, client, &format!("layer-{i}"), root);
+        assert!(seen.insert(handle.0), "layer {i} reused a live handle");
+    }
+}

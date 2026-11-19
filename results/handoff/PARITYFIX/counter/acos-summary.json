@@ -1,0 +1,127 @@
+{
+ "scenario": "counter",
+ "verdict": "pass",
+ "engine": "art",
+ "steps": [
+  {
+   "step": "launch",
+   "status": "pass",
+   "frame_seq": null
+  },
+  {
+   "step": "wait_for",
+   "status": "pass",
+   "frame_seq": 2
+  },
+  {
+   "step": "assert_text",
+   "status": "pass",
+   "frame_seq": 2
+  },
+  {
+   "step": "assert_text",
+   "status": "pass",
+   "frame_seq": 2
+  },
+  {
+   "step": "assert_text",
+   "status": "pass",
+   "frame_seq": 2
+  },
+  {
+   "step": "assert_log",
+   "status": "pass",
+   "frame_seq": null
+  },
+  {
+   "step": "tap",
+   "status": "pass",
+   "frame_seq": 4
+  },
+  {
+   "step": "assert_log",
+   "status": "pass",
+   "frame_seq": null
+  },
+  {
+   "step": "assert_text",
+   "status": "pass",
+   "frame_seq": 4
+  },
+  {
+   "step": "capture",
+   "status": "pass",
+   "frame_seq": 5
+  },
+  {
+   "step": "tap",
+   "status": "pass",
+   "frame_seq": 7
+  },
+  {
+   "step": "assert_log",
+   "status": "pass",
+   "frame_seq": null
+  },
+  {
+   "step": "assert_text",
+   "status": "pass",
+   "frame_seq": 7
+  },
+  {
+   "step": "rotate",
+   "status": "pass",
+   "frame_seq": 8
+  },
+  {
+   "step": "assert_log",
+   "status": "pass",
+   "frame_seq": null
+  },
+  {
+   "step": "assert_text",
+   "status": "pass",
+   "frame_seq": 8
+  },
+  {
+   "step": "rotate",
+   "status": "pass",
+   "frame_seq": 9
+  },
+  {
+   "step": "assert_text",
+   "status": "pass",
+   "frame_seq": 9
+  },
+  {
+   "step": "tap",
+   "status": "pass",
+   "frame_seq": 11
+  },
+  {
+   "step": "assert_log",
+   "status": "pass",
+   "frame_seq": null
+  },
+  {
+   "step": "assert_text",
+   "status": "pass",
+   "frame_seq": 11
+  },
+  {
+   "step": "back",
+   "status": "pass",
+   "frame_seq": 12
+  },
+  {
+   "step": "assert_no_crash",
+   "status": "pass",
+   "frame_seq": null
+  },
+  {
+   "step": "assert_not_visible",
+   "status": "pass",
+   "frame_seq": 12
+  }
+ ]
+}

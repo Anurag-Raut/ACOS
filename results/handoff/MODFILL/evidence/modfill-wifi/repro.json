@@ -1,0 +1,17 @@
+{
+  "acos_version": "0.3.0",
+  "apk_path": "/home/Qui/.t3/worktrees/acos/t3-4ab098ca-0845a8dc5d71e187/fixtures/build/apps/wifi-probe.apk",
+  "apk_sha256": "7b34cb4332bd9a9873e1970f5784d83d134eea9f3d8527d6b7777faa6099255f",
+  "scenario_path": "/home/Qui/.t3/worktrees/acos/t3-4ab098ca-0845a8dc5d71e187/scenarios/modfill-wifi.yaml",
+  "scenario_sha256": "b2b5dbf4809d00a1051863231da7411c98d1f27189bd5576eba75e65488ad449",
+  "flags": [],
+  "isolation": "process",
+  "display": {
+    "mode": "offscreen",
+    "width": 1080,
+    "height": 2400,
+    "density_dpi": 420
+  },
+  "fidelity": "art-reference",
+  "backend": "acos-native"
+}

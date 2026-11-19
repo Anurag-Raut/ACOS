@@ -822,6 +822,7 @@ mod tests {
                 bounds: Some(Bounds::new(0, 0, 1080, 2400)),
                 focus: true,
                 touchable: true,
+                renderer_fallback: false,
             },
             acos_protocol::ui::WindowInfo {
                 id: "bb".into(),
@@ -832,6 +833,7 @@ mod tests {
                 bounds: Some(Bounds::new(28, 976, 1052, 1489)),
                 focus: false,
                 touchable: true,
+                renderer_fallback: false,
             },
             acos_protocol::ui::WindowInfo {
                 id: "cc".into(),
@@ -842,6 +844,7 @@ mod tests {
                 bounds: Some(Bounds::new(40, 648, 520, 908)),
                 focus: false,
                 touchable: false,
+                renderer_fallback: false,
             },
         ];
         obs
