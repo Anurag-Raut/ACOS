@@ -1,0 +1,16 @@
+ACOSCRASH {"code":-6,"fault_addr":"0x0","pid":2,"signal":6,"source":"acos-shim","thread":"com.gaten","tid":2}
+*** *** *** *** *** *** *** *** *** *** *** *** *** *** *** ***
+Fatal signal 6 (SIGABRT), code -6 (SI_TKILL)
+OS: Linux 7.2.11-arch1-1 (x86_64)
+Cmdline: <unset>
+Thread: 2 "com.gaten"
+Registers:
+    rax: 0x0000000000000000    rbx: 0x00007f9f7467b71c    rcx: 0x00007fa23f0573f4    rdx: 0x0000000000000006
+    rdi: 0x0000000000000002    rsi: 0x0000000000000002    rbp: 0x00007fa049686568    rsp: 0x00007ffd0aff5a30
+    r8 : 0x00007ffd0aff5b08    r9 : 0x00007f9f7467b71c    r10: 0x0000000000000010    r11: 0x0000000000000202
+    r12: 0x0000000000000091    r13: 0x0000000000000091    r14: 0x00007fa1b96894b0    r15: 0x0000000000000001
+    rip: 0x00007fa23f0573f4    eflags: 0x00000202 [ IF ]
+     cs: 0x00000033     gs: 0x00000000     fs: 0x00000000
+
+Backtrace:
+	#00 pc 000013f4  /data/shim/libartshim.so (__android_log_assert+452) (BuildId: df7546c6a520b774f4f21cd5f318e57232258d7d)

@@ -1,0 +1,65 @@
+{
+  "backend": "acos-native",
+  "capabilities_used": [
+    "crash-reports",
+    "lifecycle",
+    "logs",
+    "static-manifest",
+    "ui.tree"
+  ],
+  "evidence": {
+    "events": "events.jsonl",
+    "log": "logs/logcat.txt",
+    "verdict": "verdict.json"
+  },
+  "fidelity": "art-reference",
+  "isolation": "process",
+  "metrics": {
+    "peak_rss_bytes": 17956864,
+    "wall_ms": 1032
+  },
+  "ok": true,
+  "request_id": "req_1313de_18e91b7ffe83880b",
+  "result": {
+    "artifacts_dir": "/home/Qui/.t3/worktrees/acos/t3-bcbcf8cf-75ebebb6d75992a3/results/handoff/MERGE040H/evidence/net-network-real",
+    "cap_bytes": 20480,
+    "evidence_provenance": {
+      "binder_transactions": "host-observed",
+      "crash_reports": "guest-asserted",
+      "frames": "host-observed",
+      "host_input": "host-observed",
+      "input_acks": "guest-asserted",
+      "launch_markers": "guest-asserted",
+      "lifecycle_markers": "guest-asserted",
+      "logs": "guest-asserted",
+      "static_manifest": "host-observed",
+      "tree": "guest-asserted"
+    },
+    "note": "this result was larger than the reply cap; only the bulk (tree, steps, logs) was dropped and the full evidence is in the artifacts paths named here",
+    "provenance": {
+      "apk": {
+        "mtime_ns": 1794995549705412294,
+        "path": "/home/Qui/.t3/worktrees/acos/t3-bcbcf8cf-75ebebb6d75992a3/fixtures/build/apps/net-check.apk",
+        "sha256": "5fa0e43eb91d0abb961d5885a28a7f4fededa4bacd6417b3816cd5d2ae6f0909",
+        "sha256_12": "5fa0e43eb91d",
+        "size_bytes": 20948
+      },
+      "engine": "art",
+      "fidelity": "art-reference",
+      "scenario": {
+        "mtime_ns": 1794995463844770259,
+        "path": "/home/Qui/.t3/worktrees/acos/t3-bcbcf8cf-75ebebb6d75992a3/scenarios/net-network-real.yaml",
+        "sha256": "e5e69249324fcbe546be7b2c51505213d86e07f9b63fbc84dae827fdba33d459",
+        "sha256_12": "e5e69249324f",
+        "size_bytes": 2444
+      },
+      "scenario_engine": "art",
+      "warnings": []
+    },
+    "reply_capped": true,
+    "verdict_path": "/home/Qui/.t3/worktrees/acos/t3-bcbcf8cf-75ebebb6d75992a3/results/handoff/MERGE040H/evidence/net-network-real/verdict.json",
+    "verdict_status": "pass"
+  },
+  "session_id": "s_art_net-check",
+  "status": "pass"
+}

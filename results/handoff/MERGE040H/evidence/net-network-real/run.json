@@ -1,0 +1,7 @@
+{
+  "request_id": "req_1313de_18e91b7ffe83880b",
+  "started_at": "2026-11-18T10:02:43.028Z",
+  "scenario": "scenarios/net-network-real.yaml",
+  "apk": "",
+  "acos_version": "0.3.0"
+}

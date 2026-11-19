@@ -1758,6 +1758,13 @@ pub struct AutofillService {
 }
 
 impl AutofillService {
+    /// `AutofillManager.FLAG_ADD_CLIENT_ENABLED` is clear: ACOS has no autofill
+    /// service, so the flags word the client reads is `0`.
+    const NO_AUTOFILL_FLAGS: i32 = 0;
+    /// `AutofillManager.NO_SESSION` (`Integer.MAX_VALUE`, image dex
+    /// `AutofillManager.startSessionLocked`): no session was started.
+    const NO_SESSION: i32 = i32::MAX;
+
     /// Wrap shared state.
     #[must_use]
     pub fn new(state: Arc<Mutex<AutofillState>>) -> Self {
@@ -1785,17 +1792,26 @@ impl ServiceObject for AutofillService {
                         state.refs.hold(client);
                     }
                 }
-                // The IResultReceiver is the last argument; answer it so the
-                // app never waits (services.tsv: "report disabled").
+                // The IResultReceiver is the last argument; answer it with
+                // `SyncResultReceiver.bundleFor(flags)` the way the platform's
+                // autofill service does. `flags == 0` is "no autofill service is
+                // enabled", which is what `AutofillManager.isEnabled()` reads
+                // out of the receiver's **result code** (image dex:
+                // `SyncResultReceiver.getIntResult()` returns `mResult`).
                 if let Some(receiver) = args.last().and_then(Value::as_binder) {
-                    deliveries.push(result_receiver_delivery(receiver.0, 0));
+                    deliveries.push(sync_result_delivery(receiver.0, 0, Some(Self::NO_AUTOFILL_FLAGS)));
                 }
                 Vec::new()
             }
             "startSession" => {
                 state.sessions.push(0);
+                // "No session": `AutofillManager.startSessionLocked` reads the
+                // session id from the result code and then
+                // `getOptionalExtraIntResult(0)`, which reads `EXTRA` out of the
+                // bundle — so a null bundle is an NPE in the app, not "no
+                // session" (image dex, `AutofillManager.startSessionLocked`).
                 if let Some(receiver) = args.last().and_then(Value::as_binder) {
-                    deliveries.push(result_receiver_delivery(receiver.0, 0));
+                    deliveries.push(sync_result_delivery(receiver.0, 0, Some(Self::NO_SESSION)));
                 }
                 Vec::new()
             }
@@ -1807,9 +1823,17 @@ impl ServiceObject for AutofillService {
                 Vec::new()
             }
             "finishSession" | "cancelSession" => Vec::new(),
-            "isServiceEnabled" => vec![Value::Bool(false)],
-            "isServiceSupported" => vec![Value::Bool(false)],
-            "isFieldClassificationEnabled" => vec![Value::Bool(false)],
+            "isServiceEnabled" | "isServiceSupported" | "isFieldClassificationEnabled" => {
+                // All three are `oneway` on the wire and carry an
+                // `IResultReceiver` as their last argument: the answer is the
+                // receiver's **result code** (1 = enabled/supported), never a
+                // reply int (a stray reply leaves the app waiting on a
+                // `SyncResultReceiver` until its 5000 ms timeout).
+                if let Some(receiver) = args.last().and_then(Value::as_binder) {
+                    deliveries.push(sync_result_delivery(receiver.0, 0, None));
+                }
+                Vec::new()
+            }
             _ => {
                 return Err(ServiceError::UnsupportedAndroidApi {
                     interface: interface.to_string(),
@@ -1834,10 +1858,31 @@ impl ServiceObject for AutofillService {
     }
 }
 
-fn result_receiver_delivery(target: u64, result_code: i32) -> PendingDelivery {
+/// `IResultReceiver.send(resultCode, resultData)` for an `IResultReceiver` that
+/// the framework's own client wraps in a `SyncResultReceiver`.
+///
+/// A `SyncResultReceiver` reads **two** things (image dex,
+/// `framework/classes3.dex` `Lcom/android/internal/util/SyncResultReceiver;`):
+///
+/// * `getIntResult()` returns the transaction's `resultCode` (`mResult`), which
+///   is what `AutofillManager.isEnabled()` uses for the flags word: `0` =
+///   no autofill service;
+/// * `getOptionalExtraIntResult(int)` / `getParcelableResult()` / ... read the
+///   `EXTRA` key (`EXTRA = "EXTRA"`, `bundleFor(int)` writes `putInt(EXTRA,
+///   value)`) out of the `Bundle` argument — and NPE when the bundle is null.
+///
+/// So a method that answers through a `SyncResultReceiver` must pass the bundle
+/// it means, not `null`. `extra` is `None` for the callers that only read the
+/// result code.
+fn sync_result_delivery(target: u64, result_code: i32, extra: Option<i32>) -> PendingDelivery {
     let info = acos_aidl::lookup_by_name("com.android.internal.os.IResultReceiver", "send")
         .expect("IResultReceiver.send is in the AIDL table");
-    let args = vec![Value::Int(result_code), Value::Bundle(None)];
+    let bundle = extra.map(|value| {
+        let mut bundle = crate::value::Bundle::new();
+        bundle.put("EXTRA", Value::Int(value));
+        bundle
+    });
+    let args = vec![Value::Int(result_code), Value::Bundle(bundle)];
     let data = crate::codec::build_request("com.android.internal.os.IResultReceiver", info, &args)
         .unwrap_or_default();
     PendingDelivery {
@@ -1965,7 +2010,11 @@ impl ServiceObject for GraphicsStatsService {
                     .unwrap()
                     .requests
                     .push(process.to_string());
-                let fd = ParcelFd::memfd("acos-gfxstats").ok();
+                // The real service hands out an ashmem region of `sizeof(ProfileData)`
+                // (hwui's `ProfileDataContainer::switchStorageToAshmem` rejects
+                // anything smaller: "Ashmem region is too small! Received 0,
+                // required 584"). One page covers it.
+                let fd = ParcelFd::memfd_sized("acos-gfxstats", 4096).ok();
                 vec![Value::TypedObject(Parcelable::ordered(
                     "android.os.ParcelFileDescriptor",
                     vec![Value::Int(0), Value::RawFd(fd.map(RawFdValue))],

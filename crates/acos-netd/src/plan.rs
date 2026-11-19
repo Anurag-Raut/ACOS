@@ -44,11 +44,15 @@ pub const RELAY_IFACE: &str = "tap0";
 
 /// Environment variable naming the `pasta` binary (a static build of the
 /// pinned tag `2026_10_02.cba3570`, see `research/spike-net/artifacts/passt-build.txt`).
-pub const PASTA_ENV: &str = "ACOS_NET_PASTA";
+///
+/// One definition: `acos_netd_ctl::pasta` owns the name, the tag and the search
+/// order (`acos doctor`, this supervisor, the scenario runners and the installer
+/// all read it).
+pub use acos_netd_ctl::pasta::ENV as PASTA_ENV;
 
 /// The tag the pinned binary reports; a mismatch is reported by `status`, not
 /// silently accepted.
-pub const PASTA_TAG: &str = "2026_10_02.cba3570";
+pub use acos_netd_ctl::pasta::TAG as PASTA_TAG;
 
 /// Where the relay's own (host-namespace) side lives, per session.
 #[derive(Clone, Debug, PartialEq, Eq)]

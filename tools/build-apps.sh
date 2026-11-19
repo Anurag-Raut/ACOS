@@ -309,6 +309,11 @@ build_apk pms-parcel
 # AccessibilityManager state (enabled + installed/enabled lists) and sends a
 # real event through IAccessibilityManager.sendAccessibilityEvent.
 build_apk a11y-probe
+# a11y-names-probe (PARITYFIX F1): one view per React Native accessibility shape
+# (hint + label EditText, text-only, text + description, labelled container,
+# delegate-composed description) so the published accessible name is pinned to
+# AccessibilityNodeInfo's.
+build_apk a11y-names-probe
 # egl-probe (GLSPIKE4): raw EGL14/EGL15 diagnostic against the guest GLES provider.
 build_apk egl-probe
 
@@ -316,6 +321,18 @@ build_apk egl-probe
 # (telephony, biometric, bluetooth, vibrator) printing what the framework's own
 # clients answered. Built at targetSdk 34 like the module scenario corpus.
 build_apk tail-probe
+
+# clip-probe is the MODFILL fixture for the two `core` services that had no
+# proof scenario: `ClipboardManager` (set/get plus the primary-clip-changed
+# listener) and `AutofillManager` (isEnabled/hasEnabledAutofillServices, the
+# explicit requestAutofill, and the field text afterwards).
+build_apk clip-probe
+
+# wifi-probe / media-probe are the MODFILL fixtures for the `net.wifi` and
+# `media.session` modules: a real WifiManager/ConnectivityManager client and a
+# real MediaSession/MediaController app.
+build_apk wifi-probe
+build_apk media-probe
 
 # location-probe is the MODLOC fixture: it shows `getLastKnownLocation`, live
 # updates from a scripted track and the geocoder state on screen, so a scenario

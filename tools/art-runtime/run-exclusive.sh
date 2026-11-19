@@ -123,6 +123,13 @@ fi
 t1=$(date +%s)
 if [ "$slot" != all ]; then echo "$need_gib" > "$lockdir/resv.$$"; trap 'rm -f "$lockdir/resv.$$"' EXIT; fi
 export ACOS_ART_DATA="$lockdir/data-$task-$$"; mkdir -p "$ACOS_ART_DATA"
+# HYG2: the *warm* ART cache is a different thing from this invocation's scratch
+# data dir above, and tests need it (a guest dex under `app/guest/`). Without it
+# `cargo test -p acos-art` used to skip every ART-booting case and still report
+# `ok` (BACKSETTLE README §6; `suite3.log` is that false-green). Export the
+# caller checkout's cache inside the lock so the default path runs them;
+# `crates/acos-test-support::prereq` reads it and fails loudly when it is gone.
+export ACOS_ART_WARM_DATA="${ACOS_ART_WARM_DATA:-$PWD/.cache/art/data}"
 export ACOS_ART_LOCK_SLOT=$slot
 rc=0; "$@" || rc=$?
 t2=$(date +%s)

@@ -1,0 +1,17 @@
+{
+  "acos_version": "0.3.0",
+  "apk_path": "/home/Qui/.t3/worktrees/acos/t3-bcbcf8cf-75ebebb6d75992a3/fixtures/build/apps/clip-probe.apk",
+  "apk_sha256": "c3229a084bd8d18dd20bc3812b6e75abbd06060a78784d8a7d107f5a2a0ba0cb",
+  "scenario_path": "/home/Qui/.t3/worktrees/acos/t3-bcbcf8cf-75ebebb6d75992a3/scenarios/modfill-clipboard.yaml",
+  "scenario_sha256": "e52076b3300baadc7d5119984052a9473ad94ccc70d04737370b972f30d9b268",
+  "flags": [],
+  "isolation": "process",
+  "display": {
+    "mode": "offscreen",
+    "width": 1080,
+    "height": 2400,
+    "density_dpi": 420
+  },
+  "fidelity": "art-reference",
+  "backend": "acos-native"
+}

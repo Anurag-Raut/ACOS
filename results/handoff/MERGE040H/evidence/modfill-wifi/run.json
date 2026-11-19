@@ -1,0 +1,7 @@
+{
+  "request_id": "req_1351ac_18e91b99f23569ff",
+  "started_at": "2026-11-18T10:04:34.491Z",
+  "scenario": "scenarios/modfill-wifi.yaml",
+  "apk": "",
+  "acos_version": "0.3.0"
+}

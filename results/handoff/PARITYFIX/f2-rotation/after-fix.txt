@@ -1,0 +1,8 @@
+PASS 2.json: display [0, 0, 1080, 2400], 14 nodes
+PASS 4.json: display [0, 0, 1080, 2400], 14 nodes
+PASS 5.json: display [0, 0, 2400, 1080], 14 nodes
+PASS 6.json: display [0, 0, 2400, 1080], 14 nodes
+PASS 8.json: display [0, 0, 2400, 1080], 14 nodes
+PASS 9.json: display [0, 0, 1080, 2400], 14 nodes
+PASS 10.json: display [0, 0, 1080, 2400], 14 nodes
+7/7 trees consistent

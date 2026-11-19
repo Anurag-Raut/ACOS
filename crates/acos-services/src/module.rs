@@ -1103,7 +1103,7 @@ pub const TOMBSTONES: &[Tombstone] = &[
         module: "net.wifi",
         reason: "no Wi-Fi stack (the network module owns real internet, ADR-0030)",
         reaction: AospReaction::Null,
-        evidence: "packages/modules/Wifi framework/java/android/net/wifi/WifiFrameworkInitializer.java:75-85 registers a context-aware factory that returns null when PMS reports no FEATURE_WIFI, and WifiManager.java:2202-2209 only stores the proxy/looper; ACOS reports no Wi-Fi feature, so Android's real missing path already answers `null` (re-decided from source, 2026-11-16)",
+        evidence: "packages/modules/Wifi framework/java/android/net/wifi/WifiFrameworkInitializer.java:75-85 registers a context-aware factory that returns null when PMS reports no FEATURE_WIFI, and WifiManager.java:2202-2209 only stores the proxy/looper; ACOS publishes `android.hardware.wifi` only while `net.wifi` is attached (the `network` module publishes no Wi-Fi feature, MERGE040H), so with `net.wifi` off PMS reports no Wi-Fi feature and Android's real missing path answers `null` (re-decided from source, 2026-11-16)",
     },
     Tombstone {
         name: "phone",
@@ -1296,6 +1296,8 @@ impl ModuleRegistry {
             Box::new(crate::modules::biometric::BiometricModule::new()),
             Box::new(crate::modules::network::NetworkModule::new()),
             Box::new(crate::modules::webview::WebviewModule::new()),
+            Box::new(crate::modules::wifi::WifiModule::new()),
+            Box::new(crate::modules::media_session::MediaSessionModule::new()),
             Box::new(crate::modules::camera::CameraModule::new()),
         ]
         .into_iter()

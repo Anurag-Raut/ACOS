@@ -1,0 +1,58 @@
+{
+  "pre_merge_modfill_wifi": {
+    "n": 30,
+    "passed": 30,
+    "min_ms": 13707,
+    "med_ms": 13796,
+    "max_ms": 13940
+  },
+  "pre_merge_modfill_wifi_network_real": {
+    "n": 10,
+    "passed": 10,
+    "min_ms": 5271,
+    "med_ms": 5306,
+    "max_ms": 5389
+  },
+  "merged_modfill_wifi": {
+    "n": 30,
+    "passed": 30,
+    "min_ms": 13660,
+    "med_ms": 13812,
+    "max_ms": 14096
+  },
+  "merged_modfill_wifi_network_real": {
+    "n": 10,
+    "passed": 10,
+    "min_ms": 5256,
+    "med_ms": 5305,
+    "max_ms": 5333
+  },
+  "merged_fresh_worktree_counter": {
+    "n": 1,
+    "passed": 1,
+    "min_ms": 3652,
+    "med_ms": 3652,
+    "max_ms": 3652
+  },
+  "merged_fresh_worktree_gaten_bubble_overlay": {
+    "n": 1,
+    "passed": 1,
+    "min_ms": 16190,
+    "med_ms": 16190,
+    "max_ms": 16190
+  },
+  "merged_cold_cache_counter": {
+    "n": 1,
+    "passed": 1,
+    "min_ms": 3690,
+    "med_ms": 3690,
+    "max_ms": 3690
+  },
+  "merged_cold_cache_gaten_bubble_overlay": {
+    "n": 1,
+    "passed": 1,
+    "min_ms": 16182,
+    "med_ms": 16182,
+    "max_ms": 16182
+  }
+}

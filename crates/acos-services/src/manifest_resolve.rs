@@ -720,10 +720,15 @@ mod tests {
         // is printed with its reason (run with --nocapture to see it).
         let gaten = repo_path(".cache/gaten/gaten-dev-f344272-x86_64-release-unsigned.apk");
         if !gaten.is_file() {
-            eprintln!(
-                "SKIP real_apks_resolve_like_aapt2_could_not (Gaten half): {} is absent; \
-                 documented environment gap (the APK is not in git)",
-                gaten.display()
+            acos_test_support::require_prereq(
+                false,
+                "real_apks_resolve_like_aapt2_could_not (Gaten half)",
+                &format!(
+                    "{} is absent — link the read-only Gaten cache (\
+                     .cache/gaten -> /home/Qui/Projects/acos/.cache/gaten) or set \
+                     ACOS_ALLOW_ART_SKIP=1 for a counted skip",
+                    gaten.display()
+                ),
             );
             return;
         }
