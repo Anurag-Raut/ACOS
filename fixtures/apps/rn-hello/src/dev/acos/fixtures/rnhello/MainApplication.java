@@ -19,12 +19,15 @@ import java.util.List;
 
 /**
  * Host application. Mirrors the RN 0.81 template but does not depend on the
- * codegen-generated {@code PackageList}/{@code BuildConfig}: it uses
- * {@link MainReactPackage} directly and hard-codes the two switches:
+ * codegen-generated {@code PackageList}: it uses {@link MainReactPackage}
+ * directly and takes its build switches from the generated
+ * {@link BuildVariant} (the stand-in for the template's {@code BuildConfig}):
  *
  * <ul>
  *   <li>{@code isNewArchEnabled() == false} — legacy Paper architecture,</li>
- *   <li>{@code isHermesEnabled() == true} — load {@code libhermes.so}.</li>
+ *   <li>{@code isHermesEnabled() == true} — load {@code libhermes.so},</li>
+ *   <li>{@code getUseDeveloperSupport() == BuildVariant.DEBUG} — the debug
+ *       variant loads its JS from a Metro dev server (METRO1).</li>
  * </ul>
  */
 public class MainApplication extends Application implements ReactApplication {
@@ -33,7 +36,7 @@ public class MainApplication extends Application implements ReactApplication {
       new DefaultReactNativeHost(this) {
         @Override
         public boolean getUseDeveloperSupport() {
-          return false;
+          return BuildVariant.DEBUG;
         }
 
         @Override
@@ -65,6 +68,25 @@ public class MainApplication extends Application implements ReactApplication {
 
   @Override
   public void onCreate() {
+    if (BuildVariant.DEBUG) {
+      // Where Metro is. `debug_http_host` is React Native's own documented knob
+      // (`DevServerHelper`'s header comment; `PackagerConnectionSettings` reads
+      // this exact key out of the default SharedPreferences). It has to be set
+      // before the bridge exists: the dev-support manager reads it once, when
+      // the first bundle fetch is built.
+      //
+      // The value is `localhost` and not the stock-emulator alias
+      // (`AndroidInfoHelpers.EMULATOR_LOCALHOST`, 10.0.2.2) because ACOS's
+      // host-port opt-in gives this session its **own** `127.0.0.1:<port>`
+      // forwarder — the equivalent of `adb reverse tcp:8081 tcp:8081` — while no
+      // ACOS session routes to 10.0.2.2 (the session network is 10.163.N.0/30
+      // with a 10.163.N.1 gateway). Same shape as a physical device with adb
+      // reverse, which is what RN itself recommends there.
+      getSharedPreferences(getPackageName() + "_preferences", MODE_PRIVATE)
+          .edit()
+          .putString("debug_http_host", BuildVariant.METRO_HOST)
+          .commit();
+    }
     super.onCreate();
     // RN 0.81 merges its separate JNI libraries (react_featureflagsjni,
     // reactnativejni, fabricjni, ...) into libreactnative.so. Register the OSS

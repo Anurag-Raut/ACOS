@@ -224,6 +224,19 @@ static int peer_txn(uint32_t wire, uint32_t code, uint32_t seq) {
     return peer_txn_from(wire, code, seq, 0, 0);
 }
 
+// The same callback with explicit frame flags (FLAKEFIX2): `TF_ONE_WAY`, or
+// `E3G_TF_ORDERED`, which is what the peer really sends for every host delivery
+// (an `IIntentReceiver` or a `NetworkCallback` call).
+static int peer_txn_flags(uint32_t wire, uint32_t code, uint32_t seq, uint32_t flags) {
+    uint8_t data[16];
+    memset(data, 0, sizeof(data));
+    memcpy(data, &code, 4);
+    int rc = peer_write_frame_from(F_TXN, seq, code, flags, wire, data, sizeof(data), NULL, 0,
+                                   0, 0);
+    if (rc == 0) g_peer.txns_sent++;
+    return rc;
+}
+
 // ------------------------------------------------------------ guest side ----
 // The record of what libbinder would have done with the driver's output.
 struct seen {
@@ -241,6 +254,15 @@ static struct seen g_seen[1024];
 static int g_nseen;
 static volatile int g_looper_stop;
 static int g_binder_fd;
+// FLAKEFIX2: a `oneway` delivery with this code is "handled" slowly (the looper
+// thread that received it does not read again for 200 ms), and the one with the
+// next code records whether that handling had finished when it was delivered.
+enum { CODE_SLOW = 900, CODE_AFTER = 901, CODE_STUCK = 910, CODE_BEHIND = 911 };
+static volatile int g_stuck_done;
+static volatile int g_behind_saw_stuck_done = -1;
+static volatile int g_slow_done;
+static volatile int g_after_saw_slow_done = -1;
+static void msleep(int ms);
 
 static void seen_add_sender(uint32_t cmd, uint64_t ptr, uint64_t cookie, uint32_t code,
                             uint8_t* buffer, int32_t sender_pid, uint32_t sender_euid) {
@@ -373,6 +395,17 @@ static int guest_read(int fd) {
                 seen_add_sender(BR_TRANSACTION, (uint64_t)tr.target.ptr, (uint64_t)tr.cookie,
                                 tr.code, (uint8_t*)(uintptr_t)tr.data.ptr.buffer, tr.sender_pid,
                                 tr.sender_euid);
+                if (tr.code == CODE_SLOW) {
+                    msleep(200);
+                    g_slow_done = 1;
+                } else if (tr.code == CODE_AFTER) {
+                    g_after_saw_slow_done = g_slow_done;
+                } else if (tr.code == CODE_STUCK) {
+                    msleep(900);
+                    g_stuck_done = 1;
+                } else if (tr.code == CODE_BEHIND) {
+                    g_behind_saw_stuck_done = g_stuck_done;
+                }
                 // A sync delivery must be answered, like BBinder::transact does,
                 // and the received transaction buffer is freed right after (the
                 // kernel ties it to the receiving thread, so this is the looper
@@ -417,6 +450,18 @@ static int guest_read(int fd) {
         ioctl(fd, BINDER_WRITE_READ, &wbwr);
     }
     return (int)bwr.read_consumed;
+}
+
+static void* looper2_main(void* arg) {
+    int fd = (int)(intptr_t)arg;
+    uint32_t cmd = BC_ENTER_LOOPER;
+    struct binder_write_read bwr;
+    memset(&bwr, 0, sizeof(bwr));
+    bwr.write_size = 4;
+    bwr.write_buffer = (binder_size_t)(uintptr_t)&cmd;
+    ioctl(fd, BINDER_WRITE_READ, &bwr);
+    while (!g_looper_stop) guest_read(fd);
+    return NULL;
 }
 
 static void* looper_main(void* arg) {
@@ -746,6 +791,65 @@ int main(void) {
           "every object registered for one event receives its callback", detail);
     free_all_txn_buffers();
     seen_flush(0);
+
+    // 6b. FLAKEFIX2: two `oneway` deliveries, however many looper threads the
+    //     guest has, are *handled* in the order the host sent them. The kernel
+    //     gives one node one active async transaction at a time; this driver
+    //     gives the whole incoming queue one owner. The owner used to drop
+    //     ownership when the queue was empty -- while it was still running the
+    //     handler of the delivery it had just made -- so a second looper thread
+    //     took the next delivery and ran its handler concurrently: a broadcast
+    //     and a NetworkCallback the module sent in order reached the app's own
+    //     threads in the scheduler's order (modfill-wifi flaked on it).
+    {
+        static int wref_o, bb_o;
+        uint32_t wire_o = 0;
+        guest_transact_with_binder(fd, (uint64_t)(uintptr_t)&wref_o, (uint64_t)(uintptr_t)&bb_o,
+                                   &wire_o);
+        free_all_txn_buffers();
+        seen_flush(0);
+        pthread_t looper2;
+        pthread_create(&looper2, NULL, looper2_main, (void*)(intptr_t)fd);
+        msleep(100);
+        // The two shapes the host's callbacks take: a real `oneway`, and the
+        // peer's synchronous frame marked `E3G_TF_ORDERED` (every host delivery).
+        static const uint32_t shapes[2] = {TF_ONE_WAY, E3G_TF_ORDERED};
+        for (int shape = 0; shape < 2; shape++) {
+        uint32_t flags = shapes[shape];
+        g_stuck_done = 0;
+        g_behind_saw_stuck_done = -1;
+        g_slow_done = 0;
+        g_after_saw_slow_done = -1;
+        peer_txn_flags(wire_o, CODE_SLOW, 500, flags);
+        msleep(30); // the slow handler is running on one looper thread
+        peer_txn_flags(wire_o, CODE_AFTER, 501, flags);
+        got = wait_for_txns(2, 5000);
+        for (int waited = 0; waited < 2000 && g_after_saw_slow_done < 0; waited += 10) msleep(10);
+        snprintf(detail, sizeof(detail), "delivered=%d, slow handler finished before the next "
+                 "delivery ran=%d", got, g_after_saw_slow_done);
+        check(got == 2 && g_after_saw_slow_done == 1,
+              "an ordered host delivery is not handed to a second looper while the previous one is "
+              "still being handled", detail);
+        free_all_txn_buffers();
+        seen_flush(0);
+
+        // Liveness: a oneway handler that does not come back (here 900 ms) loses
+        // the hold after the lease (250 ms); the next delivery runs on the other
+        // looper instead of waiting for it forever.
+        peer_txn_flags(wire_o, CODE_STUCK, 510, flags);
+        msleep(30);
+        peer_txn_flags(wire_o, CODE_BEHIND, 511, flags);
+        for (int waited = 0; waited < 700 && g_behind_saw_stuck_done < 0; waited += 10) msleep(10);
+        snprintf(detail, sizeof(detail), "next delivery ran=%d (stuck handler done=%d)",
+                 g_behind_saw_stuck_done, g_stuck_done);
+        check(g_behind_saw_stuck_done == 0,
+              "an ordered handler that never comes back cannot wedge the incoming queue", detail);
+        msleep(900); // let the stuck handler finish before the next check
+        free_all_txn_buffers();
+        seen_flush(0);
+        }
+        // looper2 stays up for the rest of the run, like a second binder pool thread.
+    }
 
     // 7. the shared transaction-buffer heap never hands one live transaction's
     //    memory to another, even when every thread allocates at once.

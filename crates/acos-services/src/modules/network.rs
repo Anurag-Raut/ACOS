@@ -126,7 +126,10 @@ fn manifest_ref() -> &'static ModuleManifest {
         }],
         replaces: &["connectivity"],
         process_initializers: &[],
-        features: &["android.hardware.wifi"],
+        // No features: `android.hardware.wifi` implies the `wifi` service, which
+        // only `net.wifi` serves. A phone that declares the feature has the
+        // service, so the feature belongs to `net.wifi` alone.
+        features: &[],
         providers: &[],
         broadcasts: &[],
         windows: &[],
@@ -159,6 +162,9 @@ pub struct NetworkModule {
     /// module attached at launch swaps it before the app can call, which is why
     /// `at-launch` is the honest attach mode here.
     connectivity: Option<std::sync::Arc<std::sync::Mutex<crate::connectivity::ConnectivityState>>>,
+    /// `core`'s default-network state, put back on detach.
+    core_connectivity:
+        Option<std::sync::Arc<std::sync::Mutex<crate::connectivity::ConnectivityState>>>,
 }
 
 impl NetworkModule {
@@ -169,6 +175,7 @@ impl NetworkModule {
             profile: Profile::Off,
             relay_session: None,
             connectivity: None,
+            core_connectivity: None,
         }
     }
 
@@ -366,11 +373,17 @@ impl Module for NetworkModule {
                 std::sync::Arc::clone(&factory_state),
             )) as Box<dyn crate::host::ServiceObject>
         });
+        // Publish it as the session's default-network state (and remember
+        // `core`'s, which detach puts back), so a module that moves the default
+        // network (`net.wifi`) reaches the service that is actually answering.
+        self.core_connectivity = _host.connectivity_state();
+        _host.set_connectivity_state(Some(std::sync::Arc::clone(&state)));
         self.connectivity = Some(state);
         Ok(())
     }
 
     fn detach(&mut self, _host: &mut ServiceHost) -> Result<()> {
+        _host.set_connectivity_state(self.core_connectivity.take());
         crate::network::clear();
         self.profile = Profile::Off;
         self.relay_session = None;

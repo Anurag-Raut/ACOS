@@ -1,0 +1,2 @@
+usage: acos-netd <up|status|identity|spawn|run|detach|offline|online|delay|clear|hostport|kill-pasta|shutdown|serve|fabric|forward> [args]
+acos-netd: {"error":{"code":"invalid","message":"unknown command down"},"ok":false}
