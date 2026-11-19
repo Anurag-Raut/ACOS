@@ -14,6 +14,7 @@ import android.net.wifi.ScanResult;
 import android.net.wifi.WifiInfo;
 import android.net.wifi.WifiManager;
 import android.os.Bundle;
+import android.os.Handler;
 import android.os.Looper;
 import android.util.Log;
 import android.view.Gravity;
@@ -142,6 +143,14 @@ public final class MainActivity extends Activity {
         filter.addAction(WifiManager.NETWORK_STATE_CHANGED_ACTION);
         filter.addAction(WifiManager.RSSI_CHANGED_ACTION);
         filter.addAction(WifiManager.SCAN_RESULTS_AVAILABLE_ACTION);
+        // Every callback below reports on the main looper. A broadcast receiver
+        // runs on the main thread, but `registerDefaultNetworkCallback(cb)`
+        // reports on ConnectivityThread: with two threads logging, the order
+        // of "NETCB lost" against "BCAST wifi_state=..." is the scheduler's,
+        // not the module's (FLAKEFIX: one run in five logged them swapped
+        // while the main thread was drawing). One looper makes the log order
+        // exactly the order the platform delivered the events in.
+        final Handler main = new Handler(Looper.getMainLooper());
         registerReceiver(new BroadcastReceiver() {
             @Override
             @SuppressWarnings("deprecation")
@@ -182,12 +191,12 @@ public final class MainActivity extends Activity {
                         + " validated="
                         + caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED));
             }
-        });
+        }, main);
         if (wifi != null) {
             wifi.registerScanResultsCallback(new Executor() {
                 @Override
                 public void execute(Runnable command) {
-                    command.run();
+                    main.post(command);
                 }
             }, new WifiManager.ScanResultsCallback() {
                 @Override
