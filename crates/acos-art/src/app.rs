@@ -1049,9 +1049,9 @@ pub fn provision_overlays(root: &ArtRoot, diagnostics: &mut Vec<String>) -> Resu
         }
     }
     let mut key_parts: Vec<Vec<u8>> = vec![
-        b"acos-art/static-rro-idmaps/v1".to_vec(),
+        b"acos-art/static-rro-idmaps/v2".to_vec(),
         image_digest.clone().into_bytes(),
-        crate::build_cache::file_id(&idmap2).into_bytes(),
+        crate::build_cache::content_id(&idmap2).into_bytes(),
         aapt2_id.into_bytes(),
         b"--policy product".to_vec(),
     ];
@@ -1384,9 +1384,17 @@ pub fn build_guest(root: &ArtRoot) -> Result<GuestDex> {
     }
     let d8 = find_tool(&sdk, "d8")?;
     let javac = PathBuf::from(std::env::var("JAVAC").unwrap_or_else(|_| "javac".into()));
-    let mut parts: Vec<Vec<u8>> = vec![b"acos-art/render-guest/v2".to_vec()];
+    let mut parts: Vec<Vec<u8>> = vec![b"acos-art/render-guest/v3".to_vec()];
     for p in &sources {
-        parts.push(p.to_string_lossy().as_bytes().to_vec());
+        // The source's place in the guest tree, never its absolute path: a
+        // worktree (or any other prefix) holding the same bytes is the same key.
+        parts.push(
+            p.strip_prefix(&src_dir)
+                .unwrap_or(p)
+                .to_string_lossy()
+                .as_bytes()
+                .to_vec(),
+        );
         parts.push(fs::read(p)?);
     }
     for tool in [&android_jar, &d8, &javac] {

@@ -49,6 +49,19 @@ pub struct LogEntry {
     pub prio: i32,
     pub tag: String,
     pub message: String,
+    /// Unix milliseconds at which the sink captured the write (the host reads
+    /// the guest's frame the moment it arrives). `0` for an entry that carries
+    /// none (an older dump): readers then fall back to their own read time.
+    #[serde(default)]
+    pub ts_ms: u64,
+}
+
+/// Wall-clock Unix milliseconds, the clock of [`LogEntry::ts_ms`].
+fn now_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0)
 }
 
 impl LogEntry {
@@ -311,7 +324,12 @@ fn parse_frame(buf: &[u8]) -> Option<LogEntry> {
         if 6 + tlen + mlen == buf.len() && (1..=8).contains(&prio) {
             let tag = String::from_utf8_lossy(&buf[6..6 + tlen]).to_string();
             let message = String::from_utf8_lossy(&buf[6 + tlen..6 + tlen + mlen]).to_string();
-            return Some(LogEntry { prio, tag, message });
+            return Some(LogEntry {
+                prio,
+                tag,
+                message,
+                ts_ms: now_ms(),
+            });
         }
     }
     // Other writers use bionic's *native* LogdLogger, which sends logd's
@@ -328,6 +346,7 @@ fn parse_frame(buf: &[u8]) -> Option<LogEntry> {
         prio: 6,
         tag: "logdw".to_string(),
         message,
+        ts_ms: now_ms(),
     })
 }
 
@@ -369,6 +388,7 @@ mod tests {
         assert_eq!(e.prio, 6);
         assert_eq!(e.tag, "foo");
         assert_eq!(e.message, "hello");
+        assert!(e.ts_ms > 0, "parsed log frames carry a capture timestamp");
         assert_eq!(e.priority_name(), "E");
         assert!(!e.is_fatal());
     }
