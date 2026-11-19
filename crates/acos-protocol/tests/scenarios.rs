@@ -111,7 +111,15 @@ fn every_checked_in_scenario_parses_and_validates() {
             path.display(),
             validation.errors
         );
-        if !workspace.join(&scenario.app).exists() {
+        // Match `acos-verify`'s `resolve_relative`: a relative `app:` resolves
+        // against the scenario file's own directory first (e.g.
+        // `../fixtures/build/apps/tail-probe.apk`), then against the workspace
+        // root.
+        let app_exists = path
+            .parent()
+            .is_some_and(|dir| dir.join(&scenario.app).exists())
+            || workspace.join(&scenario.app).exists();
+        if !app_exists {
             // Missing fixture, not a malformed scenario: skip loudly under the
             // repo's shared fixture policy (`ACOS_REQUIRE_FIXTURES` upgrades
             // this to a hard failure).
