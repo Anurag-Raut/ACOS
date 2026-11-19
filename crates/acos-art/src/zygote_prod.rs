@@ -87,17 +87,31 @@ pub struct ZygoteKey {
     /// child forked for one package set must never serve a session that asks
     /// for another, so the list is part of the identity (and of the hash).
     pub extra_apks: Vec<String>,
+    /// ZDEFAULT2: normalized `ACOS_ART_SERVICES` JSON (`"[]"` when none).
+    /// Modules such as `webview:real` (mounts `com.android.webview`) and
+    /// `network:real` (runs the sandbox inside `pasta` + permits `AF_INET` in
+    /// `seccomp.bpf`) change the keeper's sandbox, so they partition the key.
+    pub services: String,
+    /// ZDEFAULT2: `ACOS_GUEST_GLES` provider selection (`""` = default software).
+    pub gles: String,
+    /// ZDEFAULT2: `ACOS_SPIKE_NET` env override (base pasta networking without a
+    /// module spec).
+    pub spike_net: bool,
 }
 
 impl ZygoteKey {
     /// A filesystem-safe directory name for this key (stable, sorted, short).
     pub fn dir_name(&self) -> String {
         let mut hash: u64 = 0xcbf29ce484222325;
+        let spike = if self.spike_net { "1" } else { "0" };
         let mut parts: Vec<&str> = vec![
             self.apk.as_str(),
             self.boot_image.as_str(),
             self.insets.as_str(),
             self.animations.as_str(),
+            self.services.as_str(),
+            self.gles.as_str(),
+            spike,
         ];
         parts.extend(self.extra_apks.iter().map(String::as_str));
         for part in parts {
@@ -130,6 +144,9 @@ impl ZygoteKey {
             "insets": self.insets,
             "animations": self.animations,
             "extra_apks": self.extra_apks,
+            "services": self.services,
+            "gles": self.gles,
+            "spike_net": self.spike_net,
         })
     }
 }
@@ -323,11 +340,11 @@ pub struct PersistentZygote {
     /// The last child this keeper handed out per tag (so `previous_child_pid`
     /// survives a kill even after `<tag>/pid` was removed).
     last_child: HashMap<u32, u32>,
-    /// NET2: the netd `dnsproxyd` responder for this keeper's current session,
-    /// served on `<plan>/<tag>/sock` — the directory the zygote child mounts as
-    /// `/dev/socket`. This is the fourth producer (`prepare_session`); the
-    /// launcher's own dir is not the one a zygote child sees.
-    dns: Option<crate::spike_net::DnsProxy>,
+    /// NET2/ZDEFAULT2: netd `dnsproxyd` responders per live tag, served on
+    /// `<plan>/<tag>/sock` — the directory the zygote child mounts as
+    /// `/dev/socket`. Keyed by tag so concurrent sessions on one keeper never
+    /// tear down a sibling's resolver.
+    dns: HashMap<u32, crate::spike_net::DnsProxy>,
 }
 
 impl PersistentZygote {
@@ -385,6 +402,20 @@ impl PersistentZygote {
             .arg(&out)
             .arg("--timeout")
             .arg("300")
+            .arg("--width")
+            .arg(key.width.to_string())
+            .arg("--panel-height")
+            .arg(key.height.to_string())
+            .arg("--density")
+            .arg(key.density.to_string())
+            .arg("--insets")
+            .arg(&key.insets)
+            .arg("--animations")
+            .arg(&key.animations);
+        for extra in &key.extra_apks {
+            command.arg("--extra-apk").arg(extra);
+        }
+        command
             // The keeper is a zygote host, not a session: no interactive peer,
             // no live probe. It only serves the command FIFO.
             .env("ACOS_ZYGOTE_APP", zygote_build)
@@ -396,6 +427,11 @@ impl PersistentZygote {
             .stdin(Stdio::null())
             .stdout(Stdio::from(log))
             .stderr(Stdio::from(log_err));
+        if !key.services.is_empty() && key.services != "[]" {
+            command.env("ACOS_ART_SERVICES", &key.services);
+        } else {
+            command.env("ACOS_ART_SERVICES", "[]");
+        }
         for (name, value) in env {
             command.env(name, value);
         }
@@ -416,7 +452,7 @@ impl PersistentZygote {
             ack_timeout: ack_timeout_from_env(),
             log_path,
             last_child: HashMap::new(),
-            dns: None,
+            dns: HashMap::new(),
         };
         // O_RDWR: neither side blocks on open, and the FIFO never signals EOF
         // when one writer restarts (the keeper never sees a spurious `cmd eof`).
@@ -554,23 +590,27 @@ impl PersistentZygote {
             "run/task",
             "run/app-data",
             "run/app-lib",
+            "run/wv",
         ] {
             fs::create_dir_all(dir.join(sub))?;
         }
         Ok(())
     }
 
-    /// NET2: `<plan>/<tag>/sock` is bound at `/dev/socket` in the zygote child,
-    /// so the resolver proxy has to be served there (not in the launcher's
-    /// directory, which the child never sees). Held until the next session; the
-    /// previous session's resolver stops with its socket directory (a responder
-    /// left on the old inode would leak a thread and serve nobody).
+    /// NET2/ZDEFAULT2: `<plan>/<tag>/sock` is bound at `/dev/socket` in the
+    /// zygote child, so the resolver proxy has to be served there (not in the
+    /// launcher's directory, which the child never sees). Keyed by tag so
+    /// concurrent sessions on the same keeper never drop a sibling's responder.
     pub fn attach_dns(&mut self, tag: u32) -> ZygoteResult<()> {
-        self.dns = None;
+        self.dns.remove(&tag);
         let dir = self.session_dir(tag);
-        self.dns = crate::spike_net::serve_dnsproxyd_if_enabled(&dir.join("sock")).map_err(|e| {
-            ZygoteError::Io(format!("dnsproxyd in {}: {e}", dir.join("sock").display()))
-        })?;
+        if let Some(proxy) =
+            crate::spike_net::serve_dnsproxyd_if_enabled(&dir.join("sock")).map_err(|e| {
+                ZygoteError::Io(format!("dnsproxyd in {}: {e}", dir.join("sock").display()))
+            })?
+        {
+            self.dns.insert(tag, proxy);
+        }
         Ok(())
     }
 
@@ -589,6 +629,10 @@ impl PersistentZygote {
             (format!("/sessions/{tag}/run/task"), "/data/task"),
             (format!("/sessions/{tag}/run/app-data"), "/data/app-data"),
             (format!("/sessions/{tag}/run/app-lib"), "/data/app-lib"),
+            (
+                format!("/sessions/{tag}/run/wv"),
+                crate::webview_socket::GUEST_DIR,
+            ),
             (format!("/sessions/{tag}/sock"), "/dev/socket"),
             (
                 format!("/sessions/{tag}/sock/peer.sock"),
@@ -748,6 +792,7 @@ impl PersistentZygote {
     pub fn kill_begin(&mut self, tag: u32) -> ZygoteResult<(PathBuf, Option<u32>)> {
         let dir = self.session_dir(tag);
         let previous = self.child_pid_of(tag);
+        self.dns.remove(&tag);
         let _ = fs::remove_file(dir.join("reaped"));
         let _ = fs::remove_file(dir.join("spawned"));
         self.send(&format!("kill {tag}"))?;
@@ -825,6 +870,7 @@ impl PersistentZygote {
     /// serve that panics cannot leak a zygote (§3, and the acceptance "keeper not
     /// leaked after serve exit").
     pub fn shutdown(&mut self) {
+        self.dns.clear();
         if let Some(mut cmd) = self.cmd.take() {
             let _ = cmd.write_all(b"exit\n");
             let _ = cmd.flush();
@@ -943,12 +989,12 @@ pub fn read_pid(path: &Path) -> Option<u32> {
 }
 
 fn write_atomic(path: &Path, bytes: &[u8]) -> ZygoteResult<()> {
+    // Ephemeral runtime contract file (`<plan>/<tag>/binds`), consumed in RAM
+    // milliseconds later and wiped on next reset: atomic write+rename is needed
+    // so the reader never sees a partial file, but fsync serialises concurrent
+    // N=20 resets on the filesystem journal for zero durability benefit.
     let tmp = path.with_extension("tmp");
-    {
-        let mut file = File::create(&tmp)?;
-        file.write_all(bytes)?;
-        file.sync_all()?;
-    }
+    fs::write(&tmp, bytes)?;
     fs::rename(&tmp, path)?;
     Ok(())
 }
@@ -999,6 +1045,9 @@ mod tests {
             insets: "carve".into(),
             animations: "on".into(),
             extra_apks: Vec::new(),
+            services: "[]".into(),
+            gles: String::new(),
+            spike_net: false,
         }
     }
 
@@ -1013,6 +1062,15 @@ mod tests {
         let mut third = key();
         third.width = 720;
         assert_ne!(a, third.dir_name(), "geometry is part of the key");
+        let mut fourth = key();
+        fourth.services = r#"[{"id":"webview","profile":"real"}]"#.into();
+        assert_ne!(a, fourth.dir_name(), "services is part of the key");
+        let mut fifth = key();
+        fifth.gles = "mesa-host".into();
+        assert_ne!(a, fifth.dir_name(), "gles is part of the key");
+        let mut sixth = key();
+        sixth.spike_net = true;
+        assert_ne!(a, sixth.dir_name(), "spike_net is part of the key");
         assert!(a
             .chars()
             .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_'));

@@ -340,7 +340,8 @@ static long z2_setup_user_ns_as(int *uid_out, int *gid_out, long inner_uid) {
   p = z2_append(p, " 1\n");
   r = z2_write_file("/proc/self/uid_map", buf, p - buf);
   if (r < 0) return -1000 + r;
-  p = z2_append(buf, "0 ");
+  p = z4_append_int(buf, (int)inner_uid);
+  p = z2_append(p, " ");
   p = z2_append_int(p, gid, 0);
   p = z2_append(p, " 1\n");
   r = z2_write_file("/proc/self/gid_map", buf, p - buf);

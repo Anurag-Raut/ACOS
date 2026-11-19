@@ -1726,7 +1726,7 @@ impl ArtSession {
         intent: &acos_protocol::LaunchIntent,
     ) -> Result<ArtSession, BackendError> {
         let start = zygote.map(|host| ZygoteStart {
-            key: zygote_key_of(apk, insets, animations, extra_apks),
+            key: zygote_key_of(apk, insets, animations, extra_apks, services),
             host,
             reuse_tag: None,
         });
@@ -1936,8 +1936,22 @@ impl ArtSession {
                 let session_dir = start.host.session_dir(&start.key, tag);
                 command
                     .env("ACOS_ZYGOTE_SESSION", &session_dir)
+                    // ZDEFAULT2: bind-mounted into the forked child at `/run/acos`.
+                    .env(
+                        acos_art::webview_socket::HOST_DIR_ENV,
+                        session_dir.join("run/wv"),
+                    )
                     // Z4: the forked child publishes the read-only tree probe.
                     .env("ACOS_ZYGOTE_PROBE", "1");
+                if std::env::var_os(acos_art::webview_socket::BROKER_SOCKET_ENV)
+                    .filter(|v| !v.is_empty())
+                    .is_none()
+                {
+                    command.env(
+                        acos_art::webview_socket::BROKER_SOCKET_ENV,
+                        acos_art::webview_socket::runtime_root().join("broker.sock"),
+                    );
+                }
                 zygote_prepared = Some((Arc::clone(&start.host), start.key.clone(), tag));
             }
         }
@@ -6374,6 +6388,7 @@ fn zygote_key_of(
     insets: &str,
     animations: &str,
     extra_apks: &[PathBuf],
+    services: &[serde_json::Value],
 ) -> acos_art::zygote_prod::ZygoteKey {
     let num = |name: &str, default: u32| {
         std::env::var(name)
@@ -6381,6 +6396,19 @@ fn zygote_key_of(
             .and_then(|value| value.parse().ok())
             .unwrap_or(default)
     };
+    let services_json = if services.is_empty() {
+        "[]".to_string()
+    } else {
+        serde_json::to_string(services).unwrap_or_else(|_| "[]".to_string())
+    };
+    let gles = std::env::var("ACOS_GUEST_GLES")
+        .ok()
+        .map(|v| v.trim().to_ascii_lowercase())
+        .unwrap_or_default();
+    let spike_net = std::env::var("ACOS_SPIKE_NET")
+        .ok()
+        .map(|v| matches!(v.trim(), "1" | "true" | "yes" | "on"))
+        .unwrap_or(false);
     acos_art::zygote_prod::ZygoteKey {
         apk: apk.display().to_string(),
         boot_image: std::env::var("ACOS_ART_BOOT_IMAGE").unwrap_or_else(|_| "default".to_string()),
@@ -6396,6 +6424,9 @@ fn zygote_key_of(
             .iter()
             .map(|path| path.display().to_string())
             .collect(),
+        services: services_json,
+        gles,
+        spike_net,
     }
 }
 
@@ -8571,7 +8602,7 @@ mod tests {
             ArtSession::start(&apk, &dir.join("zg")).expect("zygote-shaped session starts");
         zg.zygote = Some(ZygoteBinding {
             host: Arc::new(ZygoteHost::disabled()),
-            key: zygote_key_of(&apk, "report", "on", &[]),
+            key: zygote_key_of(&apk, "report", "on", &[], &[]),
             facts: ZygoteFacts {
                 tag: 0,
                 child_pid: 0,

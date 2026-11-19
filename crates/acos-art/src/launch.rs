@@ -4264,38 +4264,34 @@ fn write_zygote_session(
         serde_json::to_vec_pretty(&doc).map_err(|e| Error::Layout(e.to_string()))?,
     )?;
     fs::rename(&tmp, dir.join("session.json"))?;
-    // The uid the child's user namespace maps its own uid onto (`host` = keep
-    // the caller's uid, the `ACOS_ART_GUEST_UID=host` seam).
+    // The uid the child's user namespace maps its own uid/gid onto. When
+    // `guest_uid` is `None` (`ACOS_ART_GUEST_UID=host`), write the caller's own
+    // numeric uid so the child matches the exec path (`bwrap` without `--uid`).
+    let resolved_uid = guest_uid.unwrap_or_else(|| unsafe { libc::getuid() });
     let tmp = dir.join("uid.tmp");
-    fs::write(
-        &tmp,
-        match guest_uid {
-            Some(uid) => format!("{uid}\n"),
-            None => "host\n".to_string(),
-        },
-    )?;
+    fs::write(&tmp, format!("{resolved_uid}\n"))?;
     fs::rename(&tmp, dir.join("uid"))?;
     // The guest environment this session's sandbox would have set on the exec
-    // path, one `NAME=value` per line. The keeper's own preload and zygote seams
-    // are the keeper's, never rewritten per child. A value with a newline cannot
-    // be carried faithfully: refuse it rather than truncate it.
-    let mut env_text = String::new();
+    // path, NUL-delimited (`NAME=value\0`) so values with embedded newlines
+    // (`ACOSLAUNCH_PROVIDERS`, `ACOSLAUNCH_APP_META`) survive intact. The
+    // keeper's own preload and zygote seams are never rewritten per child.
+    let mut env_bytes = Vec::new();
     for (name, value) in env {
         if name == "LD_PRELOAD" || name.starts_with("ACOS_ZYGOTE_") {
             continue;
         }
-        if name.contains(['=', '\n']) || value.contains('\n') {
+        if name.is_empty() || name.contains(['=', '\0']) || value.contains('\0') {
             return Err(Error::Layout(format!(
                 "guest environment entry {name:?} cannot be published in the zygote contract"
             )));
         }
-        env_text.push_str(name);
-        env_text.push('=');
-        env_text.push_str(value);
-        env_text.push('\n');
+        env_bytes.extend_from_slice(name.as_bytes());
+        env_bytes.push(b'=');
+        env_bytes.extend_from_slice(value.as_bytes());
+        env_bytes.push(0);
     }
     let tmp = dir.join("env.tmp");
-    fs::write(&tmp, env_text)?;
+    fs::write(&tmp, &env_bytes)?;
     fs::rename(&tmp, dir.join("env"))?;
     let mut argv = String::new();
     for a in guest_args {

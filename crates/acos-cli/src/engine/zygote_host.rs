@@ -59,10 +59,10 @@ pub fn zygote_selected(value: Option<&str>) -> bool {
 pub const ENV_ZYGOTE_ROOT: &str = "ACOS_ART_ZYGOTE_ROOT";
 /// `AF_UNIX`'s `sun_path`, **including** the terminating NUL.
 pub const SUN_PATH_MAX: usize = 108;
-/// The longest leaf a session launcher binds inside `<session>/sock` (`peer.sock`;
-/// the logd socket is `logdw`). Every session directory therefore has to leave
-/// room for this suffix in `sun_path`.
-const LONGEST_SOCKET_LEAF: &str = "/sock/peer.sock";
+/// The longest leaf a session launcher binds inside `<session>` (`/run/wv/webview.sock`
+/// is 20 bytes; `/sock/peer.sock` is 15; `/sock/logdw` is 11). Every session
+/// directory therefore has to leave room for this suffix in `sun_path`.
+const LONGEST_SOCKET_LEAF: &str = "/run/wv/webview.sock";
 /// The longest `ZygoteKey::dir_name()` can be (5-digit dimension, 4-digit
 /// density, `report` insets, 16 hex of hash) and the widest tag a daemon can
 /// hand out in practice. Used only for the up-front root choice; `prepare`
@@ -349,9 +349,6 @@ impl ZygoteHost {
                 PersistentZygote::start(&self.root, key.clone(), binary, apk, &keeper_env, &build)?;
             keepers.insert(key.clone(), keeper);
         }
-        let keeper = keepers
-            .keeper_mut(key)
-            .expect("the keeper was just inserted");
         // ZDEFAULT1: the keeper lock is daemon-wide, and wiping a run root takes
         // milliseconds, so the filesystem half of the preparation runs outside it
         // (it only touches `<plan>/<tag>`, which no other session uses; the tag
@@ -400,6 +397,7 @@ impl ZygoteHost {
         };
         let started = Instant::now();
         let mut lock_wait_ms = lock_started.elapsed().as_millis() as u64;
+        let mut polls = 0u32;
         loop {
             if argv.is_file() {
                 break;
@@ -411,7 +409,8 @@ impl ZygoteHost {
                     .ok_or_else(|| ZygoteError::Contract(format!("no keeper for tag {tag}")))?;
                 return Err(keeper.contract_timeout(tag, started));
             }
-            {
+            polls += 1;
+            if polls % 8 == 0 {
                 let t = Instant::now();
                 let mut keepers = self.lock();
                 lock_wait_ms += t.elapsed().as_millis() as u64;
@@ -422,7 +421,7 @@ impl ZygoteHost {
                     return Err(error);
                 }
             }
-            std::thread::sleep(Duration::from_millis(2));
+            std::thread::sleep(acos_art::zygote_prod::ACK_POLL);
         }
         let contract_ms = started.elapsed().as_millis() as u64;
         let t = Instant::now();
@@ -771,6 +770,9 @@ mod tests {
             insets: "report".into(),
             animations: "on".into(),
             extra_apks: Vec::new(),
+            services: "[]".into(),
+            gles: String::new(),
+            spike_net: false,
         }
     }
 

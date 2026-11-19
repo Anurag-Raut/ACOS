@@ -277,20 +277,42 @@ public final class ZygoteApp {
         return pid;
     }
 
-    /** ZDEFAULT1: the per-session environment file (`NAME=value` lines). Absent or
-     * empty = no overrides (an old launcher), never an error. */
+    /** ZDEFAULT2: the per-session environment file (`NAME=value\0` records so
+     * values with newlines like `ACOSLAUNCH_PROVIDERS` and `ACOSLAUNCH_APP_META`
+     * pass losslessly; falls back to `\n`-delimited if no NUL is present).
+     * Absent or empty = no overrides, never an error. */
     private static java.util.Map<String, String> readSessionEnv(String path) {
         java.util.Map<String, String> out = new java.util.LinkedHashMap<>();
         try {
-            BufferedReader in = new BufferedReader(new FileReader(path));
+            java.io.ByteArrayOutputStream raw = new java.io.ByteArrayOutputStream();
+            java.io.FileInputStream in = new java.io.FileInputStream(path);
             try {
-                String line;
-                while ((line = in.readLine()) != null) {
-                    int eq = line.indexOf('=');
-                    if (eq > 0) out.put(line.substring(0, eq), line.substring(eq + 1));
-                }
+                byte[] buf = new byte[4096];
+                int n;
+                while ((n = in.read(buf)) > 0) raw.write(buf, 0, n);
             } finally {
                 in.close();
+            }
+            byte[] bytes = raw.toByteArray();
+            if (bytes.length == 0) return out;
+            boolean hasNul = false;
+            for (byte b : bytes) {
+                if (b == 0) {
+                    hasNul = true;
+                    break;
+                }
+            }
+            byte sep = hasNul ? (byte) 0 : (byte) '\n';
+            int start = 0;
+            for (int i = 0; i <= bytes.length; i++) {
+                if (i == bytes.length || bytes[i] == sep) {
+                    if (i > start) {
+                        String entry = new String(bytes, start, i - start, "UTF-8");
+                        int eq = entry.indexOf('=');
+                        if (eq > 0) out.put(entry.substring(0, eq), entry.substring(eq + 1));
+                    }
+                    start = i + 1;
+                }
             }
         } catch (Throwable t) {
             say("ZP1 env_read_fail path=" + path + " err=" + t.getClass().getSimpleName());
