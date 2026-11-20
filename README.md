@@ -1,63 +1,45 @@
-# ACOS — agent-native Android execution OS
+# ACOS — Agent-Native Android Execution Runtime
 
-ACOS runs Android apps natively in Rust: a DEX interpreter and managed heap
-(`acos-vm`), a real-core-library / framework path, an in-process service layer,
-APK/DEX tooling and an MCP/JSON surface for AI agents. See `ARCHITECTURE.md`,
-`SPEC.md`, and `docs/V1.md`.
+ACOS runs real Android APKs (API 34, x86_64) on Linux for AI coding agents without booting a full Android VM per session. Stock Google ART (`dalvikvm64`), `framework.jar`, `libandroid_runtime`, CPU Skia (`libhwui`), and native `.so` libraries execute inside an unprivileged `bwrap` sandbox; userspace `/dev/binder` (`artshim.so`) routes system calls to a lightweight per-session Rust **Session Controller** (`acos-services` + `acos-wm`), while heavy shared resources—read-only framework/DEX/font pages, real internet egress (`acos-netd`), and headless Chromium WebView (`acos-webview`)—run **once per Host** and scale cleanly to 20+ parallel Sessions (~0.6–0.9 GiB total vs ~64.5 GiB for 20 stock emulators).
 
-## Status
+## Documentation
 
-**v0.2.0.** An agent can launch a real Android APK on real ART (API 34,
-x86_64), read its live `View` tree, drive it, and prove a flow with an
-evidence-backed verdict — through the MCP tools (`acos_launch` ->
-`acos_observe_tree` -> `acos_tap`/`acos_text` -> `acos_verify`) or the CLI with
-`--engine art`.
+- **[`docs/README.md`](docs/README.md)** — Single source of truth for all current ACOS documentation.
+- **[`docs/internals/overview.md`](docs/internals/overview.md)** — Current architecture: AOSP vs ACOS cut, Host vs Session resource split, Host-shared concurrency model, and measured scaling.
+- **[`docs/internals/glossary.md`](docs/internals/glossary.md)** — Canonical vocabulary (**Host**, **Session**, **Session Controller**, **Guest App Process**, **Module**).
+- **[`docs/internals/decisions.md`](docs/internals/decisions.md)** — Curated active architectural decisions (full ADR log in [`DECISIONS.md`](DECISIONS.md)).
+- **[`AGENTS.md`](AGENTS.md)** — Entrypoint for coding agents and contributors (crate map, doc rules, verification commands).
+- **[`docs/AGENT_GUIDE.md`](docs/AGENT_GUIDE.md)** & **[`docs/MCP.md`](docs/MCP.md)** — Agent guide (also served via `acos_help`) and closed-schema MCP contract.
+- **[`docs/MODULES.md`](docs/MODULES.md)** — Generated registry of `core` and all 23 attachable Android service modules.
+- **[`legacy/docs/`](legacy/docs/README.md)** — Frozen historical archive (pre-ART Rust VM and dated planning snapshots).
 
-* `STATUS.md` — the milestone table, measured metrics and the current risk list.
-* `docs/AGENT_GUIDE.md` — the single source of truth for agents (also served as
-  `acos_help`, its topics, and the MCP resources); `docs/MCP.md` — the MCP
-  contract.
-* `TASKS.md` — the critical path, workstreams and standing gates.
-
-## Building and running
+## Quick start
 
 ```bash
-cargo build --release -p acos-cli
-./target/release/acos run-dex fixtures/build/dexprogs/01_hello/classes.dex --main Main
+# 1. Enable the shared compiler cache and test env (see docs/DEV_WORKFLOW.md)
+source tools/agent-env.sh
+export CARGO_TARGET_DIR="$PWD/.cache/target"
+
+# 2. Build the CLI and MCP server
+tools/guarded.sh --mem 4G --time 900 -- cargo build --release -p acos-cli -p acos-mcp
+
+# 3. Check Host readiness (boot image, bwrap, pasta, chrome-headless-shell)
+"$CARGO_TARGET_DIR/release/acos" doctor --json
+
+# 4. Run a scenario on real ART
+tools/guarded.sh --mem 4G --time 300 -- "$CARGO_TARGET_DIR/release/acos" verify \
+  --apk fixtures/build/apps/counter.apk --scenario scenarios/counter.yaml --json
 ```
 
-Fixtures are built with `tools/build-fixtures.sh` (or `tools/build-apps.sh`);
-the differential corpus runs with `tools/diff-dexprogs.sh --corelib real`.
+See [`docs/INSTALL.md`](docs/INSTALL.md) for installation and image extraction, and [`docs/AGENT_QUICKSTART.md`](docs/AGENT_QUICKSTART.md) for the interactive MCP workflow (`acos_launch` → `acos_observe_tree` → `acos_tap`/`acos_text` → `acos_verify`).
 
-## Host safety (ADR-0018) — mandatory
+## Host safety (ADR-0018)
 
-Host RAM must never exceed 90% (internal target 85%; the host has 62 GiB and no
-swap). **Every** command that can execute or build guest code runs through
-`tools/guarded.sh`, which applies a hard memory ceiling and wall-clock timeout,
-kills the process group on exit/timeout/error, and cleans up scratch:
+Host RAM must never exceed 90% (target ≤ 85%). Wrap heavy builds, tests, and guest runs with `tools/guarded.sh`:
 
 ```bash
-tools/guarded.sh --mem 4G --time 900 -- cargo test -p acos-vm
+tools/guarded.sh --mem 4G --time 900 -- cargo test -p acos-services
 tools/guarded.sh --mem 4G --time 900 -- cargo clippy --workspace -- -D warnings
-tools/guarded.sh --mem 2G --time 60  -- ./target/release/acos run-dex x.dex --main Main
 ```
 
-`tools/build-*.sh`, `tools/diff-dexprogs.sh` and `tools/bench-vm.sh` invoke it
-themselves. During a parallel wave run `tools/ramguard.sh &`; it kills any
-`target/*/acos*` process once `MemAvailable < 9 GiB` (~85% used) or a single
-process exceeds 8 GiB RSS. The VM additionally enforces `ACOS_HOST_RSS_MAX`
-(default 2 GiB, `HOST_MEMORY_LIMIT`) and `ACOS_WALL_MAX_SECS` (default 600,
-`TIMEOUT`) independent of the guest heap. Details: `tools/README.md`,
-`docs/AGENT_API.md` §16, `DECISIONS.md` ADR-0018.
-
-## Documentation map
-
-| Doc | Contents |
-|---|---|
-| `ARCHITECTURE.md` | system design and crate map |
-| `SPEC.md` | product spec and owner directives |
-| `DECISIONS.md` | ADRs |
-| `docs/AGENT_API.md` | JSON/MCP contract and host ceilings |
-| `docs/FINDINGS.md` | append-only dated findings |
-| `TASKS.md` | critical path, workstreams and standing gates |
-| `tools/README.md` | fixture tooling and the host-safety rule |
+During parallel waves, run `tools/ramguard.sh &` to enforce the Host RAM ceiling. Details: [`docs/DEV_WORKFLOW.md`](docs/DEV_WORKFLOW.md), [`docs/SECURITY.md`](docs/SECURITY.md), and [`DECISIONS.md`](DECISIONS.md) (ADR-0018).

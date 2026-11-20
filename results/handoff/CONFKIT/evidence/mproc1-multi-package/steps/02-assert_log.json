@@ -1,0 +1,53 @@
+{
+  "assertions": [
+    {
+      "actual": {
+        "matched_lines": 4,
+        "sample": [
+          "AcosMultiPkg: ACOSPROBE ok pkg=dev.acos.fixtures.counter version=1.0 src=/data/app/counter.apk uid=10193",
+          "AcosMultiPkg: ACOSPROBE ai pkg=dev.acos.fixtures.counter flags=0x30083e46 src=/data/app/counter.apk",
+          "AcosMultiPkg: ACOSPROBE ctx appInfo=dev.acos.fixtures.counter pkg=dev.acos.fixtures.counter label=Counter app_name=Counter",
+          "AcosMultiPkg: ACOSPROBE uid 10193 -> [dev.acos.fixtures.counter]"
+        ]
+      },
+      "expected": {
+        "min_matches": 1,
+        "ordered": true,
+        "patterns": [
+          "^ACOSPROBE ok pkg=dev\\.acos\\.fixtures\\.counter version=1\\.0 src=/data/app/counter\\.apk uid=[0-9]+$",
+          "^ACOSPROBE ai pkg=dev\\.acos\\.fixtures\\.counter .* src=/data/app/counter\\.apk$",
+          "^ACOSPROBE ctx appInfo=dev\\.acos\\.fixtures\\.counter pkg=dev\\.acos\\.fixtures\\.counter .*app_name=Counter$",
+          "^ACOSPROBE uid [0-9]+ -> \\[dev\\.acos\\.fixtures\\.counter\\]$"
+        ],
+        "since_previous_step": false,
+        "tag": "AcosMultiPkg"
+      },
+      "kind": "log",
+      "matched_node_ids": [],
+      "passed": true
+    }
+  ],
+  "certification": "certified-with-limits",
+  "certification_limits": {
+    "doc": "docs/SANDBOX_CERTIFICATION.md",
+    "section": "§8.7"
+  },
+  "duration_ms": 0,
+  "evidence": [
+    {
+      "kind": "log",
+      "path": "logs/logcat.txt"
+    },
+    {
+      "kind": "step",
+      "path": "steps/02-assert_log.json"
+    }
+  ],
+  "index": 2,
+  "provenance": {
+    "logs": "guest-asserted"
+  },
+  "status": "pass",
+  "step": "assert_log",
+  "trust": "trusted"
+}

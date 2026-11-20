@@ -26,3 +26,5 @@ serde_json = { workspace = true }
 # NDK-surface integration test: a real `Bitmap` pixel store + a real APK zip.
 acos-render = { path = "../acos-render" }
 zip = { version = "2", default-features = false, features = ["deflate"] }
+# HYG3: a missing test prerequisite fails loudly instead of printing SKIP.
+acos-test-support = { path = "../acos-test-support" }

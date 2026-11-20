@@ -2565,7 +2565,7 @@ impl Peer {
             );
             frame.target = u64::from(wire);
             frame.code = d.code;
-            frame.flags = 0;
+            frame.flags = crate::protocol::TF_ACOS_ORDERED;
             out.push((tag, frame));
         }
         out

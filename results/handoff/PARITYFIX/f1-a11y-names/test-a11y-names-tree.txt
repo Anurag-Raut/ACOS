@@ -1,0 +1,8 @@
+PASS token: ('Paste your token', 'Paste your token', 'Personal access token', True)
+PASS search: ('Search words', 'Search words', 'Search dictionary', False)
+PASS recent: ('Recently looked up', '', '', False)
+PASS both: ('Connect', '', 'Connect WaniKani', False)
+PASS card: ('', '', 'Open card', False)
+PASS card_face: ('card face', '', '', False)
+PASS delegate_tab: ('Analytics', '', 'Analytics, tab 2 of 4', False)
+7/7 nodes match AccessibilityNodeInfo

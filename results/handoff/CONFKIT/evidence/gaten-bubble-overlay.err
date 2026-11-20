@@ -1,0 +1,1 @@
+verify: ASSERTION_FAILED (assertion): service_ctl accessibility status: the reply does not match `expect` at /value/screenshots (array length: expected 1, got 0) [class=assertion, retryable=false]

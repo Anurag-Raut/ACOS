@@ -255,6 +255,8 @@ public final class ParcelableCompareMain {
         lp.setInterfaceName("wlan0");
         lp.setMtu(1500);
         return lp;
+    }
+
     /**
      * A `Bundle` carrying the `BluetoothDevice.EXTRA_RSSI` short extra. The
      * framework writes `putShort` as `VAL_SHORT` (tag 5) with a 4-byte int

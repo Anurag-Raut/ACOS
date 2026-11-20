@@ -44,8 +44,7 @@ fn new_runtime() -> Option<Runtime> {
 /// The M2 gate: the real framework `attach` path reaches the Rust ATMS.
 #[test]
 fn activity_thread_attach_reaches_atms_attach_application() {
-    let Some(apk) = hello_views_apk() else {
-        eprintln!("SKIP activity_thread_attach_reaches_atms_attach_application: fixtures/build/apps/hello-views.apk not built");
+    let Some(apk) = acos_test_support::require_some(hello_views_apk(), "activity_thread_attach_reaches_atms_attach_application", "fixtures/build/apps/hello-views.apk not built") else {
         return;
     };
     let Some(mut rt) = new_runtime() else {

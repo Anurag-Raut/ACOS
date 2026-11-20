@@ -1,0 +1,277 @@
+--------- beginning of main
+1794996283032      1  E cutils-trace: Error opening trace file: Permission denied (13)
+1794996283032      2  I : Using CollectorTypeCC GC.
+1794996283032      3  D nativeloader: InitDefaultPublicLibraries for_preload=1: libandroid.so:libaaudio.so:libamidi.so:libbinder_ndk.so:libc.so:libcamera2ndk.so:libdl.so:libEGL.so:libGLESv1_CM.so:libGLESv2.so:libGLESv3.so:libicu.so:libicui18n.so:libicuuc.so:libjnigraphics.so:liblog.so:libmediandk.so
+1794996283032      4  D : I18n APEX ICU file found: /apex/com.android.i18n/etc/icu/icudt72l.dat
+1794996283032      5  E logdw: Found user/group name 'root' in '/etc/passwd' without required prefix 'system_'
+1794996283032      6  E logdw: Found user/group name 'bin' in '/etc/passwd' without required prefix 'system_'
+1794996283032      7  E logdw: Found user/group name 'daemon' in '/etc/passwd' without required prefix 'system_'
+1794996283032      8  E logdw: Found user/group name 'mail' in '/etc/passwd' without required prefix 'system_'
+1794996283032      9  E logdw: Found user/group name 'ftp' in '/etc/passwd' without required prefix 'system_'
+1794996283032     10  E logdw: Found user/group name 'http' in '/etc/passwd' without required prefix 'system_'
+1794996283032     11  E logdw: Found user/group name 'nobody' in '/etc/passwd' without required prefix 'system_'
+1794996283032     12  E logdw: Found user/group name 'dbus' in '/etc/passwd' without required prefix 'system_'
+1794996283032     13  E logdw: Found user/group name 'systemd-coredump' in '/etc/passwd' without required prefix 'system_'
+1794996283032     14  E logdw: Found user/group name 'systemd-network' in '/etc/passwd' without required prefix 'system_'
+1794996283032     15  E logdw: Found user/group name 'systemd-oom' in '/etc/passwd' without required prefix 'system_'
+1794996283032     16  E logdw: Found user/group name 'systemd-journal-remote' in '/etc/passwd' without required prefix 'system_'
+1794996283032     17  E logdw: Found user/group name 'systemd-resolve' in '/etc/passwd' without required prefix 'system_'
+1794996283032     18  E logdw: Found user/group name 'systemd-timesync' in '/etc/passwd' without required prefix 'system_'
+1794996283032     19  E logdw: Found user/group name 'tss' in '/etc/passwd' without required prefix 'system_'
+1794996283032     20  E logdw: Found user/group name 'uuidd' in '/etc/passwd' without required prefix 'system_'
+1794996283032     21  E logdw: Found user/group name 'alpm' in '/etc/passwd' without required prefix 'system_'
+1794996283032     22  E logdw: Found user/group name 'git' in '/etc/passwd' without required prefix 'system_'
+1794996283032     23  E logdw: Found user/group name 'polkitd' in '/etc/passwd' without required prefix 'system_'
+1794996283032     24  E logdw: Found user/group name 'Qui' in '/etc/passwd' without required prefix 'system_'
+1794996283032     25  E logdw: Found user/group name 'avahi' in '/etc/passwd' without required prefix 'system_'
+1794996283032     26  E logdw: Found user/group name 'brltty' in '/etc/passwd' without required prefix 'system_'
+1794996283032     27  E logdw: Found user/group name 'colord' in '/etc/passwd' without required prefix 'system_'
+1794996283032     28  E logdw: Found user/group name 'flatpak' in '/etc/passwd' without required prefix 'system_'
+1794996283032     29  E logdw: Found user/group name 'gdm' in '/etc/passwd' without required prefix 'system_'
+1794996283032     30  E logdw: Found user/group name 'geoclue' in '/etc/passwd' without required prefix 'system_'
+1794996283032     31  E logdw: Found user/group name 'gnome-remote-desktop' in '/etc/passwd' without required prefix 'system_'
+1794996283032     32  E logdw: Found user/group name 'libvirt-qemu' in '/etc/passwd' without required prefix 'system_'
+1794996283032     33  E logdw: Found user/group name 'qemu' in '/etc/passwd' without required prefix 'system_'
+1794996283032     34  E logdw: Found user/group name 'rtkit' in '/etc/passwd' without required prefix 'system_'
+1794996283032     35  E logdw: Found user/group name 'saned' in '/etc/passwd' without required prefix 'system_'
+1794996283032     36  E logdw: Found user/group name 'usbmux' in '/etc/passwd' without required prefix 'system_'
+1794996283032     37  E logdw: Found user/group name 'nvidia-persistenced' in '/etc/passwd' without required prefix 'system_'
+1794996283032     38  E logdw: Found user/group name 'ollama' in '/etc/passwd' without required prefix 'system_'
+1794996283032     39  E logdw: Found user/group name 'named' in '/etc/passwd' without required prefix 'system_'
+1794996283032     40  E logdw: Found user/group name 'pcscd' in '/etc/passwd' without required prefix 'system_'
+1794996283032     41  E logdw: Found user/group name 'mongodb' in '/etc/passwd' without required prefix 'system_'
+1794996283032     42  E logdw: Found user/group name 'malcontent-timer-ext-agent' in '/etc/passwd' without required prefix 'system_'
+1794996283032     43  E logdw: Found user/group name 'malcontent-timerd' in '/etc/passwd' without required prefix 'system_'
+1794996283032     44  E logdw: Found user/group name 'malcontent-webd' in '/etc/passwd' without required prefix 'system_'
+1794996283032     45  E logdw: Found user/group name 'systemd-imds' in '/etc/passwd' without required prefix 'system_'
+1794996283032     46  E logdw: Found user/group name 'clamav' in '/etc/passwd' without required prefix 'system_'
+1794996283032     47  E logdw: Found user/group name 'dnsmasq' in '/etc/passwd' without required prefix 'system_'
+1794996283032     48  W ziparchive: Unable to open '/data/app/launch-guest/classes.dm': No such file or directory
+1794996283032     49  W ziparchive: Unable to open '/data/app/launch-guest/classes.dm': No such file or directory
+1794996283032     50  D nativeloader: InitApexLibraries:
+  
+1794996283032     51  D nativeloader: InitDefaultPublicLibraries for_preload=0: libandroid.so:libaaudio.so:libamidi.so:libbinder_ndk.so:libc.so:libcamera2ndk.so:libclang_rt.hwasan-aarch64-android.so:libdl.so:libEGL.so:libGLESv1_CM.so:libGLESv2.so:libGLESv3.so:libicu.so:libicui18n.so:libicuuc.so:libj
+1794996283032     52  D nativeloader: Configuring clns-1 for other apk . target_sdk_version=0, uses_libraries=ALL, library_path=/system/lib64:/vendor/lib64, permitted_path=/data:/mnt/expand
+1794996283032     53  D nativeloader: InitExtendedPublicLibraries: 
+1794996283032     54  I nativeloader: InitVendorPublicLibraries skipped: No such file or directory
+1794996283032     55  D nativeloader: InitProductPublicLibraries: 
+1794996283032     56  E ProcessState: Binder driver /dev/binder is unavailable. Using /dev/binder instead.
+1794996283032     57  D CompatibilityChangeReporter: Compat change id reported: 171979766; UID 10192; state: ENABLED
+1794996283032     58  D CompatibilityChangeReporter: Compat change id reported: 242716250; UID 10192; state: ENABLED
+1794996283032     59  I Typeface: Preloading /system/fonts/Roboto-Regular.ttf
+1794996283032     60  I Typeface: Preloading /system/fonts/RobotoStatic-Regular.ttf
+1794996283032     61  D CompatibilityChangeReporter: Compat change id reported: 247079863; UID 10192; state: ENABLED
+1794996283032     62  W ziparchive: Unable to open '/data/app/rn-debug.dm': No such file or directory
+1794996283032     63  W ziparchive: Unable to open '/data/app/rn-debug.dm': No such file or directory
+1794996283032     64  D nativeloader: Configuring clns-2 for other apk /data/app/rn-debug.apk. target_sdk_version=34, uses_libraries=, library_path=/data/app-lib/x86_64, permitted_path=/data:/mnt/expand:/data/app-data/dev.acos.fixtures.rnhello
+1794996283032     65  W ContextImpl: Failed to ensure /data/app-data/dev.acos.fixtures.rnhello/cache: chown failed: EINVAL (Invalid argument)
+1794996283032     66  W ContextImpl: Failed to ensure /data/app-data/dev.acos.fixtures.rnhello/code_cache: chown failed: EINVAL (Invalid argument)
+1794996283032     67  V GraphicsEnvironment: Currently set values for:
+1794996283032     68  V GraphicsEnvironment:   angle_gl_driver_selection_pkgs=[]
+1794996283032     69  V GraphicsEnvironment:   angle_gl_driver_selection_values=[]
+1794996283032     70  V GraphicsEnvironment: ANGLE GameManagerService for dev.acos.fixtures.rnhello: false
+1794996283032     71  V GraphicsEnvironment: dev.acos.fixtures.rnhello is not listed in per-application setting
+1794996283032     72  V GraphicsEnvironment: Neither updatable production driver nor prerelease driver is supported.
+1794996283032     73  W SystemServiceRegistry: No service published for: netstats
+1794996283032     74  E TrafficStats: TrafficStats not initialized, uid=10192
+Previously recorded 0 base apk paths.
+1794996283032     83  I AcosRot6: ACOSLAUNCH MARK top-finish-watcher-started
+1794996283032     84  D AppCompatDelegate: Checking for metadata for AppLocalesMetadataHolderService : Service not found
+1794996283032     85  D jni_lib_merge: Entering merged library JNI_OnLoad.
+
+1794996283032     86  D jni_lib_merge: Preparing 12 pre-merged libs (including stub)
+
+1794996283032     87  D jni_lib_merge: Preparing to register libfabricjni_so.  onload_func: 91cafba0
+
+1794996283032     88  D jni_lib_merge: Preparing to register libreact_devsupportjni_so.  onload_func: 91d8b530
+
+1794996283032     89  D jni_lib_merge: Preparing to register libreact_featureflagsjni_so.  onload_func: 91d9e0a0
+
+1794996283032     90  D jni_lib_merge: Preparing to register libreact_newarchdefaults_so.  onload_func: 91dc4fa0
+
+1794996283032     91  D jni_lib_merge: Preparing to register libreactnativeblob_so.  onload_func: 91e6ca50
+
+1794996283032     92  D jni_lib_merge: Preparing to register libreactnativejni_so.  onload_func: 91e878c0
+
+1794996283032     93  D jni_lib_merge: Preparing to register libreactnativejni_common_so.  onload_func: 91e8e150
+
+1794996283032     94  D jni_lib_merge: Preparing to register librninstance_so.  onload_func: 91eac450
+
+1794996283032     95  D jni_lib_merge: Preparing to register libturbomodulejsijni_so.  onload_func: 91f57b90
+
+1794996283032     96  D jni_lib_merge: Preparing to register libuimanagerjni_so.  onload_func: 91f5fac0
+
+1794996283032     97  D jni_lib_merge: Preparing to register libyoga_so.  onload_func: 91f67140
+
+1794996283032     98  D jni_lib_merge: About to register 11 actual methods.
+
+	existing SO sources: 
+		SoSource 0: BackupSoSource[root = /data/app-data/dev.acos.fixtures.rnhello/lib-main flags = 1 apks = [/data/app/rn-debug.apk]]
+		SoSource 1: ApplicationSoSource[DirectorySoSource[root = /data/app-lib/x86_64 flags = 0]]
+		SoSource 2: DirectorySoSource[root = /system/lib64 flags = 2]
+		SoSource 3: DirectorySoSource[root = /vendor/lib64 flags = 2]
+	Native lib dir: /data/app-lib/x86_64
+
+1794996283032    100  W soloader.recovery.CheckBaseApkExists: Base apk exists: /data/app/rn-debug.apk
+1794996283032    102  W SysUtil: error removing /data/app-data/dev.acos.fixtures.rnhello/lib-main write permission
+1794996283032    103  E fb-UnpackingSoSource: Encountered exception during wait for unpacking trying to acquire file lock for com.facebook.soloader.BackupSoSource (/data/app-data/dev.acos.fixtures.rnhello/lib-main): 
+java.io.FileNotFoundException: /data/app-data/dev.acos.fixtures.rnhello/lib-main/dso_lock: open failed: ENOENT (No such file or directory)
+	at libcore.io.IoBridge.open(IoBridge.java:574)
+	at java.io.FileOutputStream.<init>(FileOutputStream.java:236)
+	at java.io.FileOutputStream.<init>(FileOutputStream.java:186)
+	at com.facebook.soloader.FileLocker.<init>(FileLocker.java:36)
+	at com.facebook.soloader.FileLocker.lock(FileLocker.java:32)
+	at com.facebook.soloader.SysUtil.getFileLocker(SysUtil.java:462)
+	at com.facebook.soloader.SysUtil.getOrCreateLockOnDir(SysUtil.java:447)
+	at com.facebook.soloader.UnpackingSoSource.waitUntilInitCompleted(UnpackingSoSource.java:401)
+	at com.facebook.soloader.recovery.WaitForAsyncInit.recover(WaitForAsyncInit.java:31)
+	at com.facebook.soloader.recovery.CompositeRecoveryStrategy.recover(CompositeRecoveryStrategy.java:34)
+	at com.facebook.react.defaults.DefaultNewArchitectureEntryPoint.load(DefaultNewArchitectureEntryPoint.kt:108)
+	at dev.acos.fixtures.rnhello.MainActivity.onCreate(MainActivity.java:36)
+	at android.app.Activity.performCreate(Activity.java:8595)
+	at android.app.Activity.performCreate(Activity.java:8573)
+	at android.app.Instrumentation.callActivityOnCreate(Instrumentation.java:1456)
+	at android.app.ActivityThread.performLaunchActivity(ActivityThread.java:3764)
+	at android.app.ActivityThread.handleLaunchActivity(ActivityThread.java:3922)
+	at android.app.servertransaction.LaunchActivityItem.execute(LaunchActivityItem.java:103)
+	at android.app.servertransaction.TransactionExecutor.executeCallbacks(TransactionExecutor.java:139)
+	at android.app.servertransaction.TransactionExecutor.execute(TransactionExecutor.java:96)
+	at android.app.ActivityThread$H.handleMessage(ActivityThread.java:2443)
+	at android.os.Handler.dispatchMessage(Handler.java:106)
+	at android.os.Looper.loopOnce(Looper.java:205)
+	at a
+	existing SO sources: 
+		SoSource 0: BackupSoSource[root = /data/app-data/dev.acos.fixtures.rnhello/lib-main flags = 1 apks = [/data/app/rn-debug.apk]]
+		SoSource 1: ApplicationSoSource[DirectorySoSource[root = /data/app-lib/x86_64 flags = 0]]
+		SoSource 2: DirectorySoSource[root = /system/lib64 flags = 2]
+		SoSource 3: DirectorySoSource[root = /vendor/lib64 flags = 2]
+	Native lib dir: /data/app-lib/x86_64
+
+1794996283032    110  W SysUtil: error removing /data/app-data/dev.acos.fixtures.rnhello/lib-main write permission
+1794996283032    111  E fb-UnpackingSoSource: Encountered exception during wait for unpacking trying to acquire file lock for com.facebook.soloader.BackupSoSource (/data/app-data/dev.acos.fixtures.rnhello/lib-main): 
+java.io.FileNotFoundException: /data/app-data/dev.acos.fixtures.rnhello/lib-main/dso_lock: open failed: ENOENT (No such file or directory)
+	at libcore.io.IoBridge.open(IoBridge.java:574)
+	at java.io.FileOutputStream.<init>(FileOutputStream.java:236)
+	at java.io.FileOutputStream.<init>(FileOutputStream.java:186)
+	at com.facebook.soloader.FileLocker.<init>(FileLocker.java:36)
+	at com.facebook.soloader.FileLocker.lock(FileLocker.java:32)
+	at com.facebook.soloader.SysUtil.getFileLocker(SysUtil.java:462)
+	at com.facebook.soloader.SysUtil.getOrCreateLockOnDir(SysUtil.java:447)
+	at com.facebook.soloader.UnpackingSoSource.waitUntilInitCompleted(UnpackingSoSource.java:401)
+	at com.facebook.soloader.recovery.WaitForAsyncInit.recover(WaitForAsyncInit.java:31)
+	at com.facebook.soloader.recovery.CompositeRecoveryStrategy.recover(CompositeRecoveryStrategy.java:34)
+	at com.facebook.react.defaults.DefaultNewArchitectureEntryPoint.load(DefaultNewArchitectureEntryPoint.kt:108)
+	at dev.acos.fixtures.rnhello.MainActivity.onCreate(MainActivity.java:36)
+	at android.app.Activity.performCreate(Activity.java:8595)
+	at android.app.Activity.performCreate(Activity.java:8573)
+	at android.app.Instrumentation.callActivityOnCreate(Instrumentation.java:1456)
+	at android.app.ActivityThread.performLaunchActivity(ActivityThread.java:3764)
+	at android.app.ActivityThread.handleLaunchActivity(ActivityThread.java:3922)
+	at android.app.servertransaction.LaunchActivityItem.execute(LaunchActivityItem.java:103)
+	at android.app.servertransaction.TransactionExecutor.executeCallbacks(TransactionExecutor.java:139)
+	at android.app.servertransaction.TransactionExecutor.execute(TransactionExecutor.java:96)
+	at android.app.ActivityThread$H.handleMessage(ActivityThread.java:2443)
+	at android.os.Handler.dispatchMessage(Handler.java:106)
+	at android.os.Looper.loopOnce(Looper.java:205)
+	at a
+	existing SO sources: 
+		SoSource 0: BackupSoSource[root = /data/app-data/dev.acos.fixtures.rnhello/lib-main flags = 1 apks = [/data/app/rn-debug.apk]]
+		SoSource 1: ApplicationSoSource[DirectorySoSource[root = /data/app-lib/x86_64 flags = 0]]
+		SoSource 2: DirectorySoSource[root = /system/lib64 flags = 2]
+		SoSource 3: DirectorySoSource[root = /vendor/lib64 flags = 2]
+	Native lib dir: /data/app-lib/x86_64
+
+1794996283032    115  D jni_lib_merge: Entering merged library JNI_OnLoad.
+
+1794996283032    116  D jni_lib_merge: Preparing 4 pre-merged libs (including stub)
+
+1794996283032    117  D jni_lib_merge: Preparing to register libhermes_executor_so.  onload_func: 945de730
+
+1794996283032    118  D jni_lib_merge: Preparing to register libhermesinstancejni_so.  onload_func: 945e5db0
+
+1794996283032    119  D jni_lib_merge: Preparing to register libjsijniprofiler_so.  onload_func: 945e6540
+
+1794996283032    120  D jni_lib_merge: About to register 3 actual methods.
+
+1794996283032    122  E logdw: dev.acos.fixtures.rnhello.MainActivity
+1794996283032    123  E logdw: dev.acos.fixtures.rnhello.MainActivity
+1794996283032    124  E logdw: dev.acos.fixtures.rnhello.MainActivity
+1794996283032    125  D CompatibilityChangeReporter: Compat change id reported: 237531167; UID 10192; state: ENABLED
+1794996283032    126  W unknown:ReactNative: Packager connection already open, nooping.
+1794996283032    127  D CompatibilityChangeReporter: Compat change id reported: 210923482; UID 10192; state: ENABLED
+1794996283032    129  W AcosPriority: setpriority(-4) clamped to 0 (host RLIMIT_NICE is below stock init.rc's 40; guest-only adapter, W21)
+1794996283032    130  W unknown:ReactNative: Packager connection already open, nooping.
+1794996283032    158  I ReactNativeJS: Running "rnhello" with {"rootTag":11}
+1794996283032    159  W ReactNativeJS: The app is running using the Legacy Architecture. The Legacy Architecture is deprecated and will be removed in a future version of React Native. Please consider migrating to the New Architecture. For more information, please see https://reactnative.dev/blog/202
+1794996283032    160  D CompatibilityChangeReporter: Compat change id reported: 289878283; UID 10192; state: ENABLED
+1794996283032    161  D CompatibilityChangeReporter: Compat change id reported: 263076149; UID 10192; state: ENABLED
+	existing SO sources: 
+		SoSource 0: BackupSoSource[root = /data/app-data/dev.acos.fixtures.rnhello/lib-main flags = 1 apks = [/data/app/rn-debug.apk]]
+		SoSource 1: ApplicationSoSource[DirectorySoSource[root = /data/app-lib/x86_64 flags = 0]]
+		SoSource 2: DirectorySoSource[root = /system/lib64 flags = 2]
+		SoSource 3: DirectorySoSource[root = /vendor/lib64 flags = 2]
+	Native lib dir: /data/app-lib/x86_64
+
+1794996283032    163  W soloader.recovery.CheckBaseApkExists: Base apk exists: /data/app/rn-debug.apk
+1794996283032    165  W SysUtil: error removing /data/app-data/dev.acos.fixtures.rnhello/lib-main write permission
+1794996283032    166  E fb-UnpackingSoSource: Encountered exception during wait for unpacking trying to acquire file lock for com.facebook.soloader.BackupSoSource (/data/app-data/dev.acos.fixtures.rnhello/lib-main): 
+java.io.FileNotFoundException: /data/app-data/dev.acos.fixtures.rnhello/lib-main/dso_lock: open failed: ENOENT (No such file or directory)
+	at libcore.io.IoBridge.open(IoBridge.java:574)
+	at java.io.FileOutputStream.<init>(FileOutputStream.java:236)
+	at java.io.FileOutputStream.<init>(FileOutputStream.java:186)
+	at com.facebook.soloader.FileLocker.<init>(FileLocker.java:36)
+	at com.facebook.soloader.FileLocker.lock(FileLocker.java:32)
+	at com.facebook.soloader.SysUtil.getFileLocker(SysUtil.java:462)
+	at com.facebook.soloader.SysUtil.getOrCreateLockOnDir(SysUtil.java:447)
+	at com.facebook.soloader.UnpackingSoSource.waitUntilInitCompleted(UnpackingSoSource.java:401)
+	at com.facebook.soloader.recovery.WaitForAsyncInit.recover(WaitForAsyncInit.java:31)
+	at com.facebook.soloader.recovery.CompositeRecoveryStrategy.recover(CompositeRecoveryStrategy.java:34)
+	at com.facebook.soloader.nativeloader.NativeLoader.loadLibrary(NativeLoader.java:52)
+	at com.facebook.soloader.nativeloader.NativeLoader.loadLibrary(NativeLoader.java:30)
+	at com.facebook.imagepipeline.memory.NativeMemoryChunk.<clinit>(NativeMemoryChunk.java:33)
+	at com.facebook.imagepipeline.memory.NativeMemoryChunkPool.alloc(NativeMemoryChunkPool.java:31)
+	at com.facebook.imagepipeline.memory.NativeMemoryChunkPool.alloc(NativeMemoryChunkPool.java:16)
+	at com.facebook.imagepipeline.memory.BasePool.get(BasePool.java:256)
+	at com.facebook.imagepipeline.memory.MemoryPooledByteBufferOutputStream.<init>(MemoryPooledByteBufferOutputStream.kt:39)
+	at com.facebook.imagepipeline.memory.MemoryPooledByteBufferFactory.newOutputStream(MemoryPooledByteBufferFactory.kt:98)
+	at com.facebook.imagepipeline.memory.MemoryPooledByteBufferFactory.newOutputStream(MemoryPooledByteBufferFactory.kt:23)
+	at com.facebook.imagepipeline.producers.NetworkFetchProducer.onResponse(NetworkFetchProducer.java:98)
+	at com.facebook.imagepipeline.producers.NetworkFetchProd
+	existing SO sources: 
+		SoSource 0: BackupSoSource[root = /data/app-data/dev.acos.fixtures.rnhello/lib-main flags = 1 apks = [/data/app/rn-debug.apk]]
+		SoSource 1: ApplicationSoSource[DirectorySoSource[root = /data/app-lib/x86_64 flags = 0]]
+		SoSource 2: DirectorySoSource[root = /system/lib64 flags = 2]
+		SoSource 3: DirectorySoSource[root = /vendor/lib64 flags = 2]
+	Native lib dir: /data/app-lib/x86_64
+
+1794996283032    173  W SysUtil: error removing /data/app-data/dev.acos.fixtures.rnhello/lib-main write permission
+1794996283032    174  E fb-UnpackingSoSource: Encountered exception during wait for unpacking trying to acquire file lock for com.facebook.soloader.BackupSoSource (/data/app-data/dev.acos.fixtures.rnhello/lib-main): 
+java.io.FileNotFoundException: /data/app-data/dev.acos.fixtures.rnhello/lib-main/dso_lock: open failed: ENOENT (No such file or directory)
+	at libcore.io.IoBridge.open(IoBridge.java:574)
+	at java.io.FileOutputStream.<init>(FileOutputStream.java:236)
+	at java.io.FileOutputStream.<init>(FileOutputStream.java:186)
+	at com.facebook.soloader.FileLocker.<init>(FileLocker.java:36)
+	at com.facebook.soloader.FileLocker.lock(FileLocker.java:32)
+	at com.facebook.soloader.SysUtil.getFileLocker(SysUtil.java:462)
+	at com.facebook.soloader.SysUtil.getOrCreateLockOnDir(SysUtil.java:447)
+	at com.facebook.soloader.UnpackingSoSource.waitUntilInitCompleted(UnpackingSoSource.java:401)
+	at com.facebook.soloader.recovery.WaitForAsyncInit.recover(WaitForAsyncInit.java:31)
+	at com.facebook.soloader.recovery.CompositeRecoveryStrategy.recover(CompositeRecoveryStrategy.java:34)
+	at com.facebook.soloader.nativeloader.NativeLoader.loadLibrary(NativeLoader.java:52)
+	at com.facebook.soloader.nativeloader.NativeLoader.loadLibrary(NativeLoader.java:30)
+	at com.facebook.imagepipeline.memory.NativeMemoryChunk.<clinit>(NativeMemoryChunk.java:33)
+	at com.facebook.imagepipeline.memory.NativeMemoryChunkPool.alloc(NativeMemoryChunkPool.java:31)
+	at com.facebook.imagepipeline.memory.NativeMemoryChunkPool.alloc(NativeMemoryChunkPool.java:16)
+	at com.facebook.imagepipeline.memory.BasePool.get(BasePool.java:256)
+	at com.facebook.imagepipeline.memory.MemoryPooledByteBufferOutputStream.<init>(MemoryPooledByteBufferOutputStream.kt:39)
+	at com.facebook.imagepipeline.memory.MemoryPooledByteBufferFactory.newOutputStream(MemoryPooledByteBufferFactory.kt:98)
+	at com.facebook.imagepipeline.memory.MemoryPooledByteBufferFactory.newOutputStream(MemoryPooledByteBufferFactory.kt:23)
+	at com.facebook.imagepipeline.producers.NetworkFetchProducer.onResponse(NetworkFetchProducer.java:98)
+	at com.facebook.imagepipeline.producers.NetworkFetchProd
+	existing SO sources: 
+		SoSource 0: BackupSoSource[root = /data/app-data/dev.acos.fixtures.rnhello/lib-main flags = 1 apks = [/data/app/rn-debug.apk]]
+		SoSource 1: ApplicationSoSource[DirectorySoSource[root = /data/app-lib/x86_64 flags = 0]]
+		SoSource 2: DirectorySoSource[root = /system/lib64 flags = 2]
+		SoSource 3: DirectorySoSource[root = /vendor/lib64 flags = 2]
+	Native lib dir: /data/app-lib/x86_64
+

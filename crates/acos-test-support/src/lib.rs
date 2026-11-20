@@ -12,6 +12,14 @@
 use std::path::{Path, PathBuf};
 use std::sync::Once;
 
+pub mod prereq;
+
+pub use prereq::{
+    art_inputs, art_sysroot, art_warm_data, require_art, require_prereq, require_some,
+    skip_allowed,
+    skipped_count, ArtInputs, ALLOW_ANY_SKIP_ENV, ALLOW_SKIP_ENV, WARM_DATA_ENV,
+};
+
 /// The workspace root (the parent of `crates/`).
 pub fn repo_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")

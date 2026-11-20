@@ -220,6 +220,21 @@ pub fn file_id(path: &Path) -> String {
     }
 }
 
+/// Identity of a tool by **content**: size and sha256 of its bytes, never its
+/// path or mtime. For files that live inside a relocatable tree (the extracted
+/// sysroot): the same image reached through another path (a worktree's
+/// `.cache/art` symlink, a copied or moved checkout, an install under another
+/// prefix) must be the same cache key, because the derived output (the
+/// `linkerconfig` tree, `derive_classpath`, idmaps) is a function of the bytes,
+/// not of where they were read from. `file_id` keeps the path on purpose for
+/// host toolchain files, where a different path is a different toolchain.
+pub fn content_id(path: &Path) -> String {
+    match fs::read(path) {
+        Ok(bytes) => format!("{}|{}", bytes.len(), sha256_hex(&bytes)),
+        Err(_) => "absent".to_string(),
+    }
+}
+
 // ------------------------------------------------------------------- cache
 
 struct Lock {

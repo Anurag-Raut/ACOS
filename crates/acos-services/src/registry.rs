@@ -465,6 +465,7 @@ pub fn install_with_handles_and_insets(
     let notification = Arc::new(Mutex::new(crate::declared::NotificationState::new()));
     let statusbar = Arc::new(Mutex::new(crate::declared::StatusBarState::new()));
     let connectivity = Arc::new(Mutex::new(crate::connectivity::ConnectivityState::new()));
+    host.set_connectivity_state(Some(Arc::clone(&connectivity)));
     let shortcuts = Arc::new(Mutex::new(crate::extras::ShortcutState::new()));
     let jobs = Arc::new(Mutex::new(crate::extras::JobState::new()));
     let power = Arc::new(Mutex::new(crate::extras::PowerState::new()));

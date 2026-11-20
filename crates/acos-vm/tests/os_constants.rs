@@ -186,8 +186,7 @@ fn parse_stdout(stdout: &str) -> HashMap<String, String> {
 
 #[test]
 fn os_constants_on_the_real_framework() {
-    let Some(dex) = compile_case("OsConstantsMain") else {
-        eprintln!("SKIP os_constants_on_the_real_framework: javac/d8/android.jar unavailable");
+    let Some(dex) = acos_test_support::require_some(compile_case("OsConstantsMain"), "os_constants_on_the_real_framework", "javac/d8/android.jar unavailable") else {
         return;
     };
     let options = VmOptions {
@@ -197,7 +196,7 @@ fn os_constants_on_the_real_framework() {
     let mut vm = match Vm::new(options) {
         Ok(vm) => vm,
         Err(VmError::BootClasspathMissing(m)) => {
-            eprintln!("SKIP os_constants_on_the_real_framework: {m}");
+            acos_test_support::require_prereq(false, "os_constants_on_the_real_framework", &format!("os_constants_on_the_real_framework: {m}"));
             return;
         }
         Err(e) => panic!("Vm::new failed: {e}"),

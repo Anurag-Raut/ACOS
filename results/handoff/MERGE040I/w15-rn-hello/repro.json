@@ -1,0 +1,17 @@
+{
+  "acos_version": "0.3.0",
+  "apk_path": "/home/Qui/.t3/worktrees/acos/t3-582a0e0f-a0e7f7d3ef4373d4/fixtures/build/apps/rn-hello.apk",
+  "apk_sha256": "9ddb7acfa0912324aee65aba41014ae3f03d7d5a8b0af91ceebfa75b3090f6da",
+  "scenario_path": "/home/Qui/.t3/worktrees/acos/t3-582a0e0f-a0e7f7d3ef4373d4/scenarios/w15-rn-hello.yaml",
+  "scenario_sha256": "ee0eb2283882cbf312382726f0a15d6f6e92e030c8202390fdbf0685886aeb69",
+  "flags": [],
+  "isolation": "process",
+  "display": {
+    "mode": "offscreen",
+    "width": 1080,
+    "height": 2400,
+    "density_dpi": 420
+  },
+  "fidelity": "art-reference",
+  "backend": "acos-native"
+}

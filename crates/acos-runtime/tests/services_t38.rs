@@ -348,8 +348,10 @@ fn clipboard_round_trips_the_marshalled_clipdata_bytes() {
 
 #[test]
 fn clipboard_set_primary_clip_without_a_vm_is_a_structured_error() {
-    // The `ClipData` request can only be read by the real `ClipData.CREATOR`,
-    // so the VM-free path must refuse it rather than store garbage.
+    // MODFILL wired `setPrimaryClip` directly through `ClipboardService::raw_transact`
+    // (`read_clip_shape`), so the VM-free path now handles real `ClipData` parcels
+    // directly and must still refuse a null `ClipData` with a structured
+    // `SERVICE_BAD_REQUEST` rather than storing garbage.
     let mut host = ServiceHost::standard();
     let err = invoke_err(
         &mut host,
@@ -364,7 +366,11 @@ fn clipboard_set_primary_clip_without_a_vm_is_a_structured_error() {
             Value::Int(0),
         ],
     );
-    assert_eq!(err.code(), codes::UNSUPPORTED_ANDROID_API);
+    assert_eq!(err.code(), codes::SERVICE_BAD_REQUEST);
+    assert!(
+        err.to_string().contains("clip is null"),
+        "expected 'clip is null' detail, got: {err}"
+    );
 }
 
 // ---------------------------------------------------------------------------

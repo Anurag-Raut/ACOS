@@ -14,11 +14,15 @@
 //!   protocol: `status`, `spawn`, `detach`, `offline`, `delay`, `host_port`.
 //! * [`net_ctl`] — the `acos_net` action names, their closed JSON Schema and the
 //!   parser; `acos-mcp` advertises the schema verbatim and both surfaces read it.
+//! * [`pasta`] — where the pinned static `pasta` binary is, in one place: the
+//!   `acos doctor` check, the relay supervisor, the `needs_env: [pasta]`
+//!   resolution and `tools/release/install.sh` all read this rule.
 //!
 //! [`Module::control`]: https://docs.rs/acos-services
 
 pub mod client;
 pub mod net_ctl;
+pub mod pasta;
 pub mod proto;
 
 /// The name of the supervisor's control socket inside its state directory.

@@ -1,0 +1,7 @@
+Host runner TMPDIR=/home/Qui/.t3/userdata/antigravity-tmp/ac0a3dfd6ddd/run-p4Xe7x (62 bytes)
+spike_net_boundary rc=101
+cli zygote_host rc=101
+cli rel3f_front_doors rc=0
+mcp fb5+serveleak rc=0
+cli s8 optin rc=0
+webview optin rc=0

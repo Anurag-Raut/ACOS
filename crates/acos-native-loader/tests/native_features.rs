@@ -108,7 +108,12 @@ fn build_testjmp() -> Option<std::path::PathBuf> {
 fn bionic_setjmp_longjmp_roundtrip() {
     let _g = common::serial();
     let Some(so) = build_testjmp() else {
-        eprintln!("SKIP bionic_setjmp_longjmp_roundtrip: NDK clang/testjmp.c unavailable");
+        let _ = acos_test_support::require_prereq(
+            false,
+            "bionic_setjmp_longjmp_roundtrip",
+            "NDK clang or tests/native/testjmp.c unavailable — set ANDROID_NDK_HOME to a \
+             toolchain with x86_64-linux-android29-clang",
+        );
         return;
     };
     let loader = Loader::new(

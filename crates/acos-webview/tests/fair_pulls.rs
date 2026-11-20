@@ -514,11 +514,13 @@ fn assert_tap_landed(arm: &Arm, tag: &str) {
 
 #[test]
 fn frame_pulls_are_fair_between_two_views_one_of_them_slow() {
-    if !engine_test_enabled() {
-        println!(
-            "SKIP fair_pulls: set ACOS_WEBVIEW_TEST=1 (and run it under \
-             tools/art-runtime/run-exclusive.sh) to measure against the real engine"
-        );
+    if acos_test_support::require_prereq(
+        engine_test_enabled(),
+        "frame_pulls_are_fair_between_two_views_one_of_them_slow",
+        "set ACOS_WEBVIEW_TEST=1 to run this heavy Chromium test (the release gate runs it with the env set; see tools/test-prereq-optouts.txt)",
+    )
+    .is_none()
+    {
         return;
     }
     let root = scratch("two-views");

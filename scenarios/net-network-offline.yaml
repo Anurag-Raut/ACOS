@@ -81,6 +81,7 @@ steps:
       tag: NetCheck
       since_previous_step: true
       ordered: true
+      timeout_ms: 10000
       patterns:
         - '^netcb onLost '
 
@@ -114,6 +115,7 @@ steps:
       tag: NetCheck
       since_previous_step: true
       ordered: true
+      timeout_ms: 10000
       patterns:
         - '^netcb onAvailable '
   - tap:

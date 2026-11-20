@@ -1,0 +1,105 @@
+{
+  "assertions": [
+    {
+      "actual": {
+        "focus": "accessibility_overlay",
+        "focus_type": "TYPE_ACCESSIBILITY_OVERLAY",
+        "order": [
+          "application",
+          "accessibility_overlay"
+        ],
+        "types": [
+          "TYPE_BASE_APPLICATION",
+          "TYPE_ACCESSIBILITY_OVERLAY"
+        ],
+        "windows": [
+          {
+            "bounds": [
+              0,
+              0,
+              1080,
+              2400
+            ],
+            "focus": false,
+            "id": "24dd669",
+            "kind": "application",
+            "label": "main",
+            "touchable": true,
+            "type_name": "TYPE_BASE_APPLICATION",
+            "z": 0
+          },
+          {
+            "bounds": [
+              0,
+              0,
+              1080,
+              2400
+            ],
+            "focus": true,
+            "id": "9367199",
+            "kind": "accessibility_overlay",
+            "label": "window-2032#1",
+            "renderer_fallback": true,
+            "touchable": true,
+            "type_name": "TYPE_ACCESSIBILITY_OVERLAY",
+            "z": 1
+          }
+        ]
+      },
+      "expected": {
+        "focus": null,
+        "focus_type": null,
+        "order": [
+          "application",
+          "accessibility_overlay"
+        ],
+        "types": [
+          "TYPE_BASE_APPLICATION",
+          "TYPE_ACCESSIBILITY_OVERLAY"
+        ]
+      },
+      "kind": "windows",
+      "matched_node_ids": [],
+      "message": "2 windows in policy z order",
+      "passed": true
+    }
+  ],
+  "certification": "certified-with-limits",
+  "certification_limits": {
+    "doc": "docs/SANDBOX_CERTIFICATION.md",
+    "section": "§8.7"
+  },
+  "duration_ms": 1,
+  "evidence": [
+    {
+      "kind": "tree",
+      "path": "tree/351.json"
+    },
+    {
+      "kind": "frame",
+      "path": "frames/351.png"
+    },
+    {
+      "kind": "step",
+      "path": "steps/57-assert_windows.json"
+    }
+  ],
+  "frame_seq": 351,
+  "index": 57,
+  "provenance": {},
+  "settle": {
+    "bound": "strict-event",
+    "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
+    "mode": "strict",
+    "probe_seq": 889,
+    "reason": "strict-event",
+    "settled": true,
+    "strict_rule": "event",
+    "tree_age_ms": 41,
+    "waited_ms": 0,
+    "waited_ms_source": "step"
+  },
+  "status": "pass",
+  "step": "assert_windows",
+  "trust": "trusted"
+}

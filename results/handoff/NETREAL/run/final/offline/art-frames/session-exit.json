@@ -1,0 +1,98 @@
+{
+  "abi": null,
+  "activity_resumed": true,
+  "application_created": true,
+  "cgroup": "cgroup: memory.max=2048MiB swap=0 pids.max=512 peak=68MiB oom_kills=0 (/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p929612-i979287.scope)",
+  "code": null,
+  "disk_free_bytes": 233248751616,
+  "guard": "seccomp: OK guard=active insns=85 / OK landlock=active abi=10 rules=15 skipped=0",
+  "guest_crash": null,
+  "guest_crash_detail": null,
+  "guest_exit": 0,
+  "guest_signal": null,
+  "heap": {
+    "bytes": {
+      "heapgrowthlimit": 201326592,
+      "heapmaxfree": 8388608,
+      "heapminfree": 524288,
+      "heapsize": 536870912,
+      "heapstartsize": 8388608
+    },
+    "heaptargetutilization": 0.75,
+    "mib": {
+      "heapgrowthlimit": 192.0,
+      "heapmaxfree": 8.0,
+      "heapminfree": 0.5,
+      "heapsize": 512.0,
+      "heapstartsize": 8.0
+    },
+    "overridden": [],
+    "prop": {
+      "dalvik.vm.heapgrowthlimit": "192m",
+      "dalvik.vm.heapmaxfree": "8m",
+      "dalvik.vm.heapminfree": "512k",
+      "dalvik.vm.heapsize": "512m",
+      "dalvik.vm.heapstartsize": "8m",
+      "dalvik.vm.heaptargetutilization": "0.75"
+    },
+    "source": "ACOS_ART_HEAP* overrides on the stock API-34 dalvik.vm.* table"
+  },
+  "kept_run_dir": null,
+  "logd": "logd: 211 entries",
+  "logd_final": "logd-final.jsonl",
+  "logd_tail": [
+    "E/RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.",
+    "E/RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.",
+    "E/RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.",
+    "E/RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.",
+    "E/RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.",
+    "E/RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.",
+    "E/RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.",
+    "E/RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.",
+    "I/NetCheck: tls tls=ok cipher=TLS_AES_128_GCM_SHA256 chain=4 leaf=CN=example.com issuer=CN=Cloudflare TLS Issuing ECC CA 3,O=SSL Corporation,C=US notAfter=1798239395000",
+    "I/NetCheck: response code=200 url=https://example.com server=cloudflare cfray=a5c5fd03cb9689c7-MRS via=null",
+    "I/NetCheck: body-first-bytes-len=256",
+    "I/NetCheck: fetch result=HTTP 200",
+    "E/RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.",
+    "E/RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.",
+    "E/RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.",
+    "E/RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.",
+    "E/RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.",
+    "E/RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.",
+    "E/RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.",
+    "E/RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.",
+    "E/RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.",
+    "E/RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.",
+    "E/RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.",
+    "I/NetCheck: tlsneg=rejected javax.net.ssl.SSLHandshakeException"
+  ],
+  "native_crash": null,
+  "native_crash_path": null,
+  "notes": [
+    "shared-boot-image: /home/Qui/.cache/acos/art/boot-images/fixed-ff39b037f1d6b9ff (ACOS_ART_BOOT_IMAGE=shared-fixed; -Ximage:/data/img/boot.art -Xnorelocate; fixed base 0x70000000, no image ASLR; cache hit)",
+    "boot_image: mode=shared-fixed cache=hit dir=/home/Qui/.cache/acos/art/boot-images/fixed-ff39b037f1d6b9ff input=ff39b037f1d6b9ff base=0x70000000",
+    "cgroup: memory.max=2048MiB swap=0 pids.max=512 peak=68MiB oom_kills=0 (/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p929612-i979287.scope)",
+    "seccomp: OK guard=active insns=85 / OK landlock=active abi=10 rules=15 skipped=0",
+    "logd: 211 entries",
+    "webview: module `webview` is off (no `com.android.webview` provider package, no gate socket): `WebView` takes Android's own no-provider path. Attach it with `services: [{id: webview, profile: real}]`."
+  ],
+  "outcome": "ok",
+  "retryable": false,
+  "route": "launch",
+  "stage": "teardown-evidence",
+  "stderr_tail": [
+    "acos-net: session=1 netns=net:[4026535273] iface=acoss1 addr=10.163.1.2/30 gw=10.163.1.1",
+    "acos-netd: session acos-verify-929600 attached idx=1 addr=10.163.1.2 gw=10.163.1.1 pid=Some(929618) attach_ms=31.9",
+    "ACOSART[render]: dlopen(libandroid_runtime.so) ok @0x68ef8f8fece2eebd (default namespace, RTLD_GLOBAL)",
+    "ACOSHWC[gralloc]: software gralloc shim loaded (1 fd / 9 ints)",
+    "ACOSLAUNCH MARK crash-handler installed sigchain=0x7fed79c56d40"
+  ],
+  "stderr_tail_last": "ACOSLAUNCH MARK crash-handler installed sigchain=0x7fed79c56d40",
+  "stdout_tail": [
+    "…,\"focused\":false,\"checked\":false,\"selected\":false},{\"class\":\"android.widget.TextView\",\"id\":\"dev.acos.fixtures.netcheck:id/tls\",\"text\":\"tls=ok cipher=TLS_AES_128_GCM_SHA256 chain=4 leaf=CN=example.com issuer=CN=Cloudflare TLS Issuing ECC CA 3,O=SSL Corporation,C=US notAfter=1798239395000\",\"hint\":\"\",\"password\":false,\"content_description\":\"\",\"window\":\"main\",\"bounds\":\"[42,921][1038,1101]\",\"bounds_on_screen\":\"[42,921][1038,1101]\",\"visible_bounds\":\"[42,921][1038,1101]\",\"visible\":true,\"visibility\":0,\"clickable\":false,\"enabled\":true,\"focused\":false,\"checked\":false,\"selected\":false},{\"class\":\"android.widget.TextView\",\"id\":\"dev.acos.fixtures.netcheck:id/tlsneg\",\"text\":\"tlsneg=rejected javax.net.ssl.SSLHandshakeException\",\"hint\":\"\",\"password\":false,\"content_description\":\"\",\"window\":\"main\",\"bounds\":\"[42,1101][929,1152]\",\"bounds_on_screen\":\"[42,1101][929,1152]\",\"visible_bounds\":\"[42,1101][929,1152]\",\"visible\":true,\"visibility\":0,\"clickable\":false,\"enabled\":true,\"focused\":false,\"checked\":false,\"selected\":false}]}]},{\"class\":\"com.android.internal.widget.ActionBarContainer\",\"id\":\"android:id/action_bar_container\",\"text\":\"\",\"hint\":\"\",\"password\":false,\"content_description\":\"\",\"window\":\"main\",\"bounds\":\"[0,128][1080,275]\",\"bounds_on_screen\":\"[0,128][1080,275]\",\"visible_bounds\":\"[0,128][1080,275]\",\"visible\":true,\"visibility\":0,\"clickable\":false,\"enabled\":true,\"focused\":false,\"checked\":false,\"selected\":false,\"children\":[{\"class\":\"android.widget.Toolbar\",\"id\":\"android:id/action_bar\",\"text\":\"\",\"hint\":\"\",\"password\":false,\"content_description\":\"\",\"window\":\"main\",\"bounds\":\"[0,128][1080,275]\",\"bounds_on_screen\":\"[0,128][1080,275]\",\"visible_bounds\":\"[0,128][1080,275]\",\"visible\":true,\"visibility\":0,\"clickable\":false,\"enabled\":true,\"focused\":false,\"checked\":false,\"selected\":false,\"children\":[{\"class\":\"android.widget.TextView\",\"id\":\"\",\"text\":\"Net Check\",\"hint\":\"\",\"password\":false,\"content_description\":\"\",\"window\":\"main\",\"bounds\":\"[42,166][287,237]\",\"bounds_on_screen\":\"[42,166][287,237]\",\"visible_bounds\":\"[42,166][287,237]\",\"visible\":true,\"visibility\":0,\"clickable\":false,\"enabled\":true,\"focused\":false,\"checked\":false,\"selected\":false},{\"class\":\"android.widget.ActionMenuView\",\"id\":\"\",\"text\":\"\",\"hint\":\"\",\"password\":false,\"content_description\":\"\",\"window\":\"main\",\"bounds\":\"[1080,128][1080,275]\",\"bounds_on_screen\":\"[1080,128][1080,275]\",\"visible_bounds\":\"\",\"visible\":false,\"visibility\":0,\"clickable\":false,\"enabled\":true,\"focused\":false,\"checked\":false,\"selected\":false}]},{\"class\":\"com.android.internal.widget.ActionBarContextView\",\"id\":\"android:id/action_context_bar\",\"text\":\"\",\"hint\":\"\",\"password\":false,\"content_description\":\"\",\"window\":\"main\",\"bounds\":\"[0,128][0,128]\",\"bounds_on_screen\":\"[0,128][0,128]\",\"visible_bounds\":\"\",\"visible\":false,\"visibility\":8,\"clickable\":false,\"enabled\":true,\"focused\":false,\"checked\":false,\"selected\":false}]}]},{\"class\":\"android.view.View\",\"id\":\"android:id/navigationBarBackground\",\"text\":\"\",\"hint\":\"\",\"password\":false,\"content_description\":\"\",\"window\":\"main\",\"bounds\":\"[0,2337][1080,2400]\",\"bounds_on_screen\":\"[0,2337][1080,2400]\",\"visible_bounds\":\"[0,2337][1080,2400]\",\"visible\":true,\"visibility\":0,\"clickable\":false,\"enabled\":true,\"focused\":false,\"checked\":false,\"selected\":false},{\"class\":\"android.view.View\",\"id\":\"android:id/statusBarBackground\",\"text\":\"\",\"hint\":\"\",\"password\":false,\"content_description\":\"\",\"window\":\"main\",\"bounds\":\"[0,0][1080,128]\",\"bounds_on_screen\":\"[0,0][1080,128]\",\"visible_bounds\":\"[0,0][1080,128]\",\"visible\":true,\"visibility\":0,\"clickable\":false,\"enabled\":true,\"focused\":false,\"checked\":false,\"selected\":false}]}],\"window_count\":1,\"node_budget\":2000,\"truncated\":false,\"emit_us\":302},\"settle\":{\"settled\":true,\"pending\":[],\"frame_callbacks\":0,\"queue_due_ms\":-1,\"horizon_ms\":256,\"anim_callbacks\":[],\"draw_ms\":1794994560976,\"draw_seq\":116,\"window_stable_ms\":2941,\"in_touch_mode\":true,\"window_gone\":false,\"task_finished\":false,\"view_generation\":126},\"animations\":{\"on\":true,\"scale\":1.0,\"applied\":true,\"source\":\"env:on\"}}",
+    "ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {a9e0313} dev.acos.art.LaunchMain$8$1@5a79cf7"
+  ],
+  "stdout_tail_last": "ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {a9e0313} dev.acos.art.LaunchMain$8$1@5a79cf7",
+  "utc_ms": 1794994561063,
+  "wall_ms": 3286
+}

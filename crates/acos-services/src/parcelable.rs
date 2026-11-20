@@ -2002,6 +2002,174 @@ pub static SPECS: &[ParcelableSpec] = &[
         ],
         verification: Verification::Full,
     },
+    // ---- MODFILL: `net.wifi` (framework-wifi / framework-connectivity) --------
+    //
+    // These classes live in jars the codec audit's `dex/framework` directory
+    // does not contain, so `codec_field_orders_match_the_framework_dex` never
+    // sees them; `tests/wifi_module.rs` scans them across every boot-classpath
+    // jar (`Scanner::write_to_parcel_boot`) and pins the call sequence.
+    //
+    // `WifiSsid.writeToParcel`: `writeByteArray(mBytes)`.
+    ParcelableSpec {
+        class: "android.net.wifi.WifiSsid",
+        fields: &[FieldOp::ByteArray],
+        verification: Verification::Full,
+    },
+    // `SupplicantState.writeToParcel` of the image: `writeString(name())` (not
+    // the ordinal — the reader is `valueOf(in.readString())`; the first draft
+    // of this row wrote an int and the dex scan caught it).
+    ParcelableSpec {
+        class: "android.net.wifi.SupplicantState",
+        fields: &[FieldOp::Str16],
+        verification: Verification::Full,
+    },
+    // `DhcpInfo.writeToParcel`: seven ints.
+    ParcelableSpec {
+        class: "android.net.DhcpInfo",
+        fields: &[
+            FieldOp::Int, // ipAddress
+            FieldOp::Int, // gateway
+            FieldOp::Int, // netmask
+            FieldOp::Int, // dns1
+            FieldOp::Int, // dns2
+            FieldOp::Int, // serverAddress
+            FieldOp::Int, // leaseDuration
+        ],
+        verification: Verification::Full,
+    },
+    // `WifiInfo.writeToParcel` of the **image** (API 34). The AOSP `main`
+    // source in the reference cache also writes `mVendorData` (`writeList`) as
+    // the last field; the image's own dex does not, and the image is
+    // authoritative (BRIEF_COMMON wire-format rule).
+    ParcelableSpec {
+        class: "android.net.wifi.WifiInfo",
+        fields: &[
+            FieldOp::Int,                               // mNetworkId
+            FieldOp::Int,                               // mRssi
+            FieldOp::Int,                               // mLinkSpeed
+            FieldOp::Int,                               // mTxLinkSpeed
+            FieldOp::Int,                               // mRxLinkSpeed
+            FieldOp::Int,                               // mFrequency
+            FieldOp::ByteCond(&[FieldOp::ByteArray]),   // mIpAddress
+            FieldOp::Cond(&[FieldOp::Nested("android.net.wifi.WifiSsid")]), // mWifiSsid
+            FieldOp::Str16,                             // mBSSID
+            FieldOp::Str16,                             // mMacAddress
+            FieldOp::Int,                               // mMeteredHint
+            FieldOp::Int,                               // mEphemeral
+            FieldOp::Int,                               // mTrusted
+            FieldOp::Int,                               // mOemPaid
+            FieldOp::Int,                               // mOemPrivate
+            FieldOp::Int,                               // mCarrierMerged
+            FieldOp::Int,                               // score
+            FieldOp::Bool,                              // mIsUsable
+            FieldOp::Long,                              // txSuccess
+            FieldOp::Double,                            // mSuccessfulTxPacketsPerSecond
+            FieldOp::Long,                              // txRetries
+            FieldOp::Double,                            // mTxRetriedTxPacketsPerSecond
+            FieldOp::Long,                              // txBad
+            FieldOp::Double,                            // mLostTxPacketsPerSecond
+            FieldOp::Long,                              // rxSuccess
+            FieldOp::Double,                            // mSuccessfulRxPacketsPerSecond
+            FieldOp::Nested("android.net.wifi.SupplicantState"), // mSupplicantState
+            FieldOp::Int,                               // mOsuAp
+            FieldOp::Str16,                             // mRequestingPackageName
+            FieldOp::Str16,                             // mFqdn
+            FieldOp::Str16,                             // mProviderFriendlyName
+            FieldOp::Int,                               // mWifiStandard
+            FieldOp::Int,                               // mMaxSupportedTxLinkSpeed
+            FieldOp::Int,                               // mMaxSupportedRxLinkSpeed
+            FieldOp::Str16,                             // mPasspointUniqueId
+            FieldOp::Int,                               // mSubscriptionId
+            FieldOp::TypedList("android.net.wifi.ScanResult$InformationElement"), // mInformationElements
+            FieldOp::Int,                               // mIsPrimary (SdkLevel.isAtLeastS)
+            FieldOp::Int,                               // mSecurityType
+            FieldOp::Int,                               // mRestricted
+            FieldOp::Str16,                             // mNetworkKey
+            FieldOp::Named("android.net.MacAddress"),   // mApMldMacAddress
+            FieldOp::Int,                               // mApMloLinkId
+            FieldOp::TypedList("android.net.wifi.MloLink"), // mAffiliatedMloLinks
+            FieldOp::Bool,                              // mApTidToLinkMappingNegotiationSupported
+        ],
+        verification: Verification::Full,
+    },
+    // `ScanResult.writeToParcel` of the image (the anqp/radio-chain loops write
+    // only their count here: ACOS carries none).
+    ParcelableSpec {
+        class: "android.net.wifi.ScanResult",
+        fields: &[
+            FieldOp::Cond(&[FieldOp::Nested("android.net.wifi.WifiSsid")]), // wifiSsid
+            FieldOp::Str16, // SSID
+            FieldOp::Str16, // BSSID
+            FieldOp::Long,  // hessid
+            FieldOp::Int,   // anqpDomainId
+            FieldOp::Str16, // capabilities
+            FieldOp::Int,   // level
+            FieldOp::Int,   // frequency
+            FieldOp::Long,  // timestamp
+            FieldOp::Int,   // distanceCm
+            FieldOp::Int,   // distanceSdCm
+            FieldOp::Int,   // channelWidth
+            FieldOp::Int,   // centerFreq0
+            FieldOp::Int,   // centerFreq1
+            FieldOp::Int,   // mWifiStandard
+            FieldOp::Long,  // seen
+            FieldOp::Int,   // untrusted
+            FieldOp::Int,   // numUsage
+            FieldOp::Str16, // venueName
+            FieldOp::Str16, // operatorFriendlyName
+            FieldOp::Long,  // flags
+            FieldOp::TypedArray("android.net.wifi.ScanResult$InformationElement"), // informationElements
+            FieldOp::Counted(&[FieldOp::Str16]), // anqpLines
+            FieldOp::Counted(&[
+                FieldOp::Int,
+                FieldOp::Int,
+                FieldOp::Int,
+                FieldOp::ByteArray,
+            ]), // anqpElements (vendor id, element id, payload length, payload)
+            FieldOp::Counted(&[FieldOp::Int, FieldOp::Int]), // radioChainInfos
+            FieldOp::Str16, // ifaceName
+            FieldOp::Named("android.net.MacAddress"), // mApMldMacAddress
+            FieldOp::Int,   // mApMloLinkId
+            FieldOp::TypedList("android.net.wifi.MloLink"), // mAffiliatedMloLinks
+        ],
+        verification: Verification::Full,
+    },
+    // ---- MODFILL: `media.session` (framework `android.media`) ------------------
+    // `MediaMetadata.writeToParcel`: `writeBundle(mBundle)`, `writeInt(limit)`.
+    ParcelableSpec {
+        class: "android.media.MediaMetadata",
+        fields: &[FieldOp::Bundle, FieldOp::Int],
+        verification: Verification::Full,
+    },
+    // `PlaybackState.writeToParcel` (image order: state, position, speed,
+    // updateTime, bufferedPosition, actions, customActions, activeItemId,
+    // errorMessage, extras).
+    ParcelableSpec {
+        class: "android.media.session.PlaybackState",
+        fields: &[
+            FieldOp::Int,    // mState
+            FieldOp::Long,   // mPosition
+            FieldOp::Float,  // mSpeed
+            FieldOp::Long,   // mUpdateTime
+            FieldOp::Long,   // mBufferedPosition
+            FieldOp::Long,   // mActions
+            FieldOp::TypedList("android.media.session.PlaybackState$CustomAction"),
+            FieldOp::Long,   // mActiveItemId
+            FieldOp::CharSequence, // mErrorMessage
+            FieldOp::Bundle, // mExtras
+        ],
+        verification: Verification::Full,
+    },
+    ParcelableSpec {
+        class: "android.media.session.PlaybackState$CustomAction",
+        fields: &[
+            FieldOp::Str16,        // mAction
+            FieldOp::CharSequence, // mName
+            FieldOp::Int,          // mIcon
+            FieldOp::Bundle,       // mExtras
+        ],
+        verification: Verification::Full,
+    },
     // `NetworkInfo.writeToParcel` (the deprecated query replies).
     ParcelableSpec {
         class: "android.net.NetworkInfo",
@@ -3486,6 +3654,9 @@ pub mod val {
     pub const IBINDER: i32 = 15;
     /// `VAL_PARCELABLE`.
     pub const PARCELABLE: i32 = 4;
+    /// `VAL_CHARSEQUENCE` (`Bundle.putCharSequence`, `MediaMetadata.Builder.putText`):
+    /// `TextUtils.writeToParcel` — an `int` kind (`1` = plain) and a `String8`.
+    pub const CHARSEQUENCE: i32 = 10;
 
     /// `VAL_OBJECTARRAY` (`Parcel.writeArray(Object[])`).
     pub const OBJECTARRAY: i32 = 17;
@@ -3906,7 +4077,7 @@ fn read_intent_at(parcel: &mut Parcel, depth: usize) -> Result<Parcelable> {
     // fields after it) and not retained: no ACOS consumer reads `clipData`, and
     // the SEND text is also in `EXTRA_TEXT`, which the capture records.
     let clip_data = if parcel.read_int32()? != 0 {
-        read_clip_data(parcel)?;
+        read_clip_data(parcel, false)?;
         Value::Parcelable(Parcelable::Null)
     } else {
         Value::Parcelable(Parcelable::Null)
@@ -3959,17 +4130,50 @@ pub const MAX_CLIP_ITEMS: i32 = 256;
 /// cannot decode (an icon `Bitmap`, a non-null `TextLinks`/`ActivityInfo`) are a
 /// structured `UNSUPPORTED_PARCELABLE` instead of a misaligned parcel.
 pub fn skip_clip_data(parcel: &mut Parcel) -> Result<()> {
-    read_clip_data(parcel)
+    read_clip_data(parcel, false).map(|_| ())
 }
 
-fn read_clip_data(parcel: &mut Parcel) -> Result<()> {
+/// What the clipboard needs to know about a `ClipData` it stores (the bytes are
+/// kept verbatim; these are read from them, not guessed).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct ClipShape {
+    /// `ClipDescription.getLabel()` (plain text only).
+    pub label: String,
+    /// The description's MIME types.
+    pub mime_types: Vec<String>,
+    /// Byte length of the inline `ClipDescription` at the start of the clip.
+    pub description_len: usize,
+    /// `ClipData.getItemCount()`.
+    pub item_count: i32,
+    /// The first item's text is non-empty.
+    pub has_text: bool,
+    /// The first item has a `Uri`.
+    pub has_uri: bool,
+    /// The first item has an `Intent`.
+    pub has_intent: bool,
+}
+
+/// [`skip_clip_data`] for the clipboard: the same reader, but an item that
+/// carries a `Uri` or an `Intent` is accepted (a copied file/link clip), and the
+/// clip's facts are returned. An icon `Bitmap`, an `ActivityInfo` or `TextLinks`
+/// is still a structured `UNSUPPORTED_PARCELABLE`.
+pub fn read_clip_shape(parcel: &mut Parcel) -> Result<ClipShape> {
+    read_clip_data(parcel, true)
+}
+
+fn read_clip_data(parcel: &mut Parcel, allow_payloads: bool) -> Result<ClipShape> {
     // The shape is part of the structured error: "which ClipData field is not
     // modelled" is what tells a caller whether their share can be captured.
     let unsupported_shape = |what: &str| ServiceError::UnsupportedParcelable {
         class: format!("{CLIP_DATA_CLASS} ({what})"),
     };
+    let start = parcel.data_position();
+    let mut shape = ClipShape::default();
     // ClipDescription.writeToParcel: written inline (a direct call, no marker).
-    let _label = read_field(FieldOp::CharSequence, parcel)?;
+    let label = read_field(FieldOp::CharSequence, parcel)?;
+    if let Value::Str(Some(label)) = label {
+        shape.label = label;
+    }
     let mime_count = parcel.read_int32()?;
     if mime_count < 0 {
         return Err(unsupported_shape("null mimeTypes"));
@@ -3982,7 +4186,9 @@ fn read_clip_data(parcel: &mut Parcel) -> Result<()> {
         });
     }
     for _ in 0..mime_count {
-        let _ = parcel.read_string16()?;
+        if let Some(mime) = parcel.read_string16()? {
+            shape.mime_types.push(mime);
+        }
     }
     // `PersistableBundle mExtras`: the `writeBundle` shape (`-1` null, `0` the
     // framework's empty fast path, else `[length][magic][count][entries]`).
@@ -3992,6 +4198,7 @@ fn read_clip_data(parcel: &mut Parcel) -> Result<()> {
     let _classification_status = parcel.read_int32()?;
     // `confidencesToBundle()`: a real Bundle (`writeBundle` shape).
     let _ = read_bundle(parcel)?;
+    shape.description_len = parcel.data_position() - start;
     if parcel.read_int32()? != 0 {
         return Err(unsupported_shape("icon (a Bitmap payload)"));
     }
@@ -4006,23 +4213,57 @@ fn read_clip_data(parcel: &mut Parcel) -> Result<()> {
             detail: format!("ClipData item count {items} exceeds {MAX_CLIP_ITEMS}"),
         });
     }
-    for _ in 0..items {
+    shape.item_count = items;
+    for index in 0..items {
         // `TextUtils.writeToParcel(item.mText, dest, flags)`: the same
         // `CharSequence` shape the parcelable codec already decodes.
-        let _text = read_field(FieldOp::CharSequence, parcel)?;
+        let text = read_field(FieldOp::CharSequence, parcel)?;
         let _html = parcel.read_string8()?;
-        // The item's four `writeTypedObject` slots on this image (the share
-        // sheet's own shape for `ACTION_SEND` text is "all null"). A non-null
-        // payload is a structured refusal, never a guessed skip: the slots are
-        // `Uri`/`Intent`/`IntentSender`/`ActivityInfo` for an item that carries
-        // a stream, and the capture target records the *text* SEND case.
-        for _ in 0..4 {
+        // The item's four `writeTypedObject` slots on this image (image dex
+        // `ClipData.writeToParcel`: `mIntent`, `mUri`, `mActivityInfo`,
+        // `mTextLinks` — there is no `IntentSender` slot, unlike the AOSP
+        // source). The share sheet's own shape for `ACTION_SEND` text is "all
+        // null"; a non-null payload is a structured refusal, never a guessed
+        // skip, unless the caller (the clipboard) models `Uri`/`Intent`.
+        let has_intent = parcel.read_int32()? != 0;
+        if has_intent {
+            if !allow_payloads {
+                return Err(unsupported_shape("non-null item payload"));
+            }
+            read_intent_at(parcel, 0)?;
+        }
+        let has_uri = parcel.read_int32()? != 0;
+        if has_uri {
+            if !allow_payloads {
+                return Err(unsupported_shape("non-null item payload"));
+            }
+            let uri_type = parcel.read_int32()?;
+            match uri_type {
+                URI_TYPE_NULL => {}
+                URI_TYPE_STRING | URI_TYPE_OPAQUE | URI_TYPE_HIERARCHICAL => {
+                    let _ = parcel.read_string8()?;
+                }
+                other => {
+                    return Err(ServiceError::BadRequest {
+                        interface: CLIP_DATA_CLASS.into(),
+                        method: "readFromParcel".into(),
+                        detail: format!("unknown Uri type {other}"),
+                    })
+                }
+            }
+        }
+        for _ in 0..2 {
             if parcel.read_int32()? != 0 {
                 return Err(unsupported_shape("non-null item payload"));
             }
         }
+        if index == 0 {
+            shape.has_text = matches!(text, Value::Str(Some(ref t)) if !t.is_empty());
+            shape.has_uri = has_uri;
+            shape.has_intent = has_intent;
+        }
     }
-    Ok(())
+    Ok(shape)
 }
 
 fn read_nested_intent(parcel: &mut Parcel, depth: usize) -> Result<Value> {
@@ -4325,6 +4566,12 @@ pub fn read_dynamic(parcel: &mut Parcel) -> Result<crate::value::DynamicValue> {
     Ok(match tag {
         val::NULL => D::Null,
         val::STRING => D::String(parcel.read_string16()?),
+        val::CHARSEQUENCE => {
+            if parcel.read_int32()? != 1 {
+                return Err(unsupported("android.text.Spanned"));
+            }
+            D::String(parcel.read_string8()?)
+        }
         val::INTEGER => D::Int(parcel.read_int32()?),
         val::SHORT => D::Short(
             i16::try_from(parcel.read_int32()?).map_err(|_| bad("VAL_SHORT out of range"))?,

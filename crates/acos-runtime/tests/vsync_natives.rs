@@ -44,8 +44,7 @@ fn field(stdout: &str, key: &str) -> String {
 
 #[test]
 fn choreographer_frames_are_monotonic_and_stop_when_idle() {
-    let Some(dex) = common::compile_case(&["VsyncMain"]) else {
-        eprintln!("SKIP vsync natives: javac/d8/android.jar unavailable");
+    let Some(dex) = acos_test_support::require_some(common::compile_case(&["VsyncMain"]), "choreographer_frames_are_monotonic_and_stop_when_idle", "vsync natives: javac/d8/android.jar unavailable") else {
         return;
     };
     fwk_vsync::reset();
@@ -105,8 +104,7 @@ fn choreographer_frames_are_monotonic_and_stop_when_idle() {
 
 #[test]
 fn no_ticks_when_nothing_is_scheduled() {
-    let Some(dex) = common::compile_case(&["VsyncMain"]) else {
-        eprintln!("SKIP vsync natives: javac/d8/android.jar unavailable");
+    let Some(dex) = acos_test_support::require_some(common::compile_case(&["VsyncMain"]), "no_ticks_when_nothing_is_scheduled", "vsync natives: javac/d8/android.jar unavailable") else {
         return;
     };
     fwk_vsync::reset();
@@ -142,8 +140,7 @@ fn no_ticks_when_nothing_is_scheduled() {
 /// `performTraversals`.
 #[test]
 fn choreographer_frames_run_under_virtual_time() {
-    let Some(dex) = common::compile_case(&["VsyncMain"]) else {
-        eprintln!("SKIP choreographer frames under virtual time: javac/d8 unavailable");
+    let Some(dex) = acos_test_support::require_some(common::compile_case(&["VsyncMain"]), "choreographer_frames_run_under_virtual_time", "choreographer frames under virtual time: javac/d8 unavailable") else {
         return;
     };
     fwk_vsync::reset();

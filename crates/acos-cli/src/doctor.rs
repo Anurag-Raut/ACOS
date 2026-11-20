@@ -492,6 +492,11 @@ fn check_install(home: &Path) -> Vec<Check> {
             "Reinstall with tools/release/install.sh, or set ACOS_ART_BIN.",
         ));
     }
+    // ADR-0031: `webview: real` needs both the sibling `acos-webview` broker
+    // binary (`acos-art` resolves it next to `current_exe()`) and the staged
+    // `com.android.webview` provider APK. Optional (`webview` defaults to `off`),
+    // so a missing piece is a `warn`, not a `fail`.
+    out.push(check_install_webview(home));
     // Mutable state: created on demand, but it must be writable, never the repo.
     let state = home.join(".cache");
     match std::fs::create_dir_all(state.join("art/data")) {
@@ -509,6 +514,47 @@ fn check_install(home: &Path) -> Vec<Check> {
         )),
     }
     out
+}
+
+fn check_install_webview(home: &Path) -> Check {
+    let broker = home.join("bin/acos-webview");
+    let provider = home.join(acos_services::modules::webview::PROVIDER_APK_IMAGE_REL);
+    match (broker.is_file(), provider.is_file()) {
+        (true, true) => Check::ok(
+            "install_webview",
+            format!("broker {}, provider {}", broker.display(), provider.display()),
+        ),
+        (false, true) => Check::warn(
+            "install_webview",
+            format!(
+                "missing broker {} (provider {} present)",
+                broker.display(),
+                provider.display()
+            ),
+            "The `webview: real` module cannot start its shared broker without `acos-webview`. \
+             Reinstall with tools/release/install.sh, or set ACOS_WEBVIEW_BIN.",
+        ),
+        (true, false) => Check::warn(
+            "install_webview",
+            format!(
+                "missing provider {} (broker {} present)",
+                provider.display(),
+                broker.display()
+            ),
+            "The `webview: real` module needs com.android.webview.apk. Reinstall with \
+             tools/release/install.sh, or set ACOS_WEBVIEW_PROVIDER_APK.",
+        ),
+        (false, false) => Check::warn(
+            "install_webview",
+            format!(
+                "missing broker {} and provider {}",
+                broker.display(),
+                provider.display()
+            ),
+            "The `webview: real` module needs both `acos-webview` and com.android.webview.apk. \
+             Reinstall with tools/release/install.sh.",
+        ),
+    }
 }
 
 /// The host helpers the sandbox and the cgroup limit need: `bwrap` for the
@@ -561,6 +607,80 @@ fn check_ndk(args: &DoctorArgs) -> Check {
         "no x86_64-linux-android34-clang (needed at run time)",
         "sdkmanager \"ndk;27.0.12077973\", or set ANDROID_NDK_HOME; the guest's JNI shims are built with it.",
     )
+}
+
+/// ADR-0030's transport: the pinned static `pasta`.
+///
+/// One rule owns this lookup (`acos_netd_ctl::pasta`): the relay supervisor
+/// starts its NAT process from it, `tools/release/install.sh` installs the
+/// binary at `<root>/libexec/pasta`, and a scenario that declares
+/// `needs_env: [pasta]` is resolved with the same answer (`acos-netd pasta`).
+///
+/// It is **optional** at run time — the default network profile is `off` — so a
+/// missing binary is a `warn`, not an unhealthy install. What the detail must
+/// carry is the honest fact: the version the binary reports, or `missing`, plus
+/// everywhere the lookup went.
+fn pasta_check(
+    found: Option<acos_netd::pasta::Resolution>,
+    version: Option<String>,
+    searched: &str,
+) -> Check {
+    use acos_netd::pasta::{is_pinned, TAG};
+    let make_fix = || {
+        format!(
+            "Build the pinned tag and install it where the relay looks:\n \
+             git clone --depth 1 -b {TAG} https://passt.top/passt && \
+             make -C passt static VERSION={TAG} && \
+             install -m 755 passt/pasta <root>/libexec/pasta\n \
+             (`tools/release/install.sh` does this when it finds a pinned pasta; \
+             the sha256 is recorded in research/spike-net/artifacts/passt-build.txt)"
+        )
+    };
+    match found {
+        Some(resolution) => {
+            let where_ = format!(
+                "{} [{}]",
+                resolution.path.display(),
+                resolution.source.as_str()
+            );
+            match version {
+                Some(version) if is_pinned(Some(&version)) => {
+                    Check::ok("pasta", format!("{version} ({where_})"))
+                }
+                Some(version) => Check::warn(
+                    "pasta",
+                    format!("{version} ({where_}) is not the pinned tag {TAG}"),
+                    format!(
+                        "The relay reports both tags in `status`; reinstall the pinned build \
+                         (fixed tag, measured transport). {}",
+                        make_fix()
+                    ),
+                ),
+                None => Check::warn(
+                    "pasta",
+                    format!("{} exists but does not run --version", resolution.path.display()),
+                    make_fix(),
+                ),
+            }
+        }
+        None => Check::warn(
+            "pasta",
+            format!("missing (searched: {searched})"),
+            format!(
+                "The `network:real` module and its `needs_env: [pasta]` scenarios \
+                 cannot run without it. {}",
+                make_fix()
+            ),
+        ),
+    }
+}
+
+fn check_pasta() -> Check {
+    let (found, looked) = acos_netd::pasta::resolve();
+    let version = found
+        .as_ref()
+        .and_then(|resolution| acos_netd::pasta::version(&resolution.path));
+    pasta_check(found, version, &acos_netd::pasta::searched(&looked))
 }
 
 /// REL3D: the running `acos serve` daemon's build identity vs this CLI's.
@@ -700,6 +820,7 @@ pub fn diagnose(args: &DoctorArgs) -> DoctorReport {
     checks.extend(check_java());
     checks.push(check_ndk(args));
     checks.extend(check_sandbox_helpers());
+    checks.push(check_pasta());
     checks.extend(check_workspace(installed));
     checks.push(check_gles());
     checks.push(check_session_daemon());
@@ -750,6 +871,37 @@ mod tests {
         assert_eq!(mem_info("garbage"), None);
     }
 
+    /// `acos doctor`'s pasta line is the capability a scenario's
+    /// `needs_env: [pasta]` resolves: the pinned version when the binary is
+    /// there, `missing` (with every place the lookup went) when it is not.
+    #[test]
+    fn pasta_check_names_the_version_or_missing() {
+        use acos_netd::pasta::{Resolution, Source, TAG};
+        let found = Resolution {
+            path: PathBuf::from("/opt/acos/libexec/pasta"),
+            source: Source::AcosHome,
+        };
+        let ok = pasta_check(Some(found.clone()), Some(TAG.to_string()), "");
+        assert_eq!(ok.status, "ok");
+        assert!(ok.detail.starts_with(TAG), "{}", ok.detail);
+        assert!(ok.detail.contains("acos_home"), "{}", ok.detail);
+        assert!(ok.fix.is_none());
+
+        let missing = pasta_check(None, None, "/x/libexec/pasta, PATH");
+        assert_eq!(missing.status, "warn");
+        assert!(missing.detail.starts_with("missing"), "{}", missing.detail);
+        assert!(missing.detail.contains("/x/libexec/pasta"), "{}", missing.detail);
+        let fix = missing.fix.expect("a missing transport names the build recipe");
+        assert!(fix.contains(TAG), "{fix}");
+        assert!(fix.contains("libexec/pasta"), "{fix}");
+
+        // A binary that is there but is another build is never `ok`: the
+        // relay's transport is pinned (measured), not "some pasta".
+        let other = pasta_check(Some(found), Some("0.0.1".to_string()), "");
+        assert_eq!(other.status, "warn");
+        assert!(other.detail.contains("0.0.1") && other.detail.contains(TAG));
+    }
+
     #[test]
     fn report_ok_only_when_no_failures() {
         let mut report = DoctorReport {
@@ -768,5 +920,62 @@ mod tests {
         assert!(!report.ok);
         assert_eq!(report.failures(), vec!["c"]);
         assert!(report.to_text().contains("fix: fix it"));
+    }
+
+    #[test]
+    fn install_webview_check_requires_broker_and_provider() {
+        let root = std::env::temp_dir().join(format!(
+            "acos-doctor-wv-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos())
+                .unwrap_or(0)
+        ));
+        let broker = root.join("bin/acos-webview");
+        let provider = root.join(acos_services::modules::webview::PROVIDER_APK_IMAGE_REL);
+        std::fs::create_dir_all(broker.parent().unwrap()).unwrap();
+        std::fs::create_dir_all(provider.parent().unwrap()).unwrap();
+
+        let neither = check_install_webview(&root);
+        assert_eq!(neither.name, "install_webview");
+        assert_eq!(neither.status, "warn");
+        assert!(neither.detail.contains("acos-webview"), "{}", neither.detail);
+        assert!(
+            neither.detail.contains("com.android.webview.apk"),
+            "{}",
+            neither.detail
+        );
+
+        std::fs::write(&provider, b"apk").unwrap();
+        let no_broker = check_install_webview(&root);
+        assert_eq!(no_broker.status, "warn");
+        assert!(
+            no_broker.detail.contains("missing broker"),
+            "{}",
+            no_broker.detail
+        );
+
+        std::fs::write(&broker, b"elf").unwrap();
+        let both = check_install_webview(&root);
+        assert_eq!(both.status, "ok");
+        assert!(both.fix.is_none());
+        assert!(both.detail.contains("acos-webview"), "{}", both.detail);
+        assert!(
+            both.detail.contains("com.android.webview.apk"),
+            "{}",
+            both.detail
+        );
+
+        std::fs::remove_file(&provider).unwrap();
+        let no_provider = check_install_webview(&root);
+        assert_eq!(no_provider.status, "warn");
+        assert!(
+            no_provider.detail.contains("missing provider"),
+            "{}",
+            no_provider.detail
+        );
+
+        let _ = std::fs::remove_dir_all(&root);
     }
 }

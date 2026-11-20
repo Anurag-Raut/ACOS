@@ -1,0 +1,56 @@
+# MODLOC evidence: the scripted geocoder on real ART. The app calls
+# `Geocoder.isPresent()` + `getFromLocation(37.4220,-122.0841)` at launch and
+# appends the first address line to its state text.
+version: 1
+name: location-geocoder
+description: location:scripted with a scripted geocoder answers a reverse geocode on screen.
+app: fixtures/build/apps/location-probe.apk
+api_level: 34
+isolation: process
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+capabilities:
+  - ui.offscreen
+  - ui.text
+  - input
+expectation: pass
+budgets:
+  memory_mib: 512
+  wall_ms: 120000
+services:
+  - id: location
+    profile: scripted
+    config:
+      permissions: fine
+      geocoder:
+        present: true
+        places:
+          - lat: 37.4220
+            lng: -122.0841
+            max_distance_m: 500
+            addresses:
+              - lines: ["1600 Amphitheatre Parkway"]
+                locality: Mountain View
+                admin_area: CA
+                country_code: US
+                country_name: United States
+                latitude: 37.4220
+                longitude: -122.0841
+        by_name:
+          mountain view:
+            - feature_name: Mountain View
+              locality: Mountain View
+              country_code: US
+steps:
+  - launch:
+      activity: dev.acos.fixtures.locationprobe/.MainActivity
+      clear_state: true
+  - wait_for:
+      selector: {id: state, text: {contains: "geocode="}}
+      timeout_ms: 20000
+  - assert_text:
+      selector: {id: state}
+      text: {contains: "geocode=1600 Amphitheatre Parkway"}

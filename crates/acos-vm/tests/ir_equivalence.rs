@@ -62,7 +62,7 @@ fn check(gc_stress: bool) {
         // The only differential guard for the IR trampoline (ADR-0023/0024);
         // under `ACOS_REQUIRE_FIXTURES` a missing corpus must fail, not skip.
         acos_test_support::have_fixture("fixtures/build/dexprogs");
-        eprintln!("SKIP ir_equals_general_path: fixtures/build/dexprogs is absent");
+        acos_test_support::require_prereq(false, "check", "ir_equals_general_path: fixtures/build/dexprogs is absent");
         return;
     }
     for name in &names {

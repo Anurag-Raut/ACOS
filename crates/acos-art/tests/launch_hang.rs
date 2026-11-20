@@ -53,43 +53,18 @@ fn bin() -> &'static str {
     env!("CARGO_BIN_EXE_acos-art")
 }
 
-fn sysroot() -> PathBuf {
-    std::env::var_os("ACOS_ART_SYSROOT")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| repo_root().join(".cache/art/sysroot"))
-}
-
-/// The warm `/data` used to seed a private copy. Under `run-exclusive.sh`
-/// `ACOS_ART_DATA` is an empty per-invocation dir, so prefer an explicitly
-/// seeded dir, then a warm `ACOS_ART_DATA`, then the productised cache.
+/// The warm `/data` used to seed a private copy (one rule for every ART test,
+/// HYG2): `ACOS_ART_TEST_DATA`/`ACOS_ART_WARM_DATA`/a warm `ACOS_ART_DATA`, then
+/// the checkout's productised cache — `run-exclusive.sh`'s per-invocation
+/// `ACOS_ART_DATA` is empty, which is why the warm cache has its own name.
 fn warm_data() -> PathBuf {
-    if let Some(p) = std::env::var_os("ACOS_ART_TEST_DATA") {
-        return PathBuf::from(p);
-    }
-    let from_env = std::env::var_os("ACOS_ART_DATA").map(PathBuf::from);
-    if let Some(p) = from_env.filter(|p| p.join("app/guest/classes.dex").is_file()) {
-        return p;
-    }
-    repo_root().join(".cache/art/data")
+    acos_test_support::art_warm_data(&repo_root())
 }
 
+/// HYG2: a missing ART input fails the test by name (or is a counted skip under
+/// `ACOS_ALLOW_ART_SKIP=1`), never a silent pass.
 fn require_art() -> Option<()> {
-    if !sysroot().join("system/apex").is_dir() {
-        eprintln!(
-            "SKIP launch hang test: no ART sysroot at {} — run tools/art-sysroot.sh",
-            sysroot().display()
-        );
-        return None;
-    }
-    if !warm_data().join("app/guest/classes.dex").is_file() {
-        eprintln!(
-            "SKIP launch hang test: no cached guest dex under {} — run \
-             `acos-art render-app --apk fixtures/build/apps/counter.apk` once",
-            warm_data().display()
-        );
-        return None;
-    }
-    Some(())
+    acos_test_support::require_art(&repo_root(), "launch hang test").map(|_| ())
 }
 
 fn apk() -> PathBuf {

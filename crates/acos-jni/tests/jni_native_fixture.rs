@@ -37,11 +37,7 @@ fn native_fixture_exercises_slots_through_jni_table() {
     let _serial = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
     let path = fixture();
     if !path.is_file() {
-        eprintln!(
-            "SKIP native_fixture_exercises_slots_through_jni_table: {} is absent \
-             (run fixtures/jni/build.sh)",
-            path.display()
-        );
+        acos_test_support::require_prereq(false, "native_fixture_exercises_slots_through_jni_table", &format!("native_fixture_exercises_slots_through_jni_table: {} is absent (run fixtures/jni/build.sh)", path.display()));
         return;
     }
 
@@ -91,11 +87,7 @@ fn native_fixture_worker_brokers_java_call() {
     let _serial = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
     let path = fixture();
     if !path.is_file() {
-        eprintln!(
-            "SKIP native_fixture_worker_brokers_java_call: {} is absent \
-             (run fixtures/jni/build.sh)",
-            path.display()
-        );
+        acos_test_support::require_prereq(false, "native_fixture_worker_brokers_java_call", &format!("native_fixture_worker_brokers_java_call: {} is absent (run fixtures/jni/build.sh)", path.display()));
         return;
     }
 

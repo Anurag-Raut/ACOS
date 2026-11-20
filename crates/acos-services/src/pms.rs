@@ -1876,6 +1876,15 @@ impl PmsService {
         // re-pointed here, before any guest can ask.
         let mut guard = self.state.lock().unwrap();
         state.runtime_permissions = guard.runtime_permissions.clone();
+        // MODFILL: the feature table outlives a package replacement too. A
+        // service module turns its system features on at attach
+        // (`ModuleManifest::features`), and the session attaches its modules
+        // *before* it installs the launched APK, so a fresh `FeatureTable` here
+        // silently withdrew every module feature (`android.hardware.wifi`,
+        // `.telephony`, `.bluetooth`, ...) at launch while the module stayed
+        // attached: `hasSystemFeature` disagreed with the attached set, and
+        // `WifiManager` (whose factory is gated on FEATURE_WIFI) was null.
+        state.features = guard.features.clone();
         state.publish_uid_grants();
         if let Some(store) = state.runtime_permissions.clone() {
             let primary = state.primary();
@@ -2523,7 +2532,15 @@ mod tests {
         let path = crate::workspace_path("fixtures/build/apps/service-provider.apk")
             .unwrap_or_else(|| PathBuf::from("fixtures/build/apps/service-provider.apk"));
         if !path.is_file() {
-            eprintln!("SKIP from_apk_reads_provider_authorities: fixture APK not built");
+            acos_test_support::require_prereq(
+                false,
+                "from_apk_reads_provider_authorities",
+                &format!(
+                    "fixture APK not built at {} — run tools/build-apps.sh, or set \
+                     ACOS_ALLOW_ART_SKIP=1 for a counted skip",
+                    path.display()
+                ),
+            );
             return;
         }
         let state = PmsState::from_apk(&path).expect("from_apk");

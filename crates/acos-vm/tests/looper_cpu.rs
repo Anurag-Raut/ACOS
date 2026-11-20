@@ -93,12 +93,10 @@ fn cpu_ticks() -> u64 {
 
 #[test]
 fn real_looper_without_messages_burns_no_cpu() {
-    let Some(dex) = compile_block_main() else {
-        eprintln!("SKIP real_looper_without_messages_burns_no_cpu: javac/d8 unavailable");
+    let Some(dex) = acos_test_support::require_some(compile_block_main(), "real_looper_without_messages_burns_no_cpu", "javac/d8 unavailable") else {
         return;
     };
-    if acos_vm::vm::default_boot_dir(None).is_none() {
-        eprintln!("SKIP real_looper_without_messages_burns_no_cpu: boot-classpath cache absent");
+    if acos_test_support::require_prereq(!(acos_vm::vm::default_boot_dir(None).is_none()), "real_looper_without_messages_burns_no_cpu", "boot-classpath cache absent").is_none() {
         return;
     }
     // The VM is not `Send`; build and run it entirely on the helper thread.
@@ -113,7 +111,7 @@ fn real_looper_without_messages_burns_no_cpu() {
         let vm = match Vm::new(options) {
             Ok(vm) => vm,
             Err(VmError::BootClasspathMissing(msg)) => {
-                eprintln!("SKIP real_looper_without_messages_burns_no_cpu: {msg}");
+                acos_test_support::require_prereq(false, "real_looper_without_messages_burns_no_cpu", &format!("real_looper_without_messages_burns_no_cpu: {msg}"));
                 return;
             }
             Err(e) => panic!("Vm::new(CoreLib::Real) failed: {e}"),

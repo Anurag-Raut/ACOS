@@ -59,8 +59,7 @@ fn describe(vm: &mut acos_vm::Vm, h: acos_vm::heap::Handle) -> String {
 
 #[test]
 fn client_transaction_is_built_and_delivered_to_the_real_application_thread() {
-    let Some(apk) = counter_apk() else {
-        eprintln!("SKIP client_transaction: fixtures/build/apps/counter.apk is absent");
+    let Some(apk) = acos_test_support::require_some(counter_apk(), "client_transaction_is_built_and_delivered_to_the_real_application_thread", "fixtures/build/apps/counter.apk is absent") else {
         return;
     };
     let Some(mut rt) = new_runtime() else {

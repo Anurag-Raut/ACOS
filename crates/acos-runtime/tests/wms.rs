@@ -257,9 +257,7 @@ fn finish_drawing_is_recorded_but_never_publishes_a_frame() {
 #[test]
 fn wms_java_stub_proxy_matches_the_reference() {
     let Some(dex) = common::compile_case(&["WmsMain"]) else {
-        eprintln!(
-            "SKIP wms_java_stub_proxy_matches_the_reference: javac/d8/android.jar unavailable"
-        );
+        acos_test_support::require_prereq(false, "wms_java_stub_proxy_matches_the_reference", "wms_java_stub_proxy_matches_the_reference: javac/d8/android.jar unavailable");
         return;
     };
     let Some(stdout) = common::run_ok(&dex, "WmsMain", "WmsMain") else {
@@ -286,8 +284,7 @@ fn wms_java_stub_proxy_matches_the_reference() {
 /// incoming `IWindow` callbacks must reach the app stub.
 #[test]
 fn wms_java_session_add_and_relayout_are_accepted() {
-    let Some(dex) = common::compile_case(&["WmsSessionMain"]) else {
-        eprintln!("SKIP wms_java_session_add_and_relayout_are_accepted: toolchain unavailable");
+    let Some(dex) = acos_test_support::require_some(common::compile_case(&["WmsSessionMain"]), "wms_java_session_add_and_relayout_are_accepted", "toolchain unavailable") else {
         return;
     };
     let Some(stdout) = common::run_ok(&dex, "android.view.WmsSessionMain", "WmsSessionMain") else {
