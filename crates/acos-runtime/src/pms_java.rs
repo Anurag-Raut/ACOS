@@ -23,8 +23,9 @@
 
 use acos_parcel::Parcel;
 use acos_services::pms::{
-    cached_description, cached_provider_info, cached_provider_list, ActivityInfo as PmsActivityInfo,
-    AppInfo, PackageInfo, ProviderInfo as PmsProviderInfo,
+    cached_description, cached_intent_activities, cached_provider_info, cached_provider_list,
+    ActivityInfo as PmsActivityInfo, AppInfo, PackageInfo, ProviderInfo as PmsProviderInfo,
+    ResolvedActivity,
 };
 use acos_vm::heap::{ArrayData, Handle, Object};
 use acos_vm::javabridge::JavaValue;
@@ -122,18 +123,18 @@ pub(crate) fn application_info(vm: &mut Vm, app: &AppInfo) -> JResult<Handle> {
     vm.set_field(h, "splitNames", JavaValue::Object(split_names))
         .map_err(err)?;
     let shared_library_files = string_array(vm, &app.shared_library_files)?;
-    vm.set_field(h, "sharedLibraryFiles", JavaValue::Object(shared_library_files))
-        .map_err(err)?;
+    vm.set_field(
+        h,
+        "sharedLibraryFiles",
+        JavaValue::Object(shared_library_files),
+    )
+    .map_err(err)?;
     set_int(vm, h, "targetSandboxVersion", app.target_sandbox_version)?;
     Ok(h)
 }
 
 /// Materialise a real `android.content.pm.ActivityInfo`.
-pub(crate) fn activity_info(
-    vm: &mut Vm,
-    app: &AppInfo,
-    act: &PmsActivityInfo,
-) -> JResult<Handle> {
+pub(crate) fn activity_info(vm: &mut Vm, app: &AppInfo, act: &PmsActivityInfo) -> JResult<Handle> {
     let h = vm
         .new_instance_ctor("android.content.pm.ActivityInfo", "()V", &[])
         .map_err(err)?;
@@ -164,7 +165,9 @@ fn activity_array(vm: &mut Vm, app: &AppInfo, acts: &[PmsActivityInfo]) -> JResu
 }
 
 fn string_array(vm: &mut Vm, values: &[String]) -> JResult<Handle> {
-    let arr = vm.new_array_empty("java.lang.String", values.len()).map_err(err)?;
+    let arr = vm
+        .new_array_empty("java.lang.String", values.len())
+        .map_err(err)?;
     for (i, s) in values.iter().enumerate() {
         let h = vm.new_string_rooted(s).map_err(err)?;
         vm.set_array_element(arr, i, JavaValue::Object(h))
@@ -222,10 +225,12 @@ pub(crate) fn provider_info(
 }
 
 /// Materialise a `ParceledListSlice<ProviderInfo>` with the given providers.
+///
+/// Each entry carries its own package's `AppInfo`: a session installs more than
+/// one package, so there is no single `applicationInfo` to nest.
 fn provider_list_slice(
     vm: &mut Vm,
-    app: &AppInfo,
-    providers: &[PmsProviderInfo],
+    providers: &[(AppInfo, PmsProviderInfo)],
 ) -> JResult<Option<Handle>> {
     if providers.is_empty() {
         return Ok(None);
@@ -233,10 +238,15 @@ fn provider_list_slice(
     let list = vm
         .new_instance_ctor("java.util.ArrayList", "()V", &[])
         .map_err(err)?;
-    for provider in providers {
+    for (app, provider) in providers {
         let h = provider_info(vm, app, provider)?;
-        vm.call_method(list, "add", "(Ljava/lang/Object;)Z", &[JavaValue::Object(h)])
-            .map_err(err)?;
+        vm.call_method(
+            list,
+            "add",
+            "(Ljava/lang/Object;)Z",
+            &[JavaValue::Object(h)],
+        )
+        .map_err(err)?;
     }
     let slice = vm
         .new_instance_ctor(
@@ -262,8 +272,12 @@ fn package_info(vm: &mut Vm, app: &AppInfo, pkg: &PackageInfo) -> JResult<Handle
     let acts = activity_array(vm, app, &pkg.activities)?;
     vm.set_field(h, "activities", JavaValue::Object(acts))
         .map_err(err)?;
-    vm.set_field(h, "firstInstallTime", JavaValue::Long(pkg.first_install_time))
-        .map_err(err)?;
+    vm.set_field(
+        h,
+        "firstInstallTime",
+        JavaValue::Long(pkg.first_install_time),
+    )
+    .map_err(err)?;
     vm.set_field(h, "lastUpdateTime", JavaValue::Long(pkg.last_update_time))
         .map_err(err)?;
     let perms = string_array(vm, &pkg.requested_permissions)?;
@@ -290,7 +304,8 @@ pub(crate) fn write_object_payload(vm: &mut Vm, obj: Handle) -> JResult<Vec<u8>>
         vm.call_method(parcel, "marshall", "()[B", &[])
             .map_err(err)?,
     )?;
-    let bytes = byte_array(vm, bytes_h).ok_or_else(|| "pms_java: marshall did not return [B".to_string())?;
+    let bytes = byte_array(vm, bytes_h)
+        .ok_or_else(|| "pms_java: marshall did not return [B".to_string())?;
     let _ = vm.call_method(parcel, "recycle", "()V", &[]);
     Ok(bytes)
 }
@@ -309,9 +324,7 @@ fn append(reply: &mut Parcel, bytes: &[u8]) -> JResult<()> {
     let mut tmp = Parcel::new();
     tmp.unmarshall(bytes);
     let len = tmp.data_size();
-    reply
-        .append_from(&tmp, 0, len)
-        .map_err(err)
+    reply.append_from(&tmp, 0, len).map_err(err)
 }
 
 /// Write a materialised typed object (presence marker + payload) or null.
@@ -357,10 +370,10 @@ pub fn rewrite_reply(vm: &mut Vm, method: &str, reply: &mut Parcel) -> JResult<b
         }
         "getActivityInfo" => {
             // The handler resolved a `ComponentName` and cached the matching
-            // activity (or `None`).
+            // activity and its owning package's application record.
             match acos_services::pms::cached_activity_info() {
-                Some(a) => {
-                    let h = activity_info(vm, &desc.app, &a)?;
+                Some((app, a)) => {
+                    let h = activity_info(vm, &app, &a)?;
                     typed_object(vm, Some(h), reply)?;
                 }
                 None => typed_object(vm, None, reply)?,
@@ -370,55 +383,47 @@ pub fn rewrite_reply(vm: &mut Vm, method: &str, reply: &mut Parcel) -> JResult<b
             // The handler resolved the authority and cached the matching
             // provider (or `None`).
             match cached_provider_info() {
-                Some(p) => {
-                    let h = provider_info(vm, &desc.app, &p)?;
+                Some((app, p)) => {
+                    let h = provider_info(vm, &app, &p)?;
                     typed_object(vm, Some(h), reply)?;
                 }
                 None => typed_object(vm, None, reply)?,
             }
         }
         "queryContentProviders" => {
-            let list = provider_list_slice(vm, &desc.app, &cached_provider_list())?;
+            let list = provider_list_slice(vm, &cached_provider_list())?;
             typed_object(vm, list, reply)?;
         }
         "resolveIntent" => {
-            // Only the launcher intent is installed; anything else is a
-            // genuine "no match".
-            let h = launcher_resolve_info(vm, &desc.app, &desc.package)?;
-            typed_object(vm, h, reply)?;
+            // The handler matched the intent against every installed package's
+            // declared filters and cached the matches (empty = no match).
+            let first = cached_intent_activities().into_iter().next();
+            let info = match first {
+                Some(m) => Some(resolve_info(vm, &m)?),
+                None => None,
+            };
+            typed_object(vm, info, reply)?;
         }
         "queryIntentActivities" => {
-            let h = launcher_list_slice(vm, &desc.app, &desc.package)?;
-            typed_object(vm, h, reply)?;
+            let list = intent_activity_slice(vm, &cached_intent_activities())?;
+            typed_object(vm, list, reply)?;
         }
         _ => return Ok(false),
     }
     Ok(true)
 }
 
-/// Materialise the launcher `ResolveInfo`, or `None` when the package has no
-/// launcher activity.
-fn launcher_resolve_info(
-    vm: &mut Vm,
-    app: &AppInfo,
-    pkg: &PackageInfo,
-) -> JResult<Option<Handle>> {
-    let Some(act) = pkg
-        .activities
-        .iter()
-        .find(|a| a.name.ends_with(".MainActivity"))
-    else {
-        return Ok(None);
-    };
+/// Materialise a `ResolveInfo` for one matched activity, with the declared
+/// filters the match was made against (`ResolveInfo.writeToParcel` writes
+/// `filter` unconditionally, so it must be a real `IntentFilter`).
+fn resolve_info(vm: &mut Vm, matched: &ResolvedActivity) -> JResult<Handle> {
     let h = vm
         .new_instance_ctor("android.content.pm.ResolveInfo", "()V", &[])
         .map_err(err)?;
-    let act_h = activity_info(vm, app, act)?;
+    let act_h = activity_info(vm, &matched.app, &matched.activity)?;
     vm.set_field(h, "activityInfo", JavaValue::Object(act_h))
         .map_err(err)?;
-    // `ResolveInfo.writeToParcel` writes `filter` unconditionally, so give it
-    // the real MAIN/LAUNCHER filter.
-    let filter = launcher_intent_filter(vm)?;
+    let filter = intent_filter(vm, &matched.declared)?;
     vm.set_field(h, "filter", JavaValue::Object(filter))
         .map_err(err)?;
     set_int(vm, h, "priority", 0)?;
@@ -427,49 +432,70 @@ fn launcher_resolve_info(
     set_int(vm, h, "specificIndex", -1)?;
     vm.set_field(h, "isDefault", JavaValue::Boolean(false))
         .map_err(err)?;
-    Ok(Some(h))
+    Ok(h)
 }
 
-fn launcher_intent_filter(vm: &mut Vm) -> JResult<Handle> {
+/// Materialise the `IntentFilter` of a declared component.
+fn intent_filter(vm: &mut Vm, declared: &acos_services::ams::DeclaredComponent) -> JResult<Handle> {
     let filter = vm
         .new_instance_ctor("android.content.IntentFilter", "()V", &[])
         .map_err(err)?;
+    // `IntentFilter.mActions` is the action list the framework matches with.
     let actions = vm
         .new_instance_ctor("java.util.ArrayList", "()V", &[])
         .map_err(err)?;
-    let main = vm
-        .new_string_rooted("android.intent.action.MAIN")
+    for action in declared.filters.iter().flat_map(|f| f.actions.iter()) {
+        let a = vm.new_string_rooted(action).map_err(err)?;
+        vm.call_method(
+            actions,
+            "add",
+            "(Ljava/lang/Object;)Z",
+            &[JavaValue::Object(a)],
+        )
         .map_err(err)?;
-    vm.call_method(actions, "add", "(Ljava/lang/Object;)Z", &[JavaValue::Object(main)])
-        .map_err(err)?;
+    }
     vm.set_field(filter, "mActions", JavaValue::Object(actions))
         .map_err(err)?;
     // Categories are stored as a bitmask plus a list with the special
-    // categories; MAIN/LAUNCHER is category 0x02000000 (`CATEGORY_LAUNCHER`).
+    // categories; the list is what the framework's `matchCategories` reads for
+    // the ones it does not model as bits (MAIN/LAUNCHER is 0x02000000).
     let categories = vm
         .new_instance_ctor("java.util.ArrayList", "()V", &[])
         .map_err(err)?;
+    for category in declared.filters.iter().flat_map(|f| f.categories.iter()) {
+        let c = vm.new_string_rooted(category).map_err(err)?;
+        vm.call_method(
+            categories,
+            "add",
+            "(Ljava/lang/Object;)Z",
+            &[JavaValue::Object(c)],
+        )
+        .map_err(err)?;
+    }
     vm.set_field(filter, "mCategories", JavaValue::Object(categories))
         .map_err(err)?;
     set_int(vm, filter, "mPriority", 0)?;
     Ok(filter)
 }
 
-/// Materialise a `ParceledListSlice<ResolveInfo>` with the single launcher entry.
-fn launcher_list_slice(vm: &mut Vm, app: &AppInfo, pkg: &PackageInfo) -> JResult<Option<Handle>> {
-    let Some(resolve) = launcher_resolve_info(vm, app, pkg)? else {
+/// Materialise a `ParceledListSlice<ResolveInfo>` with every match.
+fn intent_activity_slice(vm: &mut Vm, matches: &[ResolvedActivity]) -> JResult<Option<Handle>> {
+    if matches.is_empty() {
         return Ok(None);
-    };
+    }
     let list = vm
         .new_instance_ctor("java.util.ArrayList", "()V", &[])
         .map_err(err)?;
-    vm.call_method(
-        list,
-        "add",
-        "(Ljava/lang/Object;)Z",
-        &[JavaValue::Object(resolve)],
-    )
-    .map_err(err)?;
+    for matched in matches {
+        let resolve = resolve_info(vm, matched)?;
+        vm.call_method(
+            list,
+            "add",
+            "(Ljava/lang/Object;)Z",
+            &[JavaValue::Object(resolve)],
+        )
+        .map_err(err)?;
+    }
     let slice = vm
         .new_instance_ctor(
             "android.content.pm.ParceledListSlice",

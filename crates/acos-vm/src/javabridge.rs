@@ -42,6 +42,19 @@ use crate::vm::{InvokeKind, ThreadRT, Vm};
 /// forever (W94-A #10).
 pub const MAX_NATIVE_ROOTS: usize = 1 << 20;
 
+/// BINDERREF4: is the rooting trace on? (`ACOS_BINDER_TRACE=1`)
+///
+/// Every entry `native_roots` gains is a Java object the collector may no
+/// longer move or free — the ACOS counterpart of `JavaBBinder`'s JNI global
+/// reference. The flag makes that edge observable in `acos logs` (tag
+/// `acos-binder`); it is off by default because a register-heavy session adds
+/// one line per callback binder.
+fn native_root_trace() -> bool {
+    // Read every time (an export is rare): a cached flag would make the trace
+    // impossible to switch on from inside a test, and `ACOS_BINDER_TRACE` is
+    // read by the same process that writes the line.
+    std::env::var_os("ACOS_BINDER_TRACE").is_some()
+}
 /// A value crossing the Rust ↔ Java boundary.
 ///
 /// Reference values are heap [`Handle`]s. `Null` is the Java `null` reference;
@@ -256,7 +269,10 @@ impl Vm {
         let desc = component_descriptor(elem_desc);
         let data = self.build_array_data(&desc, values)?;
         let h = self
-            .alloc(Object::Array(crate::heap::ArrayObj { elem_desc: desc, data }))
+            .alloc(Object::Array(crate::heap::ArrayObj {
+                elem_desc: desc,
+                data,
+            }))
             .map_err(BridgeError::from)?;
         self.bridge_root(h);
         Ok(h)
@@ -265,11 +281,13 @@ impl Vm {
     /// Create a rooted zeroed Java array of `len` elements.
     pub fn new_array_empty(&mut self, elem_desc: &str, len: usize) -> BridgeResult<Handle> {
         let desc = component_descriptor(elem_desc);
-        let data = crate::heap::new_array_data(&desc, len).map_err(|e| {
-            BridgeError::BadArrayType(format!("{desc}: {e}"))
-        })?;
+        let data = crate::heap::new_array_data(&desc, len)
+            .map_err(|e| BridgeError::BadArrayType(format!("{desc}: {e}")))?;
         let h = self
-            .alloc(Object::Array(crate::heap::ArrayObj { elem_desc: desc, data }))
+            .alloc(Object::Array(crate::heap::ArrayObj {
+                elem_desc: desc,
+                data,
+            }))
             .map_err(BridgeError::from)?;
         self.bridge_root(h);
         Ok(h)
@@ -362,8 +380,12 @@ impl Vm {
     pub fn reflected_field_parts(&self, obj: Handle) -> Option<(String, String, String, bool)> {
         let dc = self.get_instance_field_by_name(obj, "declaringClass")?;
         let cid = self.class_id_of_class_object(dc)?;
-        let idx = self.get_instance_field_by_name(obj, "artFieldIndex").unwrap_or(0) as usize;
-        let access = self.get_instance_field_by_name(obj, "accessFlags").unwrap_or(0);
+        let idx = self
+            .get_instance_field_by_name(obj, "artFieldIndex")
+            .unwrap_or(0) as usize;
+        let access = self
+            .get_instance_field_by_name(obj, "accessFlags")
+            .unwrap_or(0);
         let is_static = access & acos_dex::access::STATIC != 0;
         let c = &self.classes[cid as usize];
         let def = if is_static {
@@ -538,13 +560,13 @@ impl Vm {
             _ => return Err(BridgeError::DeadHandle(array)),
         };
         let words = self.encode_desc(&elem_desc, &value).map_err(|e| match e {
-            BridgeError::FieldTypeMismatch { declared, provided, .. } => {
-                BridgeError::ArrayElementType {
-                    index,
-                    expected: declared,
-                    provided,
-                }
-            }
+            BridgeError::FieldTypeMismatch {
+                declared, provided, ..
+            } => BridgeError::ArrayElementType {
+                index,
+                expected: declared,
+                provided,
+            },
             other => other,
         })?;
         let a = match self.heap.get_mut(array) {
@@ -569,8 +591,7 @@ impl Vm {
 
     /// Convert a Java `String` handle to a Rust `String`.
     pub fn java_string_to_rust(&self, h: Handle) -> BridgeResult<String> {
-        self.string_to_rust(h)
-            .ok_or(BridgeError::DeadHandle(h))
+        self.string_to_rust(h).ok_or(BridgeError::DeadHandle(h))
     }
 
     // ---- root management -------------------------------------------------
@@ -598,6 +619,16 @@ impl Vm {
 
     // ---- internals -------------------------------------------------------
 
+    /// The log line for one new `native_roots` entry.
+    ///
+    /// BINDERREF4: the second half of the rooting trace (the first is
+    /// `acos_runtime::transport::binder_export_line`). Pure so the format is
+    /// testable without a live VM.
+    #[must_use]
+    pub fn native_root_insert_line(handle: Handle, count: usize) -> String {
+        format!("native_roots insert handle={handle} count={count}")
+    }
+
     /// Register a bridge root, once per handle.
     ///
     /// The binder transport calls `root_handle` for every `writeStrongBinder`
@@ -618,6 +649,19 @@ impl Vm {
             return;
         }
         self.native_roots.push(h);
+        if native_root_trace() {
+            // BINDERREF4: the guest-side edge is visible. `native_roots` is
+            // where a callback binder's Java object becomes a GC root, exactly
+            // like `JavaBBinder`'s JNI global reference on Android; without
+            // this line "the object was collected" and "the object was never
+            // rooted" look the same from the outside.
+            crate::natives::os_log::push_record(
+                3,
+                "acos-binder",
+                &Self::native_root_insert_line(h, self.native_roots.len()),
+                0,
+            );
+        }
     }
 
     /// Make sure the host has a thread and a sentinel base frame so
@@ -726,15 +770,15 @@ impl Vm {
         for (i, (&p, v)) in params.iter().zip(args.iter()).enumerate() {
             let desc = self.type_desc(p).to_string();
             let encoded = self.encode_desc(&desc, v).map_err(|e| match e {
-                BridgeError::FieldTypeMismatch { declared, provided, .. } => {
-                    BridgeError::ArgType {
-                        class: class.to_string(),
-                        name: format!("{name}{sig}"),
-                        index: i,
-                        expected: declared,
-                        provided,
-                    }
-                }
+                BridgeError::FieldTypeMismatch {
+                    declared, provided, ..
+                } => BridgeError::ArgType {
+                    class: class.to_string(),
+                    name: format!("{name}{sig}"),
+                    index: i,
+                    expected: declared,
+                    provided,
+                },
                 other => other,
             })?;
             if type_width(self.type_kind(p)) == 2 {
@@ -786,13 +830,18 @@ impl Vm {
     /// static field with the same name is a hard error (the caller should use
     /// the static field API).
     fn find_field(&mut self, obj: Handle, name: &str) -> BridgeResult<(String, FieldDef)> {
-        let class = self.class_of_object(obj).ok_or(BridgeError::DeadHandle(obj))?;
+        let class = self
+            .class_of_object(obj)
+            .ok_or(BridgeError::DeadHandle(obj))?;
         let start_name = self.class_desc_of_id(class);
         let mut cur = Some(class);
         while let Some(c) = cur {
             let (instance, statics) = {
                 let cl = &self.classes[c as usize];
-                (cl.declared_instance_fields.clone(), cl.declared_static_fields.clone())
+                (
+                    cl.declared_instance_fields.clone(),
+                    cl.declared_static_fields.clone(),
+                )
             };
             if let Some(f) = instance.iter().find(|f| f.name == name) {
                 return Ok((start_name, f.clone()));
@@ -873,14 +922,14 @@ impl Vm {
         value: &JavaValue,
     ) -> BridgeResult<Vec<u32>> {
         self.encode_desc(&field.desc, value).map_err(|e| match e {
-            BridgeError::FieldTypeMismatch { declared, provided, .. } => {
-                BridgeError::FieldTypeMismatch {
-                    class: class.to_string(),
-                    field: field.name.clone(),
-                    declared,
-                    provided,
-                }
-            }
+            BridgeError::FieldTypeMismatch {
+                declared, provided, ..
+            } => BridgeError::FieldTypeMismatch {
+                class: class.to_string(),
+                field: field.name.clone(),
+                declared,
+                provided,
+            },
             other => other,
         })
     }
@@ -930,17 +979,15 @@ impl Vm {
                     other => return Err(self.mismatch(desc, other)),
                 };
                 if h != NULL {
-                    let want = self.load_class(desc).map_err(|_| {
-                        BridgeError::FieldTypeMismatch {
-                            class: String::new(),
-                            field: String::new(),
-                            declared: desc.to_string(),
-                            provided: value.kind().to_string(),
-                        }
-                    })?;
-                    let got = self
-                        .class_of_object(h)
-                        .ok_or(BridgeError::DeadHandle(h))?;
+                    let want =
+                        self.load_class(desc)
+                            .map_err(|_| BridgeError::FieldTypeMismatch {
+                                class: String::new(),
+                                field: String::new(),
+                                declared: desc.to_string(),
+                                provided: value.kind().to_string(),
+                            })?;
+                    let got = self.class_of_object(h).ok_or(BridgeError::DeadHandle(h))?;
                     if !self.is_assignable(got, want).map_err(BridgeError::from)? {
                         return Err(self.mismatch(desc, value));
                     }
@@ -976,9 +1023,7 @@ impl Vm {
             Some(b'I') => JavaValue::Int(w0 as i32),
             Some(b'J') => JavaValue::Long(((w0 as u64) | ((w1 as u64) << 32)) as i64),
             Some(b'F') => JavaValue::Float(f32::from_bits(w0)),
-            Some(b'D') => {
-                JavaValue::Double(f64::from_bits((w0 as u64) | ((w1 as u64) << 32)))
-            }
+            Some(b'D') => JavaValue::Double(f64::from_bits((w0 as u64) | ((w1 as u64) << 32))),
             Some(b'L') | Some(b'[') => {
                 if w0 == NULL {
                     JavaValue::Null
@@ -1013,13 +1058,13 @@ impl Vm {
         let mut words: Vec<u32> = Vec::with_capacity(values.len());
         for (i, v) in values.iter().enumerate() {
             let enc = self.encode_desc(elem_desc, v).map_err(|e| match e {
-                BridgeError::FieldTypeMismatch { declared, provided, .. } => {
-                    BridgeError::ArrayElementType {
-                        index: i,
-                        expected: declared,
-                        provided,
-                    }
-                }
+                BridgeError::FieldTypeMismatch {
+                    declared, provided, ..
+                } => BridgeError::ArrayElementType {
+                    index: i,
+                    expected: declared,
+                    provided,
+                },
                 other => other,
             })?;
             words.push(enc[0]);
@@ -1114,12 +1159,18 @@ mod tests {
 
     #[test]
     fn descriptors_are_normalised() {
-        assert_eq!(class_descriptor("android.graphics.Rect"), "Landroid/graphics/Rect;");
+        assert_eq!(
+            class_descriptor("android.graphics.Rect"),
+            "Landroid/graphics/Rect;"
+        );
         assert_eq!(class_descriptor("java/lang/String"), "Ljava/lang/String;");
         assert_eq!(class_descriptor("Ljava/lang/String;"), "Ljava/lang/String;");
         assert_eq!(component_descriptor("I"), "I");
         assert_eq!(component_descriptor("[I"), "[I");
-        assert_eq!(component_descriptor("java.lang.String"), "Ljava/lang/String;");
+        assert_eq!(
+            component_descriptor("java.lang.String"),
+            "Ljava/lang/String;"
+        );
     }
 
     #[test]
@@ -1128,6 +1179,46 @@ mod tests {
         assert_eq!(JavaValue::Null.kind(), "null");
         assert_eq!(JavaValue::Object(3).as_handle(), Some(3));
         assert_eq!(JavaValue::Boolean(true).as_handle(), None);
+    }
+
+    #[test]
+    fn the_rooting_trace_names_the_native_root() {
+        // BINDERREF4: the line an agent reads back with `acos logs` must name
+        // the handle that became a GC root and the size of the root set after
+        // the insert, so "rooted late" is distinguishable from "never rooted".
+        assert_eq!(
+            Vm::native_root_insert_line(0x0123_4567, 7),
+            "native_roots insert handle=19088743 count=7"
+        );
+    }
+
+    /// BINDERREF4: a new `native_roots` entry must be visible in the stream
+    /// `acos logs` reads. Without it "the Java object was collected" and "the
+    /// object was never rooted on this path" are indistinguishable, which is
+    /// exactly the question the rooting edge exists to answer.
+    #[test]
+    fn the_native_root_trace_reaches_the_vm_log_sink() {
+        struct EnvGuard;
+        impl Drop for EnvGuard {
+            fn drop(&mut self) {
+                std::env::remove_var("ACOS_BINDER_TRACE");
+            }
+        }
+        let _guard = EnvGuard;
+        let _sink = crate::natives::os_log::sink_test_guard();
+        std::env::set_var("ACOS_BINDER_TRACE", "1");
+        let mut vm = Vm::new(crate::VmOptions::default()).expect("vm");
+        vm.native_roots.clear();
+        let before = crate::natives::os_log::records().len();
+        vm.root_handle(0xB1D4_0002);
+        let records = crate::natives::os_log::records();
+        let line = Vm::native_root_insert_line(0xB1D4_0002, 1);
+        assert!(
+            records[before..]
+                .iter()
+                .any(|r| r.tag == "acos-binder" && r.msg == line),
+            "the native_roots insert must be in the VM log sink: {line}"
+        );
     }
 
     #[test]

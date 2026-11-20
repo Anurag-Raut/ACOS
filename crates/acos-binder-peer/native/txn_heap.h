@@ -28,14 +28,26 @@
 void txn_heap_init(void* map, size_t size);
 
 // Allocate `n` bytes of transaction buffer, or NULL when the region is
-// exhausted. Thread-safe. Never returns a block that is still referenced.
+// exhausted. Thread-safe. Never returns a block that is still referenced: the
+// freed-block list is built only by `txn_free`, and the driver calls that only
+// for a buffer the receiving thread owns (`BC_FREE_BUFFER`), so a block is
+// reusable exactly when libbinder's `Parcel` has released it --
+// `binder_alloc_new_buf` over `alloc->free_buffers`.
 void* txn_alloc(size_t n);
 
-// Release a block returned by `txn_alloc`. Unknown pointers are ignored.
+// Release a block returned by `txn_alloc`. Unknown, foreign and double frees are
+// ignored. The space becomes reusable by the next allocation that fits.
 void txn_free(void* p);
 
-// Bytes handed out so far / bytes in the region (diagnostics and tests).
+// High-water mark: how far into the region the heap has ever reached. A session
+// that reuses buffers keeps this flat, which is the point of `txn_free`.
 size_t txn_heap_used(void);
+
+// Bytes currently handed out (live blocks). `txn_heap_used() - in_use` is the
+// space that has been reclaimed and can be reused.
+size_t txn_heap_in_use(void);
+
+// Bytes in the region.
 size_t txn_heap_capacity(void);
 
 #endif // ACOS_TXN_HEAP_H

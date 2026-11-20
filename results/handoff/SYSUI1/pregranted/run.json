@@ -1,0 +1,8 @@
+{
+  "request_id": "req_5cc2f_18e8dea7c71ab7b6",
+  "started_at": "2026-11-17T15:27:43.688Z",
+  "scenario": "scenarios/sysui1-permission-pregranted.yaml",
+  "apk": "",
+  "acos_version": "0.2.2",
+  "overwrote_run_id": "req_5a913_18e8de9058182079"
+}

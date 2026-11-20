@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Proc B</string>
+    <string name="finish">Finish B</string>
+    <string name="again">Start B Again</string>
+    <string name="idle">B</string>
+</resources>

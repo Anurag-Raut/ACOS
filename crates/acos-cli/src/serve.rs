@@ -238,14 +238,19 @@ pub fn run(args: ServeArgs) -> ExitCode {
                     continue;
                 }
                 shared.active.fetch_add(1, Ordering::SeqCst);
-                *shared.last_activity.lock().unwrap_or_else(|e| e.into_inner()) = Instant::now();
+                *shared
+                    .last_activity
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner()) = Instant::now();
                 let engine = Arc::clone(&engine);
                 let shared = Arc::clone(&shared);
                 std::thread::spawn(move || {
                     handle_connection(stream, &engine);
                     shared.active.fetch_sub(1, Ordering::SeqCst);
-                    *shared.last_activity.lock().unwrap_or_else(|e| e.into_inner()) =
-                        Instant::now();
+                    *shared
+                        .last_activity
+                        .lock()
+                        .unwrap_or_else(|e| e.into_inner()) = Instant::now();
                 });
             }
             Err(e) if e.kind() == ErrorKind::WouldBlock => {
@@ -254,8 +259,7 @@ pub fn run(args: ServeArgs) -> ExitCode {
                 // (seconds granularity). H4: 1 s, not 50 ms, removes a 20/s
                 // idle timer from every idle serve; while a session is held
                 // the check cannot fire anyway, so it waits the full second.
-                let held = shared.active.load(Ordering::SeqCst) > 0
-                    || engine.session_count() > 0;
+                let held = shared.active.load(Ordering::SeqCst) > 0 || engine.session_count() > 0;
                 let idle_left = idle.saturating_sub(
                     shared
                         .last_activity
@@ -439,10 +443,7 @@ fn handle_request(line: &str, engine: &ServeEngine) -> Value {
     };
     let id = request.get("id").cloned().unwrap_or(Value::Null);
     let tool = request.get("tool").and_then(Value::as_str).unwrap_or("");
-    let args = request
-        .get("args")
-        .cloned()
-        .unwrap_or_else(|| json!({}));
+    let args = request.get("args").cloned().unwrap_or_else(|| json!({}));
 
     let ctx = context_for(&args);
     let envelope = engine.call(tool, &args, &ctx);
@@ -937,7 +938,9 @@ pub fn run_confined_child(profile: acos_sandbox::ConfineProfile) -> ExitCode {
         }
     }
     let backend = SessionBackend::with_cli(
-        CliBackend::new(BackendConfig::for_binary("/nonexistent/acos-confined-child")),
+        CliBackend::new(BackendConfig::for_binary(
+            "/nonexistent/acos-confined-child",
+        )),
         SessionOptions::default(),
     );
     let server = std::sync::Arc::new(acos_mcp::Server::new(

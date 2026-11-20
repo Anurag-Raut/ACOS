@@ -502,8 +502,7 @@ impl Loader {
                 detail: format!("e_machine={}", elf.header.e_machine),
             });
         }
-        let dyninfo =
-            DynInfo::parse(&elf).map_err(|e| LoaderError::ElfMalformed(e.to_string()))?;
+        let dyninfo = DynInfo::parse(&elf).map_err(|e| LoaderError::ElfMalformed(e.to_string()))?;
         let relocs = self.parse_relocations(bytes, &elf, &dyninfo)?;
         let (map_base, map_len, bias) = self.map_segments(bytes, &elf, name)?;
 
@@ -559,11 +558,7 @@ impl Loader {
         Ok(())
     }
 
-    fn find_and_load_dep(
-        &self,
-        need: &str,
-        requester: &str,
-    ) -> Result<Option<Arc<NativeLibrary>>> {
+    fn find_and_load_dep(&self, need: &str, requester: &str) -> Result<Option<Arc<NativeLibrary>>> {
         // A guest library's `DT_NEEDED` is untrusted content: only a plain
         // SONAME-style name may be resolved, and only inside `search_paths`.
         if !is_safe_dep_name(need) {
@@ -608,12 +603,7 @@ impl Loader {
 
     // --- relocation parsing -------------------------------------------------
 
-    fn parse_relocations(
-        &self,
-        bytes: &[u8],
-        elf: &Elf<'_>,
-        dyni: &DynInfo,
-    ) -> Result<Vec<Reloc>> {
+    fn parse_relocations(&self, bytes: &[u8], elf: &Elf<'_>, dyni: &DynInfo) -> Result<Vec<Reloc>> {
         let mut out = Vec::new();
         if let Some((va, size)) = dyni.rela {
             self.read_rela(elf, va, size, &mut out)?;
@@ -821,7 +811,12 @@ impl Loader {
 
     // --- mapping ------------------------------------------------------------
 
-    fn map_segments(&self, bytes: &[u8], elf: &Elf<'_>, name: &str) -> Result<(usize, usize, usize)> {
+    fn map_segments(
+        &self,
+        bytes: &[u8],
+        elf: &Elf<'_>,
+        name: &str,
+    ) -> Result<(usize, usize, usize)> {
         let page = page_size() as u64;
         let loads: Vec<&Phdr> = elf.phdrs.iter().filter(|p| p.p_type == PT_LOAD).collect();
         if loads.is_empty() {
@@ -885,7 +880,9 @@ impl Loader {
                 )
             };
             if rc == libc::MAP_FAILED {
-                return Err(LoaderError::InitFailed(format!("mmap segment failed for {name}")));
+                return Err(LoaderError::InitFailed(format!(
+                    "mmap segment failed for {name}"
+                )));
             }
             if p.p_filesz > 0 {
                 let file_start = usize::try_from(p.p_offset)
@@ -900,7 +897,11 @@ impl Loader {
                 // SAFETY: src and dest are valid for `p_filesz` bytes; the
                 // reservation has room for the whole segment.
                 unsafe {
-                    std::ptr::copy_nonoverlapping(src.as_ptr(), (dest + dst_off) as *mut u8, src.len());
+                    std::ptr::copy_nonoverlapping(
+                        src.as_ptr(),
+                        (dest + dst_off) as *mut u8,
+                        src.len(),
+                    );
                 }
             }
         }
@@ -954,11 +955,17 @@ impl Loader {
             if r.r_type == rt::IRELATIVE || r.r_type == rt::NONE {
                 continue;
             }
-            let name = lib.dyninfo.symbol_name(r.sym as usize).map(|s| s.to_string());
+            let name = lib
+                .dyninfo
+                .symbol_name(r.sym as usize)
+                .map(|s| s.to_string());
             let needs_symbol = Self::reloc_needs_symbol(r.r_type);
             if needs_symbol {
                 let display = name.clone().unwrap_or_else(|| "<null>".into());
-                let req_version = lib.dyninfo.symbol_version(r.sym as usize).map(str::to_string);
+                let req_version = lib
+                    .dyninfo
+                    .symbol_version(r.sym as usize)
+                    .map(str::to_string);
                 let resolved = name
                     .as_deref()
                     .and_then(|n| self.resolve_global(n, req_version.as_deref()));
@@ -1019,10 +1026,7 @@ impl Loader {
             Some(n) => n.to_string(),
             None => return Ok(ResolvedValue::WeakNull),
         };
-        let version = lib
-            .dyninfo
-            .symbol_version(sym as usize)
-            .map(str::to_string);
+        let version = lib.dyninfo.symbol_version(sym as usize).map(str::to_string);
         match self.resolve_global(&name, version.as_deref()) {
             Some(ResolveResult::Object(l, s)) => {
                 if s.sym_type() == STT_TLS {
@@ -1087,15 +1091,13 @@ impl Loader {
                     }
                 }
             }
-            rt::GLOB_DAT | rt::JUMP_SLOT => {
-                match self.resolved_addr(lib, r.sym)? {
-                    ResolvedValue::Abs(a) => unsafe { *target = a as u64 },
-                    ResolvedValue::Tls { modid, value } => unsafe {
-                        *target = (modid as u64).wrapping_add(value)
-                    },
-                    ResolvedValue::WeakNull => unsafe { *target = 0 },
-                }
-            }
+            rt::GLOB_DAT | rt::JUMP_SLOT => match self.resolved_addr(lib, r.sym)? {
+                ResolvedValue::Abs(a) => unsafe { *target = a as u64 },
+                ResolvedValue::Tls { modid, value } => unsafe {
+                    *target = (modid as u64).wrapping_add(value)
+                },
+                ResolvedValue::WeakNull => unsafe { *target = 0 },
+            },
             rt::ABS64 => {
                 let add = r.addend as u64;
                 match self.resolved_addr(lib, r.sym)? {
@@ -1181,8 +1183,13 @@ impl Loader {
     /// Whether satisfying this relocation type requires resolving a symbol.
     fn reloc_needs_symbol(t: u32) -> bool {
         match t {
-            rt::GLOB_DAT | rt::JUMP_SLOT | rt::ABS64 | rt::COPY | rt::TLS_DTPMOD
-            | rt::TLS_DTPOFF | rt::TLS_TPOFF => true,
+            rt::GLOB_DAT
+            | rt::JUMP_SLOT
+            | rt::ABS64
+            | rt::COPY
+            | rt::TLS_DTPMOD
+            | rt::TLS_DTPOFF
+            | rt::TLS_TPOFF => true,
             #[cfg(target_arch = "x86_64")]
             rt::PC32 | rt::ABS32 | rt::ABS32S => true,
             _ => false,
@@ -1631,7 +1638,10 @@ mod tests {
         std::os::unix::fs::symlink(dir.join("outside.so"), dir.join("root/escape.so")).unwrap();
 
         assert!(contained_in(&dir.join("root/inside.so"), &dir.join("root")));
-        assert!(!contained_in(&dir.join("root/escape.so"), &dir.join("root")));
+        assert!(!contained_in(
+            &dir.join("root/escape.so"),
+            &dir.join("root")
+        ));
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

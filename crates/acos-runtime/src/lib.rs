@@ -26,16 +26,16 @@
 #![forbid(unsafe_code)]
 #![warn(missing_debug_implementations)]
 
-pub mod apk_loader;
 pub mod ams_java;
+pub mod apk_loader;
 pub mod atms_boot;
 pub mod bind_app;
 pub mod boot;
 pub mod boot_image_cache;
-pub mod clipboard_java;
-pub mod frame_handoff;
 pub mod client_transaction;
+pub mod clipboard_java;
 pub mod display_java;
+pub mod frame_handoff;
 pub mod ime_java;
 pub mod input_java;
 pub mod lifecycle;
@@ -70,12 +70,12 @@ pub const FIXTURE_UID: u32 = 10192;
 /// Synthetic pid for the app process (ACOS is in-process).
 pub const FIXTURE_PID: i32 = 1000;
 
+pub use acos_services::display::{display_override, set_display_override, DisplayOverride};
+pub use acos_wm::display::{InsetsMode, DEFAULT_INSETS_MODE};
 pub use atms_boot::{AttachLog, AttachRecord};
 pub use boot::{BootError, BootReport};
 pub use lifecycle::{LifecycleError, LifecycleReport};
 pub use rn_session::{RnSession, RnSessionError, RnSessionOptions};
-pub use acos_services::display::{display_override, set_display_override, DisplayOverride};
-pub use acos_wm::display::{InsetsMode, DEFAULT_INSETS_MODE};
 pub use session::SessionError;
 pub use text_java::{TextError, TextPath, TextReport};
 pub use view_tree::{TreeError, ViewNode, ViewTree};
@@ -213,7 +213,6 @@ impl Runtime {
     pub fn run(&mut self, main: &str, args: &[String]) -> RunOutcome {
         self.vm.run(main, args)
     }
-
 }
 
 impl Drop for Runtime {

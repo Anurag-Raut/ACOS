@@ -119,8 +119,7 @@ fn run_lifecycle(label: &str) -> Option<acos_runtime::LifecycleReport> {
 /// hits a `SurfaceControl` NPE owned by the W144-A lifecycle/render work).
 #[test]
 fn m2_lifecycle_create_start_resume_matches_reference() {
-    let Some(reference) = reference_lifecycle() else {
-        eprintln!("SKIP m2_lifecycle_create_start_resume_matches_reference: reference missing");
+    let Some(reference) = acos_test_support::require_some(reference_lifecycle(), "m2_lifecycle_create_start_resume_matches_reference", "reference missing") else {
         return;
     };
     let Some(report) = run_lifecycle("normal") else {
@@ -151,8 +150,7 @@ fn m2_lifecycle_create_start_resume_matches_reference() {
     // that reached `onResume` and then threw (W170-A H7 restored this guard).
     // `ACOS_M2_ALLOW_POST_RESUME_ERROR=1` is the explicit, printed tolerance for
     // a host where the first traversal raises after `onResume`.
-    if report.error.is_some() && std::env::var_os("ACOS_M2_ALLOW_POST_RESUME_ERROR").is_some()
-    {
+    if report.error.is_some() && std::env::var_os("ACOS_M2_ALLOW_POST_RESUME_ERROR").is_some() {
         eprintln!(
             "tolerating a post-onResume framework error because \
              ACOS_M2_ALLOW_POST_RESUME_ERROR is set: {:?}",

@@ -9,6 +9,7 @@ use std::path::{Path, PathBuf};
 
 use acos_apk::error::{NATIVE_LIB_NOT_FOUND, UNSUPPORTED_ABI, ZIP_SLIP};
 use acos_apk::{AbiGate, Apk, HOST_ABI};
+use acos_test_support::require_prereq;
 
 fn repo_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
@@ -112,7 +113,9 @@ fn extract_writes_only_into_the_destination() {
         b"\x7fELF x86_64 payload"
     );
 
-    let all = apk.extract_native_libs("x86_64", &dest).expect("extract all");
+    let all = apk
+        .extract_native_libs("x86_64", &dest)
+        .expect("extract all");
     assert_eq!(all.len(), 1);
     let _ = std::fs::remove_dir_all(&dest);
 }
@@ -120,7 +123,11 @@ fn extract_writes_only_into_the_destination() {
 #[test]
 fn hello_jni_fixture_apk_gates_and_extracts() {
     let Some(apk_path) = hello_jni_apk() else {
-        eprintln!("SKIP: fixtures/build/apps/hello-jni.apk absent (run tools/build-fixtures.sh)");
+        let _ = require_prereq(
+            false,
+            "hello_jni_fixture_apk_gates_and_extracts",
+            "fixtures/build/apps/hello-jni.apk is absent — run tools/build-apps.sh",
+        );
         return;
     };
     let apk = Apk::open(&apk_path).expect("open fixture apk");
@@ -162,7 +169,10 @@ fn abi_gate_refuses_an_arm64_only_apk_with_its_inventory() {
         ("lib/armeabi-v7a/libfoo.so", b"\x7fELF arm32"),
     ]);
     match apk.abi_gate() {
-        AbiGate::Unsupported { apk_abis, libs_sample } => {
+        AbiGate::Unsupported {
+            apk_abis,
+            libs_sample,
+        } => {
             assert_eq!(apk_abis, vec!["arm64-v8a", "armeabi-v7a"]);
             assert_eq!(
                 libs_sample,
@@ -182,7 +192,10 @@ fn abi_gate_refuses_an_arm64_only_apk_with_its_inventory() {
 
 #[test]
 fn abi_gate_passes_a_pure_java_apk() {
-    let apk = apk_with_libs(&[("classes.dex", b"dex\n035\0"), ("res/layout/main.xml", b"<x/>")]);
+    let apk = apk_with_libs(&[
+        ("classes.dex", b"dex\n035\0"),
+        ("res/layout/main.xml", b"<x/>"),
+    ]);
     assert_eq!(apk.abi_gate(), AbiGate::NoNative);
     assert!(!apk.abi_gate().is_unsupported());
 }

@@ -26,9 +26,8 @@ use acos_vm::RunOutcome;
 
 fn run(dex: &Path, args: &[&str]) -> Option<(acos_runtime::Runtime, RunOutcome)> {
     let mut rt = common::new_runtime()?;
-    rt.vm_mut().add_dex(
-        acos_dex::DexFile::parse(std::fs::read(dex).unwrap()).unwrap(),
-    );
+    rt.vm_mut()
+        .add_dex(acos_dex::DexFile::parse(std::fs::read(dex).unwrap()).unwrap());
     let args: Vec<String> = args.iter().map(|s| (*s).to_string()).collect();
     let outcome = rt.run("VsyncMain", &args);
     Some((rt, outcome))
@@ -45,8 +44,7 @@ fn field(stdout: &str, key: &str) -> String {
 
 #[test]
 fn choreographer_frames_are_monotonic_and_stop_when_idle() {
-    let Some(dex) = common::compile_case(&["VsyncMain"]) else {
-        eprintln!("SKIP vsync natives: javac/d8/android.jar unavailable");
+    let Some(dex) = acos_test_support::require_some(common::compile_case(&["VsyncMain"]), "choreographer_frames_are_monotonic_and_stop_when_idle", "vsync natives: javac/d8/android.jar unavailable") else {
         return;
     };
     fwk_vsync::reset();
@@ -59,7 +57,12 @@ fn choreographer_frames_are_monotonic_and_stop_when_idle() {
         outcome.vm_error, outcome.stdout, outcome.stderr
     );
     assert!(outcome.vm_error.is_none(), "{:?}", outcome.vm_error);
-    assert_eq!(field(&outcome.stdout, "frames"), "3", "stdout:\n{}", outcome.stdout);
+    assert_eq!(
+        field(&outcome.stdout, "frames"),
+        "3",
+        "stdout:\n{}",
+        outcome.stdout
+    );
     assert_eq!(
         field(&outcome.stdout, "monotonic"),
         "true",
@@ -79,7 +82,10 @@ fn choreographer_frames_are_monotonic_and_stop_when_idle() {
         "expected >=3 generated ticks, got {}",
         fwk_vsync::tick_count()
     );
-    assert!(fwk_vsync::last_tick() > 0, "last tick timestamp must be set");
+    assert!(
+        fwk_vsync::last_tick() > 0,
+        "last tick timestamp must be set"
+    );
     assert!(
         fwk_vsync::is_idle(),
         "vsync source must be idle after the callback chain ends"
@@ -98,8 +104,7 @@ fn choreographer_frames_are_monotonic_and_stop_when_idle() {
 
 #[test]
 fn no_ticks_when_nothing_is_scheduled() {
-    let Some(dex) = common::compile_case(&["VsyncMain"]) else {
-        eprintln!("SKIP vsync natives: javac/d8/android.jar unavailable");
+    let Some(dex) = acos_test_support::require_some(common::compile_case(&["VsyncMain"]), "no_ticks_when_nothing_is_scheduled", "vsync natives: javac/d8/android.jar unavailable") else {
         return;
     };
     fwk_vsync::reset();
@@ -112,7 +117,12 @@ fn no_ticks_when_nothing_is_scheduled() {
         outcome.vm_error, outcome.stdout, outcome.stderr
     );
     assert!(outcome.vm_error.is_none(), "{:?}", outcome.vm_error);
-    assert_eq!(field(&outcome.stdout, "frames"), "0", "stdout:\n{}", outcome.stdout);
+    assert_eq!(
+        field(&outcome.stdout, "frames"),
+        "0",
+        "stdout:\n{}",
+        outcome.stdout
+    );
     assert!(
         fwk_vsync::is_idle(),
         "idle source must remain idle with nothing scheduled"
@@ -130,8 +140,7 @@ fn no_ticks_when_nothing_is_scheduled() {
 /// `performTraversals`.
 #[test]
 fn choreographer_frames_run_under_virtual_time() {
-    let Some(dex) = common::compile_case(&["VsyncMain"]) else {
-        eprintln!("SKIP choreographer frames under virtual time: javac/d8 unavailable");
+    let Some(dex) = acos_test_support::require_some(common::compile_case(&["VsyncMain"]), "choreographer_frames_run_under_virtual_time", "choreographer frames under virtual time: javac/d8 unavailable") else {
         return;
     };
     fwk_vsync::reset();
@@ -148,7 +157,12 @@ fn choreographer_frames_run_under_virtual_time() {
         "VsyncMain virtual failed: vm_error={:?}\nstdout:\n{}\nstderr:\n{}",
         outcome.vm_error, outcome.stdout, outcome.stderr
     );
-    assert_eq!(field(&outcome.stdout, "frames"), "3", "stdout:\n{}", outcome.stdout);
+    assert_eq!(
+        field(&outcome.stdout, "frames"),
+        "3",
+        "stdout:\n{}",
+        outcome.stdout
+    );
     assert_eq!(
         field(&outcome.stdout, "monotonic"),
         "true",

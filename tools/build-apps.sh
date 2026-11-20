@@ -18,6 +18,14 @@
 #   fixtures/build/apps/svg-viewbox.apk
 #   fixtures/build/apps/offscreen-pager.apk
 #   fixtures/build/apps/insets-probe.apk
+#   fixtures/build/apps/multi-package-probe.apk
+#   fixtures/build/apps/sensor-probe.apk   (MODSENS: native sensorservice feed)
+#   fixtures/build/apps/notif-perm-probe.apk (MODNOTIF5: notifications + POST_NOTIFICATIONS gate)
+#   fixtures/build/apps/permissioncontroller.apk (SYSUI1: the permission-controller system app)
+#   fixtures/build/apps/perm-probe.apk   (SYSUI1: requestPermissions -> the dialog)
+#   fixtures/build/apps/net-check.apk  (NET3/NET4: the relay fetch fixture)
+#   fixtures/build/apps/systemui.apk   (SYSUI2: the notification shade system app)
+#
 #
 # `tools/run-matrix.sh` calls this script with ACOS_APP_ONLY for any scenario
 # APK under fixtures/build/apps that is missing, so a stale fixtures/build can
@@ -123,8 +131,18 @@ build_apk() {
         --auto-add-overlay
 
     echo "build-apps: [$name] compiling java"
+    # The ACOS guest sources are a *runtime* classpath: `dev.acos.art.*` (the
+    # session's LaunchMain providers, e.g. `SoftwareKeyStore`) is compiled into
+    # the boot dex at launch, never shipped in the APK. A fixture that calls one
+    # (keystore-probe) therefore needs them on the javac sourcepath, exactly as
+    # `tools/keystore-k5b/run.sh` compiles them beside the probe. `-implicit:none`
+    # type-checks against those sources without emitting classes, so the APK's
+    # dex never carries a second copy of a class the guest dex already owns.
+    # Kept generic so the next guest-harness fixture does not rediscover this.
     # shellcheck disable=SC2046
-    javac --release 11 -encoding UTF-8 -cp "$android_jar" -d "$work/classes" \
+    javac --release 11 -encoding UTF-8 -cp "$android_jar" \
+        -sourcepath "$ROOT/crates/acos-art/guest/java" -implicit:none \
+        -d "$work/classes" \
         $(find "$app_dir/src" "$work/gen" -name '*.java')
 
     echo "build-apps: [$name] dexing"
@@ -158,15 +176,38 @@ build_apk() {
     echo "build-apps: [$name] -> $out ($(stat -c '%s' "$out") bytes)"
 }
 
+# --- webview-provider (ADR-0031) --------------------------------------------
+#
+# The provider APK has exactly **one** build implementation,
+# `tools/build-webview-provider.sh`: the image build
+# (`tools/extract-bootclasspath.sh`) calls the same script to ship it under
+# `<image>/system-apps/com.android.webview.apk`, so a fresh install needs no
+# separate step and the two outputs can never drift apart.
+build_provider_apk() {
+    local name="$1"
+    "$ROOT/tools/build-webview-provider.sh" --out "$BUILD_DIR/$name.apk"
+}
+
 # K5b: `ACOS_APP_ONLY="a b"` builds just the named fixtures, so one app can be
 # iterated without rebuilding the whole corpus.
 if [ -n "${ACOS_APP_ONLY:-}" ]; then
     for app in $ACOS_APP_ONLY; do
-        build_apk "$app"
+        if [ "$app" = "webview-provider" ]; then
+            build_provider_apk "$app"
+        elif [ "$app" = "webview-probe" ]; then
+            # WV6: the probe serves its page from its own APK assets through
+            # the broker's request interception.
+            build_apk "$app" "$APPS_DIR/webview-probe/assets:assets"
+        else
+            build_apk "$app"
+        fi
     done
     echo "build-apps: done (ACOS_APP_ONLY=$ACOS_APP_ONLY) -> $BUILD_DIR"
     exit 0
 fi
+
+# --- webview-provider (ADR-0031: the host-Chromium WebView provider) --------
+build_provider_apk webview-provider
 
 # --- hello-views -------------------------------------------------------------
 build_apk hello-views
@@ -221,13 +262,42 @@ build_apk native-hostile "$HOSTILE_JNI_WORK:lib"
 # offscreen-pager is the tree-visibility fixture (GR2 W4): a two-page
 # HorizontalScrollView whose second page is warm-mounted one display width off
 # screen, with text that must be reported `visible:false` until you scroll.
+# ONE list, the union of every side (MERGE040A, MERGE040B). The pre-merge tree
+# carried two `for app in` headers here (a MERGE030 artifact): the second one
+# (with looper-wake) shadowed the first, so sensor-probe and notif-perm-probe
+# were silently never built; SCENHYG and PROCUID each found the other half of
+# the same artifact — the pair of `done`-less headers left this loop
+# unterminated, so the whole script died before *any* fixture of the tree could
+# be built (nothing below this point: a11y-probe, tail-probe, location-probe,
+# proc-a/b, scroll-list, back-layers, tap-targets, touch-probe, net-check,
+# keystore-probe, webview-probe, insets-probe, …). sysui3a's side added the
+# SYSUI system apps, launchextras its launch-extras-probe. Deleting any list
+# loses fixtures, so the merged list is the union and there is exactly one loop.
+#
 # looper-wake is the LOOPERWAKE fixture: an idle Activity changed from a
 # non-main thread (plain Thread + runOnUiThread, HandlerThread + main Handler,
 # and View.postInvalidate from a plain thread). Nothing here needs input, so a
 # scenario can prove the main looper is woken by the post itself.
-for app in counter todo-list multi-activity finish-start form-validation settle-lab thread-heavy svg-viewbox offscreen-pager looper-wake; do
+# sensor-probe (MODSENS), notif-perm-probe (MODNOTIF5),
+# permissioncontroller + perm-probe (SYSUI1), systemui (SYSUI2),
+# launch-extras-probe (LAUNCHEXTRAS).
+for app in counter todo-list multi-activity finish-start form-validation settle-lab \
+           thread-heavy svg-viewbox offscreen-pager looper-wake sensor-probe \
+           notif-perm-probe permissioncontroller perm-probe systemui \
+           launch-extras-probe; do
     build_apk "$app"
 done
+
+# multi-package-probe (MPROC1) is the multi-package session fixture: it asks
+# `PackageManager` about a second installed package (`dev.acos.fixtures.counter`)
+# and builds that package's Context/resources. It needs no second APK at build
+# time; the session installs `counter.apk` with `--extra-apk`.
+build_apk multi-package-probe
+
+# intent-probe (MPROC1 step 2) drives the two intents a device routes to another
+# app: an implicit ACTION_SEND text share (`startActivity`) and an
+# ACTION_GET_CONTENT image pick (`startActivityForResult`, requestCode 42).
+build_apk intent-probe
 
 # pms-parcel is the REL3P fixture: it calls
 # getPackageInfo(own package, GET_SIGNATURES|GET_META_DATA|GET_PERMISSIONS =
@@ -235,6 +305,42 @@ done
 # framework decoded from the ACOS PMS reply. It is the app-visible check that
 # `PackageInfo.writeToParcel`'s String8 arrays are encoded as String8.
 build_apk pms-parcel
+# a11y-probe is the ADR-0029 accessibility-module fixture: reads the real
+# AccessibilityManager state (enabled + installed/enabled lists) and sends a
+# real event through IAccessibilityManager.sendAccessibilityEvent.
+build_apk a11y-probe
+# a11y-names-probe (PARITYFIX F1): one view per React Native accessibility shape
+# (hint + label EditText, text-only, text + description, labelled container,
+# delegate-composed description) so the published accessible name is pinned to
+# AccessibilityNodeInfo's.
+build_apk a11y-names-probe
+# egl-probe (GLSPIKE4): raw EGL14/EGL15 diagnostic against the guest GLES provider.
+build_apk egl-probe
+
+# tail-probe is the long-tail module fixture (ADR-0029): one tab per module
+# (telephony, biometric, bluetooth, vibrator) printing what the framework's own
+# clients answered. Built at targetSdk 34 like the module scenario corpus.
+build_apk tail-probe
+
+# clip-probe is the MODFILL fixture for the two `core` services that had no
+# proof scenario: `ClipboardManager` (set/get plus the primary-clip-changed
+# listener) and `AutofillManager` (isEnabled/hasEnabledAutofillServices, the
+# explicit requestAutofill, and the field text afterwards).
+build_apk clip-probe
+
+# wifi-probe / media-probe are the MODFILL fixtures for the `net.wifi` and
+# `media.session` modules: a real WifiManager/ConnectivityManager client and a
+# real MediaSession/MediaController app.
+build_apk wifi-probe
+build_apk media-probe
+
+# location-probe is the MODLOC fixture: it shows `getLastKnownLocation`, live
+# updates from a scripted track and the geocoder state on screen, so a scenario
+# can assert what the app really received (fixtures/apps/location-probe).
+build_apk location-probe
+# MPROC4: the two-process pair (proc-a starts/binds components of proc-b).
+build_apk proc-a
+build_apk proc-b
 # scroll-list is the REL3S swipe/scroll fixture: a ListView of 100 rows
 # ("Row 0".."Row 99"). A real swipe on it moves the list, so a test can prove
 # row 0 left the viewport and a later row arrived, and `until` can search for
@@ -260,7 +366,19 @@ build_apk touch-probe
 # keystore-probe is the K5b AndroidKeyStore fixture: fidelity assertions plus
 # the cross-session reach probe. One launcher activity; the mode comes from
 # ACOS_ART_KEYPROBE_MODE (see results/compat/K5.md).
+# --- net-check ---------------------------------------------------------------
+# SPIKE-NET fixture: apps that need the real network. HttpURLConnection GET of
+# https://example.com; the status code (or the exception class) goes into a
+# TextView, plus the ConnectivityManager report.
+build_apk net-check
+
+# --- keystore-probe ----------------------------------------------------------
 build_apk keystore-probe
+
+# SPIKE-WV (ADR-0031 gate, research/spike-wv/): webview-probe creates a real
+# android.webkit.WebView and reports the exact outcome (uid, hasSystemFeature,
+# provider discovery, load, JS) into its UI tree and logcat tag WVProbe.
+build_apk webview-probe "$APPS_DIR/webview-probe/assets:assets"
 
 # insets-probe is the W7 window-model fixture: an edge-to-edge Activity that
 # prints the frame and the reported system-bar insets. It is the only fixture

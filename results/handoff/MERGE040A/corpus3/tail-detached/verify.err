@@ -1,0 +1,1 @@
+verify: TIMEOUT (infra_timeout): wait_for timed out after 20000 ms: selector text*="TELEPHONY unavailable=NullPointerException" did not satisfy the condition (require_visible=true) [class=infra_timeout, retryable=true]

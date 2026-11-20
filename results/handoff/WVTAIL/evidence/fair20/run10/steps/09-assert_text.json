@@ -1,0 +1,75 @@
+{
+  "assertions": [
+    {
+      "actual": {
+        "bounds": [
+          0,
+          275,
+          1080,
+          695
+        ],
+        "hint": "",
+        "node": "n5_dev.acos.fixtures.webview:id/status",
+        "text": "hasSystemFeature(android.software.webview)=true\nWebView.getCurrentWebViewPackage()=PackageInfo{23e1905 com.android.webview}\nWebView created: dev.acos.fixtures.webview.MainActivity$ProbeWebView{98b5b8b VFED..... ......I. 0,0-0,0 #7f010002 app:id/webview}\nWebView created: dev.acos.fixtures.webview.MainActivity$ProbeWebView{a4f526 VFED..... ......I. 0,0-0,0 #7f010003 app:id/webview2}\nA laid out 900x560\nB laid out 900x560\nA loadUrl issued\nB loadUrl issued\nB onPageFinished file:///android_asset/viewport-meta.html\nA onPageFinished file:///android_asset/test.html\nB evaluateJavascript -> \"acos meta page\"\nB viewport#0 -> \"640x0.54\"\nA viewport -> \"343x1.00\"\nA evaluateJavascript -> \"acos asset page\"\nfair: slow page started in B\nB onPageFinished data:text/html;base64,…\nfair: touch down on A\nfair: touch down on A\nJS->Java: tapped\nfair: tap -> page click 442 ms\nfair: slow view touched for a frame\nfair: touch down on A\n",
+        "visible": true
+      },
+      "expected": {
+        "bounds": null,
+        "selector": {
+          "id": "status"
+        },
+        "text": {
+          "contains": "JS->Java: tapped"
+        }
+      },
+      "kind": "text",
+      "matched_node_ids": [
+        "n5_dev.acos.fixtures.webview:id/status"
+      ],
+      "passed": true
+    }
+  ],
+  "certification": "certified-with-limits",
+  "certification_limits": {
+    "doc": "docs/SANDBOX_CERTIFICATION.md",
+    "section": "§8.7"
+  },
+  "duration_ms": 1,
+  "evidence": [
+    {
+      "kind": "tree",
+      "path": "tree/129.json"
+    },
+    {
+      "kind": "frame",
+      "path": "frames/129.png"
+    },
+    {
+      "kind": "step",
+      "path": "steps/09-assert_text.json"
+    }
+  ],
+  "frame_seq": 129,
+  "index": 9,
+  "provenance": {
+    "tree": "guest-asserted"
+  },
+  "settle": {
+    "ack_ms": 445,
+    "bound": "strict-event",
+    "first_change_ms": 1924,
+    "frame_ms": 1963,
+    "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
+    "mode": "strict",
+    "pixels_changed": true,
+    "reason": "strict-event",
+    "settled": true,
+    "state_changed": null,
+    "strict_rule": "event",
+    "waited_ms": 0,
+    "waited_ms_source": "step"
+  },
+  "status": "pass",
+  "step": "assert_text",
+  "trust": "trusted"
+}

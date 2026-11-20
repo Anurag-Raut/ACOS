@@ -18,7 +18,7 @@ import java.util.concurrent.locks.LockSupport;
  * binds the *real* framework class from {@code framework.jar}, not the stub.
  */
 public class OsNativesMain {
-    public static void main(String[] args) {
+    public static void main(String[] args) throws Exception {
         // ---- Build identity: read from build.prop through SystemProperties.
         System.out.println("sdk=" + Build.VERSION.SDK_INT);
         System.out.println("sdk_string=" + Build.VERSION.SDK);

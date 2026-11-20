@@ -85,7 +85,10 @@ fn gles_child_worker() {
         .with_read_only(&data_dir)
         .with_read_write(&scratch);
     if let Err(e) = acos_sandbox::confine(&profile) {
-        println!("W86A_SUMMARY {}", serde_json::json!({"confined": false, "error": e.to_string()}));
+        println!(
+            "W86A_SUMMARY {}",
+            serde_json::json!({"confined": false, "error": e.to_string()})
+        );
         return;
     }
     let confined = acos_sandbox::confinement_active();
@@ -98,12 +101,8 @@ fn gles_child_worker() {
         seq: 0,
     }));
     acos_jni::ndk_host::install_forced();
-    let window = acos_jni::ndk_host::register_native_window(
-        WIDTH as i32,
-        HEIGHT as i32,
-        LAYER,
-        0x5AA2,
-    );
+    let window =
+        acos_jni::ndk_host::register_native_window(WIDTH as i32, HEIGHT as i32, LAYER, 0x5AA2);
 
     let bytes = match std::fs::read(fixture()) {
         Ok(b) => b,
@@ -137,8 +136,7 @@ fn gles_child_worker() {
         );
         return;
     };
-    let test: extern "C" fn(*mut std::ffi::c_void) -> c_int =
-        unsafe { std::mem::transmute(entry) };
+    let test: extern "C" fn(*mut std::ffi::c_void) -> c_int = unsafe { std::mem::transmute(entry) };
     let failures = test(window as usize as *mut std::ffi::c_void);
 
     let frame = recorded.lock().ok().and_then(|g| g.clone());
@@ -161,11 +159,7 @@ fn gles_child_worker() {
 #[test]
 fn gles_fixture_draws_a_triangle_under_confinement() {
     if !acos_test_support::have_fixture(FIXTURE_REL) {
-        eprintln!(
-            "SKIP gles_fixture_draws_a_triangle_under_confinement: {} is absent; run \
-             fixtures/jni/build.sh",
-            fixture().display()
-        );
+        acos_test_support::require_prereq(false, "gles_fixture_draws_a_triangle_under_confinement", &format!("gles_fixture_draws_a_triangle_under_confinement: {} is absent; run fixtures/jni/build.sh", fixture().display()));
         return;
     }
     let exe = std::env::current_exe().expect("test binary");

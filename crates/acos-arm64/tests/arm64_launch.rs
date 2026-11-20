@@ -6,9 +6,10 @@
 //! the deferred seccomp guard must deny `ptrace`/`unshare`, and the bionic
 //! `linker64` must have resolved (otherwise the guest never runs at all).
 //!
-//! Any missing prerequisite prints a `SKIP` reason and returns, so the test is
-//! green on a host without qemu/the phone-attached sysroot. The fail-closed
-//! error path is covered by a test that never needs a device.
+//! Any missing prerequisite fails the test loudly by default and is a counted
+//! skip only behind `ACOS_ALLOW_TEST_SKIP=1` (HYG3); the host list is
+//! `tools/test-prereq-optouts.txt`. The fail-closed error path is covered by a
+//! test that never needs a device.
 
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
@@ -45,8 +46,17 @@ fn ndk_clang() -> Option<PathBuf> {
     None
 }
 
+/// A missing prerequisite **fails** the test (HYG3). The arm64 transport needs
+/// `qemu-aarch64`, a bionic sysroot pulled from an attached arm64 device
+/// (`tools/fetch-bionic-sysroot.sh`) and the built `libacos_seccomp_guard.so`;
+/// a host without them cannot run this test, so the default path panics and the
+/// counted skip exists only behind `ACOS_ALLOW_TEST_SKIP=1`.
 fn skip(reason: &str) {
-    eprintln!("SKIP acos-arm64 integration launch: {reason}");
+    let _ = acos_test_support::require_prereq(
+        false,
+        "dynamic_aarch64_bionic_guest_runs_confined",
+        reason,
+    );
 }
 
 fn compile_guest(clang: &Path, out: &Path) -> std::io::Result<()> {
@@ -66,11 +76,7 @@ fn compile_guest(clang: &Path, out: &Path) -> std::io::Result<()> {
 }
 
 fn scratch_dir(tag: &str) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!(
-        "acos-arm64-test-{}-{}",
-        std::process::id(),
-        tag
-    ));
+    let dir = std::env::temp_dir().join(format!("acos-arm64-test-{}-{}", std::process::id(), tag));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).expect("create scratch dir");
     dir

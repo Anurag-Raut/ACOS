@@ -335,11 +335,15 @@ pub fn render_app(root: &ArtRoot, opts: &AppOpts) -> Result<AppResult> {
     sb.ro_bind(&shim, "/data/app/libacosart.so");
     // H17: this run's APK shadows the (read-only) shared `/data/app` entry.
     sb.ro_bind(&apk, &format!("/data/app/{apk_name}"));
-    // Software gralloc interposer (built into the sysroot by
-    // `tools/art-sysroot.sh --shim`; G1). Loaded last, so the substrate's
-    // libraries resolve against it.
-    sb.ro_bind(&root.sysroot.join("shim/libacoshw.so"), "/data/libacoshw.so");
+    // Software gralloc interposer (the sysroot's prebuilt copy when its stamp
+    // matches this binary's embedded source, else rebuilt into the build cache;
+    // G1). Loaded last, so the substrate's libraries resolve against it.
+    let gralloc_shim = crate::gralloc_shim(root)?;
+    sb.ro_bind(&gralloc_shim, "/data/libacoshw.so");
     sb.rw_bind(run.dir("socket"), "/dev/socket");
+    // SPIKE-NET (gated): `render-app` binds its own run socket dir at
+    // `/dev/socket`, so a guest that resolves a name needs the responder here.
+    let _dns = crate::spike_net::serve_dnsproxyd_if_enabled(&run.dir("socket"))?;
     sb.env(
         "LD_PRELOAD",
         "/data/shim/libartshim.so:/data/app/libacosart.so:/data/libacoshw.so",
@@ -357,8 +361,9 @@ pub fn render_app(root: &ArtRoot, opts: &AppOpts) -> Result<AppResult> {
 
     let dalvik = "/system/apex/com.android.art/bin/dalvikvm64";
     let cmd = sb.command(dalvik, &argv)?;
-    let full_argv: Vec<String> =
-        std::iter::once(dalvik.to_string()).chain(argv.iter().cloned()).collect();
+    let full_argv: Vec<String> = std::iter::once(dalvik.to_string())
+        .chain(argv.iter().cloned())
+        .collect();
     let started = Instant::now();
     // S5: a proven memory/pids cgroup scope, and the guest seccomp filter
     // (fail-closed, exactly as on the `run`/`verify` route).
@@ -372,21 +377,35 @@ pub fn render_app(root: &ArtRoot, opts: &AppOpts) -> Result<AppResult> {
         |c| {
             unsafe {
                 c.pre_exec(move || {
-            libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGKILL as libc::c_ulong, 0, 0, 0);
-            let core = libc::rlimit { rlim_cur: 0, rlim_max: 0 };
-            libc::setrlimit(libc::RLIMIT_CORE, &core);
-            let nofile = libc::rlimit { rlim_cur: 4096, rlim_max: 4096 };
-            libc::setrlimit(libc::RLIMIT_NOFILE, &nofile);
-            // The launcher's memory backstops are soft limits for *this* process;
-            // ART needs terabytes of address space and is never the bounded one.
-            crate::watchdog::relax_child_limits();
-            // init.rc: setrlimit nice 40 40 (host best-effort; see watchdog).
-            crate::watchdog::apply_init_rlimit_nice();
-            Ok(())
+                    libc::prctl(
+                        libc::PR_SET_PDEATHSIG,
+                        libc::SIGKILL as libc::c_ulong,
+                        0,
+                        0,
+                        0,
+                    );
+                    let core = libc::rlimit {
+                        rlim_cur: 0,
+                        rlim_max: 0,
+                    };
+                    libc::setrlimit(libc::RLIMIT_CORE, &core);
+                    let nofile = libc::rlimit {
+                        rlim_cur: 4096,
+                        rlim_max: 4096,
+                    };
+                    libc::setrlimit(libc::RLIMIT_NOFILE, &nofile);
+                    // The launcher's memory backstops are soft limits for *this* process;
+                    // ART needs terabytes of address space and is never the bounded one.
+                    crate::watchdog::relax_child_limits();
+                    // init.rc: setrlimit nice 40 40 (host best-effort; see watchdog).
+                    crate::watchdog::apply_init_rlimit_nice();
+                    Ok(())
                 });
             }
             c.process_group(0);
-            c.stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped());
+            c.stdin(Stdio::null())
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped());
         },
     )?;
     let pid = child.id() as i32;
@@ -530,17 +549,23 @@ pub fn render_app(root: &ArtRoot, opts: &AppOpts) -> Result<AppResult> {
         // The guest echoes the panel it rendered at; a mismatch means the
         // arguments did not survive the sandbox, not a style difference.
         if (g.width, g.panel_height, g.density_dpi)
-            != (Some(opts.width), Some(opts.panel_height), Some(opts.density_dpi))
+            != (
+                Some(opts.width),
+                Some(opts.panel_height),
+                Some(opts.density_dpi),
+            )
         {
             diags.push(format!(
                 "guest panel {:?}x{:?}@{:?} != requested {}x{}@{}",
-                g.width, g.panel_height, g.density_dpi,
-                opts.width, opts.panel_height, opts.density_dpi
+                g.width,
+                g.panel_height,
+                g.density_dpi,
+                opts.width,
+                opts.panel_height,
+                opts.density_dpi
             ));
         }
-        if (g.status_inset, g.nav_inset)
-            != (Some(opts.status_inset), Some(opts.nav_inset))
-        {
+        if (g.status_inset, g.nav_inset) != (Some(opts.status_inset), Some(opts.nav_inset)) {
             diags.push(format!(
                 "guest insets {:?}/{:?} != requested {}/{}",
                 g.status_inset, g.nav_inset, opts.status_inset, opts.nav_inset
@@ -557,7 +582,11 @@ pub fn render_app(root: &ArtRoot, opts: &AppOpts) -> Result<AppResult> {
                 code = None;
             }
             other => {
-                outcome = if other == "unsupported" { Outcome::Unsupported } else { Outcome::Crash };
+                outcome = if other == "unsupported" {
+                    Outcome::Unsupported
+                } else {
+                    Outcome::Crash
+                };
                 code = g.code.clone().or(Some("GUEST_ERROR".into()));
                 diags.push(format!("guest: {}", g.message.clone().unwrap_or_default()));
             }
@@ -713,7 +742,11 @@ pub fn ensure_system_fonts(root: &ArtRoot, diagnostics: &mut Vec<String>) -> Res
             copied += 1;
         }
     }
-    if let Some(xml) = src.join("fonts.xml").is_file().then(|| src.join("fonts.xml")) {
+    if let Some(xml) = src
+        .join("fonts.xml")
+        .is_file()
+        .then(|| src.join("fonts.xml"))
+    {
         let to = root.sysroot.join("system/etc/fonts.xml");
         if !to.is_file() {
             let _ = fs::hard_link(&xml, &to).or_else(|_| fs::copy(&xml, &to).map(|_| ()));
@@ -817,7 +850,9 @@ fn merge_font_customization(
     let mut rest = customization;
     while let Some(start) = rest.find("<family") {
         rest = &rest[start..];
-        let Some(end) = rest.find("</family>") else { break };
+        let Some(end) = rest.find("</family>") else {
+            break;
+        };
         let block = &rest[..end + "</family>".len()];
         rest = &rest[end + "</family>".len()..];
         let open_end = block.find('>').unwrap_or(0);
@@ -834,7 +869,9 @@ fn merge_font_customization(
             skipped += 1;
             continue;
         }
-        if base.contains(&format!("name=\"{name}\"")) || added_xml.contains(&format!("name=\"{name}\"")) {
+        if base.contains(&format!("name=\"{name}\""))
+            || added_xml.contains(&format!("name=\"{name}\""))
+        {
             continue;
         }
         // Rewrite every <font ...>path</font> to an absolute /system/fonts path.
@@ -1012,9 +1049,9 @@ pub fn provision_overlays(root: &ArtRoot, diagnostics: &mut Vec<String>) -> Resu
         }
     }
     let mut key_parts: Vec<Vec<u8>> = vec![
-        b"acos-art/static-rro-idmaps/v1".to_vec(),
+        b"acos-art/static-rro-idmaps/v2".to_vec(),
         image_digest.clone().into_bytes(),
-        crate::build_cache::file_id(&idmap2).into_bytes(),
+        crate::build_cache::content_id(&idmap2).into_bytes(),
         aapt2_id.into_bytes(),
         b"--policy product".to_vec(),
     ];
@@ -1085,7 +1122,9 @@ pub fn provision_overlays(root: &ArtRoot, diagnostics: &mut Vec<String>) -> Resu
                     continue;
                 }
                 Err(e) => {
-                    diagnostics.push(format!("overlay {name}: manifest unreadable ({e}), skipped"));
+                    diagnostics.push(format!(
+                        "overlay {name}: manifest unreadable ({e}), skipped"
+                    ));
                     continue;
                 }
             }
@@ -1137,9 +1176,7 @@ pub fn provision_overlays(root: &ArtRoot, diagnostics: &mut Vec<String>) -> Resu
         set.host_idmaps.push(idmap);
     }
     if cached {
-        crate::build_cache::publish_tree_locked(&cache_key, &dest, &|rel| {
-            rel.ends_with(".apk")
-        })?;
+        crate::build_cache::publish_tree_locked(&cache_key, &dest, &|rel| rel.ends_with(".apk"))?;
     }
     crate::stage("overlays-done");
 
@@ -1272,7 +1309,9 @@ fn sandbox_tool(
     // shared-tree staging layout, never a per-run root.
     sb.staging(true);
     let mut cmd = sb.command(program, argv)?;
-    cmd.stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped());
+    cmd.stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
     let mut child = cmd
         .spawn()
         .map_err(|e| Error::Tool(format!("spawning bwrap for {program}: {e}")))?;
@@ -1330,7 +1369,10 @@ pub fn build_guest(root: &ArtRoot) -> Result<GuestDex> {
     let out_dir = root.data.join("app/guest");
     let sources = render_guest_sources();
     if sources.is_empty() {
-        return Err(Error::Layout(format!("no guest Java sources under {}", src_dir.display())));
+        return Err(Error::Layout(format!(
+            "no guest Java sources under {}",
+            src_dir.display()
+        )));
     }
     let sdk = android_sdk()?;
     let android_jar = sdk.join("platforms/android-34/android.jar");
@@ -1342,9 +1384,17 @@ pub fn build_guest(root: &ArtRoot) -> Result<GuestDex> {
     }
     let d8 = find_tool(&sdk, "d8")?;
     let javac = PathBuf::from(std::env::var("JAVAC").unwrap_or_else(|_| "javac".into()));
-    let mut parts: Vec<Vec<u8>> = vec![b"acos-art/render-guest/v2".to_vec()];
+    let mut parts: Vec<Vec<u8>> = vec![b"acos-art/render-guest/v3".to_vec()];
     for p in &sources {
-        parts.push(p.to_string_lossy().as_bytes().to_vec());
+        // The source's place in the guest tree, never its absolute path: a
+        // worktree (or any other prefix) holding the same bytes is the same key.
+        parts.push(
+            p.strip_prefix(&src_dir)
+                .unwrap_or(p)
+                .to_string_lossy()
+                .as_bytes()
+                .to_vec(),
+        );
         parts.push(fs::read(p)?);
     }
     for tool in [&android_jar, &d8, &javac] {
@@ -1396,7 +1446,10 @@ pub fn build_guest(root: &ArtRoot) -> Result<GuestDex> {
     })?;
     let cached = built.reused;
     crate::build_cache::install(&built, &["classes.dex"], &out_dir)?;
-    Ok(GuestDex { dex_dir: out_dir, cached })
+    Ok(GuestDex {
+        dex_dir: out_dir,
+        cached,
+    })
 }
 
 /// Compile `shim/render_shim.c` with the NDK's bionic clang **once** into the
@@ -1417,7 +1470,14 @@ pub fn build_render_shim(root: &ArtRoot) -> Result<PathBuf> {
         let src = stage.join("render_shim.c");
         fs::write(&src, RENDER_SHIM_SOURCE)?;
         let st = Command::new(&clang)
-            .args(["-O2", "-fPIC", "-shared", "-Wall", "-Wno-unused-parameter", "-o"])
+            .args([
+                "-O2",
+                "-fPIC",
+                "-shared",
+                "-Wall",
+                "-Wno-unused-parameter",
+                "-o",
+            ])
             .arg(stage.join("libacosart.so"))
             .arg(&src)
             .arg("-ldl")
@@ -1462,9 +1522,9 @@ pub(crate) fn android_sdk() -> Result<PathBuf> {
 
 pub(crate) fn find_tool(sdk: &Path, name: &str) -> Result<PathBuf> {
     let mut best: Option<(Vec<u32>, PathBuf)> = None;
-    for e in fs::read_dir(sdk.join("build-tools")).map_err(|_| {
-        Error::Tool(format!("no build-tools under {}", sdk.display()))
-    })? {
+    for e in fs::read_dir(sdk.join("build-tools"))
+        .map_err(|_| Error::Tool(format!("no build-tools under {}", sdk.display())))?
+    {
         let e = e?;
         let p = e.path().join(name);
         if !p.is_file() {
@@ -1486,7 +1546,9 @@ pub(crate) fn find_tool(sdk: &Path, name: &str) -> Result<PathBuf> {
 
 fn ndk_clang() -> Result<PathBuf> {
     let mut roots: Vec<PathBuf> = Vec::new();
-    if let Some(p) = std::env::var_os("ANDROID_NDK_HOME").or_else(|| std::env::var_os("ANDROID_NDK_ROOT")) {
+    if let Some(p) =
+        std::env::var_os("ANDROID_NDK_HOME").or_else(|| std::env::var_os("ANDROID_NDK_ROOT"))
+    {
         roots.push(PathBuf::from(p));
     }
     if let Ok(sdk) = android_sdk() {
@@ -1499,7 +1561,10 @@ fn ndk_clang() -> Result<PathBuf> {
     }
     for r in roots {
         let dir = r.join("toolchains/llvm/prebuilt/linux-x86_64/bin");
-        for target in ["x86_64-linux-android34-clang", "x86_64-linux-android33-clang"] {
+        for target in [
+            "x86_64-linux-android34-clang",
+            "x86_64-linux-android33-clang",
+        ] {
             let p = dir.join(target);
             if p.is_file() {
                 return Ok(p);
@@ -1549,7 +1614,11 @@ pub fn apk_package(apk: &Path) -> Result<String> {
 pub fn apk_chrome(apk: &Path) -> Result<(String, String, u32)> {
     let sdk = android_sdk()?;
     let aapt2 = find_tool(&sdk, "aapt2")?;
-    let badging = Command::new(&aapt2).arg("dump").arg("badging").arg(apk).output()?;
+    let badging = Command::new(&aapt2)
+        .arg("dump")
+        .arg("badging")
+        .arg(apk)
+        .output()?;
     if !badging.status.success() {
         return Err(Error::Tool(format!(
             "aapt2 could not read {}: {}",
@@ -1585,8 +1654,12 @@ pub fn apk_chrome(apk: &Path) -> Result<(String, String, u32)> {
     let mut theme = "0".to_string();
     if tree.status.success() {
         for line in String::from_utf8_lossy(&tree.stdout).lines() {
-            let Some(idx) = line.find(":theme(") else { continue };
-            let Some(eq) = line[idx..].find('=') else { continue };
+            let Some(idx) = line.find(":theme(") else {
+                continue;
+            };
+            let Some(eq) = line[idx..].find('=') else {
+                continue;
+            };
             let value = line[idx + eq + 1..].trim().trim_start_matches('@');
             // Numeric resource ids are stable ACOS-wide (the manifest's
             // compile-time table); names would need a resource lookup.
@@ -1602,7 +1675,11 @@ pub fn apk_chrome(apk: &Path) -> Result<(String, String, u32)> {
 fn pick_layout(apk: &Path, package: &str) -> Result<String> {
     let sdk = android_sdk()?;
     let aapt2 = find_tool(&sdk, "aapt2")?;
-    let out = Command::new(&aapt2).arg("dump").arg("resources").arg(apk).output()?;
+    let out = Command::new(&aapt2)
+        .arg("dump")
+        .arg("resources")
+        .arg(apk)
+        .output()?;
     let text = String::from_utf8_lossy(&out.stdout).to_string();
     let mut layouts: Vec<String> = Vec::new();
     for line in text.lines() {
@@ -1612,11 +1689,18 @@ fn pick_layout(apk: &Path, package: &str) -> Result<String> {
         let Some(idx) = line
             .find(" layout/")
             .map(|i| i + " layout/".len())
-            .or_else(|| line.find(&format!("{package}:layout/")).map(|i| i + package.len() + ":layout/".len()))
+            .or_else(|| {
+                line.find(&format!("{package}:layout/"))
+                    .map(|i| i + package.len() + ":layout/".len())
+            })
         else {
             continue;
         };
-        let name = line[idx..].split_whitespace().next().unwrap_or("").to_string();
+        let name = line[idx..]
+            .split_whitespace()
+            .next()
+            .unwrap_or("")
+            .to_string();
         if !name.is_empty() && !name.contains('/') && !layouts.contains(&name) {
             layouts.push(name);
         }
@@ -1689,10 +1773,10 @@ impl GuestLine {
 }
 
 fn parse_guest_line(stdout: &str) -> Option<GuestLine> {
-    stdout
-        .lines()
-        .rev()
-        .find_map(|l| l.strip_prefix("ACOSAPP ").and_then(|j| serde_json::from_str(j).ok()))
+    stdout.lines().rev().find_map(|l| {
+        l.strip_prefix("ACOSAPP ")
+            .and_then(|j| serde_json::from_str(j).ok())
+    })
 }
 
 #[allow(dead_code)] // kept for callers that genuinely want the whole tree
@@ -1767,7 +1851,8 @@ mod tests {
 
     #[test]
     fn apk_chrome_reads_the_manifest() {
-        let apk = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/build/apps/counter.apk");
+        let apk =
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/build/apps/counter.apk");
         if !apk.is_file() {
             return; // fixture not built on this host
         }
@@ -1812,8 +1897,13 @@ mod tests {
 
         let (merged, added, skipped) = merge_font_customization(base, cust, &dir).expect("merge");
         assert_eq!(added, 1, "only the resolvable new-named-family is added");
-        assert_eq!(skipped, 2, "replace + a family whose file is absent are reported");
-        assert!(merged.contains(r#"<family customizationType="new-named-family" name="google-sans">"#));
+        assert_eq!(
+            skipped, 2,
+            "replace + a family whose file is absent are reported"
+        );
+        assert!(
+            merged.contains(r#"<family customizationType="new-named-family" name="google-sans">"#)
+        );
         assert!(merged.contains("/system/fonts/GoogleSans-Regular.ttf"));
         assert!(merged.contains("/system/fonts/GoogleSans-Medium.ttf"));
         assert!(!merged.contains("/product/fonts/"));

@@ -83,11 +83,16 @@ fn sensorservice_resolves_the_first_time_and_serves_an_empty_sensor_list() {
 
     // getSensorList: `writeUint32(count)` + per sensor
     // `writeInt32(flattenedSize)` + flattened `Sensor`. Zero sensors is one
-    // count word, which is byte-exact and needs no `Sensor` layout.
+    // count word.
+    //
+    // MODSENS: `ISensorServer` is a **hand-written** binder interface
+    // (`libsensor/ISensorServer.cpp`), so its proxy reads the reply with no
+    // `binder::Status`/exception header. W26 wrote one (`no_exception` first),
+    // which the client read as the count: harmless while the list was always
+    // empty, and fatal for a populated one. The reply now starts at the count.
     for code in [SENSOR_GET_SENSOR_LIST, SENSOR_GET_DYNAMIC_SENSOR_LIST] {
         let mut data = sensor_list_request(SENSOR_SERVER_DESCRIPTOR, "com.gaten");
         let mut reply = transact(&mut host, server, code, 0, &mut data).expect("transact");
-        no_exception(&mut reply);
         assert_eq!(reply.read_int32().expect("sensor count"), 0);
         assert_eq!(reply.data_avail(), 0, "an empty Vector<Sensor> is 4 bytes");
     }
@@ -102,7 +107,10 @@ fn sensorservice_resolves_the_first_time_and_serves_an_empty_sensor_list() {
         .expect("IServiceManager node");
     let mut reply = transact(&mut host, sm, 1, 0, &mut data).expect("getService");
     no_exception(&mut reply);
-    let answered = reply.read_strong_binder().expect("binder").expect("non-null");
+    let answered = reply
+        .read_strong_binder()
+        .expect("binder")
+        .expect("non-null");
     assert_eq!(answered, server);
     assert_eq!(reply.data_avail(), 0);
 
@@ -133,7 +141,8 @@ fn sensor_server_rejects_truncated_and_garbage_requests_without_hanging() {
 
     // Truncated: token only, no package string.
     let mut data = Parcel::new();
-    data.write_interface_token(SENSOR_SERVER_DESCRIPTOR).expect("token");
+    data.write_interface_token(SENSOR_SERVER_DESCRIPTOR)
+        .expect("token");
     data.set_data_position(0);
     let err = transact(&mut host, server, SENSOR_GET_SENSOR_LIST, 0, &mut data)
         .expect_err("a missing package must be a bad request");
@@ -141,12 +150,19 @@ fn sensor_server_rejects_truncated_and_garbage_requests_without_hanging() {
 
     // Garbage: a string length far past the end of the parcel.
     let mut data = Parcel::new();
-    data.write_interface_token(SENSOR_SERVER_DESCRIPTOR).expect("token");
+    data.write_interface_token(SENSOR_SERVER_DESCRIPTOR)
+        .expect("token");
     data.write_int32(0x00ff_ffff);
     data.write_int32(0x1234);
     data.set_data_position(0);
-    let err = transact(&mut host, server, SENSOR_GET_DYNAMIC_SENSOR_LIST, 0, &mut data)
-        .expect_err("an impossible string length must be a bad request");
+    let err = transact(
+        &mut host,
+        server,
+        SENSOR_GET_DYNAMIC_SENSOR_LIST,
+        0,
+        &mut data,
+    )
+    .expect_err("an impossible string length must be a bad request");
     assert_eq!(err.code(), "SERVICE_BAD_REQUEST", "{err}");
 
     // Garbage: a wrong interface token is not this node's business.
@@ -160,23 +176,31 @@ fn sensor_server_rejects_truncated_and_garbage_requests_without_hanging() {
 fn sensor_event_connection_is_a_named_gap_not_a_fabricated_queue() {
     // `createSensorEventConnection(String8 opPackage, int mode, String16
     // package, String16 attributionTag) -> ISensorEventConnection` (image
-    // `0xECDB`). With an empty sensor list no guest can ask for a queue, so the
-    // honest answer is a named structured gap: a real device's reply carries a
-    // `BitTube` of event fds, which ACOS cannot serve without inventing fds.
+    // `0xECDB`). With **no feed** (the modules `sensors:off` state) the honest
+    // answer is a named structured gap: a real device's reply carries a `BitTube`
+    // of event fds, and ACOS only serves one from a scripted feed
+    // (`crates/acos-services/tests/sensors_module.rs`).
     let mut host = ServiceHost::standard();
     let server = host
         .check_service("sensorservice")
         .expect("lookup")
         .expect("published");
     let mut data = Parcel::new();
-    data.write_interface_token(SENSOR_SERVER_DESCRIPTOR).expect("token");
+    data.write_interface_token(SENSOR_SERVER_DESCRIPTOR)
+        .expect("token");
     data.write_string8("com.gaten").expect("string8");
     data.write_int32(0);
     data.write_string16("com.gaten").expect("string");
     data.write_string16("").expect("string");
     data.set_data_position(0);
-    let err = transact(&mut host, server, SENSOR_CREATE_EVENT_CONNECTION, 0, &mut data)
-        .expect_err("no fabricated queue");
+    let err = transact(
+        &mut host,
+        server,
+        SENSOR_CREATE_EVENT_CONNECTION,
+        0,
+        &mut data,
+    )
+    .expect_err("no fabricated queue");
     match err {
         ServiceError::UnsupportedAndroidApi { code, .. } => {
             assert_eq!(code, SENSOR_CREATE_EVENT_CONNECTION)
@@ -187,15 +211,23 @@ fn sensor_event_connection_is_a_named_gap_not_a_fabricated_queue() {
     // The direct-channel call (a `NativeHandle` argument, image `0xEB68`) is
     // likewise a structured gap rather than a guessed layout.
     let mut data = Parcel::new();
-    data.write_interface_token(SENSOR_SERVER_DESCRIPTOR).expect("token");
+    data.write_interface_token(SENSOR_SERVER_DESCRIPTOR)
+        .expect("token");
     data.set_data_position(0);
-    let err = transact(&mut host, server, SENSOR_CREATE_DIRECT_CONNECTION, 0, &mut data)
-        .expect_err("no guessed direct channel");
+    let err = transact(
+        &mut host,
+        server,
+        SENSOR_CREATE_DIRECT_CONNECTION,
+        0,
+        &mut data,
+    )
+    .expect_err("no guessed direct channel");
     assert_eq!(err.code(), "UNSUPPORTED_ANDROID_API", "{err}");
 
     // And a code the image does not define at all.
     let mut data = Parcel::new();
-    data.write_interface_token(SENSOR_SERVER_DESCRIPTOR).expect("token");
+    data.write_interface_token(SENSOR_SERVER_DESCRIPTOR)
+        .expect("token");
     data.set_data_position(0);
     let err = transact(&mut host, server, 99, 0, &mut data).expect_err("unknown code");
     assert_eq!(err.code(), "UNSUPPORTED_ANDROID_API", "{err}");
@@ -253,7 +285,11 @@ fn notify_dex_load_with_31_dex_files_decodes_instead_of_underflowing() {
     let args = codec::read_args_override(IPACKAGE_MANAGER, 106, &mut data)
         .expect("override decode")
         .expect("notifyDexLoad has an override");
-    assert_eq!(data.data_avail(), 0, "every byte of the request is consumed");
+    assert_eq!(
+        data.data_avail(),
+        0,
+        "every byte of the request is consumed"
+    );
     assert_eq!(args.len(), 3);
     assert_eq!(args[0].as_str(), Some("com.gaten"));
     match &args[1] {
@@ -285,8 +321,7 @@ fn notify_dex_load_rejects_impossible_counts_and_truncation() {
     data.write_string16("com.gaten").expect("string");
     data.write_int32(-2);
     data.set_data_position(0);
-    let err = codec::read_args_override(IPACKAGE_MANAGER, 106, &mut data)
-        .expect_err("bad count");
+    let err = codec::read_args_override(IPACKAGE_MANAGER, 106, &mut data).expect_err("bad count");
     assert_eq!(err.code(), "SERVICE_BAD_REQUEST", "{err}");
 
     // A huge count with a short parcel must be refused *before* allocating.
@@ -294,8 +329,8 @@ fn notify_dex_load_rejects_impossible_counts_and_truncation() {
     data.write_string16("com.gaten").expect("string");
     data.write_int32(1 << 24);
     data.set_data_position(0);
-    let err = codec::read_args_override(IPACKAGE_MANAGER, 106, &mut data)
-        .expect_err("impossible count");
+    let err =
+        codec::read_args_override(IPACKAGE_MANAGER, 106, &mut data).expect_err("impossible count");
     assert_eq!(err.code(), "SERVICE_BAD_REQUEST", "{err}");
     assert!(format!("{err}").contains("need at least"), "{err}");
 
@@ -305,8 +340,8 @@ fn notify_dex_load_rejects_impossible_counts_and_truncation() {
     let len = data.data_size();
     data.set_data_size(len - 8);
     data.set_data_position(0);
-    let err = codec::read_args_override(IPACKAGE_MANAGER, 106, &mut data)
-        .expect_err("truncated map");
+    let err =
+        codec::read_args_override(IPACKAGE_MANAGER, 106, &mut data).expect_err("truncated map");
     assert_eq!(err.code(), "SERVICE_BAD_REQUEST", "{err}");
 
     // And the fallback for every other method is "no override".
@@ -330,7 +365,10 @@ fn the_package_manager_records_the_dex_files_it_was_told_about() {
     data.set_data_position(0); // the dispatcher reads the interface token first
     let started = Instant::now();
     let reply = transact(&mut host, pms, 106, 1, &mut data).expect("oneway notifyDexLoad");
-    assert!(started.elapsed().as_millis() < 500, "no retry loop, no stall");
+    assert!(
+        started.elapsed().as_millis() < 500,
+        "no retry loop, no stall"
+    );
     assert_eq!(reply.data_size(), 0, "oneway: an empty reply body");
 }
 
@@ -352,7 +390,8 @@ fn write_crash_info(p: &mut Parcel) {
         p.write_string16(s).expect("string");
     }
     p.write_int32(412);
-    p.write_string16("java.lang.IllegalStateException: boom\n\tat a.b(C.kt:1)").expect("string");
+    p.write_string16("java.lang.IllegalStateException: boom\n\tat a.b(C.kt:1)")
+        .expect("string");
     p.write_string16("GatenWtf").expect("string");
 }
 
@@ -360,7 +399,8 @@ fn write_crash_info(p: &mut Parcel) {
 /// `IBinder app, String tag, boolean system, ParcelableCrashInfo crashInfo, int pid`.
 fn wtf_request(truncate: usize) -> Parcel {
     let mut data = Parcel::new();
-    data.write_interface_token(IACTIVITY_MANAGER).expect("token");
+    data.write_interface_token(IACTIVITY_MANAGER)
+        .expect("token");
     data.write_strong_binder_opt(None);
     data.write_string16("GatenWtf").expect("string");
     data.write_int32(0); // boolean false
@@ -406,7 +446,10 @@ fn handle_application_wtf_is_decoded_logged_and_does_not_kill_the_guest() {
         .collect();
     assert_eq!(logged.len(), 1, "one WTF log line: {events:?}");
     let line = &logged[0];
-    assert!(line.contains("java.lang.IllegalStateException: boom"), "{line}");
+    assert!(
+        line.contains("java.lang.IllegalStateException: boom"),
+        "{line}"
+    );
     assert!(line.contains("(line 412)"), "{line}");
     assert!(line.contains("at a.b(C.kt:1)"), "{line}");
 }

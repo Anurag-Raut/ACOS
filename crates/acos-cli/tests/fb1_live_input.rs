@@ -398,7 +398,9 @@ fn ambiguous_selector_is_refused_with_candidates() {
     for candidate in &candidates {
         assert_eq!(candidate["text"], json!("Continue"));
         assert!(
-            candidate["bounds"].as_str().is_some_and(|b| b.contains("][")),
+            candidate["bounds"]
+                .as_str()
+                .is_some_and(|b| b.contains("][")),
             "each candidate names its bounds: {candidate:#?}"
         );
         assert!(candidate["id"].as_str().is_some());
@@ -425,7 +427,11 @@ fn ambiguous_selector_is_refused_with_candidates() {
         "acos_assert",
         json!({"base": b, "text": "Search Japanese dictionary", "expect": "x"}),
     );
-    assert_eq!(wrong["error"]["code"], json!("ELEMENT_NOT_FOUND"), "{wrong:#?}");
+    assert_eq!(
+        wrong["error"]["code"],
+        json!("ELEMENT_NOT_FOUND"),
+        "{wrong:#?}"
+    );
     // ... and the explicit content_desc is the field-exact way to name it.
     let ok = conn.call(
         "acos_assert",
@@ -450,7 +456,11 @@ fn ambiguous_assertion_is_refused_with_candidates() {
         "acos_assert",
         json!({"base": b, "text": "Continue", "expect": "Continue"}),
     );
-    assert_eq!(refused["error"]["code"], json!("AMBIGUOUS_SELECTOR"), "{refused:#?}");
+    assert_eq!(
+        refused["error"]["code"],
+        json!("AMBIGUOUS_SELECTOR"),
+        "{refused:#?}"
+    );
     assert_eq!(
         refused.pointer("/error/details/count"),
         Some(&json!(2)),

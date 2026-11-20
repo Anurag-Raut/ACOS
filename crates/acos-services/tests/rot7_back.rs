@@ -107,7 +107,9 @@ fn a_back_press_asks_the_client_to_finish() {
         .expect("record for the adopted token");
     assert!(record.back_pressed, "the press is recorded on the ActivityRecord");
     assert!(!record.finished, "the host does not finish it: the client does");
-    assert_eq!(record.lifecycle, ActivityLifecycle::Uncreated);
+    // The `resume` above established `Resumed` (MPROC5: the report is the
+    // proof the lifecycle ran); a Back press invents no further transition.
+    assert_eq!(record.lifecycle, ActivityLifecycle::Resumed);
     assert!(
         !locked
             .events
@@ -164,7 +166,7 @@ fn the_client_finish_after_the_callback_flips_finished() {
     // the guest's transaction executor; the host only recorded the finish.
     assert_eq!(
         locked.lifecycle_of(token),
-        Some(ActivityLifecycle::Uncreated),
+        Some(ActivityLifecycle::Resumed),
         "no lifecycle transition is invented by finishActivity"
     );
 }

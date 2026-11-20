@@ -33,6 +33,7 @@ pub mod error;
 pub mod events;
 pub mod frame;
 pub mod identity;
+pub mod launch;
 pub mod mcp;
 pub mod provenance;
 pub mod reply;
@@ -71,6 +72,7 @@ pub use events::{
 };
 pub use frame::FrameMeta;
 pub use identity::{DisplaySpec, IsolationLevel, ResourceBudget};
+pub use launch::{ExtraValue, LaunchIntent};
 pub use mcp::{mcp_tools, McpToolDescriptor, McpToolsList};
 pub use reply::{
     compact_nodes, compact_text, enforce_cap, enforce_cap_pretty, shape_result_tree, shape_tree,

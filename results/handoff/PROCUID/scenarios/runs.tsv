@@ -1,0 +1,10 @@
+run_id	scenario	verdict	rc	wall_ms
+01-binderpid	scenarios/binderpid.yaml	pass	0	1978
+02-mproc8-bind-only	scenarios/mproc8-bind-only.yaml	pass	0	2260
+03-mproc3-two-process	scenarios/mproc3-two-process.yaml	pass	0	7038
+04-notif-perm-granted	scenarios/notif-perm-granted.yaml	pass	0	742
+05-notif-perm-denied	scenarios/notif-perm-denied.yaml	pass	0	797
+06-a11y-probe	scenarios/a11y-probe.yaml	pass	0	5130
+07-location-pending-intent	scenarios/location-pending-intent.yaml	pass	0	2059
+08-counter	scenarios/counter.yaml	pass	0	6688
+09-gaten-backstack	scenarios/gaten-backstack.yaml	timeout	1	12888

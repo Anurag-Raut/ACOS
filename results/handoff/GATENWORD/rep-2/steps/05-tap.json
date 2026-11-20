@@ -1,0 +1,117 @@
+{
+  "assertions": [
+    {
+      "actual": {
+        "screenshot_changed": true,
+        "tree_changed": true
+      },
+      "expected": {
+        "screenshot_changed": true,
+        "tree_changed": true
+      },
+      "kind": "state_change",
+      "matched_node_ids": [],
+      "message": "UI tree and screenshot both changed",
+      "passed": true
+    }
+  ],
+  "certification": "certified-with-limits",
+  "certification_limits": {
+    "doc": "docs/SANDBOX_CERTIFICATION.md",
+    "section": "§8.7"
+  },
+  "duration_ms": 5519,
+  "evidence": [
+    {
+      "kind": "tree",
+      "path": "tree/4.json"
+    },
+    {
+      "kind": "frame",
+      "path": "frames/4.png"
+    },
+    {
+      "kind": "step",
+      "path": "steps/05-tap.json"
+    }
+  ],
+  "frame_seq": 4,
+  "index": 5,
+  "input": {
+    "expect_change": "auto",
+    "handled": true,
+    "handled_evidence": {
+      "acked": 2,
+      "published": 2,
+      "source": "guest"
+    },
+    "target": {
+      "hit": {
+        "clickable": false,
+        "consumer": null,
+        "method": "tree-geometry",
+        "node": {
+          "bounds": "[0,0][1080,2400]",
+          "class": "b5.g",
+          "clickable": false,
+          "content_desc": "",
+          "enabled": true,
+          "focused": false,
+          "id": "n10_",
+          "password": false,
+          "resource_id": "",
+          "scrollable": false,
+          "text": "",
+          "visible_bounds": "[0,0][1080,2400]",
+          "window": "main"
+        },
+        "suggest": {
+          "bounds": "[58,2117][1022,2253]",
+          "class": "b5.g",
+          "clickable": true,
+          "content_desc": "Set up Gaten",
+          "enabled": true,
+          "focused": false,
+          "id": "n13_",
+          "password": false,
+          "resource_id": "",
+          "scrollable": false,
+          "text": "",
+          "visible_bounds": "[58,2117][1022,2253]",
+          "window": "main"
+        }
+      },
+      "point": {
+        "x": 539,
+        "y": 2184
+      },
+      "selector": {
+        "selector": "text*=\"Set up Gaten\""
+      }
+    }
+  },
+  "provenance": {
+    "frame": "host-observed",
+    "host_input": "host-observed",
+    "input_acks": "guest-asserted",
+    "tree": "guest-asserted"
+  },
+  "settle": {
+    "ack_ms": 10,
+    "bound": "strict-event",
+    "first_change_ms": 75,
+    "frame_ms": 480,
+    "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
+    "mode": "strict",
+    "pixels_changed": true,
+    "reason": "strict-event",
+    "settled": true,
+    "state_changed": null,
+    "strict_rule": "event",
+    "waited_ms": 5519,
+    "waited_ms_source": "step"
+  },
+  "status": "pass",
+  "step": "tap",
+  "trust": "trusted"
+}

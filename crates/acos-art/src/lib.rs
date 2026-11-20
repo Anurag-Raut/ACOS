@@ -32,18 +32,42 @@ pub mod build_cache;
 pub mod capture;
 pub mod cgroup;
 pub mod crash;
+// GLSPIKE: the opt-in, lazily loaded software GLES provider (`ACOS_GUEST_GLES`).
+pub mod gles;
+
+/// The provider contract's error is a layout error here: a missing provider, a
+/// manifest that disagrees with the staged bytes or a render node that is not a
+/// device are all "the tree is not what the run needs" (`acos-gles-provider`
+/// keeps the message; this launcher keeps one error type).
+impl From<acos_gles_provider::Error> for Error {
+    fn from(e: acos_gles_provider::Error) -> Self {
+        match e {
+            acos_gles_provider::Error::Layout(m) => Error::Layout(m),
+        }
+    }
+}
+
+/// The process environment is global: every test that mutates it takes this
+/// lock, in any module, so one test's `ACOS_GUEST_GLES`/`ACOS_ART_*` cannot
+/// leak into another's (they run on parallel threads).
+#[cfg(test)]
+pub(crate) static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 pub mod host_zygote;
-pub mod zygote_prod;
 pub mod jvm;
-pub mod launch;
-pub mod session;
 pub mod landlock;
+pub mod launch;
 pub mod launcher;
 pub mod live_view;
 pub mod logd;
 pub mod props;
 pub mod seccomp;
+pub mod session;
+// WV4: the guest path ⇄ host path mapping of the WebView session socket.
+/// SPIKE-NET (ADR-0030 gate): pasta networking, gated on `ACOS_SPIKE_NET=1`.
+pub mod spike_net;
 pub mod watchdog;
+pub mod webview_socket;
+pub mod zygote_prod;
 
 use std::ffi::OsString;
 use std::fs;
@@ -61,6 +85,153 @@ pub const DEFAULT_IMAGE_REL: &str = "system-images/android-34/google_apis/x86_64
 
 /// Host path of the embedded freestanding shim source.
 pub const SHIM_SOURCE: &str = include_str!("../shim/artshim.c");
+
+/// The software gralloc interposer's source (`LD_PRELOAD`, the memfd-backed
+/// `GraphicBuffer` memory the stock libui/libgui use; G1).
+pub const GRALLOC_SHIM_SOURCE: &str = include_str!("../shim/gralloc_shim.c");
+
+/// The `libacoshw.so` this binary must run: the sysroot's prebuilt copy when it
+/// was built from the embedded source, else a build of the embedded source into
+/// the content-addressed cache.
+///
+/// # Why the sysroot's copy is verified, not trusted
+///
+/// `tools/art-sysroot.sh --shim` writes `shim/libacoshw.so` and stamps
+/// `shim/gralloc_shim.hash` with the first 32 hex characters of the source's
+/// SHA-256. The `.so` lives **outside** this binary, so when the shim source
+/// changes an existing sysroot keeps the old artefact — and a session then
+/// silently runs a shim that is missing entry points. Measured
+/// (`results/handoff/A11YPACE`): A11YNATIVE2 added
+/// `GraphicBufferMapper::getAllocationSize` to the shim, the shared sysroot's
+/// copy was older, and an app calling `Bitmap.wrapHardwareBuffer` on the
+/// screenshot `HardwareBuffer` took SIGSEGV in
+/// `android::GraphicBufferMapper::getAllocationSize` (libui's own copy, whose
+/// HAL mapper object is null without a gralloc HAL) instead of getting its
+/// bitmap. The `.so` therefore cannot be taken on faith: its stamp is compared
+/// with the embedded source's hash, and a stale/missing artefact is rebuilt
+/// from the embedded bytes (one compile per source change, then reused).
+///
+/// Only when the sysroot is stale **and** no Android NDK is available does the
+/// launch stop — with a structured error naming the fix, never a crash.
+///
+/// # Errors
+///
+/// A stale sysroot shim with no usable NDK toolchain (`Error::Tool`), or a
+/// failed compile of the embedded source.
+pub fn gralloc_shim(root: &ArtRoot) -> Result<PathBuf> {
+    let prebuilt = root.sysroot.join("shim/libacoshw.so");
+    let stamp = root.sysroot.join("shim/gralloc_shim.hash");
+    let source = GRALLOC_SHIM_SOURCE.as_bytes();
+    let want: String = crate::build_cache::sha256_hex(source)
+        .chars()
+        .take(32)
+        .collect();
+    let stamped = fs::read_to_string(&stamp)
+        .map(|text| text.trim() == want)
+        .unwrap_or(false);
+    if std::env::var_os("ACOSART_SHIM_TRACE").is_some() {
+        eprintln!(
+            "acos-art: gralloc shim: sysroot={} stamped={stamped} want={want} prebuilt={}",
+            prebuilt.display(),
+            prebuilt.is_file()
+        );
+    }
+    if stamped && prebuilt.is_file() {
+        return Ok(prebuilt);
+    }
+    let clang = ndk_clang().ok_or_else(|| {
+        Error::Tool(format!(
+            "the sysroot's software gralloc shim ({}) was not built from this binary's              crates/acos-art/shim/gralloc_shim.c (stamp {} vs {want}), so it would crash an app              that wraps a HardwareBuffer in a Bitmap; rebuild it with              `tools/art-sysroot.sh --shim` or point ANDROID_NDK_HOME at an NDK",
+            prebuilt.display(),
+            stamp.display()
+        ))
+    })?;
+    let key = crate::build_cache::digest(&[
+        b"acos-art/gralloc-shim/v1",
+        source,
+        crate::build_cache::file_id(Path::new(&clang)).as_bytes(),
+    ]);
+    let built = crate::build_cache::ensure(&key, &["libacoshw.so"], |stage| {
+        let src = stage.join("gralloc_shim.c");
+        fs::write(&src, source)?;
+        let out = stage.join("libacoshw.so");
+        let status = Command::new(&clang)
+            .args([
+                "-O2",
+                "-fPIC",
+                "-shared",
+                "-Wall",
+                "-Wno-unused-parameter",
+                "-o",
+            ])
+            .arg(&out)
+            .arg(&src)
+            .status()
+            .map_err(|e| Error::Tool(format!("running {clang}: {e}")))?;
+        if !status.success() {
+            return Err(Error::Tool(format!(
+                "{clang} failed to build {}",
+                src.display()
+            )));
+        }
+        Ok(())
+    })?;
+    let installed = crate::build_cache::install(&built, &["libacoshw.so"], &root.data.join("shim"))?;
+    Ok(installed[0].clone())
+}
+
+/// The NDK clang that can build the bionic-linked gralloc shim, if one is
+/// installed: `ACOS_ART_NDK`, `ANDROID_NDK_HOME`, `ANDROID_NDK_ROOT`, then the
+/// SDK's `ndk/*` (the same discovery `tools/art-sysroot.sh` uses).
+fn ndk_clang() -> Option<String> {
+    let mut roots: Vec<PathBuf> = Vec::new();
+    for key in ["ACOS_ART_NDK", "ANDROID_NDK_HOME", "ANDROID_NDK_ROOT"] {
+        if let Some(value) = std::env::var_os(key) {
+            if !value.is_empty() {
+                roots.push(PathBuf::from(value));
+            }
+        }
+    }
+    for key in ["ANDROID_HOME", "ANDROID_SDK_ROOT"] {
+        if let Some(value) = std::env::var_os(key) {
+            roots.push(PathBuf::from(value).join("ndk"));
+        }
+    }
+    if let Some(home) = std::env::var_os("HOME") {
+        roots.push(PathBuf::from(home).join("Android/Sdk/ndk"));
+    }
+    for root in roots {
+        let mut ndks: Vec<PathBuf> = match fs::read_dir(&root) {
+            Ok(entries) => entries
+                .flatten()
+                .map(|entry| entry.path())
+                .filter(|path| path.is_dir())
+                .collect(),
+            Err(_) => Vec::new(),
+        };
+        // A bare NDK directory (ACOS_ART_NDK=/path/to/ndk) has no nested
+        // versions; a bare android-34 API suffix is what the image's libs are.
+        ndks.sort();
+        if root.join("toolchains").is_dir() {
+            ndks.push(root.clone());
+        }
+        for ndk in ndks {
+            let prebuilt = ndk.join("toolchains/llvm/prebuilt");
+            let Ok(hosts) = fs::read_dir(&prebuilt) else {
+                continue;
+            };
+            let mut hosts: Vec<PathBuf> = hosts.flatten().map(|e| e.path()).collect();
+            hosts.sort();
+            for host in hosts {
+                let candidate = host.join("bin/x86_64-linux-android34-clang");
+                if candidate.is_file() {
+                    return Some(candidate.display().to_string());
+                }
+            }
+        }
+    }
+    None
+}
 
 /// Publish `bytes` at `path` without ever truncating a file another process may
 /// be reading or **mapping**.
@@ -108,7 +279,9 @@ const APEX_INFO_MARKER: &str = "<!-- acos-art apex-info-list v3 -->\n";
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
-    #[error("runtime root not found (set ACOS_HOME for an installed ACOS, or ACOS_ROOT for a checkout)")]
+    #[error(
+        "runtime root not found (set ACOS_HOME for an installed ACOS, or ACOS_ROOT for a checkout)"
+    )]
     NoRepoRoot,
     #[error(
         "ART sysroot not found: {0} (run tools/art-sysroot.sh --out {0}, or set ACOS_ART_SYSROOT)"
@@ -196,8 +369,8 @@ impl Classpaths {
     /// and its derivation would silently drop `framework.jar`.
     pub fn is_complete(&self) -> bool {
         let has_framework = self.boot.iter().any(|j| j.ends_with("/framework.jar"));
-        let prefix_ok =
-            self.dex2oat.len() < self.boot.len() && self.boot[..self.dex2oat.len()] == self.dex2oat[..];
+        let prefix_ok = self.dex2oat.len() < self.boot.len()
+            && self.boot[..self.dex2oat.len()] == self.dex2oat[..];
         has_framework && prefix_ok
     }
 }
@@ -245,7 +418,12 @@ impl ArtRoot {
             },
         };
         let modules = read_modules(&sysroot)?;
-        Ok(Self { repo_root, sysroot, data, modules })
+        Ok(Self {
+            repo_root,
+            sysroot,
+            data,
+            modules,
+        })
     }
 
     // ---- layout -----------------------------------------------------------
@@ -311,7 +489,13 @@ impl ArtRoot {
     pub fn run_dir_at(&self, path: &Path, tag: &str) -> Result<RunDir> {
         let label: String = tag
             .chars()
-            .map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '_' { c } else { '-' })
+            .map(|c| {
+                if c.is_ascii_alphanumeric() || c == '-' || c == '_' {
+                    c
+                } else {
+                    '-'
+                }
+            })
             .collect();
         for d in [
             "dalvik-cache/x86_64",
@@ -329,15 +513,27 @@ impl ArtRoot {
         // from a pid that has been reused since (H1's leak-check lesson).
         let start = fs::read_to_string("/proc/self/stat")
             .ok()
-            .and_then(|s| s.rfind(')').map(|i| s[i + 2..].split_whitespace().nth(19).map(str::to_string)).flatten())
+            .and_then(|s| {
+                s.rfind(')')
+                    .map(|i| s[i + 2..].split_whitespace().nth(19).map(str::to_string))
+                    .flatten()
+            })
             .unwrap_or_else(|| "0".to_string());
         fs::write(
             path.join("owner"),
-            format!("pid={}\nstart={}\ntag={}\n", std::process::id(), start, label),
+            format!(
+                "pid={}\nstart={}\ntag={}\n",
+                std::process::id(),
+                start,
+                label
+            ),
         )?;
         let keep = std::env::var_os("ACOS_ART_KEEP_RUN").is_some()
             || std::env::var_os("ACOS_ZYGOTE_SESSION").is_some();
-        Ok(RunDir { path: path.to_path_buf(), keep })
+        Ok(RunDir {
+            path: path.to_path_buf(),
+            keep,
+        })
     }
 
     /// Remove run dirs that have no live owner pid and are older than the TTL
@@ -347,7 +543,9 @@ impl ArtRoot {
     pub fn sweep_stale_runs(&self) -> Result<usize> {
         let ttl = run_ttl_from_env();
         let root = self.runs_dir();
-        let Ok(rd) = fs::read_dir(&root) else { return Ok(0) };
+        let Ok(rd) = fs::read_dir(&root) else {
+            return Ok(0);
+        };
         let mut removed = 0;
         for e in rd.flatten() {
             let path = e.path();
@@ -386,7 +584,9 @@ impl ArtRoot {
     pub fn write_apex_info_list(&self) -> Result<()> {
         let out = self.apex_info_list();
         let modules = self.modules_path();
-        let have_marker = fs::read_to_string(&out).map(|t| t.contains(APEX_INFO_MARKER)).unwrap_or(false);
+        let have_marker = fs::read_to_string(&out)
+            .map(|t| t.contains(APEX_INFO_MARKER))
+            .unwrap_or(false);
         let stale = !have_marker
             || match (fs::metadata(&out), fs::metadata(&modules)) {
                 (Ok(o), Ok(m)) => match (o.modified(), m.modified()) {
@@ -438,8 +638,10 @@ impl ArtRoot {
         // so a mount-table change (new extraction, corrected apex names)
         // invalidates an existing ld.config.txt.
         let stamp = self.data.join("linkerconfig/.mounts");
-        let mounts = self.mount_stamp();
-        let stamp_ok = fs::read_to_string(&stamp).map(|s| s.trim() == mounts).unwrap_or(false);
+        let mounts = self.linkerconfig_stamp();
+        let stamp_ok = fs::read_to_string(&stamp)
+            .map(|s| s.trim() == mounts)
+            .unwrap_or(false);
         if ld.is_file() && stamp_ok && !regen {
             return Ok(());
         }
@@ -464,13 +666,19 @@ impl ArtRoot {
         // linkerconfig is a bionic binary: without the shim its CHECK failures
         // are invisible (liblog has nowhere to write) and it just aborts.
         crate::build_shim(&self.data.join("shim"))?;
+        // linkerconfig picks its mode from the property table; serve it the
+        // table without the Treble-mode keys so it emits the unisolated config
+        // the runtime is built for (see `props::LINKERCONFIG_MODE_KEYS`).
+        let lc_props = self.data.join(props::LINKERCONFIG_PROPS_FILE);
+        Props::for_linkerconfig()?.write(&lc_props)?;
         let mut sb = self.sandbox();
         sb.staging(true); // host build step: /linkerconfig is regenerated here
         sb.with_shim(true);
-        let mut cmd = sb.command("/apex/com.android.runtime/bin/linkerconfig", &[
-            "--target".into(),
-            "/linkerconfig".into(),
-        ])?;
+        sb.ro_bind(&lc_props, "/data/acos.properties");
+        let mut cmd = sb.command(
+            "/apex/com.android.runtime/bin/linkerconfig",
+            &["--target".into(), "/linkerconfig".into()],
+        )?;
         let log = self.data.join("linkerconfig.log");
         let out = cmd.output()?;
         let mut text = Vec::new();
@@ -493,15 +701,26 @@ impl ArtRoot {
         Ok(())
     }
 
+    /// What the generated `/linkerconfig` tree depends on besides the image:
+    /// the APEX mount table and the **mode** the generator runs in (legacy,
+    /// unisolated; it follows `ro.vndk.version`, see
+    /// `props::LINKERCONFIG_MODE_KEYS`). A tree an older build generated in the
+    /// strict mode carries no such token, so it is regenerated, not reused.
+    fn linkerconfig_stamp(&self) -> String {
+        format!("{}+legacy-v1", self.mount_stamp())
+    }
+
     /// Cache key of the generated `linkerconfig` tree: image digest + APEX mount
-    /// table + the `linkerconfig` binary identity + the invocation.
-    fn linkerconfig_cache_key(&self, mounts: &str) -> String {
+    /// table + generator property table + the `linkerconfig` binary **content**
+    /// + the invocation. Nothing in it names the sysroot's path: the same image
+    /// through another path (a worktree) is the same entry.
+    fn linkerconfig_cache_key(&self, stamp: &str) -> String {
         let tool = self.host_path("/apex/com.android.runtime/bin/linkerconfig");
         crate::build_cache::digest(&[
-            b"acos-art/linkerconfig/v1",
+            b"acos-art/linkerconfig/v2",
             crate::build_cache::image_digest(&self.sysroot).as_bytes(),
-            mounts.as_bytes(),
-            crate::build_cache::file_id(&tool).as_bytes(),
+            stamp.as_bytes(),
+            crate::build_cache::content_id(&tool).as_bytes(),
             b"--target /linkerconfig",
         ])
     }
@@ -533,8 +752,12 @@ impl ArtRoot {
         let mut cp = Classpaths::default();
         for line in text.lines() {
             let line = line.trim();
-            let Some(rest) = line.strip_prefix("export ") else { continue };
-            let Some((key, value)) = rest.split_once(char::is_whitespace) else { continue };
+            let Some(rest) = line.strip_prefix("export ") else {
+                continue;
+            };
+            let Some((key, value)) = rest.split_once(char::is_whitespace) else {
+                continue;
+            };
             let list: Vec<String> = value
                 .trim()
                 .split(':')
@@ -563,7 +786,11 @@ impl ArtRoot {
         if let Some(dir) = out.parent() {
             fs::create_dir_all(dir)?;
         }
-        if !regen && out.is_file() && self.classpaths().is_some() && self.classpath_env_is_fresh(&out) {
+        if !regen
+            && out.is_file()
+            && self.classpaths().is_some()
+            && self.classpath_env_is_fresh(&out)
+        {
             return Ok(());
         }
         let key = self.classpath_env_cache_key();
@@ -571,7 +798,10 @@ impl ArtRoot {
         if cached {
             let _lock = crate::build_cache::lock(&key)?;
             if !regen {
-                let dir = out.parent().map(Path::to_path_buf).unwrap_or_else(|| self.data.clone());
+                let dir = out
+                    .parent()
+                    .map(Path::to_path_buf)
+                    .unwrap_or_else(|| self.data.clone());
                 if crate::build_cache::reuse_to(&key, &["classpath"], &dir)?.is_some() {
                     crate::stage("classpath-hit");
                     return Ok(());
@@ -622,15 +852,26 @@ impl ArtRoot {
         }
         // Every enumerated jar must exist in the sysroot, otherwise ART would
         // fail far away from the cause.
-        let missing: Vec<&String> = cp.boot.iter().filter(|j| !self.host_path(j).is_file()).collect();
+        let missing: Vec<&String> = cp
+            .boot
+            .iter()
+            .filter(|j| !self.host_path(j).is_file())
+            .collect();
         if !missing.is_empty() {
             return Err(Error::Layout(format!(
                 "BOOTCLASSPATH names jars the sysroot lacks: {} (re-run tools/art-sysroot.sh)",
-                missing.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(", ")
+                missing
+                    .iter()
+                    .map(|s| s.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ")
             )));
         }
         if cached {
-            let dir = out.parent().map(Path::to_path_buf).unwrap_or_else(|| self.data.clone());
+            let dir = out
+                .parent()
+                .map(Path::to_path_buf)
+                .unwrap_or_else(|| self.data.clone());
             crate::build_cache::publish_locked(&key, &dir, &["classpath"])?;
         }
         crate::stage("classpath-built");
@@ -644,15 +885,18 @@ impl ArtRoot {
     fn classpath_env_cache_key(&self) -> String {
         let derive = self.host_path("/apex/com.android.sdkext/bin/derive_classpath");
         crate::build_cache::digest(&[
-            b"acos-art/derive-classpath/v1",
+            b"acos-art/derive-classpath/v2",
             crate::build_cache::image_digest(&self.sysroot).as_bytes(),
-            crate::build_cache::file_id(&derive).as_bytes(),
+            crate::build_cache::content_id(&derive).as_bytes(),
         ])
     }
 
     fn classpath_env_is_fresh(&self, out: &Path) -> bool {
         let newer = |p: &Path| -> bool {
-            match (fs::metadata(p).and_then(|m| m.modified()), fs::metadata(out).and_then(|m| m.modified())) {
+            match (
+                fs::metadata(p).and_then(|m| m.modified()),
+                fs::metadata(out).and_then(|m| m.modified()),
+            ) {
                 (Ok(src), Ok(dst)) => dst >= src,
                 _ => false,
             }
@@ -677,14 +921,18 @@ impl ArtRoot {
             return Ok(prefix);
         }
         // Last resort: keep one jar for the mainline remainder.
-        Ok(boot.split_last().map(|(_, rest)| rest.to_vec()).unwrap_or_default())
+        Ok(boot
+            .split_last()
+            .map(|(_, rest)| rest.to_vec())
+            .unwrap_or_default())
     }
 
     /// Jars the image's `bootclasspath.pb` fragments put in
     /// `DEX2OATBOOTCLASSPATH` (proto `ClasspathEntry{string jar=1; Classpath
     /// classpath=2;}` with `DEX2OATBOOTCLASSPATH = 1`).
     fn dex2oat_fragment_jars(&self) -> Vec<String> {
-        let mut files: Vec<PathBuf> = vec![self.sysroot.join("system/etc/classpaths/bootclasspath.pb")];
+        let mut files: Vec<PathBuf> =
+            vec![self.sysroot.join("system/etc/classpaths/bootclasspath.pb")];
         if let Ok(rd) = fs::read_dir(self.sysroot.join("system/apex")) {
             for e in rd.filter_map(|e| e.ok()) {
                 files.push(e.path().join("etc/classpaths/bootclasspath.pb"));
@@ -731,7 +979,9 @@ impl ArtRoot {
 
     /// Jars the reference boot classpath names but the sysroot lacks.
     pub fn bootclasspath_missing(&self) -> Vec<String> {
-        self.bootclasspath_entries().map(|e| e.1).unwrap_or_default()
+        self.bootclasspath_entries()
+            .map(|e| e.1)
+            .unwrap_or_default()
     }
 
     fn bootclasspath_entries(&self) -> Result<(Vec<String>, Vec<String>)> {
@@ -757,7 +1007,8 @@ impl ArtRoot {
         }
         // Legacy sysroots (the E1A scratch dir) only ship a bare jar-name list.
         let list = [
-            self.repo_root.join("research/art-feasibility/a-dalvikvm/bootclasspath.txt"),
+            self.repo_root
+                .join("research/art-feasibility/a-dalvikvm/bootclasspath.txt"),
             self.repo_root.join(".cache/boot/android-34/BOOTCLASSPATH"),
         ]
         .into_iter()
@@ -769,7 +1020,11 @@ impl ArtRoot {
             ))
         })?;
         for line in list.lines().map(str::trim).filter(|l| !l.is_empty()) {
-            let jar = Path::new(line).file_name().unwrap().to_string_lossy().to_string();
+            let jar = Path::new(line)
+                .file_name()
+                .unwrap()
+                .to_string_lossy()
+                .to_string();
             match self.find_jar(&jar) {
                 Some(dev) => resolved.push(dev),
                 None => missing.push(jar),
@@ -812,10 +1067,17 @@ impl ArtRoot {
                 None => (rest, ""),
             };
             if module == "sharedlibs" {
-                return self.sysroot.join("system/apex/com.google.mainline.primary.libs").join(tail);
+                return self
+                    .sysroot
+                    .join("system/apex/com.google.mainline.primary.libs")
+                    .join(tail);
             }
             // Device path (`/apex/<apex_manifest name>`) or host directory name.
-            if let Some(m) = self.modules.iter().find(|m| m.mount == module || m.name == module) {
+            if let Some(m) = self
+                .modules
+                .iter()
+                .find(|m| m.mount == module || m.name == module)
+            {
                 return self.sysroot.join("system/apex").join(&m.name).join(tail);
             }
             return self.sysroot.join("system/apex").join(module).join(tail);
@@ -826,7 +1088,10 @@ impl ArtRoot {
     /// Map a host sysroot path to its on-device absolute path.
     pub fn dev_path(&self, host: &Path) -> String {
         let s = host.to_string_lossy().to_string();
-        let s = s.replace(&format!("{}/system/apex/", self.sysroot.display()), "/apex/");
+        let s = s.replace(
+            &format!("{}/system/apex/", self.sysroot.display()),
+            "/apex/",
+        );
         let s = s.replace(&self.sysroot.display().to_string(), "");
         s
     }
@@ -923,14 +1188,18 @@ pub fn keeps_run_tree_for_crash(signal: Option<i32>, has_native_crash: bool) -> 
 /// Kept crash trees under `runs_root`, oldest first (marker mtime, then path).
 fn kept_crash_trees(runs_root: &Path) -> Vec<(std::time::SystemTime, PathBuf)> {
     let mut trees: Vec<(std::time::SystemTime, PathBuf)> = Vec::new();
-    let Ok(rd) = fs::read_dir(runs_root) else { return trees };
+    let Ok(rd) = fs::read_dir(runs_root) else {
+        return trees;
+    };
     for e in rd.flatten() {
         let dir = e.path();
         if !e.file_type().map(|t| t.is_dir()).unwrap_or(false) {
             continue;
         }
         let marker = dir.join(CRASH_KEEP_MARKER);
-        let Ok(meta) = fs::metadata(&marker) else { continue };
+        let Ok(meta) = fs::metadata(&marker) else {
+            continue;
+        };
         let at = meta.modified().unwrap_or(std::time::SystemTime::UNIX_EPOCH);
         trees.push((at, dir));
     }
@@ -1126,7 +1395,9 @@ fn run_ttl_from_env() -> u64 {
 
 /// Is the pid recorded in `<run>/owner` still alive **and** the same process?
 fn run_dir_is_live(path: &Path) -> bool {
-    let Ok(text) = fs::read_to_string(path.join("owner")) else { return false };
+    let Ok(text) = fs::read_to_string(path.join("owner")) else {
+        return false;
+    };
     let mut pid = 0u32;
     let mut start = String::new();
     for line in text.lines() {
@@ -1139,9 +1410,17 @@ fn run_dir_is_live(path: &Path) -> bool {
     if pid == 0 {
         return false;
     }
-    let Ok(stat) = fs::read_to_string(format!("/proc/{pid}/stat")) else { return false };
-    let Some(i) = stat.rfind(')') else { return false };
-    let now_start = stat[i + 2..].split_whitespace().nth(19).unwrap_or("").to_string();
+    let Ok(stat) = fs::read_to_string(format!("/proc/{pid}/stat")) else {
+        return false;
+    };
+    let Some(i) = stat.rfind(')') else {
+        return false;
+    };
+    let now_start = stat[i + 2..]
+        .split_whitespace()
+        .nth(19)
+        .unwrap_or("")
+        .to_string();
     !start.is_empty() && now_start == start
 }
 
@@ -1159,7 +1438,8 @@ fn run_dir_is_live(path: &Path) -> bool {
 ///
 /// `--unshare-user` is made explicit for runs because it is what lets the guest
 /// carry an **application** uid instead of the host caller's uid (see
-/// [`guest_uid`]); bwrap would create the namespace implicitly anyway.
+/// [`Sandbox::app_uid`] and [`guest_uid_override`]); bwrap would create the
+/// namespace implicitly anyway.
 /// `--disable-userns` and `--new-session` remain absent (untested against ART;
 /// see S2).
 const SANDBOX_FLAGS: &[&str] = &[
@@ -1182,7 +1462,7 @@ const SANDBOX_FLAGS: &[&str] = &[
 /// `Libcore.os.getuid()`, `/proc/self/status` — is an application uid.
 ///
 /// Default: [`acos_services::pms::FIXTURE_UID`] (10192), the uid PMS/AMS already
-/// answer for the installed package, so `Process.myUid()` and
+/// answer for an installed package, so `Process.myUid()` and
 /// `getPackageUid()` agree. This is a fidelity fix, not a cosmetic one: the
 /// host caller is uid 1000, which is Android's `Process.SYSTEM_UID`. Framework
 /// code branches on it — `WebViewFactory.getProvider()` refuses for
@@ -1192,37 +1472,52 @@ const SANDBOX_FLAGS: &[&str] = &[
 /// allowed in privileged processes`, so every app that probes WebView died in a
 /// *system* branch it can never take on a device.
 ///
-/// `ACOS_ART_GUEST_UID=host` keeps the old uid for A/B work. Any other value
-/// must be exactly the PMS fixture uid: PMS/AMS answers and the writable mount
-/// ownership are keyed to it, so a different numeric uid would make
-/// `Process.myUid()` and `getPackageUid()` disagree. A malformed or unsupported
-/// value is an explicit `INVALID_GUEST_UID` error, never a silent host-uid
-/// fallback (host uid 1000 is `SYSTEM_UID`).
-fn guest_uid() -> Result<Option<u32>> {
+/// A multi-process session overrides that default per process with
+/// [`Sandbox::app_uid`]: AOSP gives every installed package its own uid
+/// (`PackageManagerService` allocates it), processes of one package share it and
+/// processes of different packages differ, so the guest that runs a package must
+/// carry **that package's** uid — otherwise `Process.myUid()`, `getPackageUid()`
+/// and the per-uid permission answers would describe one app while the code of
+/// another runs.
+///
+/// `ACOS_ART_GUEST_UID=host` keeps the old uid for A/B work, and a numeric value
+/// pins one uid for the whole run. Both are explicit overrides of the per-process
+/// uid (a seam, not a default), and a value that is neither `host` nor an
+/// application uid (`10000..=19999`, Android's `Process.FIRST_APPLICATION_UID..=`
+/// `LAST_APPLICATION_UID`) is an explicit `INVALID_GUEST_UID` error, never a
+/// silent host-uid fallback (host uid 1000 is `SYSTEM_UID`).
+fn guest_uid_override() -> Result<Option<Option<u32>>> {
     let raw = match std::env::var("ACOS_ART_GUEST_UID") {
-        Err(std::env::VarError::NotPresent) => {
-            return Ok(Some(acos_services::pms::FIXTURE_UID as u32))
-        }
+        Err(std::env::VarError::NotPresent) => return Ok(None),
         Err(e) => return Err(Error::InvalidGuestUid(e.to_string())),
         Ok(v) => v,
     };
+    parse_guest_uid_override(Some(&raw))
+}
+
+/// [`guest_uid_override`] without the environment: the seam's whole rule, so a
+/// unit test can pin it (`ACOS_ART_GUEST_UID` is process-wide and every test in
+/// this binary shares it).
+fn parse_guest_uid_override(raw: Option<&str>) -> Result<Option<Option<u32>>> {
+    let Some(raw) = raw else {
+        return Ok(None);
+    };
     let value = raw.trim();
     if value.eq_ignore_ascii_case("host") {
-        return Ok(None);
+        return Ok(Some(None));
     }
     let uid = value.parse::<u32>().map_err(|_| {
-        Error::InvalidGuestUid(format!(
-            "{raw:?} is neither `host` nor an application uid"
-        ))
+        Error::InvalidGuestUid(format!("{raw:?} is neither `host` nor an application uid"))
     })?;
-    if uid != acos_services::pms::FIXTURE_UID as u32 {
+    if !acos_services::pms::is_application_uid(uid) {
         return Err(Error::InvalidGuestUid(format!(
-            "uid {uid} != PMS fixture uid {} (PMS/AMS answers and the writable \
-             mounts are keyed to the fixture uid)",
-            acos_services::pms::FIXTURE_UID
+            "uid {uid} is not an application uid ({first}..={last}): the guest must not \
+             run as a system uid",
+            first = acos_services::pms::FIRST_APPLICATION_UID,
+            last = acos_services::pms::LAST_APPLICATION_UID
         )));
     }
-    Ok(Some(uid))
+    Ok(Some(Some(uid)))
 }
 
 /// Builder for the `bwrap` command line: the mini-Android root, its
@@ -1241,9 +1536,16 @@ pub struct Sandbox<'a> {
     /// Guest-side seccomp filter (S5): preload the freestanding stub, which
     /// installs the filter and logs SIGSYS denials.
     seccomp_guest: bool,
+    /// The application uid **this** guest carries (a package's uid, per process).
+    /// `None` = the historical session-wide default ([`guest_uid_override`],
+    /// else the PMS fixture uid).
+    app_uid: Option<u32>,
     /// Host-side build step: keep today's fully-writable `<data>` (regenerating
     /// `linkerconfig`, `derive_classpath`, `dex2oat` boot image). Never an APK run.
     staging: bool,
+    /// NET2: the session id this run belongs to. The relay arm names its net
+    /// session after it, so the live session API addresses the same session.
+    net_session: Option<String>,
 }
 
 /// The guest's `ANDROID_ROOT`.
@@ -1276,14 +1578,23 @@ impl<'a> Sandbox<'a> {
     fn new(root: &'a ArtRoot) -> Self {
         let mut env = vec![
             ("ANDROID_ROOT".into(), android_root_for_guest().to_string()),
-            ("ANDROID_RUNTIME_ROOT".into(), "/apex/com.android.runtime".into()),
+            (
+                "ANDROID_RUNTIME_ROOT".into(),
+                "/apex/com.android.runtime".into(),
+            ),
             ("ANDROID_ART_ROOT".into(), "/apex/com.android.art".into()),
             ("ANDROID_I18N_ROOT".into(), "/apex/com.android.i18n".into()),
-            ("ANDROID_TZDATA_ROOT".into(), "/apex/com.google.android.tzdata5".into()),
+            (
+                "ANDROID_TZDATA_ROOT".into(),
+                "/apex/com.google.android.tzdata5".into(),
+            ),
             ("ANDROID_DATA".into(), "/data".into()),
             ("ANDROID_STORAGE".into(), "/data".into()),
             ("ANDROID_TMP".into(), "/data/tmp".into()),
-            ("ANDROID_ART_PROPERTIES".into(), "/data/acos.properties".into()),
+            (
+                "ANDROID_ART_PROPERTIES".into(),
+                "/data/acos.properties".into(),
+            ),
         ];
         env.push(("BOOTCLASSPATH".into(), String::new())); // filled in command()
         Self {
@@ -1297,8 +1608,17 @@ impl<'a> Sandbox<'a> {
             args: Vec::new(),
             run_root: None,
             seccomp_guest: false,
+            app_uid: None,
             staging: false,
+            net_session: None,
         }
+    }
+
+    /// NET2: name the relay session after the caller's session id, so
+    /// `offline`/`delay`/`hostport` on that id reach the guest's netns.
+    pub fn net_session(&mut self, id: Option<&str>) -> &mut Self {
+        self.net_session = id.map(str::to_string);
+        self
     }
 
     /// Make this run install the guest-side seccomp-bpf filter before ART runs.
@@ -1314,6 +1634,29 @@ impl<'a> Sandbox<'a> {
     pub fn run_root(&mut self, dir: impl AsRef<Path>) -> &mut Self {
         self.run_root = Some(dir.as_ref().to_path_buf());
         self
+    }
+
+    /// The application uid **this** guest process carries — the uid the package
+    /// manager allocated for the package it runs (AOSP: one uid per package,
+    /// shared by that package's processes). See [`guest_uid_override`] for the
+    /// session-wide default this replaces and for the explicit A/B seam that
+    /// still overrides it.
+    pub fn app_uid(&mut self, uid: u32) -> &mut Self {
+        self.app_uid = Some(uid);
+        self
+    }
+
+    /// The uid the guest's user namespace maps its own uid onto.
+    ///
+    /// `Ok(None)` = keep the host caller's uid (`ACOS_ART_GUEST_UID=host`).
+    fn run_uid(&self) -> Result<Option<u32>> {
+        if let Some(explicit) = guest_uid_override()? {
+            return Ok(explicit);
+        }
+        Ok(Some(
+            self.app_uid
+                .unwrap_or(acos_services::pms::FIXTURE_UID as u32),
+        ))
     }
 
     /// Staging mode (host-side build steps only): keep the shared `<data>` tree
@@ -1334,12 +1677,14 @@ impl<'a> Sandbox<'a> {
     }
 
     pub fn ro_bind(&mut self, host: impl AsRef<Path>, guest: &str) -> &mut Self {
-        self.ro_binds.push((host.as_ref().to_path_buf(), guest.to_string()));
+        self.ro_binds
+            .push((host.as_ref().to_path_buf(), guest.to_string()));
         self
     }
 
     pub fn rw_bind(&mut self, host: impl AsRef<Path>, guest: &str) -> &mut Self {
-        self.rw_binds.push((host.as_ref().to_path_buf(), guest.to_string()));
+        self.rw_binds
+            .push((host.as_ref().to_path_buf(), guest.to_string()));
         self
     }
 
@@ -1378,15 +1723,24 @@ impl<'a> Sandbox<'a> {
         let mut a: Vec<OsString> = Vec::new();
         // Namespaces, env clearing and pid-1 supervision first: bwrap applies
         // options in order, so these must precede every mount and `--setenv`.
-        for f in SANDBOX_FLAGS {
-            a.push((*f).into());
+        // SPIKE-NET: with the spike on, `--unshare-net` is dropped because the
+        // network namespace is the one pasta created (see `spike_net`).
+        for f in spike_net::sandbox_flags() {
+            a.push(f.into());
         }
-        // Runs get an application uid (see `guest_uid`); host-side staging
+        // Runs get an application uid (see `run_uid`); host-side staging
         // steps and the argv-shape tests keep the caller's uid.
         if self.active_run_root().is_some() {
-            if let Some(uid) = guest_uid()? {
+            if let Some(uid) = self.run_uid()? {
                 a.push("--unshare-user".into());
                 a.push("--uid".into());
+                a.push(uid.to_string().into());
+                // PROCUID: an app process's primary group is its own uid
+                // (`Process.myGid()` == uid on a device; the supplementary
+                // groups are the permissions' `inet` etc.). One id per process,
+                // mapped onto the caller's inside this process's own user
+                // namespace.
+                a.push("--gid".into());
                 a.push(uid.to_string().into());
             }
         }
@@ -1444,7 +1798,11 @@ impl<'a> Sandbox<'a> {
                 ("dalvik-cache", "/data/dalvik-cache"),
                 ("misc", "/data/misc"),
             ] {
-                let host = if shared_cache { r.data.join(sub) } else { run.join(sub) };
+                let host = if shared_cache {
+                    r.data.join(sub)
+                } else {
+                    run.join(sub)
+                };
                 let _ = fs::create_dir_all(&host);
                 a.push("--bind".into());
                 a.push(host.into());
@@ -1467,6 +1825,19 @@ impl<'a> Sandbox<'a> {
             // that opens a session; the parent only has to exist.
             a.push("--dir".into());
             a.push("/data/session".into());
+            // WV4: the WebView session socket (`results/handoff/WVB/WIRE.md`
+            // §0). The host broker listens on `host_dir/webview.sock`; the
+            // guest only ever sees `/run/acos/webview.sock` and connects to it
+            // through the image's own `LocalSocketImpl` natives. The
+            // *directory* is what is mounted (read-only), so the broker may
+            // create its listener at any point after the guest starts and the
+            // guest can connect to a node it cannot unlink. Without the broker
+            // the connect fails with the kernel's real ENOENT — there is no
+            // fallback transport.
+            let webview = crate::webview_socket::host_dir(run)?;
+            a.push("--ro-bind".into());
+            a.push(webview.into());
+            a.push(crate::webview_socket::GUEST_DIR.into());
         } else {
             a.push("--bind".into());
             a.push(r.data.join("linkerconfig").into());
@@ -1493,6 +1864,77 @@ impl<'a> Sandbox<'a> {
             a.push("--dir".into());
             a.push(d.into());
         }
+        // GLSHIP: the software GLES provider — the image's default
+        // (`angle-swiftshader`) when it is installed, `ACOS_GUEST_GLES=off` to
+        // turn it off, `ACOS_GUEST_GLES=<name>` to pick another (an explicitly
+        // named provider that is not installed is an error, never a silent
+        // fall back to the default).
+        //
+        // The image's own EGL loader (`Loader.cpp`'s
+        // `attempt_to_load_system_driver`) looks for
+        // `/vendor/lib64/egl/libEGL_<ro.hardware.egl>.so`,
+        // `libGLESv1_CM_<tag>.so` and `libGLESv2_<tag>.so`. Binding the staged
+        // provider there is the *whole* integration: no hook, no interposer,
+        // no change to libhwui. Nothing in the bound directory is mapped until
+        // libhwui's RenderThread first asks libEGL for a context, so a process
+        // that never touches GL pays no resident memory (only the mount entry);
+        // the digest is cached per staged inode set (`gles::verify`), so a
+        // launch that never touches GL pays one `stat` walk and no read of the
+        // 32 MB provider.
+        //
+        // A provider whose bytes do not match its manifest is a structured
+        // error here, never a different library reaching the loader
+        // (A11YPACE's stale-shim lesson). One selection rule (`gles::status`)
+        // and one verify cache for every provider (GLSHIP's `.verified`).
+        let gles_status = gles::status(r)?;
+        let mut gpu_landlock_plan: Option<PathBuf> = None;
+        if let Some(provider) = &gles_status.provider {
+            if !gles::lib_dir_ready(provider, r) {
+                return Err(Error::Layout(format!(
+                    "ACOS_GUEST_GLES={}: {} is not a directory (install the provider with \
+                     `tools/art-gles.sh`)",
+                    provider.name,
+                    gles::lib_dir(provider, r).display()
+                )));
+            }
+            let started = std::time::Instant::now();
+            gles::verify(provider, r)?;
+            if std::env::var_os("ACOS_GUEST_GLES_TRACE").is_some() {
+                eprintln!(
+                    "acos-art: {} [{}] (verify {}ms, staged {} bytes)",
+                    gles::describe(provider),
+                    gles_status.detail,
+                    started.elapsed().as_millis(),
+                    gles::staged_bytes(provider)
+                );
+            }
+            // One bind, three lookups: `/vendor/lib64/egl/libEGL_<tag>.so` is
+            // what `Loader::findLibrary` opens, `/vendor/lib64` is where
+            // the linker resolves that driver's own NEEDED entries, and
+            // `/vendor/lib64/hw/vulkan.<tag>.so` (GLSPIKE2) is the ICD the
+            // image's `libvulkan.so` opens when the provider carries one.
+            a.push("--ro-bind".into());
+            a.push(gles::lib_dir(provider, r).into());
+            a.push("/vendor/lib64".into());
+            // GPUSPIKE: a host-GPU provider (`mesa-host`) also names the one
+            // DRM *render* node it draws on. It is bound read-write at the same
+            // path (`--dev-bind` keeps the device node usable), only here, only
+            // for the selected provider, and only `/dev/dri/renderD<N>` passes
+            // validation: no card node (modesetting/master), no other device.
+            // Waydroid's own `gralloc.gbm.device` prop names the same path.
+            if let Some(node) = provider.render_node()? {
+                // The guest's Landlock plan handles WRITE_FILE and IOCTL_DEV, so
+                // the node is also granted in a plan that is bound over the
+                // default one for this run only (below, after /data/seccomp).
+                if self.seccomp_guest {
+                    gpu_landlock_plan =
+                        landlock::write_gpu_plan(&r.data.join("seccomp"), &node)?;
+                }
+                a.push("--dev-bind".into());
+                a.push(node.clone().into());
+                a.push(node.into());
+            }
+        }
         a.push("--ro-bind".into());
         a.push("/etc/passwd".into());
         a.push("/etc/passwd".into());
@@ -1513,8 +1955,7 @@ impl<'a> Sandbox<'a> {
         if self.seccomp_guest {
             // The filter blob and the freestanding installer: read-only inputs.
             let dir = r.data.join("seccomp");
-            if !dir.join("seccomp.bpf").is_file()
-                || !dir.join("libacos_seccomp_guest.so").is_file()
+            if !dir.join("seccomp.bpf").is_file() || !dir.join("libacos_seccomp_guest.so").is_file()
             {
                 return Err(Error::SeccompUnavailable(format!(
                     "guest guard not built in {} (run `acos-art build-shim`)",
@@ -1524,6 +1965,11 @@ impl<'a> Sandbox<'a> {
             a.push("--ro-bind".into());
             a.push(dir.into());
             a.push("/data/seccomp".into());
+            if let Some(plan) = gpu_landlock_plan.take() {
+                a.push("--ro-bind".into());
+                a.push(plan.into());
+                a.push(landlock::GUEST_PLAN.into());
+            }
             // The program is installed by the preloaded stub's constructor, so
             // it lands after bionic finished loading and before ART's main.
         }
@@ -1560,7 +2006,10 @@ impl<'a> Sandbox<'a> {
         let (bc, dx) = match r.classpaths() {
             Some(cp) => (cp.boot, Some(cp.dex2oat)),
             // Before `derive_classpath` has run (e.g. the linkerconfig step).
-            None => (r.device_bootclasspath()?, Some(r.fallback_dex2oat_classpath()?)),
+            None => (
+                r.device_bootclasspath()?,
+                Some(r.fallback_dex2oat_classpath()?),
+            ),
         };
         // One LD_PRELOAD line, assembled from every source: the guest seccomp
         // guard first (its constructor installs the filter before any other
@@ -1583,7 +2032,11 @@ impl<'a> Sandbox<'a> {
             if k == "LD_PRELOAD" {
                 continue;
             }
-            let v = if k.as_str() == "BOOTCLASSPATH" { bc.join(":") } else { v.clone() };
+            let v = if k.as_str() == "BOOTCLASSPATH" {
+                bc.join(":")
+            } else {
+                v.clone()
+            };
             a.push("--setenv".into());
             a.push(k.as_str().into());
             a.push(v.as_str().into());
@@ -1602,7 +2055,11 @@ impl<'a> Sandbox<'a> {
             // A boot image is a build input: the guest may read it, never
             // rewrite it (S4's canary test). Staging (`build-image`) keeps the
             // writable bind, because that is where dex2oat writes it.
-            a.push(if run_root.is_some() { "--ro-bind".into() } else { "--bind".into() });
+            a.push(if run_root.is_some() {
+                "--ro-bind".into()
+            } else {
+                "--bind".into()
+            });
             a.push(img.clone().into());
             a.push("/data/img".into());
         }
@@ -1612,7 +2069,42 @@ impl<'a> Sandbox<'a> {
             a.push(arg.as_str().into());
         }
         if std::env::var_os("ACOS_ART_DEBUG_ARGV").is_some() {
-            eprintln!("bwrap {}", a.iter().map(|x| x.to_string_lossy().to_string()).collect::<Vec<_>>().join(" "));
+            eprintln!(
+                "bwrap {}",
+                a.iter()
+                    .map(|x| x.to_string_lossy().to_string())
+                    .collect::<Vec<_>>()
+                    .join(" ")
+            );
+        }
+        if spike_net::enabled() {
+            match spike_net::arm() {
+                // SPIKE-NET (base arm): run bwrap *inside* the netns pasta
+                // configured for it.
+                Ok(acos_netd::client::Arm::Base) => return Ok(spike_net::wrap(&a)),
+                // NET2 (relay arm): the guest runs in the session netns the relay
+                // supervisor creates and joins to the shared relay. Host-side
+                // build steps (`staging`) stay out of the relay: they need no
+                // network, and every attach costs a netns + veth.
+                Ok(acos_netd::client::Arm::Relay) => {
+                    if self.active_run_root().is_some() {
+                        // NET4: a relay session is *named by the session id* and
+                        // nothing else. A session without one could not be
+                        // addressed by `acos_net`, so this fails closed instead of
+                        // inventing a name no client can use.
+                        let Some(id) = self.net_session.as_deref() else {
+                            return Err(Error::Layout(format!(
+                                "the relay arm needs a session id: set {} (the engine \
+                                 publishes the id it addresses the session by; a relay \
+                                 session without one is unreachable by `acos_net`)",
+                                spike_net::SESSION_ID_ENV
+                            )));
+                        };
+                        return Ok(spike_net::relay_wrap(&a, id));
+                    }
+                }
+                Err(e) => return Err(Error::Layout(format!("{e}"))),
+            }
         }
         b.args(a);
         Ok(b)
@@ -1644,12 +2136,20 @@ pub fn stage(name: &str) {
 fn exec_elapsed_ms() -> u128 {
     let uptime = fs::read_to_string("/proc/uptime")
         .ok()
-        .and_then(|s| s.split_whitespace().next().and_then(|v| v.parse::<f64>().ok()))
+        .and_then(|s| {
+            s.split_whitespace()
+                .next()
+                .and_then(|v| v.parse::<f64>().ok())
+        })
         .unwrap_or(0.0);
     let start_ticks = fs::read_to_string("/proc/self/stat")
         .ok()
         .and_then(|s| s.rfind(')').map(|i| s[i + 2..].to_string()))
-        .and_then(|rest| rest.split_whitespace().nth(19).and_then(|v| v.parse::<u64>().ok()))
+        .and_then(|rest| {
+            rest.split_whitespace()
+                .nth(19)
+                .and_then(|v| v.parse::<u64>().ok())
+        })
         .unwrap_or(0);
     ((uptime * 1000.0) as u128).saturating_sub((start_ticks as u128) * 10)
 }
@@ -1753,13 +2253,17 @@ fn proto_fields(bytes: &[u8]) -> Vec<(u64, u8, Vec<u8>)> {
     let mut out = Vec::new();
     let mut i = 0usize;
     while i < bytes.len() {
-        let Some((key, next)) = read_varint(bytes, i) else { break };
+        let Some((key, next)) = read_varint(bytes, i) else {
+            break;
+        };
         i = next;
         let field = key >> 3;
         let wire = (key & 7) as u8;
         match wire {
             0 => {
-                let Some((v, next)) = read_varint(bytes, i) else { break };
+                let Some((v, next)) = read_varint(bytes, i) else {
+                    break;
+                };
                 i = next;
                 out.push((field, wire, v.to_le_bytes().to_vec()));
             }
@@ -1771,7 +2275,9 @@ fn proto_fields(bytes: &[u8]) -> Vec<(u64, u8, Vec<u8>)> {
                 i += 8;
             }
             2 => {
-                let Some((len, next)) = read_varint(bytes, i) else { break };
+                let Some((len, next)) = read_varint(bytes, i) else {
+                    break;
+                };
                 let end = next.saturating_add(len as usize);
                 if end > bytes.len() {
                     break;
@@ -1812,7 +2318,9 @@ fn read_varint(bytes: &[u8], mut i: usize) -> Option<(u64, usize)> {
 /// Device mount name of an APEX (`apex_manifest.pb` field 1, a string), which
 /// is what apexd mounts under `/apex/<name>`.
 fn apex_mount_name(dir: &Path, fallback: &str) -> String {
-    let Ok(bytes) = fs::read(dir.join("apex_manifest.pb")) else { return fallback.to_string() };
+    let Ok(bytes) = fs::read(dir.join("apex_manifest.pb")) else {
+        return fallback.to_string();
+    };
     for (field, wire, value) in proto_fields(&bytes) {
         if field == 1 && wire == 2 {
             if let Ok(name) = std::str::from_utf8(&value) {
@@ -1854,7 +2362,11 @@ fn read_modules(sysroot: &Path) -> Result<Vec<ApexModule>> {
             let file = it.next().unwrap_or(&name).to_string();
             let Some(dir) = real_dir(&name) else { continue };
             let mount = apex_mount_name(&sysroot.join("system/apex").join(&dir), &dir);
-            out.push(ApexModule { name: dir, file, mount });
+            out.push(ApexModule {
+                name: dir,
+                file,
+                mount,
+            });
         }
         if !out.is_empty() {
             return Ok(out);
@@ -1882,7 +2394,10 @@ fn read_modules(sysroot: &Path) -> Result<Vec<ApexModule>> {
         out.push(ApexModule { name, file, mount });
     }
     if out.is_empty() {
-        return Err(Error::Layout(format!("no APEX payloads under {}", dir.display())));
+        return Err(Error::Layout(format!(
+            "no APEX payloads under {}",
+            dir.display()
+        )));
     }
     Ok(out)
 }
@@ -1918,7 +2433,10 @@ pub fn build_shim(dest_dir: &Path) -> Result<PathBuf> {
             .status()
             .map_err(|e| Error::Tool(format!("running {clang}: {e}")))?;
         if !st.success() {
-            return Err(Error::Tool(format!("{clang} failed to build {}", src.display())));
+            return Err(Error::Tool(format!(
+                "{clang} failed to build {}",
+                src.display()
+            )));
         }
         fs::remove_file(&src)?;
         Ok(())
@@ -1951,6 +2469,61 @@ mod tests {
         dir
     }
 
+    /// FLAKEFIX: a sysroot that has the same bytes but another path (a
+    /// worktree reaching the shared image through its own `.cache/art`) must
+    /// hit the same derived-file cache entries; different bytes must not.
+    fn key_sysroot(tag: &str, linkerconfig: &[u8]) -> ArtRoot {
+        let dir = scratch_dir(&format!("keyroot-{tag}"));
+        let sysroot = dir.join("sysroot");
+        let rt = sysroot.join("system/apex/com.android.runtime/bin");
+        let sdk = sysroot.join("system/apex/com.android.sdkext/bin");
+        fs::create_dir_all(&rt).unwrap();
+        fs::create_dir_all(&sdk).unwrap();
+        fs::write(rt.join("linkerconfig"), linkerconfig).unwrap();
+        fs::write(sdk.join("derive_classpath"), b"derive").unwrap();
+        fs::write(sysroot.join("READY"), b"ready").unwrap();
+        fs::write(sysroot.join("MANIFEST.txt"), b"manifest").unwrap();
+        ArtRoot {
+            repo_root: dir.clone(),
+            sysroot,
+            data: dir.join("data"),
+            modules: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn the_derived_file_cache_keys_do_not_name_the_sysroot_path() {
+        let a = key_sysroot("a", b"linkerconfig-bytes");
+        let b = key_sysroot("b-another-path", b"linkerconfig-bytes");
+        assert_ne!(a.sysroot, b.sysroot);
+        // The mtimes differ too (b was written later): content is the identity.
+        let stamp = |r: &ArtRoot| r.linkerconfig_stamp();
+        assert_eq!(
+            a.linkerconfig_cache_key(&stamp(&a)),
+            b.linkerconfig_cache_key(&stamp(&b)),
+            "linkerconfig key must be path-independent"
+        );
+        assert_eq!(
+            a.classpath_env_cache_key(),
+            b.classpath_env_cache_key(),
+            "derive_classpath key must be path-independent"
+        );
+        let c = key_sysroot("c", b"a different linkerconfig");
+        assert_ne!(
+            a.linkerconfig_cache_key(&stamp(&a)),
+            c.linkerconfig_cache_key(&stamp(&c)),
+            "a different linkerconfig binary is a different key"
+        );
+    }
+
+    #[test]
+    fn a_strict_mode_stamp_from_an_older_build_is_not_reused() {
+        let a = key_sysroot("stamp", b"x");
+        let old = a.mount_stamp();
+        assert_ne!(old, a.linkerconfig_stamp());
+        assert!(a.linkerconfig_stamp().starts_with(&old));
+    }
+
     #[test]
     fn acos_home_overrides_every_root_lookup() {
         let home = fake_home("override");
@@ -1964,7 +2537,11 @@ mod tests {
     #[test]
     fn unset_home_resolves_to_the_checkout_unchanged() {
         let resolved = repo_root_with(None).expect("a checkout resolves");
-        assert!(resolved.join("Cargo.toml").is_file(), "{}", resolved.display());
+        assert!(
+            resolved.join("Cargo.toml").is_file(),
+            "{}",
+            resolved.display()
+        );
         assert!(resolved.join("crates").is_dir(), "{}", resolved.display());
         // Today's asset paths, relative to that root.
         assert!(
@@ -2003,15 +2580,21 @@ mod tests {
     #[test]
     fn compiled_root_is_the_checkout() {
         let root = compiled_root();
-        assert!(root.join("crates/acos-art/guest/java").is_dir(), "{}", root.display());
+        assert!(
+            root.join("crates/acos-art/guest/java").is_dir(),
+            "{}",
+            root.display()
+        );
     }
 
     /// Tiny scratch dir under the repo `.cache/` (never `/tmp`: the directives
     /// keep ART scratch on the repo volume).
     fn scratch_dir(tag: &str) -> PathBuf {
+        // Short on purpose: a run root's socket paths (`<run>/socket/logd`,
+        // `<run>/wv/webview.sock`) live under `sun_path`'s 108-byte limit.
         let base = match repo_root() {
-            Ok(r) => r.join(".cache/test-scratch"),
-            Err(_) => std::env::temp_dir().join("acos-art-test-scratch"),
+            Ok(r) => r.join(".cache/t"),
+            Err(_) => std::env::temp_dir().join("acos-t"),
         };
         let dir = base.join(format!("{}-{tag}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
@@ -2072,9 +2655,7 @@ mod tests {
             "ACOS_ART_GWP_ASAN=on restores libc's own sampling for one run"
         );
         // An explicit host knob wins and is forwarded verbatim (A/B runs).
-        let host = |k: &str| {
-            (k == "GWP_ASAN_PROCESS_SAMPLING").then(|| "1".to_string())
-        };
+        let host = |k: &str| (k == "GWP_ASAN_PROCESS_SAMPLING").then(|| "1".to_string());
         assert_eq!(
             gwp_asan_guest_env(host, Some("off")),
             vec![("GWP_ASAN_PROCESS_SAMPLING".to_string(), "1".to_string())]
@@ -2105,8 +2686,10 @@ mod tests {
             // mtime is what retention orders by; force it so the test is not
             // dependent on filesystem timestamp granularity.
             let f = fs::OpenOptions::new().write(true).open(&marker).unwrap();
-            f.set_modified(std::time::SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(1000 + i))
-                .unwrap();
+            f.set_modified(
+                std::time::SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(1000 + i),
+            )
+            .unwrap();
             kept.push(dir);
         }
         // An explicit `ACOS_ART_KEEP_RUN` tree (no marker) must never be pruned.
@@ -2120,8 +2703,14 @@ mod tests {
             kept[0..3].to_vec(),
             "the three *oldest* kept crash trees are the ones removed"
         );
-        assert!(kept[3].is_dir() && kept[4].is_dir(), "the two newest survive");
-        assert!(explicit.is_dir(), "a non-crash (explicit --keep) tree survives");
+        assert!(
+            kept[3].is_dir() && kept[4].is_dir(),
+            "the two newest survive"
+        );
+        assert!(
+            explicit.is_dir(),
+            "a non-crash (explicit --keep) tree survives"
+        );
         assert_eq!(kept_crash_trees(&root).len(), 2);
 
         // `ACOS_ART_KEEP_CRASH_MAX=0` means keep none.
@@ -2136,8 +2725,17 @@ mod tests {
     /// comes from the per-run root; the shared `<data>` tree is never bound.
     #[test]
     fn run_root_makes_shared_inputs_read_only() {
+        let _env = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let data = scratch_dir("run-root");
-        for d in ["system/environ", "app", "overlay", "lib", "shim", "linkerconfig", "img/x86_64"] {
+        for d in [
+            "system/environ",
+            "app",
+            "overlay",
+            "lib",
+            "shim",
+            "linkerconfig",
+            "img/x86_64",
+        ] {
             fs::create_dir_all(data.join(d)).unwrap();
         }
         fs::write(
@@ -2146,7 +2744,11 @@ mod tests {
              export DEX2OATBOOTCLASSPATH /apex/a.jar\n",
         )
         .unwrap();
-        for f in ["acos.properties", "apex-info-list.xml", "shim/libartshim.so"] {
+        for f in [
+            "acos.properties",
+            "apex-info-list.xml",
+            "shim/libartshim.so",
+        ] {
             fs::write(data.join(f), "x").unwrap();
         }
         fs::write(data.join("img/x86_64/boot.art"), "x").unwrap();
@@ -2189,12 +2791,22 @@ mod tests {
             );
         }
         assert!(
-            has_pair(&argv, "--ro-bind", &data.join("linkerconfig").display().to_string(), "/linkerconfig"),
+            has_pair(
+                &argv,
+                "--ro-bind",
+                &data.join("linkerconfig").display().to_string(),
+                "/linkerconfig"
+            ),
             "linkerconfig must be read-only in a run"
         );
         for f in ["acos.properties", "apex-info-list.xml"] {
             assert!(
-                has_pair(&argv, "--ro-bind", &data.join(f).display().to_string(), &format!("/data/{f}")),
+                has_pair(
+                    &argv,
+                    "--ro-bind",
+                    &data.join(f).display().to_string(),
+                    &format!("/data/{f}")
+                ),
                 "{f} must be read-only in a run"
             );
         }
@@ -2222,7 +2834,10 @@ mod tests {
             .map(|a| a.to_string_lossy().to_string())
             .collect();
         assert!(
-            staged.iter().enumerate().any(|(i, a)| a == "--bind" && staged[i + 1].trim_end_matches('/') == data_s),
+            staged
+                .iter()
+                .enumerate()
+                .any(|(i, a)| a == "--bind" && staged[i + 1].trim_end_matches('/') == data_s),
             "staging mode must still bind the shared tree rw: {staged:?}"
         );
         assert!(
@@ -2230,16 +2845,238 @@ mod tests {
             "staging mode must not use a per-run root: {staged:?}"
         );
         drop(run);
-        assert!(!data.join("runs").read_dir().map(|mut d| d.next().is_some()).unwrap_or(false),
-            "RunDir::drop must remove the tree");
+        assert!(
+            !data
+                .join("runs")
+                .read_dir()
+                .map(|mut d| d.next().is_some())
+                .unwrap_or(false),
+            "RunDir::drop must remove the tree"
+        );
         let _ = fs::remove_dir_all(&data);
+    }
+
+    /// WV4: every run maps this session's WebView socket directory at
+    /// `/run/acos` (read-only), and staging — a host-side build step with no
+    /// guest — does not. That mount is the whole guest path ⇄ host path
+    /// mapping: the image's `LocalSocketImpl` connects to the literal
+    /// `/run/acos/webview.sock`, and the broker listens at
+    /// `<run>/wv/webview.sock` (or `$ACOS_WEBVIEW_SOCKET_DIR/webview.sock`).
+    #[test]
+    fn run_root_maps_the_webview_session_socket() {
+        let _env = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let data = scratch_dir("webview-socket");
+        for d in [
+            "system/environ",
+            "app",
+            "overlay",
+            "lib",
+            "shim",
+            "linkerconfig",
+        ] {
+            fs::create_dir_all(data.join(d)).unwrap();
+        }
+        fs::write(
+            data.join("system/environ/classpath"),
+            "export BOOTCLASSPATH /apex/a.jar:/system/framework/framework.jar\n\
+             export DEX2OATBOOTCLASSPATH /apex/a.jar\n",
+        )
+        .unwrap();
+        let root = ArtRoot {
+            repo_root: data.clone(),
+            sysroot: data.join("sysroot"),
+            data: data.clone(),
+            modules: Vec::new(),
+        };
+        let run = root.new_run_dir("wv").expect("run dir");
+
+        let mut sb = root.sandbox();
+        sb.run_root(run.path());
+        let argv: Vec<String> = sb
+            .command("/system/bin/prog", &[])
+            .expect("argv")
+            .get_args()
+            .map(|a| a.to_string_lossy().to_string())
+            .collect();
+
+        // WV5b: the default mapping is the short runtime directory, not
+        // `<run>/wv` (see `webview_socket::default_session_dir`).
+        let dir = crate::webview_socket::host_dir(run.path()).expect("webview dir");
+        assert!(
+            has_pair(
+                &argv,
+                "--ro-bind",
+                &dir.display().to_string(),
+                crate::webview_socket::GUEST_DIR
+            ),
+            "the session socket dir must be mounted at {}: {argv:?}",
+            crate::webview_socket::GUEST_DIR
+        );
+        // Read-only: the guest may connect, never unlink the broker's listener.
+        assert!(
+            !has_pair(
+                &argv,
+                "--bind",
+                &dir.display().to_string(),
+                crate::webview_socket::GUEST_DIR
+            ),
+            "the socket dir must not be writable by the guest: {argv:?}"
+        );
+        assert!(
+            dir.is_dir(),
+            "the mount source must exist before the broker"
+        );
+        // (Host path length is `check_sun_path`'s job at launch time: a unit
+        // test's scratch root is deeper than a real run's, so asserting the
+        // 108-byte budget here would test the test's own path, not the code.)
+
+        // Staging mode is a host build step: no guest, no socket mount.
+        let mut sb = root.sandbox();
+        sb.run_root(run.path());
+        sb.staging(true);
+        let staged: Vec<String> = sb
+            .command("/system/bin/prog", &[])
+            .expect("argv")
+            .get_args()
+            .map(|a| a.to_string_lossy().to_string())
+            .collect();
+        assert!(
+            !staged.iter().any(|a| a == crate::webview_socket::GUEST_DIR),
+            "staging mode must not mount the guest socket dir: {staged:?}"
+        );
+        let _ = fs::remove_dir_all(&data);
+    }
+
+    /// PROCUID: every guest process carries **its package's** uid (AOSP allocates
+    /// one uid per installed package; processes of one package share it, two
+    /// packages' processes differ). The sandbox maps the guest's own uid onto the
+    /// host caller's, so two processes of one session can carry two different
+    /// application uids without any host privilege.
+    #[test]
+    fn sandbox_runs_a_process_as_the_uid_its_package_owns() {
+        let _env = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let data = scratch_dir("uid");
+        fs::create_dir_all(data.join("system/environ")).unwrap();
+        fs::write(
+            data.join("system/environ/classpath"),
+            "export BOOTCLASSPATH /apex/a.jar:/system/framework/framework.jar\n\
+             export DEX2OATBOOTCLASSPATH /apex/a.jar\n",
+        )
+        .unwrap();
+        let root = ArtRoot {
+            repo_root: data.clone(),
+            sysroot: data.join("sysroot"),
+            data: data.clone(),
+            modules: Vec::new(),
+        };
+        // The session default (no `app_uid`) is the PMS fixture uid, which is
+        // what every single-process caller keeps.
+        let run = root.new_run_dir("uid-default").expect("run dir");
+        let mut sb = root.sandbox();
+        sb.run_root(run.path());
+        let argv: Vec<String> = sb
+            .command("/system/bin/prog", &[])
+            .expect("argv")
+            .get_args()
+            .map(|a| a.to_string_lossy().to_string())
+            .collect();
+        let sep = argv.iter().position(|a| a == "--uid").expect("--uid");
+        assert_eq!(argv[sep - 1], "--unshare-user", "a uid needs its namespace");
+        assert_eq!(
+            argv[sep + 1],
+            acos_services::pms::FIXTURE_UID.to_string(),
+            "the default is the PMS fixture uid: {argv:?}"
+        );
+        // The process's primary gid is its uid, exactly like a device app
+        // (`Process.myGid()` == `Process.myUid()`).
+        let gsep = argv.iter().position(|a| a == "--gid").expect("--gid");
+        assert_eq!(argv[gsep + 1], argv[sep + 1], "uid and gid are one id");
+        // Two processes, two packages' uids: the second package's process runs as
+        // the uid the package manager allocated for it.
+        let second = 10_193u32;
+        let run2 = root.new_run_dir("uid-second").expect("run dir");
+        let mut sb2 = root.sandbox();
+        sb2.run_root(run2.path());
+        sb2.app_uid(second);
+        let argv2: Vec<String> = sb2
+            .command("/system/bin/prog", &[])
+            .expect("argv")
+            .get_args()
+            .map(|a| a.to_string_lossy().to_string())
+            .collect();
+        let sep2 = argv2.iter().position(|a| a == "--uid").expect("--uid");
+        assert_eq!(argv2[sep2 + 1], second.to_string(), "argv: {argv2:?}");
+        assert_eq!(
+            argv2[sep2 + 3],
+            second.to_string(),
+            "the second process's gid is its own uid: {argv2:?}"
+        );
+        assert_ne!(argv[sep + 1], argv2[sep2 + 1], "two apps, two uids");
+        // A host-side staging step keeps the caller's uid (it is not an app).
+        let mut sb3 = root.sandbox();
+        sb3.staging(true);
+        let argv3: Vec<String> = sb3
+            .command("/system/bin/prog", &[])
+            .expect("argv")
+            .get_args()
+            .map(|a| a.to_string_lossy().to_string())
+            .collect();
+        assert!(
+            !argv3.iter().any(|a| a == "--uid"),
+            "staging is not an app process: {argv3:?}"
+        );
+        assert!(
+            !argv3.iter().any(|a| a == "--gid"),
+            "staging is not an app process: {argv3:?}"
+        );
+        let _ = fs::remove_dir_all(&data);
+    }
+
+    /// PROCUID: the explicit `ACOS_ART_GUEST_UID` seam takes **any** application
+    /// uid, because in a multi-process session the uid a caller wants to pin is a
+    /// package's uid (10193 for the second package), not only the PMS fixture
+    /// uid. It still refuses everything that is not an application uid: host uid
+    /// 1000 is `SYSTEM_UID`, which the framework takes privileged branches on.
+    #[test]
+    fn the_guest_uid_seam_takes_an_application_uid_and_nothing_else() {
+        assert!(
+            matches!(parse_guest_uid_override(None), Ok(None)),
+            "no override = the per-process uid"
+        );
+        assert_eq!(parse_guest_uid_override(Some("host")).unwrap(), Some(None));
+        assert_eq!(
+            parse_guest_uid_override(Some("10193")).unwrap(),
+            Some(Some(10_193)),
+            "a second package's uid is a valid pin"
+        );
+        assert_eq!(
+            parse_guest_uid_override(Some(" 10000 ")).unwrap(),
+            Some(Some(10_000)),
+            "the first application uid"
+        );
+        assert_eq!(
+            parse_guest_uid_override(Some("19999")).unwrap(),
+            Some(Some(19_999)),
+            "the last application uid"
+        );
+        for raw in ["1000", "0", "9999", "20000", "sudo", "10192.5"] {
+            assert!(
+                matches!(
+                    parse_guest_uid_override(Some(raw)),
+                    Err(Error::InvalidGuestUid(_))
+                ),
+                "{raw} must be refused (never a silent fallback)"
+            );
+        }
     }
 
     /// `flag src dst` appears as consecutive argv elements.
     fn has_pair(argv: &[String], flag: &str, src: &str, dst: &str) -> bool {
-        argv.iter()
-            .enumerate()
-            .any(|(i, a)| a == flag && argv.get(i + 1).map(String::as_str) == Some(src) && argv.get(i + 2).map(String::as_str) == Some(dst))
+        argv.iter().enumerate().any(|(i, a)| {
+            a == flag
+                && argv.get(i + 1).map(String::as_str) == Some(src)
+                && argv.get(i + 2).map(String::as_str) == Some(dst)
+        })
     }
 
     /// The argv `Sandbox::command` builds: hardening flags are the prefix (so
@@ -2247,6 +3084,7 @@ mod tests {
     /// `--setenv` list and nothing else, and the debug/exec tail is intact.
     #[test]
     fn sandbox_argv_hardens_before_first_mount() {
+        let _env = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let data = scratch_dir("argv");
         fs::create_dir_all(data.join("system/environ")).unwrap();
         fs::write(
@@ -2262,20 +3100,41 @@ mod tests {
             modules: Vec::new(),
         };
         let sb = root.sandbox();
-        let cmd = sb.command("/system/bin/prog", &["one".into(), "two".into()]).expect("argv");
-        let argv: Vec<String> = cmd.get_args().map(|a| a.to_string_lossy().to_string()).collect();
+        let cmd = sb
+            .command("/system/bin/prog", &["one".into(), "two".into()])
+            .expect("argv");
+        let argv: Vec<String> = cmd
+            .get_args()
+            .map(|a| a.to_string_lossy().to_string())
+            .collect();
 
         // 1. The exact flag prefix, in order, before anything else.
-        assert_eq!(&argv[..SANDBOX_FLAGS.len()], SANDBOX_FLAGS, "argv: {argv:?}");
+        assert_eq!(
+            &argv[..SANDBOX_FLAGS.len()],
+            SANDBOX_FLAGS,
+            "argv: {argv:?}"
+        );
         // 2. No mount, bind or exec may precede the namespace setup.
         let first_mount = argv.iter().position(|a| a == "--tmpfs").expect("--tmpfs /");
-        assert_eq!(first_mount, SANDBOX_FLAGS.len(), "flags must be the argv prefix");
-        for flag in ["--unshare-pid", "--unshare-net", "--die-with-parent", "--clearenv"] {
+        assert_eq!(
+            first_mount,
+            SANDBOX_FLAGS.len(),
+            "flags must be the argv prefix"
+        );
+        for flag in [
+            "--unshare-pid",
+            "--unshare-net",
+            "--die-with-parent",
+            "--clearenv",
+        ] {
             let at = argv.iter().position(|a| a == flag).expect(flag);
             assert!(at < first_mount, "{flag} must precede --tmpfs /");
         }
         // 3. `--unshare-pid` without a fresh /proc would show the host's pids.
-        assert!(argv.iter().any(|a| a == "--proc"), "--unshare-pid needs --proc /proc");
+        assert!(
+            argv.iter().any(|a| a == "--proc"),
+            "--unshare-pid needs --proc /proc"
+        );
         // 4. `--clearenv` + explicit `--setenv` only: every var is set after the
         //    clear, and the list is the complete set the guest needs.
         let keys: Vec<String> = argv
@@ -2298,8 +3157,14 @@ mod tests {
         ] {
             assert!(keys.iter().any(|x| x == k), "missing --setenv {k}");
         }
-        let clearenv = argv.iter().position(|a| a == "--clearenv").expect("--clearenv");
-        let last_setenv = argv.iter().rposition(|a| a == "--setenv").expect("--setenv");
+        let clearenv = argv
+            .iter()
+            .position(|a| a == "--clearenv")
+            .expect("--clearenv");
+        let last_setenv = argv
+            .iter()
+            .rposition(|a| a == "--setenv")
+            .expect("--setenv");
         assert!(clearenv < last_setenv, "--setenv after --clearenv");
         // 5. The exec tail (program + its args) still ends the argv.
         let sep = argv.iter().rposition(|a| a == "--").expect("--");
@@ -2313,7 +3178,10 @@ mod tests {
                     export DEX2OATBOOTCLASSPATH /apex/a.jar:/apex/b.jar\n\
                     export SYSTEMSERVERCLASSPATH /system/framework/services.jar\n";
         let cp = ArtRoot::parse_classpath_env(text).expect("parsed");
-        assert_eq!(cp.boot, vec!["/apex/a.jar", "/apex/b.jar", "/system/framework/c.jar"]);
+        assert_eq!(
+            cp.boot,
+            vec!["/apex/a.jar", "/apex/b.jar", "/system/framework/c.jar"]
+        );
         assert_eq!(cp.dex2oat, vec!["/apex/a.jar", "/apex/b.jar"]);
         // The invariant ART CHECKs: DEX2OATBOOTCLASSPATH is the prefix of
         // BOOTCLASSPATH and something is left over (the mainline framework).
@@ -2368,7 +3236,10 @@ mod tests {
             "com.android.configinfrastructure"
         );
         // Absent manifest: keep the host directory name.
-        assert_eq!(apex_mount_name(&dir.join("nope"), "com.android.art"), "com.android.art");
+        assert_eq!(
+            apex_mount_name(&dir.join("nope"), "com.android.art"),
+            "com.android.art"
+        );
         let _ = fs::remove_dir_all(&dir);
     }
 
@@ -2391,8 +3262,15 @@ mod tests {
         let mut seen = Vec::new();
         use std::io::Read;
         held.read_to_end(&mut seen).expect("read the held fd");
-        assert_eq!(seen, old, "the open fd must still see the old file, complete");
-        assert_eq!(fs::read(&path).expect("path"), new, "a new open sees the new file");
+        assert_eq!(
+            seen, old,
+            "the open fd must still see the old file, complete"
+        );
+        assert_eq!(
+            fs::read(&path).expect("path"),
+            new,
+            "a new open sees the new file"
+        );
         // Identical bytes are a no-op (the inode does not churn).
         use std::os::unix::fs::MetadataExt;
         let inode_before = fs::metadata(&path).expect("meta").ino();

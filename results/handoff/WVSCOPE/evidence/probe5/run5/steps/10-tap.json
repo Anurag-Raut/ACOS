@@ -1,0 +1,134 @@
+{
+  "assertions": [
+    {
+      "actual": {
+        "acks": 2,
+        "delivered": true,
+        "handled": true,
+        "visual_change": false
+      },
+      "expected": {
+        "delivered": true
+      },
+      "kind": "input_delivery",
+      "matched_node_ids": [],
+      "message": "host-observed input delivery (2 guest ack(s), handled: Some(true)); no visual change; no state change claimed",
+      "passed": true
+    }
+  ],
+  "certification": "certified-with-limits",
+  "certification_limits": {
+    "doc": "docs/SANDBOX_CERTIFICATION.md",
+    "section": "§8.7"
+  },
+  "duration_ms": 198,
+  "evidence": [
+    {
+      "kind": "tree",
+      "path": "tree/4.json"
+    },
+    {
+      "kind": "frame",
+      "path": "frames/4.png"
+    },
+    {
+      "kind": "step",
+      "path": "steps/10-tap.json"
+    }
+  ],
+  "frame_seq": 4,
+  "index": 10,
+  "input": {
+    "expect_change": "auto",
+    "handled": true,
+    "handled_evidence": {
+      "acked": 2,
+      "published": 2,
+      "source": "guest"
+    },
+    "handled_hint": "the app's window consumed the input (`finishInputEvent(handled) = true`) but the settled frame shows no change: the handler may be asynchronous, or the control already had that state. Assert on the state you expect instead of expecting a change",
+    "target": {
+      "hit": {
+        "clickable": true,
+        "consumer": {
+          "bounds": "[21,811][218,882]",
+          "class": "android.widget.Button",
+          "clickable": true,
+          "content_desc": "",
+          "enabled": true,
+          "focused": false,
+          "id": "n6_",
+          "password": false,
+          "resource_id": "",
+          "scrollable": false,
+          "text": "Tap me",
+          "visible_bounds": "[21,811][218,882]",
+          "window": "main"
+        },
+        "method": "tree-geometry",
+        "node": {
+          "bounds": "[21,811][218,882]",
+          "class": "android.widget.Button",
+          "clickable": true,
+          "content_desc": "",
+          "enabled": true,
+          "focused": false,
+          "id": "n6_",
+          "password": false,
+          "resource_id": "",
+          "scrollable": false,
+          "text": "Tap me",
+          "visible_bounds": "[21,811][218,882]",
+          "window": "main"
+        },
+        "suggest": null
+      },
+      "node": {
+        "bounds": "[21,811][218,882]",
+        "class": "android.widget.Button",
+        "clickable": true,
+        "content_desc": "",
+        "enabled": true,
+        "focused": false,
+        "id": "n6_",
+        "password": false,
+        "resource_id": "",
+        "scrollable": false,
+        "text": "Tap me",
+        "visible_bounds": "[21,811][218,882]",
+        "window": "main"
+      },
+      "point": {
+        "x": 119,
+        "y": 846
+      },
+      "selector": {
+        "selector": "text==\"Tap me\""
+      }
+    }
+  },
+  "provenance": {
+    "frame": "host-observed",
+    "host_input": "host-observed",
+    "input_acks": "guest-asserted",
+    "tree": "guest-asserted"
+  },
+  "settle": {
+    "ack_ms": 5,
+    "bound": "strict-event",
+    "first_change_ms": 147,
+    "frame_ms": 185,
+    "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
+    "mode": "strict",
+    "pixels_changed": false,
+    "reason": "strict-event",
+    "settled": true,
+    "state_changed": null,
+    "strict_rule": "event",
+    "waited_ms": 198,
+    "waited_ms_source": "step"
+  },
+  "status": "pass",
+  "step": "tap",
+  "trust": "trusted"
+}

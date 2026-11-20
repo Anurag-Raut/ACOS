@@ -13,8 +13,15 @@ use acos_dex::DexFile;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 
+/// The directory of platform jars: `ACOS_BOOT_JARS`, else the worktree's boot
+/// cache (`.cache/boot/android-34/jars`, what `tools/art-runtime/test-crates.sh`
+/// relies on). Neither present is a missing prerequisite (HYG4): the test fails.
 fn boot_jars_dir() -> Option<PathBuf> {
-    std::env::var("ACOS_BOOT_JARS").ok().map(PathBuf::from)
+    if let Ok(dir) = std::env::var("ACOS_BOOT_JARS") {
+        return Some(PathBuf::from(dir));
+    }
+    let cache = acos_test_support::repo_root().join(".cache/boot/android-34/jars");
+    cache.is_dir().then_some(cache)
 }
 
 /// Locate the built `dexdump` example next to the current test binary
@@ -30,34 +37,26 @@ fn example_binary() -> Option<PathBuf> {
     }
 }
 
+/// Extract the `classes*.dex` entries of one jar. An unreadable or malformed
+/// input **fails the run** (HYG4 decision): a bad boot jar must not shrink the
+/// verified set without a word.
 fn extract_dex(jar: &Path) -> Vec<(String, Vec<u8>)> {
-    let data = match std::fs::read(jar) {
-        Ok(d) => d,
-        Err(e) => {
-            eprintln!("skip {jar:?}: {e}");
-            return Vec::new();
-        }
-    };
+    let data = std::fs::read(jar).unwrap_or_else(|e| panic!("read boot jar {jar:?}: {e}"));
     let cursor = std::io::Cursor::new(data);
-    let mut archive = match zip::ZipArchive::new(cursor) {
-        Ok(a) => a,
-        Err(e) => {
-            eprintln!("skip {jar:?}: not a zip ({e})");
-            return Vec::new();
-        }
-    };
+    let mut archive = zip::ZipArchive::new(cursor)
+        .unwrap_or_else(|e| panic!("boot jar {jar:?} is not a zip: {e}"));
     let mut out = Vec::new();
     for i in 0..archive.len() {
-        let mut entry = match archive.by_index(i) {
-            Ok(e) => e,
-            Err(_) => continue,
-        };
+        let mut entry = archive
+            .by_index(i)
+            .unwrap_or_else(|e| panic!("boot jar {jar:?} entry {i}: {e}"));
         let name = entry.name().to_string();
         if name.starts_with("classes") && name.ends_with(".dex") {
             let mut bytes = Vec::new();
-            if entry.read_to_end(&mut bytes).is_ok() {
-                out.push((name, bytes));
-            }
+            entry
+                .read_to_end(&mut bytes)
+                .unwrap_or_else(|e| panic!("boot jar {jar:?}!{name}: {e}"));
+            out.push((name, bytes));
         }
     }
     out.sort_by(|a, b| a.0.cmp(&b.0));
@@ -77,14 +76,17 @@ fn jars_in(dir: &Path) -> Vec<PathBuf> {
 
 #[test]
 fn boot_classpath_parse_and_verify() {
-    let Some(dir) = boot_jars_dir() else {
-        eprintln!(
-            "ACOS_BOOT_JARS not set; skipping boot classpath test \
-             (set ACOS_BOOT_JARS=/tmp/acos-framework-dex/sys/framework to run)"
-        );
+    let Some(dir) = acos_test_support::require_some(
+        boot_jars_dir(),
+        "boot_classpath_parse_and_verify",
+        "no boot jars: set ACOS_BOOT_JARS (e.g. /tmp/acos-framework-dex/sys/framework) or build the boot cache (.cache/boot/android-34/jars)",
+    ) else {
         return;
     };
-    assert!(dir.is_dir(), "ACOS_BOOT_JARS is not a directory: {dir:?}");
+    assert!(
+        dir.is_dir(),
+        "boot jars directory is not a directory: {dir:?}"
+    );
     let jars = jars_in(&dir);
     assert!(!jars.is_empty(), "no .jar files in {dir:?}");
 
@@ -143,11 +145,9 @@ fn boot_classpath_parse_and_verify() {
                         )),
                     }
                 }
-                Err(e) => failures.push(format!(
-                    "parse {}!{name}: {} {e}",
-                    jar.display(),
-                    e.code()
-                )),
+                Err(e) => {
+                    failures.push(format!("parse {}!{name}: {} {e}", jar.display(), e.code()))
+                }
             }
             let _ = std::fs::remove_file(&tmpf);
         }
@@ -168,12 +168,18 @@ fn boot_classpath_parse_and_verify() {
 
 #[test]
 fn boot_classpath_dexdump_differential() {
-    let Some(dir) = boot_jars_dir() else {
-        eprintln!("ACOS_BOOT_JARS not set; skipping boot dexdump differential");
+    let Some(dir) = acos_test_support::require_some(
+        boot_jars_dir(),
+        "boot_classpath_dexdump_differential",
+        "no boot jars: set ACOS_BOOT_JARS or build the boot cache (.cache/boot/android-34/jars)",
+    ) else {
         return;
     };
-    let Some(bin) = example_binary() else {
-        eprintln!("dexdump example binary not found; skipping boot differential");
+    let Some(bin) = acos_test_support::require_some(
+        example_binary(),
+        "boot_classpath_dexdump_differential",
+        "dexdump example not built (cargo test -p acos-dex builds it; or cargo build -p acos-dex --example dexdump)",
+    ) else {
         return;
     };
 
@@ -219,5 +225,8 @@ fn boot_classpath_dexdump_differential() {
         .filter_map(|s| s.trim().parse().ok())
         .next()
         .unwrap_or(u64::MAX);
-    assert_eq!(mismatches, 0, "boot dexdump differential mismatches: {mismatches}");
+    assert_eq!(
+        mismatches, 0,
+        "boot dexdump differential mismatches: {mismatches}"
+    );
 }

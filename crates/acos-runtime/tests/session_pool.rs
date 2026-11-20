@@ -110,7 +110,8 @@ fn deterministic_across_worker_counts() {
     }
     for (i, got) in per_n.iter().enumerate().skip(1) {
         assert_eq!(
-            got, &per_n[0],
+            got,
+            &per_n[0],
             "worker count {} produced a different result than N=1",
             [1usize, 2, 3, 5][i]
         );
@@ -144,7 +145,11 @@ fn panicking_session_is_isolated_and_replaced() {
         .unwrap_or_default()
         .contains("injected panic"));
     for id in [101u64, 102] {
-        assert_eq!(by_id[&id].status, JobStatus::Completed, "job {id} disturbed");
+        assert_eq!(
+            by_id[&id].status,
+            JobStatus::Completed,
+            "job {id} disturbed"
+        );
         assert_eq!(by_id[&id].exit_code, want_exit);
         assert_eq!(by_id[&id].stdout, want_out);
     }
@@ -221,19 +226,17 @@ fn reset_restores_clean_state() {
 
 #[test]
 fn looping_session_is_killed_by_wall_guard() {
-    let Some(loop_dex_path) = common::compile_case(&["LoopForever"]) else {
-        eprintln!("SKIP looping_session_is_killed_by_wall_guard: javac/d8 toolchain absent");
+    let Some(loop_dex_path) = acos_test_support::require_some(common::compile_case(&["LoopForever"]), "looping_session_is_killed_by_wall_guard", "javac/d8 toolchain absent") else {
         return;
     };
     let bytes = match std::fs::read(&loop_dex_path) {
         Ok(b) => b,
         Err(e) => {
-            eprintln!("SKIP looping_session_is_killed_by_wall_guard: {e}");
+            acos_test_support::require_prereq(false, "looping_session_is_killed_by_wall_guard", &format!("looping_session_is_killed_by_wall_guard: {e}"));
             return;
         }
     };
-    let Some(loop_dex) = DexFile::parse(bytes).ok().map(Arc::new) else {
-        eprintln!("SKIP looping_session_is_killed_by_wall_guard: LoopForever DEX did not parse");
+    let Some(loop_dex) = acos_test_support::require_some(DexFile::parse(bytes).ok().map(Arc::new), "looping_session_is_killed_by_wall_guard", "LoopForever DEX did not parse") else {
         return;
     };
     let Some(ok_dex) = require("01_hello") else {
@@ -259,7 +262,11 @@ fn looping_session_is_killed_by_wall_guard() {
     assert_eq!(by_id[&10].status, JobStatus::Killed, "loop must be killed");
     assert_eq!(by_id[&10].error.as_deref(), Some("TIMEOUT"));
     for id in [11u64, 12] {
-        assert_eq!(by_id[&id].status, JobStatus::Completed, "job {id} disturbed");
+        assert_eq!(
+            by_id[&id].status,
+            JobStatus::Completed,
+            "job {id} disturbed"
+        );
         assert_eq!(by_id[&id].stdout, want_out);
     }
 

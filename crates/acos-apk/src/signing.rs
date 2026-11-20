@@ -286,8 +286,7 @@ fn scheme_certificates(
     let mut out = Vec::new();
     let mut s_pos = 0;
     while s_pos < signers.len() {
-        let signer =
-            der_len_prefixed(signers, &mut s_pos).ok_or("truncated signer list")?;
+        let signer = der_len_prefixed(signers, &mut s_pos).ok_or("truncated signer list")?;
         if signer.is_empty() {
             return Err("empty signer");
         }
@@ -558,7 +557,13 @@ mod tests {
             body.extend(u32p_u64(&pair));
         }
         let size = (body.len() + 8 + 16) as u64;
-        [&size.to_le_bytes()[..], &body, &size.to_le_bytes()[..], BLOCK_MAGIC].concat()
+        [
+            &size.to_le_bytes()[..],
+            &body,
+            &size.to_le_bytes()[..],
+            BLOCK_MAGIC,
+        ]
+        .concat()
     }
 
     fn u32p_u64(bytes: &[u8]) -> Vec<u8> {
@@ -572,7 +577,10 @@ mod tests {
         for (_, c) in serials_and_certs {
             certs.extend_from_slice(c);
         }
-        let sid = tlv(0x30, &[issuer.to_vec(), tlv(0x02, &[signer_serial])].concat());
+        let sid = tlv(
+            0x30,
+            &[issuer.to_vec(), tlv(0x02, &[signer_serial])].concat(),
+        );
         let signer_info = tlv(0x30, &[tlv(0x02, &[1]), sid].concat());
         let signed_data = tlv(
             0x30,
@@ -588,7 +596,9 @@ mod tests {
         let ci = tlv(
             0x30,
             &[
-                vec![0x06, 0x09, 0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 0x01, 0x07, 0x02],
+                vec![
+                    0x06, 0x09, 0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 0x01, 0x07, 0x02,
+                ],
                 tlv(0xA0, &signed_data),
             ]
             .concat(),
@@ -598,7 +608,10 @@ mod tests {
 
     #[test]
     fn scheme_returns_one_leaf_per_signer_not_the_chain() {
-        let issuer = tlv(0x30, &tlv(0x31, &tlv(0x30, &[0x06, 0x03, b'a', b'b', b'c'])));
+        let issuer = tlv(
+            0x30,
+            &tlv(0x31, &tlv(0x30, &[0x06, 0x03, b'a', b'b', b'c'])),
+        );
         let leaf1 = cert(1, &issuer);
         let chain1 = cert(9, &issuer);
         let leaf2 = cert(2, &issuer);

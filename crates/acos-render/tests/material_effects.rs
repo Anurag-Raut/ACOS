@@ -7,8 +7,8 @@
 //! screenshot diff. The per-scene ART reference diffs live in `corpus.rs`.
 
 use acos_render::{
-    BitmapConfig, ColorFilterSpec, DisplayOp, Matrix3x3, PorterDuffMode, RectF,
-    RenderContext, RenderEffectSpec, Scene, ShaderSpec, TileMode,
+    BitmapConfig, ColorFilterSpec, DisplayOp, Matrix3x3, PorterDuffMode, RectF, RenderContext,
+    RenderEffectSpec, Scene, ShaderSpec, TileMode,
 };
 
 fn render(scene_json: &str) -> acos_render::SceneRender {
@@ -185,7 +185,10 @@ fn render_effect_blur_spreads_the_node_layer() {
         .get_mut(node)
         .unwrap()
         .display_list
-        .push(DisplayOp::DrawRect(RectF::new(24.0, 24.0, 40.0, 40.0), paint));
+        .push(DisplayOp::DrawRect(
+            RectF::new(24.0, 24.0, 40.0, 40.0),
+            paint,
+        ));
     ctx.render_nodes.get_mut(node).unwrap().render_effect = Some(RenderEffectSpec::Blur {
         sigma_x: 5.0,
         sigma_y: 5.0,
@@ -194,9 +197,16 @@ fn render_effect_blur_spreads_the_node_layer() {
     ctx.surface_render_node(surface, node, 1).unwrap();
     let f = ctx.surface_capture(surface).unwrap().unwrap();
     assert!(f.unsupported_ops.is_empty(), "{:?}", f.unsupported_ops);
-    assert_eq!(f.pixels.pixel(32, 32).unwrap().red(), 0, "centre stays black");
+    assert_eq!(
+        f.pixels.pixel(32, 32).unwrap().red(),
+        0,
+        "centre stays black"
+    );
     let halo = f.pixels.pixel(32, 18).unwrap().red();
-    assert!(halo < 250, "expected a blur halo outside the rect, got {halo}");
+    assert!(
+        halo < 250,
+        "expected a blur halo outside the rect, got {halo}"
+    );
 }
 
 /// `RenderEffect.createColorFilterEffect` applies the filter to the node layer.
@@ -214,15 +224,16 @@ fn render_effect_color_filter_transforms_the_node_layer() {
         .display_list
         .push(DisplayOp::DrawRect(RectF::new(4.0, 4.0, 28.0, 28.0), paint));
     // Zero the RGB rows, keep alpha => red becomes black.
-    ctx.render_nodes.get_mut(node).unwrap().render_effect =
-        Some(RenderEffectSpec::ColorFilter(ColorFilterSpec::ColorMatrix {
+    ctx.render_nodes.get_mut(node).unwrap().render_effect = Some(RenderEffectSpec::ColorFilter(
+        ColorFilterSpec::ColorMatrix {
             matrix: [
                 0.0, 0.0, 0.0, 0.0, 0.0, // r
                 0.0, 0.0, 0.0, 0.0, 0.0, // g
                 0.0, 0.0, 0.0, 0.0, 0.0, // b
                 0.0, 0.0, 0.0, 1.0, 0.0, // a
             ],
-        }));
+        },
+    ));
     ctx.surface_render_node(surface, node, 1).unwrap();
     let f = ctx.surface_capture(surface).unwrap().unwrap();
     let p = f.pixels.pixel(16, 16).unwrap();

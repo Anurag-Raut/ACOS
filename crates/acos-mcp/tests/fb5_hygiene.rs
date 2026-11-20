@@ -22,7 +22,7 @@ use std::sync::mpsc::{channel, Receiver};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use acos_mcp::{BackendConfig, CliBackend, CallContext, SessionBackend};
+use acos_mcp::{BackendConfig, CallContext, CliBackend, SessionBackend};
 use acos_protocol::{
     Backend as ProtocolBackend, Envelope, ErrorCode, Fidelity, Metrics, ProtocolError,
 };
@@ -31,9 +31,9 @@ use serde_json::{json, Value};
 
 /// A short scratch directory: a unix socket path must fit `SUN_LEN` (108 bytes).
 fn scratch(name: &str) -> PathBuf {
-    let dir = PathBuf::from(std::env::var_os("ACOS_TEST_SCRATCH").unwrap_or_else(|| {
-        std::env::temp_dir().into()
-    }))
+    let dir = PathBuf::from(
+        std::env::var_os("ACOS_TEST_SCRATCH").unwrap_or_else(|| std::env::temp_dir().into()),
+    )
     .join(format!(
         "acos-fb5-{}-{}-{name}",
         std::process::id(),
@@ -124,7 +124,10 @@ fn fake_daemon(path: &std::path::Path, mode: Mode) -> FakeDaemon {
                         "req_list",
                         ProtocolBackend::AcosNative,
                         Fidelity::NativeRuntime,
-                        ProtocolError::new(ErrorCode::UnsupportedBackend, "session_list is not available"),
+                        ProtocolError::new(
+                            ErrorCode::UnsupportedBackend,
+                            "session_list is not available",
+                        ),
                         Metrics::wall_ms(0),
                     )
                 } else {
@@ -373,8 +376,13 @@ fn _in_process_is_a_type(session: AgentSession) -> bool {
     true
 }
 
-
-fn launch(backend: &SessionBackend, ctx: &CallContext, dir: &std::path::Path, session: Option<&str>, ttl: u64) -> Envelope {
+fn launch(
+    backend: &SessionBackend,
+    ctx: &CallContext,
+    dir: &std::path::Path,
+    session: Option<&str>,
+    ttl: u64,
+) -> Envelope {
     let mut base = json!({"request_id": "req_launch"});
     if let Some(session) = session {
         base["session_id"] = json!(session);
@@ -427,7 +435,10 @@ fn h1_default_session_expiry_does_not_break_the_next_sweeps_listing() {
     backend.sweep_idle();
     let first = tools_seen(&fake.seen, 200);
     let default_id = acos_mcp::session_backend::default_session_id();
-    assert!(first.contains(&("acos_destroy".into(), default_id.into())), "{first:?}");
+    assert!(
+        first.contains(&("acos_destroy".into(), default_id.into())),
+        "{first:?}"
+    );
 
     // The default session is tombstoned now. A second sweep must still list.
     std::thread::sleep(Duration::from_millis(2000));
@@ -442,7 +453,10 @@ fn h1_default_session_expiry_does_not_break_the_next_sweeps_listing() {
         "our own second session was proven and destroyed: {second:?}"
     );
     assert!(
-        !second.iter().chain(first.iter()).any(|(tool, id)| tool == "acos_destroy" && id == "s_foreign"),
+        !second
+            .iter()
+            .chain(first.iter())
+            .any(|(tool, id)| tool == "acos_destroy" && id == "s_foreign"),
         "a foreign session is never destroyed"
     );
     assert!(fake
@@ -454,7 +468,11 @@ fn h1_default_session_expiry_does_not_break_the_next_sweeps_listing() {
 
     // And a listing is not an expired-session answer even for the default id.
     let list = backend
-        .session_call("session_list", &json!({"base": {"request_id": "req_list"}}), &ctx)
+        .session_call(
+            "session_list",
+            &json!({"base": {"request_id": "req_list"}}),
+            &ctx,
+        )
         .expect("forwarded");
     assert!(list.ok(), "session_list is not the tombstone: {list:?}");
 
@@ -503,10 +521,17 @@ fn h1_a_failed_listing_destroys_nothing_on_the_external_daemon() {
     std::thread::sleep(Duration::from_millis(1200));
     assert!(backend.sweep_idle(), "reports the unproven listing");
     let seen = tools_seen(&fake.seen, 200);
-    assert!(!seen.iter().any(|(tool, _)| tool == "acos_destroy"), "{seen:?}");
+    assert!(
+        !seen.iter().any(|(tool, _)| tool == "acos_destroy"),
+        "{seen:?}"
+    );
     // The session is still ours and live (no tombstone either).
     let tap = backend
-        .session_call("acos_observe", &json!({"base": {"request_id": "r", "session_id": "s_maybe"}}), &ctx)
+        .session_call(
+            "acos_observe",
+            &json!({"base": {"request_id": "r", "session_id": "s_maybe"}}),
+            &ctx,
+        )
         .expect("forwarded");
     assert!(tap.ok(), "{tap:?}");
     let _ = fake.stop.send(());
@@ -522,7 +547,11 @@ fn m2_tokenless_sessions_are_never_expired_on_the_external_daemon() {
     let backend = backend(&socket);
     let ctx = context(&dir);
     let reply = launch(&backend, &ctx, &dir, Some("s_old_daemon"), 1);
-    assert_eq!(reply.result().unwrap()["idle_ttl_s"], json!(0), "expiry disabled and reported");
+    assert_eq!(
+        reply.result().unwrap()["idle_ttl_s"],
+        json!(0),
+        "expiry disabled and reported"
+    );
     tools_seen(&fake.seen, 100);
     std::thread::sleep(Duration::from_millis(1200));
     assert!(!backend.sweep_idle());
@@ -568,7 +597,9 @@ fn m1_a_slow_call_in_flight_is_not_idleness() {
     );
     // The finished call renewed the clock: an immediate sweep is a no-op too.
     backend.sweep_idle();
-    assert!(!tools_seen(&fake.seen, 200).iter().any(|(tool, _)| tool == "acos_destroy"));
+    assert!(!tools_seen(&fake.seen, 200)
+        .iter()
+        .any(|(tool, _)| tool == "acos_destroy"));
     let _ = fake.stop.send(());
     let _ = std::fs::remove_dir_all(&dir);
 }
@@ -587,7 +618,11 @@ fn l1_status_ignores_a_session_another_client_relaunched() {
         entry["guest_pid"] = json!(std::process::id());
     }
     let status = backend
-        .session_call("acos_status", &json!({"base": {"request_id": "r", "session_id": "s_mine"}}), &ctx)
+        .session_call(
+            "acos_status",
+            &json!({"base": {"request_id": "r", "session_id": "s_mine"}}),
+            &ctx,
+        )
         .expect("status");
     let text = serde_json::to_string(&status).unwrap();
     let sessions = status
@@ -597,7 +632,9 @@ fn l1_status_ignores_a_session_another_client_relaunched() {
         .cloned()
         .unwrap_or_default();
     assert!(
-        sessions.iter().all(|entry| entry["session_id"] != json!("s_mine")),
+        sessions
+            .iter()
+            .all(|entry| entry["session_id"] != json!("s_mine")),
         "another client's guest is not listed as ours: {text}"
     );
     let _ = fake.stop.send(());

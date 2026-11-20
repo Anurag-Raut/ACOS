@@ -77,8 +77,8 @@ fn expected_served_parcel() -> Parcel {
     p.write_int32(1); // writeInt(type)          TYPE_INTERNAL
     p.write_int32(0); // writeInt(displayId)
     p.write_int32(0); // writeInt(displayGroupId)
-    // :593-594 writeParcelable(address) / writeParcelable(deviceProductInfo):
-    // a null Parcelable is `writeString(null)` = int32 -1.
+                      // :593-594 writeParcelable(address) / writeParcelable(deviceProductInfo):
+                      // a null Parcelable is `writeString(null)` = int32 -1.
     p.write_string16_opt(None).expect("address");
     p.write_string16_opt(None).expect("deviceProductInfo");
     // :595 writeString8(name)
@@ -92,8 +92,8 @@ fn expected_served_parcel() -> Parcel {
     p.write_int32(2209); // largestNominalAppHeight
     p.write_int32(1080); // logicalWidth
     p.write_int32(2400); // logicalHeight
-    // :604 DisplayCutout.ParcelableWrapper.writeCutoutToParcel: variant 0 is
-    // `DisplayCutout.NO_CUTOUT` (int32 only).
+                         // :604 DisplayCutout.ParcelableWrapper.writeCutoutToParcel: variant 0 is
+                         // `DisplayCutout.NO_CUTOUT` (int32 only).
     p.write_int32(0);
     // :605-609
     p.write_int32(0); // rotation                 ROTATION_0
@@ -101,7 +101,7 @@ fn expected_served_parcel() -> Parcel {
     p.write_float(60.000004_f32); // renderFrameRate
     p.write_int32(1); // defaultModeId
     p.write_int32(0); // userPreferredModeId
-    // :610-613 writeInt(supportedModes.length) + each Mode.writeToParcel
+                      // :610-613 writeInt(supportedModes.length) + each Mode.writeToParcel
     p.write_int32(1);
     p.write_int32(1); // Mode.mModeId
     p.write_int32(1080); // Mode.mWidth
@@ -111,7 +111,8 @@ fn expected_served_parcel() -> Parcel {
     p.write_int32_array(Some(&[])).expect("Mode HDR types");
     // :614-618
     p.write_int32(0); // colorMode                COLOR_MODE_SRGB
-    p.write_int32_array(Some(&[0])).expect("supportedColorModes");
+    p.write_int32_array(Some(&[0]))
+        .expect("supportedColorModes");
     // :619 writeParcelable(hdrCapabilities) — null
     p.write_string16_opt(None).expect("hdrCapabilities");
     // :620-625
@@ -121,7 +122,7 @@ fn expected_served_parcel() -> Parcel {
     p.write_float(420.0); // physicalYDpi
     p.write_int64(0); // appVsyncOffsetNanos
     p.write_int64(0); // presentationDeadlineNanos
-    // :626-635
+                      // :626-635
     p.write_int32(2); // state                    STATE_ON
     p.write_int32(2); // committedState
     p.write_int32(FIXTURE_UID); // ownerUid
@@ -132,20 +133,22 @@ fn expected_served_parcel() -> Parcel {
     p.write_float(0.0); // brightnessMinimum
     p.write_float(1.0); // brightnessMaximum
     p.write_float(0.5); // brightnessDefault
-    // :636 writeTypedObject(roundedCorners) — null
+                        // :636 writeTypedObject(roundedCorners) — null
     p.write_int32(0);
     // :637-640 writeInt(userDisabledHdrTypes.length) + ints (empty)
-    p.write_int32_array(Some(&[])).expect("userDisabledHdrTypes");
+    p.write_int32_array(Some(&[]))
+        .expect("userDisabledHdrTypes");
     // :641-646
     p.write_int32(0); // installOrientation
     p.write_int32(0); // writeTypedObject(displayShape) — null
     p.write_int32(0); // writeTypedObject(layoutLimitedRefreshRate) — null
     p.write_float(f32::NAN); // hdrSdrRatio
-    // writeSparseArray(new SparseArray<>()) — the framework default is an
-    // *empty* array, which writes a 0 count (not the null -1).
+                             // writeSparseArray(new SparseArray<>()) — the framework default is an
+                             // *empty* array, which writes a 0 count (not the null -1).
     p.write_int32(0);
     // :647 writeString8(thermalBrightnessThrottlingDataId) — null
-    p.write_string8_opt(None).expect("thermalBrightnessThrottlingDataId");
+    p.write_string8_opt(None)
+        .expect("thermalBrightnessThrottlingDataId");
     p
 }
 
@@ -266,7 +269,11 @@ fn read_typed_rect(p: &mut Parcel) -> RectI {
 /// `DisplayInfo.readFromParcel`, in the framework's read order.
 fn decode(p: &mut Parcel) -> (Decoded, usize) {
     assert_eq!(p.read_int32().expect("exception code"), 0, "no exception");
-    assert_eq!(p.read_int32().expect("typed marker"), 1, "non-null DisplayInfo");
+    assert_eq!(
+        p.read_int32().expect("typed marker"),
+        1,
+        "non-null DisplayInfo"
+    );
     let layer_stack = p.read_int32().unwrap();
     let flags = p.read_int32().unwrap();
     let display_type = p.read_int32().unwrap();
@@ -475,7 +482,11 @@ fn host_serves_display_info_in_the_api34_write_order() {
     let expected = expected_served_parcel().marshall();
     if std::env::var_os("ACOS_DUMP_DISPLAYINFO").is_some() {
         // Evidence for results/art-runtime/D1.md: the exact reply bytes.
-        println!("getDisplayInfo reply ({} bytes):{}", reply.len(), hex(&reply));
+        println!(
+            "getDisplayInfo reply ({} bytes):{}",
+            reply.len(),
+            hex(&reply)
+        );
     }
     assert_eq!(reply.len(), SERVED_LEN, "DisplayInfo size drift");
     assert_eq!(expected.len(), SERVED_LEN, "hand-built size drift");
@@ -569,7 +580,6 @@ fn variant_1_cutout_is_written_in_write_cutout_to_parcel_order() {
     assert_eq!(got.supported_modes.len(), 1);
 }
 
-
 #[test]
 fn displayinfo_spec_is_the_api34_write_order() {
     // A literal transcription of `DisplayInfo.writeToParcel` (587-647). The
@@ -579,56 +589,56 @@ fn displayinfo_spec_is_the_api34_write_order() {
         Bool, CountedNested, Cutout, Float, Int, IntArray, Long, Named, SparseArray, Str8, Typed,
     };
     let expected: &[FieldOp] = &[
-        Int,                                         // layerStack
-        Int,                                         // flags
-        Int,                                         // type
-        Int,                                         // displayId
-        Int,                                         // displayGroupId
-        Named("android.view.DisplayAddress"),        // address
-        Named("android.hardware.display.DeviceProductInfo"), // deviceProductInfo
-        Str8,                                        // name
-        Int,                                         // appWidth
-        Int,                                         // appHeight
-        Int,                                         // smallestNominalAppWidth
-        Int,                                         // smallestNominalAppHeight
-        Int,                                         // largestNominalAppWidth
-        Int,                                         // largestNominalAppHeight
-        Int,                                         // logicalWidth
-        Int,                                         // logicalHeight
-        Cutout,                                      // writeCutoutToParcel
-        Int,                                         // rotation
-        Int,                                         // modeId
-        Float,                                       // renderFrameRate
-        Int,                                         // defaultModeId
-        Int,                                         // userPreferredModeId
-        CountedNested("android.view.Display$Mode"),  // supportedModes
-        Int,                                         // colorMode
-        IntArray,                                    // supportedColorModes
-        Named("android.view.Display$HdrCapabilities"), // hdrCapabilities
-        Bool,                                        // minimalPostProcessingSupported
-        Int,                                         // logicalDensityDpi
-        Float,                                       // physicalXDpi
-        Float,                                       // physicalYDpi
-        Long,                                        // appVsyncOffsetNanos
-        Long,                                        // presentationDeadlineNanos
-        Int,                                         // state
-        Int,                                         // committedState
-        Int,                                         // ownerUid
-        Str8,                                        // ownerPackageName
-        Str8,                                        // uniqueId
-        Int,                                         // removeMode
-        Float,                                       // refreshRateOverride
-        Float,                                       // brightnessMinimum
-        Float,                                       // brightnessMaximum
-        Float,                                       // brightnessDefault
-        Typed("android.view.RoundedCorners"),        // roundedCorners
-        IntArray,                                    // userDisabledHdrTypes
-        Int,                                         // installOrientation
-        Typed("android.view.DisplayShape"),          // displayShape
+        Int,                                                   // layerStack
+        Int,                                                   // flags
+        Int,                                                   // type
+        Int,                                                   // displayId
+        Int,                                                   // displayGroupId
+        Named("android.view.DisplayAddress"),                  // address
+        Named("android.hardware.display.DeviceProductInfo"),   // deviceProductInfo
+        Str8,                                                  // name
+        Int,                                                   // appWidth
+        Int,                                                   // appHeight
+        Int,                                                   // smallestNominalAppWidth
+        Int,                                                   // smallestNominalAppHeight
+        Int,                                                   // largestNominalAppWidth
+        Int,                                                   // largestNominalAppHeight
+        Int,                                                   // logicalWidth
+        Int,                                                   // logicalHeight
+        Cutout,                                                // writeCutoutToParcel
+        Int,                                                   // rotation
+        Int,                                                   // modeId
+        Float,                                                 // renderFrameRate
+        Int,                                                   // defaultModeId
+        Int,                                                   // userPreferredModeId
+        CountedNested("android.view.Display$Mode"),            // supportedModes
+        Int,                                                   // colorMode
+        IntArray,                                              // supportedColorModes
+        Named("android.view.Display$HdrCapabilities"),         // hdrCapabilities
+        Bool,                                                  // minimalPostProcessingSupported
+        Int,                                                   // logicalDensityDpi
+        Float,                                                 // physicalXDpi
+        Float,                                                 // physicalYDpi
+        Long,                                                  // appVsyncOffsetNanos
+        Long,                                                  // presentationDeadlineNanos
+        Int,                                                   // state
+        Int,                                                   // committedState
+        Int,                                                   // ownerUid
+        Str8,                                                  // ownerPackageName
+        Str8,                                                  // uniqueId
+        Int,                                                   // removeMode
+        Float,                                                 // refreshRateOverride
+        Float,                                                 // brightnessMinimum
+        Float,                                                 // brightnessMaximum
+        Float,                                                 // brightnessDefault
+        Typed("android.view.RoundedCorners"),                  // roundedCorners
+        IntArray,                                              // userDisabledHdrTypes
+        Int,                                                   // installOrientation
+        Typed("android.view.DisplayShape"),                    // displayShape
         Typed("android.view.SurfaceControl$RefreshRateRange"), // layoutLimitedRefreshRate
-        Float,                                       // hdrSdrRatio
-        SparseArray,                                 // thermalRefreshRateThrottling
-        Str8,                                        // thermalBrightnessThrottlingDataId
+        Float,                                                 // hdrSdrRatio
+        SparseArray,                                           // thermalRefreshRateThrottling
+        Str8,                                                  // thermalBrightnessThrottlingDataId
     ];
     let spec = parcelable::spec_for(parcelable::DISPLAY_INFO_CLASS).expect("DisplayInfo codec");
     assert_eq!(spec.fields, expected, "DisplayInfo field order drifted");

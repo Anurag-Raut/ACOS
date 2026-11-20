@@ -9,17 +9,15 @@ use common::{compile_case, repo_root, run_ok};
 
 #[test]
 fn settings_provider_generation_matches_the_golden() {
-    let Some(dex) = compile_case(&["SettingsMain"]) else {
-        eprintln!("SKIP settings_provider_generation_matches_the_golden: javac/d8/android.jar unavailable");
+    let Some(dex) = acos_test_support::require_some(compile_case(&["SettingsMain"]), "settings_provider_generation_matches_the_golden", "javac/d8/android.jar unavailable") else {
         return;
     };
     let Some(stdout) = run_ok(&dex, "android.content.SettingsMain", "SettingsMain") else {
         return;
     };
-    let expected = std::fs::read_to_string(
-        repo_root().join("crates/acos-runtime/tests/data/settings.golden"),
-    )
-    .expect("committed settings golden file");
+    let expected =
+        std::fs::read_to_string(repo_root().join("crates/acos-runtime/tests/data/settings.golden"))
+            .expect("committed settings golden file");
 
     let actual: Vec<&str> = stdout.lines().filter(|l| !l.is_empty()).collect();
     let expected: Vec<&str> = expected.lines().filter(|l| !l.is_empty()).collect();

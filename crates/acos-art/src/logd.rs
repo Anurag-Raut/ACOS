@@ -49,6 +49,19 @@ pub struct LogEntry {
     pub prio: i32,
     pub tag: String,
     pub message: String,
+    /// Unix milliseconds at which the sink captured the write (the host reads
+    /// the guest's frame the moment it arrives). `0` for an entry that carries
+    /// none (an older dump): readers then fall back to their own read time.
+    #[serde(default)]
+    pub ts_ms: u64,
+}
+
+/// Wall-clock Unix milliseconds, the clock of [`LogEntry::ts_ms`].
+fn now_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0)
 }
 
 impl LogEntry {
@@ -155,7 +168,10 @@ impl Logd {
         // 10/s idle timer per session without delaying teardown.
         sock.set_read_timeout(Some(Duration::from_secs(1)))?;
         let entries: Arc<Mutex<Vec<LogEntry>>> = Arc::new(Mutex::new(Vec::new()));
-        let stats = Arc::new(Mutex::new(LogStats { cap, ..LogStats::default() }));
+        let stats = Arc::new(Mutex::new(LogStats {
+            cap,
+            ..LogStats::default()
+        }));
         let first_dropped: Arc<Mutex<Option<LogEntry>>> = Arc::new(Mutex::new(None));
         let stop = Arc::new(AtomicBool::new(false));
         // A separate unconnected socket that can send to `path`; a zero-length
@@ -271,7 +287,11 @@ impl Logd {
         let mut stats = *self.stats.lock().unwrap();
         stats.kept = v.len();
         let first_dropped = self.first_dropped.lock().unwrap().take();
-        LogBatch { entries: v, stats, first_dropped }
+        LogBatch {
+            entries: v,
+            stats,
+            first_dropped,
+        }
     }
 
     fn drain(&self) {
@@ -304,7 +324,12 @@ fn parse_frame(buf: &[u8]) -> Option<LogEntry> {
         if 6 + tlen + mlen == buf.len() && (1..=8).contains(&prio) {
             let tag = String::from_utf8_lossy(&buf[6..6 + tlen]).to_string();
             let message = String::from_utf8_lossy(&buf[6 + tlen..6 + tlen + mlen]).to_string();
-            return Some(LogEntry { prio, tag, message });
+            return Some(LogEntry {
+                prio,
+                tag,
+                message,
+                ts_ms: now_ms(),
+            });
         }
     }
     // Other writers use bionic's *native* LogdLogger, which sends logd's
@@ -317,7 +342,12 @@ fn parse_frame(buf: &[u8]) -> Option<LogEntry> {
     if message.len() < 4 {
         return None;
     }
-    Some(LogEntry { prio: 6, tag: "logdw".to_string(), message })
+    Some(LogEntry {
+        prio: 6,
+        tag: "logdw".to_string(),
+        message,
+        ts_ms: now_ms(),
+    })
 }
 
 fn longest_printable_run(buf: &[u8]) -> String {
@@ -358,6 +388,7 @@ mod tests {
         assert_eq!(e.prio, 6);
         assert_eq!(e.tag, "foo");
         assert_eq!(e.message, "hello");
+        assert!(e.ts_ms > 0, "parsed log frames carry a capture timestamp");
         assert_eq!(e.priority_name(), "E");
         assert!(!e.is_fatal());
     }
@@ -397,9 +428,19 @@ mod tests {
             batch.entries.len()
         );
         assert_eq!(batch.stats.cap, 1000);
-        assert_eq!(batch.stats.total, batch.stats.kept as u64 + batch.stats.dropped);
-        assert!(batch.stats.dropped > 0, "a spammer must trip the cap: {:?}", batch.stats);
-        assert!(batch.first_dropped.is_some(), "the first dropped entry is kept as a sample");
+        assert_eq!(
+            batch.stats.total,
+            batch.stats.kept as u64 + batch.stats.dropped
+        );
+        assert!(
+            batch.stats.dropped > 0,
+            "a spammer must trip the cap: {:?}",
+            batch.stats
+        );
+        assert!(
+            batch.first_dropped.is_some(),
+            "the first dropped entry is kept as a sample"
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 

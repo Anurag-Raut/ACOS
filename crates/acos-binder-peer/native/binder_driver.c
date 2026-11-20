@@ -45,7 +45,15 @@
 //   4. substrate  : property table + framework natives (copied from E2D because
 //                   bionic symbol lookup is namespace-scoped: one .so).
 #define _GNU_SOURCE
+// The driver is built for bionic inside the guest. The driver *core* (transport,
+// object table, BC_*/BR_* handling) is plain Linux C and is also built for the
+// host by `native/driver_test.c` (`ACOS_DRIVER_HOST_TEST`), which is how the
+// delivery rules are tested without ART. The JNI bridge and the AndroidRuntime
+// bootstrap are guest-only substrate and are compiled out of that host build;
+// bionic's `jni.h`/`ucontext`/`ioctl` declarations differ from glibc's.
+#ifndef ACOS_DRIVER_HOST_TEST
 #include <jni.h>
+#endif
 #include <dlfcn.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -80,8 +88,16 @@
 #define E3G_MAX_FRAME (256 * 1024)
 #define E3G_MAX_FD 16
 #define E3G_MAX_SLOT 32
-#define E3G_MAX_NODE 64
-#define E3G_MAX_HANDLE 64
+// A session registers one local node per callback object (the tail-probe
+// acceptance registers 100+ PhoneStateListeners, each a new Java `Binder`), and
+// nodes are only ever released by the host (the reference model lives in the
+// peer, not here), so this table is the session-long one. It is a plain table
+// in this driver's own memory, not part of the wire contract.
+#define E3G_MAX_NODE 1024
+#define E3G_MAX_HANDLE 512
+// Death registrations (`BC_REQUEST_DEATH_NOTIFICATION`): one per linkToDeath
+// on a peer-owned binder, bounded like the kernel's.
+#define E3G_MAX_DEATH 64
 
 static int g_dbg = -1;
 #define DBG(...)                                     \
@@ -93,17 +109,93 @@ static int g_dbg = -1;
             dprintf(2, "\n");                        \
         }                                            \
     } while (0)
+// Warnings are the driver's only diagnostic channel, and the guest's stderr is
+// not always captured (a live session keeps a bounded tail, and the tail is
+// dominated by whatever the app printed last). Mirror every warning into logd
+// so a dropped callback always leaves a record an agent can read back with
+// `acos_logs`; resolve the liblog symbol lazily so a host build of this file
+// (the driver unit test) works without liblog.
+static void logd_print(int prio, const char* fmt, va_list ap) {
+    // `__android_log_vprint`, never `__android_log_print(prio, tag, fmt, ap)`:
+    // the latter is variadic, so passing a `va_list` as its single vararg
+    // consumes the *va_list pointer* as the first `%` argument and every later
+    // argument out of whatever happens to be in the next register. The driver
+    // used to do exactly that, and the logd copy of every warning with
+    // arguments was garbage (`transaction buffer exhausted (139818998707856/
+    // 139831030787232 used, -198541192 blocks)`) while the stderr copy was
+    // correct. Evidence read back with `acos_logs` must be the real values.
+    typedef int (*log_vprint_fn)(int, const char*, const char*, va_list);
+    static log_vprint_fn log_vprint;
+    if (log_vprint == NULL) {
+        // Not cached when missing: liblog may only be loaded later (the driver
+        // is LD_PRELOADed before libbinder pulls in liblog), and libbinder's
+        // dependencies are not in the global symbol group, so `RTLD_DEFAULT`
+        // alone would never find it.
+        static void* log_so;
+        if (log_so == NULL) {
+            log_so = dlopen("liblog.so", RTLD_NOW | RTLD_NOLOAD);
+            if (log_so == NULL) log_so = dlopen("liblog.so", RTLD_NOW | RTLD_GLOBAL);
+        }
+        if (log_so != NULL)
+            log_vprint = (log_vprint_fn)dlsym(log_so, "__android_log_vprint");
+        if (log_vprint == NULL)
+            log_vprint = (log_vprint_fn)dlsym(RTLD_DEFAULT, "__android_log_vprint");
+    }
+    if (log_vprint != NULL) log_vprint(prio, "acos-binder", fmt, ap);
+}
+
+static void warn_log(const char* fmt, ...) {
+    va_list ap;
+    va_start(ap, fmt);
+    dprintf(2, "E3G[warn]: ");
+    vdprintf(2, fmt, ap);
+    dprintf(2, "\n");
+    va_end(ap);
+
+    va_start(ap, fmt);
+    logd_print(5 /* ANDROID_LOG_WARN */, fmt, ap);
+    va_end(ap);
+}
+
+// Reference-model trace. The driver's *only* window into libbinder's half of the
+// node-ref handshake is what libbinder acks (BC_INCREFS_DONE/BC_ACQUIRE_DONE)
+// and what it answers (the F_REP to a delivery), and the guest's stderr is not
+// captured for a live session. So the trace goes to logd and is switched on
+// with E3G_DEBUG (which the launcher already forwards), never on by default.
+static void trace_log(const char* fmt, ...) {
+    static int on = -1;
+    if (on < 0) on = getenv("E3G_DEBUG") != NULL;
+    if (!on) return;
+    va_list ap;
+    va_start(ap, fmt);
+    dprintf(2, "E3G: ");
+    vdprintf(2, fmt, ap);
+    dprintf(2, "\n");
+    va_end(ap);
+    va_start(ap, fmt);
+    logd_print(4 /* ANDROID_LOG_DEBUG-connected: INFO */, fmt, ap);
+    va_end(ap);
+}
+
 #define WARN(...)                        \
     do {                                 \
-        dprintf(2, "E3G[warn]: ");       \
-        dprintf(2, __VA_ARGS__);         \
-        dprintf(2, "\n");                \
+        warn_log(__VA_ARGS__);           \
+    } while (0)
+#define TRACE(...)                       \
+    do {                                 \
+        trace_log(__VA_ARGS__);          \
     } while (0)
 
 // Crash reporter (defined next to the JNI bridge, below): the sandbox has no
 // tombstoned, so a fault inside libbinder otherwise leaves no evidence at all.
 static void* __attribute__((noinline)) crash_install(void);
 
+// MPROC5b: the substrate (property table, framework natives, crash reporter,
+// fd/ioctl interception) is bionic/JNI-specific and is left out of the host
+// driver test (`native/driver_test.c` compiles the transport, object table and
+// driver layers with E3G_HOST_TEST and drives the death paths directly). The
+// guest build never defines it.
+#ifndef E3G_HOST_TEST
 // --------------------------------------------------------- (4) property table
 // (see E2D §1: Build.VERSION.<clinit> indexes SUPPORTED_ABIS[0]; a failure is
 // sticky and poisons Resources/ActivityThread/anything touching Build).
@@ -204,8 +296,36 @@ __attribute__((constructor)) static void e3g_load_runtime(void) {
     }
 }
 
+#endif  // E3G_HOST_TEST
+
 // ------------------------------------------------------------- (3) transport
-enum { F_REQ = 1, F_RSP = 2, F_TXN = 3, F_REP = 4 };
+// Wire protocol (see crates/acos-binder-peer/src/protocol.rs). F_HELLO is sent
+// once by the driver right after it connects: `seq` = protocol version, `code` =
+// this connection's process tag, `data` = the process name. F_REF is the peer's
+// reference-count operation on a node the guest exported (the `F_REL`-style
+// message: without it a node lives for the whole session even after the host
+// dropped its last reference). F_DEATH says a synthetic node for another
+// process's binder died.
+enum {
+    F_REQ = 1,
+    F_RSP = 2,
+    F_TXN = 3,
+    F_REP = 4,
+    F_HELLO = 5,
+    F_REF = 6,
+    F_DEATH = 7
+};
+enum { REF_ACQUIRE = 1, REF_RELEASE = 2 };
+// v4: the header's last 8 bytes carry the sender's pid and euid instead of
+// being `reserved`. A v3 peer wrote zeros there, so a v4 driver reads them as
+// the "unknown sender" a v3 build reported (`Binder.getCallingPid()` = 0) —
+// nothing a v3 peer sends is misread.
+#define ACOS_WIRE_VERSION 4
+
+// `F_RSP` flag (MPROC5b): the peer refused because the target process is dead.
+// The caller must see `BR_DEAD_REPLY` (DeadObjectException), not the generic
+// `BR_FAILED_REPLY`. No reply payload is carried.
+#define E3G_RSP_DEAD 0x80000000u
 
 struct fhdr {
     uint32_t type;
@@ -215,7 +335,14 @@ struct fhdr {
     uint64_t target;       // REQ: target handle (u32); TXN: node id
     uint64_t data_size;
     uint64_t offsets_size;
-    uint64_t reserved;
+    // v4 (BINDERPID): the sender's identity — the 8 bytes v3 called `reserved`.
+    // TXN/RSP: what `binder_transaction_data.sender_pid/sender_euid` must say in
+    // the guest (the peer fills them: `system_server` for a host delivery, the
+    // calling app for a relayed guest -> guest transaction). REQ/REP: this
+    // process's own pid/uid, evidence the peer never has to trust (it reads the
+    // caller from SO_PEERCRED and the activity manager instead).
+    uint32_t sender_pid;
+    uint32_t sender_euid;
 };
 
 struct slot {
@@ -227,6 +354,11 @@ struct slot {
     uint8_t* offs;
     size_t offs_size;
     uint32_t status;
+    // v4: the sender identity carried by the F_RSP header, reported as
+    // BR_REPLY's `binder_transaction_data.sender_pid/sender_euid` (BINDERPID).
+    uint32_t sender_pid;
+    uint32_t sender_euid;
+    int dead;              // F_RSP with E3G_RSP_DEAD -> BR_DEAD_REPLY
     // Descriptors the peer sent with this reply (SCM_RIGHTS). They are owned by
     // this process until `build_reply` substitutes them into the reply
     // parcel's `BINDER_TYPE_FD` objects and closes them. Dropping them here
@@ -246,6 +378,9 @@ struct inq {
     uint32_t seq;
     uint32_t code;
     uint32_t flags;
+    // v4: the sender identity carried by the F_TXN header (BINDERPID).
+    uint32_t sender_pid;
+    uint32_t sender_euid;
     uint64_t data_size, offs_size;
     uint8_t* data;
 };
@@ -254,6 +389,28 @@ struct node {          // a local binder node we exported
     uint64_t binder;   // obj.binder == weakref ptr
     uint64_t cookie;   // obj.cookie == BBinder*
     uint32_t wire;     // handle number used on the wire
+    // References to this node that the *remote* side holds, as reported by
+    // F_REF. The kernel keeps the same two counters per node
+    // (`internal_strong_refs` / `local_strong_refs`) and drops the node when the
+    // last one goes away, sending BR_RELEASE + BR_DECREFS to the owner in the
+    // process of doing it (`binder_dec_node` -> BINDER_WORK_NODE). The
+    // transaction that first carried the object transfers one reference, so a
+    // fresh node starts at one.
+    int strong;
+    // Set while the guest object is rooted by us (BR_INCREFS + BR_ACQUIRE
+    // handed out) and the release commands have not been queued yet.
+    int rooted;
+};
+
+// A BR_RELEASE + BR_DECREFS pair owed to the guest for a node whose last
+// reference the host dropped. Node work belongs to the *process*, not to a
+// thread (the kernel queues it on `proc->todo`), so whichever thread next reads
+// from the driver delivers it: the object's owner is the process that exported
+// it, and any of its threads can run the deref.
+struct nodework {
+    uint64_t binder;
+    uint64_t cookie;
+    uint32_t wire;
 };
 
 struct handle {        // a handle to a peer node
@@ -270,8 +427,13 @@ struct drv {
     int reader_started;
     pthread_mutex_t mu;
     pthread_cond_t cv_txn;   // incoming transaction queued
+    pthread_cond_t cv_own;   // the incoming-queue owner changed (CLOCK_MONOTONIC)
     pthread_cond_t cv_rsp;   // any reply slot filled
     struct inq *in_head, *in_tail;
+    // BR_RELEASE + BR_DECREFS owed to the guest: node work is per process (the
+    // kernel queues it on `proc->todo`), so any reading thread delivers it.
+    struct nodework node_work[256];
+    int n_node_work;
     struct slot slots[E3G_MAX_SLOT];
     struct node nodes[E3G_MAX_NODE];
     int n_nodes;
@@ -279,9 +441,90 @@ struct drv {
     int n_handles;
     uint32_t next_wire;
     uint32_t next_handle;
+    // MPROC5b: `BC_REQUEST_DEATH_NOTIFICATION` registrations, keyed by our
+    // local handle. A registration is one-shot: the kernel drops it when it
+    // delivers `BR_DEAD_BINDER`, and the app answers `BC_DEAD_BINDER_DONE`.
+    struct death_reg {
+        int used;
+        uint32_t handle;
+        uint64_t cookie;
+    } deaths[E3G_MAX_DEATH];
+    // Cookies queued by `F_DEATH` and not yet handed to a looper thread. The
+    // reader thread must not pend them itself: `T.pend` belongs to the thread
+    // that will later read, and only a looper thread dispatches callbacks.
+    uint64_t death_queue[E3G_MAX_DEATH];
+    int death_head, death_tail, death_count;
 };
 
 static struct drv g;
+
+// State every guest thread can touch at once, kept apart from `g.mu` (which is
+// only the transport queues and reply slots):
+//
+//   * the node/handle tables -- any thread can export a local object or resolve
+//     a peer node, and the looper thread resolves a node while the caller's
+//     thread exports one;
+//   * the transaction-buffer heap -- the caller's reply path (`build_reply`) and
+//     the looper's delivery path (`deliver_incoming`) allocate at the same time,
+//     and an unsynchronised bump pointer hands both the *same* memory (one
+//     transaction's parcel overwrites the other while libbinder decodes it);
+//   * the reply-side fd sets.
+//
+// No path takes `g.mu` while holding one of these, so there is no lock order to
+// get wrong: they are always taken and released inside one function.
+static pthread_mutex_t g_obj_mu = PTHREAD_MUTEX_INITIALIZER;
+static pthread_mutex_t g_slab_mu = PTHREAD_MUTEX_INITIALIZER;
+// Set while node work (BR_RELEASE/BR_DECREFS) is queued, so a looper thread
+// that is parked waiting for an incoming transaction still wakes up for it: the
+// kernel's `binder_wakeup_proc_ilocked` does the same for BINDER_WORK_NODE.
+static volatile int g_node_pending;
+// One thread at a time *owns* the incoming queue.
+//
+// The kernel gives a node **one** active async transaction at a time
+// (`binder_node.has_async_transaction`): its queued work is executed in FIFO
+// order by whichever thread is reading, and no second thread interleaves. A
+// userspace driver that let two reader threads pop one transaction each lost
+// that order once the receiver posted both to its own looper thread from two
+// different binder threads — measured with MPROC8: `scheduleCreateService` and
+// `scheduleBindService` (sent create-first) reached `ActivityThread` as
+// BIND_SERVICE then CREATE_SERVICE, so `Service.onBind` ran for a service that
+// did not exist yet.
+//
+// The owner delivers one transaction per read (libbinder reads commands into a
+// small fixed parcel, so two deliveries in one write leave the first one's tail
+// unread and it never runs — measured with two ACTION_FOUND broadcasts queued in
+// one turn) and keeps ownership until the queue is empty. Any other thread that
+// finds work queued returns and lets the owner continue.
+static volatile pid_t g_queue_owner;
+// FLAKEFIX2: the owner's last delivery was a `oneway` transaction or one of the
+// host's own deliveries (`E3G_TF_ORDERED`: the peer sends every `system -> app`
+// callback as a synchronous frame, whatever the AIDL says), so the owner
+// keeps the queue until it is *back in read*, i.e. until its handler returned.
+//
+// The owner used to give the queue up the moment it was empty, which is before
+// the handler of the delivery it had just made ran (the handler runs in
+// libbinder, after this ioctl returned). A second looper thread then took the
+// next transaction while the first handler was still executing, and the two
+// handlers raced: a broadcast and a NetworkCallback the host sent in that order
+// (`net.wifi` disabling Wi-Fi) reached the app's looper in the scheduler's
+// order, so `modfill-wifi`'s ordered log assertion failed one run in five. The
+// kernel gives one node one active async transaction at a time and frees the
+// next on `BC_FREE_BUFFER`; this driver's rule is stricter (one owner for the
+// whole queue, which MPROC8 needed for cross-node ordering), so it must hold
+// until the handler is done, not until the queue is empty.
+//
+// A plain `sync` delivery (a relayed app -> app call) does not extend the hold:
+// its handler may transact back into this process (a callback that needs another
+// looper thread), which the kernel serves with the waiting thread's transaction
+// stack and this driver cannot. The host's deliveries never nest like that.
+// Liveness: a handler that does not come back within `E3G_OWNER_LEASE_MS` loses
+// the hold (another thread then delivers the next transaction, as before this
+// change) -- a oneway handler that blocks on a later delivery must not wedge the
+// guest.
+#define E3G_TF_ORDERED 0x40000000u  // frame flag only: the host's delivery (never reaches libbinder)
+static int g_owner_held;
+static struct timespec g_owner_since;
+#define E3G_OWNER_LEASE_MS 250
 
 struct tstate {
     int is_looper;
@@ -346,8 +589,29 @@ static void node_ref_cmds(uint64_t weakref, uint64_t cookie) {
     cmd = BR_ACQUIRE;
     pend_append(&cmd, 4);
     pend_append(&pc, sizeof(pc));
-    DBG("node refs: BR_INCREFS+BR_ACQUIRE weakref=%llx cookie=%llx",
-        (unsigned long long)weakref, (unsigned long long)cookie);
+    TRACE("tid=%d node refs: BR_INCREFS+BR_ACQUIRE weakref=%llx cookie=%llx",
+          (int)syscall(__NR_gettid), (unsigned long long)weakref,
+          (unsigned long long)cookie);
+}
+
+// The kernel's last-release half of the same handshake: BR_RELEASE makes
+// libbinder drop the strong reference it took for BR_ACQUIRE (`decStrong`), and
+// BR_DECREFS drops the weak one. libbinder queues both until its next write
+// (`mPendingStrongDerefs`/`mPendingWeakDerefs`), so a node that is released and
+// immediately re-exported still sees the release before the new acquire.
+static void node_unref_cmds(uint64_t weakref, uint64_t cookie) {
+    struct binder_ptr_cookie pc;
+    pc.ptr = (binder_uintptr_t)weakref;
+    pc.cookie = (binder_uintptr_t)cookie;
+    uint32_t cmd = BR_RELEASE;
+    pend_append(&cmd, 4);
+    pend_append(&pc, sizeof(pc));
+    cmd = BR_DECREFS;
+    pend_append(&cmd, 4);
+    pend_append(&pc, sizeof(pc));
+    TRACE("tid=%d node unref: BR_RELEASE+BR_DECREFS weakref=%llx cookie=%llx",
+          (int)syscall(__NR_gettid), (unsigned long long)weakref,
+          (unsigned long long)cookie);
 }
 
 // ----------------------------------------------------------- (2) object table
@@ -357,58 +621,292 @@ static uint32_t node_wire_for(uint64_t binder, uint64_t cookie) {
     // between two writes of the same Java object (E3G saw this too); keying on
     // both produced two nodes with the same cookie, and an incoming
     // transaction could then target a stale weakref.
+    pthread_mutex_lock(&g_obj_mu);
     for (int i = 0; i < g.n_nodes; i++)
         if (g.nodes[i].cookie == cookie) {
-            // The node is rooted (BR_INCREFS/BR_ACQUIRE, see node_ref_cmds), so
-            // the same BBinder must always report the same weakref.  A mismatch
-            // means the object died and was replaced while our node still
-            // points at the old one: delivering to it would be a use-after-free.
-            if (g.nodes[i].binder != binder)
-                WARN("node wire=%u cookie=%llx: weakref changed %llx -> %llx "
-                     "(object replaced under a live node?)",
-                     g.nodes[i].wire, (unsigned long long)cookie,
-                     (unsigned long long)g.nodes[i].binder, (unsigned long long)binder);
-            return g.nodes[i].wire;
+            // The object behind this cookie was re-created.  A Java `Binder`
+            // only keeps a *weak* pointer to its `JavaBBinder`, and
+            // `JavaBBinderHolder::get` allocates a new one whenever that pointer
+            // no longer promotes (`android_util_Binder.cpp`); the new
+            // `JavaBBinder` also has a new `RefBase::weakref_impl`, so the
+            // node's cached `binder`/`cookie` now name a dead object.
+            //
+            // Delivering to them is a silent lost callback: libbinder runs
+            // `((RefBase::weakref_type*)tr.target.ptr)->attemptIncStrong(this)`
+            // and drops the transaction when that fails
+            // (`IPCThreadState.cpp`), so the host queues a delivery the app never
+            // sees.  The wire handle must stay (the remote side holds a
+            // reference to *it*), so re-point the node at the object that is
+            // registered now and root it exactly like a first export.
+            if (g.nodes[i].binder != binder) {
+                struct node* n = &g.nodes[i];
+                WARN("node wire=%u cookie=%llx: object replaced, refreshing weakref "
+                     "%llx -> %llx and re-rooting",
+                     n->wire, (unsigned long long)cookie,
+                     (unsigned long long)n->binder, (unsigned long long)binder);
+                n->binder = binder;
+                n->cookie = cookie;
+                n->rooted = 1;
+                node_ref_cmds(binder, cookie);
+            }
+            uint32_t wire = g.nodes[i].wire;
+            pthread_mutex_unlock(&g_obj_mu);
+            return wire;
         }
     if (g.n_nodes >= E3G_MAX_NODE) {
-        WARN("node table full");
+        pthread_mutex_unlock(&g_obj_mu);
+        WARN("node table full (%d nodes)", E3G_MAX_NODE);
         return 0;
     }
     struct node* n = &g.nodes[g.n_nodes++];
     n->binder = binder;
     n->cookie = cookie;
     n->wire = g.next_wire++;
-    DBG("node: local binder=%llx cookie=%llx -> wire=%u", (unsigned long long)binder,
-        (unsigned long long)cookie, n->wire);
+    n->strong = 1;   // the transaction that carries the object transfers one ref
+    n->rooted = 1;
+    uint32_t wire = n->wire;
+    pthread_mutex_unlock(&g_obj_mu);
+    TRACE("tid=%d node: local binder=%llx cookie=%llx -> wire=%u (nodes=%d)",
+          (int)syscall(__NR_gettid), (unsigned long long)binder, (unsigned long long)cookie, wire,
+          g.n_nodes);
     // Root the node before anybody can deliver to it (see node_ref_cmds).
     node_ref_cmds(binder, cookie);
-    return n->wire;
+    return wire;
 }
 
-static struct node* node_by_wire(uint32_t wire) {
+// Resolve a wire handle to the object it names *now*.  A copy, not a pointer:
+// another thread can refresh the node (see `node_wire_for`) between the lookup
+// and the delivery, and a delivery must use the object that is current when it
+// is built.
+// One F_REF operation from the host: the remote side took (`REF_ACQUIRE`) or
+// dropped (`REF_RELEASE`) a strong reference on the node behind `wire`. On the
+// last drop the node is released exactly like the kernel releases one: the
+// owner is told to drop its object (`BR_RELEASE` + `BR_DECREFS`) and the node's
+// wire handle stops naming anything, so a transaction that is already in flight
+// answers DEAD_OBJECT instead of reaching a stale object, and a later
+// re-export creates a fresh node and roots the object that carries it then.
+// A release the kernel defers: `binder_dec_node` runs `BR_RELEASE`/`BR_DECREFS`
+// on the node's own thread **after** the transactions already queued for it.
+// A userspace driver that dropped the node as soon as the peer's `F_REF`
+// arrived would answer a delivery that is still queued with `DEAD_OBJECT`
+// (measured: the geocoder's one-shot `IGeocodeListener.onResults` was released
+// in the same turn, and the app never got the answer). Deferred releases are
+// retried once the inbound queue no longer names that wire.
+static struct { uint32_t wire; uint32_t op; } g_deferred_refs[64];
+static int g_n_deferred_refs;
+
+// Is a queued inbound transaction addressed at `wire`? (caller holds `g.mu`)
+static int inbound_names_wire(uint32_t wire) {
+    for (struct inq* q = g.in_head; q; q = q->next)
+        if ((uint32_t)q->target == wire) return 1;
+    return 0;
+}
+
+static void node_apply_ref(uint32_t wire, uint32_t op) {
+    struct nodework work;
+    int have_work = 0;
+    pthread_mutex_lock(&g.mu);
+    int inbound = inbound_names_wire(wire);
+    pthread_mutex_unlock(&g.mu);
+    if (op == REF_RELEASE && inbound) {
+        // Keep the node rooted until the queued delivery has run.
+        pthread_mutex_lock(&g_obj_mu);
+        if (g_n_deferred_refs < (int)(sizeof(g_deferred_refs) / sizeof(g_deferred_refs[0]))) {
+            g_deferred_refs[g_n_deferred_refs].wire = wire;
+            g_deferred_refs[g_n_deferred_refs].op = op;
+            g_n_deferred_refs++;
+            pthread_mutex_unlock(&g_obj_mu);
+            TRACE("tid=%d node release wire=%u deferred (delivery queued)",
+                  (int)syscall(__NR_gettid), wire);
+            return;
+        }
+        pthread_mutex_unlock(&g_obj_mu);
+    }
+    pthread_mutex_lock(&g_obj_mu);
+    for (int i = 0; i < g.n_nodes; i++) {
+        struct node* n = &g.nodes[i];
+        if (n->wire != wire) continue;
+        if (op == REF_ACQUIRE) {
+            n->strong++;
+        } else if (op == REF_RELEASE) {
+            if (n->strong > 0) n->strong--;
+            if (n->strong == 0 && n->rooted) {
+                work.binder = n->binder;
+                work.cookie = n->cookie;
+                work.wire = n->wire;
+                have_work = 1;
+                n->rooted = 0;
+                // Drop the node: the wire no longer names an object.
+                g.nodes[i] = g.nodes[--g.n_nodes];
+            }
+        }
+        break;
+    }
+    if (have_work && g.n_node_work < (int)(sizeof(g.node_work) / sizeof(g.node_work[0])))
+        g.node_work[g.n_node_work++] = work;
+    else if (have_work)
+        WARN("node release queue full (%d entries); wire %u not unrooted",
+             g.n_node_work, wire);
+    pthread_mutex_unlock(&g_obj_mu);
+    if (have_work) {
+        TRACE("tid=%d node release wire=%u weakref=%llx cookie=%llx", (int)syscall(__NR_gettid),
+              work.wire, (unsigned long long)work.binder, (unsigned long long)work.cookie);
+        // Wake a parked reader (the looper that owns the object).
+        g_node_pending = 1;
+        pthread_mutex_lock(&g.mu);
+        pthread_cond_broadcast(&g.cv_txn);
+        pthread_mutex_unlock(&g.mu);
+    }
+}
+
+// Retry the releases that were deferred because a delivery was still queued for
+// the node. Called on the reader side once the queue no longer names them.
+static void drain_deferred_refs(void) {
+    for (;;) {
+        uint32_t wire = 0, op = 0;
+        int have = 0;
+        pthread_mutex_lock(&g_obj_mu);
+        if (g_n_deferred_refs > 0) {
+            g_n_deferred_refs--;
+            wire = g_deferred_refs[g_n_deferred_refs].wire;
+            op = g_deferred_refs[g_n_deferred_refs].op;
+            have = 1;
+        }
+        pthread_mutex_unlock(&g_obj_mu);
+        if (!have) return;
+        node_apply_ref(wire, op);
+    }
+}
+
+// Move every owed BR_RELEASE/BR_DECREFS into this thread's pending output.
+static void drain_node_work(void) {
+    struct nodework local[256];
+    int n = 0;
+    pthread_mutex_lock(&g_obj_mu);
+    n = g.n_node_work;
+    if (n > 0) {
+        memcpy(local, g.node_work, sizeof(local[0]) * (size_t)n);
+        g.n_node_work = 0;
+        g_node_pending = 0;
+    }
+    pthread_mutex_unlock(&g_obj_mu);
+    for (int i = 0; i < n; i++) node_unref_cmds(local[i].binder, local[i].cookie);
+}
+
+static int node_for_wire(uint32_t wire, struct node* out) {
+    int found = 0;
+    pthread_mutex_lock(&g_obj_mu);
     for (int i = 0; i < g.n_nodes; i++)
-        if (g.nodes[i].wire == wire) return &g.nodes[i];
-    return NULL;
+        if (g.nodes[i].wire == wire) {
+            *out = g.nodes[i];
+            found = 1;
+            break;
+        }
+    pthread_mutex_unlock(&g_obj_mu);
+    return found;
 }
 
 static uint32_t handle_for_peer_node(uint64_t peer_node) {
+    pthread_mutex_lock(&g_obj_mu);
+    uint32_t found = 0;
     for (int i = 0; i < g.n_handles; i++)
-        if (g.handles[i].peer_node == peer_node) return g.handles[i].h;
-    if (g.n_handles >= E3G_MAX_HANDLE) {
-        WARN("handle table full");
-        return 0;
+        if (g.handles[i].peer_node == peer_node) {
+            found = g.handles[i].h;
+            break;
+        }
+    if (found == 0) {
+        if (g.n_handles >= E3G_MAX_HANDLE) {
+            pthread_mutex_unlock(&g_obj_mu);
+            WARN("handle table full (%d handles)", E3G_MAX_HANDLE);
+            return 0;
+        }
+        struct handle* h = &g.handles[g.n_handles++];
+        h->h = g.next_handle++;
+        h->peer_node = peer_node;
+        found = h->h;
     }
-    struct handle* h = &g.handles[g.n_handles++];
-    h->h = g.next_handle++;
-    h->peer_node = peer_node;
-    DBG("handle: peer node=%llx -> handle=%u", (unsigned long long)peer_node, h->h);
-    return h->h;
+    pthread_mutex_unlock(&g_obj_mu);
+    DBG("handle: peer node=%llx -> handle=%u", (unsigned long long)peer_node, found);
+    return found;
 }
 
 static uint64_t peer_node_for_handle(uint32_t h) {
+    uint64_t peer = 0;
+    pthread_mutex_lock(&g_obj_mu);
     for (int i = 0; i < g.n_handles; i++)
-        if (g.handles[i].h == h) return g.handles[i].peer_node;
-    return 0;
+        if (g.handles[i].h == h) {
+            peer = g.handles[i].peer_node;
+            break;
+        }
+    pthread_mutex_unlock(&g_obj_mu);
+    return peer;
+}
+
+// -------------------------------------------------- death notifications (MPROC5b)
+// Stock libbinder asks for `BC_REQUEST_DEATH_NOTIFICATION(handle, cookie)` —
+// the cookie is the `BpBinder*` it wants back in `BR_DEAD_BINDER`, and the
+// handle is our local wire handle. The peer owns liveness (a node dies when the
+// process that owns it disconnects), so the driver only remembers the
+// registrations, turns `F_DEATH(target = peer node)` into one `BR_DEAD_BINDER`
+// per registration with that exact cookie, and lets `BC_DEAD_BINDER_DONE` fall
+// through (the registration is one-shot, as in the kernel).
+static void request_death(uint32_t handle, uint64_t cookie) {
+    for (int i = 0; i < E3G_MAX_DEATH; i++) {
+        if (g.deaths[i].used && g.deaths[i].handle == handle && g.deaths[i].cookie == cookie)
+            return;
+    }
+    for (int i = 0; i < E3G_MAX_DEATH; i++) {
+        if (!g.deaths[i].used) {
+            g.deaths[i].used = 1;
+            g.deaths[i].handle = handle;
+            g.deaths[i].cookie = cookie;
+            DBG("death: handle=%u cookie=%llx registered", handle, (unsigned long long)cookie);
+            return;
+        }
+    }
+    WARN("death registration table full (handle %u cookie %llx)", handle,
+         (unsigned long long)cookie);
+}
+
+static void clear_death(uint32_t handle, uint64_t cookie) {
+    for (int i = 0; i < E3G_MAX_DEATH; i++) {
+        if (g.deaths[i].used && g.deaths[i].handle == handle && g.deaths[i].cookie == cookie) {
+            g.deaths[i].used = 0;
+            DBG("death: handle=%u cookie=%llx cleared", handle, (unsigned long long)cookie);
+            return;
+        }
+    }
+}
+
+// Queue one cookie for a looper thread. Caller holds `g.mu`.
+static void queue_death(uint64_t cookie) {
+    if (g.death_count >= E3G_MAX_DEATH) {
+        WARN("death queue full, dropping cookie %llx", (unsigned long long)cookie);
+        return;
+    }
+    g.death_queue[g.death_tail] = cookie;
+    g.death_tail = (g.death_tail + 1) % E3G_MAX_DEATH;
+    g.death_count++;
+    pthread_cond_broadcast(&g.cv_txn);
+}
+
+// The peer reported that `node` died. Every local handle standing for that peer
+// node loses its registrations, one `BR_DEAD_BINDER` each. Caller holds `g.mu`.
+static int deaths_for_node(uint64_t node) {
+    int queued = 0;
+    for (int i = 0; i < g.n_handles; i++) {
+        if (g.handles[i].peer_node != node) continue;
+        uint32_t handle = g.handles[i].h;
+        for (int d = 0; d < E3G_MAX_DEATH; d++) {
+            if (!g.deaths[d].used || g.deaths[d].handle != handle) continue;
+            uint64_t cookie = g.deaths[d].cookie;
+            g.deaths[d].used = 0;
+            queue_death(cookie);
+            queued++;
+        }
+    }
+    DBG("death: node=%llx -> %d BR_DEAD_BINDER queued", (unsigned long long)node, queued);
+    return queued;
 }
 
 // Rewrite the flat objects of a parcel in place.
@@ -472,15 +970,15 @@ static int xform_objects(uint8_t* data, size_t dsize, uint8_t* offs, size_t osiz
                     o->binder = peer;
                     o->cookie = peer;
                 } else {
-                    struct node* n = node_by_wire(o->handle);
-                    if (n == NULL) {
+                    struct node local;
+                    if (!node_for_wire(o->handle, &local)) {
                         WARN("incoming handle %u is not a local node", o->handle);
                         break;
                     }
                     o->hdr.type = (o->hdr.type == BINDER_TYPE_HANDLE) ? BINDER_TYPE_BINDER
                                                                      : BINDER_TYPE_WEAK_BINDER;
-                    o->binder = n->binder;
-                    o->cookie = n->cookie;
+                    o->binder = local.binder;
+                    o->cookie = local.cookie;
                 }
                 break;
             }
@@ -507,15 +1005,26 @@ static int xform_objects(uint8_t* data, size_t dsize, uint8_t* offs, size_t osiz
 }
 
 // ------------------------------------------------- (3) transaction-buffer heap
-// FLAKEWIN: the heap lives in `txn_heap.c`, which takes its own lock. Two
-// binder threads allocate concurrently by design (a reply on the thread blocked
-// in `transact` and a peer-initiated `BR_TRANSACTION` on the looper thread are
-// the launch case: `addToDisplayAsUser`'s reply and
-// `IWindow.dispatchAppVisibility`), and the lock-free bump allocator that lived
-// here handed both the same offset, so one parcel overwrote the other in place.
-// The kernel's `binder_alloc` allocates under `alloc->mutex` for the same reason.
 //
-// Lock order: `txn_heap.c`'s own mutex is a leaf. `g.mu` is never held across a
+// FLAKEWIN: the heap is `txn_heap.c`, the one transaction-buffer heap for the
+// driver *and* the host tests. It takes a leaf mutex because two binder threads
+// allocate concurrently by design (the reply to a synchronous transaction is
+// built on the thread blocked in `transact` and a peer-initiated
+// `BR_TRANSACTION` on the receiving looper thread -- in a launch that is
+// `addToDisplayAsUser`'s reply and `IWindow.dispatchAppVisibility`), and the
+// lock-free bump allocator that used to live here handed both the same offset,
+// so the second `memcpy` overwrote the first parcel in place
+// (`ipcSetDataReference: unsupported type object ...`, `Adding window failed`).
+//
+// BINDERREF: that heap also *reclaims*. `BC_FREE_BUFFER` is the receiver's
+// release of the buffer (`IPCThreadState::freeBuffer`, run from the received
+// `Parcel`'s destructor), so from that point the bytes are free and the next
+// transaction that fits takes them, as `binder_alloc_new_buf` does over
+// `alloc->free_buffers`. Without it a session died once the bump pointer reached
+// the 1 MB mapping (the 60-of-101 registration wall: every registered callback
+// costs a transaction, and nothing was ever given back).
+//
+// Lock order: `txn_heap.c`'s mutex is a leaf. `g.mu` is never held across a
 // `txn_alloc`/`txn_free` call (callers reach the heap after unlocking, or before
 // taking it), so the two can never deadlock.
 #include "txn_heap.h"
@@ -532,6 +1041,12 @@ static int send_frame(uint32_t type, uint32_t seq, uint32_t code, uint32_t flags
     h.target = target;
     h.data_size = dsize;
     h.offsets_size = osize;
+    // v4: this driver's own identity. The guest's `getpid()` is namespace-local
+    // (`--unshare-pid`) and its euid is the sandbox uid, so the peer derives the
+    // caller from the accepted socket and the activity manager instead; these
+    // fields are evidence/diagnostics, never the peer's source of truth.
+    h.sender_pid = (uint32_t)getpid();
+    h.sender_euid = (uint32_t)geteuid();
     struct iovec iov[3];
     int niov = 0;
     iov[niov].iov_base = &h;
@@ -668,6 +1183,9 @@ static void dispatch_frame(uint32_t type, struct fhdr* h, uint8_t* payload, int*
             s->data_size = (size_t)h->data_size;
             s->offs_size = (size_t)h->offsets_size;
             s->status = h->code;
+            s->sender_pid = h->sender_pid;
+            s->sender_euid = h->sender_euid;
+            s->dead = (h->flags & E3G_RSP_DEAD) != 0;
             if (nfds > E3G_MAX_FD) nfds = E3G_MAX_FD;
             if (nfds > 0) memcpy(s->fds, fds, sizeof(int) * (size_t)nfds);
             s->nfds = nfds > 0 ? nfds : 0;
@@ -679,12 +1197,23 @@ static void dispatch_frame(uint32_t type, struct fhdr* h, uint8_t* payload, int*
             pthread_cond_broadcast(&g.cv_rsp);
             break;
         }
+        case F_DEATH: {
+            // MPROC5b: the peer owns liveness. One `BR_DEAD_BINDER` per
+            // registration with the cookie libbinder handed the driver in
+            // `BC_REQUEST_DEATH_NOTIFICATION` (its `BpBinder*`), which is
+            // exactly what `IPCThreadState::executeCommand(BR_DEAD_BINDER)`
+            // reads back before `proxy->sendObituary()`.
+            (void)deaths_for_node(h->target);
+            break;
+        }
         case F_TXN: {
             struct inq* q = calloc(1, sizeof(*q));
             q->target = h->target;
             q->seq = h->seq;
             q->code = h->code;
             q->flags = h->flags;
+            q->sender_pid = h->sender_pid;
+            q->sender_euid = h->sender_euid;
             q->data_size = h->data_size;
             q->offs_size = h->offsets_size;
             q->data = malloc((size_t)h->data_size + 8);
@@ -701,6 +1230,18 @@ static void dispatch_frame(uint32_t type, struct fhdr* h, uint8_t* payload, int*
             pthread_cond_broadcast(&g.cv_txn);
             break;
         }
+        case F_REF:
+            // `target` is the driver wire handle, `code` the operation.
+            pthread_mutex_unlock(&g.mu);
+            node_apply_ref((uint32_t)h->target, h->code);
+            pthread_mutex_lock(&g.mu);
+            break;
+        case F_HELLO:
+            // The peer answered our hello; the version negotiation happened at
+            // connect time (see connect_peer), so this is informational.
+            WARN("unexpected hello from peer (version %u, driver speaks %d)", h->seq,
+                 ACOS_WIRE_VERSION);
+            break;
         default:
             WARN("unexpected frame type %u", type);
             break;
@@ -729,6 +1270,38 @@ static int connect_peer(void) {
         return -1;
     }
     g.sock = s;
+    // Handshake before any other frame: `seq` = wire protocol version, `code` =
+    // this connection's app process tag (a driver wire handle is only unique
+    // inside its own process, so the peer needs the tag to route a delivery),
+    // `data` = the process name. The peer must not send an `F_REF`/`F_DEATH`
+    // (or use any later frame meaning) to a driver that does not speak it, and
+    // this driver refuses to guess what an older peer means either.
+    {
+        const char* tag_env = getenv("ACOS_PROCESS_TAG");
+        unsigned long tag = 0;
+        if (tag_env != NULL && tag_env[0] != '\0') {
+            char* end = NULL;
+            unsigned long parsed = strtoul(tag_env, &end, 10);
+            if (end != tag_env && *end == '\0' && parsed <= 63) {
+                tag = parsed;
+            } else {
+                WARN("ACOS_PROCESS_TAG=%s is not a tag (0..63); using 0", tag_env);
+            }
+        }
+        const char* name = getenv("ACOS_PROCESS_NAME");
+        if (name == NULL) name = "primary";
+        size_t nlen = strlen(name);
+        if (nlen > 64) nlen = 64;
+        if (send_frame(F_HELLO, ACOS_WIRE_VERSION, (uint32_t)tag, 0, 0, name, nlen, NULL, 0, NULL,
+                       0) != 0) {
+            WARN("hello to peer failed; the connection is unusable");
+            close(s);
+            g.sock = -1;
+            return -1;
+        }
+        TRACE("tid=%d hello: wire protocol v%d tag=%lu name=%s", (int)syscall(__NR_gettid),
+              ACOS_WIRE_VERSION, tag, name);
+    }
     pthread_create(&g.reader, NULL, reader_main, NULL);
     g.reader_started = 1;
     DBG("connected to peer at %s", path);
@@ -748,6 +1321,13 @@ static void driver_init(int fd) {
         g.next_handle = 1;
         pthread_mutex_init(&g.mu, NULL);
         pthread_cond_init(&g.cv_txn, NULL);
+        {
+            pthread_condattr_t own_attr;
+            pthread_condattr_init(&own_attr);
+            pthread_condattr_setclock(&own_attr, CLOCK_MONOTONIC);
+            pthread_cond_init(&g.cv_own, &own_attr);
+            pthread_condattr_destroy(&own_attr);
+        }
         pthread_cond_init(&g.cv_rsp, NULL);
         g.map = mmap(NULL, BINDER_VM_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
         if (g.map == MAP_FAILED) {
@@ -822,6 +1402,9 @@ static int emit_transaction(const struct binder_transaction_data* tr, int is_rep
     DBG("%s seq=%u code=%u flags=0x%x target=%llu size=%zu/%zu fds=%d",
         is_reply ? "REPLY" : "REQ", seq, tr->code, tr->flags, (unsigned long long)target, dsize,
         osize, nfds);
+    if (is_reply)
+        TRACE("tid=%d REPLY seq=%u flags=0x%x size=%llu/%llu", (int)syscall(__NR_gettid), seq,
+              tr->flags, (unsigned long long)dsize, (unsigned long long)osize);
     return rc;
 }
 
@@ -832,12 +1415,25 @@ static int deliver_incoming(void) {
     g.in_head = q->next;
     if (!g.in_head) g.in_tail = NULL;
     if (!g.in_head) pthread_cond_broadcast(&g.cv_txn);
-    struct node* n = node_by_wire((uint32_t)q->target);
-    if (n == NULL) {
+    struct node local;
+    if (!node_for_wire((uint32_t)q->target, &local)) {
+        // The node is gone (never exported, or released by the remote side).
+        // The kernel answers such a transaction with BR_DEAD_REPLY on the
+        // sender; a userspace driver must do the same, because a silently
+        // dropped callback is indistinguishable from a callback the app
+        // handled. `Binder.getCallingPid()`-style status replies are the
+        // host's contract here: F_REP + TF_STATUS_CODE + DEAD_OBJECT (-32).
         pthread_mutex_unlock(&g.mu);
-        WARN("incoming transaction for unknown node %llu",
-             (unsigned long long)q->target);
+        WARN("incoming transaction seq=%u for unknown node %llu: answering DEAD_OBJECT",
+             q->seq, (unsigned long long)q->target);
+        // -32 = DEAD_OBJECT (binder/Status.h); the value libbinder reports to
+        // the caller when the target's process/node is gone.
+        uint32_t status = (uint32_t)-32;
+        int err = send_frame(F_REP, q->seq, (uint32_t)status, TF_STATUS_CODE, 0, &status,
+                             sizeof(status), NULL, 0, NULL, 0);
+        if (err != 0) WARN("could not answer seq=%u with DEAD_OBJECT", q->seq);
         pthread_mutex_lock(&g.mu);
+        g_owner_held = 0;
         free(q->data);
         free(q);
         return -1;
@@ -847,10 +1443,14 @@ static int deliver_incoming(void) {
     memcpy(fds, q->fds, sizeof(int) * (size_t)q->nfds);
     int nfds = q->nfds;
     uint8_t* offs = q->data + dsize;
+    int hold = (q->flags & (TF_ONE_WAY | E3G_TF_ORDERED)) != 0;
+    g_owner_held = hold;
+    if (hold) clock_gettime(CLOCK_MONOTONIC, &g_owner_since);
     pthread_mutex_unlock(&g.mu);
     xform_objects(q->data, dsize, offs, osize, 1, fds, &nfds);
     void* buf = txn_alloc(dsize + 8 + osize + 8);
     if (buf == NULL) {
+        uint32_t seq = q->seq;
         // ART_RESOURCE_LIMIT: named, not silent. The oneway delivery is dropped
         // (the kernel driver fails `binder_alloc_new_buf` the same way) and the
         // caller's frame counter records it.
@@ -859,6 +1459,18 @@ static int deliver_incoming(void) {
         free(q->data);
         free(q);
         pthread_mutex_lock(&g.mu);
+        // The kernel answers a transaction it cannot find a buffer for with
+        // BR_FAILED_REPLY on the sender. Here the sender is the host, and the
+        // driver has no reply slot of its own, so answer the F_TXN instead of
+        // dropping it: a delivery the driver could not even copy is evidence,
+        // never a silently lost callback. -12 = ENOMEM.
+        pthread_mutex_unlock(&g.mu);
+        WARN("no transaction buffer for incoming seq=%u (%zu+%zu bytes): answering NO_MEMORY",
+             seq, dsize, osize);
+        uint32_t status = (uint32_t)-12;
+        send_frame(F_REP, seq, status, TF_STATUS_CODE, 0, &status, sizeof(status), NULL, 0, NULL, 0);
+        pthread_mutex_lock(&g.mu);
+        g_owner_held = 0;
         return -1;
     }
     memcpy(buf, q->data, dsize);
@@ -866,12 +1478,17 @@ static int deliver_incoming(void) {
     if (osize) memcpy(obuf, offs, osize);
     struct binder_transaction_data tr;
     memset(&tr, 0, sizeof(tr));
-    tr.target.ptr = n->binder;
-    tr.cookie = n->cookie;
+    tr.target.ptr = local.binder;
+    tr.cookie = local.cookie;
     tr.code = q->code;
-    tr.flags = q->flags;
-    tr.sender_pid = 0;
-    tr.sender_euid = 0;
+    tr.flags = q->flags & ~E3G_TF_ORDERED;
+    // v4: `Binder.getCallingPid()`/`getCallingUid()` inside the app's
+    // `onTransact` read exactly these two fields (`IPCThreadState::
+    // executeCommand(BR_TRANSACTION)` -> `setCallingWorkSourceUid`). The peer
+    // filled them from the F_TXN header: `system_server` for a host delivery,
+    // the calling app's real uid/pid for a relayed guest -> guest transaction.
+    tr.sender_pid = (int32_t)q->sender_pid;
+    tr.sender_euid = q->sender_euid;
     tr.data_size = dsize;
     tr.offsets_size = osize;
     tr.data.ptr.buffer = (uintptr_t)buf;
@@ -887,10 +1504,14 @@ static int deliver_incoming(void) {
     T.reply_to_seq = q->seq;
     T.have_reply_to = 1;
     DBG("BR_TRANSACTION seq=%u code=%u flags=0x%x node=%llx/%llx size=%zu/%zu", q->seq, q->code,
-        q->flags, (unsigned long long)n->binder, (unsigned long long)n->cookie, dsize, osize);
+        q->flags, (unsigned long long)local.binder, (unsigned long long)local.cookie, dsize, osize);
+    TRACE("tid=%d deliver seq=%u wire=%u code=%u weakref=%llx cookie=%llx",
+          (int)syscall(__NR_gettid), q->seq, (uint32_t)q->target, q->code,
+          (unsigned long long)local.binder, (unsigned long long)local.cookie);
     free(q->data);
     free(q);
     pthread_mutex_lock(&g.mu);
+    if (hold) clock_gettime(CLOCK_MONOTONIC, &g_owner_since);
     return 0;
 }
 
@@ -912,28 +1533,33 @@ static struct fdset g_fdsets[E3G_MAX_FDSETS];
 static void remember_fds(void* buf, const int* fds, int n) {
     if (n <= 0 || buf == NULL) return;
     if (n > E3G_MAX_FD) n = E3G_MAX_FD;
+    pthread_mutex_lock(&g_slab_mu);
     for (int i = 0; i < E3G_MAX_FDSETS; i++) {
         if (g_fdsets[i].buf == NULL) {
             g_fdsets[i].buf = buf;
             memcpy(g_fdsets[i].fds, fds, sizeof(int) * (size_t)n);
             g_fdsets[i].n = n;
+            pthread_mutex_unlock(&g_slab_mu);
             return;
         }
     }
+    pthread_mutex_unlock(&g_slab_mu);
     WARN("reply fd table full, closing %d descriptors early", n);
     for (int i = 0; i < n; i++) close(fds[i]);
 }
 
 static void release_fds(void* buf) {
     if (buf == NULL) return;
+    pthread_mutex_lock(&g_slab_mu);
     for (int i = 0; i < E3G_MAX_FDSETS; i++) {
         if (g_fdsets[i].buf == buf) {
             for (int j = 0; j < g_fdsets[i].n; j++) close(g_fdsets[i].fds[j]);
             g_fdsets[i].buf = NULL;
             g_fdsets[i].n = 0;
-            return;
+            break;
         }
     }
+    pthread_mutex_unlock(&g_slab_mu);
 }
 
 static int build_reply(struct slot* s) {
@@ -975,8 +1601,10 @@ static int build_reply(struct slot* s) {
     tr.cookie = 0;
     tr.code = 0;
     tr.flags = 0;
-    tr.sender_pid = 0;
-    tr.sender_euid = 0;
+    // v4: the reply's sender is the process that sent it (the host), the same
+    // thing the kernel reports for BR_REPLY.
+    tr.sender_pid = (int32_t)s->sender_pid;
+    tr.sender_euid = s->sender_euid;
     tr.data_size = dsize;
     tr.offsets_size = osize;
     tr.data.ptr.buffer = (uintptr_t)buf;
@@ -1128,7 +1756,16 @@ static void handle_commands(const uint8_t* wbuf, size_t wsize) {
             case BC_INCREFS_DONE:
             case BC_ACQUIRE_DONE: {
                 if (pos + 16 > wsize) return;
+                struct binder_ptr_cookie pc;
+                memcpy(&pc, wbuf + pos, sizeof(pc));
                 pos += 16;
+                // libbinder's acknowledgement of BR_INCREFS/BR_ACQUIRE is the
+                // only proof that the object behind a node was actually
+                // incWeak'ed/incStrong'ed. The kernel uses it to clear
+                // `pending_*_ref` and to decide whether the node is rooted.
+                TRACE("tid=%d node %s weakref=%llx cookie=%llx", (int)syscall(__NR_gettid),
+                      cmd == BC_ACQUIRE_DONE ? "ACQUIRE_DONE" : "INCREFS_DONE",
+                      (unsigned long long)pc.ptr, (unsigned long long)pc.cookie);
                 break;
             }
             case BC_ATTEMPT_ACQUIRE: {
@@ -1146,16 +1783,30 @@ static void handle_commands(const uint8_t* wbuf, size_t wsize) {
                 break;
             case BC_REQUEST_DEATH_NOTIFICATION:
             case BC_CLEAR_DEATH_NOTIFICATION: {
+                // `struct binder_handle_cookie { u32 handle; u64 cookie; }` is
+                // packed, so the body is exactly 12 bytes. The cookie is the
+                // `BpBinder*` libbinder wants back in `BR_DEAD_BINDER`.
                 if (pos + 12 > wsize) return;
-                pos += 12;  // struct binder_handle_cookie is packed
-                DBG("%s (recorded, peer liveness not modelled)",
-                    cmd == BC_REQUEST_DEATH_NOTIFICATION ? "BC_REQUEST_DEATH_NOTIFICATION"
-                                                         : "BC_CLEAR_DEATH_NOTIFICATION");
+                uint32_t handle;
+                uint64_t cookie;
+                memcpy(&handle, wbuf + pos, 4);
+                memcpy(&cookie, wbuf + pos + 4, 8);
+                pos += 12;
+                if (cmd == BC_REQUEST_DEATH_NOTIFICATION)
+                    request_death(handle, cookie);
+                else
+                    clear_death(handle, cookie);
                 break;
             }
             case BC_DEAD_BINDER_DONE: {
+                // `IPCThreadState` answers every `BR_DEAD_BINDER` with this and
+                // the pointer it was given. The registration is already gone
+                // (one-shot, as in the kernel), so the command is consumed.
                 if (pos + 8 > wsize) return;
+                uint64_t cookie;
+                memcpy(&cookie, wbuf + pos, 8);
                 pos += 8;
+                DBG("BC_DEAD_BINDER_DONE cookie=%llx", (unsigned long long)cookie);
                 break;
             }
             default:
@@ -1178,6 +1829,9 @@ static size_t br_cmd_len(const uint8_t* p, size_t avail) {
         case BR_SPAWN_LOOPER:
         case BR_DEAD_REPLY:
             return 4;
+        case BR_DEAD_BINDER:
+            // MPROC5b: the registered death cookie (`BpBinder*`).
+            return 4 + sizeof(binder_uintptr_t);
         case BR_INCREFS:
         case BR_ACQUIRE:
         case BR_RELEASE:
@@ -1232,6 +1886,10 @@ static int e3g_write_read(struct binder_write_read* bwr) {
     }
     if (bwr->read_size == 0) return 0;
 
+    // Node work comes first, like `binder_thread_read` (which serves
+    // `proc->todo` node work before it parks the thread): a released node's
+    // BR_RELEASE/BR_DECREFS must reach the guest even if nothing else happens.
+    drain_node_work();
     if (T.pend_len) {
         flush_pend(bwr);
         return 0;
@@ -1255,23 +1913,27 @@ static int e3g_write_read(struct binder_write_read* bwr) {
         T.reply_seq = -1;
         // BR_TRANSACTION_COMPLETE was already handed out in the previous ioctl
         // (or is still pending); make sure it precedes BR_REPLY.
-        pend_cmd(BR_TRANSACTION_COMPLETE);
-        if (done.status != 0 || done.data == NULL) {
+            pend_cmd(BR_TRANSACTION_COMPLETE);
+        if (done.dead) {
+            // A transaction whose target died is `BR_DEAD_REPLY`: libbinder
+            // throws `DeadObjectException` instead of a generic runtime error.
+            uint32_t cmd = BR_DEAD_REPLY;
+            pend_append(&cmd, 4);
+        } else if (done.status != 0 || done.data == NULL) {
             uint32_t cmd = BR_FAILED_REPLY;
             pend_append(&cmd, 4);
         } else if (build_reply(&done) != 0) {
             // FLAKEWIN: the reply could not be allocated (transaction buffer
             // exhausted, named by the `ART_RESOURCE_LIMIT` warning inside
             // `build_reply`). libbinder turns `BR_FAILED_REPLY` into
-            // `RemoteException("Transaction failed")` on the caller's side,
-            // which AOSP handles — replying with nothing would leave the guest
-            // blocked in `waitForResponse` for a reply that can never come.
+            // `RemoteException("Transaction failed")` on the caller's side; a
+            // reply that never comes would leave the guest blocked in
+            // `waitForResponse` (that is a wedged `transact`).
             uint32_t cmd = BR_FAILED_REPLY;
             pend_append(&cmd, 4);
-        } else {
-            free(done.data);
-            free(done.offs);
         }
+        free(done.data);
+        free(done.offs);
         flush_pend(bwr);
         return 0;
     }
@@ -1293,8 +1955,46 @@ static int e3g_write_read(struct binder_write_read* bwr) {
     // an F_TXN frame is queued, so an untimed wait cannot miss it and adds no
     // latency; process teardown ends the thread. Non-loopers already returned
     // above and never park here.
-    while (g.in_head == NULL) {
+    {
+        // Back in read: the handler of this thread's last delivery returned, so
+        // the queue it owned is free for the next transaction (see
+        // `g_owner_held`). Without this the owner would park below still
+        // holding it.
+        pid_t me = (pid_t)syscall(__NR_gettid);
+        if (g_queue_owner == me) {
+            g_owner_held = 0;
+            if (g.in_head == NULL) {
+                g_queue_owner = 0;
+                pthread_cond_broadcast(&g.cv_own);
+            }
+        }
+    }
+    while (g.in_head == NULL && !g_node_pending && g.death_count == 0) {
         pthread_cond_wait(&g.cv_txn, &g.mu);
+    }
+    // MPROC5b: death notifications are queued by `F_DEATH` on the reader thread
+    // and delivered here, on the thread that dispatches callbacks. They do not
+    // use a reply slot: `BR_DEAD_BINDER` carries the registered cookie.
+    if (g.death_count > 0) {
+        while (g.death_count > 0) {
+            uint64_t cookie = g.death_queue[g.death_head];
+            g.death_head = (g.death_head + 1) % E3G_MAX_DEATH;
+            g.death_count--;
+            uint32_t cmd = BR_DEAD_BINDER;
+            pend_append(&cmd, 4);
+            pend_append(&cookie, 8);
+        }
+        pthread_mutex_unlock(&g.mu);
+        flush_pend(bwr);
+        pthread_mutex_lock(&g.mu);
+    }
+    if (g.in_head == NULL) {
+        // Only node work (or nothing) woke us: hand the release commands out
+        // and park again.
+        pthread_mutex_unlock(&g.mu);
+        drain_node_work();
+        if (T.pend_len) flush_pend(bwr);
+        return 0;
     }
     // Peer-initiated transactions are delivered only to a thread that has
     // entered the binder looper.  A thread that is merely transacting must
@@ -1304,15 +2004,65 @@ static int e3g_write_read(struct binder_write_read* bwr) {
         bwr->read_consumed = 0;
         return 0;
     }
-    int have = g.in_head != NULL;
+    // A deferred node release is retried only when nothing queued names it any
+    // more; `drain_deferred_refs` re-checks each entry.
+    if (g.in_head == NULL) {
+        pthread_mutex_unlock(&g.mu);
+        drain_deferred_refs();
+        pthread_mutex_lock(&g.mu);
+    }
+    pid_t self_tid = (pid_t)syscall(__NR_gettid);
+    if (g_queue_owner == self_tid) {
+        // Back in read: the handler of the last delivery returned.
+        g_owner_held = 0;
+    }
+    while (g_queue_owner != 0 && g_queue_owner != self_tid) {
+        if (!g_owner_held) {
+            // Another thread owns the queue and delivers its transactions in order.
+            pthread_mutex_unlock(&g.mu);
+            bwr->read_consumed = 0;
+            return 0;
+        }
+        // The owner is still running the handler of a oneway delivery: the next
+        // transaction waits for it (bounded, see `E3G_OWNER_LEASE_MS`).
+        struct timespec until = g_owner_since;
+        until.tv_nsec += (long)E3G_OWNER_LEASE_MS * 1000000L;
+        until.tv_sec += until.tv_nsec / 1000000000L;
+        until.tv_nsec %= 1000000000L;
+        struct timespec now;
+        clock_gettime(CLOCK_MONOTONIC, &now);
+        if (now.tv_sec > until.tv_sec ||
+            (now.tv_sec == until.tv_sec && now.tv_nsec >= until.tv_nsec)) {
+            WARN("oneway handler on tid %d held the incoming queue for %d ms: delivering the "
+                 "next transaction on tid %d",
+                 (int)g_queue_owner, E3G_OWNER_LEASE_MS, (int)self_tid);
+            break;
+        }
+        pthread_cond_timedwait(&g.cv_own, &g.mu, &until);
+        if (g.in_head == NULL) {
+            // The owner drained the queue while this thread waited.
+            pthread_mutex_unlock(&g.mu);
+            bwr->read_consumed = 0;
+            return 0;
+        }
+    }
+    g_queue_owner = self_tid;
     int delivered = -1;
-    if (have) delivered = deliver_incoming();
+    if (g.in_head != NULL) delivered = deliver_incoming();
+    if (g.in_head == NULL && !g_owner_held) {
+        g_queue_owner = 0;
+        pthread_cond_broadcast(&g.cv_own);
+    }
     pthread_mutex_unlock(&g.mu);
+    // The delivery is in libbinder's hands now, so a release that was held back
+    // for that node may run.
+    drain_deferred_refs();
     if (delivered == 0) flush_pend(bwr);
     else bwr->read_consumed = 0;
     return 0;
 }
 
+#ifndef E3G_HOST_TEST
 // --------------------------------------------------- (4) fd / ioctl interception
 static const char* kBinderPaths[] = {"/dev/binder", "/dev/hwbinder", "/dev/vndbinder",
                                      "/dev/binderfs/binder", NULL};
@@ -1387,7 +2137,13 @@ int __open_2(const char* path, int flags) {
     return real(path, flags);
 }
 
-int ioctl(int fd, int request, ...) {
+#ifdef ACOS_DRIVER_HOST_TEST
+typedef unsigned long ioctl_request_t;   // glibc: unsigned long
+#else
+typedef int ioctl_request_t;             // bionic: int
+#endif
+
+int ioctl(int fd, ioctl_request_t request, ...) {
     va_list ap;
     va_start(ap, request);
     void* arg = va_arg(ap, void*);
@@ -1423,6 +2179,7 @@ int ioctl(int fd, int request, ...) {
 }
 
 // --------------------------------------------------------- (4) JNI bridge
+#ifndef ACOS_DRIVER_HOST_TEST
 static void mangle_android_register(const char* plain, char* out, size_t n) {
     snprintf(out, n, "_ZN7android%zu%sEP7_JNIEnv", strlen(plain), plain);
 }
@@ -1476,6 +2233,8 @@ JNIEXPORT jint JNICALL Java_dev_acos_e3g_Nat_register(JNIEnv* env, jclass klass,
     (*env)->ReleaseStringUTFChars(env, name, plain);
     return rc;
 }
+
+#endif  // !ACOS_DRIVER_HOST_TEST (JNI bridge)
 
 // ------------------------------------------------------- fault diagnostics
 // `E3G_CRASH=1` installs a SIGSEGV/SIGBUS/SIGABRT handler that prints the fault
@@ -1533,7 +2292,7 @@ static void crash_print_map(uintptr_t a) {
 
 static void crash_handler(int sig, siginfo_t* si, void* ucv) {
     uintptr_t ip = 0, sp = 0, bp = 0, rdi = 0, rsi = 0;
-#if defined(__x86_64__)
+#if defined(__x86_64__) && !defined(ACOS_DRIVER_HOST_TEST)
     if (ucv != NULL) {
         // bionic x86_64: mcontext_t is { gregset_t gregs; ... } indexed by REG_*.
         struct ucontext* uc = (struct ucontext*)ucv;
@@ -1603,6 +2362,7 @@ static void* __attribute__((noinline)) crash_install(void) {
     return NULL;
 }
 
+#ifndef ACOS_DRIVER_HOST_TEST
 // Attach a native thread to the VM and turn it into a binder looper:
 // IPCThreadState::self()->joinThreadPool(true).  This is the thread that
 // receives peer-initiated BR_TRANSACTIONs (reverse calls into a Java Binder).
@@ -1930,3 +2690,6 @@ JNIEXPORT jint JNICALL Java_dev_acos_art_Nat_crashTest(JNIEnv* env, jclass klass
     *unmapped = 0xacc0deadUL;
     return 0;
 }
+
+#endif  // !ACOS_DRIVER_HOST_TEST (JNI bridge / AndroidRuntime bootstrap)
+#endif  // !E3G_HOST_TEST (property table, framework natives)

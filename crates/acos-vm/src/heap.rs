@@ -20,11 +20,20 @@ pub enum BuiltinData {
     /// `java.util.TreeMap` (entries kept sorted by key).
     TreeMap(Vec<(Handle, Handle)>),
     /// `java.util.Map$Entry`.
-    Entry { key: Handle, value: Handle },
+    Entry {
+        key: Handle,
+        value: Handle,
+    },
     /// A snapshot iterator over a list/set of elements.
-    Iterator { items: Vec<Handle>, index: usize },
+    Iterator {
+        items: Vec<Handle>,
+        index: usize,
+    },
     /// `java.util.EnumSet`.
-    EnumSet { enum_class: u32, elements: Vec<Handle> },
+    EnumSet {
+        enum_class: u32,
+        elements: Vec<Handle>,
+    },
     /// A live `java.lang.Thread`.
     Thread(ThreadData),
     /// `java.lang.StackTraceElement`.
@@ -283,7 +292,9 @@ fn object_size(obj: &Object) -> usize {
             BuiltinData::Thread(_) => 32,
             BuiltinData::Entry { .. } => 8,
             BuiltinData::StackTraceElement(d) => {
-                d.class_name.len() + d.method_name.len() + d.file_name.as_ref().map_or(0, |s| s.len())
+                d.class_name.len()
+                    + d.method_name.len()
+                    + d.file_name.as_ref().map_or(0, |s| s.len())
             }
         },
         Object::Class(_) => 16,

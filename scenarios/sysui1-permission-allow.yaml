@@ -1,0 +1,153 @@
+# SYSUI1: the permission dialog is the guest system app (ADR-0029 amendment).
+#
+# The probe calls the framework's own `Activity.requestPermissions(CAMERA,
+# ACCESS_FINE_LOCATION, 7)`. That builds
+# `PackageManager.buildRequestPermissionsIntent` and starts it at
+# `com.android.permissioncontroller` for a result. The host resolves the intent to
+# the installed system app, spawns its process lazily (multi-process launcher),
+# launches `GrantPermissionsActivity` with a host-built `ClientTransaction`, and
+# the served tree is that system app's window: the requested permissions' rows and
+# the Allow/Deny answers.
+#
+# Tap Allow: the dialog sets the AOSP result shape
+# (`EXTRA_REQUEST_PERMISSIONS_NAMES` + `EXTRA_REQUEST_PERMISSIONS_RESULTS`) and
+# finishes; the host delivers it as `ActivityResultItem` + `ResumeActivityItem`
+# (`resultWho = "@android:requestPermissions:"`), so the probe's
+# `onRequestPermissionsResult` runs, and the host updates the one runtime-permission
+# table the two `checkPermission` paths and the `permissions` module read.
+#
+# The second request asks again: every permission is granted now, so the
+# controller returns the granted results without drawing anything
+# (`allRequestedPermissionsGranted`) — the "already granted" short-circuit.
+version: 1
+name: sysui1-permission-allow
+description: >-
+  requestPermissions -> the com.android.permissioncontroller system app's dialog
+  (allow/deny, both permissions in one request) -> tap Allow -> onRequestPermissionsResult
+  granted and the permission store updated; a second request short-circuits without a
+  dialog because both are already granted.
+app: fixtures/build/apps/perm-probe.apk
+engine: art
+fallback: report-and-escalate
+api_level: 34
+isolation: process
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+capabilities:
+  - ui.offscreen
+  - ui.text
+services:
+  # Dialogs are the `real` profile's default; nothing is pre-decided here, so the
+  # request must reach the dialog.
+  - id: system.permissions
+    profile: real
+expectation: pass
+budgets:
+  memory_mib: 1024
+  wall_ms: 240000
+steps:
+  - launch:
+      activity: dev.acos.fixtures.permprobe/.MainActivity
+      clear_state: true
+
+  - wait_for:
+      selector: {id: state}
+      timeout_ms: 20000
+
+  - assert_text:
+      selector: {id: state}
+      text: {exact: "state before: CAMERA=-1 LOCATION=-1"}
+
+  # The request goes through the framework; the dialog is the system app's window.
+  - tap:
+      selector: {id: request}
+
+  - wait_for:
+      selector: {id: allow_button}
+      timeout_ms: 30000
+
+  # The system app's window is the served one, and it shows the request.
+  - assert_windows:
+      order: [application]
+      focus: application
+      focus_type: TYPE_BASE_APPLICATION
+      types: [TYPE_BASE_APPLICATION]
+
+  - assert_text:
+      selector: {id: title}
+      text: {exact: "Allow dev.acos.fixtures.permprobe to access?"}
+
+  # Both permissions of the one request are listed with AOSP's own labels:
+  # the dialog calls `getPermissionInfo(...).loadLabel(...)`, which answers the
+  # reply's `nonLocalizedLabel` (`permlab_camera`, `permlab_accessFineLocation`)
+  # instead of falling back to the permission name's last segment (SYSUI3B).
+  - assert_text:
+      selector: {id: permission_0}
+      text: {exact: "take pictures and videos"}
+      timeout_ms: 10000
+
+  - assert_text:
+      selector: {id: permission_1}
+      text: {exact: "access precise location only in the foreground"}
+      timeout_ms: 10000
+
+  - assert_text:
+      selector: {id: allow_button}
+      text: {exact: "Allow"}
+
+  - assert_text:
+      selector: {id: deny_button}
+      text: {exact: "Deny"}
+
+  # Allow: the AOSP result shape reaches the app's own callback.
+  - tap:
+      selector: {id: allow_button}
+
+  - wait_for:
+      selector: {id: state}
+      timeout_ms: 30000
+
+  - assert_text:
+      selector: {id: result}
+      text: {exact: "result request=7 n=2 m=2 CAMERA=0 LOCATION=0"}
+      timeout_ms: 20000
+
+  - assert_text:
+      selector: {id: state}
+      text: {exact: "state after: CAMERA=0 LOCATION=0"}
+      timeout_ms: 20000
+
+  # The store the two checkPermission paths read has both grants (USER_SET, so
+  # the user answered rather than an install-time default).
+  - service_ctl:
+      module: system.permissions
+      op: state
+      expect:
+        ok: true
+        op: state
+        value:
+          permissions:
+            - permission: android.permission.ACCESS_FINE_LOCATION
+              state: granted
+              granted: true
+              user_set: true
+              never_ask_again: false
+              requested: true
+            - permission: android.permission.CAMERA
+              state: granted
+              granted: true
+              user_set: true
+              never_ask_again: false
+              requested: true
+
+  - assert_log:
+      since_previous_step: false
+      timeout_ms: 20000
+      ordered: true
+      patterns:
+        - '^created names=android\.permission\.CAMERA,android\.permission\.ACCESS_FINE_LOCATION granted= fixed= package=dev\.acos\.fixtures\.permprobe$'
+        - '^allow names=android\.permission\.CAMERA,android\.permission\.ACCESS_FINE_LOCATION results=granted,granted never_ask_again=false$'
+        - '^result request=7 n=2 m=2 CAMERA=0 LOCATION=0$'

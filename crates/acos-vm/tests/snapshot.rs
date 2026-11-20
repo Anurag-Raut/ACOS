@@ -24,9 +24,7 @@ fn repo_root() -> PathBuf {
 /// run in debug.
 fn guard_heavy_real() -> bool {
     if cfg!(debug_assertions) && std::env::var_os("ACOS_SNAPSHOT_FULL_REAL").is_none() {
-        eprintln!(
-            "SKIP full real corpus in debug (release-only; set ACOS_SNAPSHOT_FULL_REAL=1 to force)"
-        );
+        acos_test_support::require_prereq(false, "guard_heavy_real", "full real corpus in debug (release-only; set ACOS_SNAPSHOT_FULL_REAL=1 to force)");
         return true;
     }
     false
@@ -97,8 +95,7 @@ fn fresh_run(name: &str, corelib: CoreLib, gc_stress: bool) -> Output {
 
 fn for_each_case(corelib: CoreLib, gc_stress: bool, mut f: impl FnMut(&str, &[u8])) {
     let names = fixture_names();
-    if names.is_empty() {
-        eprintln!("SKIP snapshot differential: fixtures/build/dexprogs is absent");
+    if acos_test_support::require_prereq(!(names.is_empty()), "for_each_case", "snapshot differential: fixtures/build/dexprogs is absent").is_none() {
         return;
     }
     for name in &names {
@@ -118,9 +115,7 @@ fn for_each_case(corelib: CoreLib, gc_stress: bool, mut f: impl FnMut(&str, &[u8
                     continue;
                 }
                 if boot_dir().is_none() {
-                    eprintln!(
-                        "SKIP real-corelib snapshot differential: .cache/boot/android-34 absent"
-                    );
+                    acos_test_support::require_prereq(false, "for_each_case", "real-corelib snapshot differential: .cache/boot/android-34 absent");
                     return;
                 }
             }
@@ -171,8 +166,7 @@ fn snapshot_restore_bootstrap_dexprogs_gc_stress() {
 
 #[test]
 fn snapshot_restore_real_regex() {
-    if boot_dir().is_none() {
-        eprintln!("SKIP snapshot_restore_real_regex: .cache/boot/android-34 absent");
+    if acos_test_support::require_prereq(!(boot_dir().is_none()), "snapshot_restore_real_regex", ".cache/boot/android-34 absent").is_none() {
         return;
     }
     let corelib = CoreLib::Real;
@@ -200,8 +194,7 @@ fn snapshot_restore_real_dexprogs_gc_stress() {
     if guard_heavy_real() {
         return;
     }
-    if boot_dir().is_none() {
-        eprintln!("SKIP snapshot_restore_real_dexprogs_gc_stress: boot cache absent");
+    if acos_test_support::require_prereq(!(boot_dir().is_none()), "snapshot_restore_real_dexprogs_gc_stress", "boot cache absent").is_none() {
         return;
     }
     let corelib = CoreLib::Real;
@@ -233,14 +226,12 @@ fn snapshot_restore_real_all_dexprogs() {
     if guard_heavy_real() {
         return;
     }
-    if boot_dir().is_none() {
-        eprintln!("SKIP snapshot_restore_real_all_dexprogs: .cache/boot/android-34 absent");
+    if acos_test_support::require_prereq(!(boot_dir().is_none()), "snapshot_restore_real_all_dexprogs", ".cache/boot/android-34 absent").is_none() {
         return;
     }
     let corelib = CoreLib::Real;
     let names = fixture_names();
-    if names.is_empty() {
-        eprintln!("SKIP snapshot_restore_real_all_dexprogs: fixtures absent");
+    if acos_test_support::require_prereq(!(names.is_empty()), "snapshot_restore_real_all_dexprogs", "fixtures absent").is_none() {
         return;
     }
     let template = Vm::new(options(corelib, false)).expect("template");
@@ -279,9 +270,18 @@ fn snapshot_restore_100_cycles_is_stable() {
 #[test]
 fn snapshot_is_deterministic_and_idempotent() {
     let corelib = CoreLib::Bootstrap;
-    let a = Vm::new(options(corelib, false)).unwrap().snapshot().unwrap();
-    let b = Vm::new(options(corelib, false)).unwrap().snapshot().unwrap();
-    assert_eq!(a, b, "two snapshots of the same boot state must be byte-equal");
+    let a = Vm::new(options(corelib, false))
+        .unwrap()
+        .snapshot()
+        .unwrap();
+    let b = Vm::new(options(corelib, false))
+        .unwrap()
+        .snapshot()
+        .unwrap();
+    assert_eq!(
+        a, b,
+        "two snapshots of the same boot state must be byte-equal"
+    );
 
     let restored = Vm::restore(&a).unwrap();
     let again = restored.snapshot().unwrap();

@@ -158,7 +158,9 @@ fn downscale(pixels: &[u8], width: u32, height: u32, pw: u32, ph: u32) -> Vec<u8
     let mut out = vec![0u8; (pw as usize) * (ph as usize) * 4];
     for oy in 0..ph as usize {
         let y0 = oy * height as usize / ph as usize;
-        let y1 = ((oy + 1) * height as usize / ph as usize).max(y0 + 1).min(height as usize);
+        let y1 = ((oy + 1) * height as usize / ph as usize)
+            .max(y0 + 1)
+            .min(height as usize);
         for ox in 0..pw as usize {
             let x0 = ox * width as usize / pw as usize;
             let x1 = ((ox + 1) * width as usize / pw as usize)

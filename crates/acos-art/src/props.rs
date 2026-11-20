@@ -36,6 +36,25 @@ use std::path::Path;
 /// File name inside the writable data dir (`/data` in the sandbox).
 pub const PROPS_FILE: &str = "acos.properties";
 
+/// The table the host-side `linkerconfig` generation step reads (FLAKEFIX),
+/// next to [`PROPS_FILE`] in the data dir. It is bound over
+/// `/data/acos.properties` for that one step only; no guest ever sees it.
+pub const LINKERCONFIG_PROPS_FILE: &str = "acos.linkerconfig.properties";
+
+/// Properties the image's `linkerconfig` binary reads to choose its **mode**
+/// and that the guests need for other reasons.
+///
+/// `ro.vndk.version` makes linkerconfig emit the strict, Treble-style config
+/// (`dir.system`/`dir.vendor` sections, isolated default namespace whose
+/// permitted paths exclude `/data/shim`). With it unset linkerconfig emits the
+/// legacy, unisolated config this runtime was built and validated against
+/// (every guest, `derive_classpath` and `dalvikvm64` are launched with the
+/// `libartshim.so` `LD_PRELOAD` from `/data/shim`, which the strict default
+/// namespace refuses to open). The guests still need `ro.vndk.version`
+/// (libcutils' memfd-backed ashmem, GATENE2E), so only the generation step
+/// is served a table without it.
+pub const LINKERCONFIG_MODE_KEYS: [&str; 1] = ["ro.vndk.version"];
+
 /// bionic `PROP_VALUE_MAX`.
 pub const PROP_VALUE_MAX: usize = 92;
 
@@ -106,7 +125,11 @@ impl std::error::Error for HeapConfigError {}
 
 impl HeapConfigError {
     fn new(var: &'static str, value: &str, problem: impl Into<String>) -> Self {
-        Self { var, value: value.to_string(), problem: problem.into() }
+        Self {
+            var,
+            value: value.to_string(),
+            problem: problem.into(),
+        }
     }
 }
 
@@ -141,7 +164,10 @@ impl HeapSize {
         let bytes = n
             .checked_mul(mult)
             .ok_or_else(|| HeapConfigError::new(var, text, "size does not fit in 64 bits"))?;
-        Ok(Self { text: text.to_string(), bytes })
+        Ok(Self {
+            text: text.to_string(),
+            bytes,
+        })
     }
 
     /// MiB, for the metadata record.
@@ -161,10 +187,7 @@ pub struct HeapUtilization {
 
 impl HeapUtilization {
     /// Parse a decimal in (0,1).
-    pub fn parse(
-        var: &'static str,
-        text: &str,
-    ) -> std::result::Result<Self, HeapConfigError> {
+    pub fn parse(var: &'static str, text: &str) -> std::result::Result<Self, HeapConfigError> {
         let expected = "expected a decimal strictly between 0 and 1, e.g. 0.75";
         if text.is_empty()
             || !text.bytes().all(|b| b.is_ascii_digit() || b == b'.')
@@ -184,7 +207,10 @@ impl HeapUtilization {
                 format!("{expected}; {value} is outside (0,1)"),
             ));
         }
-        Ok(Self { text: text.to_string(), value })
+        Ok(Self {
+            text: text.to_string(),
+            value,
+        })
     }
 }
 
@@ -211,8 +237,7 @@ impl HeapConfig {
                 .expect("stock default"),
             heapgrowthlimit: HeapSize::parse(ENV_HEAPGROWTHLIMIT, DEFAULT_HEAPGROWTHLIMIT)
                 .expect("stock default"),
-            heapsize: HeapSize::parse(ENV_HEAPSIZE, DEFAULT_HEAPSIZE)
-                .expect("stock default"),
+            heapsize: HeapSize::parse(ENV_HEAPSIZE, DEFAULT_HEAPSIZE).expect("stock default"),
             heapminfree: HeapSize::parse(ENV_HEAPMINFREE, DEFAULT_HEAPMINFREE)
                 .expect("stock default"),
             heapmaxfree: HeapSize::parse(ENV_HEAPMAXFREE, DEFAULT_HEAPMAXFREE)
@@ -340,7 +365,10 @@ impl HeapConfig {
             ("dalvik.vm.heapsize", &self.heapsize.text),
             ("dalvik.vm.heapminfree", &self.heapminfree.text),
             ("dalvik.vm.heapmaxfree", &self.heapmaxfree.text),
-            ("dalvik.vm.heaptargetutilization", &self.heaptargetutilization.text),
+            (
+                "dalvik.vm.heaptargetutilization",
+                &self.heaptargetutilization.text,
+            ),
         ]
     }
 
@@ -417,6 +445,21 @@ impl Props {
             // loop -- R1's log flood trigger -- cannot start.
             ("servicemanager.ready", "true"),
             ("ro.build.version.release", "14"),
+            // libcutils `ashmem-dev.cpp::has_memfd_support()` is false without
+            // these two properties (it logs "memfd: ro.vndk.version not defined"),
+            // which sends every ashmem call down the `/dev/ashmem` ioctl path --
+            // and the guest has no `/dev/ashmem`; every buffer ACOS hands out is a
+            // memfd (the gralloc shim, `IGraphicsStats.requestBufferForProcess`,
+            // `ParcelFd::memfd`). hwui's `ProfileDataContainer::switchStorageTo
+            // Ashmem` then called `ashmem_get_size_region(memfd)` ->
+            // `__ashmem_check_failure` -> `LOG_ALWAYS_FATAL("illegal fd=...")` and
+            // the first thing in the app to start the RenderThread (the Gaten
+            // lookup's screenshot copy) aborted (GATENE2E). `sys.use_memfd=true`
+            // is the documented switch for "this device uses memfd-backed
+            // ashmem" (the same file's own header); the kernel here has memfd +
+            // F_SEAL_FUTURE_WRITE, so libcutils' self-detection passes.
+            ("sys.use_memfd", "true"),
+            ("ro.vndk.version", "34"),
             ("ro.build.version.codename", "REL"),
             ("ro.build.version.all_codenames", "REL"),
             ("ro.build.version.security_patch", "2024-01-01"),
@@ -444,10 +487,16 @@ impl Props {
             ("ro.config.low_ram", "false"),
             ("ro.sf.lcd_density", "420"),
             ("persist.sys.dalvik.vm.lib.2", "libart.so"),
-            ("persist.device_config.runtime_native_boot.enable_uffd_gc", "false"),
+            (
+                "persist.device_config.runtime_native_boot.enable_uffd_gc",
+                "false",
+            ),
             ("dalvik.vm.isa.x86_64.variant", "x86_64"),
             ("dalvik.vm.isa.x86_64.features", "default"),
-            ("dalvik.vm.heaptargetutilization", DEFAULT_HEAPTARGETUTILIZATION),
+            (
+                "dalvik.vm.heaptargetutilization",
+                DEFAULT_HEAPTARGETUTILIZATION,
+            ),
             ("dalvik.vm.heapstartsize", DEFAULT_HEAPSTARTSIZE),
             ("dalvik.vm.heapgrowthlimit", DEFAULT_HEAPGROWTHLIMIT),
             ("dalvik.vm.heapsize", DEFAULT_HEAPSIZE),
@@ -478,6 +527,47 @@ impl Props {
         let heap = HeapConfig::from_env().map_err(|e| Error::InvalidHeapConfig(e.to_string()))?;
         let mut p = Self::android34();
         heap.apply(&mut p);
+        // GLSPIKE: the image's own EGL loader appends `ro.hardware.egl` to the
+        // driver name it looks for in `/vendor/lib64/egl` (`Loader.cpp`,
+        // `HAL_SUBNAME_KEY_PROPERTIES`). Default: the property stays unset, so
+        // libEGL keeps its own "couldn't find an OpenGL ES implementation"
+        // fatal — exactly today's guest. With `ACOS_GUEST_GLES=<provider>` the
+        // run opted into a staged provider and the loader can find it.
+        //
+        // The value is the manifest **tag** (`libEGL_<tag>.so`), not the
+        // provider directory: GLSPIKE2's `angle-swiftshader` provider stages
+        // `libEGL_angle.so`, so a run that served the directory name aborted
+        // inside libEGL one step before ANGLE.
+        //
+        // GLSPIKE2: a provider that also stages a Vulkan ICD (ANGLE needs one)
+        // declares `ro.hardware.vulkan`, and the image's own `libvulkan.so`
+        // opens `/vendor/lib64/hw/vulkan.<tag>.so` from it (`hwvulkan module
+        // open`, `vulkan.`, measured in the sysroot's libvulkan). Absent when
+        // the provider carries no ICD: the property stays unset, exactly as in
+        // the image today.
+        if let Some((tag, vulkan, extra)) = crate::gles::selected_props()? {
+            for (k, v) in &extra {
+                p.set(k, v);
+            }
+            p.set("ro.hardware.egl", &tag);
+            // The probe fixtures read this to decide whether to take the GL
+            // path at all; an app on a device never needs it (it just draws).
+            p.set("acos.guest.gles", &tag);
+            if let Some(vulkan) = vulkan {
+                p.set("ro.hardware.vulkan", &vulkan);
+                p.set("acos.guest.gles.vulkan", &vulkan);
+            }
+        }
+        Ok(p)
+    }
+
+    /// The table the `linkerconfig` generation step is served: the launch
+    /// table without [`LINKERCONFIG_MODE_KEYS`].
+    pub fn for_linkerconfig() -> Result<Self> {
+        let mut p = Self::for_launch()?;
+        for key in LINKERCONFIG_MODE_KEYS {
+            p.entries.remove(key);
+        }
         Ok(p)
     }
 
@@ -557,14 +647,16 @@ mod tests {
         ENV_HEAPTARGETUTILIZATION,
     ];
 
-    /// The process environment is global; the heap tests mutate it, so they take
-    /// this lock and run one at a time (and restore what they found).
-    static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    /// The process environment is global; the tests that mutate it take the
+    /// crate-wide lock and run one at a time (and restore what they found).
+    use crate::ENV_LOCK;
 
     fn with_env(vars: &[(&'static str, &str)], f: impl FnOnce()) {
         let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        let saved: Vec<(&str, Option<String>)> =
-            ALL_HEAP_ENV.iter().map(|k| (*k, std::env::var(k).ok())).collect();
+        let saved: Vec<(&str, Option<String>)> = ALL_HEAP_ENV
+            .iter()
+            .map(|k| (*k, std::env::var(k).ok()))
+            .collect();
         for k in ALL_HEAP_ENV {
             std::env::remove_var(k);
         }
@@ -580,15 +672,46 @@ mod tests {
         }
     }
 
+    /// GLSHIP: software GL is ON by default when the provider is installed, so
+    /// a test that compares the **whole** launch table must pin that seam.
+    /// The caller holds `ENV_LOCK` (directly or through [`with_env`]).
+    fn with_gles_off<T>(f: impl FnOnce() -> T) -> T {
+        let saved = std::env::var("ACOS_GUEST_GLES").ok();
+        std::env::set_var("ACOS_GUEST_GLES", "off");
+        let out = f();
+        match saved {
+            Some(v) => std::env::set_var("ACOS_GUEST_GLES", v),
+            None => std::env::remove_var("ACOS_GUEST_GLES"),
+        }
+        out
+    }
+
     #[test]
     fn defaults_are_servable() {
         let p = Props::android34();
         assert_eq!(p.get("ro.build.version.sdk"), Some("34"));
+        // GATENE2E: libcutils only uses memfd-backed ashmem with these two set.
+        assert_eq!(p.get("sys.use_memfd"), Some("true"));
+        assert_eq!(p.get("ro.vndk.version"), Some("34"));
         assert_eq!(p.get("dalvik.vm.heapgrowthlimit"), Some("192m"));
         let text = p.to_string();
         assert!(text.contains("ro.debuggable=1\n"));
         let round = Props::parse(&text);
         assert_eq!(round.get("ro.build.version.release"), Some("14"));
+    }
+
+    #[test]
+    fn the_linkerconfig_table_hides_only_the_mode_keys() {
+        let _env = ENV_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let launch = Props::for_launch().unwrap();
+        let lc = Props::for_linkerconfig().unwrap();
+        assert_eq!(launch.get("ro.vndk.version"), Some("34"));
+        assert_eq!(lc.get("ro.vndk.version"), None);
+        assert_eq!(lc.len() + LINKERCONFIG_MODE_KEYS.len(), launch.len());
+        // Everything else (memfd switch included) is identical.
+        assert_eq!(lc.get("sys.use_memfd"), Some("true"));
     }
 
     #[test]
@@ -605,7 +728,7 @@ mod tests {
     /// the table is byte-identical to the stock one and no override is claimed.
     #[test]
     fn heap_defaults_unchanged() {
-        with_env(&[], || {
+        with_env(&[], || with_gles_off(|| {
             let cfg = HeapConfig::from_env().expect("defaults must validate");
             assert_eq!(cfg, HeapConfig::defaults());
             assert!(cfg.overrides.is_empty());
@@ -625,7 +748,7 @@ mod tests {
             for (k, v) in cfg.properties() {
                 assert_eq!(launch.get(k), Some(v));
             }
-        });
+        }));
     }
 
     /// Each override moves exactly its own property and is recorded as an
@@ -638,7 +761,11 @@ mod tests {
             (ENV_HEAPSIZE, "256m", "dalvik.vm.heapsize"),
             (ENV_HEAPMINFREE, "1m", "dalvik.vm.heapminfree"),
             (ENV_HEAPMAXFREE, "16m", "dalvik.vm.heapmaxfree"),
-            (ENV_HEAPTARGETUTILIZATION, "0.5", "dalvik.vm.heaptargetutilization"),
+            (
+                ENV_HEAPTARGETUTILIZATION,
+                "0.5",
+                "dalvik.vm.heaptargetutilization",
+            ),
         ];
         for (var, value, prop) in cases {
             with_env(&[(var, value)], || {
@@ -682,8 +809,18 @@ mod tests {
     #[test]
     fn heap_invalid_format_rejected() {
         let bad = [
-            "8x", "8M", "8 m", "", "m", "8.5m", "-8m", "+8m", "0x10m",
-            "99999999999999999999m", "8mm", "8g ",
+            "8x",
+            "8M",
+            "8 m",
+            "",
+            "m",
+            "8.5m",
+            "-8m",
+            "+8m",
+            "0x10m",
+            "99999999999999999999m",
+            "8mm",
+            "8g ",
         ];
         for value in bad {
             let err = HeapSize::parse(ENV_HEAPSIZE, value)
@@ -697,7 +834,10 @@ mod tests {
                     msg.starts_with("INVALID_HEAP_CONFIG:"),
                     "unexpected error: {msg}"
                 );
-                assert!(msg.contains(ENV_HEAPSIZE), "error must name the variable: {msg}");
+                assert!(
+                    msg.contains(ENV_HEAPSIZE),
+                    "error must name the variable: {msg}"
+                );
             });
         }
         for value in ["0", "1", "1.5", ".5", "0.0", "abc", "0.75.1", ""] {
@@ -720,13 +860,17 @@ mod tests {
             let err = HeapConfig::from_env().expect_err("256m start > 192m growth limit");
             assert_eq!(err.var, ENV_HEAPSTARTSIZE);
             assert!(err.to_string().contains("heapgrowthlimit"), "{err}");
-            let msg = Props::for_launch().expect_err("must not launch").to_string();
+            let msg = Props::for_launch()
+                .expect_err("must not launch")
+                .to_string();
             assert!(msg.starts_with("INVALID_HEAP_CONFIG:"), "{msg}");
         });
         with_env(&[(ENV_HEAPGROWTHLIMIT, "1g")], || {
             let err = HeapConfig::from_env().expect_err("growth limit > heap size");
             assert_eq!(err.var, ENV_HEAPGROWTHLIMIT);
-            let msg = Props::for_launch().expect_err("must not launch").to_string();
+            let msg = Props::for_launch()
+                .expect_err("must not launch")
+                .to_string();
             assert!(msg.starts_with("INVALID_HEAP_CONFIG:"), "{msg}");
         });
         with_env(
@@ -762,5 +906,81 @@ mod tests {
             let doc = effective_heap_json();
             assert!(doc["error"].as_str().unwrap().contains(ENV_HEAPSTARTSIZE));
         });
+    }
+
+    /// GLSPIKE2: `ro.hardware.egl` is the provider's manifest **tag**, the value
+    /// the image's loader appends to `libEGL_`, never the `ACOS_GUEST_GLES`
+    /// directory name. A run whose property was the directory name aborted
+    /// inside libEGL with its own `couldn't find an OpenGL ES implementation`
+    /// fatal (measured: results/handoff/GLSPIKE2), one step before the driver.
+    /// The ICD the provider stages comes with it as `ro.hardware.vulkan`.
+    ///
+    /// GLSHIP: the provider is the **default** when it is installed, so the
+    /// matrix is (nothing installed | installed) x (no flag | off | named).
+    #[test]
+    fn the_gles_properties_are_the_manifest_tag_and_its_vulkan_icd() {
+        let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let dir = std::env::temp_dir().join(format!("acos-props-gles-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let gles = dir.join("gles");
+        std::fs::create_dir_all(&gles).expect("dirs");
+        let saved: Vec<(&str, Option<String>)> = ["ACOS_GUEST_GLES", "ACOS_GUEST_GLES_DIR"]
+            .iter()
+            .map(|k| (*k, std::env::var(k).ok()))
+            .collect();
+        let result: Props = (|| {
+            // (1) nothing installed, no flag: today's guest, properties unset.
+            std::env::remove_var("ACOS_GUEST_GLES");
+            std::env::set_var("ACOS_GUEST_GLES_DIR", &gles);
+            let none = Props::for_launch().expect("defaults");
+            assert_eq!(none.get("ro.hardware.egl"), None, "not installed: unset");
+            assert_eq!(none.get("ro.hardware.vulkan"), None);
+
+            // (2) installed: the default provider is served with no flag.
+            let provider = gles.join("angle-swiftshader");
+            std::fs::create_dir_all(provider.join("lib64/egl")).expect("dirs");
+            std::fs::create_dir_all(provider.join("lib64/hw")).expect("dirs");
+            std::fs::write(provider.join("lib64/egl/libEGL_angle.so"), b"driver").expect("write");
+            std::fs::write(provider.join("lib64/hw/vulkan.pastel.so"), b"icd").expect("write");
+            std::fs::write(provider.join("lib64/vulkan.pastel.so"), b"icd").expect("write");
+            std::fs::write(
+                provider.join("manifest.json"),
+                r#"{"tag":"angle","vulkan_tag":"pastel","provider":"x","source":"y",
+                    "version":"0","licence":"z","files":[
+                    {"path":"lib64/egl/libEGL_angle.so","sha256":"00","size":6},
+                    {"path":"lib64/hw/vulkan.pastel.so","sha256":"00","size":3},
+                    {"path":"lib64/vulkan.pastel.so","sha256":"00","size":3}]}"#,
+            )
+            .expect("manifest");
+            let default_on = Props::for_launch().expect("default provider");
+            assert_eq!(default_on.get("ro.hardware.egl"), Some("angle"));
+            assert_eq!(default_on.get("ro.hardware.vulkan"), Some("pastel"));
+
+            // (3) `off` wins over an installed provider.
+            std::env::set_var("ACOS_GUEST_GLES", "off");
+            let off = Props::for_launch().expect("off");
+            assert_eq!(off.get("ro.hardware.egl"), None, "ACOS_GUEST_GLES=off: unset");
+            assert_eq!(off.get("ro.hardware.vulkan"), None);
+
+            // (4) an explicit name serves the same provider.
+            std::env::set_var("ACOS_GUEST_GLES", "angle-swiftshader");
+            Props::for_launch().expect("a staged provider is valid")
+        })();
+        for (k, v) in saved {
+            match v {
+                Some(v) => std::env::set_var(k, v),
+                None => std::env::remove_var(k),
+            }
+        }
+        let _ = std::fs::remove_dir_all(&dir);
+        let on = result;
+        assert_eq!(
+            on.get("ro.hardware.egl"),
+            Some("angle"),
+            "the directory name is a label; the loader appends the tag"
+        );
+        assert_eq!(on.get("acos.guest.gles"), Some("angle"));
+        assert_eq!(on.get("ro.hardware.vulkan"), Some("pastel"));
+        assert_eq!(on.get("acos.guest.gles.vulkan"), Some("pastel"));
     }
 }

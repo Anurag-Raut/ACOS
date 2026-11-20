@@ -182,8 +182,16 @@ fn rn_runtime_child_worker() {
     let boot_ok = boot_dir.join("BOOTCLASSPATH").is_file();
     let mut rt = match Runtime::standard_with(VmOptions {
         heap_max_bytes: 1024 * 1024 * 1024,
-        corelib: if boot_ok { CoreLib::Real } else { CoreLib::Bootstrap },
-        boot_dir: if boot_ok { Some(boot_dir.clone()) } else { None },
+        corelib: if boot_ok {
+            CoreLib::Real
+        } else {
+            CoreLib::Bootstrap
+        },
+        boot_dir: if boot_ok {
+            Some(boot_dir.clone())
+        } else {
+            None
+        },
         ..VmOptions::default()
     }) {
         Ok(rt) => rt,
@@ -215,7 +223,11 @@ fn rn_runtime_child_worker() {
     names.sort();
     for name in &names {
         let mut data = Vec::new();
-        archive.by_name(name).unwrap().read_to_end(&mut data).unwrap();
+        archive
+            .by_name(name)
+            .unwrap()
+            .read_to_end(&mut data)
+            .unwrap();
         let dex = DexFile::parse(data).expect("parse apk dex");
         rt.vm_mut().add_dex(dex);
     }
@@ -278,7 +290,9 @@ fn rn_runtime_child_worker() {
         "real".to_string(),
         "tap".to_string(),
     ];
-    let outcome = rt.vm_mut().run_virtual("dev/acos/fixtures/rnhello/BridgeProbe", &args);
+    let outcome = rt
+        .vm_mut()
+        .run_virtual("dev/acos/fixtures/rnhello/BridgeProbe", &args);
     for line in outcome.stdout.lines() {
         println!("W157A_PROBE {line}");
     }
@@ -315,10 +329,7 @@ fn rn_runtime_child_worker() {
 #[test]
 fn rn_bridge_runs_on_a_real_runtime_session_and_taps_the_button() {
     if !acos_test_support::have_fixture("fixtures/build/apps/rn-hello.apk") {
-        eprintln!(
-            "SKIP rn_bridge_runs_on_a_real_runtime_session_and_taps_the_button: \
-             fixtures/build/apps/rn-hello.apk is absent (build with tools/build-rn-hello.sh)"
-        );
+        acos_test_support::require_prereq(false, "rn_bridge_runs_on_a_real_runtime_session_and_taps_the_button", "rn_bridge_runs_on_a_real_runtime_session_and_taps_the_button: fixtures/build/apps/rn-hello.apk is absent (build with tools/build-rn-hello.sh)");
         return;
     }
     let apk = repo_root().join("fixtures/build/apps/rn-hello.apk");
@@ -399,7 +410,7 @@ fn rn_bridge_runs_on_a_real_runtime_session_and_taps_the_button() {
         }),
     };
 
-    let out_dir = repo_root().join("results/rn");
+    let out_dir = acos_test_support::test_artifacts_dir("rn");
     let _ = std::fs::create_dir_all(&out_dir);
     let _ = std::fs::write(
         out_dir.join("w157a-ops.json"),
@@ -425,9 +436,7 @@ fn rn_bridge_runs_on_a_real_runtime_session_and_taps_the_button() {
     );
     // The real `AndroidChoreographerProvider` must be the one in use.
     assert!(
-        stage_lines
-            .iter()
-            .any(|l| l.contains("ok-real-provider")),
+        stage_lines.iter().any(|l| l.contains("ok-real-provider")),
         "the real Choreographer provider was not installed:\n{stage_lines:#?}"
     );
     // The real `AndroidInfoModule` must have resolved the `uimode` service.

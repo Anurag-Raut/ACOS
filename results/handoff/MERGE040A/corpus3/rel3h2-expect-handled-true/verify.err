@@ -1,0 +1,1 @@
+verify: INPUT_NOT_HANDLED (assertion): tap: `expect_handled: true` and the app window acknowledged the gesture `finishInputEvent(handled) = false` (2/2 event(s) acked, every one unhandled) - the input was delivered and nothing consumed it [class=assertion, retryable=false]

@@ -1,0 +1,17 @@
+{
+  "acos_version": "0.2.2",
+  "apk_path": "fixtures/build/apps/overlay-stack.apk",
+  "apk_sha256": "b7be8c13487850fc370706c496fbb0d4eb3e6daf84dbe39647caf9516febe582",
+  "scenario_path": "scenarios/layer0-overlay-stack.yaml",
+  "scenario_sha256": "71cd080d0f2496d28d8743275623869874fa2a542d46ff2dc9fbe829a480c662",
+  "flags": [],
+  "isolation": "process",
+  "display": {
+    "mode": "offscreen",
+    "width": 1080,
+    "height": 2400,
+    "density_dpi": 420
+  },
+  "fidelity": "art-reference",
+  "backend": "acos-native"
+}

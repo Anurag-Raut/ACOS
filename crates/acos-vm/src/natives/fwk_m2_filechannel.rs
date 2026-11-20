@@ -73,42 +73,17 @@ pub fn install(vm: &mut Vm) -> VmResult<()> {
     let d = "Lsun/nio/ch/FileDispatcherImpl;";
     vm.register_native(d, "read0", "(Ljava/io/FileDescriptor;JI)I", fd_read0);
     vm.register_native(d, "write0", "(Ljava/io/FileDescriptor;JI)I", fd_write0);
-    vm.register_native(
-        d,
-        "pread0",
-        "(Ljava/io/FileDescriptor;JIJ)I",
-        fd_pread0,
-    );
-    vm.register_native(
-        d,
-        "pwrite0",
-        "(Ljava/io/FileDescriptor;JIJ)I",
-        fd_pwrite0,
-    );
+    vm.register_native(d, "pread0", "(Ljava/io/FileDescriptor;JIJ)I", fd_pread0);
+    vm.register_native(d, "pwrite0", "(Ljava/io/FileDescriptor;JIJ)I", fd_pwrite0);
     vm.register_native(d, "readv0", "(Ljava/io/FileDescriptor;JI)J", fd_readv0);
     vm.register_native(d, "writev0", "(Ljava/io/FileDescriptor;JI)J", fd_writev0);
     vm.register_native(d, "close0", "(Ljava/io/FileDescriptor;)V", fd_close0);
     vm.register_native(d, "closeIntFD", "(I)V", fd_close_int);
     vm.register_native(d, "force0", "(Ljava/io/FileDescriptor;Z)I", fd_force0);
-    vm.register_native(
-        d,
-        "truncate0",
-        "(Ljava/io/FileDescriptor;J)I",
-        fd_truncate0,
-    );
+    vm.register_native(d, "truncate0", "(Ljava/io/FileDescriptor;J)I", fd_truncate0);
     vm.register_native(d, "preClose0", "(Ljava/io/FileDescriptor;)V", fd_noop_obj);
-    vm.register_native(
-        d,
-        "release0",
-        "(Ljava/io/FileDescriptor;JJ)V",
-        fd_release0,
-    );
-    vm.register_native(
-        d,
-        "lock0",
-        "(Ljava/io/FileDescriptor;ZJJZ)I",
-        fd_lock0,
-    );
+    vm.register_native(d, "release0", "(Ljava/io/FileDescriptor;JJ)V", fd_release0);
+    vm.register_native(d, "lock0", "(Ljava/io/FileDescriptor;ZJJZ)I", fd_lock0);
     Ok(())
 }
 
@@ -191,11 +166,11 @@ fn map0(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
         }
     }
     let readonly = prot == 0; // MAP_RO
-    // Record where the bytes came from so a snapshot can re-read the file on
-    // restore instead of embedding the mapping (W160-A). Only a *read-only*
-    // map over a real host file gives a safe source: a writable map is a
-    // private copy whose in-place mutations are not in the file, so it must
-    // embed. Synthetic descriptors embed their bytes too.
+                              // Record where the bytes came from so a snapshot can re-read the file on
+                              // restore instead of embedding the mapping (W160-A). Only a *read-only*
+                              // map over a real host file gives a safe source: a writable map is a
+                              // private copy whose in-place mutations are not in the file, so it must
+                              // embed. Synthetic descriptors embed their bytes too.
     let source = if readonly {
         vm.vfs
             .fd_file_guest_path(fd)
@@ -448,9 +423,10 @@ fn fd_readv0(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
             break;
         }
         let mut buf = vec![0u8; len];
-        let n = vm.vfs.read(fd, &mut buf).map_err(|e| {
-            io_error(vm, &format!("readv0 failed: {}", crate::vfs::errno_name(e)))
-        })?;
+        let n = vm
+            .vfs
+            .read(fd, &mut buf)
+            .map_err(|e| io_error(vm, &format!("readv0 failed: {}", crate::vfs::errno_name(e))))?;
         native_mem::write_bytes_at(vm, base, &buf[..n])?;
         total += n;
         if n < len {
@@ -476,7 +452,10 @@ fn fd_writev0(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
         }
         let data = native_mem::read_bytes_at(vm, base, len)?;
         let n = vm.vfs.write(fd, &data).map_err(|e| {
-            io_error(vm, &format!("writev0 failed: {}", crate::vfs::errno_name(e)))
+            io_error(
+                vm,
+                &format!("writev0 failed: {}", crate::vfs::errno_name(e)),
+            )
         })?;
         total += n;
         if n < len {
@@ -511,9 +490,9 @@ fn fd_force0(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let fd_obj = vm.arg_ref(ctx, 0);
     let meta = vm.arg_i32(ctx, 1) != 0;
     if let Some(fd) = fd_descriptor(vm, fd_obj) {
-        vm.vfs.fsync(fd, !meta).map_err(|e| {
-            io_error(vm, &format!("force0 failed: {}", crate::vfs::errno_name(e)))
-        })?;
+        vm.vfs
+            .fsync(fd, !meta)
+            .map_err(|e| io_error(vm, &format!("force0 failed: {}", crate::vfs::errno_name(e))))?;
     }
     vm.ret_i32(ctx, 0);
     Ok(())
@@ -526,7 +505,10 @@ fn fd_truncate0(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
         return Err(io_error(vm, "truncate0: invalid FileDescriptor"));
     };
     vm.vfs.ftruncate(fd, size).map_err(|e| {
-        io_error(vm, &format!("truncate0 failed: {}", crate::vfs::errno_name(e)))
+        io_error(
+            vm,
+            &format!("truncate0 failed: {}", crate::vfs::errno_name(e)),
+        )
     })?;
     vm.ret_i32(ctx, 0);
     Ok(())

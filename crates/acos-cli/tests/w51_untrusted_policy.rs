@@ -128,8 +128,7 @@ fn run_verify(name: &str, trust_header: &str, steps: &str, alias: bool) -> (Scra
     use std::os::unix::fs::PermissionsExt;
     let script = dir.join("fake_art_session.py");
     std::fs::write(&script, SESSION_SCRIPT).expect("session script");
-    std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755))
-        .expect("executable");
+    std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).expect("executable");
     let artifacts = dir.join("artifacts");
     let frames = dir.join("frames");
     std::fs::create_dir_all(&frames).expect("frames");

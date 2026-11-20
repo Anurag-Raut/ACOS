@@ -1,0 +1,615 @@
+{
+  "animations": "off",
+  "app": {
+    "package": "com.gaten",
+    "path": "/home/Qui/Projects/acos/.cache/gaten/gaten-dev-f344272-x86_64-release-unsigned.apk",
+    "sha256": "e04c7ffcf01209c98e511e1ab01a7f68d6decb178d14a08f2b7f0a6539e2ee29"
+  },
+  "backend": "acos-native",
+  "certification": "certified-with-limits",
+  "certification_limits": {
+    "doc": "docs/SANDBOX_CERTIFICATION.md",
+    "section": "§8.7"
+  },
+  "certification_policy": {
+    "doc": "docs/SANDBOX_CERTIFICATION.md",
+    "policy": "opt-in untrusted: trusted is the default, an explicit --untrusted or `trust: untrusted` is allowed",
+    "section": "§8.8"
+  },
+  "engine": "art",
+  "evidence": {
+    "artifacts": "/home/Qui/.t3/worktrees/acos/t3-121d3058-b4fc4c69978d9127/results/handoff/MERGE040A/corpus3/gaten-bubble/art",
+    "engine_report": "/home/Qui/.t3/worktrees/acos/t3-121d3058-b4fc4c69978d9127/results/handoff/MERGE040A/corpus3/gaten-bubble/art/engine.json",
+    "retention": "/home/Qui/.t3/worktrees/acos/t3-121d3058-b4fc4c69978d9127/results/handoff/MERGE040A/corpus3/gaten-bubble/art/retention.json",
+    "verdict": "/home/Qui/.t3/worktrees/acos/t3-121d3058-b4fc4c69978d9127/results/handoff/MERGE040A/corpus3/gaten-bubble/art/verdict.json"
+  },
+  "evidence_provenance": {
+    "binder_transactions": "host-observed",
+    "crash_reports": "guest-asserted",
+    "frames": "host-observed",
+    "host_input": "host-observed",
+    "input_acks": "guest-asserted",
+    "launch_markers": "guest-asserted",
+    "lifecycle_markers": "guest-asserted",
+    "logs": "guest-asserted",
+    "static_manifest": "host-observed",
+    "tree": "guest-asserted"
+  },
+  "extra_apks": [],
+  "failure": {
+    "code": "TIMEOUT",
+    "error": {
+      "class": "infra_timeout",
+      "code": "TIMEOUT",
+      "details": {
+        "animating": false,
+        "backend": "acos-art-session",
+        "context": "tap",
+        "frame_seq": 3,
+        "reason": "queue",
+        "settle": {
+          "ack_ms": 10,
+          "animating": false,
+          "bound": "timeout",
+          "first_change_ms": 1063,
+          "frame_ms": null,
+          "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
+          "mode": "strict",
+          "pixels_changed": true,
+          "probe": {
+            "guest_stall_pending_ms": null,
+            "newest_sample_age_ms": 5,
+            "note": "the demand-probe channel's own counters at the timeout: wakes written, wakes the channel refused, guest samples the host refused (not newer), and the guest's own starved-probe mark",
+            "stale_samples": 0,
+            "wake_failures": 0,
+            "wakes_sent": 23
+          },
+          "reason": "queue",
+          "settled": false,
+          "state_changed": null,
+          "strict_rule": "event"
+        }
+      },
+      "hint": "settle_timeout_ms changes only the deadline. In verify, a timed-out settle is a TIMEOUT failure and never a pass. For a screen that animates forever in pixels (React Native `Animated`, a custom `ValueAnimator`), `animations:off` does not help: use `settle: content` on the step (content-stable: the UI tree's text, nodes and state stop changing even while the pixels keep moving). Tree/text assertions and `wait_for` accept it too, and `wait_for`/`assert_*` fall back to it by default. The latest tree/frame is kept in the step evidence.",
+      "message": "tap: strict settle timed out (queue); the step is a non-pass because the screen was still changing when the deadline elapsed",
+      "retryable": true
+    },
+    "step_index": 1,
+    "summary": "step 1 (tap) timeout"
+  },
+  "fidelity": "art-reference",
+  "finished_at": "2026-11-17T18:33:47.814Z",
+  "insets": "report",
+  "isolation": "process",
+  "mode": "live",
+  "modules": [
+    {
+      "attach": "at-launch",
+      "details": null,
+      "fidelity": "real",
+      "id": "core",
+      "profile": "real",
+      "reason": null,
+      "state": "attached"
+    },
+    {
+      "attach": "hot",
+      "details": {
+        "app_thread": "0x100000001",
+        "bind_pending": null,
+        "binding": "bound: the app published its IAccessibilityServiceClient and the system delivered init(IAccessibilityServiceConnection, connectionId, windowToken), so onServiceConnected ran",
+        "bound_service": {
+          "binder": "0x100000016",
+          "component": "com.gaten/com.gaten.app.GatenAccessibilityService",
+          "connection": "0x77",
+          "connection_id": 1,
+          "service_info_set": false
+        },
+        "clients": 1,
+        "connections": [
+          {
+            "connection": "0x100000011",
+            "package": "com.gaten",
+            "window": "0x10000000d"
+          },
+          {
+            "connection": "0x100000015",
+            "package": "com.gaten",
+            "window": "0x100000013"
+          }
+        ],
+        "enabled": true,
+        "enabled_services": [
+          "com.gaten/com.gaten.app.GatenAccessibilityService"
+        ],
+        "event_count": 223,
+        "event_types": [
+          {
+            "count": 223,
+            "type": 0
+          }
+        ],
+        "gestures": [],
+        "installed_services": [
+          "com.gaten/.app.GatenAccessibilityService"
+        ],
+        "interactions": [],
+        "screenshots": [],
+        "self_disabled": false,
+        "service_bound": true,
+        "service_config": {
+          "can_perform_gestures": false,
+          "can_retrieve_window_content": false,
+          "can_retrieve_windows": false,
+          "can_take_screenshot": true,
+          "capabilities": 128,
+          "event_types": 96,
+          "feedback_type": 16,
+          "flags": 65,
+          "notification_timeout": 100
+        },
+        "unsupported": [
+          "bind not started: service module accessibility: no IApplicationThread yet: attachApplication has not arrived, so the bind has no target",
+          "setAccessibilityWindowAttributes",
+          "setAccessibilityWindowAttributes"
+        ],
+        "windows": [
+          {
+            "active": true,
+            "bounds": [
+              0,
+              0,
+              1080,
+              2400
+            ],
+            "connection": "0x100000015",
+            "focused": true,
+            "id": 2,
+            "layer": 1,
+            "package": "com.gaten",
+            "type": 1,
+            "window": "0x100000013"
+          },
+          {
+            "active": false,
+            "bounds": [
+              0,
+              0,
+              1080,
+              2400
+            ],
+            "connection": "0x100000011",
+            "focused": false,
+            "id": 1,
+            "layer": 0,
+            "package": "com.gaten",
+            "type": 1,
+            "window": "0x10000000d"
+          }
+        ]
+      },
+      "fidelity": "real",
+      "id": "accessibility",
+      "profile": "real",
+      "reason": "real: settings, client state, service lists, event and interaction records, system-initiated bind (scheduleCreateService + scheduleBindService -> publishService -> IAccessibilityServiceClient.init); the interaction surface (getWindows, node queries, gestures, screenshot) is not implemented yet",
+      "state": "attached"
+    },
+    {
+      "attach": "hot",
+      "details": null,
+      "fidelity": "off",
+      "id": "system.permissions",
+      "profile": "off",
+      "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.permissions\", \"profile\": \"real\"}]}",
+      "state": "off"
+    },
+    {
+      "attach": "hot",
+      "details": null,
+      "fidelity": "off",
+      "id": "system.notifications",
+      "profile": "off",
+      "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.notifications\", \"profile\": \"real\"}]}",
+      "state": "off"
+    },
+    {
+      "attach": "hot",
+      "details": null,
+      "fidelity": "off",
+      "id": "sensors",
+      "profile": "off",
+      "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"sensors\", \"profile\": \"scripted\"}]}",
+      "state": "off"
+    },
+    {
+      "attach": "hot",
+      "details": null,
+      "fidelity": "off",
+      "id": "feedback.vibrator",
+      "profile": "off",
+      "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"feedback.vibrator\", \"profile\": \"scripted\"}]}",
+      "state": "off"
+    },
+    {
+      "attach": "hot",
+      "details": null,
+      "fidelity": "off",
+      "id": "location",
+      "profile": "off",
+      "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"location\", \"profile\": \"scripted\"}]}",
+      "state": "off"
+    },
+    {
+      "attach": "at-launch",
+      "details": null,
+      "fidelity": "off",
+      "id": "net.telephony",
+      "profile": "off",
+      "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"net.telephony\", \"profile\": \"scripted\"}]}",
+      "state": "off"
+    },
+    {
+      "attach": "hot",
+      "details": null,
+      "fidelity": "off",
+      "id": "hw.bluetooth",
+      "profile": "off",
+      "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.bluetooth\", \"profile\": \"scripted\"}]}",
+      "state": "off"
+    },
+    {
+      "attach": "hot",
+      "details": null,
+      "fidelity": "off",
+      "id": "hw.biometric",
+      "profile": "off",
+      "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.biometric\", \"profile\": \"scripted\"}]}",
+      "state": "off"
+    },
+    {
+      "attach": "at-launch",
+      "details": null,
+      "fidelity": "off",
+      "id": "network",
+      "profile": "off",
+      "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"network\", \"profile\": \"real\"}]}",
+      "state": "off"
+    },
+    {
+      "attach": "at-launch",
+      "details": null,
+      "fidelity": "off",
+      "id": "webview",
+      "profile": "off",
+      "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"webview\", \"profile\": \"real\"}]}",
+      "state": "off"
+    },
+    {
+      "attach": "hot",
+      "details": null,
+      "fidelity": "off",
+      "id": "hw.usb",
+      "profile": "off",
+      "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.usb\", \"profile\": \"stub\"}]}",
+      "state": "off"
+    },
+    {
+      "attach": "hot",
+      "details": null,
+      "fidelity": "off",
+      "id": "system.dropbox",
+      "profile": "off",
+      "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.dropbox\", \"profile\": \"stub\"}]}",
+      "state": "off"
+    },
+    {
+      "attach": "hot",
+      "details": null,
+      "fidelity": "off",
+      "id": "hw.nfc",
+      "profile": "off",
+      "reason": "off: no NFC hardware: NfcAdapter throws UnsupportedOperationException before any binder (FEATURE_NFC is absent)",
+      "state": "off"
+    },
+    {
+      "attach": "hot",
+      "details": null,
+      "fidelity": "off",
+      "id": "system.wallpaper",
+      "profile": "off",
+      "reason": "off: no wallpaper service; AOSP's own DisabledWallpaperManager is the working missing path (config_enableWallpaperService is false)",
+      "state": "off"
+    },
+    {
+      "attach": "hot",
+      "details": null,
+      "fidelity": "off",
+      "id": "system.print",
+      "profile": "off",
+      "reason": "off: no print service; the client only resolves the name when FEATURE_PRINTING is reported, and ACOS reports it absent",
+      "state": "off"
+    },
+    {
+      "attach": "hot",
+      "details": null,
+      "fidelity": "off",
+      "id": "system.search",
+      "profile": "off",
+      "reason": "off: no search service and no searchable index; an empty SearchableInfo list would look like an installed search provider",
+      "state": "off"
+    },
+    {
+      "attach": "hot",
+      "details": null,
+      "fidelity": "off",
+      "id": "system.usage",
+      "profile": "off",
+      "reason": "off: nothing records app usage; an empty ParceledListSlice<UsageStats> would be indistinguishable from 'not used'",
+      "state": "off"
+    },
+    {
+      "attach": "hot",
+      "details": null,
+      "fidelity": "off",
+      "id": "system.dpm",
+      "profile": "off",
+      "reason": "off: no managed device or profile; every device-policy answer would be invented policy state",
+      "state": "off"
+    },
+    {
+      "attach": "hot",
+      "details": null,
+      "fidelity": "off",
+      "id": "system.role",
+      "profile": "off",
+      "reason": "off: IRoleManager lives in the Permission APEX; its transaction table is not in the framework dex this build reads, so a stub would guess codes",
+      "state": "off"
+    },
+    {
+      "attach": "hot",
+      "details": null,
+      "fidelity": "off",
+      "id": "geo.country",
+      "profile": "off",
+      "reason": "off: a detected country is a location claim ACOS cannot back",
+      "state": "off"
+    }
+  ],
+  "notes": [
+    "stopped at step 1 (tap): timeout; later steps were not executed",
+    "scenario expected `pass`, engine produced `timeout` — result is a truthful partial",
+    "artifacts: referenced (keep-all): 12 file(s) / 1.3 MiB kept, 0 file(s) / 0.0 MiB pruned; see retention.json",
+    "fidelity: module `system.permissions` is off (module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.permissions\", \"profile\": \"real\"}]}); behaviour that needs it is unsupported, never a pass",
+    "fidelity: module `system.notifications` is off (module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.notifications\", \"profile\": \"real\"}]}); behaviour that needs it is unsupported, never a pass",
+    "fidelity: module `sensors` is off (module is off; attach it: acos_launch {\"services\": [{\"id\": \"sensors\", \"profile\": \"scripted\"}]}); behaviour that needs it is unsupported, never a pass",
+    "fidelity: module `feedback.vibrator` is off (module is off; attach it: acos_launch {\"services\": [{\"id\": \"feedback.vibrator\", \"profile\": \"scripted\"}]}); behaviour that needs it is unsupported, never a pass",
+    "fidelity: module `location` is off (module is off; attach it: acos_launch {\"services\": [{\"id\": \"location\", \"profile\": \"scripted\"}]}); behaviour that needs it is unsupported, never a pass",
+    "fidelity: module `net.telephony` is off (module is off; attach it: acos_launch {\"services\": [{\"id\": \"net.telephony\", \"profile\": \"scripted\"}]}); behaviour that needs it is unsupported, never a pass",
+    "fidelity: module `hw.bluetooth` is off (module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.bluetooth\", \"profile\": \"scripted\"}]}); behaviour that needs it is unsupported, never a pass",
+    "fidelity: module `hw.biometric` is off (module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.biometric\", \"profile\": \"scripted\"}]}); behaviour that needs it is unsupported, never a pass",
+    "fidelity: module `network` is off (module is off; attach it: acos_launch {\"services\": [{\"id\": \"network\", \"profile\": \"real\"}]}); behaviour that needs it is unsupported, never a pass",
+    "fidelity: module `webview` is off (module is off; attach it: acos_launch {\"services\": [{\"id\": \"webview\", \"profile\": \"real\"}]}); behaviour that needs it is unsupported, never a pass",
+    "fidelity: module `hw.usb` is off (module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.usb\", \"profile\": \"stub\"}]}); behaviour that needs it is unsupported, never a pass",
+    "fidelity: module `system.dropbox` is off (module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.dropbox\", \"profile\": \"stub\"}]}); behaviour that needs it is unsupported, never a pass",
+    "fidelity: module `hw.nfc` is off (off: no NFC hardware: NfcAdapter throws UnsupportedOperationException before any binder (FEATURE_NFC is absent)); behaviour that needs it is unsupported, never a pass",
+    "fidelity: module `system.wallpaper` is off (off: no wallpaper service; AOSP's own DisabledWallpaperManager is the working missing path (config_enableWallpaperService is false)); behaviour that needs it is unsupported, never a pass",
+    "fidelity: module `system.print` is off (off: no print service; the client only resolves the name when FEATURE_PRINTING is reported, and ACOS reports it absent); behaviour that needs it is unsupported, never a pass",
+    "fidelity: module `system.search` is off (off: no search service and no searchable index; an empty SearchableInfo list would look like an installed search provider); behaviour that needs it is unsupported, never a pass",
+    "fidelity: module `system.usage` is off (off: nothing records app usage; an empty ParceledListSlice<UsageStats> would be indistinguishable from 'not used'); behaviour that needs it is unsupported, never a pass",
+    "fidelity: module `system.dpm` is off (off: no managed device or profile; every device-policy answer would be invented policy state); behaviour that needs it is unsupported, never a pass",
+    "fidelity: module `system.role` is off (off: IRoleManager lives in the Permission APEX; its transaction table is not in the framework dex this build reads, so a stub would guess codes); behaviour that needs it is unsupported, never a pass",
+    "fidelity: module `geo.country` is off (off: a detected country is a location claim ACOS cannot back); behaviour that needs it is unsupported, never a pass"
+  ],
+  "provenance": {
+    "apk": {
+      "mtime_ns": 1794503846699559546,
+      "path": "/home/Qui/Projects/acos/.cache/gaten/gaten-dev-f344272-x86_64-release-unsigned.apk",
+      "sha256": "e04c7ffcf01209c98e511e1ab01a7f68d6decb178d14a08f2b7f0a6539e2ee29",
+      "sha256_12": "e04c7ffcf012",
+      "size_bytes": 114751344
+    },
+    "engine": "art",
+    "fidelity": "art-reference",
+    "scenario": {
+      "mtime_ns": 1794940147833828488,
+      "path": "/home/Qui/.t3/worktrees/acos/t3-121d3058-b4fc4c69978d9127/scenarios/gaten-bubble.yaml",
+      "sha256": "757636fcc222c8f2fdac7506962f5197c8904e2fdfbc319e731ae371366a0cde",
+      "sha256_12": "757636fcc222",
+      "size_bytes": 4541
+    },
+    "scenario_engine": "rust-vm",
+    "warnings": [
+      {
+        "code": "SCENARIO_ENGINE_MISMATCH",
+        "engine": "art",
+        "message": "the scenario declares `engine: rust-vm` but this run used `art`: the scenario field records the engine the scenario was written for, it does not select one (`--engine art` / the MCP `engine` argument do). The verdict is about the `art` run; pass `--engine rust-vm` to run the engine the scenario names.",
+        "scenario_engine": "rust-vm"
+      }
+    ]
+  },
+  "provenance_rule": "trusted fixture: guest-asserted evidence may corroborate a pass, and its provenance is still recorded",
+  "reproducer": {
+    "acos_version": "0.3.0",
+    "apk_path": "/home/Qui/Projects/acos/.cache/gaten/gaten-dev-f344272-x86_64-release-unsigned.apk",
+    "apk_sha256": "e04c7ffcf01209c98e511e1ab01a7f68d6decb178d14a08f2b7f0a6539e2ee29",
+    "backend": "acos-native",
+    "display": {
+      "density_dpi": 400,
+      "height": 2400,
+      "mode": "offscreen",
+      "width": 1080
+    },
+    "fidelity": "art-reference",
+    "flags": [],
+    "isolation": "process",
+    "scenario_path": "/home/Qui/.t3/worktrees/acos/t3-121d3058-b4fc4c69978d9127/scenarios/gaten-bubble.yaml",
+    "scenario_sha256": "757636fcc222c8f2fdac7506962f5197c8904e2fdfbc319e731ae371366a0cde"
+  },
+  "request_id": "req_13120a_18e8e8cc3a03306c",
+  "resources": {
+    "events": 258,
+    "frames_captured": 1,
+    "memory_mib": 242,
+    "peak_rss_bytes": 254091264,
+    "sessions": 1,
+    "steps": 2,
+    "wall_ms": 11608
+  },
+  "scenario": {
+    "name": "gaten-bubble",
+    "path": "/home/Qui/.t3/worktrees/acos/t3-121d3058-b4fc4c69978d9127/scenarios/gaten-bubble.yaml",
+    "sha256": "757636fcc222c8f2fdac7506962f5197c8904e2fdfbc319e731ae371366a0cde"
+  },
+  "schema_version": 1,
+  "session_exit": {
+    "abi": null,
+    "cgroup": "cgroup: memory.max=2048MiB swap=0 pids.max=512 peak=251MiB oom_kills=0 (/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p1250110-i1231375.scope)",
+    "code": null,
+    "disk_free_bytes": 160555212800,
+    "guest_crash": null,
+    "guest_exit": 0,
+    "guest_signal": null,
+    "native_crash": null,
+    "native_crash_path": null,
+    "outcome": "ok",
+    "panic": null,
+    "path": "/home/Qui/.t3/worktrees/acos/t3-121d3058-b4fc4c69978d9127/results/handoff/MERGE040A/corpus3/gaten-bubble/art/art-frames/session-exit.json",
+    "retryable": false,
+    "stage": "teardown-evidence"
+  },
+  "session_id": "s_art_gaten-dev-f344272-x86_64-release-unsigned",
+  "started_at": "2026-11-17T18:33:36.206Z",
+  "status": "timeout",
+  "steps": [
+    {
+      "assertions": [],
+      "duration_ms": 1531,
+      "evidence": [
+        {
+          "kind": "step",
+          "path": "steps/00-launch.json"
+        }
+      ],
+      "index": 0,
+      "provenance": {
+        "frame": "host-observed",
+        "launch_markers": "guest-asserted",
+        "lifecycle_markers": "guest-asserted",
+        "tree": "guest-asserted"
+      },
+      "status": "pass",
+      "step": "launch"
+    },
+    {
+      "assertions": [],
+      "duration_ms": 10077,
+      "error": {
+        "class": "infra_timeout",
+        "code": "TIMEOUT",
+        "details": {
+          "animating": false,
+          "backend": "acos-art-session",
+          "context": "tap",
+          "frame_seq": 3,
+          "reason": "queue",
+          "settle": {
+            "ack_ms": 10,
+            "animating": false,
+            "bound": "timeout",
+            "first_change_ms": 1063,
+            "frame_ms": null,
+            "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
+            "mode": "strict",
+            "pixels_changed": true,
+            "probe": {
+              "guest_stall_pending_ms": null,
+              "newest_sample_age_ms": 5,
+              "note": "the demand-probe channel's own counters at the timeout: wakes written, wakes the channel refused, guest samples the host refused (not newer), and the guest's own starved-probe mark",
+              "stale_samples": 0,
+              "wake_failures": 0,
+              "wakes_sent": 23
+            },
+            "reason": "queue",
+            "settled": false,
+            "state_changed": null,
+            "strict_rule": "event"
+          }
+        },
+        "hint": "settle_timeout_ms changes only the deadline. In verify, a timed-out settle is a TIMEOUT failure and never a pass. For a screen that animates forever in pixels (React Native `Animated`, a custom `ValueAnimator`), `animations:off` does not help: use `settle: content` on the step (content-stable: the UI tree's text, nodes and state stop changing even while the pixels keep moving). Tree/text assertions and `wait_for` accept it too, and `wait_for`/`assert_*` fall back to it by default. The latest tree/frame is kept in the step evidence.",
+        "message": "tap: strict settle timed out (queue); the step is a non-pass because the screen was still changing when the deadline elapsed",
+        "retryable": true
+      },
+      "evidence": [
+        {
+          "kind": "step",
+          "path": "steps/01-tap.json"
+        }
+      ],
+      "index": 1,
+      "input": {
+        "expect_change": "auto",
+        "handled": true,
+        "handled_evidence": {
+          "acked": 2,
+          "published": 2,
+          "source": "guest"
+        },
+        "target": {
+          "hit": {
+            "clickable": false,
+            "consumer": null,
+            "method": "tree-geometry",
+            "node": {
+              "bounds": "[0,0][1080,2400]",
+              "class": "b5.g",
+              "clickable": false,
+              "content_desc": "",
+              "enabled": true,
+              "focused": false,
+              "id": "n10_",
+              "password": false,
+              "resource_id": "",
+              "scrollable": false,
+              "text": "",
+              "visible_bounds": "[0,0][1080,2400]",
+              "window": "main"
+            },
+            "suggest": {
+              "bounds": "[58,2117][1022,2253]",
+              "class": "b5.g",
+              "clickable": true,
+              "content_desc": "Set up Gaten",
+              "enabled": true,
+              "focused": false,
+              "id": "n13_",
+              "password": false,
+              "resource_id": "",
+              "scrollable": false,
+              "text": "",
+              "visible_bounds": "[58,2117][1022,2253]",
+              "window": "window-1#0"
+            }
+          },
+          "point": {
+            "x": 539,
+            "y": 2184
+          },
+          "selector": {
+            "selector": "text*=\"Set up Gaten\""
+          }
+        }
+      },
+      "provenance": {
+        "frame": "host-observed",
+        "host_input": "host-observed",
+        "input_acks": "guest-asserted",
+        "tree": "guest-asserted"
+      },
+      "status": "timeout",
+      "step": "tap"
+    }
+  ],
+  "trust": "trusted",
+  "unsupported_steps": [],
+  "verdict": "timeout"
+}

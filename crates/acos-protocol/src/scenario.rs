@@ -21,6 +21,7 @@ use crate::assertion::{
 use crate::commands::{CaptureFormat, KeyName, Orientation, Point, ResetScope};
 use crate::error::ErrorCode;
 use crate::identity::{DisplaySpec, IsolationLevel, ResourceBudget};
+use crate::launch::ExtraValue;
 use crate::ui::{Bounds, Selector};
 
 /// The only scenario format version this crate accepts.
@@ -80,6 +81,12 @@ pub enum FallbackPolicy {
 }
 
 /// What the scenario expects. Used to make negative tests explicit.
+///
+/// Every scenario in the corpus declares one, and the declaration is enforced at
+/// run time: `pass` is the only value that may produce a pass, and a scenario
+/// that cannot (or should not) produce one says so here instead of leaving a
+/// red row looking like a regression. `expectation_reason` is the one-line why
+/// (`non_pass`/`unsupported`) and is required for those values.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum Expectation {
@@ -90,7 +97,18 @@ pub enum Expectation {
     Fail,
     /// The scenario must produce any non-pass status (crash/unsupported/... count).
     NonPass,
+    /// The engine cannot provide what the scenario asks, by design or by a known
+    /// gap. The run must report `unsupported` (or the code `expect_error` pins);
+    /// a pass is a harness failure, never a successful test.
+    Unsupported,
 }
+
+/// Host capabilities a scenario may need before it can run at all (`needs_env`).
+///
+/// One registry, validated at load time: a typo'd capability name would
+/// otherwise disable a scenario forever with no error, which is the same
+/// silent-skip failure the corpus is meant to prevent.
+pub const KNOWN_NEEDS_ENV: &[&str] = &["pasta"];
 
 /// A scenario step.
 ///
@@ -106,6 +124,9 @@ pub struct Step {
     /// Wait for a selector (event-driven).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub wait_for: Option<WaitForStep>,
+    /// Wait for a fixed number of milliseconds (a timeline step).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub wait: Option<WaitStep>,
     /// Tap a selector or point.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tap: Option<TapStep>,
@@ -139,6 +160,9 @@ pub struct Step {
     /// Assert node state flags.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub assert_state: Option<StateAssertion>,
+    /// Assert the window stack order (bottom to top) and focus.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub assert_windows: Option<WindowOrderAssertion>,
     /// Assert a log sequence.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub assert_log: Option<LogAssertion>,
@@ -183,6 +207,23 @@ pub struct Step {
     /// debuggable/source-owned builds; never for arbitrary third-party APKs.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub call_activity_method: Option<CallActivityMethodStep>,
+    /// ADR-0029 item 4: one service-module operation in the middle of a run.
+    ///
+    /// `op` is either the module-lifecycle word (`attach`/`detach`, with an
+    /// optional `profile`/`config`) or a module's own control op
+    /// (`sensors.set_value`, `net.telephony.sms`, `hw.bluetooth.scan`, ...) with
+    /// `args`. This is the scenario spelling of the agent API
+    /// (`acos_services` for attach/detach, `acos_service_ctl` for a control op),
+    /// so a scripted module can be driven between assertions instead of only at
+    /// launch.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub service_ctl: Option<ServiceCtlStep>,
+    /// ADR-0029 item 4/5: module ids this step needs attached (`feedback.vibrator`).
+    ///
+    /// A step whose module is `off` is `unsupported`, never `pass`: the executor
+    /// refuses to run an assertion against behaviour the session does not have.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub requires_services: Vec<String>,
 }
 
 /// A borrowed view of the one populated step kind.
@@ -192,6 +233,8 @@ pub enum StepRef<'a> {
     Launch(&'a LaunchStep),
     /// See [`Step::wait_for`].
     WaitFor(&'a WaitForStep),
+    /// See [`Step::wait`].
+    Wait(&'a WaitStep),
     /// See [`Step::tap`].
     Tap(&'a TapStep),
     /// See [`Step::swipe`].
@@ -214,6 +257,8 @@ pub enum StepRef<'a> {
     AssertNotVisible(&'a VisibilityAssertion),
     /// See [`Step::assert_state`].
     AssertState(&'a StateAssertion),
+    /// See [`Step::assert_windows`].
+    AssertWindows(&'a WindowOrderAssertion),
     /// See [`Step::assert_log`].
     AssertLog(&'a LogAssertion),
     /// See [`Step::assert_no_crash`].
@@ -240,6 +285,8 @@ pub enum StepRef<'a> {
     SetTime(&'a TimeSetup),
     /// See [`Step::call_activity_method`].
     CallActivityMethod(&'a CallActivityMethodStep),
+    /// See [`Step::service_ctl`].
+    ServiceCtl(&'a ServiceCtlStep),
 }
 
 impl StepRef<'_> {
@@ -248,6 +295,7 @@ impl StepRef<'_> {
         match self {
             StepRef::Launch(_) => "launch",
             StepRef::WaitFor(_) => "wait_for",
+            StepRef::Wait(_) => "wait",
             StepRef::Tap(_) => "tap",
             StepRef::Swipe(_) => "swipe",
             StepRef::ScrollUntil(_) => "scroll_until",
@@ -259,6 +307,7 @@ impl StepRef<'_> {
             StepRef::AssertVisible(_) => "assert_visible",
             StepRef::AssertNotVisible(_) => "assert_not_visible",
             StepRef::AssertState(_) => "assert_state",
+            StepRef::AssertWindows(_) => "assert_windows",
             StepRef::AssertLog(_) => "assert_log",
             StepRef::AssertNoCrash(_) => "assert_no_crash",
             StepRef::AssertScreenshot(_) => "assert_screenshot",
@@ -272,6 +321,7 @@ impl StepRef<'_> {
             StepRef::SetTheme(_) => "set_theme",
             StepRef::SetTime(_) => "set_time",
             StepRef::CallActivityMethod(_) => "call_activity_method",
+            StepRef::ServiceCtl(_) => "service_ctl",
         }
     }
 }
@@ -282,6 +332,7 @@ impl Step {
         [
             self.launch.is_some(),
             self.wait_for.is_some(),
+            self.wait.is_some(),
             self.tap.is_some(),
             self.swipe.is_some(),
             self.scroll_until.is_some(),
@@ -293,6 +344,7 @@ impl Step {
             self.assert_visible.is_some(),
             self.assert_not_visible.is_some(),
             self.assert_state.is_some(),
+            self.assert_windows.is_some(),
             self.assert_log.is_some(),
             self.assert_no_crash.is_some(),
             self.assert_screenshot.is_some(),
@@ -306,6 +358,7 @@ impl Step {
             self.set_theme.is_some(),
             self.set_time.is_some(),
             self.call_activity_method.is_some(),
+            self.service_ctl.is_some(),
         ]
         .into_iter()
         .filter(|present| *present)
@@ -319,6 +372,9 @@ impl Step {
         }
         if self.wait_for.is_some() {
             return self.wait_for.as_ref().map(StepRef::WaitFor);
+        }
+        if self.wait.is_some() {
+            return self.wait.as_ref().map(StepRef::Wait);
         }
         if self.tap.is_some() {
             return self.tap.as_ref().map(StepRef::Tap);
@@ -355,6 +411,9 @@ impl Step {
         }
         if self.assert_state.is_some() {
             return self.assert_state.as_ref().map(StepRef::AssertState);
+        }
+        if self.assert_windows.is_some() {
+            return self.assert_windows.as_ref().map(StepRef::AssertWindows);
         }
         if self.assert_log.is_some() {
             return self.assert_log.as_ref().map(StepRef::AssertLog);
@@ -401,6 +460,9 @@ impl Step {
                 .as_ref()
                 .map(StepRef::CallActivityMethod);
         }
+        if self.service_ctl.is_some() {
+            return self.service_ctl.as_ref().map(StepRef::ServiceCtl);
+        }
         None
     }
 
@@ -441,7 +503,7 @@ pub struct BackStep {
 }
 
 /// `launch`.
-#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, JsonSchema)]
 pub struct LaunchStep {
     /// Explicit component (`pkg/.Activity` or `.Activity`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -452,9 +514,11 @@ pub struct LaunchStep {
     /// Intent data URI.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub data: Option<String>,
-    /// String extras.
+    /// Typed extras (`String`, `int`, `long`, `float`, `double`, `boolean`,
+    /// `String[]`; see [`ExtraValue`] for the YAML spelling). A `parcelable`
+    /// extra is a legal declaration that the ART launcher refuses by name.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
-    pub extras: BTreeMap<String, String>,
+    pub extras: BTreeMap<String, ExtraValue>,
     /// Clear app data before launching.
     #[serde(default)]
     pub clear_state: bool,
@@ -467,6 +531,29 @@ pub struct LaunchStep {
     /// pixel assertion bound to it fails closed.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub settle: Option<StepSettle>,
+    /// MPROC7: the launcher's idle kill, in seconds, for this session
+    /// (`0` disables it). A lazily spawned secondary process that starts no
+    /// activity and holds no started/bound service is killed after this long,
+    /// and the next intent respawns it. Launch-time (the launcher owns the
+    /// timer): a scenario that proves the idle kill sets this small, exactly as
+    /// `acos-art launch --idle-kill-seconds` / `ACOSLAUNCH_IDLE_KILL_SECS`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub idle_kill_seconds: Option<u64>,
+}
+
+/// `wait`: a fixed timeline delay.
+///
+/// It asserts nothing; it exists so a scenario can prove **time-based**
+/// behaviour (the launcher's idle kill, a timeout) because that is what the
+/// test is about. It is **never** a synchronisation primitive: waiting a fixed
+/// number of milliseconds before an assertion races the app (too early on a
+/// fast host, flaky on a loaded one). Use `wait_for` or an assertion's own
+/// `timeout_ms` to wait for a state the app reaches. The step's observation
+/// records `waited_ms`, so the verdict shows the delay actually elapsed.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct WaitStep {
+    /// Milliseconds to wait (1..=600000).
+    pub ms: u64,
 }
 
 /// `wait_for`.
@@ -540,13 +627,27 @@ pub struct TapStep {
     /// Settle rule for this input (`strict` default, `fast` navigation).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub settle: Option<StepSettle>,
-    /// SE1: fail the step when the settled frame's pixels are unchanged.
+    /// SE1: fail the step when the settled frame's pixels are unchanged;
+    /// A11YPACE: `expect_change: false` says the tap's effect is transient (a
+    /// hide/re-show, an asynchronous worker) and **no** change is claimed.
     ///
-    /// Opt-in and strict-only: `expect_change: true` with `settle: fast` is
-    /// rejected at scenario-validation time, because a fast frame may be
-    /// mid-animation and can never back a claim.
-    #[serde(default, skip_serializing_if = "is_false")]
-    pub expect_change: bool,
+    /// The tap's own `state_change` assertion (the UI tree + screenshot rule a
+    /// tap runs even when the scenario says nothing) needs a tree that differs
+    /// between the pre- and post-action frames. That is wrong for a control
+    /// whose effect is transient: Gaten's bubble hides for its lookup and
+    /// re-shows a moment later, so two probe samples can land on the same tree
+    /// and a sampling race would fail the step. An explicit `false` turns the
+    /// assertion into the "input delivered, no change claimed" form (the same
+    /// `input_delivery` assertion a `handled: false` tap gets) and is recorded
+    /// as `input.expect_change: false` in the step and verdict, so it can never
+    /// read as a silent pass of a missing effect: only `true` or the default
+    /// ("auto") still require the change.
+    ///
+    /// `true` is strict-only: with `settle: fast`/`content` the pixel claim has
+    /// no evidence, so validation rejects it. `false` is not a claim and may
+    /// combine with any settle rule.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub expect_change: Option<bool>,
     /// REL3H2: the scenario's own claim about the app's handling of this input.
     ///
     /// `true` fails the step with `INPUT_NOT_HANDLED` when the app window
@@ -816,6 +917,32 @@ pub enum PermissionState {
     Reset,
 }
 
+/// `assert_windows`: the window stack in policy z order, bottom first.
+///
+/// This is the LAYER1 assertion: it reads the tree's `windows[]` block (the
+/// host's AOSP layer policy, not insertion order), so an application overlay
+/// that is drawn and tapped above an activity can only pass when the reported
+/// stack actually says so.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct WindowOrderAssertion {
+    /// Expected window kinds, bottom to top (`application`,
+    /// `application_overlay`, `sub_window`, …). The count must match exactly:
+    /// a missing or extra window is a failure, never silently ignored.
+    pub order: Vec<String>,
+    /// Optional expected kind of the focused window.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub focus: Option<String>,
+    /// Optional expected `LayoutParams.TYPE_*` name of the focused window.
+    /// This is the precise form: the activity is `TYPE_BASE_APPLICATION`, a
+    /// dialog is `TYPE_APPLICATION`, and both have kind `application`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub focus_type: Option<String>,
+    /// Optional expected `LayoutParams.TYPE_*` names, bottom to top. When
+    /// present this must have the same length as `order`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub types: Option<Vec<String>>,
+}
+
 /// `set_permission`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct PermissionSetup {
@@ -866,6 +993,57 @@ pub struct TimeSetup {
     /// Optional IANA timezone.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub timezone: Option<String>,
+}
+
+/// `service_ctl`: one service-module operation between assertions (ADR-0029
+/// item 4).
+///
+/// `op` is `attach` (with `profile`/`config`), `detach`, or one of the module's
+/// own control ops (`sensors.set_value`, `net.telephony.sms`, `hw.bluetooth.scan`,
+/// ...). The step is the one scenario spelling of the agent API —
+/// `acos_services {op: attach|detach}` for the lifecycle words and
+/// `acos_service_ctl {module, op, args}` for a control op — so a scripted module
+/// can be driven mid-run: set a sensor value, assert the view, play a shake,
+/// detach and assert the honest empty answer. A control op reaches only a module
+/// that is attached in this run; a step naming a detached module is a structured
+/// step failure (never a silent no-op).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ServiceCtlStep {
+    /// Module id (`sensors`, `feedback.vibrator`).
+    pub module: String,
+    /// `attach`, `detach`, or a module control op (`set_value`, `play`, ...).
+    pub op: String,
+    /// Profile for `attach` (`off`/`stub`/`scripted`/`real`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub profile: Option<String>,
+    /// Module config for `attach`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub config: Option<Value>,
+    /// Control-op arguments (`{sensor: "accelerometer", values: [0,0,9.81]}`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub args: Option<Value>,
+    /// What the reply must contain, as a JSON **subset**.
+    ///
+    /// Objects match key by key (an expected key the reply lacks is a
+    /// failure), arrays match element by element with the same length, and
+    /// every other value must be equal. Absent = the reply is evidence only.
+    /// This is what makes a control op an *assertion*: `list` can require the
+    /// posted notification's title/channel/actions, `tap` the fired sender's
+    /// `start_result`, `dismiss` an empty `posted`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub expect: Option<Value>,
+    /// Wait for `expect` instead of sampling it once (1..=120000 ms).
+    ///
+    /// For a state the app reaches *asynchronously* (a screenshot the app
+    /// requests from a worker thread after a tap, a service that binds a moment
+    /// after the setting is written): the read-only op is re-issued until the
+    /// reply contains `expect`, and the step fails with the **last** reply when
+    /// the deadline passes. Only legal with `expect` and the read-only op
+    /// `status`: a polled op must be idempotent, and a wait with no expectation
+    /// would be a sleep (`wait` is that step).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub timeout_ms: Option<u64>,
 }
 
 /// `call_activity_method` (optional; debug/source-owned builds only).
@@ -971,6 +1149,17 @@ pub struct Scenario {
     /// Expected outcome.
     #[serde(default)]
     pub expectation: Expectation,
+    /// One line saying **why** the expectation is not `pass` (the known reason:
+    /// an open defect, an engine gap, a security rule). Required for
+    /// `non_pass`/`unsupported` and for `needs_env`; refused for `pass`, so an
+    /// honest declaration and a green row cannot disagree silently.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub expectation_reason: Option<String>,
+    /// Host capabilities the scenario needs before it can run (see
+    /// [`KNOWN_NEEDS_ENV`]). A runner must skip the scenario when one is absent
+    /// and say so, instead of running it into a failure that is not its own.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub needs_env: Vec<String>,
     /// Ordered steps.
     pub steps: Vec<Step>,
     /// Artifact options.
@@ -982,6 +1171,12 @@ pub struct Scenario {
     /// it is never for animation/transition testing. Launch-time only.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub animations: Option<String>,
+    /// ADR-0029 item 4: the service modules this scenario attaches at launch,
+    /// in order. Shape is the launch-request shape (`{id, profile, config}`);
+    /// the profiles and ids are validated here so a typo is an invalid
+    /// scenario, never a silently defaulted session.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub services: Vec<ServiceRequest>,
     /// SE2b: the exact failure a **negative** scenario must produce.
     ///
     /// `expectation: fail` only says "the run did not pass"; it accepts ANY
@@ -1000,6 +1195,14 @@ pub struct Scenario {
     /// the Rust VM has no window insets and ignores it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub insets: Option<String>,
+    /// MPROC1: extra APKs installed into the session beside `app`, each at its
+    /// own uid and reachable through `PackageManager`/`createPackageContext`.
+    ///
+    /// Paths are workspace-relative or absolute, resolved like `app`. A
+    /// scenario that names packages here is self-contained: the run installs
+    /// exactly this set, or fails with a structured error naming the APK.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub extra_apks: Option<Vec<String>>,
 }
 
 impl Scenario {
@@ -1067,6 +1270,25 @@ impl Scenario {
         serde_yaml_ng::to_string(self)
     }
 }
+
+/// One `services:` entry (`{id, profile, config}`), the scenario spelling of a
+/// launch request (ADR-0029 item 4).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ServiceRequest {
+    /// Module id (`feedback.vibrator`).
+    pub id: String,
+    /// Requested profile; `None` means the module's default (strongest
+    /// implemented) profile, exactly like the MCP/CLI form.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub profile: Option<String>,
+    /// Module configuration object (scripted state, launch config).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub config: Option<Value>,
+}
+
+/// The profiles a service module implements (plus `off`).
+pub const SERVICE_PROFILES: &[&str] = &["off", "stub", "scripted", "real"];
 
 /// One validation error with a stable path.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -1271,13 +1493,18 @@ fn validate_regex(validation: &mut ScenarioValidation, path: &str, pattern: &str
 fn validate_expect_change(
     validation: &mut ScenarioValidation,
     path: &str,
-    expect_change: bool,
+    expect_change: Option<bool>,
     settle: Option<StepSettle>,
 ) {
-    // SE2: `expect_change` is a pixel claim. A content-stable frame is never
-    // pixel evidence (the pixels may still be animating), so the combination
-    // is rejected at parse time exactly like fast.
-    if expect_change && matches!(settle, Some(StepSettle::Fast | StepSettle::Content)) {
+    // SE2: `expect_change: true` is a pixel claim. A content-stable frame is
+    // never pixel evidence (the pixels may still be animating), so the
+    // combination is rejected at parse time exactly like fast.
+    //
+    // A11YPACE: only `true` is a claim. `expect_change: false` (a tap whose
+    // effect is transient) asks for *no* evidence, so it may combine with any
+    // settle rule; the tap then reports `input_delivery` with "no change
+    // claimed" instead of running the tree/pixel comparison.
+    if expect_change == Some(true) && matches!(settle, Some(StepSettle::Fast | StepSettle::Content)) {
         let mode = if matches!(settle, Some(StepSettle::Content)) {
             "content"
         } else {
@@ -1428,6 +1655,31 @@ pub fn validate_scenario(scenario: &Scenario) -> ScenarioValidation {
             v.push("$.insets", "insets must be `carve` or `report`");
         }
     }
+    // MPROC1: an extra APK list is explicit — no empty entry, no duplicate
+    // path, and never the launched APK itself (the install would collide).
+    if let Some(extra_apks) = &scenario.extra_apks {
+        for (index, path) in extra_apks.iter().enumerate() {
+            if path.trim().is_empty() {
+                v.push(
+                    &format!("$.extra_apks[{index}]"),
+                    "an extra APK path cannot be empty",
+                );
+            } else if path.trim() == scenario.app.trim() {
+                v.push(
+                    &format!("$.extra_apks[{index}]"),
+                    "an extra APK cannot be the scenario's own `app`",
+                );
+            } else if extra_apks[..index]
+                .iter()
+                .any(|earlier| earlier.trim() == path.trim())
+            {
+                v.push(
+                    &format!("$.extra_apks[{index}]"),
+                    "the same extra APK is listed twice",
+                );
+            }
+        }
+    }
     match scenario.display {
         DisplaySpec::None => {
             v.warn(
@@ -1461,6 +1713,77 @@ pub fn validate_scenario(scenario: &Scenario) -> ScenarioValidation {
     }
     if scenario.steps.is_empty() {
         v.push("$.steps", "scenario must contain at least one step");
+    }
+    // The declaration must be honest on its own: a non-pass expectation says
+    // why in one line, and a `needs_env` names a registered host capability (a
+    // typo would otherwise skip the scenario forever with no error).
+    if let Some(reason) = scenario.expectation_reason.as_deref() {
+        if reason.trim().is_empty() {
+            v.push(
+                "$.expectation_reason",
+                "expectation_reason must not be empty (it is the one-line why)",
+            );
+        }
+        if scenario.expectation == Expectation::Pass && scenario.needs_env.is_empty() {
+            v.push(
+                "$.expectation_reason",
+                "`expectation: pass` has no reason to give; a reason belongs to non_pass or \
+                 unsupported (or to needs_env, where it says what the host must provide)",
+            );
+        }
+    }
+    if matches!(
+        scenario.expectation,
+        Expectation::NonPass | Expectation::Unsupported
+    ) && scenario.expectation_reason.as_deref().is_none_or(|r| r.trim().is_empty())
+    {
+        v.push(
+            "$.expectation_reason",
+            format!(
+                "`expectation: {}` must say why in one line (expectation_reason)",
+                match scenario.expectation {
+                    Expectation::NonPass => "non_pass",
+                    Expectation::Unsupported => "unsupported",
+                    _ => unreachable!(),
+                }
+            ),
+        );
+    }
+    let mut seen_needs: BTreeMap<&str, usize> = BTreeMap::new();
+    for (index, name) in scenario.needs_env.iter().enumerate() {
+        let path = format!("$.needs_env[{index}]");
+        let name_trimmed = name.trim();
+        if name_trimmed.is_empty() {
+            v.push(path, "needs_env entries must not be empty");
+            continue;
+        }
+        if !KNOWN_NEEDS_ENV.contains(&name_trimmed) {
+            v.push(
+                path,
+                format!(
+                    "unknown host capability `{name_trimmed}`; known: {}",
+                    KNOWN_NEEDS_ENV.join(", ")
+                ),
+            );
+        }
+        *seen_needs.entry(name_trimmed).or_default() += 1;
+    }
+    for (name, count) in seen_needs {
+        if count > 1 {
+            v.push(
+                "$.needs_env",
+                format!("`{name}` is listed {count} times; name each capability once"),
+            );
+        }
+    }
+    if !scenario.needs_env.is_empty()
+        && scenario.expectation_reason.as_deref().is_none_or(|r| r.trim().is_empty())
+    {
+        v.push(
+            "$.needs_env",
+            "a scenario that needs a host capability says so in expectation_reason \
+             (what is missing and why the run cannot be honest without it)",
+        );
     }
     // SE2b: a pinned failure only makes sense for a negative scenario. A
     // `pass` scenario that pins an error code would be self-contradictory, and
@@ -1517,11 +1840,17 @@ pub fn validate_scenario(scenario: &Scenario) -> ScenarioValidation {
                         "launch needs `activity` or `intent_action` (both may be omitted only if the APK has a single launcher activity)",
                     );
                 }
-                if launch.activity.is_some() && launch.intent_action.is_some() {
-                    v.push(
-                        &path,
-                        "launch accepts `activity` or `intent_action`, not both",
-                    );
+                // LAUNCHEXTRAS: `activity` names the component and
+                // `intent_action` is the Intent's action; they are independent
+                // fields now (a scenario launching `X/.A` with an explicit
+                // action is exactly what a host-built launch Intent carries).
+                if let Some(secs) = launch.idle_kill_seconds {
+                    if secs > 86_400 {
+                        v.push(
+                            format!("{path}.idle_kill_seconds"),
+                            "idle_kill_seconds must be <= 86400 (one day); 0 disables the idle kill",
+                        );
+                    }
                 }
             }
             StepRef::WaitFor(wait) => {
@@ -1535,6 +1864,11 @@ pub fn validate_scenario(scenario: &Scenario) -> ScenarioValidation {
                     &format!("{path}.settle_timeout_ms"),
                     wait.settle_timeout_ms,
                 );
+            }
+            StepRef::Wait(wait) => {
+                if wait.ms == 0 || wait.ms > 600_000 {
+                    v.push(format!("{path}.ms"), "ms must be in 1..=600000");
+                }
             }
             StepRef::Tap(tap) => {
                 validate_action_like(&mut v, &format!("steps[{index}]"), tap, "tap");
@@ -1552,7 +1886,7 @@ pub fn validate_scenario(scenario: &Scenario) -> ScenarioValidation {
                     swipe.duration_ms,
                     swipe.settle_timeout_ms,
                 );
-                validate_expect_change(&mut v, &path, swipe.expect_change, swipe.settle);
+                validate_expect_change(&mut v, &path, Some(swipe.expect_change), swipe.settle);
             }
             StepRef::ScrollUntil(scroll) => {
                 validate_swipe_geometry(
@@ -1589,10 +1923,10 @@ pub fn validate_scenario(scenario: &Scenario) -> ScenarioValidation {
                 if ty.text.is_empty() && !ty.clear {
                     v.push(&path, "type needs non-empty `text` (or `clear: true`)");
                 }
-                validate_expect_change(&mut v, &path, ty.expect_change, ty.settle);
+                validate_expect_change(&mut v, &path, Some(ty.expect_change), ty.settle);
             }
             StepRef::Key(key) => {
-                validate_expect_change(&mut v, &path, key.expect_change, key.settle)
+                validate_expect_change(&mut v, &path, Some(key.expect_change), key.settle)
             }
             StepRef::Back(_) | StepRef::Rotate(_) => {}
             StepRef::AssertText(assertion) => {
@@ -1687,6 +2021,19 @@ pub fn validate_scenario(scenario: &Scenario) -> ScenarioValidation {
                         &format!("{path}.region_masks[{i}].bounds"),
                         mask.bounds,
                     );
+                }
+            }
+            StepRef::AssertWindows(assertion) => {
+                if assertion.order.is_empty() {
+                    v.push(&path, "assert_windows.order must list at least one window");
+                }
+                if let Some(types) = &assertion.types {
+                    if types.len() != assertion.order.len() {
+                        v.push(
+                            &path,
+                            "assert_windows.types must have the same length as order",
+                        );
+                    }
                 }
             }
             StepRef::AssertRegion(assertion) => {
@@ -1842,6 +2189,92 @@ pub fn validate_scenario(scenario: &Scenario) -> ScenarioValidation {
                     "optional step: only valid for debuggable/source-owned builds with an injected test hook",
                 );
             }
+            StepRef::ServiceCtl(ctl) => {
+                if ctl.module.trim().is_empty() {
+                    v.push(format!("{path}.module"), "module id must not be empty");
+                }
+                if ctl.op.trim().is_empty() {
+                    v.push(format!("{path}.op"), "op must not be empty");
+                }
+                if let Some(profile) = &ctl.profile {
+                    if !SERVICE_PROFILES.contains(&profile.as_str()) {
+                        v.push(
+                            format!("{path}.profile"),
+                            format!(
+                                "unknown profile {profile:?}; use one of {}",
+                                SERVICE_PROFILES.join(", ")
+                            ),
+                        );
+                    }
+                    if ctl.op != "attach" {
+                        v.push(
+                            format!("{path}.profile"),
+                            "`profile` only applies to op `attach`",
+                        );
+                    }
+                }
+                if let Some(config) = &ctl.config {
+                    if !config.is_object() {
+                        v.push(format!("{path}.config"), "config must be an object");
+                    }
+                    if ctl.op != "attach" {
+                        v.push(
+                            format!("{path}.config"),
+                            "`config` only applies to op `attach`",
+                        );
+                    }
+                }
+                if let Some(args) = &ctl.args {
+                    if !args.is_object() && !args.is_null() {
+                        v.push(format!("{path}.args"), "args must be an object");
+                    }
+                }
+                if let Some(timeout) = ctl.timeout_ms {
+                    if !(1..=120_000).contains(&timeout) {
+                        v.push(
+                            format!("{path}.timeout_ms"),
+                            "timeout_ms must be between 1 and 120000",
+                        );
+                    }
+                    if ctl.expect.is_none() {
+                        v.push(
+                            format!("{path}.timeout_ms"),
+                            "`timeout_ms` waits for `expect`; without one it is a sleep (use `wait`)",
+                        );
+                    }
+                    if ctl.op != "status" {
+                        v.push(
+                            format!("{path}.timeout_ms"),
+                            "`timeout_ms` re-issues the op, so it only applies to the read-only op `status`",
+                        );
+                    }
+                }
+                // A control op drives a module that is attached in *this* run:
+                // the scenario's `services:` block attaches it at launch, or an
+                // earlier `service_ctl {op: attach}` step does. A step that can
+                // only ever be refused is a scenario error, not a runtime one —
+                // but the step that *does* the attaching is never one.
+                if ctl.op != "attach" && !ctl.module.trim().is_empty() {
+                    let attached_at_launch = scenario
+                        .services
+                        .iter()
+                        .any(|service| service.id == ctl.module);
+                    let attached_earlier = scenario.steps[..index].iter().any(|step| {
+                        step.service_ctl.as_ref().is_some_and(|earlier| {
+                            earlier.op == "attach" && earlier.module == ctl.module
+                        })
+                    });
+                    if !attached_at_launch && !attached_earlier {
+                        v.push(
+                            &path,
+                            format!(
+                                "module {:?} is not attached by this scenario (no `services:` entry and no earlier `service_ctl: {{op: attach}}`); a control step can only drive an attached module",
+                                ctl.module
+                            ),
+                        );
+                    }
+                }
+            }
         }
     }
 
@@ -1851,6 +2284,35 @@ pub fn validate_scenario(scenario: &Scenario) -> ScenarioValidation {
                 v.warn(
                     format!("steps[{index}]"),
                     "step needs screenshots but output.screenshots is false",
+                );
+            }
+        }
+    }
+
+    // ADR-0029 item 4: a `services:` entry must name a module and a profile
+    // this registry knows; the runtime would refuse it anyway, but a scenario
+    // that can never run must fail at parse time with a stable path.
+    for (index, service) in scenario.services.iter().enumerate() {
+        let path = format!("$.services[{index}]");
+        if service.id.trim().is_empty() {
+            v.push(format!("{path}.id"), "a service module id cannot be empty");
+        }
+        if let Some(profile) = &service.profile {
+            if !SERVICE_PROFILES.contains(&profile.as_str()) {
+                v.push(
+                    format!("{path}.profile"),
+                    format!(
+                        "unknown profile {profile:?}; use one of {}",
+                        SERVICE_PROFILES.join(", ")
+                    ),
+                );
+            }
+        }
+        if let Some(config) = &service.config {
+            if !config.is_object() {
+                v.push(
+                    format!("{path}.config"),
+                    format!("config must be an object, got {config}"),
                 );
             }
         }
@@ -1941,13 +2403,15 @@ steps:
   - back: {expect_change: true}
 "#;
 
-    /// SE1: the flag is a bool on the action payloads and defaults to false
-    /// (so every existing scenario keeps the P12 rule).
+    /// SE1: the flag on the action payloads. A tap's is tri-state
+    /// (`None` = the implicit "auto" tree rule, `true` = a change claim,
+    /// `false` = A11YPACE's "transient effect, no change claimed"); the other
+    /// actions keep the bool (default `false`, no claim).
     #[test]
     fn expect_change_parses_as_a_bool_and_defaults_false() {
         let scenario = Scenario::from_yaml_str(EXPECT_CHANGE).expect("valid scenario");
         assert!(scenario.validate().is_ok(), "{:?}", scenario.validate());
-        assert!(scenario.steps[1].tap.as_ref().unwrap().expect_change);
+        assert_eq!(scenario.steps[1].tap.as_ref().unwrap().expect_change, Some(true));
         assert!(scenario.steps[2].back.as_ref().unwrap().expect_change);
 
         let plain = Scenario::from_yaml_str(
@@ -1955,10 +2419,59 @@ steps:
         )
         .expect("valid scenario");
         assert!(plain.validate().is_ok(), "{:?}", plain.validate());
-        assert!(!plain.steps[0].tap.as_ref().unwrap().expect_change);
+        assert_eq!(plain.steps[0].tap.as_ref().unwrap().expect_change, None);
         assert!(!plain.steps[1].back.as_ref().unwrap().expect_change);
-        // A false flag is not written back: the wire form is unchanged.
+        // An unset flag is not written back: the wire form is unchanged.
         assert!(!plain.to_yaml_string().unwrap().contains("expect_change"));
+    }
+
+    /// A11YPACE: `expect_change: false` on a tap is a first-class value: it
+    /// says "the effect is transient, no change claimed", it survives a
+    /// round-trip (so a replayed scenario keeps it), and it is *not* subject to
+    /// the pixel-claim rule that rejects `true` with fast/content.
+    #[test]
+    fn a11ypace_tap_expect_change_false_is_an_explicit_no_change_claim() {
+        for settle in ["", ", settle: fast", ", settle: content"] {
+            let yaml = format!(
+                "version: 1\nname: x\napp: y\nisolation: process\ndisplay: {{mode: offscreen, width: 8, height: 8, density_dpi: 420}}\nsteps:\n  - tap: {{x: 1, y: 2, expect_change: false{settle}}}\n"
+            );
+            let scenario = Scenario::from_yaml_str(&yaml).expect("valid scenario");
+            assert!(
+                scenario.validate().is_ok(),
+                "expect_change: false{settle} is not a pixel claim: {:?}",
+                scenario.validate()
+            );
+            assert_eq!(
+                scenario.steps[0].tap.as_ref().unwrap().expect_change,
+                Some(false)
+            );
+            assert!(scenario.to_yaml_string().unwrap().contains("expect_change: false"));
+        }
+        // The pixel claim keeps its strict-only rule.
+        let yaml = "version: 1\nname: x\napp: y\nisolation: process\ndisplay: {mode: offscreen, width: 8, height: 8, density_dpi: 420}\nsteps:\n  - tap: {x: 1, y: 2, settle: fast, expect_change: true}\n";
+        let scenario = Scenario::from_yaml_str_unvalidated(yaml).expect("parses");
+        assert!(!scenario.validate().is_ok());
+    }
+
+    /// GATENE2E: `service_ctl.timeout_ms` is a wait for `expect`, so it needs one,
+    /// and it re-issues the op, so only the read-only `status` may carry it.
+    #[test]
+    fn gatene2e_service_ctl_timeout_rules() {
+        let head = "version: 1\nname: x\napp: y\nisolation: process\ndisplay: {mode: offscreen, width: 8, height: 8, density_dpi: 420}\nservices:\n  - id: accessibility\n    profile: real\nsteps:\n";
+        let ok = format!("{head}  - service_ctl: {{module: accessibility, op: status, expect: {{service_bound: true}}, timeout_ms: 5000}}\n");
+        let scenario = Scenario::from_yaml_str(&ok).expect("valid");
+        assert_eq!(scenario.steps[0].service_ctl.as_ref().unwrap().timeout_ms, Some(5000));
+        assert!(scenario.to_yaml_string().unwrap().contains("timeout_ms: 5000"));
+        for (step, why) in [
+            ("{module: accessibility, op: status, timeout_ms: 5000}", "no expect"),
+            ("{module: accessibility, op: enable, expect: {a: 1}, timeout_ms: 5000}", "not status"),
+            ("{module: accessibility, op: status, expect: {a: 1}, timeout_ms: 0}", "zero"),
+            ("{module: accessibility, op: status, expect: {a: 1}, timeout_ms: 999999}", "too long"),
+        ] {
+            let yaml = format!("{head}  - service_ctl: {step}\n");
+            let scenario = Scenario::from_yaml_str_unvalidated(&yaml).expect("parses");
+            assert!(!scenario.validate().is_ok(), "{why} must be rejected");
+        }
     }
 
     const EXPECT_HANDLED: &str = r#"

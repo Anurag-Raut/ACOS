@@ -12,6 +12,14 @@
 use std::path::{Path, PathBuf};
 use std::sync::Once;
 
+pub mod prereq;
+
+pub use prereq::{
+    art_inputs, art_sysroot, art_warm_data, require_art, require_prereq, require_some,
+    skip_allowed,
+    skipped_count, ArtInputs, ALLOW_ANY_SKIP_ENV, ALLOW_SKIP_ENV, WARM_DATA_ENV,
+};
+
 /// The workspace root (the parent of `crates/`).
 pub fn repo_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
@@ -152,9 +160,52 @@ pub fn pick_scratch_root(
     )
 }
 
+/// The scratch directory a test publishes evidence into.
+///
+/// Tests used to write their evidence straight into the checkout's tracked
+/// `results/` tree (`results/flutter/`, `results/rn/`, `results/render/`, ...),
+/// so a suite run left `git status` dirty and could overwrite a committed frame,
+/// coverage table or probe JSON. One rule for that class: `$ACOS_TEST_ARTIFACTS`
+/// when set, otherwise `<checkout>/.cache/test-artifacts/<name>`. Never the
+/// `results/` tree, which is evidence a human curated.
+///
+/// `repo_root` is the caller's checkout (each test crate has its own
+/// `repo_root()`); `name` is the per-suite subdirectory (`flutter`, `rn`, ...).
+pub fn test_artifacts_dir_from(repo_root: &Path, requested: Option<&Path>, name: &str) -> PathBuf {
+    requested
+        .map(Path::to_path_buf)
+        .unwrap_or_else(|| repo_root.join(".cache").join("test-artifacts"))
+        .join(name)
+}
+
+/// [`test_artifacts_dir_from`] reading `$ACOS_TEST_ARTIFACTS`, relative to this
+/// workspace's checkout.
+pub fn test_artifacts_dir(name: &str) -> PathBuf {
+    let requested = std::env::var_os("ACOS_TEST_ARTIFACTS").map(PathBuf::from);
+    test_artifacts_dir_from(&repo_root(), requested.as_deref(), name)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Tests that publish evidence wrote into the checkout's tracked `results/`
+    /// tree, so a suite run left `git status` dirty and could overwrite a
+    /// committed frame or coverage file. One rule for that class: a scratch
+    /// root, never the checkout.
+    #[test]
+    fn test_artifacts_go_to_a_scratch_root_and_never_to_the_checkout_results_tree() {
+        let checkout = Path::new("/home/agent/wt");
+        let dir = test_artifacts_dir_from(checkout, Some(Path::new("/scratch/artifacts")), "flutter");
+        assert_eq!(dir, Path::new("/scratch/artifacts/flutter"));
+        let dir = test_artifacts_dir_from(checkout, None, "rn");
+        assert_eq!(dir, checkout.join(".cache/test-artifacts/rn"));
+        assert!(
+            !dir.starts_with(checkout.join("results")),
+            "test artifacts must not land in the tracked results/ tree: {}",
+            dir.display()
+        );
+    }
 
     #[test]
     fn a_root_that_cannot_hold_a_socket_falls_through_to_a_short_one() {

@@ -43,8 +43,8 @@ pub mod manifest;
 pub mod native;
 pub mod reference;
 pub mod retention;
-pub mod settle;
 pub mod screenshot;
+pub mod settle;
 pub mod verify;
 
 pub use backend::{
@@ -56,9 +56,9 @@ pub use display::{frame_display_geometry, FrameDisplayGeometry};
 pub use error::VerifyError;
 pub use executor::{run_scenario, RunOptions, RunOutcome};
 pub use native::NativeBackend;
-pub use settle::{content_signature, content_window_ms, ContentWindow};
 pub use reference::{ReferenceBackend, ReferenceState};
 pub use retention::{Decision, KeepArtifacts, RetentionReport, KEEP_ARTIFACTS_ENV};
+pub use settle::{content_signature, content_window_ms, ContentWindow};
 pub use verify::{verify, verify_with_clock};
 
 // Re-export the protocol types a caller needs to drive `verify`, so consumers do

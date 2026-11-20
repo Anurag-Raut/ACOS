@@ -212,13 +212,21 @@ fn clip_facts(vm: &mut Vm, clip: Handle) -> JResult<ClipFacts> {
                 &[JavaValue::Int(i)],
             )?;
             if mime != NULL {
-                facts.mime_types.push(vm.java_string_to_rust(mime).map_err(err)?);
+                facts
+                    .mime_types
+                    .push(vm.java_string_to_rust(mime).map_err(err)?);
             }
         }
     }
     facts.item_count = int_call(vm, clip, "getItemCount", "()I")?;
     if facts.item_count > 0 {
-        let item = object_field(vm, clip, "getItemAt", "(I)Landroid/content/ClipData$Item;", &[JavaValue::Int(0)])?;
+        let item = object_field(
+            vm,
+            clip,
+            "getItemAt",
+            "(I)Landroid/content/ClipData$Item;",
+            &[JavaValue::Int(0)],
+        )?;
         if item != NULL {
             facts.has_text =
                 object_field(vm, item, "getText", "()Ljava/lang/CharSequence;", &[])? != NULL;
@@ -238,10 +246,13 @@ fn clip_description(vm: &mut Vm, facts: &ClipFacts) -> JResult<Handle> {
     } else {
         facts.mime_types.clone()
     };
-    let arr = vm.new_array_empty("Ljava/lang/String;", mime_types.len()).map_err(err)?;
+    let arr = vm
+        .new_array_empty("Ljava/lang/String;", mime_types.len())
+        .map_err(err)?;
     for (i, mime) in mime_types.iter().enumerate() {
         let s = vm.new_string_rooted(mime).map_err(err)?;
-        vm.set_array_element(arr, i, JavaValue::Object(s)).map_err(err)?;
+        vm.set_array_element(arr, i, JavaValue::Object(s))
+            .map_err(err)?;
     }
     vm.new_instance_ctor(
         "android.content.ClipDescription",

@@ -7,8 +7,8 @@
 //! false-pass prevention can be exercised on this host.
 
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 use std::process::ExitCode;
+use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use acos_protocol::artifacts::RunMarker;
@@ -216,7 +216,11 @@ pub fn run(args: VerifyArgs) -> ExitCode {
         );
         // `finish_run` must not try to write into the directory it just refused,
         // so report through the same printer with the claimed path only.
-        return finish(&crate::trust::stamp_envelope(&envelope, None), &args, &artifacts);
+        return finish(
+            &crate::trust::stamp_envelope(&envelope, None),
+            &args,
+            &artifacts,
+        );
     }
 
     // F10: `--flag` values are deterministic NAME=VALUE metadata recorded in
@@ -233,7 +237,9 @@ pub fn run(args: VerifyArgs) -> ExitCode {
                     ErrorCode::InvalidArgument,
                     format!("invalid argument `--flag` (`{flag}`): {reason}"),
                 )
-                .with_hint("Use NAME=VALUE (`--flag engine=art`); flags are recorded in the reproducer.")
+                .with_hint(
+                    "Use NAME=VALUE (`--flag engine=art`); flags are recorded in the reproducer.",
+                )
                 .with_details(serde_json::json!({
                     "field": "flags",
                     "index": index,
@@ -283,10 +289,9 @@ pub fn run(args: VerifyArgs) -> ExitCode {
     // falls back to the default and the run records that in its verdict.
     if let Some(value) = args.keep_artifacts.as_deref() {
         match acos_verify::retention::KeepArtifacts::parse(value) {
-            Some(mode) => std::env::set_var(
-                acos_verify::retention::KEEP_ARTIFACTS_ENV,
-                mode.as_str(),
-            ),
+            Some(mode) => {
+                std::env::set_var(acos_verify::retention::KEEP_ARTIFACTS_ENV, mode.as_str())
+            }
             None => {
                 let envelope = Envelope::failure(
                     request_id,
@@ -459,6 +464,60 @@ pub fn run(args: VerifyArgs) -> ExitCode {
     };
     std::env::set_var(acos_services::wms::INSETS_ENV, &insets_owned);
 
+    // ADR-0029 item 4: the scenario's `services:` block is applied at launch,
+    // through the same validated spec path the launch request uses. A module
+    // the engine cannot attach is a refusal here, before a guest exists.
+    let scenario_services: Vec<serde_json::Value> =
+        acos_protocol::scenario::Scenario::load(&scenario)
+            .ok()
+            .map(|scenario| {
+                scenario
+                    .services
+                    .iter()
+                    .map(|service| {
+                        serde_json::json!({
+                            "id": service.id,
+                            "profile": service.profile,
+                            "config": service.config,
+                        })
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+    let mut validated_services = Vec::new();
+    for service in &scenario_services {
+        match acos_services::module::ModuleSpec::from_json(service) {
+            Ok(spec) => validated_services.push(spec.to_json()),
+            Err(error) => {
+                let envelope = Envelope::failure(
+                    request_id,
+                    ProtocolBackend::AcosNative,
+                    Fidelity::StaticAnalysis,
+                    ProtocolError::new(ErrorCode::InvalidScenario, error.to_string())
+                        .with_hint("Fix the scenario `services:` entry; the profile must be one of off, stub, scripted, real.")
+                        .with_details(serde_json::json!({"field": "services", "value": service})),
+                    Metrics::wall_ms(0),
+                );
+                return finish_run(&envelope, &args, &artifacts, Some(trust));
+            }
+        }
+    }
+    if !validated_services.is_empty() && engine == Engine::RustVm {
+        let envelope = Envelope::failure(
+            request_id,
+            ProtocolBackend::AcosNative,
+            Fidelity::StaticAnalysis,
+            ProtocolError::new(
+                ErrorCode::UnsupportedBackend,
+                "services: a scenario `services:` block needs the ART engine",
+            )
+            .with_hint("The Rust VM has no service table to attach modules to. Run `--engine art`; the verdict then lists the attached modules and their fidelity.")
+            .with_details(serde_json::json!({"field": "services", "capability": "service.modules"})),
+            Metrics::wall_ms(0),
+        );
+        return finish_run(&envelope, &args, &artifacts, Some(trust));
+    }
+
     let request = VerifyRequest {
         base: RequestBase::new(request_id.clone()),
         apk: args.apk.as_ref().map(|path| path.display().to_string()),
@@ -522,8 +581,16 @@ pub fn run(args: VerifyArgs) -> ExitCode {
     let mut session_boot_ms: Option<u64> = None;
     let mut session_animations: Option<&'static str> = None;
     let mut session_insets: Option<&'static str> = None;
+    // MPROC1: the extra packages this run installed (empty for a single-app
+    // scenario), echoed in the verdict so the evidence names the package set.
+    let mut session_extra_apks: Vec<PathBuf> = Vec::new();
     // H13b: the boot image the guest booted and whether its cache hit.
     let mut session_boot_image: Option<serde_json::Value> = None;
+    // NET4: the id this run's session is addressed by. The relay session is
+    // `acos-<id>`, so a run's network is reachable by `acos_net` like a serve
+    // session's — the id is published in the engine report instead of dying with
+    // the process.
+    let mut session_id: Option<String> = None;
     let backend: EngineBackend = match engine {
         // The default route is forwarded verbatim: engine selection does not
         // change Rust VM behaviour.
@@ -549,6 +616,63 @@ pub fn run(args: VerifyArgs) -> ExitCode {
                     return finish_run(&envelope, &args, &artifacts, Some(trust));
                 }
             };
+            // MPROC1: the scenario's `extra_apks` (or none). A path that does
+            // not resolve is a structured `APK_IO`/`INVALID_SCENARIO` failure
+            // before any guest starts, never a silently smaller package set.
+            let extra_apks = match resolve_extra_apks(&scenario) {
+                Ok(paths) => paths,
+                Err(error) => {
+                    let envelope = Envelope::failure(
+                        request_id,
+                        ProtocolBackend::AcosNative,
+                        Fidelity::StaticAnalysis,
+                        error,
+                        Metrics::wall_ms(0),
+                    );
+                    return finish_run(&envelope, &args, &artifacts, Some(trust));
+                }
+            };
+            // MPROC7: the scenario's launch-time idle kill, for the same reason:
+            // the launcher owns the timer, so it must be known before the guest
+            // starts.
+            let idle_kill_seconds = match resolve_idle_kill_seconds(&scenario) {
+                Ok(value) => value,
+                Err(error) => {
+                    let envelope = Envelope::failure(
+                        request_id,
+                        ProtocolBackend::AcosNative,
+                        Fidelity::StaticAnalysis,
+                        error,
+                        Metrics::wall_ms(0),
+                    );
+                    return finish_run(&envelope, &args, &artifacts, Some(trust));
+                }
+            };
+            // LAUNCHEXTRAS: the launch Intent is resolved before the guest, for
+            // the same reason as the idle kill: the launcher owns the first
+            // launch, so a scenario's `intent_action`/`data`/`extras` must be
+            // known before it starts. A `Parcelable` extra starts no guest with
+            // an incomplete Intent; the launch step refuses it by name (its
+            // status stays `unsupported`, which is what the scenario declares).
+            let launch_intent = match resolve_launch_intent(&scenario) {
+                Ok(intent) => {
+                    if intent.unsupported_extra().is_some() {
+                        acos_protocol::LaunchIntent::default()
+                    } else {
+                        intent
+                    }
+                }
+                Err(error) => {
+                    let envelope = Envelope::failure(
+                        request_id,
+                        ProtocolBackend::AcosNative,
+                        Fidelity::StaticAnalysis,
+                        error,
+                        Metrics::wall_ms(0),
+                    );
+                    return finish_run(&envelope, &args, &artifacts, Some(trust));
+                }
+            };
             // ZPROD3: a `verify` run uses the same engine path as `acos serve`.
             // With `ACOS_ART_ZYGOTE=on` that means a persistent-zygote child
             // (`start_with_zygote`); with the flag off the host is disabled and
@@ -557,17 +681,28 @@ pub fn run(args: VerifyArgs) -> ExitCode {
             let zygote = Arc::new(crate::engine::zygote_host::ZygoteHost::for_artifacts(
                 &artifacts,
             ));
-            match crate::engine::art::ArtSession::start_with_zygote(
+            match crate::engine::art::ArtSession::start_with_apks_and_session(
                 &apk,
+                &extra_apks,
                 &artifacts,
                 animations,
                 &insets_owned,
+                idle_kill_seconds,
                 Some(zygote),
+                // NET4: one-shot runs are named by an id too (the engine
+                // generates `verify-<pid>`): the relay session is `acos-<id>`,
+                // so this run's network is addressable exactly like a serve
+                // session's, and the id is reported in `engine.json`.
+                None,
+                &validated_services,
+                &launch_intent,
             ) {
                 Ok(session) => {
+                    session_id = Some(session.session_id().to_string());
                     session_boot_ms = Some(session.session_start_ms());
                     session_animations = Some(session.animations());
                     session_insets = Some(session.insets());
+                    session_extra_apks = session.extra_apks().to_vec();
                     session_boot_image = session.boot_image().cloned();
                     EngineBackend::session(Box::new(session))
                 }
@@ -592,6 +727,13 @@ pub fn run(args: VerifyArgs) -> ExitCode {
     let engine_label = backend.engine();
     let mode = backend.mode().unwrap_or(Mode::Live);
     let session_caps = backend.session_capabilities();
+    // ADR-0029 item 4: the attached set as the *launcher* reported it, captured
+    // before the session is torn down (the rows are the verdict's evidence).
+    let session_modules = backend.modules();
+    // ADR-0029: the rows a verdict cites must be the session's *final* module
+    // state (every delivered fix is recorded in them), so keep the live handle
+    // and read it after the teardown asked the launcher once more.
+    let live_module_rows = backend.module_rows();
     let mut guarded = crate::trust::TrustGuard::new(Box::new(backend), trust);
     let mut envelope = acos_verify::verify(&request, &mut guarded);
     // W46: tear the session down *before* annotating, so the launcher's own
@@ -599,6 +741,13 @@ pub fn run(args: VerifyArgs) -> ExitCode {
     // record is evidence for a pass as well as for a failure (a clean run ends
     // with guest_exit=0), and a caller that keeps only the artifacts keeps it.
     drop(guarded);
+    if trust == crate::trust::Trust::Trusted {
+        merge_final_logd(&artifacts);
+    }
+    let session_modules = live_module_rows
+        .and_then(|rows| rows.lock().ok().map(|rows| rows.clone()))
+        .filter(|rows| !rows.is_empty())
+        .unwrap_or(session_modules);
     annotate(
         &mut envelope,
         &args,
@@ -610,9 +759,69 @@ pub fn run(args: VerifyArgs) -> ExitCode {
         session_boot_ms,
         session_animations,
         session_insets,
+        &session_extra_apks,
         session_boot_image,
+        &session_modules,
+        session_id.clone(),
     );
     finish_run(&envelope, &args, &artifacts, Some(trust))
+}
+
+/// The verifier reads the guest's log **between steps**, so the entries the
+/// guest wrote after its last flush (the lookup a tap started, and for a guest
+/// that died the assertion text that says why) never reached `logs/logcat.txt`.
+/// The launcher keeps the whole sink in `art-frames/logd-final.jsonl` at exit;
+/// append what the artifact is missing (entries with a `seq` past its last one).
+/// Guest-asserted, so the caller only runs this for a trusted run.
+pub(crate) fn merge_final_logd(artifacts: &Path) {
+    let dump = artifacts.join("art-frames").join("logd-final.jsonl");
+    let Ok(text) = std::fs::read_to_string(&dump) else {
+        return;
+    };
+    let logcat = artifacts.join(acos_protocol::artifacts::logcat_file_name());
+    let Ok(mut current) = std::fs::read_to_string(&logcat) else {
+        return;
+    };
+    let last_seq = current
+        .lines()
+        .filter_map(|line| line.split_whitespace().nth(1)?.parse::<u64>().ok())
+        .max()
+        .unwrap_or(0);
+    let stamp = std::fs::read_to_string(artifacts.join("art-frames").join("session-exit.json"))
+        .ok()
+        .and_then(|t| serde_json::from_str::<serde_json::Value>(&t).ok())
+        .and_then(|v| v.get("utc_ms").and_then(|m| m.as_u64()))
+        .unwrap_or(0);
+    let mut added = 0usize;
+    for line in text.lines() {
+        let Ok(entry) = serde_json::from_str::<serde_json::Value>(line) else {
+            continue;
+        };
+        let seq = entry.get("seq").and_then(|v| v.as_u64()).unwrap_or(0);
+        if seq <= last_seq {
+            continue;
+        }
+        let level = match entry.get("prio").and_then(|v| v.as_i64()).unwrap_or(4) {
+            2 => 'V',
+            3 => 'D',
+            5 => 'W',
+            6 | 7 => 'E',
+            _ => 'I',
+        };
+        let captured = entry.get("ts_ms").and_then(|v| v.as_u64()).unwrap_or(0);
+        current.push_str(&format!(
+            "{:>6}  {:>5}  {} {}: {}\n",
+            if captured > 0 { captured } else { stamp },
+            seq,
+            level,
+            entry.get("tag").and_then(|v| v.as_str()).unwrap_or(""),
+            entry.get("message").and_then(|v| v.as_str()).unwrap_or("")
+        ));
+        added += 1;
+    }
+    if added > 0 {
+        let _ = std::fs::write(&logcat, current);
+    }
 }
 
 /// Put the engine choice and mode into the JSON verdict, enforce that preview is
@@ -628,7 +837,10 @@ pub(crate) fn annotate(
     session_boot_ms: Option<u64>,
     session_animations: Option<&'static str>,
     session_insets: Option<&'static str>,
+    session_extra_apks: &[PathBuf],
     session_boot_image: Option<serde_json::Value>,
+    session_modules: &[serde_json::Value],
+    session_id: Option<String>,
 ) {
     let engine = engine.unwrap_or(Engine::RustVm);
     // ARTGC: the engine writes `art-frames/live-session.json` and
@@ -697,6 +909,8 @@ pub(crate) fn annotate(
         "evidence": evidence,
         "timing": timing,
         "session_exit": session_exit_summary,
+        // NET4: the addressable id (`acos_net` resolves `acos-<id>`).
+        "session_id": session_id,
         "commands": caps.map(|caps| serde_json::json!({
             "supported": caps.names(),
             "missing": caps.missing(),
@@ -705,9 +919,14 @@ pub(crate) fn annotate(
         // not the build default": `--reference` without `--engine` selects the
         // replay engine by implication, so that run is not explicit.
         "explicit": args.engine_explicit() || mode == Mode::Preview,
+        "modules": session_modules,
         "animations": session_animations.unwrap_or("on"),
         "insets": session_insets
             .unwrap_or(acos_services::wms::DEFAULT_INSETS_MODE.as_str()),
+        "extra_apks": session_extra_apks
+            .iter()
+            .map(|path| path.display().to_string())
+            .collect::<Vec<_>>(),
     });
     // FB4: a run owns its artifacts directory. When `--overwrite` replaced a
     // previous run's evidence, say so in the verdict itself (the marker records
@@ -727,7 +946,47 @@ pub(crate) fn annotate(
             }
         }
     }
+    // ADR-0029 item 4/5: the attached modules are evidence, so they are written
+    // into `verdict.json` exactly as the launcher reported them. A run that
+    // relied on `stub`/`scripted` says so in `notes`, so a reader can never
+    // mistake a stand-in for a real implementation.
+    let module_notes: Vec<String> = session_modules
+        .iter()
+        .filter_map(|module| {
+            let id = module.get("id").and_then(|v| v.as_str()).unwrap_or("");
+            let profile = module.get("profile").and_then(|v| v.as_str()).unwrap_or("off");
+            let state = module.get("state").and_then(|v| v.as_str()).unwrap_or("off");
+            if state == "attached" && matches!(profile, "stub" | "scripted") {
+                Some(format!(
+                    "fidelity: module `{id}` is attached at `{profile}` (not `real`); every result that depends on it is that fidelity, not a real implementation"
+                ))
+            } else if state != "attached" {
+                Some(format!(
+                    "fidelity: module `{id}` is off ({}); behaviour that needs it is unsupported, never a pass",
+                    module
+                        .get("reason")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("no reason reported")
+                ))
+            } else {
+                None
+            }
+        })
+        .collect();
     if let Some(object) = verdict.as_object_mut() {
+        if !session_modules.is_empty() {
+            object.insert("modules".to_string(), serde_json::json!(session_modules));
+        }
+        if !module_notes.is_empty() {
+            let notes = object
+                .entry("notes".to_string())
+                .or_insert_with(|| serde_json::json!([]));
+            if let Some(list) = notes.as_array_mut() {
+                for note in &module_notes {
+                    list.push(serde_json::json!(note));
+                }
+            }
+        }
         object.insert("engine".to_string(), engine_block["engine"].clone());
         object.insert("mode".to_string(), engine_block["mode"].clone());
         object.insert(
@@ -735,11 +994,9 @@ pub(crate) fn annotate(
             engine_block["unsupported_steps"].clone(),
         );
         object.insert("evidence".to_string(), engine_block["evidence"].clone());
-        object.insert(
-            "animations".to_string(),
-            engine_block["animations"].clone(),
-        );
+        object.insert("animations".to_string(), engine_block["animations"].clone());
         object.insert("insets".to_string(), engine_block["insets"].clone());
+        object.insert("extra_apks".to_string(), engine_block["extra_apks"].clone());
         if let Some(summary) = &session_exit_summary {
             object.insert("session_exit".to_string(), summary.clone());
         }
@@ -984,6 +1241,35 @@ fn print_summary(envelope: &Envelope, artifacts: &Path) {
             .unwrap_or("-");
         let mode = verdict.get("mode").and_then(|v| v.as_str()).unwrap_or("-");
         println!("  engine: {engine} (mode: {mode})");
+        if let Some(modules) = verdict.get("modules").and_then(|v| v.as_array()) {
+            let attached: Vec<String> = modules
+                .iter()
+                .filter(|module| module.get("state").and_then(|v| v.as_str()) == Some("attached"))
+                .map(|module| {
+                    format!(
+                        "{}:{}",
+                        module.get("id").and_then(|v| v.as_str()).unwrap_or(""),
+                        module.get("profile").and_then(|v| v.as_str()).unwrap_or("")
+                    )
+                })
+                .collect();
+            let off: Vec<&str> = modules
+                .iter()
+                .filter(|module| module.get("state").and_then(|v| v.as_str()) != Some("attached"))
+                .filter_map(|module| module.get("id").and_then(|v| v.as_str()))
+                .collect();
+            if !attached.is_empty() || !off.is_empty() {
+                println!(
+                    "  services: {} attached{}",
+                    attached.join(", "),
+                    if off.is_empty() {
+                        String::new()
+                    } else {
+                        format!("; off: {}", off.join(", "))
+                    }
+                );
+            }
+        }
         // PROVENANCE: the human summary names the scenario and the APK it
         // judged, with the 12-character digests. Before this line, a mistyped
         // scenario path could run an older scenario against a stale APK and
@@ -1088,4 +1374,196 @@ pub fn resolve_apk(path: &Path, scenario: &Path) -> Result<PathBuf, ProtocolErro
         .map(|parent| parent.join(&app))
         .unwrap_or_else(|| app.clone());
     Ok(if candidate.exists() { candidate } else { app })
+}
+
+/// MPROC1: a scenario's `extra_apks`, resolved the way `app:` is (absolute, else
+/// relative to the scenario file, else as written).
+///
+/// A listed path that does not exist is a structured failure before any guest
+/// starts: a run must never silently install fewer packages than the scenario
+/// declares, because every later assertion would then measure a different
+/// device than the one the scenario describes.
+pub fn resolve_extra_apks(scenario: &Path) -> Result<Vec<PathBuf>, ProtocolError> {
+    let declared = acos_protocol::scenario::Scenario::load(scenario)
+        .map_err(|validation| {
+            let detail = validation
+                .errors
+                .first()
+                .map(|error| format!("{}: {}", error.path, error.message))
+                .unwrap_or_else(|| "invalid scenario".to_string());
+            ProtocolError::new(
+                ErrorCode::InvalidScenario,
+                format!("cannot read scenario {}: {detail}", scenario.display()),
+            )
+        })?
+        .extra_apks
+        .unwrap_or_default();
+    let base = scenario
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .map(Path::to_path_buf);
+    let mut out = Vec::with_capacity(declared.len());
+    for raw in declared {
+        let path = PathBuf::from(raw.trim());
+        let resolved = if path.is_absolute() {
+            path
+        } else if let Some(base) = &base {
+            let candidate = base.join(&path);
+            if candidate.exists() {
+                candidate
+            } else {
+                path
+            }
+        } else {
+            path
+        };
+        if !resolved.is_file() {
+            return Err(ProtocolError::new(
+                ErrorCode::ApkIo,
+                format!(
+                    "scenario {} lists extra_apks: {} which is not a file",
+                    scenario.display(),
+                    resolved.display()
+                ),
+            ));
+        }
+        out.push(resolved);
+    }
+    Ok(out)
+}
+
+/// MPROC7: a scenario's launch-step `idle_kill_seconds` (the launcher option).
+///
+/// The value belongs to the *launch* step but must reach the launcher before it
+/// starts (the launcher owns the idle timer), so the scenario is read before the
+/// session is created. A scenario with several launch steps that disagree is a
+/// scenario error: one launcher has one idle rule.
+/// LAUNCHEXTRAS: the launch `Intent` the scenario's first `launch` step
+/// declares (action, data URI, typed extras), resolved before the session
+/// starts because the launcher owns the first launch.
+///
+/// One rule: every `launch` step that declares Intent fields must declare the
+/// same Intent. A session is one guest process whose first launch already
+/// received an Intent; a step that asked for a different one would be the
+/// WVFAIR silent drop again, so it is an `INVALID_SCENARIO` before any guest
+/// exists.
+pub fn resolve_launch_intent(
+    scenario: &Path,
+) -> Result<acos_protocol::LaunchIntent, ProtocolError> {
+    let parsed = acos_protocol::scenario::Scenario::load(scenario).map_err(|validation| {
+        let detail = validation
+            .errors
+            .first()
+            .map(|error| format!("{}: {}", error.path, error.message))
+            .unwrap_or_else(|| "invalid scenario".to_string());
+        ProtocolError::new(
+            ErrorCode::InvalidScenario,
+            format!("cannot read scenario {}: {detail}", scenario.display()),
+        )
+    })?;
+    let mut value = acos_protocol::LaunchIntent::default();
+    for step in &parsed.steps {
+        let Some(launch) = &step.launch else { continue };
+        let declared = acos_protocol::LaunchIntent {
+            action: launch.intent_action.clone(),
+            data: launch.data.clone(),
+            extras: launch.extras.clone(),
+        };
+        if declared.is_empty() {
+            continue;
+        }
+        if value.is_empty() {
+            value = declared;
+        } else if value != declared {
+            return Err(ProtocolError::new(
+                ErrorCode::InvalidScenario,
+                format!(
+                    "scenario {} declares two different launch Intents ({} vs {}); one session is                      one guest whose first launch already received its Intent",
+                    scenario.display(),
+                    serde_json::to_string(&value).unwrap_or_default(),
+                    serde_json::to_string(&declared).unwrap_or_default()
+                ),
+            ));
+        }
+    }
+    Ok(value)
+}
+
+pub fn resolve_idle_kill_seconds(scenario: &Path) -> Result<Option<u64>, ProtocolError> {
+    let parsed = acos_protocol::scenario::Scenario::load(scenario).map_err(|validation| {
+        let detail = validation
+            .errors
+            .first()
+            .map(|error| format!("{}: {}", error.path, error.message))
+            .unwrap_or_else(|| "invalid scenario".to_string());
+        ProtocolError::new(
+            ErrorCode::InvalidScenario,
+            format!("cannot read scenario {}: {detail}", scenario.display()),
+        )
+    })?;
+    let mut value: Option<u64> = None;
+    for step in &parsed.steps {
+        let Some(launch) = &step.launch else { continue };
+        let Some(secs) = launch.idle_kill_seconds else {
+            continue;
+        };
+        if let Some(previous) = value {
+            if previous != secs {
+                return Err(ProtocolError::new(
+                    ErrorCode::InvalidScenario,
+                    format!(
+                        "scenario {} sets launch.idle_kill_seconds to {previous} and {secs}; one \
+                         launcher has one idle rule",
+                        scenario.display()
+                    ),
+                ));
+            }
+        }
+        value = Some(secs);
+    }
+    Ok(value)
+}
+
+#[cfg(test)]
+mod final_logd_merge_tests {
+    use super::merge_final_logd;
+
+    /// GATENE2E: entries the verifier never flushed (the guest's last words, here
+    /// a fatal assertion) reach `logs/logcat.txt`; entries it already has do not
+    /// repeat, and without a dump the file is untouched.
+    #[test]
+    fn merge_appends_only_the_missing_tail() {
+        let dir = std::env::temp_dir().join(format!("merge-logd-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join("art-frames")).unwrap();
+        std::fs::create_dir_all(dir.join("logs")).unwrap();
+        let logcat = dir.join("logs/logcat.txt");
+        let head = "--------- beginning of main\n  1000      1  I t: one\n  1000      2  I t: two\n";
+        std::fs::write(&logcat, head).unwrap();
+        merge_final_logd(&dir); // no dump: untouched
+        assert_eq!(std::fs::read_to_string(&logcat).unwrap(), head);
+        std::fs::write(
+            dir.join("art-frames/session-exit.json"),
+            "{\"utc_ms\":9999}\n",
+        )
+        .unwrap();
+        std::fs::write(
+            dir.join("art-frames/logd-final.jsonl"),
+            concat!(
+                "{\"seq\":1,\"prio\":4,\"tag\":\"t\",\"message\":\"one\",\"ts_ms\":1000}\n",
+                "{\"seq\":2,\"prio\":4,\"tag\":\"t\",\"message\":\"two\",\"ts_ms\":1001}\n",
+                "{\"seq\":3,\"prio\":7,\"tag\":\"x\",\"message\":\"assertion failed: boom\",\"ts_ms\":1234}\n",
+                "{\"seq\":4,\"prio\":4,\"tag\":\"x\",\"message\":\"unstamped tail\"}\n"
+            ),
+        )
+        .unwrap();
+        merge_final_logd(&dir);
+        merge_final_logd(&dir); // idempotent
+        let text = std::fs::read_to_string(&logcat).unwrap();
+        assert_eq!(text.matches("one").count(), 1);
+        assert_eq!(text.matches("assertion failed: boom").count(), 1);
+        assert!(text.contains("  1234      3  E x: assertion failed: boom"));
+        assert!(text.contains("  9999      4  I x: unstamped tail"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }

@@ -169,7 +169,11 @@ pub fn sha256(data: &[u8]) -> [u8; 32] {
 }
 
 pub fn sha256_hex(data: &[u8]) -> String {
-    hex(&sha256(data))
+    // One implementation for the whole tree's staged-artefact digests: the
+    // provider contract (`acos-gles-provider`, which verifies 32 MB of GL
+    // driver by the same hash) owns it; `sha256`/`hex` stay for the callers in
+    // this module that want the raw digest.
+    acos_gles_provider::sha256_hex(data)
 }
 
 fn hex(bytes: &[u8]) -> String {
@@ -216,6 +220,21 @@ pub fn file_id(path: &Path) -> String {
     }
 }
 
+/// Identity of a tool by **content**: size and sha256 of its bytes, never its
+/// path or mtime. For files that live inside a relocatable tree (the extracted
+/// sysroot): the same image reached through another path (a worktree's
+/// `.cache/art` symlink, a copied or moved checkout, an install under another
+/// prefix) must be the same cache key, because the derived output (the
+/// `linkerconfig` tree, `derive_classpath`, idmaps) is a function of the bytes,
+/// not of where they were read from. `file_id` keeps the path on purpose for
+/// host toolchain files, where a different path is a different toolchain.
+pub fn content_id(path: &Path) -> String {
+    match fs::read(path) {
+        Ok(bytes) => format!("{}|{}", bytes.len(), sha256_hex(&bytes)),
+        Err(_) => "absent".to_string(),
+    }
+}
+
 // ------------------------------------------------------------------- cache
 
 struct Lock {
@@ -229,7 +248,11 @@ impl Lock {
         if let Some(dir) = path.parent() {
             fs::create_dir_all(dir)?;
         }
-        let file = fs::OpenOptions::new().create(true).read(true).write(true).open(path)?;
+        let file = fs::OpenOptions::new()
+            .create(true)
+            .read(true)
+            .write(true)
+            .open(path)?;
         let rc = unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX) };
         if rc != 0 {
             return Err(Error::Io(std::io::Error::last_os_error()));
@@ -382,7 +405,9 @@ where
     let mut build_lock: Option<Lock> = None;
     if enabled() {
         fs::create_dir_all(root.join(".locks"))?;
-        build_lock = Some(Lock::acquire(&root.join(".locks").join(format!("{key}.lock")))?);
+        build_lock = Some(Lock::acquire(
+            &root.join(".locks").join(format!("{key}.lock")),
+        )?);
         // Double-checked: another builder may have published while we queued.
         if entry.is_dir() {
             match verify(&entry, files) {
@@ -578,8 +603,11 @@ pub fn install(built: &Built, files: &[&str], dest_dir: &Path) -> Result<Vec<Pat
         let dest = dest_dir.join(f);
         let want = sha256_hex(&fs::read(&src)?);
         let up_to_date = dest.is_file()
-            && fs::metadata(&dest).map(|m| m.len()).ok() == fs::metadata(&src).map(|m| m.len()).ok()
-            && fs::read(&dest).map(|d| sha256_hex(&d) == want).unwrap_or(false);
+            && fs::metadata(&dest).map(|m| m.len()).ok()
+                == fs::metadata(&src).map(|m| m.len()).ok()
+            && fs::read(&dest)
+                .map(|d| sha256_hex(&d) == want)
+                .unwrap_or(false);
         if !up_to_date {
             let tmp = dest_dir.join(format!(
                 ".{f}.w37-{}-{}",
@@ -612,8 +640,7 @@ fn manifest_of(dir: &Path, files: &[&str]) -> Result<String> {
 /// Verify an entry against its manifest: no missing file, no size/hash drift,
 /// and no unexpected extra artefact (a stale file means a different build).
 fn verify(dir: &Path, files: &[&str]) -> std::result::Result<(), String> {
-    let text = fs::read_to_string(dir.join(MANIFEST))
-        .map_err(|e| format!("no {MANIFEST}: {e}"))?;
+    let text = fs::read_to_string(dir.join(MANIFEST)).map_err(|e| format!("no {MANIFEST}: {e}"))?;
     let mut seen = Vec::new();
     for line in text.lines() {
         let Some((hash, name)) = line.split_once("  ") else {
@@ -705,9 +732,11 @@ fn walk_files(dir: &Path) -> Result<Vec<String>> {
             } else if ft.is_file() || ft.is_symlink() && p.is_file() {
                 let rel = p
                     .strip_prefix(base)
-                    .map_err(|_| Error::Tool(format!("{} is outside {}", p.display(), base.display())))?
-                .to_string_lossy()
-                .to_string();
+                    .map_err(|_| {
+                        Error::Tool(format!("{} is outside {}", p.display(), base.display()))
+                    })?
+                    .to_string_lossy()
+                    .to_string();
                 if rel != MANIFEST {
                     out.push(rel);
                 }
@@ -728,7 +757,10 @@ fn manifest_of_tree(dir: &Path) -> Result<String> {
         out.push_str(&format!("{}  {}\n", sha256_hex(&fs::read(&p)?), rel));
     }
     if out.is_empty() {
-        return Err(Error::Tool(format!("build produced an empty tree in {}", dir.display())));
+        return Err(Error::Tool(format!(
+            "build produced an empty tree in {}",
+            dir.display()
+        )));
     }
     Ok(out)
 }
@@ -744,7 +776,9 @@ fn verify_tree(dir: &Path) -> std::result::Result<Vec<String>, String> {
         };
         if name.is_empty()
             || name.starts_with('/')
-            || name.split('/').any(|c| c.is_empty() || c == "." || c == "..")
+            || name
+                .split('/')
+                .any(|c| c.is_empty() || c == "." || c == "..")
         {
             return Err(format!("refusing manifest name {name:?}"));
         }
@@ -755,8 +789,8 @@ fn verify_tree(dir: &Path) -> std::result::Result<Vec<String>, String> {
         }
         seen.push((name.to_string(), hash.to_string()));
     }
-    let actual = walk_files(dir)
-        .map_err(|e| format!("cannot walk entry {}: {e}", dir.display()))?;
+    let actual =
+        walk_files(dir).map_err(|e| format!("cannot walk entry {}: {e}", dir.display()))?;
     if actual.len() != seen.len() {
         let extra: Vec<&String> = actual
             .iter()
@@ -769,7 +803,11 @@ fn verify_tree(dir: &Path) -> std::result::Result<Vec<String>, String> {
             if extra.is_empty() {
                 "none".to_string()
             } else {
-                extra.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(", ")
+                extra
+                    .iter()
+                    .map(|s| s.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ")
             }
         ));
     }
@@ -810,12 +848,17 @@ pub fn reuse_tree_to(key: &str, dest_dir: &Path) -> Result<Option<Vec<PathBuf>>>
         }
         let want = sha256_hex(&fs::read(&src)?);
         let up_to_date = dest.is_file()
-            && fs::metadata(&dest).map(|m| m.len()).ok() == fs::metadata(&src).map(|m| m.len()).ok()
-            && fs::read(&dest).map(|d| sha256_hex(&d) == want).unwrap_or(false);
+            && fs::metadata(&dest).map(|m| m.len()).ok()
+                == fs::metadata(&src).map(|m| m.len()).ok()
+            && fs::read(&dest)
+                .map(|d| sha256_hex(&d) == want)
+                .unwrap_or(false);
         if !up_to_date {
             let tmp = dest.with_file_name(format!(
                 ".{}.w39-{}-{}",
-                dest.file_name().map(|f| f.to_string_lossy().to_string()).unwrap_or_default(),
+                dest.file_name()
+                    .map(|f| f.to_string_lossy().to_string())
+                    .unwrap_or_default(),
                 std::process::id(),
                 SEQ.fetch_add(1, Ordering::Relaxed)
             ));
@@ -898,7 +941,9 @@ pub fn publish_tree_locked(
 /// Remove staging directories left by a killed builder (janitor hook).
 pub fn sweep_staging() -> Result<usize> {
     let tmp = cache_root().join(".tmp");
-    let Ok(rd) = fs::read_dir(&tmp) else { return Ok(0) };
+    let Ok(rd) = fs::read_dir(&tmp) else {
+        return Ok(0);
+    };
     let mut n = 0;
     for e in rd.flatten() {
         let p = e.path();

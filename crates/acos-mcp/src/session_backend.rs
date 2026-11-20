@@ -35,8 +35,8 @@ use serde_json::{json, Value};
 
 use crate::backend::{Backend, BackendConfig, BackendInfo, CallContext, Capabilities, CliBackend};
 use crate::daemon::{self, DaemonClient};
-use crate::private_daemon::PrivateDaemon;
 use crate::flutter_backend::{self, FlutterSessions};
+use crate::private_daemon::PrivateDaemon;
 use crate::rn_backend::{self, RnSessions};
 use acos_jni::FlutterSessionError;
 use acos_runtime::RnSessionError;
@@ -433,8 +433,7 @@ impl SessionBackend {
                 }
             }
             let args = json!({"base": {"request_id": "req_shutdown", "session_id": id}});
-            let envelope =
-                self.destroy_on_daemon(&args, &ctx, Restart::Never);
+            let envelope = self.destroy_on_daemon(&args, &ctx, Restart::Never);
             match envelope {
                 Some(envelope) if envelope.ok() => {
                     eprintln!("acos-mcp: destroyed session {id} on exit")
@@ -583,7 +582,12 @@ impl SessionBackend {
 
     /// Destroy one session through whichever daemon owns it, honouring the
     /// restart policy (FB5).
-    fn destroy_on_daemon(&self, args: &Value, ctx: &CallContext, restart: Restart) -> Option<Envelope> {
+    fn destroy_on_daemon(
+        &self,
+        args: &Value,
+        ctx: &CallContext,
+        restart: Restart,
+    ) -> Option<Envelope> {
         let _ = ctx;
         // FB5b/M1: raw forward — the reaper's own destroy must bypass the
         // tombstone / in-flight bookkeeping it is itself the author of.
@@ -644,10 +648,7 @@ impl SessionBackend {
                     return Some(private_daemon_error(
                         &request_id(args),
                         args,
-                        &format!(
-                            "start `{} serve --engine art`: {e}",
-                            acos.display()
-                        ),
+                        &format!("start `{} serve --engine art`: {e}", acos.display()),
                     ))
                 }
             }
@@ -685,9 +686,7 @@ impl SessionBackend {
                         *slot = Some(fresh);
                         Some(match result {
                             Ok(envelope) => envelope,
-                            Err(e) => {
-                                daemon_error(&request_id(args), args, &e.to_string())
-                            }
+                            Err(e) => daemon_error(&request_id(args), args, &e.to_string()),
                         })
                     }
                     Err(e) => Some(private_daemon_error(
@@ -841,14 +840,20 @@ impl SessionBackend {
 
     /// Forward one session tool call to the confined child that holds `id`.
     fn forward_native(&self, id: &str, tool: &str, args: &Value) -> Option<Envelope> {
-        let mut children = self.native_children.lock().unwrap_or_else(|e| e.into_inner());
+        let mut children = self
+            .native_children
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         let child = children.get_mut(id)?;
         Some(child.call_tool(tool, args))
     }
 
     /// Drop a confined child, returning whether one existed.
     fn remove_native_child(&self, id: &str) -> bool {
-        let mut children = self.native_children.lock().unwrap_or_else(|e| e.into_inner());
+        let mut children = self
+            .native_children
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         children.remove(id).is_some_and(|mut child| {
             child.shutdown();
             true
@@ -1135,12 +1140,7 @@ impl SessionBackend {
         .with_capabilities(capabilities)
     }
 
-    fn observe_tree_flutter(
-        &self,
-        request_id: &str,
-        id: &str,
-        max_nodes: usize,
-    ) -> Envelope {
+    fn observe_tree_flutter(&self, request_id: &str, id: &str, max_nodes: usize) -> Envelope {
         let nodes = match self.flutter.semantics(id) {
             Ok(nodes) => nodes,
             Err(e) => return flutter_session_error(request_id, Some(id), &e),
@@ -1181,7 +1181,13 @@ impl SessionBackend {
         .with_capabilities(["ui.tree"])
     }
 
-    fn tap_flutter(&self, request_id: &str, id: &str, text: Option<&str>, point: Option<(f64, f64)>) -> Envelope {
+    fn tap_flutter(
+        &self,
+        request_id: &str,
+        id: &str,
+        text: Option<&str>,
+        point: Option<(f64, f64)>,
+    ) -> Envelope {
         let outcome = match (text, point) {
             (Some(label), _) => self
                 .flutter
@@ -1217,7 +1223,9 @@ impl SessionBackend {
         let lines = self.flutter.logs(id);
         let records: Vec<Value> = lines
             .iter()
-            .map(|line| json!({"priority": "info", "tag": "flutter", "message": line, "line": line}))
+            .map(
+                |line| json!({"priority": "info", "tag": "flutter", "message": line, "line": line}),
+            )
             .collect();
         Envelope::pass(
             request_id,
@@ -1559,7 +1567,10 @@ impl SessionBackend {
         // `--flutter` or a structural Flutter APK implies native: the engine is
         // host native code and must run under the confined child. Auto-detect is
         // structural (libflutter.so / flutter_assets), never a manifest guess.
-        let explicit_flutter = args.get("flutter").and_then(Value::as_bool).unwrap_or(false);
+        let explicit_flutter = args
+            .get("flutter")
+            .and_then(Value::as_bool)
+            .unwrap_or(false);
         let explicit_rn = args.get("rn").and_then(Value::as_bool).unwrap_or(false);
         let native_flag = args.get("native").and_then(Value::as_bool).unwrap_or(false);
         let is_flutter = flutter_backend::is_flutter(&apk);
@@ -1693,12 +1704,7 @@ impl SessionBackend {
         })
     }
 
-    fn call_observe_tree(
-        &self,
-        request_id: &str,
-        args: &Value,
-        _ctx: &CallContext,
-    ) -> Envelope {
+    fn call_observe_tree(&self, request_id: &str, args: &Value, _ctx: &CallContext) -> Envelope {
         let id = session_id(args);
         if self.rn.contains(&id) {
             let max_nodes = args
@@ -1732,10 +1738,7 @@ impl SessionBackend {
                         .as_ref()
                         .and_then(|s| s.package.clone())
                         .unwrap_or_default();
-                    let stage = status
-                        .as_ref()
-                        .map(|s| s.stage_reached)
-                        .unwrap_or("none");
+                    let stage = status.as_ref().map(|s| s.stage_reached).unwrap_or("none");
                     Envelope::pass(
                         request_id,
                         ProtocolBackend::AcosNative,
@@ -2012,22 +2015,19 @@ impl SessionBackend {
             );
             idle_ttl_s = 0;
         }
-        self.owned
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .insert(
-                id.to_string(),
-                OwnedSession {
-                    token: token.to_string(),
-                    label,
-                    launched_at: now,
-                    last_used: now,
-                    idle_ttl_s,
-                    seq: self.next_seq.fetch_add(1, Ordering::SeqCst),
-                    in_flight: 0,
-                    expiring: false,
-                },
-            );
+        self.owned.lock().unwrap_or_else(|e| e.into_inner()).insert(
+            id.to_string(),
+            OwnedSession {
+                token: token.to_string(),
+                label,
+                launched_at: now,
+                last_used: now,
+                idle_ttl_s,
+                seq: self.next_seq.fetch_add(1, Ordering::SeqCst),
+                in_flight: 0,
+                expiring: false,
+            },
+        );
         // A fresh launch gives the id a live guest again: it is no longer
         // "the session that expired".
         self.expired
@@ -2153,7 +2153,9 @@ impl SessionBackend {
             .name("acos-mcp-idle-reaper".to_string())
             .spawn(move || loop {
                 std::thread::sleep(Duration::from_millis(250));
-                let Some(backend) = weak.upgrade() else { return };
+                let Some(backend) = weak.upgrade() else {
+                    return;
+                };
                 if backend.stopping.load(Ordering::SeqCst) {
                     return;
                 }
@@ -2245,9 +2247,7 @@ impl SessionBackend {
                     None => {
                         // Already gone (the guest died, or a reset dropped it):
                         // record the tombstone so the agent still learns why.
-                        eprintln!(
-                            "acos-mcp: idle session {id} is already gone; noting it expired"
-                        );
+                        eprintln!("acos-mcp: idle session {id} is already gone; noting it expired");
                         self.finish_expiry(&id, &session);
                         continue;
                     }
@@ -2932,7 +2932,10 @@ fn annotate_launch(envelope: &mut Envelope, args: &Value, idle_ttl_s: u64) {
     };
     result.insert(
         "label".to_string(),
-        json!(args.get("label").and_then(Value::as_str).unwrap_or_default()),
+        json!(args
+            .get("label")
+            .and_then(Value::as_str)
+            .unwrap_or_default()),
     );
     result.insert("idle_ttl_s".to_string(), json!(idle_ttl_s));
     result.insert("idle_reap".to_string(), json!(idle_ttl_s > 0));
@@ -3004,12 +3007,7 @@ fn flutter_session_error(
 }
 
 /// A structured failure envelope for a React Native session error code.
-fn rn_error(
-    request_id: &str,
-    session_id: Option<&str>,
-    code: &str,
-    message: &str,
-) -> Envelope {
+fn rn_error(request_id: &str, session_id: Option<&str>, code: &str, message: &str) -> Envelope {
     let error = ProtocolError::new(
         ErrorCode::from_str_opt(code).unwrap_or(ErrorCode::UnsupportedRn),
         message.to_string(),
@@ -3027,11 +3025,7 @@ fn rn_error(
     }
 }
 
-fn rn_session_error(
-    request_id: &str,
-    session_id: Option<&str>,
-    err: &RnSessionError,
-) -> Envelope {
+fn rn_session_error(request_id: &str, session_id: Option<&str>, err: &RnSessionError) -> Envelope {
     rn_error(request_id, session_id, err.code(), &err.to_string())
 }
 
@@ -3066,10 +3060,7 @@ fn rn_tree_text(tree: &acos_jni::react_native::RnTree) -> String {
 /// The original `base` object, so a synthesized action request keeps the
 /// caller's session id instead of falling back to `DEFAULT_SESSION`.
 fn session_base(args: &Value) -> Value {
-    let mut base = args
-        .get("base")
-        .cloned()
-        .unwrap_or_else(|| json!({}));
+    let mut base = args.get("base").cloned().unwrap_or_else(|| json!({}));
     if let Some(object) = base.as_object_mut() {
         object
             .entry("session_id".to_string())
@@ -3374,12 +3365,9 @@ impl ConfinedChild {
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::inherit());
-        let mut child = command.spawn().map_err(|e| {
-            format!(
-                "spawn confined child {}: {e}",
-                binary.display()
-            )
-        })?;
+        let mut child = command
+            .spawn()
+            .map_err(|e| format!("spawn confined child {}: {e}", binary.display()))?;
         let stdin = child.stdin.take().ok_or("confined child has no stdin")?;
         let stdout = child.stdout.take().ok_or("confined child has no stdout")?;
         let mut this = ConfinedChild {
@@ -3449,10 +3437,7 @@ impl ConfinedChild {
     fn call_tool(&mut self, name: &str, args: &Value) -> Envelope {
         let request_id = request_id(args);
         let id = session_id(args);
-        let response = match self.request(
-            "tools/call",
-            json!({"name": name, "arguments": args}),
-        ) {
+        let response = match self.request("tools/call", json!({"name": name, "arguments": args})) {
             Ok(response) => response,
             Err(e) => return native_child_error(&request_id, &id, "INTERNAL", &e),
         };
@@ -3467,9 +3452,12 @@ impl ConfinedChild {
             });
         match envelope.map(serde_json::from_value::<Envelope>) {
             Some(Ok(envelope)) => envelope,
-            Some(Err(e)) => {
-                native_child_error(&request_id, &id, "INTERNAL", &format!("bad child envelope: {e}"))
-            }
+            Some(Err(e)) => native_child_error(
+                &request_id,
+                &id,
+                "INTERNAL",
+                &format!("bad child envelope: {e}"),
+            ),
             None => native_child_error(
                 &request_id,
                 &id,
@@ -3513,12 +3501,7 @@ fn private_daemon_error(request_id: &str, args: &Value, message: &str) -> Envelo
     .with_session_id(session_id(args))
 }
 
-fn native_child_error(
-    request_id: &str,
-    session_id: &str,
-    code: &str,
-    message: &str,
-) -> Envelope {
+fn native_child_error(request_id: &str, session_id: &str, code: &str, message: &str) -> Envelope {
     let code = ErrorCode::from_str_opt(code).unwrap_or(ErrorCode::Internal);
     Envelope::failure(
         request_id,
@@ -3552,8 +3535,7 @@ fn native_session_root(seq: u64) -> std::io::Result<PathBuf> {
         return Ok(root);
     }
     let base = std::env::temp_dir();
-    let mut last =
-        std::io::Error::other("could not create a private native session root");
+    let mut last = std::io::Error::other("could not create a private native session root");
     for attempt in 0..64u32 {
         let name = format!(
             "acos-mcp-native-{}-{seq}-{:016x}",
@@ -3626,9 +3608,7 @@ fn child_random_u64() -> u64 {
     let nanos = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map_or(0, |d| d.as_nanos() as u64);
-    nanos
-        ^ u64::from(std::process::id()).rotate_left(32)
-        ^ (&buf as *const _ as u64)
+    nanos ^ u64::from(std::process::id()).rotate_left(32) ^ (&buf as *const _ as u64)
 }
 
 /// The boot-classpath cache directory (`ACOS_BOOT_DIR`, then an installed
@@ -3886,10 +3866,7 @@ mod tests {
         let fake = dir.join("acos");
         std::fs::write(
             &fake,
-            format!(
-                "#!/bin/sh\necho \"$@\" >> {}\nexit 2\n",
-                marker.display()
-            ),
+            format!("#!/bin/sh\necho \"$@\" >> {}\nexit 2\n", marker.display()),
         )
         .expect("write fake acos");
         use std::os::unix::fs::PermissionsExt;
@@ -3926,19 +3903,23 @@ mod tests {
         let dir = scratch_dir("expiry-retry");
         *backend.private.lock().unwrap_or_else(|e| e.into_inner()) =
             Some(crate::private_daemon::dead_for_test(dir.join("dead")));
-        backend.owned.lock().unwrap_or_else(|e| e.into_inner()).insert(
-            "s_idle".to_string(),
-            OwnedSession {
-                token: "tok".to_string(),
-                label: String::new(),
-                launched_at: Instant::now() - Duration::from_secs(30),
-                last_used: Instant::now() - Duration::from_secs(30),
-                idle_ttl_s: 20,
-                seq: 1,
-                in_flight: 0,
-                expiring: false,
-            },
-        );
+        backend
+            .owned
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert(
+                "s_idle".to_string(),
+                OwnedSession {
+                    token: "tok".to_string(),
+                    label: String::new(),
+                    launched_at: Instant::now() - Duration::from_secs(30),
+                    last_used: Instant::now() - Duration::from_secs(30),
+                    idle_ttl_s: 20,
+                    seq: 1,
+                    in_flight: 0,
+                    expiring: false,
+                },
+            );
         backend.sweep_idle();
         assert!(
             backend.owned.lock().unwrap().contains_key("s_idle"),
@@ -3987,7 +3968,10 @@ mod tests {
         let stages = ladder["stages"].as_array().expect("stages");
         assert_eq!(stages.len(), 2);
         for stage in stages {
-            assert!(stage.get("ms").is_some(), "every rung carries `ms`: {stage}");
+            assert!(
+                stage.get("ms").is_some(),
+                "every rung carries `ms`: {stage}"
+            );
         }
         assert_eq!(stages[0]["ms"], json!(42));
         assert_eq!(stages[1]["ms"], Value::Null);
@@ -4032,7 +4016,6 @@ mod tests {
         let _ = backend;
     }
 
-
     fn owned_record(ttl: u64, idle_for: u64, token: &str, seq: u64) -> OwnedSession {
         OwnedSession {
             token: token.to_string(),
@@ -4058,13 +4041,27 @@ mod tests {
             .unwrap()
             .insert("s_busy".into(), owned_record(20, 30, "tok", 7));
 
-        let guard = backend.begin_call("s_busy", false).expect("not expiring").expect("owned");
+        let guard = backend
+            .begin_call("s_busy", false)
+            .expect("not expiring")
+            .expect("owned");
         // Due by the clock (begin_call renewed it, so force it back) but in flight.
-        backend.owned.lock().unwrap().get_mut("s_busy").unwrap().last_used =
-            Instant::now() - Duration::from_secs(30);
+        backend
+            .owned
+            .lock()
+            .unwrap()
+            .get_mut("s_busy")
+            .unwrap()
+            .last_used = Instant::now() - Duration::from_secs(30);
         assert!(!backend.sweep_idle(), "nothing to prove");
         assert!(
-            !backend.owned.lock().unwrap().get("s_busy").unwrap().expiring,
+            !backend
+                .owned
+                .lock()
+                .unwrap()
+                .get("s_busy")
+                .unwrap()
+                .expiring,
             "an in-flight session is never claimed"
         );
         drop(guard);
@@ -4078,10 +4075,24 @@ mod tests {
             );
         }
         backend.sweep_idle();
-        assert!(!backend.owned.lock().unwrap().get("s_busy").unwrap().expiring);
+        assert!(
+            !backend
+                .owned
+                .lock()
+                .unwrap()
+                .get("s_busy")
+                .unwrap()
+                .expiring
+        );
 
         // Mid-destroy: the sweep set `expiring`; a call now answers with the reason.
-        backend.owned.lock().unwrap().get_mut("s_busy").unwrap().expiring = true;
+        backend
+            .owned
+            .lock()
+            .unwrap()
+            .get_mut("s_busy")
+            .unwrap()
+            .expiring = true;
         let args = json!({"base": {"request_id": "req_tap", "session_id": "s_busy"}});
         let envelope = backend
             .session_call("acos_tap", &args, &ctx())
@@ -4110,7 +4121,13 @@ mod tests {
             .lock()
             .unwrap()
             .insert("s".into(), owned_record(20, 0, "b", 2));
-        backend.owned.lock().unwrap().get_mut("s").unwrap().in_flight = 1;
+        backend
+            .owned
+            .lock()
+            .unwrap()
+            .get_mut("s")
+            .unwrap()
+            .in_flight = 1;
         drop(guard);
         assert_eq!(backend.owned.lock().unwrap().get("s").unwrap().in_flight, 1);
     }

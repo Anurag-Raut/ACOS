@@ -97,43 +97,43 @@ impl BinderTransport for NoServices {
                 .is_ok()
         {
             match code {
-                    // getDisplayInfo(int) -> DisplayInfo
-                    1 => {
-                        if let Err(e) = display_info_reply(vm, reply) {
-                            eprintln!("display-info-reply: {e}");
-                        }
-                        return Ok(Vec::new());
+                // getDisplayInfo(int) -> DisplayInfo
+                1 => {
+                    if let Err(e) = display_info_reply(vm, reply) {
+                        eprintln!("display-info-reply: {e}");
                     }
-                    // getDisplayIds(boolean) -> int[]
-                    2 => {
-                        reply.reset();
-                        reply.write_int32(0);
-                        reply.write_int32_array(Some(&[0])).ok();
-                        return Ok(Vec::new());
-                    }
-                    // isUidPresentOnDisplay(int, int) -> boolean
-                    3 => {
-                        reply.reset();
-                        reply.write_int32(0);
-                        reply.write_int32(1);
-                        return Ok(Vec::new());
-                    }
-                    // getPreferredWideGamutColorSpaceId() -> int
-                    41 => {
-                        reply.reset();
-                        reply.write_int32(0);
-                        reply.write_int32(1);
-                        return Ok(Vec::new());
-                    }
-                    // getOverlaySupport() -> OverlayProperties (null = none)
-                    55 => {
-                        reply.reset();
-                        reply.write_int32(0);
-                        reply.write_int32(0);
-                        return Ok(Vec::new());
-                    }
-                    _ => {}
+                    return Ok(Vec::new());
                 }
+                // getDisplayIds(boolean) -> int[]
+                2 => {
+                    reply.reset();
+                    reply.write_int32(0);
+                    reply.write_int32_array(Some(&[0])).ok();
+                    return Ok(Vec::new());
+                }
+                // isUidPresentOnDisplay(int, int) -> boolean
+                3 => {
+                    reply.reset();
+                    reply.write_int32(0);
+                    reply.write_int32(1);
+                    return Ok(Vec::new());
+                }
+                // getPreferredWideGamutColorSpaceId() -> int
+                41 => {
+                    reply.reset();
+                    reply.write_int32(0);
+                    reply.write_int32(1);
+                    return Ok(Vec::new());
+                }
+                // getOverlaySupport() -> OverlayProperties (null = none)
+                55 => {
+                    reply.reset();
+                    reply.write_int32(0);
+                    reply.write_int32(0);
+                    return Ok(Vec::new());
+                }
+                _ => {}
+            }
         }
         // Everything else: the truthful "no service" answer.
         reply.reset();
@@ -202,7 +202,9 @@ fn display_info_reply(vm: &mut Vm, reply: &mut Parcel) -> Result<(), String> {
     set_int(vm, h, "type", 1)?;
     set_int(vm, h, "displayId", 0)?;
     set_int(vm, h, "displayGroupId", 0)?;
-    let name = vm.new_string("Built-in Screen").map_err(|e| e.to_string())?;
+    let name = vm
+        .new_string("Built-in Screen")
+        .map_err(|e| e.to_string())?;
     vm.set_field(h, "name", JavaValue::Object(name))
         .map_err(|e| format!("DisplayInfo.name: {e}"))?;
     set_int(vm, h, "appWidth", 1080)?;
@@ -219,8 +221,12 @@ fn display_info_reply(vm: &mut Vm, reply: &mut Parcel) -> Result<(), String> {
         .map_err(|e| format!("DisplayInfo.renderFrameRate: {e}"))?;
     set_int(vm, h, "defaultModeId", 1)?;
     set_int(vm, h, "colorMode", 0)?;
-    vm.set_field(h, "minimalPostProcessingSupported", JavaValue::Boolean(false))
-        .map_err(|e| format!("DisplayInfo.minimalPostProcessingSupported: {e}"))?;
+    vm.set_field(
+        h,
+        "minimalPostProcessingSupported",
+        JavaValue::Boolean(false),
+    )
+    .map_err(|e| format!("DisplayInfo.minimalPostProcessingSupported: {e}"))?;
     set_int(vm, h, "logicalDensityDpi", 420)?;
     vm.set_field(h, "physicalXDpi", JavaValue::Float(420.0))
         .map_err(|e| format!("DisplayInfo.physicalXDpi: {e}"))?;
@@ -242,7 +248,9 @@ fn display_info_reply(vm: &mut Vm, reply: &mut Parcel) -> Result<(), String> {
         .map_err(|e| format!("DisplayInfo.brightnessDefault: {e}"))?;
     set_int(vm, h, "installOrientation", 0)?;
     // `supportedColorModes` is `{COLOR_MODE_SRGB}` on the reference.
-    let colors = vm.new_array("I", &[JavaValue::Int(0)]).map_err(|e| e.to_string())?;
+    let colors = vm
+        .new_array("I", &[JavaValue::Int(0)])
+        .map_err(|e| e.to_string())?;
     vm.set_field(h, "supportedColorModes", JavaValue::Object(colors))
         .map_err(|e| format!("DisplayInfo.supportedColorModes: {e}"))?;
 
@@ -323,7 +331,10 @@ fn compile_harness() -> Option<PathBuf> {
     std::fs::create_dir_all(&stubs).ok()?;
     let mut stub_src: Vec<PathBuf> = Vec::new();
     collect_java(&root.join("crates/acos-vm/tests/java/stubs"), &mut stub_src);
-    collect_java(&root.join("crates/acos-vm/tests/java/inflate_stubs"), &mut stub_src);
+    collect_java(
+        &root.join("crates/acos-vm/tests/java/inflate_stubs"),
+        &mut stub_src,
+    );
     if stub_src.is_empty() {
         return None;
     }
@@ -512,10 +523,7 @@ fn run_harness(app: &str, layout: &str) -> Result<(), String> {
         return Err(format!("harness did not finish:\n{}", outcome.stdout));
     }
     if outcome.stdout.contains("INFLATE-FAILED") {
-        return Err(format!(
-            "framework inflation failed:\n{}",
-            outcome.stdout
-        ));
+        return Err(format!("framework inflation failed:\n{}", outcome.stdout));
     }
     if std::env::var_os("ACOS_RENDER_VIEWS_VERBOSE").is_some() {
         eprintln!("[{app}] harness stdout:\n{}", outcome.stdout);
@@ -606,14 +614,11 @@ fn pipeline_generated_layouts_match_art_reference() {
 
     for scene in SCENES {
         if !acos_test_support::have_fixture(scene.reference) {
-            eprintln!(
-                "SKIP {}: missing reference {}",
-                scene.app, scene.reference
-            );
+            acos_test_support::require_prereq(false, "pipeline_generated_layouts_match_art_reference", &format!("{}: missing reference {}", scene.app, scene.reference));
             continue;
         }
         if !acos_test_support::have_fixture(&format!("fixtures/build/apps/{}.apk", scene.app)) {
-            eprintln!("SKIP {}: missing fixture apk", scene.app);
+            acos_test_support::require_prereq(false, "pipeline_generated_layouts_match_art_reference", &format!("{}: missing fixture apk", scene.app));
             continue;
         }
         eprintln!("RENDER-VIEWS scene {} start", scene.app);
@@ -635,7 +640,10 @@ fn pipeline_generated_layouts_match_art_reference() {
         }
         eprintln!("RENDER-VIEWS scene {} harness done", scene.app);
         let Some(frame) = acos_vm::natives::gfx_hwui::last_frame() else {
-            eprintln!("PIPELINE-FAIL {}: HardwareRenderer submitted no frame", scene.app);
+            eprintln!(
+                "PIPELINE-FAIL {}: HardwareRenderer submitted no frame",
+                scene.app
+            );
             continue;
         };
         assert_eq!(
@@ -673,7 +681,7 @@ fn pipeline_generated_layouts_match_art_reference() {
         );
 
         // Persist the candidate frame as PNG for inspection.
-        let out_dir = repo_root().join("results/render/pipeline");
+        let out_dir = acos_test_support::test_artifacts_dir("render/pipeline");
         let _ = std::fs::create_dir_all(&out_dir);
         let _ = std::fs::write(
             out_dir.join(format!("{}.png", scene.app)),
@@ -702,7 +710,7 @@ fn pipeline_generated_layouts_match_art_reference() {
         ran += 1;
     }
 
-    let out = repo_root().join("results/render/corpus/corpus-pipeline-metrics.json");
+    let out = acos_test_support::test_artifacts_dir("render/corpus").join("corpus-pipeline-metrics.json");
     let _ = std::fs::create_dir_all(out.parent().unwrap());
     let aggregate = serde_json::json!({
         "wave": "W101-A",
@@ -710,8 +718,11 @@ fn pipeline_generated_layouts_match_art_reference() {
         "note": "candidate = real LayoutInflater + View.measure/layout/draw -> RecordingCanvas -> HardwareRenderer -> acos-render; reference = ART API-34 emulator",
         "scenes": rows,
     });
-    std::fs::write(&out, serde_json::to_vec_pretty(&aggregate).expect("serialize"))
-        .expect("write pipeline metrics");
+    std::fs::write(
+        &out,
+        serde_json::to_vec_pretty(&aggregate).expect("serialize"),
+    )
+    .expect("write pipeline metrics");
     eprintln!("wrote {}", out.display());
 
     assert!(

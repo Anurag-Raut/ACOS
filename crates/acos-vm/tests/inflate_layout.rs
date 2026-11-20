@@ -54,16 +54,16 @@ impl BinderTransport for NoServices {
         None
     }
 
-    fn binder_object(
-        &self,
-        vm: &mut Vm,
-        id: BinderId,
-    ) -> Option<acos_vm::heap::Handle> {
+    fn binder_object(&self, vm: &mut Vm, id: BinderId) -> Option<acos_vm::heap::Handle> {
         if id.is_null() {
             return None;
         }
-        vm.new_instance_ctor("android.os.BinderProxy", "(J)V", &[JavaValue::Long(id.0 as i64)])
-            .ok()
+        vm.new_instance_ctor(
+            "android.os.BinderProxy",
+            "(J)V",
+            &[JavaValue::Long(id.0 as i64)],
+        )
+        .ok()
     }
 
     fn transact(
@@ -148,8 +148,14 @@ fn compile_case(name: &str) -> Option<PathBuf> {
     // The hidden-API stubs: the res `AssetManager` stub used by `res_natives`
     // plus the `MockContext`/`PhoneLayoutInflater` surface for this case.
     let mut stubs_src: Vec<PathBuf> = Vec::new();
-    collect_java(&root.join("crates/acos-vm/tests/java/stubs"), &mut stubs_src);
-    collect_java(&root.join("crates/acos-vm/tests/java/inflate_stubs"), &mut stubs_src);
+    collect_java(
+        &root.join("crates/acos-vm/tests/java/stubs"),
+        &mut stubs_src,
+    );
+    collect_java(
+        &root.join("crates/acos-vm/tests/java/inflate_stubs"),
+        &mut stubs_src,
+    );
     if stubs_src.is_empty() {
         return None;
     }
@@ -165,8 +171,7 @@ fn compile_case(name: &str) -> Option<PathBuf> {
             .map(|s| s.success())
             .unwrap_or(false)
     };
-    let stub_src_os: Vec<&std::ffi::OsStr> =
-        stubs_src.iter().map(|p| p.as_os_str()).collect();
+    let stub_src_os: Vec<&std::ffi::OsStr> = stubs_src.iter().map(|p| p.as_os_str()).collect();
     let stub_args: Vec<&std::ffi::OsStr> = std::iter::once(std::ffi::OsStr::new("-cp"))
         .chain(std::iter::once(tools.android_jar.as_os_str()))
         .chain(std::iter::once(std::ffi::OsStr::new("-d")))

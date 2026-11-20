@@ -1,0 +1,77 @@
+# SYSUI1: the already-decided short-circuit.
+#
+# Both permissions are pre-granted by the scenario (the `permissions` module's
+# launch config), so `requestPermissions` does not draw a dialog: the controller
+# system app is still the component the framework's intent resolves to — it is
+# launched, sees that nothing is left to ask (`allRequestedPermissionsGranted`)
+# and answers the granted results immediately, so the app's
+# `onRequestPermissionsResult` runs and its screen is never covered.
+version: 1
+name: sysui1-permission-pregranted
+description: >-
+  CAMERA + LOCATION pre-granted: requestPermissions is answered by the controller
+  system app without a dialog (no Allow button in the tree), the app receives the
+  granted AOSP result shape, and the dialog activity's own log says it had nothing
+  to ask.
+app: fixtures/build/apps/perm-probe.apk
+engine: art
+fallback: report-and-escalate
+api_level: 34
+isolation: process
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+capabilities:
+  - ui.offscreen
+  - ui.text
+services:
+  - id: system.permissions
+    profile: real
+    config:
+      grant:
+        - android.permission.CAMERA
+        - android.permission.ACCESS_FINE_LOCATION
+expectation: pass
+budgets:
+  memory_mib: 1024
+  wall_ms: 240000
+steps:
+  - launch:
+      activity: dev.acos.fixtures.permprobe/.MainActivity
+      clear_state: true
+
+  - wait_for:
+      selector: {id: state}
+      timeout_ms: 20000
+
+  - assert_text:
+      selector: {id: state}
+      text: {exact: "state before: CAMERA=0 LOCATION=0"}
+
+  - tap:
+      selector: {id: request}
+
+  - wait_for:
+      selector: {id: result}
+      timeout_ms: 30000
+
+  - assert_text:
+      selector: {id: result}
+      text: {exact: "result request=7 n=2 m=2 CAMERA=0 LOCATION=0"}
+      timeout_ms: 20000
+
+  # No dialog was drawn.
+  - assert_not_visible:
+      selector: {id: allow_button}
+      timeout_ms: 5000
+
+  - assert_log:
+      since_previous_step: false
+      timeout_ms: 20000
+      ordered: true
+      patterns:
+        - '^created names=android\.permission\.CAMERA,android\.permission\.ACCESS_FINE_LOCATION granted=android\.permission\.CAMERA,android\.permission\.ACCESS_FINE_LOCATION fixed= package=dev\.acos\.fixtures\.permprobe$'
+        - '^nothing to ask, returning results granted,granted$'
+        - '^result request=7 n=2 m=2 CAMERA=0 LOCATION=0$'

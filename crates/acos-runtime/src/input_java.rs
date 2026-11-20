@@ -26,9 +26,7 @@
 use std::sync::Arc;
 
 use acos_services::input::{DispatchFrame, FrameWriter, InputError};
-use acos_vm::natives::fwk_input::{
-    FramePointer, InputFrame, InputHost, KIND_KEY, KIND_MOTION,
-};
+use acos_vm::natives::fwk_input::{FramePointer, InputFrame, InputHost, KIND_KEY, KIND_MOTION};
 use acos_wm::input::InputEvent;
 use acos_wm::transport::ChannelEnd;
 
@@ -156,11 +154,10 @@ pub fn install() {
 pub fn install_window_writer(window: u64) -> Result<(), String> {
     with_wms(|s| {
         let record = s.wm.windows.get(&window).cloned()?;
-        let end = s
-            .wm
-            .channels
-            .get(record.input_channel_handle)
-            .map(|c| c.dispatcher.clone())?;
+        let end =
+            s.wm.channels
+                .get(record.input_channel_handle)
+                .map(|c| c.dispatcher.clone())?;
         s.input
             .register_window(&record, Arc::new(ChannelFrameWriter::new(end)));
         Some(())

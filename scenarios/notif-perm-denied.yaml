@@ -1,0 +1,74 @@
+# MODNOTIF5: the POST_NOTIFICATIONS gate, denied.
+#
+# Same fixture and same real path as `notif-perm-granted`, but the session's
+# permission store was pre-denied. AOSP
+# (`NotificationManagerService.enqueueNotificationInternal`) drops the
+# notification when the app lacks POST_NOTIFICATIONS at `targetSdk >= 33`; the
+# app gets **no exception**, so the only honest evidence is the system side:
+# `posted: []` and `dropped[0].reason` naming the permission, while the app's
+# screen still shows `enabled: false`.
+version: 1
+name: notif-perm-denied
+description: >-
+  notif-perm-probe on ART with POST_NOTIFICATIONS pre-denied: notify() is
+  accepted and dropped (never an exception), the module records why, and
+  areNotificationsEnabled() answers false on the app's screen.
+app: fixtures/build/apps/notif-perm-probe.apk
+api_level: 34
+isolation: process
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+capabilities:
+  - ui.offscreen
+  - ui.text
+services:
+  - id: system.permissions
+    profile: real
+    config:
+      deny:
+        - android.permission.POST_NOTIFICATIONS
+  - id: system.notifications
+    profile: real
+expectation: pass
+budgets:
+  memory_mib: 640
+  wall_ms: 180000
+steps:
+  - launch:
+      activity: dev.acos.fixtures.notifpermprobe/.MainActivity
+      clear_state: true
+
+  # 1. The app sees the denial (the value is read before and after the post).
+  - wait_for:
+      selector: {id: enabled}
+      timeout_ms: 20000
+  - assert_text:
+      selector: {id: enabled}
+      text: {exact: "enabled: false"}
+      timeout_ms: 10000
+  # The app's own attempt is still recorded on screen: notify() has no exception.
+  - assert_text:
+      selector: {id: posted}
+      text: {exact: "posted: id 7"}
+
+  # 2. The system dropped it, and says exactly why (the gate's own message).
+  - service_ctl:
+      module: system.notifications
+      op: list
+      expect:
+        ok: true
+        value:
+          notifications_enabled: false
+          posted: []
+          dropped:
+            - id: 7
+              reason: >-
+                android.permission.POST_NOTIFICATIONS is not granted (targetSdk 34);
+                NotificationManagerService drops the notification
+
+  # A tap on a notification the gate dropped is a structured `MODULE_REJECTED`
+  # (never a fake success); a scenario step cannot expect a step-level error
+  # (`expect_error` is scenario-wide), so MODNOTIF4's module test owns that arm.

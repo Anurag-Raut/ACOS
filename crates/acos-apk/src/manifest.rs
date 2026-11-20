@@ -44,6 +44,32 @@ pub struct UsesFeature {
     pub version: Option<u32>,
 }
 
+/// One `<permission>` the package **declares** (SYSUI3B).
+///
+/// `PackageParser.parsePermission` (`base/core/java/android/content/pm/PackageParser.java`,
+/// tag android-14.0.0_r75) turns the element into a `PermissionInfo`; the
+/// fields here are the ones an `IPermissionManager.getPermissionInfo` answer
+/// needs. `label`/`description` keep a literal string attribute as written; a
+/// `@string/...` reference stays unset (`None`), because resolving it would
+/// need the declaring package's resource table — the store reports the gap
+/// rather than inventing a label.
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
+pub struct DeclaredPermission {
+    /// `android:name` (already normalised by `PackageParser`: a bare class name
+    /// gets the package prefix, exactly as the platform does).
+    pub name: String,
+    /// A literal `android:label` string, when the manifest gives one.
+    pub label: Option<String>,
+    /// A literal `android:description` string, when the manifest gives one.
+    pub description: Option<String>,
+    /// `android:permissionGroup` (fully qualified, as written).
+    pub group: Option<String>,
+    /// `android:protectionLevel` as written (`"dangerous"`, `"signature|privileged"`).
+    pub protection_level: Option<String>,
+    /// `android:backgroundPermission`.
+    pub background_permission: Option<String>,
+}
+
 /// A typed `<meta-data>` value, stored exactly as `PackageParser.parseMetaData`
 /// (`.cache/aosp/base/core/java/android/content/pm/PackageParser.java`, tag
 /// android-14.0.0_r75) writes it into the owning `PackageItemInfo`'s `Bundle`:
@@ -262,6 +288,8 @@ pub struct Manifest {
     pub compile_sdk: Option<u32>,
     pub uses_permissions: Vec<UsesPermission>,
     pub uses_features: Vec<UsesFeature>,
+    /// Every `<permission>` the package itself declares, in manifest order.
+    pub permissions: Vec<DeclaredPermission>,
     pub application: ApplicationInfo,
     pub activities: Vec<Component>,
     pub services: Vec<Component>,
@@ -284,6 +312,7 @@ impl Manifest {
         let mut max_sdk = None;
         let mut uses_permissions = Vec::new();
         let mut uses_features = Vec::new();
+        let mut permissions = Vec::new();
         let mut application = ApplicationInfo::default();
         let mut supports_screens = SupportsScreens::default();
 
@@ -308,6 +337,21 @@ impl Manifest {
                             name,
                             required: attr_bool(child, "required"),
                             version: attr_u32(child, "version"),
+                        });
+                    }
+                }
+                "permission" => {
+                    if let Some(name) = attr_string(child, "name") {
+                        // `PackageParser.parsePermissionName`: a bare name is
+                        // prefixed with the package, a leading dot is resolved
+                        // against it; a fully qualified name is kept.
+                        permissions.push(DeclaredPermission {
+                            name: fq_name(&package, &name),
+                            label: attr_string(child, "label"),
+                            description: attr_string(child, "description"),
+                            group: attr_string(child, "permissionGroup"),
+                            protection_level: attr_string(child, "protectionLevel"),
+                            background_permission: attr_string(child, "backgroundPermission"),
                         });
                     }
                 }
@@ -345,6 +389,7 @@ impl Manifest {
             compile_sdk,
             uses_permissions,
             uses_features,
+            permissions,
             application,
             activities,
             services,
@@ -852,7 +897,11 @@ mod tests {
         }
     }
 
-    pub(crate) fn node(name: &str, attributes: Vec<XmlAttribute>, children: Vec<XmlNode>) -> XmlNode {
+    pub(crate) fn node(
+        name: &str,
+        attributes: Vec<XmlAttribute>,
+        children: Vec<XmlNode>,
+    ) -> XmlNode {
         XmlNode {
             namespace: None,
             name: name.to_string(),
@@ -865,7 +914,10 @@ mod tests {
     fn meta(name: &str, attribute: XmlAttribute) -> XmlNode {
         node(
             "meta-data",
-            vec![attr("name", TypedValue::String(name.to_string())), attribute],
+            vec![
+                attr("name", TypedValue::String(name.to_string())),
+                attribute,
+            ],
             Vec::new(),
         )
     }
@@ -929,6 +981,70 @@ mod tests {
         document_with_sdk(None, target_sdk, manifest_children)
     }
 
+    /// SYSUI3B: `<permission>` declarations are part of the typed model, with
+    /// the platform's name normalisation (`PackageParser.parsePermissionName`).
+    #[test]
+    fn a_declared_permission_keeps_its_label_group_and_protection_level() {
+        let document = document_with_sdk(
+            None,
+            Some(34),
+            vec![
+                node(
+                    "permission",
+                    vec![
+                        attr("name", TypedValue::String(".permission.PROBE".into())),
+                        attr(
+                            "label",
+                            TypedValue::String("probe permission".into()),
+                        ),
+                        attr(
+                            "description",
+                            TypedValue::String("a declared permission".into()),
+                        ),
+                        attr(
+                            "permissionGroup",
+                            TypedValue::String("pkg.permission-group.PROBE".into()),
+                        ),
+                        attr(
+                            "protectionLevel",
+                            TypedValue::String("dangerous|instant".into()),
+                        ),
+                        attr(
+                            "backgroundPermission",
+                            TypedValue::String("pkg.permission.PROBE_BACKGROUND".into()),
+                        ),
+                    ],
+                    Vec::new(),
+                ),
+                node(
+                    "permission",
+                    vec![
+                        attr("name", TypedValue::String("Bare".into())),
+                        attr("protectionLevel", TypedValue::String("signature".into())),
+                    ],
+                    Vec::new(),
+                ),
+            ],
+        );
+        let manifest = Manifest::parse(&document).expect("manifest parses");
+        assert_eq!(manifest.permissions.len(), 2);
+        let probe = &manifest.permissions[0];
+        assert_eq!(probe.name, "pkg.permission.PROBE");
+        assert_eq!(probe.label.as_deref(), Some("probe permission"));
+        assert_eq!(probe.description.as_deref(), Some("a declared permission"));
+        assert_eq!(probe.group.as_deref(), Some("pkg.permission-group.PROBE"));
+        assert_eq!(probe.protection_level.as_deref(), Some("dangerous|instant"));
+        assert_eq!(
+            probe.background_permission.as_deref(),
+            Some("pkg.permission.PROBE_BACKGROUND")
+        );
+        // A bare name gets the package prefix, and an absent label stays absent
+        // (a `@string/...` reference would too: resolving it needs the app's
+        // resource table).
+        assert_eq!(manifest.permissions[1].name, "pkg.Bare");
+        assert_eq!(manifest.permissions[1].label, None);
+    }
+
     /// One `<activity>`/`<activity-alias>` with an optional MAIN/LAUNCHER
     /// `<intent-filter>` and an optional `android:enabled`.
     pub(crate) fn component_node(
@@ -940,7 +1056,10 @@ mod tests {
     ) -> XmlNode {
         let mut attrs = vec![attr("name", TypedValue::String(name.to_string()))];
         if let Some(target) = target {
-            attrs.push(attr("targetActivity", TypedValue::String(target.to_string())));
+            attrs.push(attr(
+                "targetActivity",
+                TypedValue::String(target.to_string()),
+            ));
         }
         if let Some(enabled) = enabled {
             attrs.push(attr("enabled", TypedValue::Boolean(enabled)));
@@ -1000,10 +1119,18 @@ mod tests {
             // ungated normalScreens default survives.
             (None, None, FLAG_SUPPORTS_NORMAL_SCREENS),
             (Some(3), None, FLAG_SUPPORTS_NORMAL_SCREENS),
-            (Some(4), None, ALL_SCREEN_FLAGS & !FLAG_SUPPORTS_XLARGE_SCREENS),
+            (
+                Some(4),
+                None,
+                ALL_SCREEN_FLAGS & !FLAG_SUPPORTS_XLARGE_SCREENS,
+            ),
             (Some(9), None, ALL_SCREEN_FLAGS),
             (Some(26), Some(3), FLAG_SUPPORTS_NORMAL_SCREENS),
-            (None, Some(8), ALL_SCREEN_FLAGS & !FLAG_SUPPORTS_XLARGE_SCREENS),
+            (
+                None,
+                Some(8),
+                ALL_SCREEN_FLAGS & !FLAG_SUPPORTS_XLARGE_SCREENS,
+            ),
             (Some(26), Some(34), ALL_SCREEN_FLAGS),
         ];
         for (min_sdk, target_sdk, expected) in cases {
@@ -1085,11 +1212,7 @@ mod tests {
             .into_iter()
             .map(|name| attr(name, TypedValue::Boolean(true)))
             .collect();
-            let doc = document_with_sdk(
-                min_sdk,
-                target_sdk,
-                vec![supports_screens(attrs)],
-            );
+            let doc = document_with_sdk(min_sdk, target_sdk, vec![supports_screens(attrs)]);
             let manifest = Manifest::parse(&doc).expect("manifest");
             assert_eq!(
                 screen_flags(&manifest),
@@ -1190,7 +1313,11 @@ mod tests {
                 vec![attr("name", TypedValue::String("empty".into()))],
                 Vec::new(),
             ),
-            node("meta-data", vec![attr("value", TypedValue::IntDec(1))], Vec::new()),
+            node(
+                "meta-data",
+                vec![attr("value", TypedValue::IntDec(1))],
+                Vec::new(),
+            ),
         ]);
         let manifest = Manifest::parse(&doc).expect("manifest");
         assert_eq!(
@@ -1278,8 +1405,16 @@ mod tests {
     fn corpus_editor_provider_meta_data_is_a_reference() {
         let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../../.cache/corpus/k1/apks/org.billthefarmer.editor_196_1.96.apk");
-        if !path.is_file() {
-            eprintln!("skip corpus_editor_provider_meta_data_is_a_reference: corpus not present");
+        if acos_test_support::require_prereq(
+            path.is_file(),
+            "corpus_editor_provider_meta_data_is_a_reference",
+            &format!(
+                "{} is absent — put the corpus APK under .cache/corpus/k1/apks",
+                path.display()
+            ),
+        )
+        .is_none()
+        {
             return;
         }
         let apk = crate::Apk::open(&path).expect("open editor APK");

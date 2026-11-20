@@ -1,0 +1,17 @@
+{
+  "acos_version": "0.3.0",
+  "apk_path": "/home/Qui/.t3/worktrees/acos/t3-a2b5f6fb-3b52a9c9158c9fa8/fixtures/build/apps/net-check.apk",
+  "apk_sha256": "11c5dfbe019728e0976a00795b4c5add08c3b553809f2f97a284080869158ed0",
+  "scenario_path": "/home/Qui/.t3/worktrees/acos/t3-a2b5f6fb-3b52a9c9158c9fa8/scenarios/net-check-offline.yaml",
+  "scenario_sha256": "bdf07214647fdc363911aa8cef2ffa9046ef21f14597f4f324f15cf50c82a37d",
+  "flags": [],
+  "isolation": "process",
+  "display": {
+    "mode": "offscreen",
+    "width": 1080,
+    "height": 2400,
+    "density_dpi": 420
+  },
+  "fidelity": "art-reference",
+  "backend": "acos-native"
+}

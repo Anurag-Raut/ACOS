@@ -32,7 +32,12 @@ pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
     vm.register_native(c, "setProcessDataDirectory", "(Ljava/lang/String;)V", noop);
     vm.register_native(c, "setTargetSdkVersionNative", "(I)V", noop);
     vm.register_native(c, "nativeSetTargetHeapUtilization", "(F)V", noop);
-    vm.register_native(c, "registerAppInfo", "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;[Ljava/lang/String;I)V", noop);
+    vm.register_native(
+        c,
+        "registerAppInfo",
+        "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;[Ljava/lang/String;I)V",
+        noop,
+    );
     vm.register_native(c, "preloadDexCaches", "()V", noop);
     vm.register_native(c, "updateProcessState", "(I)V", noop);
     vm.register_native(c, "bootCompleted", "()V", noop);
@@ -40,21 +45,51 @@ pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
     vm.register_native(c, "isCheckJniEnabled", "()Z", ret_false);
     vm.register_native(c, "isJavaDebuggable", "()Z", ret_false);
     vm.register_native(c, "isNativeDebuggable", "()Z", ret_false);
-    vm.register_native(c, "isBootClassPathOnDisk", "(Ljava/lang/String;)Z", ret_true);
-    vm.register_native(c, "isValidClassLoaderContext", "(Ljava/lang/String;)Z", ret_true);
+    vm.register_native(
+        c,
+        "isBootClassPathOnDisk",
+        "(Ljava/lang/String;)Z",
+        ret_true,
+    );
+    vm.register_native(
+        c,
+        "isValidClassLoaderContext",
+        "(Ljava/lang/String;)Z",
+        ret_true,
+    );
     vm.register_native(c, "getTargetHeapUtilization", "()F", ret_half_f);
     vm.register_native(c, "getFinalizerTimeoutMs", "()J", ret_10000_l);
     vm.register_native(c, "getSdkVersionNative", "(I)I", ret_sdk);
-    vm.register_native(c, "getCurrentInstructionSet", "()Ljava/lang/String;", ret_x86_64);
+    vm.register_native(
+        c,
+        "getCurrentInstructionSet",
+        "()Ljava/lang/String;",
+        ret_x86_64,
+    );
     vm.register_native(c, "vmInstructionSet", "()Ljava/lang/String;", ret_x86_64);
     vm.register_native(c, "vmVersion", "()Ljava/lang/String;", ret_null_str);
     vm.register_native(c, "vmLibrary", "()Ljava/lang/String;", ret_null_str);
     vm.register_native(c, "bootClassPath", "()Ljava/lang/String;", ret_empty_str);
     vm.register_native(c, "classPath", "()Ljava/lang/String;", ret_empty_str);
     vm.register_native(c, "properties", "()[Ljava/lang/String;", runtime_properties);
-    vm.register_native(c, "getBaseApkOptimizationInfo", "()Ldalvik/system/DexFile$OptimizationInfo;", ret_null);
-    vm.register_native(c, "newUnpaddedArray", "(Ljava/lang/Class;I)Ljava/lang/Object;", new_array_of);
-    vm.register_native(c, "newNonMovableArray", "(Ljava/lang/Class;I)Ljava/lang/Object;", new_array_of);
+    vm.register_native(
+        c,
+        "getBaseApkOptimizationInfo",
+        "()Ldalvik/system/DexFile$OptimizationInfo;",
+        ret_null,
+    );
+    vm.register_native(
+        c,
+        "newUnpaddedArray",
+        "(Ljava/lang/Class;I)Ljava/lang/Object;",
+        new_array_of,
+    );
+    vm.register_native(
+        c,
+        "newNonMovableArray",
+        "(Ljava/lang/Class;I)Ljava/lang/Object;",
+        new_array_of,
+    );
     vm.register_native(c, "addressOf", "(Ljava/lang/Object;)J", address_of);
     atomic_integer(vm);
     atomic_boolean(vm);
@@ -87,13 +122,48 @@ fn atomic_reference(vm: &mut Vm) {
     vm.register_native(c, "setPlain", "(Ljava/lang/Object;)V", ar_set);
     vm.register_native(c, "setOpaque", "(Ljava/lang/Object;)V", ar_set);
     vm.register_native(c, "setRelease", "(Ljava/lang/Object;)V", ar_set);
-    vm.register_native(c, "getAndSet", "(Ljava/lang/Object;)Ljava/lang/Object;", ar_get_and_set);
-    vm.register_native(c, "compareAndSet", "(Ljava/lang/Object;Ljava/lang/Object;)Z", ar_cas);
-    vm.register_native(c, "weakCompareAndSet", "(Ljava/lang/Object;Ljava/lang/Object;)Z", ar_cas);
-    vm.register_native(c, "weakCompareAndSetPlain", "(Ljava/lang/Object;Ljava/lang/Object;)Z", ar_cas);
-    vm.register_native(c, "weakCompareAndSetVolatile", "(Ljava/lang/Object;Ljava/lang/Object;)Z", ar_cas);
-    vm.register_native(c, "weakCompareAndSetAcquire", "(Ljava/lang/Object;Ljava/lang/Object;)Z", ar_cas);
-    vm.register_native(c, "weakCompareAndSetRelease", "(Ljava/lang/Object;Ljava/lang/Object;)Z", ar_cas);
+    vm.register_native(
+        c,
+        "getAndSet",
+        "(Ljava/lang/Object;)Ljava/lang/Object;",
+        ar_get_and_set,
+    );
+    vm.register_native(
+        c,
+        "compareAndSet",
+        "(Ljava/lang/Object;Ljava/lang/Object;)Z",
+        ar_cas,
+    );
+    vm.register_native(
+        c,
+        "weakCompareAndSet",
+        "(Ljava/lang/Object;Ljava/lang/Object;)Z",
+        ar_cas,
+    );
+    vm.register_native(
+        c,
+        "weakCompareAndSetPlain",
+        "(Ljava/lang/Object;Ljava/lang/Object;)Z",
+        ar_cas,
+    );
+    vm.register_native(
+        c,
+        "weakCompareAndSetVolatile",
+        "(Ljava/lang/Object;Ljava/lang/Object;)Z",
+        ar_cas,
+    );
+    vm.register_native(
+        c,
+        "weakCompareAndSetAcquire",
+        "(Ljava/lang/Object;Ljava/lang/Object;)Z",
+        ar_cas,
+    );
+    vm.register_native(
+        c,
+        "weakCompareAndSetRelease",
+        "(Ljava/lang/Object;Ljava/lang/Object;)Z",
+        ar_cas,
+    );
     vm.register_native(
         c,
         "compareAndExchange",
@@ -504,7 +574,6 @@ fn noop_long(_vm: &mut Vm, _ctx: NativeCtx) -> VmResult<()> {
     Ok(())
 }
 
-
 fn ret_notify_interval(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     vm.ret_i32(ctx, 300);
     Ok(())
@@ -605,7 +674,10 @@ fn new_array_of(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
         .map(|c| vm.class_desc(c).to_string())
         .unwrap_or_else(|| "Ljava/lang/Object;".to_string());
     let data = new_array_data(&desc, len)?;
-    let h = vm.alloc(Object::Array(ArrayObj { elem_desc: desc, data }))?;
+    let h = vm.alloc(Object::Array(ArrayObj {
+        elem_desc: desc,
+        data,
+    }))?;
     vm.ret_ref(ctx, h);
     Ok(())
 }

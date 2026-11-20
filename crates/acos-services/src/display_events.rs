@@ -196,7 +196,10 @@ impl VsyncEventData {
         parcel.write_int64(self.frame_interval);
         parcel.write_uint32(self.preferred_frame_timeline_index);
         parcel.write_uint32(self.frame_timelines_length);
-        for i in 0..self.frame_timelines_length.min(FRAME_TIMELINES_CAPACITY as u32) as usize {
+        for i in 0..self
+            .frame_timelines_length
+            .min(FRAME_TIMELINES_CAPACITY as u32) as usize
+        {
             let t = &self.frame_timelines[i];
             parcel.write_int64(t.vsync_id);
             parcel.write_int64(t.deadline_timestamp);
@@ -264,12 +267,14 @@ pub fn encode_vsync_event(
     data: &VsyncEventData,
 ) -> [u8; EVENT_SIZE] {
     let mut buf = [0u8; EVENT_SIZE];
-    buf[EVENT_OFFSET_TYPE..EVENT_OFFSET_TYPE + 4].copy_from_slice(&DISPLAY_EVENT_VSYNC.to_ne_bytes());
+    buf[EVENT_OFFSET_TYPE..EVENT_OFFSET_TYPE + 4]
+        .copy_from_slice(&DISPLAY_EVENT_VSYNC.to_ne_bytes());
     buf[EVENT_OFFSET_DISPLAY_ID..EVENT_OFFSET_DISPLAY_ID + 8]
         .copy_from_slice(&display_id.to_ne_bytes());
     buf[EVENT_OFFSET_TIMESTAMP..EVENT_OFFSET_TIMESTAMP + 8]
         .copy_from_slice(&timestamp_ns.to_ne_bytes());
-    buf[EVENT_OFFSET_VSYNC_COUNT..EVENT_OFFSET_VSYNC_COUNT + 4].copy_from_slice(&count.to_ne_bytes());
+    buf[EVENT_OFFSET_VSYNC_COUNT..EVENT_OFFSET_VSYNC_COUNT + 4]
+        .copy_from_slice(&count.to_ne_bytes());
 
     let mut at = EVENT_OFFSET_VSYNC_DATA;
     let put_i64 = |buf: &mut [u8; EVENT_SIZE], at: &mut usize, v: i64| {
@@ -404,6 +409,34 @@ impl BitTube {
         let send = self.send.as_ref().ok_or_else(|| {
             ServiceError::Internal("IDisplayEventConnection: send channel is gone".into())
         })?;
+        reply.write_file_descriptor(receive.as_fd()).map_err(perr)?;
+        reply.write_file_descriptor(send.as_fd()).map_err(perr)?;
+        Ok(())
+    }
+
+    /// `gui::BitTube::writeToParcel` for a **hand-written** binder interface: the
+    /// two descriptors and nothing else.
+    ///
+    /// The AIDL `android.gui.IDisplayEventConnection` is served through a
+    /// generated stub, so its reply carries a `binder::Status` and a
+    /// `kNonNullParcelableFlag` before the tube. The sensor service's
+    /// `ISensorEventConnection` is hand-written C++ (`libsensor`): its proxy does
+    /// `new BitTube(reply)`, i.e. `readFileDescriptor` twice with no flag and no
+    /// status word in front. Writing either here would shift the reply by four
+    /// bytes and the client would read the flag as the receive descriptor.
+    ///
+    /// The receive end is taken (stolen, as on the stock path); the send end is
+    /// kept so the server can keep writing events into the tube.
+    pub fn write_to_parcel_raw(&mut self, reply: &mut Parcel) -> SResult<()> {
+        let Some(receive) = self.receive.take() else {
+            return Err(ServiceError::Internal(
+                "BitTube: receive channel already stolen".into(),
+            ));
+        };
+        let send = self
+            .send
+            .as_ref()
+            .ok_or_else(|| ServiceError::Internal("BitTube: send channel is gone".into()))?;
         reply.write_file_descriptor(receive.as_fd()).map_err(perr)?;
         reply.write_file_descriptor(send.as_fd()).map_err(perr)?;
         Ok(())
@@ -628,10 +661,7 @@ fn writer_loop(shared: Arc<ClockShared>, send: OwnedFd) {
                 if state.rate > 0 || state.pending > 0 {
                     break;
                 }
-                state = shared
-                    .wake
-                    .wait(state)
-                    .unwrap_or_else(|e| e.into_inner());
+                state = shared.wake.wait(state).unwrap_or_else(|e| e.into_inner());
             }
             let now = now_ns();
             let period = shared.period_ns;
@@ -675,11 +705,8 @@ fn writer_loop(shared: Arc<ClockShared>, send: OwnedFd) {
             // The request was withdrawn while we slept (a `setVsyncRate(0)`).
             continue;
         }
-        let data = VsyncEventData::single_timeline(
-            shared.period_ns,
-            i64::from(state.count) + 1,
-            target,
-        );
+        let data =
+            VsyncEventData::single_timeline(shared.period_ns, i64::from(state.count) + 1, target);
         let event = encode_vsync_event(shared.display_id, target, state.count, &data);
         if rustix::net::send(&send, &event, SendFlags::DONTWAIT | SendFlags::NOSIGNAL).is_ok() {
             state.sent += 1;
@@ -809,13 +836,8 @@ impl ServiceObject for DisplayEventConnectionService {
                 // (`PERMISSION_DENIED` from `validateReadData`) and
                 // `stealReceiveChannel` fails with
                 // `Status(-129, …): 'PERMISSION_DENIED: '` (L1 §3).
-                reply
-                    .write_int32(1);
-                let mut slot = self
-                    .slot
-                    .clock
-                    .lock()
-                    .unwrap_or_else(|e| e.into_inner());
+                reply.write_int32(1);
+                let mut slot = self.slot.clock.lock().unwrap_or_else(|e| e.into_inner());
                 let clock = slot.as_mut().ok_or_else(|| {
                     ServiceError::Internal(
                         "IDisplayEventConnection: stealReceiveChannel before a connection exists"

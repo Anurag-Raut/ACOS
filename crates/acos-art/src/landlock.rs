@@ -60,7 +60,7 @@
 //! constructors, and the guest pid namespace plus the seccomp `kill`/`tkill`
 //! denial already bound signalling. Recorded as a residual in S6.md.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use crate::{Error, Result};
 
@@ -128,6 +128,39 @@ pub fn write_plan(dir: &Path) -> Result<bool> {
     Ok(true)
 }
 
+/// GPUSPIKE: the plan for a run that opted into a host-GPU provider, written
+/// next to the default plan as `landlock.gpu.<node>.plan` and bound over
+/// `/data/seccomp/landlock.plan` for **that run only**.
+///
+/// It is the default plan plus exactly one extra read-write root, the DRM
+/// render node (`/dev/dri/renderD<N>`): `WRITE_FILE` + `IOCTL_DEV` are what
+/// `open(O_RDWR)` and every `DRM_IOCTL_*` need, and without them the guest's
+/// Mesa logs `failed to open /dev/dri/renderD129: Permission denied` and falls
+/// back to llvmpipe (measured, `results/handoff/GPUSPIKE/p1`). The default
+/// plan, and therefore every run without the flag, is unchanged.
+///
+/// `Ok(None)` when this kernel has no Landlock (nothing to widen).
+pub fn write_gpu_plan(dir: &Path, render_node: &Path) -> Result<Option<PathBuf>> {
+    if acos_sandbox::landlock_abi().is_none() {
+        return Ok(None);
+    }
+    let node = render_node.to_string_lossy().to_string();
+    if !crate::gles::valid_render_node(&node) {
+        return Err(Error::Layout(format!(
+            "{node:?} is not /dev/dri/renderD<N>; refusing to widen the guest's Landlock plan"
+        )));
+    }
+    let mut rw: Vec<&str> = READ_WRITE_ROOTS.to_vec();
+    rw.push(&node);
+    let bytes = acos_sandbox::landlock_guest_plan(READ_ONLY_ROOTS, &rw)
+        .map_err(|e| Error::LandlockUnavailable(format!("cannot assemble the GPU ruleset: {e}")))?;
+    let base = node.rsplit('/').next().unwrap_or("renderD");
+    std::fs::create_dir_all(dir)?;
+    let path = dir.join(format!("landlock.gpu.{base}.plan"));
+    crate::publish_atomic(&path, &bytes)?;
+    Ok(Some(path))
+}
+
 /// Require the applier's evidence in a finished run's guard log.
 ///
 /// `OK landlock=active abi=N rules=M` means the kernel accepted the ruleset;
@@ -163,9 +196,50 @@ mod tests {
     use super::*;
 
     #[test]
+    fn the_gpu_plan_adds_exactly_the_render_node_and_nothing_else() {
+        if acos_test_support::require_prereq(
+            acos_sandbox::landlock_abi().is_some(),
+            "the_gpu_plan_adds_exactly_the_render_node_and_nothing_else",
+            "this kernel has no Landlock (landlock_abi() is None)",
+        )
+        .is_none()
+        {
+            return;
+        }
+        let dir = std::env::temp_dir().join(format!("acos-gpu-plan-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("dir");
+        let path = write_gpu_plan(&dir, Path::new("/dev/dri/renderD129"))
+            .expect("plan")
+            .expect("landlock present");
+        assert!(path.ends_with("landlock.gpu.renderD129.plan"), "{path:?}");
+        let gpu = std::fs::read_to_string(&path).expect("read");
+        let base = plan_preview().expect("default plan");
+        let rw = |t: &str| -> Vec<String> {
+            t.lines()
+                .filter_map(|l| l.strip_prefix("rw "))
+                .map(|l| l.splitn(2, ' ').nth(1).unwrap_or("").to_string())
+                .collect()
+        };
+        let (g, b) = (rw(&gpu), rw(&base));
+        assert!(g.contains(&"/dev/dri/renderD129".to_string()), "{g:?}");
+        assert_eq!(g.len(), b.len() + 1, "exactly one extra root: {g:?} vs {b:?}");
+        assert!(!b.contains(&"/dev/dri/renderD129".to_string()), "default plan must not grant it");
+        // Never a card node (modesetting), never a directory.
+        assert!(write_gpu_plan(&dir, Path::new("/dev/dri/card0")).is_err());
+        assert!(write_gpu_plan(&dir, Path::new("/dev/dri")).is_err());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
     fn plan_grants_writes_only_on_the_per_run_roots() {
         if acos_sandbox::landlock_abi().is_none() {
-            eprintln!("SKIP landlock plan test: this kernel has no Landlock");
+            acos_test_support::require_prereq(
+                false,
+                "landlock plan test",
+                "this kernel has no Landlock — run on a kernel with Landlock, or set \
+                 ACOS_ALLOW_ART_SKIP=1 for a counted skip",
+            );
             return;
         }
         let text = plan_preview().expect("plan");
@@ -175,7 +249,10 @@ mod tests {
             .lines()
             .filter_map(|l| l.strip_prefix("rw ").and_then(|r| r.splitn(2, ' ').nth(1)))
             .collect();
-        assert!(rw.contains(&"/data/out"), "the run's out dir is writable: {rw:?}");
+        assert!(
+            rw.contains(&"/data/out"),
+            "the run's out dir is writable: {rw:?}"
+        );
         assert!(rw.contains(&"/data/task"), "{rw:?}");
         // The escape targets are *not* writable roots.
         for forbidden in [
@@ -187,7 +264,10 @@ mod tests {
             "/system",
             "/proc",
         ] {
-            assert!(!rw.contains(&forbidden), "{forbidden} must not be writable: {rw:?}");
+            assert!(
+                !rw.contains(&forbidden),
+                "{forbidden} must not be writable: {rw:?}"
+            );
         }
     }
 

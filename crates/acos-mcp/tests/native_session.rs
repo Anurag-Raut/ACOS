@@ -27,25 +27,29 @@ fn boot_available() -> bool {
 fn native_fixture() -> Option<PathBuf> {
     let rel = "fixtures/build/apps/native-hello.apk";
     let apk = repo_root().join(rel);
-    if acos_test_support::have_fixture(rel) {
-        Some(apk)
-    } else {
-        eprintln!("SKIP native_session: missing {}", apk.display());
-        None
-    }
+    acos_test_support::require_prereq(
+        acos_test_support::have_fixture(rel),
+        "native_session",
+        &format!("missing {} — build it with tools/build-apps.sh", apk.display()),
+    )?;
+    Some(apk)
 }
 
 fn backend() -> SessionBackend {
     let cli = CliBackend::new(BackendConfig::for_binary("/nonexistent/acos-w80a"));
-    SessionBackend::with_cli(cli, SessionOptions::default()).with_native_child_binary(PathBuf::from(
-        env!("CARGO_BIN_EXE_acos-mcp"),
-    ))
+    SessionBackend::with_cli(cli, SessionOptions::default())
+        .with_native_child_binary(PathBuf::from(env!("CARGO_BIN_EXE_acos-mcp")))
 }
 
 #[test]
 fn native_launch_runs_in_a_confined_child_session() {
-    if !boot_available() {
-        eprintln!("SKIP native_launch_runs_in_a_confined_child_session: no boot cache");
+    if acos_test_support::require_prereq(
+        boot_available(),
+        "native_launch_runs_in_a_confined_child_session",
+        "no boot cache",
+    )
+    .is_none()
+    {
         return;
     }
     let Some(apk) = native_fixture() else {
@@ -81,7 +85,10 @@ fn native_launch_runs_in_a_confined_child_session() {
         events.contains(&"frame=1"),
         "the native ANativeWindow post must publish a frame; events: {events:#?}"
     );
-    let stages = envelope["result"]["stages"].as_array().cloned().unwrap_or_default();
+    let stages = envelope["result"]["stages"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
     let first_frame = stages
         .iter()
         .find(|s| s["stage"] == "first_frame")
@@ -124,9 +131,7 @@ fn native_launch_runs_in_a_confined_child_session() {
         launch_frames, 1,
         "the launch ladder must publish exactly one frame; events: {events:#?}"
     );
-    let observed_frames = observed["result"]["published_frames"]
-        .as_u64()
-        .unwrap_or(0);
+    let observed_frames = observed["result"]["published_frames"].as_u64().unwrap_or(0);
     assert!(
         observed_frames >= launch_frames,
         "observe must see at least the {launch_frames} launch frame(s), saw {observed_frames}: \

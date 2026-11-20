@@ -1,0 +1,3 @@
+apk=/home/Qui/.t3/worktrees/acos/t3-2d2bb735-60949492e8cb8af5/fixtures/build/apps/counter.apk
+apk_sha256=ad32b0ec9b5ceb07576eb14a617676886249a4526ae94500049b29f622a448b8
+engine=art

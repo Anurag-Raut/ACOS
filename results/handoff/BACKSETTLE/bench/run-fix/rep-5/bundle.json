@@ -1,0 +1,115 @@
+{
+  "host_after": {
+    "loadavg1": 5.5,
+    "loadavg15": 5.33,
+    "loadavg5": 5.11,
+    "mem_available_gib": 44.61,
+    "mem_available_mib": 45683.8,
+    "mem_total_gib": 60.46,
+    "mem_total_mib": 61908.7,
+    "noisy": true,
+    "other_acos": [
+      {
+        "cmd": "/bin/bash -c cd /home/Qui/.t3/worktrees/acos/t3-43746ade-7323e343b6e1642d && CARGO_PROFILE_DEV_DEBUG=0 CARGO_PROFILE_TEST_DEBUG=0 CARGO_INCREMENTAL=0 CARGO_TARG",
+        "comm": "bash",
+        "pid": 592282
+      },
+      {
+        "cmd": "bash tools/art-runtime/run-exclusive.sh --task WVTAIL -- tools/guarded.sh --mem 12G --time 1800 -- cargo test --offline -p acos-art -p acos-services",
+        "comm": "bash",
+        "pid": 592283
+      },
+      {
+        "cmd": "bash tools/guarded.sh --mem 12G --time 1800 -- cargo test --offline -p acos-art -p acos-services",
+        "comm": "bash",
+        "pid": 592305
+      },
+      {
+        "cmd": "/usr/bin/timeout -k 5 1800 cargo test --offline -p acos-art -p acos-services",
+        "comm": "timeout",
+        "pid": 592314
+      },
+      {
+        "cmd": "/home/Qui/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/cargo test --offline -p acos-art -p acos-services",
+        "comm": "cargo",
+        "pid": 592315
+      }
+    ],
+    "runnable": "17/2860",
+    "used_mib": 16224.9,
+    "used_pct": 26.21,
+    "utc": "2026-11-18T05:23:26+00:00"
+  },
+  "host_before": {
+    "loadavg1": 3.25,
+    "loadavg15": 5.42,
+    "loadavg5": 5.3,
+    "mem_available_gib": 46.16,
+    "mem_available_mib": 47267.0,
+    "mem_total_gib": 60.46,
+    "mem_total_mib": 61908.7,
+    "noisy": false,
+    "other_acos": [
+      {
+        "cmd": "/home/Qui/.t3/worktrees/acos/t3-7941bd5d-f2cbf7e1581aeebb/.cache/merge040b-target/release/acos-art launch --apk fixtures/build/apps/webview-probe.apk --until ac",
+        "comm": "acos-art",
+        "pid": 559164
+      },
+      {
+        "cmd": "bwrap --unshare-pid --unshare-net --unshare-ipc --unshare-uts --unshare-cgroup-try --die-with-parent --clearenv --cap-drop ALL --unshare-user --uid 10192 --gid ",
+        "comm": "bwrap",
+        "pid": 559173
+      },
+      {
+        "cmd": "bwrap --unshare-pid --unshare-net --unshare-ipc --unshare-uts --unshare-cgroup-try --die-with-parent --clearenv --cap-drop ALL --unshare-user --uid 10192 --gid ",
+        "comm": "bwrap",
+        "pid": 559178
+      },
+      {
+        "cmd": "/home/Qui/.t3/worktrees/acos/t3-baa027c2-92822109faf07523/.cache/glspike4-target/release/acos-art launch --apk fixtures/build/apps/counter.apk --until activity-",
+        "comm": "acos-art",
+        "pid": 559942
+      },
+      {
+        "cmd": "bwrap --unshare-pid --unshare-net --unshare-ipc --unshare-uts --unshare-cgroup-try --die-with-parent --clearenv --cap-drop ALL --unshare-user --uid 10192 --tmpf",
+        "comm": "bwrap",
+        "pid": 559951
+      },
+      {
+        "cmd": "bwrap --unshare-pid --unshare-net --unshare-ipc --unshare-uts --unshare-cgroup-try --die-with-parent --clearenv --cap-drop ALL --unshare-user --uid 10192 --tmpf",
+        "comm": "bwrap",
+        "pid": 559953
+      },
+      {
+        "cmd": "/home/Qui/.t3/worktrees/acos/t3-43746ade-7323e343b6e1642d/.cache/wvtail-target/release/acos-art launch --apk fixtures/build/apps/webview-probe.apk --until activ",
+        "comm": "acos-art",
+        "pid": 560215
+      },
+      {
+        "cmd": "bwrap --unshare-pid --unshare-net --unshare-ipc --unshare-uts --unshare-cgroup-try --die-with-parent --clearenv --cap-drop ALL --unshare-user --uid 10192 --tmpf",
+        "comm": "bwrap",
+        "pid": 560226
+      },
+      {
+        "cmd": "bwrap --unshare-pid --unshare-net --unshare-ipc --unshare-uts --unshare-cgroup-try --die-with-parent --clearenv --cap-drop ALL --unshare-user --uid 10192 --tmpf",
+        "comm": "bwrap",
+        "pid": 560231
+      }
+    ],
+    "runnable": "4/3032",
+    "used_mib": 14641.7,
+    "used_pct": 23.65,
+    "utc": "2026-11-18T05:20:09+00:00"
+  },
+  "ok": true,
+  "phases": {
+    "latency": {
+      "errors": [],
+      "ok": true,
+      "wall_s": 196.731
+    }
+  },
+  "schema": "acos-bench-bundle/1",
+  "utc": "2026-11-18T05:20:09+00:00",
+  "wall_s": 196.731
+}

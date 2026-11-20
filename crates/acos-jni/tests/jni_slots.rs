@@ -8,8 +8,8 @@
 use std::ffi::CString;
 
 use acos_jni::jni;
-use acos_jni::state::JNI_WEAK_GLOBAL_REF_TYPE;
 use acos_jni::state::JNI_EVERSION;
+use acos_jni::state::JNI_WEAK_GLOBAL_REF_TYPE;
 use acos_jni::{JniConfig, JniRuntime};
 use acos_vm::{Vm, VmOptions};
 
@@ -138,15 +138,9 @@ fn javavm_attach_getenv_and_versions() {
     assert_eq!(unsafe { jni::jni_GetJavaVM(env, &mut java_vm) }, 0);
     assert_ne!(java_vm, 0);
 
-    assert_eq!(
-        unsafe { jni::vm_GetEnv(java_vm, &mut out, 0x0001_0006) },
-        0
-    );
+    assert_eq!(unsafe { jni::vm_GetEnv(java_vm, &mut out, 0x0001_0006) }, 0);
     assert_eq!(out, env);
-    assert_eq!(
-        unsafe { jni::vm_GetEnv(java_vm, &mut out, 0x0001_0004) },
-        0
-    );
+    assert_eq!(unsafe { jni::vm_GetEnv(java_vm, &mut out, 0x0001_0004) }, 0);
     assert_eq!(
         unsafe { jni::vm_GetEnv(java_vm, &mut out, 0x0002_0000) },
         JNI_EVERSION

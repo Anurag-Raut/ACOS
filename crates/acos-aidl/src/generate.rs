@@ -85,9 +85,7 @@ impl BootScanner {
                     }
                 }
             }
-            files.sort_by_key(|p| {
-                dex_number(&p.file_name().unwrap_or_default().to_string_lossy())
-            });
+            files.sort_by_key(|p| dex_number(&p.file_name().unwrap_or_default().to_string_lossy()));
             for path in files {
                 let bytes = std::fs::read(&path)?;
                 let dex = DexFile::parse(bytes).map_err(|err| GenError::Dex {
@@ -464,11 +462,9 @@ fn render_op(op: &WireOp) -> String {
         } => format!("super::typed_object_nn({class:?})"),
         WireOp::List { elem } => format!("super::list_op({})", render_op(elem)),
         WireOp::Array { elem } => format!("super::array_op({})", render_op(elem)),
-        WireOp::Map { key, value } => format!(
-            "super::map_op({}, {})",
-            render_op(key),
-            render_op(value)
-        ),
+        WireOp::Map { key, value } => {
+            format!("super::map_op({}, {})", render_op(key), render_op(value))
+        }
         WireOp::Bundle => "WireOp::Bundle".into(),
         WireOp::Value => "super::value_op()".into(),
         WireOp::Cond { marker, ops } => {
@@ -518,7 +514,9 @@ pub fn render_tables(ifaces: &[InterfaceInfo]) -> String {
     out.push_str("use crate::ir::WireOp;\n");
     out.push_str("use std::sync::LazyLock;\n\n");
     out.push_str("/// Every AIDL interface in the default ACOS service-layer subset.\n");
-    out.push_str("pub static INTERFACES: LazyLock<Vec<crate::ir::InterfaceInfo>> = LazyLock::new(|| {\n");
+    out.push_str(
+        "pub static INTERFACES: LazyLock<Vec<crate::ir::InterfaceInfo>> = LazyLock::new(|| {\n",
+    );
     out.push_str("    vec![\n");
     for iface in sorted {
         out.push_str(&format!(

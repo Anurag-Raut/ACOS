@@ -20,8 +20,7 @@ use acos_protocol::{
     Backend as ProtocolBackend, Bounds, DisplaySpec, ErrorCode, Fidelity, FrameMeta, UiNode, UiTree,
 };
 use acos_runtime::session::{
-    AgentSession, FrameInfo, LaunchReport, LogLine, ObserveReport, SessionError,
-    SessionOptions,
+    AgentSession, FrameInfo, LaunchReport, LogLine, ObserveReport, SessionError, SessionOptions,
 };
 use acos_runtime::view_tree::{ViewNode, ViewTree};
 
@@ -109,11 +108,9 @@ impl NativeBackend {
     }
 
     fn session(&self) -> Result<&AgentSession, BackendError> {
-        self.session.as_ref().ok_or_else(|| {
-            BackendError::Error {
-                code: ErrorCode::InvalidArgument,
-                detail: "no session: a `launch` step must run first".to_string(),
-            }
+        self.session.as_ref().ok_or_else(|| BackendError::Error {
+            code: ErrorCode::InvalidArgument,
+            detail: "no session: a `launch` step must run first".to_string(),
         })
     }
 
@@ -235,11 +232,7 @@ fn frame_is_meaningful(pixels: &[u8]) -> bool {
 
 /// Convert one live `View` node to a protocol `UiNode` (recursively).
 fn ui_node(node: &ViewNode, index: usize, package: &str) -> UiNode {
-    let mut ui = UiNode::new(
-        format!("n{index}"),
-        node.class.clone(),
-        Bounds(node.bounds),
-    );
+    let mut ui = UiNode::new(format!("n{index}"), node.class.clone(), Bounds(node.bounds));
     ui.resource_id = node.resource_id.clone();
     ui.text = node.text.clone();
     ui.content_desc = node.content_desc.clone();
@@ -386,8 +379,7 @@ fn launch_failure(report: &LaunchReport) -> Option<BackendError> {
 
 /// `Some("name")` when the runtime reported an unresolved native method.
 fn missing_native_symbol(message: &str) -> Option<String> {
-    if !message.contains("UnsatisfiedLinkError")
-        || !message.contains("No implementation found for")
+    if !message.contains("UnsatisfiedLinkError") || !message.contains("No implementation found for")
     {
         return None;
     }
@@ -465,6 +457,7 @@ impl Backend for NativeBackend {
             reset: true,
             environment: false,
             crash_reports: true,
+            services: false,
         }
     }
 
@@ -613,13 +606,11 @@ impl Backend for NativeBackend {
                         let (x, y) = node.bounds.center();
                         (x as f32, y as f32)
                     }
-                    None => {
-                        return Err(BackendError::unsupported(
-                            "input",
-                            "type without a selector needs a focused editor; the session text path \
+                    None => return Err(BackendError::unsupported(
+                        "input",
+                        "type without a selector needs a focused editor; the session text path \
                              requires focus to be established first",
-                        ))
-                    }
+                    )),
                 };
                 let session = self.session()?;
                 session.tap(tx, ty).map_err(input_error)?;
@@ -737,10 +728,7 @@ impl NativeBackend {
     }
 
     /// Find one live node by selector (the same rules as the protocol).
-    fn find_node(
-        &mut self,
-        selector: &acos_protocol::Selector,
-    ) -> Result<UiNode, BackendError> {
+    fn find_node(&mut self, selector: &acos_protocol::Selector) -> Result<UiNode, BackendError> {
         let session = self.session()?;
         let tree = session
             .observe_tree(acos_runtime::view_tree::DEFAULT_MAX_NODES)
@@ -821,7 +809,10 @@ mod tests {
         assert!(caps.input);
         assert!(caps.screenshot);
         assert!(caps.logs);
-        assert!(!caps.environment, "rotation/locale knobs are not implemented");
+        assert!(
+            !caps.environment,
+            "rotation/locale knobs are not implemented"
+        );
         assert_eq!(backend.fidelity(), Fidelity::NativeRuntime);
     }
 

@@ -32,8 +32,18 @@ pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
 
 fn object(vm: &mut Vm) {
     let c = "Ljava/lang/Object;";
-    vm.register_native(c, "identityHashCodeNative", "(Ljava/lang/Object;)I", obj_identity_hash);
-    vm.register_native(c, "internalClone", "()Ljava/lang/Object;", obj_internal_clone);
+    vm.register_native(
+        c,
+        "identityHashCodeNative",
+        "(Ljava/lang/Object;)I",
+        obj_identity_hash,
+    );
+    vm.register_native(
+        c,
+        "internalClone",
+        "()Ljava/lang/Object;",
+        obj_internal_clone,
+    );
     vm.register_native(c, "notify", "()V", obj_notify);
     vm.register_native(c, "notifyAll", "()V", obj_notify_all);
     vm.register_native(c, "wait", "(JI)V", obj_wait);
@@ -153,9 +163,19 @@ fn string(vm: &mut Vm) {
     vm.register_native(c, "indexOf", "(II)I", str_index_of_char_from);
     vm.register_native(c, "indexOf", "(Ljava/lang/String;)I", str_index_of_str);
     vm.register_native(c, "lastIndexOf", "(I)I", str_last_index_of_char);
-    vm.register_native(c, "lastIndexOf", "(Ljava/lang/String;)I", str_last_index_of_str);
+    vm.register_native(
+        c,
+        "lastIndexOf",
+        "(Ljava/lang/String;)I",
+        str_last_index_of_str,
+    );
     vm.register_native(c, "startsWith", "(Ljava/lang/String;)Z", str_starts_with);
-    vm.register_native(c, "startsWith", "(Ljava/lang/String;I)Z", str_starts_with_from);
+    vm.register_native(
+        c,
+        "startsWith",
+        "(Ljava/lang/String;I)Z",
+        str_starts_with_from,
+    );
     vm.register_native(c, "endsWith", "(Ljava/lang/String;)Z", str_ends_with);
     vm.register_native(c, "contains", "(Ljava/lang/CharSequence;)Z", str_contains);
     vm.register_native(c, "trim", "()Ljava/lang/String;", str_trim);
@@ -163,16 +183,31 @@ fn string(vm: &mut Vm) {
     vm.register_native(c, "toLowerCase", "()Ljava/lang/String;", str_to_lower);
     vm.register_native(c, "replace", "(CC)Ljava/lang/String;", str_do_replace);
     vm.register_native(c, "isEmpty", "()Z", str_is_empty);
-    vm.register_native(c, "equalsIgnoreCase", "(Ljava/lang/String;)Z", str_equals_ignore_case);
+    vm.register_native(
+        c,
+        "equalsIgnoreCase",
+        "(Ljava/lang/String;)Z",
+        str_equals_ignore_case,
+    );
     vm.register_native(c, "charAt", "(I)C", str_char_at);
     vm.register_native(c, "getCharsNoCheck", "(II[CI)V", str_get_chars_no_check);
     vm.register_native(c, "fillBytesLatin1", "([BI)V", str_fill_bytes_latin1);
     vm.register_native(c, "fillBytesUTF16", "([BI)V", str_fill_bytes_utf16);
-    vm.register_native(c, "fastSubstring", "(II)Ljava/lang/String;", str_fast_substring);
+    vm.register_native(
+        c,
+        "fastSubstring",
+        "(II)Ljava/lang/String;",
+        str_fast_substring,
+    );
     vm.register_native(c, "intern", "()Ljava/lang/String;", str_intern);
     vm.register_native(c, "toCharArray", "()[C", str_to_char_array);
     vm.register_native(c, "compareTo", "(Ljava/lang/String;)I", str_compare_to);
-    vm.register_native(c, "concat", "(Ljava/lang/String;)Ljava/lang/String;", str_concat);
+    vm.register_native(
+        c,
+        "concat",
+        "(Ljava/lang/String;)Ljava/lang/String;",
+        str_concat,
+    );
     vm.register_native(c, "doReplace", "(CC)Ljava/lang/String;", str_do_replace);
     vm.register_native(c, "doRepeat", "(I)Ljava/lang/String;", str_do_repeat);
 }
@@ -189,7 +224,10 @@ fn set_string_units(vm: &mut Vm, h: Handle, units: Vec<u16>) {
 
 fn int_array(vm: &Vm, h: Handle) -> Vec<i32> {
     match vm.heap.get(h) {
-        Some(Object::Array(ArrayObj { data: ArrayData::Int(v), .. })) => v.clone(),
+        Some(Object::Array(ArrayObj {
+            data: ArrayData::Int(v),
+            ..
+        })) => v.clone(),
         _ => Vec::new(),
     }
 }
@@ -213,7 +251,14 @@ fn str_init(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
             let coder = vm.arg_i32(ctx, 1);
             decode_bytes_coder(vm, b, 0, usize::MAX, coder)
         }
-        "([BI)V" => decode_bytes(vm, vm.arg_ref(ctx, 0), vm.arg_i32(ctx, 1), 0, usize::MAX, "latin1"),
+        "([BI)V" => decode_bytes(
+            vm,
+            vm.arg_ref(ctx, 0),
+            vm.arg_i32(ctx, 1),
+            0,
+            usize::MAX,
+            "latin1",
+        ),
         "([BII)V" => {
             // `String(byte[] bytes, int offset, int length)` (latin1).
             let b = vm.arg_ref(ctx, 0);
@@ -281,14 +326,24 @@ fn str_init(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     Ok(())
 }
 
-fn decode_bytes(vm: &Vm, h: Handle, _hibyte: i32, offset: usize, count: usize, charset: &str) -> Vec<u16> {
+fn decode_bytes(
+    vm: &Vm,
+    h: Handle,
+    _hibyte: i32,
+    offset: usize,
+    count: usize,
+    charset: &str,
+) -> Vec<u16> {
     let bytes = byte_array(vm, h).unwrap_or_default();
     let end = if count == usize::MAX {
         bytes.len()
     } else {
         (offset + count).min(bytes.len())
     };
-    let slice: Vec<u8> = bytes[offset.min(end)..end].iter().map(|&b| b as u8).collect();
+    let slice: Vec<u8> = bytes[offset.min(end)..end]
+        .iter()
+        .map(|&b| b as u8)
+        .collect();
     let up = charset.to_ascii_uppercase();
     if up.contains("UTF-8") || up.contains("UTF8") {
         String::from_utf8_lossy(&slice).encode_utf16().collect()
@@ -309,7 +364,10 @@ fn decode_bytes_coder(vm: &Vm, h: Handle, offset: usize, count: usize, coder: i3
     } else {
         (offset + count).min(bytes.len())
     };
-    let slice: Vec<u8> = bytes[offset.min(end)..end].iter().map(|&b| b as u8).collect();
+    let slice: Vec<u8> = bytes[offset.min(end)..end]
+        .iter()
+        .map(|&b| b as u8)
+        .collect();
     if coder == 1 {
         slice
             .chunks_exact(2)
@@ -547,7 +605,11 @@ fn str_index_of_char(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let this = vm.ctx_this(ctx).unwrap_or(NULL);
     let c = vm.arg_i32(ctx, 0) as u16;
     let u = units_of(vm, this).unwrap_or_default();
-    let i = u.iter().position(|&x| x == c).map(|i| i as i32).unwrap_or(-1);
+    let i = u
+        .iter()
+        .position(|&x| x == c)
+        .map(|i| i as i32)
+        .unwrap_or(-1);
     vm.ret_i32(ctx, i);
     Ok(())
 }
@@ -581,7 +643,11 @@ fn str_last_index_of_char(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let this = vm.ctx_this(ctx).unwrap_or(NULL);
     let c = vm.arg_i32(ctx, 0) as u16;
     let u = units_of(vm, this).unwrap_or_default();
-    let i = u.iter().rposition(|&x| x == c).map(|i| i as i32).unwrap_or(-1);
+    let i = u
+        .iter()
+        .rposition(|&x| x == c)
+        .map(|i| i as i32)
+        .unwrap_or(-1);
     vm.ret_i32(ctx, i);
     Ok(())
 }
@@ -643,7 +709,11 @@ fn str_trim(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let this = vm.ctx_this(ctx).unwrap_or(NULL);
     let u = units_of(vm, this).unwrap_or_default();
     let begin = u.iter().position(|&c| c > 0x20).unwrap_or(u.len());
-    let end = u.iter().rposition(|&c| c > 0x20).map(|i| i + 1).unwrap_or(begin);
+    let end = u
+        .iter()
+        .rposition(|&c| c > 0x20)
+        .map(|i| i + 1)
+        .unwrap_or(begin);
     let h = vm.new_string_utf16(u[begin..end].to_vec())?;
     vm.ret_ref(ctx, h);
     Ok(())
@@ -701,11 +771,36 @@ fn str_equals_ignore_case(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
 
 fn string_factory(vm: &mut Vm) {
     let c = "Ljava/lang/StringFactory;";
-    vm.register_native(c, "newStringFromBytes", "([BIII)Ljava/lang/String;", sf_from_bytes);
-    vm.register_native(c, "newStringFromChars", "(II[C)Ljava/lang/String;", sf_from_chars);
-    vm.register_native(c, "newStringFromString", "(Ljava/lang/String;)Ljava/lang/String;", sf_from_string);
-    vm.register_native(c, "newStringFromUtf8Bytes", "([BII)Ljava/lang/String;", sf_from_utf8);
-    vm.register_native(c, "newStringFromUtf16Bytes", "([BII)Ljava/lang/String;", sf_from_utf16);
+    vm.register_native(
+        c,
+        "newStringFromBytes",
+        "([BIII)Ljava/lang/String;",
+        sf_from_bytes,
+    );
+    vm.register_native(
+        c,
+        "newStringFromChars",
+        "(II[C)Ljava/lang/String;",
+        sf_from_chars,
+    );
+    vm.register_native(
+        c,
+        "newStringFromString",
+        "(Ljava/lang/String;)Ljava/lang/String;",
+        sf_from_string,
+    );
+    vm.register_native(
+        c,
+        "newStringFromUtf8Bytes",
+        "([BII)Ljava/lang/String;",
+        sf_from_utf8,
+    );
+    vm.register_native(
+        c,
+        "newStringFromUtf16Bytes",
+        "([BII)Ljava/lang/String;",
+        sf_from_utf16,
+    );
 }
 
 fn sf_from_bytes(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
@@ -717,7 +812,10 @@ fn sf_from_bytes(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let bytes = byte_array(vm, data).unwrap_or_default();
     let units: Vec<u16> = if high == 0 {
         let end = (offset + count).min(bytes.len());
-        bytes[offset.min(end)..end].iter().map(|&b| b as u16).collect()
+        bytes[offset.min(end)..end]
+            .iter()
+            .map(|&b| b as u16)
+            .collect()
     } else {
         let end = (offset + count * 2).min(bytes.len());
         bytes[offset.min(end)..end]
@@ -755,7 +853,10 @@ fn sf_from_utf8(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let count = vm.arg_i32(ctx, 2).max(0) as usize;
     let bytes = byte_array(vm, data).unwrap_or_default();
     let end = (offset + count).min(bytes.len());
-    let slice: Vec<u8> = bytes[offset.min(end)..end].iter().map(|&b| b as u8).collect();
+    let slice: Vec<u8> = bytes[offset.min(end)..end]
+        .iter()
+        .map(|&b| b as u8)
+        .collect();
     let h = vm.new_string_utf16(String::from_utf8_lossy(&slice).encode_utf16().collect())?;
     vm.ret_ref(ctx, h);
     Ok(())
@@ -782,7 +883,12 @@ fn sf_from_utf16(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
 
 fn system(vm: &mut Vm) {
     let c = "Ljava/lang/System;";
-    vm.register_native(c, "arraycopy", "(Ljava/lang/Object;ILjava/lang/Object;II)V", sys_arraycopy);
+    vm.register_native(
+        c,
+        "arraycopy",
+        "(Ljava/lang/Object;ILjava/lang/Object;II)V",
+        sys_arraycopy,
+    );
     vm.register_native(c, "arraycopyBooleanUnchecked", "([ZI[ZII)V", sys_arraycopy);
     vm.register_native(c, "arraycopyByteUnchecked", "([BI[BII)V", sys_arraycopy);
     vm.register_native(c, "arraycopyCharUnchecked", "([CI[CII)V", sys_arraycopy);
@@ -796,10 +902,25 @@ fn system(vm: &mut Vm) {
     vm.register_native(c, "setOut0", "(Ljava/io/PrintStream;)V", sys_set_out);
     vm.register_native(c, "setErr0", "(Ljava/io/PrintStream;)V", sys_set_err);
     vm.register_native(c, "setIn0", "(Ljava/io/InputStream;)V", sys_set_in);
-    vm.register_native(c, "specialProperties", "()[Ljava/lang/String;", sys_special_properties);
-    vm.register_native(c, "mapLibraryName", "(Ljava/lang/String;)Ljava/lang/String;", sys_map_library_name);
+    vm.register_native(
+        c,
+        "specialProperties",
+        "()[Ljava/lang/String;",
+        sys_special_properties,
+    );
+    vm.register_native(
+        c,
+        "mapLibraryName",
+        "(Ljava/lang/String;)Ljava/lang/String;",
+        sys_map_library_name,
+    );
     // `System.log` is the core-library warning sink; ACOS has no log sink here.
-    vm.register_native(c, "log", "(CLjava/lang/String;Ljava/lang/Throwable;)V", sys_log);
+    vm.register_native(
+        c,
+        "log",
+        "(CLjava/lang/String;Ljava/lang/Throwable;)V",
+        sys_log,
+    );
     vm.register_native(c, "log", "(CLjava/lang/String;)V", sys_log);
 }
 
@@ -819,7 +940,14 @@ fn sys_arraycopy(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     if len < 0 || src_pos < 0 || dst_pos < 0 {
         return Err(vm.throw_new("Ljava/lang/ArrayIndexOutOfBoundsException;", None));
     }
-    array_copy(vm, src, src_pos as usize, dst, dst_pos as usize, len as usize)
+    array_copy(
+        vm,
+        src,
+        src_pos as usize,
+        dst,
+        dst_pos as usize,
+        len as usize,
+    )
 }
 
 fn array_copy(
@@ -836,7 +964,10 @@ fn array_copy(
     };
     let dst_is_ref = matches!(
         vm.heap.get(dst),
-        Some(Object::Array(ArrayObj { data: ArrayData::Ref(_), .. }))
+        Some(Object::Array(ArrayObj {
+            data: ArrayData::Ref(_),
+            ..
+        }))
     );
     let src_is_ref = matches!(src_data, ArrayData::Ref(_));
     if src_is_ref != dst_is_ref {
@@ -941,9 +1072,19 @@ fn thread(vm: &mut Vm) {
     // `monitor-enter`; the VM parks the green thread directly instead.
     vm.register_native(c, "sleep", "(JI)V", th_sleep_ji);
     vm.register_native(c, "yield", "()V", th_yield);
-    vm.register_native(c, "nativeCreate", "(Ljava/lang/Thread;JZ)V", th_native_create);
+    vm.register_native(
+        c,
+        "nativeCreate",
+        "(Ljava/lang/Thread;JZ)V",
+        th_native_create,
+    );
     vm.register_native(c, "nativeGetStatus", "(Z)I", th_native_get_status);
-    vm.register_native(c, "setNativeName", "(Ljava/lang/String;)V", th_set_native_name);
+    vm.register_native(
+        c,
+        "setNativeName",
+        "(Ljava/lang/String;)V",
+        th_set_native_name,
+    );
     vm.register_native(c, "setPriority0", "(I)V", th_set_priority0);
 
     // ThreadGroup bookkeeping is maintained by the VM's green-thread runtime,
@@ -971,9 +1112,7 @@ fn th_interrupt0(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     for t in &mut vm.threads {
         // Interrupting a sleeping thread wakes it early; interrupting a
         // `LockSupport.park`ed thread unparks it (JDK `Parker` semantics).
-        if t.object == this
-            && matches!(t.status, ThreadStatus::Sleeping | ThreadStatus::Parked)
-        {
+        if t.object == this && matches!(t.status, ThreadStatus::Sleeping | ThreadStatus::Parked) {
             t.status = ThreadStatus::Runnable;
             t.wake_at = None;
         }
@@ -1034,7 +1173,12 @@ fn th_native_create(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let mut rt = crate::vm::ThreadRT::new(this);
     rt.status = ThreadStatus::Runnable;
     // Give the Java object a thread id if it does not have one yet.
-    if vm.get_instance_field_by_name(this, "tid").map(|v| v as i64).unwrap_or(0) == 0 {
+    if vm
+        .get_instance_field_by_name(this, "tid")
+        .map(|v| v as i64)
+        .unwrap_or(0)
+        == 0
+    {
         let id = vm.next_thread_id as i64;
         vm.next_thread_id += 1;
         vm.set_instance_field_by_name(this, "tid", id as u32);
@@ -1084,8 +1228,18 @@ fn th_set_priority0(vm: &mut Vm, _ctx: NativeCtx) -> VmResult<()> {
 
 fn throwable(vm: &mut Vm) {
     let c = "Ljava/lang/Throwable;";
-    vm.register_native(c, "nativeFillInStackTrace", "()Ljava/lang/Object;", thr_fill_in);
-    vm.register_native(c, "nativeGetStackTrace", "(Ljava/lang/Object;)[Ljava/lang/StackTraceElement;", thr_get_stack_trace);
+    vm.register_native(
+        c,
+        "nativeFillInStackTrace",
+        "()Ljava/lang/Object;",
+        thr_fill_in,
+    );
+    vm.register_native(
+        c,
+        "nativeGetStackTrace",
+        "(Ljava/lang/Object;)[Ljava/lang/StackTraceElement;",
+        thr_get_stack_trace,
+    );
 }
 
 /// One frame captured at `Throwable` construction time. Names are resolved
@@ -1230,20 +1384,29 @@ fn reference(vm: &mut Vm) {
     vm.register_native(c, "clearReferent", "()V", ref_clear_referent);
     let f = "Ljava/lang/ref/FinalizerReference;";
     vm.register_native(f, "getReferent", "()Ljava/lang/Object;", ref_get_referent);
-    vm.register_native(f, "makeCircularListIfUnenqueued", "()Z", ref_finalizer_circular);
+    vm.register_native(
+        f,
+        "makeCircularListIfUnenqueued",
+        "()Z",
+        ref_finalizer_circular,
+    );
 }
 
 fn ref_refers_to0(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let this = vm.ctx_this(ctx).unwrap_or(NULL);
     let other = vm.arg_ref(ctx, 0);
-    let referent = vm.get_instance_field_by_name(this, "referent").unwrap_or(NULL);
+    let referent = vm
+        .get_instance_field_by_name(this, "referent")
+        .unwrap_or(NULL);
     vm.ret_bool(ctx, referent == other);
     Ok(())
 }
 
 fn ref_get_referent(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let this = vm.ctx_this(ctx).unwrap_or(NULL);
-    let referent = vm.get_instance_field_by_name(this, "referent").unwrap_or(NULL);
+    let referent = vm
+        .get_instance_field_by_name(this, "referent")
+        .unwrap_or(NULL);
     vm.ret_ref(ctx, referent);
     Ok(())
 }
@@ -1265,11 +1428,36 @@ fn ref_finalizer_circular(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
 
 fn vmstack(vm: &mut Vm) {
     let c = "Ldalvik/system/VMStack;";
-    vm.register_native(c, "getStackClass2", "()Ljava/lang/Class;", vms_get_stack_class);
-    vm.register_native(c, "getCallingClassLoader", "()Ljava/lang/ClassLoader;", vms_calling_class_loader);
-    vm.register_native(c, "getClosestUserClassLoader", "()Ljava/lang/ClassLoader;", vms_calling_class_loader);
-    vm.register_native(c, "fillStackTraceElements", "(Ljava/lang/Thread;[Ljava/lang/StackTraceElement;)I", vms_fill_stack);
-    vm.register_native(c, "getThreadStackTrace", "(Ljava/lang/Thread;)[Ljava/lang/StackTraceElement;", vms_thread_stack);
+    vm.register_native(
+        c,
+        "getStackClass2",
+        "()Ljava/lang/Class;",
+        vms_get_stack_class,
+    );
+    vm.register_native(
+        c,
+        "getCallingClassLoader",
+        "()Ljava/lang/ClassLoader;",
+        vms_calling_class_loader,
+    );
+    vm.register_native(
+        c,
+        "getClosestUserClassLoader",
+        "()Ljava/lang/ClassLoader;",
+        vms_calling_class_loader,
+    );
+    vm.register_native(
+        c,
+        "fillStackTraceElements",
+        "(Ljava/lang/Thread;[Ljava/lang/StackTraceElement;)I",
+        vms_fill_stack,
+    );
+    vm.register_native(
+        c,
+        "getThreadStackTrace",
+        "(Ljava/lang/Thread;)[Ljava/lang/StackTraceElement;",
+        vms_thread_stack,
+    );
 }
 
 /// Whether a method is `@CallerSensitive` (transparent to `getCallerClass`).
@@ -1354,12 +1542,14 @@ fn vms_fill_stack(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let source = build_stack_elements(vm, &frames[..take])?;
     let elems = match vm.heap.get(source) {
         Some(Object::Array(ArrayObj {
-            data: ArrayData::Ref(v), ..
+            data: ArrayData::Ref(v),
+            ..
         })) => v.clone(),
         _ => Vec::new(),
     };
     if let Some(Object::Array(ArrayObj {
-        data: ArrayData::Ref(dst), ..
+        data: ArrayData::Ref(dst),
+        ..
     })) = vm.heap.get_mut(arr)
     {
         for (i, h) in elems.into_iter().enumerate() {
@@ -1422,4 +1612,3 @@ fn set_static_ref(vm: &mut Vm, class_desc: &str, field: &str, value: Handle) -> 
     }
     Ok(())
 }
-

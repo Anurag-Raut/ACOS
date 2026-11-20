@@ -36,7 +36,11 @@ pub fn native_requested(flag: bool) -> bool {
     )
 }
 
-fn error(code: &'static str, message: impl Into<String>, details: Vec<(&str, String)>) -> SessionError {
+fn error(
+    code: &'static str,
+    message: impl Into<String>,
+    details: Vec<(&str, String)>,
+) -> SessionError {
     SessionError {
         code,
         message: message.into(),
@@ -87,8 +91,7 @@ fn session_root() -> Result<PathBuf, SessionError> {
     let root = match std::env::var_os("ACOS_SESSION_ROOT") {
         Some(path) => PathBuf::from(path),
         None => {
-            let base = crate::root::runtime_root()
-                .unwrap_or_else(|| PathBuf::from("."));
+            let base = crate::root::runtime_root().unwrap_or_else(|| PathBuf::from("."));
             let root = base.join(format!(".cache/sessions/w59a-{}", std::process::id()));
             std::env::set_var("ACOS_SESSION_ROOT", &root);
             root
@@ -98,10 +101,9 @@ fn session_root() -> Result<PathBuf, SessionError> {
     // A root owned by another user, or group/world-writable, would let that
     // user swap the app data; refuse it before creating anything under it
     // (W170-A E1). The code is the protocol's `UNSAFE_PATH`.
-    if let Err((code, msg)) = acos_runtime::private_root::ensure_private_root(
-        "ACOS_SESSION_ROOT",
-        &root,
-    ) {
+    if let Err((code, msg)) =
+        acos_runtime::private_root::ensure_private_root("ACOS_SESSION_ROOT", &root)
+    {
         return Err(error(
             code.protocol_code(),
             msg,
@@ -133,9 +135,7 @@ fn boot_root() -> Option<PathBuf> {
         candidates.push(root.join(".cache/boot/android-34"));
     }
     candidates.push(PathBuf::from("target/tmp/boot/android-34"));
-    candidates
-        .into_iter()
-        .find(|p| p.is_dir())
+    candidates.into_iter().find(|p| p.is_dir())
 }
 
 /// Enter confinement for a native launch.

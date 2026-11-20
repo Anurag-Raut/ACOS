@@ -10,7 +10,11 @@ use crate::ir::{InterfaceInfo, MethodInfo, WireOp};
 
 /// Construct an [`InterfaceInfo`]. Used only by generated code.
 #[doc(hidden)]
-pub fn iface(descriptor: &str, first_call_transaction: u32, methods: Vec<MethodInfo>) -> InterfaceInfo {
+pub fn iface(
+    descriptor: &str,
+    first_call_transaction: u32,
+    methods: Vec<MethodInfo>,
+) -> InterfaceInfo {
     InterfaceInfo {
         descriptor: descriptor.to_string(),
         first_call_transaction,

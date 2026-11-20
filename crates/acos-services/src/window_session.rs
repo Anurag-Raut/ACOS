@@ -121,6 +121,30 @@ pub mod codes {
 /// The descriptor every transaction of this interface carries.
 pub const DESCRIPTOR: &str = "android.view.IWindowSession";
 
+/// A window left or entered the layer stack.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WindowStackChange {
+    /// `addToDisplayAsUser` created the window (`ADD_OKAY`).
+    Added(u64),
+    /// `remove` dropped the window.
+    Removed(u64),
+}
+
+/// The sink a session installs so another system component (the accessibility
+/// module) learns about window-stack changes the way AOSP's
+/// `AccessibilityWindowManager` does — one event per added/removed window.
+///
+/// It is called **after** the window-manager state lock is released: the sink
+/// takes its own state lock and builds deliveries, and holding the window
+/// state across that would order the two locks against
+/// `A11yState::window_snapshot` (which takes them the other way round). See
+/// `results/handoff/MODA11Y6/README.md` §1.
+///
+/// It returns the deliveries the change owes the guest; the session hands them
+/// to the host through [`ServiceObject::drain_raw_deliveries`].
+pub type WindowStackSink =
+    std::sync::Arc<dyn Fn(WindowStackChange) -> Vec<PendingDelivery> + Send + Sync>;
+
 /// One `IWindow` callback body as a delivery, when it is an in-process IME
 /// show/hide callback.
 ///
@@ -192,6 +216,15 @@ pub fn take_ime_insets_deliveries(wms: &mut WmsState) -> Vec<PendingDelivery> {
 /// windows.
 pub struct WindowSessionService {
     state: Arc<Mutex<WmsState>>,
+    /// The `acos-wm` session **this node** serves.
+    ///
+    /// Stock `WindowManagerService.openSession` creates one `Session` per call
+    /// and every later operation is validated against it
+    /// (`windowForClientLocked`). MPROC5c creates one node per call too, so this
+    /// id — not a shared "last session" — is what every handler passes to
+    /// `acos-wm`, and a `relayout` for another process's window is refused
+    /// because it arrived on the wrong node.
+    session: acos_wm::wms::SessionId,
     /// The `IWindowId` binder `getWindowId` answers with (registered as an aux
     /// binder so it is routable rather than a fabricated id).
     window_id_binder: BinderId,
@@ -214,6 +247,15 @@ pub struct WindowSessionService {
     /// `acos-wm`'s private channel), publishes the real FOCUS/TOUCH_MODE
     /// state, and `relayout` wakes the env-driven injector.
     input: Option<input_dispatch::InputHost>,
+    /// Who hears about window-stack changes (the accessibility module).
+    window_changes: Option<WindowStackSink>,
+    /// Deliveries a window-stack change produced, waiting for
+    /// [`ServiceObject::drain_raw_deliveries`].
+    window_change_deliveries: Vec<PendingDelivery>,
+    /// The host's binder-owner table, so the first `addToDisplayAsUser` can
+    /// record which app process this session belongs to (stock
+    /// `Session.mClientPid`, which AOSP reads from `Binder.getCallingPid`).
+    owners: Option<crate::host::NodeRegistrar>,
 }
 
 impl std::fmt::Debug for WindowSessionService {
@@ -228,16 +270,70 @@ impl std::fmt::Debug for WindowSessionService {
 }
 
 impl WindowSessionService {
-    /// Build the session node around shared `acos-wm` state.
+    /// Build the session node around shared `acos-wm` state, serving `session`.
     #[must_use]
-    pub fn new(state: Arc<Mutex<WmsState>>, window_id_binder: BinderId) -> Self {
+    pub fn new(
+        state: Arc<Mutex<WmsState>>,
+        session: acos_wm::wms::SessionId,
+        window_id_binder: BinderId,
+    ) -> Self {
         Self {
             state,
+            session,
             window_id_binder,
             compositor: None,
             visibility_delivered: HashSet::new(),
             callbacks_deferred: 0,
             input: None,
+            window_changes: None,
+            window_change_deliveries: Vec::new(),
+            owners: None,
+        }
+    }
+
+    /// The `acos-wm` session this node serves.
+    #[must_use]
+    pub fn session(&self) -> acos_wm::wms::SessionId {
+        self.session
+    }
+
+    /// Hand the host's binder-owner table to the session (the process this
+    /// session's `IWindow`s belong to).
+    #[must_use]
+    pub fn with_owners(mut self, owners: crate::host::NodeRegistrar) -> Self {
+        self.owners = Some(owners);
+        self
+    }
+
+    /// Install the window-stack sink (the accessibility module's
+    /// `TYPE_WINDOWS_CHANGED` producer).
+    #[must_use]
+    pub fn with_window_changes(mut self, sink: WindowStackSink) -> Self {
+        self.window_changes = Some(sink);
+        self
+    }
+
+    /// Install or replace the window-stack sink on a node a host already
+    /// registered (`ServiceHost::dynamic_object_mut`). A test does this to
+    /// model a sink that stalls; production installs it once through
+    /// [`Self::with_window_changes`].
+    pub fn set_window_changes(&mut self, sink: WindowStackSink) {
+        self.window_changes = Some(sink);
+    }
+
+    /// Tell the sink about a stack change and keep the deliveries it produced.
+    ///
+    /// Must be called with `self.state`'s guard **dropped**: the sink reads the
+    /// accessibility state, whose `window_snapshot` takes the window-manager
+    /// state, so calling it under the guard would order the locks the other
+    /// way round.
+    fn notify_window_change(&mut self, change: WindowStackChange) {
+        let Some(sink) = self.window_changes.clone() else {
+            return;
+        };
+        let deliveries = sink(change);
+        if !deliveries.is_empty() {
+            self.window_change_deliveries.extend(deliveries);
         }
     }
 
@@ -439,7 +535,9 @@ fn write_size_compat_scale(reply: &mut Parcel, values: &[f32], client_len: i32) 
     const MAX_SIZE_COMPAT_SCALE: usize = 8;
     let len = usize::try_from(client_len).unwrap_or(0);
     if len > MAX_SIZE_COMPAT_SCALE {
-        return Err(perr(format!("sizeCompatScale length {len} exceeds {MAX_SIZE_COMPAT_SCALE}")));
+        return Err(perr(format!(
+            "sizeCompatScale length {len} exceeds {MAX_SIZE_COMPAT_SCALE}"
+        )));
     }
     let mut out = vec![0.0f32; len];
     for (slot, value) in out.iter_mut().zip(values) {
@@ -503,12 +601,19 @@ struct RawTransactTrace {
 impl Drop for RawTransactTrace {
     fn drop(&mut self) {
         if self.enabled {
-            eprintln!("ACOSWMS exit code={}", self.code);
+            crate::trace::line(format!("ACOSWMS exit code={}", self.code));
         }
     }
 }
 
 impl ServiceObject for WindowSessionService {
+    /// The host configures a registered node through this (`sensors` does the
+    /// same for its feed); the window-stack sink is installed that way by
+    /// `registry::install` and by tests.
+    fn as_any_mut(&mut self) -> Option<&mut dyn std::any::Any> {
+        Some(self)
+    }
+
     fn call(
         &mut self,
         interface: &str,
@@ -547,6 +652,9 @@ impl ServiceObject for WindowSessionService {
     /// The visibility callback is delivered **once per window**, so a queue that
     /// keeps growing across relayouts cannot turn into a traversal storm.
     fn drain_raw_deliveries(&mut self) -> Vec<PendingDelivery> {
+        // Window-stack change deliveries (the accessibility events a window
+        // add/remove owes the bound service) go out with the window callbacks.
+        let mut out = std::mem::take(&mut self.window_change_deliveries);
         let mut pending = Vec::new();
         {
             let mut state = self.lock();
@@ -554,7 +662,6 @@ impl ServiceObject for WindowSessionService {
                 pending.push(pc);
             }
         }
-        let mut out = Vec::new();
         for pc in pending {
             let method = pc.callback.method();
             let code = pc.callback.code();
@@ -656,26 +763,33 @@ impl ServiceObject for WindowSessionService {
         // blocked the guest main thread: the last `enter` with no `exit` is the
         // transaction that never completed, which no probe sample can show
         // (the guest stops sampling and `WindowManagerGlobal.mLock` hides why).
-        let trace = std::env::var_os("ACOS_WMS_TRACE").is_some();
-        let _trace_guard = RawTransactTrace { enabled: trace, code };
+        let trace = std::env::var_os("ACOS_WMS_TRACE").is_some()
+            || std::env::var_os("ACOS_TRACE_FILE").is_some();
+        let _trace_guard = RawTransactTrace {
+            enabled: trace,
+            code,
+        };
         if trace {
-            eprintln!(
+            crate::trace::line(format!(
                 "ACOSWMS enter code={code} ({}) avail={}",
                 method_name(code).unwrap_or_else(|| "?".into()),
                 data.data_avail()
-            );
+            ));
         }
         if interface != DESCRIPTOR {
             return Ok(false);
         }
         if trace {
-            eprintln!("ACOSWMS lock-wait code={code}");
+            crate::trace::line(format!("ACOSWMS lock-wait code={code}"));
         }
         let mut state = self.lock();
         if trace {
-            eprintln!("ACOSWMS locked code={code}");
+            crate::trace::line(format!("ACOSWMS locked code={code}"));
         }
         let window_id = self.window_id_binder;
+        // Collected while the state lock is held, delivered after it is
+        // released (`notify_window_change` takes the accessibility state).
+        let mut stack_change: Option<WindowStackChange> = None;
         match code {
             codes::ADD_TO_DISPLAY | codes::ADD_TO_DISPLAY_AS_USER => {
                 // IWindow, LayoutParams (typed), viewVisibility, layerStackId,
@@ -702,12 +816,46 @@ impl ServiceObject for WindowSessionService {
                 if trace {
                     eprintln!(
                         "ACOSWMS add-request window={:#x} type={} token={:?} title={:?} w={} h={}",
-                        window.0, params.type_, params.token, params.title, params.width, params.height
+                        window.0,
+                        params.type_,
+                        params.token,
+                        params.title,
+                        params.width,
+                        params.height
                     );
                 }
                 let add = state
-                    .add_to_display_as_user(window, params, requested_visible_types)
+                    .add_to_display_as_user_for(
+                        self.session,
+                        window,
+                        params,
+                        requested_visible_types,
+                    )
                     .map_err(werr)?;
+                // Stock `Session.mClientPid`: the process this session's window
+                // belongs to, from the host's own record of who handed the
+                // `IWindow` binder over (never a guessed pid).
+                let known = state
+                    .sessions
+                    .get(&self.session)
+                    .and_then(|entry| entry.process)
+                    .is_some();
+                if add.result == acos_wm::wms::ADD_OKAY && !known {
+                    if let Some(tag) = self
+                        .owners
+                        .as_ref()
+                        .and_then(|owners| owners.binder_owner(window))
+                    {
+                        state.record_session_process(self.session, tag);
+                    }
+                }
+                if add.result == acos_wm::wms::ADD_OKAY {
+                    // AOSP `AccessibilityWindowManager.updateWindowsLocked`
+                    // reports every window that entered the stack
+                    // (`WINDOWS_CHANGE_ADDED`), which is what clears a bound
+                    // service's window cache.
+                    stack_change = Some(WindowStackChange::Added(window.0));
+                }
                 if trace {
                     eprintln!(
                         "ACOSWMS add-done window={:#x} result={} frame={:?}",
@@ -734,9 +882,24 @@ impl ServiceObject for WindowSessionService {
                                 "{DESCRIPTOR}: register window input: {e}"
                             ))
                         })?;
+                    // LAYER1: focus is the WMS layer stack's answer (topmost
+                    // focusable window), not "the window that just registered".
+                    // A FLAG_NOT_FOCUSABLE overlay must not take focus from the
+                    // activity; a dialog above it must.
+                    dispatch
+                        .set_focus(state.wm.focus.map(BinderId))
+                        .map_err(|e| {
+                            ServiceError::Internal(format!("{DESCRIPTOR}: publish focus: {e}"))
+                        })?;
                 }
                 crate::exception::write_no_exception(reply);
-                write_add_result(&mut state, self.input.as_ref(), &add, size_compat_scale_len, reply)?;
+                write_add_result(
+                    &mut state,
+                    self.input.as_ref(),
+                    &add,
+                    size_compat_scale_len,
+                    reply,
+                )?;
                 // W5 finding: the real WMS also sends `IWindow`
                 // `dispatchAppVisibility(true)` here, and `ViewRootImpl`
                 // derives `mAppVisible` from the add result's
@@ -761,7 +924,9 @@ impl ServiceObject for WindowSessionService {
                         "{DESCRIPTOR}: addToDisplayWithoutInputChannel: missing LayoutParams"
                     ))
                 })?;
-                let add = state.add_to_display_as_user(window, params, 0).map_err(werr)?;
+                let add = state
+                    .add_to_display_as_user_for(self.session, window, params, 0)
+                    .map_err(werr)?;
                 crate::exception::write_no_exception(reply);
                 reply.write_int32(add.result);
                 // InsetsState, Rect attachedFrame typed; no InputChannel.
@@ -786,13 +951,21 @@ impl ServiceObject for WindowSessionService {
                             );
                         }
                     }
-                    state.remove(binder.0).map_err(werr)?;
+                    state.remove_for(self.session, binder.0).map_err(werr)?;
+                    stack_change = Some(WindowStackChange::Removed(binder.0));
                     if let Some(input) = &self.input {
                         let mut dispatch = input
                             .state()
                             .lock()
                             .unwrap_or_else(std::sync::PoisonError::into_inner);
                         dispatch.remove(binder);
+                        // The focused window is gone: publish FOCUS(true) to the
+                        // topmost focusable window that remains.
+                        dispatch
+                            .set_focus(state.wm.focus.map(BinderId))
+                            .map_err(|e| {
+                                ServiceError::Internal(format!("{DESCRIPTOR}: publish focus: {e}"))
+                            })?;
                     }
                 }
                 crate::exception::write_no_exception(reply);
@@ -833,14 +1006,16 @@ impl ServiceObject for WindowSessionService {
                         requested_width, requested_height, params.surface_insets
                     );
                 }
-                let mut r = state.relayout_with_requested(
-                    window.0,
-                    params,
-                    requested_width,
-                    requested_height,
-                    seq,
-                )
-                .map_err(werr)?;
+                let mut r = state
+                    .relayout_with_requested_for(
+                        self.session,
+                        window.0,
+                        params,
+                        requested_width,
+                        requested_height,
+                        seq,
+                    )
+                    .map_err(werr)?;
                 if trace {
                     eprintln!(
                         "ACOSWMS relayout-done window={:#x} result={:#x} frame={:?} surface={}x{}",
@@ -864,7 +1039,8 @@ impl ServiceObject for WindowSessionService {
                         // from here (every relayout, so a moved/resized window
                         // moves in the next frame).
                         Some(binding) => {
-                            let drawn = state.publish_layer_placement(binding, window.0, &compositor);
+                            let drawn =
+                                state.publish_layer_placement(binding, window.0, &compositor);
                             // W42: `relayout` carries the client root's
                             // `View.getVisibility()`. A `GONE` window surface is
                             // hidden in the same transaction, a `VISIBLE` one is
@@ -889,6 +1065,18 @@ impl ServiceObject for WindowSessionService {
                 // tree has bounds. Wake the env-driven injector (no-op when no
                 // plan is configured).
                 if let Some(input) = &self.input {
+                    // A relayout can change `FLAG_NOT_FOCUSABLE`; focus moves
+                    // with the stack's target, in the same order the tree sees.
+                    let mut dispatch = input
+                        .state()
+                        .lock()
+                        .unwrap_or_else(std::sync::PoisonError::into_inner);
+                    dispatch
+                        .set_focus(state.wm.focus.map(BinderId))
+                        .map_err(|e| {
+                            ServiceError::Internal(format!("{DESCRIPTOR}: publish focus: {e}"))
+                        })?;
+                    drop(dispatch);
                     input.note_relayout(window);
                 }
                 // W5 finding: `resized(reportDraw=true)` is the other callback
@@ -911,14 +1099,16 @@ impl ServiceObject for WindowSessionService {
                 let seq = data.read_int32().map_err(perr)?;
                 let _ = data.read_int32().map_err(perr)?;
                 if let Some(params) = params {
-                    let _ = state.relayout_with_requested(
-                        window.0,
-                        params,
-                        requested_width,
-                        requested_height,
-                        seq,
-                    )
-                    .map_err(werr)?;
+                    let _ = state
+                        .relayout_with_requested_for(
+                            self.session,
+                            window.0,
+                            params,
+                            requested_width,
+                            requested_height,
+                            seq,
+                        )
+                        .map_err(werr)?;
                 }
                 // W42: the async form carries the same `viewVisibility`; honour
                 // a `GONE`/`VISIBLE` toggle on an already-bound window layer.
@@ -955,7 +1145,9 @@ impl ServiceObject for WindowSessionService {
                 // Trailing `Region` is native-backed and last; its body is not
                 // decoded (W1.md §4).
                 if let Some(window) = window {
-                    state.set_insets(window.0, None, None).map_err(werr)?;
+                    state
+                        .set_insets_for(self.session, window.0, None, None)
+                        .map_err(werr)?;
                 }
             }
             codes::FINISH_DRAWING => {
@@ -979,14 +1171,18 @@ impl ServiceObject for WindowSessionService {
                 }
                 let seq = data.read_int32().map_err(perr)?;
                 if let Some(window) = window {
-                    state.finish_drawing(window.0, seq).map_err(werr)?;
+                    state
+                        .finish_drawing_for(self.session, window.0, seq)
+                        .map_err(werr)?;
                 }
             }
             codes::ON_RECTANGLE_ON_SCREEN_REQUESTED => {
                 let window = read_window(data)?;
                 let rect = read_rect(data)?;
                 if let Some(window) = window {
-                    state.on_rectangle_on_screen_requested(window.0, rect).map_err(werr)?;
+                    state
+                        .on_rectangle_on_screen_requested_for(self.session, window.0, rect)
+                        .map_err(werr)?;
                 }
             }
             codes::GET_WINDOW_ID => {
@@ -997,7 +1193,9 @@ impl ServiceObject for WindowSessionService {
             codes::POKE_DRAW_LOCK => {
                 let window = read_window(data)?;
                 if let Some(window) = window {
-                    state.poke_draw_lock(window.0).map_err(werr)?;
+                    state
+                        .poke_draw_lock_for(self.session, window.0)
+                        .map_err(werr)?;
                 }
                 crate::exception::write_no_exception(reply);
             }
@@ -1005,14 +1203,18 @@ impl ServiceObject for WindowSessionService {
                 let window = read_window(data)?;
                 let types = data.read_int32().map_err(perr)?;
                 if let Some(window) = window {
-                    state.update_requested_visible_types(window.0, types).map_err(werr)?;
+                    state
+                        .update_requested_visible_types_for(self.session, window.0, types)
+                        .map_err(werr)?;
                 }
             }
             codes::REPORT_SYSTEM_GESTURE_EXCLUSION_CHANGED => {
                 let window = read_window(data)?;
                 skip_typed_rect_list(data)?;
                 if let Some(window) = window {
-                    state.report_system_gesture_exclusion_changed(window.0).map_err(werr)?;
+                    state
+                        .report_system_gesture_exclusion_changed_for(self.session, window.0)
+                        .map_err(werr)?;
                 }
             }
             codes::REPORT_KEEP_CLEAR_AREAS_CHANGED => {
@@ -1025,13 +1227,17 @@ impl ServiceObject for WindowSessionService {
                 // `OnBackInvokedCallbackInfo` typed object; the body is not
                 // interpreted (nothing invokes back in this launch).
                 if let Some(window) = window {
-                    let _ = state.wm.windows.contains_key(&window.0);
+                    state
+                        .poke_draw_lock_for(self.session, window.0)
+                        .map_err(werr)?;
                 }
             }
             codes::CLEAR_TOUCHABLE_REGION => {
                 let window = read_window(data)?;
                 if let Some(window) = window {
-                    let _ = state.wm.windows.contains_key(&window.0);
+                    state
+                        .poke_draw_lock_for(self.session, window.0)
+                        .map_err(werr)?;
                 }
                 crate::exception::write_no_exception(reply);
             }
@@ -1048,7 +1254,117 @@ impl ServiceObject for WindowSessionService {
             }
             _ => return Err(Self::unsupported(code)),
         }
+        // The window-manager state lock is released **before** anything that
+        // can wait on another system component (the accessibility state here,
+        // a guest round trip anywhere): `A11yState::window_snapshot` takes the
+        // window state, so holding it while the sink runs would order the two
+        // the other way round (results/handoff/MODA11Y6/README.md §1).
+        drop(state);
+        if let Some(change) = stack_change {
+            self.notify_window_change(change);
+        }
         Ok(true)
+    }
+}
+
+/// Creates one `IWindowSession` **host node** per `IWindowManager.openSession`
+/// call, the way stock `WindowManagerService.openSession` creates one `Session`
+/// per call.
+///
+/// `registry` installs it once the pieces a session needs exist (`IWindowId`,
+/// the compositor, the input producer); `WmsService` then asks it for a binder
+/// on every `openSession`.
+#[derive(Clone)]
+pub struct SessionFactory {
+    state: Arc<Mutex<WmsState>>,
+    window_id_binder: BinderId,
+    nodes: crate::host::NodeRegistrar,
+    compositor: Option<Arc<Mutex<crate::surface_client::SurfaceState>>>,
+    input: Option<input_dispatch::InputHost>,
+    window_changes: Option<WindowStackSink>,
+}
+
+impl std::fmt::Debug for SessionFactory {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("SessionFactory")
+            .field("window_id", &self.window_id_binder)
+            .field("compositor", &self.compositor.is_some())
+            .field("input", &self.input.as_ref().map(|h| h.is_active()))
+            .finish()
+    }
+}
+
+impl SessionFactory {
+    /// A factory for `state`'s sessions.
+    #[must_use]
+    pub fn new(
+        state: Arc<Mutex<WmsState>>,
+        window_id_binder: BinderId,
+        nodes: crate::host::NodeRegistrar,
+    ) -> Self {
+        Self {
+            state,
+            window_id_binder,
+            nodes,
+            compositor: None,
+            input: None,
+            window_changes: None,
+        }
+    }
+
+    /// Serve the sessions' `relayout` with a real compositor (W5).
+    #[must_use]
+    pub fn with_compositor(
+        mut self,
+        compositor: Arc<Mutex<crate::surface_client::SurfaceState>>,
+    ) -> Self {
+        self.compositor = Some(compositor);
+        self
+    }
+
+    /// Serve the sessions with the session's one authoritative input producer
+    /// (I2).
+    #[must_use]
+    pub fn with_input(mut self, input: input_dispatch::InputHost) -> Self {
+        self.input = Some(input);
+        self
+    }
+
+    /// Every session this factory creates reports its window-stack changes to
+    /// the accessibility module's sink (MODA11Y6's `TYPE_WINDOWS_CHANGED`
+    /// producer).
+    #[must_use]
+    pub fn with_window_changes(mut self, sink: WindowStackSink) -> Self {
+        self.window_changes = Some(sink);
+        self
+    }
+
+    /// `IWindowManager.openSession`: allocate a session and register its node,
+    /// answering the binder the caller must use for every later window call.
+    pub fn open(&self) -> BinderId {
+        let session = self
+            .state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .allocate_session();
+        let mut node =
+            WindowSessionService::new(Arc::clone(&self.state), session, self.window_id_binder)
+                .with_owners(self.nodes.clone());
+        if let Some(compositor) = &self.compositor {
+            node = node.with_compositor(Arc::clone(compositor));
+        }
+        if let Some(input) = &self.input {
+            node = node.with_input(input.clone());
+        }
+        if let Some(sink) = &self.window_changes {
+            node = node.with_window_changes(sink.clone());
+        }
+        let binder = self.nodes.register(DESCRIPTOR, Box::new(node));
+        self.state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .attach_host_node(session, binder);
+        binder
     }
 }
 

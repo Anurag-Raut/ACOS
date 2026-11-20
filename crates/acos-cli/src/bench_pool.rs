@@ -100,18 +100,27 @@ pub(crate) fn run(args: &BenchArgs) -> Result<Value, BenchFailure> {
             push_raw(&probe, "reset_nanos", &mut reset_nanos);
             push_raw(&probe, "job_run_nanos", &mut run_nanos);
             push_raw(&probe, "cpu/cores_used", &mut cores_used);
-            if let Some(v) = probe.pointer("/session_create/sessions_per_sec").and_then(Value::as_f64)
+            if let Some(v) = probe
+                .pointer("/session_create/sessions_per_sec")
+                .and_then(Value::as_f64)
             {
                 sessions_per_sec.push(v);
             }
-            if let Some(v) = probe.pointer("/session_create/warm_wall_ms").and_then(Value::as_f64) {
+            if let Some(v) = probe
+                .pointer("/session_create/warm_wall_ms")
+                .and_then(Value::as_f64)
+            {
                 warm_wall_ms.push(v);
             }
-            if let Some(v) = probe.pointer("/session_create/create_nanos/p50").and_then(Value::as_f64)
+            if let Some(v) = probe
+                .pointer("/session_create/create_nanos/p50")
+                .and_then(Value::as_f64)
             {
                 create_nanos.push(v);
             }
-            if let Some(v) = probe.pointer("/determinism/distinct_outputs_max").and_then(Value::as_u64)
+            if let Some(v) = probe
+                .pointer("/determinism/distinct_outputs_max")
+                .and_then(Value::as_u64)
             {
                 distinct_max = distinct_max.max(v);
             }

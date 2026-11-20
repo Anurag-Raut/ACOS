@@ -115,7 +115,11 @@ fn compile_case(name: &str) -> Option<PathBuf> {
     }
     let ok = Command::new(&tools.javac)
         .args(["--release", "11", "-encoding", "UTF-8", "-cp"])
-        .arg(format!("{}:{}", stubs.display(), tools.android_jar.display()))
+        .arg(format!(
+            "{}:{}",
+            stubs.display(),
+            tools.android_jar.display()
+        ))
         .args(["-d"])
         .arg(&classes)
         .arg(&src)

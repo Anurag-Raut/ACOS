@@ -179,8 +179,7 @@ fn do_userfaultfd() -> i32 {
 fn do_open_by_handle_at() -> i32 {
     let handle = [0u8; 64];
     // SAFETY: `handle` is a readable buffer; the kernel validates the fields.
-    let rc =
-        unsafe { libc::syscall(libc::SYS_open_by_handle_at, -1i32, handle.as_ptr(), 0i32) };
+    let rc = unsafe { libc::syscall(libc::SYS_open_by_handle_at, -1i32, handle.as_ptr(), 0i32) };
     if rc >= 0 {
         // SAFETY: `rc` is a live fd.
         unsafe {

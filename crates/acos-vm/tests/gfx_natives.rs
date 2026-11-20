@@ -36,15 +36,17 @@ fn stale_handle_is_a_structured_error_not_a_panic() {
     let h2 = t.insert(2);
     assert_ne!(h, h2);
     assert!(matches!(t.get(h), Err(HandleError::Stale { .. })));
-    assert_eq!(t.get(Handle(0xffff_ffff)), Err(HandleError::Stale {
-        handle: Handle(0xffff_ffff)
-    }));
+    assert_eq!(
+        t.get(Handle(0xffff_ffff)),
+        Err(HandleError::Stale {
+            handle: Handle(0xffff_ffff)
+        })
+    );
 }
 
 #[test]
 fn paint_text_measurement_agrees_with_acos_render() {
-    let Some(fonts) = FontCollection::shared() else {
-        eprintln!("SKIP paint_text_measurement_agrees_with_acos_render: no /system/fonts");
+    let Some(fonts) = acos_test_support::require_some(FontCollection::shared(), "paint_text_measurement_agrees_with_acos_render", "no /system/fonts") else {
         return;
     };
     let font = fonts
@@ -106,7 +108,9 @@ fn compile_case(name: &str) -> Option<PathBuf> {
         return None;
     }
     let root = repo_root();
-    let src = root.join("crates/acos-vm/tests/java").join(format!("{name}.java"));
+    let src = root
+        .join("crates/acos-vm/tests/java")
+        .join(format!("{name}.java"));
     if !src.is_file() {
         return None;
     }
@@ -170,8 +174,7 @@ fn run_case() -> Result<String, String> {
 }
 
 fn line_value<'a>(out: &'a str, key: &str) -> Option<&'a str> {
-    out.lines()
-        .find_map(|l| l.strip_prefix(&format!("{key}=")))
+    out.lines().find_map(|l| l.strip_prefix(&format!("{key}=")))
 }
 
 #[test]
@@ -179,7 +182,7 @@ fn gfx_natives_on_the_real_framework() {
     let out = match run_case() {
         Ok(out) => out,
         Err(m) => {
-            eprintln!("SKIP gfx_natives_on_the_real_framework: {m}");
+            acos_test_support::require_prereq(false, "gfx_natives_on_the_real_framework", &format!("gfx_natives_on_the_real_framework: {m}"));
             return;
         }
     };
@@ -200,8 +203,7 @@ fn gfx_natives_on_the_real_framework() {
     // acos-render's shaping within 0.01 px.
     let measured: f32 = line_value(&out, "measure").unwrap().parse().unwrap();
     let raw: f32 = line_value(&out, "widths").unwrap().parse().unwrap();
-    let Some(fonts) = FontCollection::shared() else {
-        eprintln!("SKIP measure comparison: no /system/fonts");
+    let Some(fonts) = acos_test_support::require_some(FontCollection::shared(), "gfx_natives_on_the_real_framework", "measure comparison: no /system/fonts") else {
         return;
     };
     let font = fonts
@@ -222,10 +224,18 @@ fn gfx_natives_on_the_real_framework() {
     );
     // Android's `Paint.measureText` wraps the native advance in `Math.ceil`
     // (verified in the framework DEX), so the Java-visible value is the ceiling.
-    assert_eq!(measured, expected.ceil(), "measureText must be ceil(advance)");
+    assert_eq!(
+        measured,
+        expected.ceil(),
+        "measureText must be ceil(advance)"
+    );
 
     // Path ops/bounds.
-    assert_eq!(line_value(&out, "bounds"), Some("0.0,0.0,10.0,5.0"), "{out}");
+    assert_eq!(
+        line_value(&out, "bounds"),
+        Some("0.0,0.0,10.0,5.0"),
+        "{out}"
+    );
     // Matrix map points.
     assert_eq!(line_value(&out, "mapped"), Some("6.0,9.0"), "{out}");
     // Shaders (W75-A): gradient/bitmap/compose construction reaches

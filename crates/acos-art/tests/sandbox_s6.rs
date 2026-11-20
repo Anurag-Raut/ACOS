@@ -242,7 +242,11 @@ fn probe_root(tag: &str) -> Option<ArtRoot> {
     let root = match ArtRoot::resolve(None, Some(dir.join("data"))) {
         Ok(r) => r,
         Err(e) => {
-            eprintln!("SKIP {tag}: no ART sysroot ({e})");
+            acos_test_support::require_prereq(
+                false,
+                &format!("{tag} (sandbox S6)"),
+                &format!("no ART sysroot ({e}) — run tools/art-sysroot.sh"),
+            )?;
             return None;
         }
     };
@@ -265,7 +269,8 @@ fn guest_command(root: &ArtRoot, run: &Path, probe: &Path, mode: &str) -> Comman
         }
     }
     sb.args(Vec::new());
-    sb.command("/data/probe", &[mode.to_string()]).expect("sandbox argv")
+    sb.command("/data/probe", &[mode.to_string()])
+        .expect("sandbox argv")
 }
 
 struct ProbeRun {
@@ -346,12 +351,18 @@ fn spawn_probe(
     let info = run.path().join("cgroup");
     let observer = write_scope_observer(&dir);
     let mut cmd = Command::new("/bin/sh");
-    cmd.arg(&observer).arg(&info).arg(guest.get_program()).args(guest.get_args());
+    cmd.arg(&observer)
+        .arg(&info)
+        .arg(guest.get_program())
+        .args(guest.get_args());
     let mut cg = RunCgroup::prepare(limits, &info).expect("user scope");
     let mut wrapped = cg.wrap(&cmd).unwrap();
     // `wrap` rebuilds the command, so the stdio must be set on the *wrapped*
     // one (the process actually spawned; the scope's children inherit it).
-    wrapped.stdin(Stdio::null()).stdout(Stdio::from(out)).stderr(Stdio::from(err));
+    wrapped
+        .stdin(Stdio::null())
+        .stdout(Stdio::from(out))
+        .stderr(Stdio::from(err));
     let child = wrapped.spawn().expect("spawn the guest probe");
     cg.confirm(Duration::from_secs(10)).expect("cgroup proven");
     let cg_path = cg.path().to_path_buf();
@@ -366,7 +377,8 @@ fn run_probe(
     limits: MemoryLimits,
     timeout: Duration,
 ) -> Option<ProbeRun> {
-    let (mut child, mut cg, cg_path, run, out_host, err_host) = spawn_probe(root, tag, mode, limits)?;
+    let (mut child, mut cg, cg_path, run, out_host, err_host) =
+        spawn_probe(root, tag, mode, limits)?;
     let start = Instant::now();
     let status = loop {
         match child.try_wait().expect("wait") {
@@ -394,11 +406,22 @@ fn run_probe(
     }
     let stdout = std::fs::read_to_string(&out_host).unwrap_or_default();
     let stderr = std::fs::read_to_string(&err_host).unwrap_or_default();
-    Some(ProbeRun { status, stdout, stderr, cg, cg_path, run, events })
+    Some(ProbeRun {
+        status,
+        stdout,
+        stderr,
+        cg,
+        cg_path,
+        run,
+        events,
+    })
 }
 
 fn assert_line(stdout: &str, needle: &str) {
-    assert!(stdout.contains(needle), "missing {needle:?} in probe stdout:\n{stdout}");
+    assert!(
+        stdout.contains(needle),
+        "missing {needle:?} in probe stdout:\n{stdout}"
+    );
 }
 
 fn guard_log(run: &RunDir) -> String {
@@ -412,7 +435,9 @@ fn guard_log(run: &RunDir) -> String {
 #[test]
 fn escape_corpus_is_denied_in_the_real_guest() {
     let _g = guard();
-    let Some(root) = probe_root("escapes") else { return };
+    let Some(root) = probe_root("escapes") else {
+        return;
+    };
     let Some(p) = run_probe(
         &root,
         "escapes",
@@ -425,7 +450,11 @@ fn escape_corpus_is_denied_in_the_real_guest() {
     eprintln!("probe stdout:\n{}", p.stdout);
     eprintln!("probe stderr:\n{}", p.stderr);
     eprintln!("guard log:\n{}", guard_log(&p.run));
-    assert_eq!(p.status.and_then(|s| s.code()), Some(0), "the probe itself must survive");
+    assert_eq!(
+        p.status.and_then(|s| s.code()),
+        Some(0),
+        "the probe itself must survive"
+    );
 
     // (2) writes inside the per-run root succeed ...
     assert_line(&p.stdout, "write-run-out WRITTEN");
@@ -459,8 +488,10 @@ fn escape_corpus_is_denied_in_the_real_guest() {
     // `/proc/1/root/...` is refused by the kernel's ptrace check (S2 measured
     // EACCES for the same lookup), i.e. not readable, whichever errno wins.
     assert!(
-        p.stdout.contains("read-host-proc-root MISSING errno=Permission denied")
-            || p.stdout.contains("read-host-proc-root MISSING errno=ENOENT"),
+        p.stdout
+            .contains("read-host-proc-root MISSING errno=Permission denied")
+            || p.stdout
+                .contains("read-host-proc-root MISSING errno=ENOENT"),
         "host root via /proc/1/root must not be readable:\n{}",
         p.stdout
     );
@@ -477,8 +508,14 @@ fn escape_corpus_is_denied_in_the_real_guest() {
 
     // (4) the seccomp filter and Landlock are both proven in the log.
     let log = guard_log(&p.run);
-    assert!(log.contains("OK landlock=active"), "Landlock must be active: {log:?}");
-    assert!(log.contains("OK guard=active"), "seccomp must be active: {log:?}");
+    assert!(
+        log.contains("OK landlock=active"),
+        "Landlock must be active: {log:?}"
+    );
+    assert!(
+        log.contains("OK guard=active"),
+        "seccomp must be active: {log:?}"
+    );
     acos_art::landlock::require_from_log(&log, &p.run.path().join("out/seccomp.log"))
         .expect("Landlock evidence is mandatory");
     acos_art::seccomp::require_guard(p.run.path()).expect("both layers are provable");
@@ -498,10 +535,17 @@ fn escape_corpus_is_denied_in_the_real_guest() {
 fn missing_plan_fails_closed_on_a_landlock_kernel() {
     let _g = guard();
     if acos_sandbox::landlock_abi().is_none() {
-        eprintln!("SKIP: this kernel has no Landlock (the documented fallback path)");
+        acos_test_support::require_prereq(
+            false,
+            "sandbox S6 missing-plan",
+            "this kernel has no Landlock (the documented fallback path) — run on a \
+             kernel with Landlock, or set ACOS_ALLOW_ART_SKIP=1 for a counted skip",
+        );
         return;
     }
-    let Some(root) = probe_root("no-plan") else { return };
+    let Some(root) = probe_root("no-plan") else {
+        return;
+    };
     std::fs::remove_file(root.data.join("seccomp/landlock.plan")).expect("remove the plan");
 
     // The probe must not run: the constructor exits before seccomp.
@@ -548,8 +592,13 @@ fn missing_plan_fails_closed_on_a_landlock_kernel() {
 #[test]
 fn fork_bomb_in_the_guest_stays_under_pids_max() {
     let _g = guard();
-    let Some(root) = probe_root("fork-bomb") else { return };
-    let limits = MemoryLimits { mem_bytes: 256 * 1024 * 1024, pids_max: 32 };
+    let Some(root) = probe_root("fork-bomb") else {
+        return;
+    };
+    let limits = MemoryLimits {
+        mem_bytes: 256 * 1024 * 1024,
+        pids_max: 32,
+    };
     let Some((mut child, mut cg, cg_path, _run, _out, err_host)) =
         spawn_probe(&root, "fork-bomb", "forkbomb", limits)
     else {
@@ -566,13 +615,19 @@ fn fork_bomb_in_the_guest_stays_under_pids_max() {
     cg.kill();
     let _ = child.wait();
     eprintln!("fork bomb: max processes in scope = {max_seen}");
-    eprintln!("guest stderr: {:?}", std::fs::read_to_string(&err_host).unwrap_or_default());
+    eprintln!(
+        "guest stderr: {:?}",
+        std::fs::read_to_string(&err_host).unwrap_or_default()
+    );
     assert!(
         max_seen as u32 <= limits.pids_max,
         "fork bomb reached {max_seen} processes with pids.max={}",
         limits.pids_max
     );
-    assert!(max_seen >= 2, "the bomb did fork at least once (saw {max_seen})");
+    assert!(
+        max_seen >= 2,
+        "the bomb did fork at least once (saw {max_seen})"
+    );
     let deadline = Instant::now() + Duration::from_secs(10);
     while !processes_in(&cg_path).is_empty() && Instant::now() < deadline {
         std::thread::sleep(Duration::from_millis(20));
@@ -587,8 +642,13 @@ fn fork_bomb_in_the_guest_stays_under_pids_max() {
 #[test]
 fn memory_bomb_in_the_guest_is_oom_killed_at_the_cap() {
     let _g = guard();
-    let Some(root) = probe_root("mem-bomb") else { return };
-    let limits = MemoryLimits { mem_bytes: 128 * 1024 * 1024, pids_max: 64 };
+    let Some(root) = probe_root("mem-bomb") else {
+        return;
+    };
+    let limits = MemoryLimits {
+        mem_bytes: 128 * 1024 * 1024,
+        pids_max: 64,
+    };
     let host_before = host_available_mb();
     // The bomb runs in the scope; sample the host while it is alive so the
     // safety assertion is about the whole run, not just its endpoints (this

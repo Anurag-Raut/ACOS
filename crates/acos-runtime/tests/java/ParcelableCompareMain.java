@@ -1,19 +1,31 @@
+import android.app.Notification;
+import android.app.PendingIntent;
+import android.content.IIntentReceiver;
+import android.content.IIntentSender;
+import android.content.Intent;
+import android.bluetooth.BluetoothDevice;
 import android.content.pm.ActivityInfo;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.InstrumentationInfo;
 import android.content.pm.PackageInfo;
+import android.content.pm.PermissionGroupInfo;
 import android.content.pm.PermissionInfo;
 import android.content.pm.ResolveInfo;
 import android.content.pm.ServiceInfo;
 import android.content.res.Configuration;
 import android.net.LinkProperties;
 import android.net.NetworkCapabilities;
+import android.graphics.drawable.Icon;
+import android.os.Bundle;
+import android.os.IBinder;
 import android.os.LocaleList;
 import android.os.Parcel;
 import android.os.Parcelable;
 import android.os.PersistableBundle;
 
 import java.lang.reflect.Field;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Locale;
 
 /**
@@ -245,8 +257,174 @@ public final class ParcelableCompareMain {
         return lp;
     }
 
+    /**
+     * A `Bundle` carrying the `BluetoothDevice.EXTRA_RSSI` short extra. The
+     * framework writes `putShort` as `VAL_SHORT` (tag 5) with a 4-byte int
+     * payload, and `Intent.getShortExtra` casts the value to `java.lang.Short`.
+     */
+    static Bundle rssiBundle() {
+        Bundle b = new Bundle();
+        b.putShort("android.bluetooth.device.extra.RSSI", (short) -40);
+        return b;
+    }
+
+    /**
+     * A `Notification` in the MODNOTIF3 codec's shape: a resource small icon,
+     * title/text in the extras bundle, a group key and the channel id, with an
+     * optional content `PendingIntent`.
+     */
+    static Notification notification(PendingIntent contentIntent) throws Exception {
+        Notification n = new Notification();
+        n.when = 1700000000000L;
+        set(n, "creationTime", 1700000000000L);
+        set(n, "mSmallIcon",
+                Icon.createWithResource("dev.acos.fixtures.notif", 0x7f010001));
+        // The image's `Notification()` seeds a default `audioAttributes` and
+        // `STREAM_DEFAULT`; the codec models the null/0 pair, so the case pins
+        // them explicitly (every other optional field is null too).
+        set(n, "audioStreamType", 0);
+        set(n, "audioAttributes", null);
+        n.number = 1;
+        n.contentIntent = contentIntent;
+        n.flags = 0x10; // FLAG_ONGOING_EVENT
+        set(n, "mGroupKey", "fixture-group");
+        Bundle extras = new Bundle();
+        extras.putString("android.title", "hello");
+        extras.putString("android.text", "world");
+        n.extras = extras;
+        n.visibility = 1;
+        set(n, "mChannelId", "fixture-channel");
+        set(n, "mTimeout", 0L);
+        return n;
+    }
+
+    /**
+     * The `IIntentSender` a `PendingIntent` wraps. A local `Binder` is enough:
+     * `PendingIntent.writeToParcel` writes it with `writeStrongBinder` and the
+     * system side only ever calls `send` on it.
+     */
+    static final class Sender extends IIntentSender.Stub {
+        @Override
+        public void send(int code, Intent intent, String resolvedType,
+                IBinder whitelistToken, IIntentReceiver finishedReceiver,
+                String requiredPermission, Bundle options) {
+        }
+    }
+
     interface Writer {
         void write(Parcel p) throws Exception;
+    }
+
+    /**
+     * The `List<BluetoothDevice>` `IBluetooth.getBondedDevices` answers inside a
+     * `SynchronousResultReceiver.Result`. `BluetoothDevice(String)` is the
+     * `@hide` constructor the framework itself uses (`mAddressType` 0), so the
+     * case builds it reflectively.
+     */
+    static List<BluetoothDevice> bondedDevices() throws Exception {
+        java.lang.reflect.Constructor<BluetoothDevice> ctor =
+                BluetoothDevice.class.getDeclaredConstructor(String.class);
+        ctor.setAccessible(true);
+        List<BluetoothDevice> devices = new ArrayList<>();
+        devices.add(ctor.newInstance("11:22:33:44:55:66"));
+        devices.add(ctor.newInstance("AA:BB:CC:DD:EE:FF"));
+        return devices;
+    }
+
+    // ------------------------------------------------------------------
+    // PIFILLIN: `Intent.fillIn` differential cases
+    // ------------------------------------------------------------------
+    //
+    // Each case builds the *stored* intent (`a`) and the caller's fill-in
+    // (`b`), calls the real `Intent.fillIn(b, flags)` and writes `a` with the
+    // real `writeToParcel`. The Rust side builds the same two intents, runs
+    // `acos_services::fill_in::fill_in_value` and writes the merged value with
+    // `parcelable::write_intent`: the two byte streams must be identical.
+    //
+    // A non-null `Uri` is deliberately absent: this image's `Uri.writeToParcel`
+    // body is not pinned by the dex, so `parcelable` refuses it instead of
+    // guessing (`type`-only reaches the same data/type rule with String8).
+
+    static Intent filledIn(Intent a, Intent b, int flags) {
+        a.fillIn(b, flags);
+        return a;
+    }
+
+    static Intent emptyFilledIn() {
+        Intent a = new Intent();
+        Intent b = new Intent("android.intent.action.VIEW");
+        b.setType("text/plain");
+        b.setIdentifier("id-1");
+        b.setPackage("dev.acos.fixtures.pifillin");
+        b.addCategory("android.intent.category.DEFAULT");
+        b.addCategory("android.intent.category.BROWSABLE");
+        b.putExtra("action", "from-fill-in");
+        b.putExtra("count", 3);
+        return filledIn(a, b, 0);
+    }
+
+    static Intent componentFilledIn(boolean allow) {
+        Intent a = new Intent();
+        a.setComponent(new android.content.ComponentName("dev.acos.fixtures", "Stored"));
+        a.setAction("stored.action");
+        Intent b = new Intent();
+        b.setComponent(new android.content.ComponentName("dev.acos.fixtures", "Fill"));
+        b.setAction("fill.action");
+        return filledIn(a, b, allow ? Intent.FILL_IN_COMPONENT | Intent.FILL_IN_ACTION : 0);
+    }
+
+    static Intent overwrittenFilledIn() {
+        Intent a = new Intent();
+        a.setAction("stored.action");
+        a.addCategory("stored.category");
+        a.setPackage("stored.pkg");
+        a.setComponent(new android.content.ComponentName("stored.pkg", "Stored"));
+        Intent b = new Intent();
+        b.setAction("fill.action");
+        b.addCategory("fill.category");
+        b.setPackage("fill.pkg");
+        b.setComponent(new android.content.ComponentName("fill.pkg", "Fill"));
+        return filledIn(a, b, Intent.FILL_IN_ACTION | Intent.FILL_IN_CATEGORIES
+                | Intent.FILL_IN_PACKAGE | Intent.FILL_IN_COMPONENT);
+    }
+
+    static Intent extrasFilledIn() {
+        Intent a = new Intent();
+        a.putExtra("stored", "mine");
+        a.putExtra("shared", 1);
+        Intent b = new Intent();
+        b.putExtra("fresh", true);
+        b.putExtra("shared", 2);
+        return filledIn(a, b, 0);
+    }
+
+    static Intent dataTypeFilledIn() {
+        Intent a = new Intent();
+        a.setType("text/plain");
+        Intent b = new Intent();
+        b.setType("image/png");
+        return filledIn(a, b, Intent.FILL_IN_DATA);
+    }
+
+    static Intent selectorFilledIn() {
+        Intent a = new Intent();
+        a.setAction("outer.action");
+        Intent selector = new Intent("inner.action");
+        selector.addCategory("inner.category");
+        Intent b = new Intent();
+        b.setSelector(selector);
+        return filledIn(a, b, Intent.FILL_IN_SELECTOR);
+    }
+
+    static Intent flagsAndBoundsFilledIn() {
+        Intent a = new Intent();
+        a.setAction("stored.action");
+        a.setFlags(0x10000000);
+        a.setSourceBounds(new android.graphics.Rect(1, 2, 3, 4));
+        Intent b = new Intent();
+        b.setFlags(0x00000001);
+        b.setSourceBounds(new android.graphics.Rect(10, 20, 30, 40));
+        return filledIn(a, b, Intent.FILL_IN_SOURCE_BOUNDS);
     }
 
     static void emit(String name, Writer writer) throws Exception {
@@ -265,6 +443,44 @@ public final class ParcelableCompareMain {
         emit("package_info_arrays", p -> packageInfoArrays().writeToParcel(p, 0));
         emit("network_capabilities", p -> networkCapabilities().writeToParcel(p, 0));
         emit("link_properties", p -> linkProperties().writeToParcel(p, 0));
+        emit("bundle_short", p -> rssiBundle().writeToParcel(p, 0));
+        // `SynchronousResultReceiver$Result.writeToParcel` (image dex):
+        // `writeValue(mObject)` then `writeValue(mException)`. The Bluetooth
+        // module answers `getBondedDevices` with a `List<BluetoothDevice>` and
+        // `getState` with an `Integer`; both cases are emitted here so the Rust
+        // `Result` codec can be byte-compared against the real writer.
+        emit("bluetooth_result", p -> {
+            p.writeValue(bondedDevices());
+            p.writeValue(null);
+        });
+        emit("bluetooth_state", p -> {
+            p.writeValue(Integer.valueOf(12));
+            p.writeValue(null);
+        });
+        emit("notification", p -> notification(null).writeToParcel(p, 0));
+        // The guest allocates the binder handle, so the harness reports the one
+        // the framework itself wrote; the Rust side builds the same
+        // `PendingIntent` with it and byte-compares the whole notification.
+        final Sender sender = new Sender();
+        emit("intent_sender", p -> p.writeStrongBinder(sender));
+        // `PendingIntent(IIntentSender)` is `@hide`, so the public SDK stub does
+        // not declare it; the runtime class does, and that is the constructor
+        // the framework itself uses to rebuild a PendingIntent from a binder.
+        final Class<?> iis = Class.forName("android.content.IIntentSender");
+        final java.lang.reflect.Constructor<?> ctor =
+                PendingIntent.class.getDeclaredConstructor(iis);
+        ctor.setAccessible(true);
+        final PendingIntent pending = (PendingIntent) ctor.newInstance(sender);
+        emit("notification_intent", p -> notification(pending).writeToParcel(p, 0));
+        // PIFILLIN: `a.fillIn(b, flags)` then `a.writeToParcel`.
+        emit("fillin_empty", p -> emptyFilledIn().writeToParcel(p, 0));
+        emit("fillin_component_kept", p -> componentFilledIn(false).writeToParcel(p, 0));
+        emit("fillin_component_allowed", p -> componentFilledIn(true).writeToParcel(p, 0));
+        emit("fillin_overwritten", p -> overwrittenFilledIn().writeToParcel(p, 0));
+        emit("fillin_extras", p -> extrasFilledIn().writeToParcel(p, 0));
+        emit("fillin_data_type", p -> dataTypeFilledIn().writeToParcel(p, 0));
+        emit("fillin_selector", p -> selectorFilledIn().writeToParcel(p, 0));
+        emit("fillin_flags_bounds", p -> flagsAndBoundsFilledIn().writeToParcel(p, 0));
 
         for (String arg : args) {
             int eq = arg.indexOf('=');
@@ -277,8 +493,54 @@ public final class ParcelableCompareMain {
             try {
                 p.unmarshall(bytes, 0, bytes.length);
                 p.setDataPosition(0);
-                Parcelable got;
+                Parcelable got = null;
+                Object dynamicObject = null;
+                Object dynamicException = null;
+                if (name.startsWith("fillin_")) {
+                    Intent intent = Intent.CREATOR.createFromParcel(p);
+                    p.enforceNoDataAvail();
+                    System.out.println("read." + name + "=ok");
+                    System.out.println("read." + name + ".action="
+                            + intent.getAction() + " type=" + intent.getType()
+                            + " flags=" + intent.getFlags()
+                            + " categories=" + intent.getCategories()
+                            + " package=" + intent.getPackage()
+                            + " extras=" + intent.getExtras());
+                    Parcel rewritten = Parcel.obtain();
+                    try {
+                        intent.writeToParcel(rewritten, 0);
+                        System.out.println("roundtrip." + name + "="
+                                + hex(rewritten.marshall()));
+                    } finally {
+                        rewritten.recycle();
+                    }
+                    continue;
+                }
                 switch (name) {
+                    case "bluetooth_result": {
+                        dynamicObject = p.readValue(null);
+                        dynamicException = p.readValue(null);
+                        check(dynamicException == null, "bluetooth_result exception is null");
+                        check(dynamicObject instanceof List,
+                                "bluetooth_result is a List: " + dynamicObject);
+                        List<?> devices = (List<?>) dynamicObject;
+                        check(devices.size() == 2, "bluetooth_result size " + devices.size());
+                        BluetoothDevice first = (BluetoothDevice) devices.get(0);
+                        check("11:22:33:44:55:66".equals(first.getAddress()),
+                                "bluetooth_result address " + first.getAddress());
+                        BluetoothDevice second = (BluetoothDevice) devices.get(1);
+                        check("AA:BB:CC:DD:EE:FF".equals(second.getAddress()),
+                                "bluetooth_result second address " + second.getAddress());
+                        break;
+                    }
+                    case "bluetooth_state": {
+                        dynamicObject = p.readValue(null);
+                        dynamicException = p.readValue(null);
+                        check(dynamicException == null, "bluetooth_state exception is null");
+                        check(Integer.valueOf(12).equals(dynamicObject),
+                                "bluetooth_state object " + dynamicObject);
+                        break;
+                    }
                     case "configuration":
                         got = Configuration.CREATOR.createFromParcel(p);
                         Configuration c = (Configuration) got;
@@ -309,6 +571,14 @@ public final class ParcelableCompareMain {
                         check(((PersistableBundle) got).getString("name").equals("helloviews"),
                                 "bundle name");
                         break;
+                    case "bundle_short":
+                        got = Bundle.CREATOR.createFromParcel(p);
+                        check(((Bundle) got).getShort("android.bluetooth.device.extra.RSSI")
+                                        == (short) -40,
+                                "bundle_short rssi "
+                                        + ((Bundle) got).getShort(
+                                                "android.bluetooth.device.extra.RSSI"));
+                        break;
                     case "application_info":
                         got = ApplicationInfo.CREATOR.createFromParcel(p);
                         break;
@@ -318,6 +588,43 @@ public final class ParcelableCompareMain {
                     case "package_info":
                         got = PackageInfo.CREATOR.createFromParcel(p);
                         break;
+                    case "package_info_provider": {
+                        // WV2: the `webviewupdate` reply's `PackageInfo` — the
+                        // exact value `WebViewUpdateService` writes from the
+                        // installed `com.android.webview` record. The nested
+                        // `ApplicationInfo` is the part the Java materialiser
+                        // writes for `PackageManager` but the Rust codec writes
+                        // for this peer; a field-order difference shows up here
+                        // as a desynchronised `requestedPermissions` (the image
+                        // OOMs allocating the bogus `String[]`) or as
+                        // `enforceNoDataAvail()` seeing leftover bytes.
+                        got = PackageInfo.CREATOR.createFromParcel(p);
+                        PackageInfo pi = (PackageInfo) got;
+                        check("com.android.webview".equals(pi.packageName),
+                                "package_info_provider packageName " + pi.packageName);
+                        check(pi.versionCode == 1,
+                                "package_info_provider versionCode " + pi.versionCode);
+                        check(pi.applicationInfo != null,
+                                "package_info_provider applicationInfo is null");
+                        check("com.android.webview".equals(pi.applicationInfo.packageName),
+                                "package_info_provider applicationInfo.packageName "
+                                        + pi.applicationInfo.packageName);
+                        check(pi.applicationInfo.sourceDir.endsWith(".apk"),
+                                "package_info_provider sourceDir "
+                                        + pi.applicationInfo.sourceDir);
+                        check(pi.applicationInfo.uid > 0,
+                                "package_info_provider uid " + pi.applicationInfo.uid);
+                        check(pi.requestedPermissions != null
+                                        && pi.requestedPermissions.length == 1
+                                        && "android.permission.INTERNET".equals(
+                                                pi.requestedPermissions[0]),
+                                "package_info_provider requestedPermissions "
+                                        + java.util.Arrays.toString(pi.requestedPermissions));
+                        check(pi.splitNames == null,
+                                "package_info_provider splitNames "
+                                        + java.util.Arrays.toString(pi.splitNames));
+                        break;
+                    }
                     case "package_info_arrays":
                         got = PackageInfo.CREATOR.createFromParcel(p);
                         PackageInfo pi = (PackageInfo) got;
@@ -402,10 +709,38 @@ public final class ParcelableCompareMain {
                         check(((PermissionInfo) got).group.equals("android.permission-group.NETWORK"),
                                 "permission_info group");
                         break;
+                    case "permission_group_info":
+                        got = PermissionGroupInfo.CREATOR.createFromParcel(p);
+                        check(((PermissionGroupInfo) got).name.equals(
+                                        "android.permission-group.CAMERA"),
+                                "permission_group_info name");
+                        check(((PermissionGroupInfo) got).loadLabel(null).toString().equals(
+                                        "Camera"),
+                                "permission_group_info nonLocalizedLabel");
+                        check(((PermissionGroupInfo) got).descriptionRes == 0,
+                                "permission_group_info descriptionRes");
+                        check(((PermissionGroupInfo) got).priority == 700,
+                                "permission_group_info priority");
+                        break;
                     case "resolve_info":
                         got = ResolveInfo.CREATOR.createFromParcel(p);
                         check(((ResolveInfo) got).activityInfo != null, "resolve_info activityInfo");
                         check(((ResolveInfo) got).filter == null, "resolve_info filter is null");
+                        break;
+                    case "notification":
+                        got = Notification.CREATOR.createFromParcel(p);
+                        Notification n = (Notification) got;
+                        check(n.extras != null, "notification extras");
+                        check("hello".equals(n.extras.getString("android.title")),
+                                "notification title");
+                        check("world".equals(n.extras.getString("android.text")),
+                                "notification text");
+                        check("fixture-channel".equals(get(n, "mChannelId")),
+                                "notification channel");
+                        check(n.contentIntent == null, "notification contentIntent is null");
+                        check(n.number == 1, "notification number");
+                        check(n.flags == 0x10, "notification flags");
+                        check(get(n, "mSmallIcon") != null, "notification small icon");
                         break;
                     default:
                         throw new AssertionError("unknown case " + name);
@@ -417,7 +752,12 @@ public final class ParcelableCompareMain {
                 // pure function of the parsed fields (no hidden defaults).
                 Parcel rewritten = Parcel.obtain();
                 try {
-                    got.writeToParcel(rewritten, 0);
+                    if (got != null) {
+                        got.writeToParcel(rewritten, 0);
+                    } else {
+                        rewritten.writeValue(dynamicObject);
+                        rewritten.writeValue(dynamicException);
+                    }
                     System.out.println("roundtrip." + name + "=" + hex(rewritten.marshall()));
                 } finally {
                     rewritten.recycle();

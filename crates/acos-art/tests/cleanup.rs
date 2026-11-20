@@ -26,10 +26,13 @@
 //! the launcher pid this test spawned plus this test's private data root, and
 //! the kill path re-derives it rather than trusting the caller.
 //!
-//! The suite skips (with a reason, exit 0) when the ART sysroot or the cached
-//! guest dex is absent: those are 1 GB+ host artefacts produced by
-//! `tools/art-sysroot.sh` / one warm `acos-art render-app`, not something a
-//! `cargo test` may download or build.
+//! The suite **fails** when the ART sysroot or the cached guest dex is absent
+//! (HYG2): those are 1 GB+ host artefacts produced by `tools/art-sysroot.sh` /
+//! one warm `acos-art render-app`, not something a `cargo test` may download or
+//! build, but a test that asserts nothing must not report a pass. The one
+//! counted-skip path is `ACOS_ALLOW_ART_SKIP=1`, which prints the reason and a
+//! `SKIP SUMMARY` count at exit; `tools/art-runtime/test-crates.sh` exports the
+//! warm data inside the lock so the default path runs these cases.
 //!
 //! ART is started through `tools/guarded.sh` by the acceptance command; inside
 //! the test, runs are serialised on one mutex so a suite run never has two
@@ -74,46 +77,55 @@ fn bin() -> &'static str {
 }
 
 fn sysroot() -> PathBuf {
-    std::env::var_os("ACOS_ART_SYSROOT")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| repo_root().join(".cache/art/sysroot"))
+    acos_test_support::art_sysroot(&repo_root())
 }
 
 fn warm_data() -> PathBuf {
-    std::env::var_os("ACOS_ART_DATA")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| repo_root().join(".cache/art/data"))
+    acos_test_support::art_warm_data(&repo_root())
 }
 
-/// `None` = the host lacks the (large, out-of-repo-build) ART inputs; the test
-/// prints why and passes without asserting anything.
+/// `None` = the host lacks the (large, out-of-repo-build) ART inputs. HYG2: that
+/// is a **failure** naming the missing artefact, not a silent skip — a `cargo
+/// test` that reports `ok` while every ART case skipped is the false-green this
+/// helper replaced (BACKSETTLE README §6, `suite3.log`).
 fn require_art() -> Option<()> {
-    let sysroot = sysroot();
-    if !sysroot.join("system/apex").is_dir() {
-        eprintln!(
-            "SKIP cleanup test: no ART sysroot at {} — run tools/art-sysroot.sh",
-            sysroot.display()
-        );
-        return None;
-    }
-    if !warm_data().join("app/guest/classes.dex").is_file() {
-        eprintln!(
-            "SKIP cleanup test: no cached guest dex under {} — run \
-             `acos-art render-app --apk fixtures/build/apps/counter.apk` once",
-            warm_data().display()
-        );
-        return None;
-    }
-    Some(())
+    acos_test_support::require_art(&repo_root(), "cleanup test").map(|_| ())
 }
 
-/// A scratch dir under the repo `.cache/` (never `/tmp`), fresh per test.
+/// The root every test's scratch dir lives under.
+///
+/// The scratch dir holds copy of `/data`, and a run root below it binds the
+/// logd/WebView sockets (`<run>/socket/logdw`), so the checkout path decides
+/// whether `bind()` fits `sun_path` (108 bytes with the NUL). An agent worktree
+/// is ~55 bytes, which left 113 for the deepest socket and failed the suite with
+/// "path must be shorter than SUN_LEN" instead of testing cleanup. One rule for
+/// that class (the same one `acos-cli`/`live_view` use): the checkout's
+/// `.cache/h1-tests` when it fits, a short fixed root otherwise; `$ACOS_CLEANUP_TEST_DIR`
+/// overrides when it fits (see `acos_test_support::short_scratch_root`).
+fn scratch_root() -> PathBuf {
+    let candidates = vec![repo_root().join(".cache/h1-tests")];
+    acos_test_support::short_scratch_root(
+        "ACOS_CLEANUP_TEST_DIR",
+        &candidates,
+        "acos-cleanup-tests",
+    )
+}
+
+/// The deepest socket these tests make the launcher bind below the scratch
+/// root: `<root>/<tag>-<pid>/data/runs/<pid>-<seq>/socket/logdw`. The longest
+/// tag used here is `scope-foreign`, and the seq is a small counter.
+fn deepest_socket(root: &Path) -> PathBuf {
+    root.join(format!("scope-foreign-{}", std::process::id()))
+        .join("data/runs")
+        .join(format!("{}-999", std::process::id()))
+        .join("socket/logdw")
+}
+
+/// A scratch dir under [`scratch_root`], fresh per test.
 fn scratch(tag: &str) -> PathBuf {
-    let dir = repo_root()
-        .join(".cache/h1-tests")
-        .join(format!("{tag}-{}", std::process::id()));
+    let dir = scratch_root().join(format!("{tag}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(&dir).expect("create scratch dir under .cache/");
+    std::fs::create_dir_all(&dir).expect("create the test's scratch dir");
     dir
 }
 
@@ -134,6 +146,21 @@ fn seed_data(scratch: &Path) -> PathBuf {
 
 fn apk() -> PathBuf {
     repo_root().join("fixtures/build/apps/counter.apk")
+}
+
+/// The scratch root must leave room for the deepest socket the launcher binds,
+/// or the suite fails on `SUN_LEN` for a reason that has nothing to do with
+/// cleanup (see [`scratch_root`]).
+#[test]
+fn the_scratch_root_leaves_room_for_the_run_sockets() {
+    let deepest = deepest_socket(&scratch_root());
+    let len = deepest.as_os_str().as_encoded_bytes().len();
+    assert!(
+        len <= acos_test_support::SUN_PATH_MAX,
+        "{} is {len} bytes, too long for sun_path ({} with the NUL)",
+        deepest.display(),
+        acos_test_support::SUN_PATH_MAX + 1
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -198,7 +225,9 @@ fn scan_procs() -> Vec<Proc> {
     let root = repo_root();
     let root_s = root.to_string_lossy().to_string();
     let mut out = Vec::new();
-    let Ok(rd) = std::fs::read_dir("/proc") else { return out };
+    let Ok(rd) = std::fs::read_dir("/proc") else {
+        return out;
+    };
     for entry in rd.flatten() {
         let name = entry.file_name();
         let Some(pid) = name.to_str().and_then(|s| s.parse::<u32>().ok()) else {
@@ -213,12 +242,16 @@ fn scan_procs() -> Vec<Proc> {
         };
         let comm = comm.trim().to_string();
         // Fields after "(comm)": 0 state, 1 ppid, … 19 starttime.
-        let Some(rest) = stat.rfind(')').and_then(|i| stat.get(i + 2..)) else { continue };
+        let Some(rest) = stat.rfind(')').and_then(|i| stat.get(i + 2..)) else {
+            continue;
+        };
         let fields: Vec<&str> = rest.split_whitespace().collect();
         if fields.len() < 20 {
             continue;
         }
-        let Ok(start) = fields[19].parse::<u64>() else { continue };
+        let Ok(start) = fields[19].parse::<u64>() else {
+            continue;
+        };
         let cmd = read_cmdline(&dir);
         let cwd = read_cwd(&dir);
         // Match the process NAME or the command line. W53 narrowed this to
@@ -294,7 +327,10 @@ struct Scope {
 
 impl Scope {
     fn new() -> Self {
-        Scope { roots: Vec::new(), markers: Vec::new() }
+        Scope {
+            roots: Vec::new(),
+            markers: Vec::new(),
+        }
     }
 
     /// Register this test's private run directories (the seeded `/data` copy and
@@ -322,7 +358,10 @@ impl Scope {
     /// only; [`Scope::reap`] stays strict).
     fn procs(&self) -> Vec<Proc> {
         if host_wide_diagnostic() {
-            let mut all: Vec<Proc> = scan_procs().into_iter().filter(|p| !p.is_zombie()).collect();
+            let mut all: Vec<Proc> = scan_procs()
+                .into_iter()
+                .filter(|p| !p.is_zombie())
+                .collect();
             all.sort_by_key(|p| p.pid);
             return all;
         }
@@ -331,7 +370,10 @@ impl Scope {
 
     /// The strict ownership closure (never widened by the diagnostic knob).
     fn owned(&self) -> Vec<Proc> {
-        let all: Vec<Proc> = scan_procs().into_iter().filter(|p| !p.is_zombie()).collect();
+        let all: Vec<Proc> = scan_procs()
+            .into_iter()
+            .filter(|p| !p.is_zombie())
+            .collect();
         let root_pids: BTreeSet<u32> = self.roots.iter().map(|(pid, _)| *pid).collect();
         let min_start = self
             .roots
@@ -447,7 +489,9 @@ struct Reaper(Option<Child>);
 
 impl Reaper {
     fn spawn(cmd: &mut Command, what: &str) -> Reaper {
-        Reaper(Some(cmd.spawn().unwrap_or_else(|e| panic!("spawn {what}: {e}"))))
+        Reaper(Some(
+            cmd.spawn().unwrap_or_else(|e| panic!("spawn {what}: {e}")),
+        ))
     }
     fn pid(&self) -> u32 {
         self.child().id()
@@ -478,7 +522,9 @@ impl Reaper {
     /// with the pid available for [`Scope::add_root`]).
     fn wait_with_output(&mut self) -> std::process::Output {
         let child = self.0.take().expect("the child was already collected");
-        child.wait_with_output().expect("collect the child's output")
+        child
+            .wait_with_output()
+            .expect("collect the child's output")
     }
 }
 
@@ -568,7 +614,11 @@ fn render_app_leaves_no_processes_or_scratch_behind() {
 
     let sessions_after = dir_entries(&data.join("session"));
     let new: Vec<&String> = sessions_after.difference(&sessions_before).collect();
-    assert!(new.is_empty(), "render-app left scratch behind under {}/session: {new:?}", data.display());
+    assert!(
+        new.is_empty(),
+        "render-app left scratch behind under {}/session: {new:?}",
+        data.display()
+    );
 
     // S4: the per-run writable root (dalvik-cache, tmp, out, socket) must be
     // removed on the normal exit path, not merely emptied.
@@ -722,7 +772,9 @@ fn toolchain_d8() -> Option<PathBuf> {
     roots.push(home.join("Android/Sdk"));
     for root in roots {
         let bt = root.join("build-tools");
-        let Ok(rd) = std::fs::read_dir(&bt) else { continue };
+        let Ok(rd) = std::fs::read_dir(&bt) else {
+            continue;
+        };
         let mut versions: Vec<PathBuf> = rd.flatten().map(|e| e.path()).collect();
         versions.sort();
         for v in versions.into_iter().rev() {
@@ -735,11 +787,17 @@ fn toolchain_d8() -> Option<PathBuf> {
     None
 }
 
-/// Compile the canary DEX (javac + d8). `None` = the host lacks the toolchain,
-/// which is a skip, not a failure (`d8` comes from the Android SDK).
+/// Compile the canary DEX (javac + d8). A host without the Android
+/// build-tools is a missing prerequisite (HYG2: a loud failure, or a counted
+/// skip under `ACOS_ALLOW_ART_SKIP=1`), never a silent pass.
 fn build_canary_dex(scratch: &Path) -> Option<PathBuf> {
     let Some(d8) = toolchain_d8() else {
-        eprintln!("SKIP canary test: no d8 (Android build-tools) on this host");
+        acos_test_support::require_prereq(
+            false,
+            "canary test",
+            "no d8 (Android build-tools) on this host — install the Android SDK \
+             build-tools, or set ACOS_ALLOW_ART_SKIP=1 for a counted skip",
+        )?;
         return None;
     };
     let src = scratch.join("canary/Canary.java");
@@ -771,7 +829,11 @@ fn build_canary_dex(scratch: &Path) -> Option<PathBuf> {
         .status()
         .ok()?;
     if !st.success() {
-        eprintln!("SKIP canary test: javac failed");
+        acos_test_support::require_prereq(
+            false,
+            "canary test",
+            "javac failed to compile the canary — the JDK on PATH is not usable",
+        )?;
         return None;
     }
     let out = scratch.join("canary/dex");
@@ -785,7 +847,11 @@ fn build_canary_dex(scratch: &Path) -> Option<PathBuf> {
         .collect();
     class_files.sort();
     if class_files.is_empty() {
-        eprintln!("SKIP canary test: javac produced no class files");
+        acos_test_support::require_prereq(
+            false,
+            "canary test",
+            "javac produced no class files",
+        )?;
         return None;
     }
     let st = Command::new(&d8)
@@ -795,7 +861,11 @@ fn build_canary_dex(scratch: &Path) -> Option<PathBuf> {
         .status()
         .ok()?;
     if !st.success() {
-        eprintln!("SKIP canary test: d8 failed ({})", d8.display());
+        acos_test_support::require_prereq(
+            false,
+            "canary test",
+            &format!("d8 failed ({})", d8.display()),
+        )?;
         return None;
     }
     let dex = out.join("classes.dex");
@@ -808,6 +878,15 @@ fn guest_cannot_overwrite_boot_art_or_the_classpath() {
     let Some(()) = require_art() else { return };
     let scratch = scratch("canary");
     let data = seed_data(&scratch);
+    // The launcher rewrites `<data>/acos.properties` from `Props::for_launch()`
+    // on every run (it is a derived table, not a guest-writable input). The warm
+    // copy can predate the current defaults (for example the software-GL
+    // properties once the provider is installed), so refresh it before the
+    // "before" snapshot: the host-side proof then compares what the *guest* did,
+    // not the launcher's own regeneration.
+    acos_art::Props::for_launch()
+        .and_then(|props| props.write(&data.join("acos.properties")))
+        .expect("refresh the derived property table before the snapshot");
     let Some(dex) = build_canary_dex(&scratch) else {
         let _ = std::fs::remove_dir_all(&scratch);
         return;
@@ -823,17 +902,30 @@ fn guest_cannot_overwrite_boot_art_or_the_classpath() {
         .find(|p| p.join("x86_64/boot.art").is_file());
 
     let mut inputs: Vec<(&str, PathBuf)> = vec![
-        ("/data/system/environ/classpath", data.join("system/environ/classpath")),
+        (
+            "/data/system/environ/classpath",
+            data.join("system/environ/classpath"),
+        ),
         ("/data/acos.properties", data.join("acos.properties")),
         ("/data/shim/libartshim.so", data.join("shim/libartshim.so")),
-        ("/data/app/guest/classes.dex", data.join("app/guest/classes.dex")),
-        ("/linkerconfig/ld.config.txt", data.join("linkerconfig/ld.config.txt")),
+        (
+            "/data/app/guest/classes.dex",
+            data.join("app/guest/classes.dex"),
+        ),
+        (
+            "/linkerconfig/ld.config.txt",
+            data.join("linkerconfig/ld.config.txt"),
+        ),
     ];
     if let Some(img) = &image {
         inputs.push(("/data/img/x86_64/boot.art", img.join("x86_64/boot.art")));
     }
     for (_, host) in &inputs {
-        assert!(host.is_file(), "canary target missing on the host: {}", host.display());
+        assert!(
+            host.is_file(),
+            "canary target missing on the host: {}",
+            host.display()
+        );
     }
     let before: Vec<String> = inputs.iter().map(|(_, h)| md5(h)).collect();
 
@@ -867,11 +959,17 @@ fn guest_cannot_overwrite_boot_art_or_the_classpath() {
     }
     let after: Vec<String> = inputs.iter().map(|(_, h)| md5(h)).collect();
     // The host-side proof: the bytes are identical, not just the guest's opinion.
-    assert_eq!(before, after, "a shared input changed on the host during the canary run");
+    assert_eq!(
+        before, after,
+        "a shared input changed on the host during the canary run"
+    );
 
     // And the run root is gone, so the canary left nothing behind either.
     let runs = dir_entries(&data.join("runs"));
-    assert!(runs.is_empty(), "canary run left per-run roots behind: {runs:?}");
+    assert!(
+        runs.is_empty(),
+        "canary run left per-run roots behind: {runs:?}"
+    );
 
     let _ = std::fs::remove_dir_all(&scratch);
 }
@@ -950,7 +1048,10 @@ fn guest_crash_still_removes_the_run_root() {
     let survivors = scope.wait_until_clean(Duration::from_secs(3));
     let detail = describe(&survivors);
     scope.reap(&survivors);
-    assert!(survivors.is_empty(), "a crashed guest left processes behind:{detail}");
+    assert!(
+        survivors.is_empty(),
+        "a crashed guest left processes behind:{detail}"
+    );
 
     let runs = dir_entries(&data.join("runs"));
     assert!(
@@ -1005,9 +1106,15 @@ fn janitor_reaps_stale_runs_and_keeps_live_ones() {
     };
     let stale = mk("stale", Some("pid=999999\nstart=1\ntag=stale\n".into()));
     let no_owner = mk("no-owner", None);
-    let dead_fresh = mk("dead-fresh", Some("pid=999998\nstart=1\ntag=fresh\n".into()));
+    let dead_fresh = mk(
+        "dead-fresh",
+        Some("pid=999998\nstart=1\ntag=fresh\n".into()),
+    );
     let (pid, start) = own_pid_start();
-    let live = mk("live", Some(format!("pid={pid}\nstart={start}\ntag=live\n")));
+    let live = mk(
+        "live",
+        Some(format!("pid={pid}\nstart={start}\ntag=live\n")),
+    );
     for d in [stale.as_path(), no_owner.as_path(), live.as_path()] {
         age(&d.join("owner"), "2 hours ago");
         age(d, "2 hours ago");
@@ -1017,10 +1124,19 @@ fn janitor_reaps_stale_runs_and_keeps_live_ones() {
     // is kept in case its owner is still finishing.
     let out = launcher("janitor", &data).output().expect("janitor");
     assert!(out.status.success(), "janitor failed: {out:?}");
-    assert!(!stale.exists(), "janitor kept a stale run dir with no live owner");
-    assert!(!no_owner.exists(), "janitor kept an old run dir with no owner record");
+    assert!(
+        !stale.exists(),
+        "janitor kept a stale run dir with no live owner"
+    );
+    assert!(
+        !no_owner.exists(),
+        "janitor kept an old run dir with no owner record"
+    );
     assert!(live.exists(), "janitor reaped a LIVE run dir (pid {pid})");
-    assert!(dead_fresh.exists(), "janitor reaped a fresh run dir before the TTL");
+    assert!(
+        dead_fresh.exists(),
+        "janitor reaped a fresh run dir before the TTL"
+    );
 
     // Zero TTL: the SIGKILL case — the pid is gone, the age does not matter.
     let out = launcher("janitor", &data)
@@ -1028,8 +1144,14 @@ fn janitor_reaps_stale_runs_and_keeps_live_ones() {
         .output()
         .expect("janitor (ttl=0)");
     assert!(out.status.success(), "janitor failed: {out:?}");
-    assert!(!dead_fresh.exists(), "a zero-TTL sweep must reap a dead owner's run dir");
-    assert!(live.exists(), "a zero-TTL sweep must still keep a live run dir");
+    assert!(
+        !dead_fresh.exists(),
+        "a zero-TTL sweep must reap a dead owner's run dir"
+    );
+    assert!(
+        live.exists(),
+        "a zero-TTL sweep must still keep a live run dir"
+    );
 
     let _ = std::fs::remove_dir_all(&scratch);
 }
@@ -1044,7 +1166,14 @@ fn r1_watchdog_reports_host_memory_limit_and_leaves_no_orphans() {
     let Some(()) = require_art() else { return };
     let dex = repo_root().join("fixtures/build/dexprogs/01_hello/classes.dex");
     if !dex.is_file() {
-        eprintln!("SKIP watchdog test: no {} (build the dex corpus)", dex.display());
+        acos_test_support::require_prereq(
+            false,
+            "watchdog test",
+            &format!(
+                "no {} — build the dex corpus (tools/build-fixtures.sh)",
+                dex.display()
+            ),
+        );
         return;
     }
     let scratch = scratch("watchdog");
@@ -1076,17 +1205,26 @@ fn r1_watchdog_reports_host_memory_limit_and_leaves_no_orphans() {
 
     let stderr = String::from_utf8_lossy(&out.stderr).to_string();
     let stdout = String::from_utf8_lossy(&out.stdout).to_string();
-    assert!(!out.status.success(), "a 1 MiB ceiling must not end in success (rc={:?})", out.status.code());
+    assert!(
+        !out.status.success(),
+        "a 1 MiB ceiling must not end in success (rc={:?})",
+        out.status.code()
+    );
     // The structured result is the contract: a kill that is not *reported* is
     // the incident again (a silent OOM victim).
-    let json_start = stdout.find('{').unwrap_or_else(|| panic!("no JSON on stdout: {stdout}"));
+    let json_start = stdout
+        .find('{')
+        .unwrap_or_else(|| panic!("no JSON on stdout: {stdout}"));
     let json: serde_json::Value =
         serde_json::from_str(&stdout[json_start..]).expect("run --json emits valid JSON");
     assert_eq!(json["outcome"], "unsupported", "json={json}");
     assert_eq!(json["code"], "HOST_MEMORY_LIMIT", "json={json}");
     let diags = json["diagnostics"].to_string();
     assert!(diags.contains("HOST_MEMORY_LIMIT"), "diagnostics={diags}");
-    assert!(diags.contains("ACOS_ART_RSS_MAX"), "the trip must name its knob: {diags}");
+    assert!(
+        diags.contains("ACOS_ART_RSS_MAX"),
+        "the trip must name its knob: {diags}"
+    );
     assert!(
         stderr.contains("HOST_MEMORY_LIMIT"),
         "the watchdog must say so on stderr too: {stderr}"
@@ -1168,7 +1306,10 @@ fn log_spam_keeps_the_launcher_peak_rss_under_256_mib() {
         }
         if Instant::now() >= deadline {
             let tail = std::fs::read_to_string(scratch.join("session.log")).unwrap_or_default();
-            panic!("no logd sink under {} within 60 s:\n{tail}", data.join("runs").display());
+            panic!(
+                "no logd sink under {} within 60 s:\n{tail}",
+                data.join("runs").display()
+            );
         }
         std::thread::sleep(Duration::from_millis(25));
     }
@@ -1198,7 +1339,9 @@ fn log_spam_keeps_the_launcher_peak_rss_under_256_mib() {
     let frame = log_frame(900);
     let target: u64 = 300 * 1024 * 1024;
     let sock_dg = UnixDatagram::unbound().expect("unbound datagram socket");
-    sock_dg.set_nonblocking(true).expect("non-blocking logdw writer");
+    sock_dg
+        .set_nonblocking(true)
+        .expect("non-blocking logdw writer");
     sock_dg.connect(&logdw).expect("connect logdw");
     let mut sent: u64 = 0;
     let mut spins: u64 = 0;
@@ -1296,7 +1439,11 @@ fn leak_scan_is_scoped_to_this_tests_own_processes() {
         .arg(&fake)
         .status()
         .expect("cp /bin/sleep");
-    assert!(st.success(), "could not stage the fake guest at {}", fake.display());
+    assert!(
+        st.success(),
+        "could not stage the fake guest at {}",
+        fake.display()
+    );
 
     let before = snapshot();
     let mut scope = Scope::new();
@@ -1348,13 +1495,18 @@ fn leak_scan_is_scoped_to_this_tests_own_processes() {
         pids
     );
     let foreign_named = scope.foreign(&before).iter().any(|p| p.pid == foreign.id());
-    assert!(foreign_named, "the foreign guest must be *reported* (never killed):{foreign_desc}");
+    assert!(
+        foreign_named,
+        "the foreign guest must be *reported* (never killed):{foreign_desc}"
+    );
 
     // The survivor check still fires for our own leak...
     let survivors = scope.wait_until_clean(Duration::from_secs(1));
     assert_eq!(
         survivors.iter().map(|p| p.pid).collect::<BTreeSet<_>>(),
-        [own_marker.id(), own_root.id()].into_iter().collect::<BTreeSet<_>>(),
+        [own_marker.id(), own_root.id()]
+            .into_iter()
+            .collect::<BTreeSet<_>>(),
         "the clean-check did not report exactly this run's two stand-in guests"
     );
 
@@ -1377,7 +1529,10 @@ fn leak_scan_is_scoped_to_this_tests_own_processes() {
         }
         std::thread::sleep(Duration::from_millis(20));
     }
-    assert!(own_gone, "reap did not clear this test's own (stand-in) leaked guests");
+    assert!(
+        own_gone,
+        "reap did not clear this test's own (stand-in) leaked guests"
+    );
     assert!(
         alive(&mut foreign),
         "reap killed another run's guest (pid {}) — the W52 r2 sweep is back",

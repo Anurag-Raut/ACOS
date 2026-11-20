@@ -256,7 +256,10 @@ pub fn install_self_data_limit(rss_max: u64) -> u64 {
     if limit == 0 {
         return 0;
     }
-    let rl = libc::rlimit { rlim_cur: limit as libc::rlim_t, rlim_max: libc::RLIM_INFINITY };
+    let rl = libc::rlimit {
+        rlim_cur: limit as libc::rlim_t,
+        rlim_max: libc::RLIM_INFINITY,
+    };
     let rc = unsafe { libc::setrlimit(libc::RLIMIT_DATA, &rl) };
     if rc == 0 {
         limit
@@ -276,14 +279,20 @@ pub fn install_self_data_limit(rss_max: u64) -> u64 {
 /// inherited and could not be raised here).
 pub fn relax_child_limits() {
     for resource in [libc::RLIMIT_DATA, libc::RLIMIT_AS] {
-        let mut cur = libc::rlimit { rlim_cur: 0, rlim_max: 0 };
+        let mut cur = libc::rlimit {
+            rlim_cur: 0,
+            rlim_max: 0,
+        };
         if unsafe { libc::getrlimit(resource, &mut cur) } != 0 {
             continue;
         }
         if cur.rlim_cur == cur.rlim_max {
             continue; // nothing to raise (already unlimited or hard-capped)
         }
-        let unlimited = libc::rlimit { rlim_cur: cur.rlim_max, rlim_max: cur.rlim_max };
+        let unlimited = libc::rlimit {
+            rlim_cur: cur.rlim_max,
+            rlim_max: cur.rlim_max,
+        };
         unsafe {
             libc::setrlimit(resource, &unlimited);
         }
@@ -307,7 +316,10 @@ pub const INIT_RLIMIT_NICE: libc::rlim_t = 40;
 /// must never be fatal. A host that starts the engine with the stock limit
 /// gets stock behaviour with no further change.
 pub fn apply_init_rlimit_nice() {
-    let lim = libc::rlimit { rlim_cur: INIT_RLIMIT_NICE, rlim_max: INIT_RLIMIT_NICE };
+    let lim = libc::rlimit {
+        rlim_cur: INIT_RLIMIT_NICE,
+        rlim_max: INIT_RLIMIT_NICE,
+    };
     unsafe {
         libc::setrlimit(libc::RLIMIT_NICE, &lim);
     }
@@ -319,7 +331,10 @@ pub fn apply_init_rlimit_nice() {
 /// letting the guest fail with a bare `SecurityException`.
 #[must_use]
 pub fn guest_priority_supported() -> bool {
-    let mut cur = libc::rlimit { rlim_cur: 0, rlim_max: 0 };
+    let mut cur = libc::rlimit {
+        rlim_cur: 0,
+        rlim_max: 0,
+    };
     if unsafe { libc::getrlimit(libc::RLIMIT_NICE, &mut cur) } != 0 {
         return false;
     }
@@ -334,7 +349,10 @@ pub fn note_guest_priority_gap(route: &str) {
     if guest_priority_supported() || NOTED.swap(true, Ordering::Relaxed) {
         return;
     }
-    let mut cur = libc::rlimit { rlim_cur: 0, rlim_max: 0 };
+    let mut cur = libc::rlimit {
+        rlim_cur: 0,
+        rlim_max: 0,
+    };
     unsafe {
         libc::getrlimit(libc::RLIMIT_NICE, &mut cur);
     }
@@ -393,7 +411,7 @@ mod tests {
         // is exercised by the integration spammer test (never on our own group).
         let w = MemoryWatchdog::start(1).unwrap();
         w.arm_process_group(0); // pid 0 would be our own group: must not be used here
-        // Re-arm to a harmless, non-existent pid before the sampler fires.
+                                // Re-arm to a harmless, non-existent pid before the sampler fires.
         w.arm_process_group(0x7fff_fffe);
         let deadline = std::time::Instant::now() + Duration::from_secs(5);
         while w.trip().is_none() && std::time::Instant::now() < deadline {
@@ -406,7 +424,10 @@ mod tests {
     fn data_limit_defaults_above_the_rss_ceiling() {
         let base = 2 * 1024 * 1024 * 1024u64;
         let limit = data_limit_from_env(base);
-        assert!(limit > base, "the rlimit backstop must leave room for the watchdog");
+        assert!(
+            limit > base,
+            "the rlimit backstop must leave room for the watchdog"
+        );
         assert_eq!(data_limit_from_env(0), 0);
     }
 
@@ -424,7 +445,10 @@ mod tests {
         // refuses the raise and the guest keeps the host limit; the gate below
         // must report that instead of claiming stock support.
         apply_init_rlimit_nice();
-        let mut cur = libc::rlimit { rlim_cur: 0, rlim_max: 0 };
+        let mut cur = libc::rlimit {
+            rlim_cur: 0,
+            rlim_max: 0,
+        };
         let rc = unsafe { libc::getrlimit(libc::RLIMIT_NICE, &mut cur) };
         assert_eq!(rc, 0);
         assert_eq!(guest_priority_supported(), cur.rlim_max >= 24);

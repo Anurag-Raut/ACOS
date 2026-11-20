@@ -1,0 +1,11 @@
+   Compiling acos-vm v0.3.0 (/home/Qui/.t3/worktrees/acos/t3-800392d7-bb87b01f3dcc4499/crates/acos-vm)
+    Finished `test` profile [unoptimized] target(s) in 6.34s
+     Running tests/snapshot.rs (.cache/hyg4-target/debug/deps/snapshot-7babfbd8ca068715)
+
+running 3 tests
+test snapshot_restore_real_regex ... ok
+test snapshot_restore_real_all_dexprogs ... ok
+test snapshot_restore_real_dexprogs_gc_stress ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 13 filtered out; finished in 22.20s
+

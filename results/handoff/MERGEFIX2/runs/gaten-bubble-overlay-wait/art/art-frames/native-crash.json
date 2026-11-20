@@ -1,0 +1,33 @@
+{
+  "cmdline": "<unset>",
+  "code": -6,
+  "code_name": "SI_TKILL",
+  "fault_addr": "0x0",
+  "fault_pc": "000013f4",
+  "frames": [
+    {
+      "index": 0,
+      "map": "/data/shim/libartshim.so",
+      "offset": null,
+      "pc": "000013f4",
+      "symbol": "BuildId: df7546c6a520b774f4f21cd5f318e57232258d7d"
+    }
+  ],
+  "shim": {
+    "code": -6,
+    "fault_addr": "0x0",
+    "pid": 2,
+    "signal": 6,
+    "source": "acos-shim",
+    "thread": "RenderThread",
+    "tid": 59
+  },
+  "signal": 6,
+  "signal_name": "SIGABRT",
+  "summary": "SIGABRT (6) fault_addr=0x0 in thread 59 \"RenderThread\": /data/shim/libartshim.so (BuildId: df7546c6a520b774f4f21cd5f318e57232258d7d)",
+  "thread": {
+    "name": "RenderThread",
+    "tid": 59
+  },
+  "unmapped_frames": 0
+}

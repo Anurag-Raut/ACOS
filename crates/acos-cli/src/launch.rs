@@ -103,6 +103,25 @@ pub struct LaunchArgs {
     #[arg(long, value_name = "carve|report")]
     pub insets: Option<String>,
 
+    /// MPROC1: install this APK into the session beside the launched one
+    /// (repeatable). Each extra package gets its own uid and its own guest
+    /// paths, and is reachable through `PackageManager` /
+    /// `createPackageContext` — the way a second app exists on the device.
+    ///
+    /// ART only: the frozen Rust VM loads exactly one APK and refuses rather
+    /// than pretending a second package is installed.
+    #[arg(long = "extra-apk", value_name = "APK")]
+    pub extra_apk: Vec<PathBuf>,
+    /// ADR-0029 item 4: attach a service module for this session.
+    ///
+    /// Spelling `id[:profile][,config]` (`feedback.vibrator:stub`,
+    /// `feedback.vibrator:scripted,{"x":1}`); repeatable, applied in order,
+    /// `core` is always attached first. Requires a session host, so it needs
+    /// `--keep` or `--engine art` (the in-process Rust VM has no service table
+    /// to attach to and refuses instead of pretending).
+    #[arg(long = "service", value_name = "id[:profile][,config]")]
+    pub service: Vec<String>,
+
     /// P12: framework animation scales for an ART session (`on`/`off`).
     ///
     /// `off` sets Android's three animation scales to 0 for functional checks
@@ -111,6 +130,30 @@ pub struct LaunchArgs {
     /// animators, so it refuses `off` rather than pretending.
     #[arg(long, value_name = "on|off")]
     pub animations: Option<String>,
+
+    /// LAUNCHEXTRAS: the Intent action the launched Activity must receive
+    /// (`Intent.setAction`). ART only: the real host-built `LaunchActivityItem`
+    /// Intent carries it, so `getIntent().getAction()` is this value.
+    #[arg(long = "intent-action", value_name = "ACTION")]
+    pub intent_action: Option<String>,
+
+    /// LAUNCHEXTRAS: the Intent data URI (`Intent.setData(Uri.parse(...))`).
+    /// ART only, same host-built Intent.
+    #[arg(long = "data", value_name = "URI")]
+    pub data: Option<String>,
+
+    /// LAUNCHEXTRAS: one typed extra, `KEY=VALUE` (repeatable). `VALUE` is a
+    /// JSON scalar/array (`42`, `true`, `0.5`, `["a","b"]`) or the explicit
+    /// `{"type":"long","value":7}` form; a bare word is a string. ART only.
+    #[arg(long = "extra", value_name = "KEY=VALUE")]
+    pub extra: Vec<String>,
+
+    /// MPROC7: how long a lazily spawned secondary ART process may sit idle
+    /// (no started activity, no started/bound service, no visible window)
+    /// before the launcher kills it; the next intent respawns it. `0` disables
+    /// the idle kill. Launch-time only, ART sessions only.
+    #[arg(long, value_name = "SECS")]
+    pub idle_kill_seconds: Option<u64>,
 }
 
 /// Build the display override for `acos launch` from its flags.
@@ -189,12 +232,79 @@ pub fn run(args: LaunchArgs) -> ExitCode {
     if art && crate::native_launch::native_requested(args.native) {
         return reject_engine_conflict(&request_id, &args);
     }
+    // MPROC1: `--extra-apk` installs packages into an ART session. The Rust VM
+    // runs one APK and has no package manager, so it refuses instead of
+    // accepting the flag and installing nothing.
+    if !args.extra_apk.is_empty() && !art {
+        eprintln!(
+            "launch: --extra-apk installs packages into an ART session; add \n\
+             `--engine art` (the Rust VM runs one APK and would silently install nothing)."
+        );
+        return ExitCode::FAILURE;
+    }
+    // LAUNCHEXTRAS: the Intent fields are a session-start property of the real
+    // ART launch (the host builds the LaunchActivityItem Intent). The in-process
+    // Rust VM has no such transaction, so it refuses instead of accepting the
+    // flags and launching with its own captured Intent.
+    if (!args.extra.is_empty() || args.intent_action.is_some() || args.data.is_some())
+        && !(args.keep || art)
+    {
+        eprintln!(
+            "launch: --intent-action/--data/--extra are carried by the ART session-start \
+             Intent; add `--engine art` (the in-process Rust VM would launch with its own \
+             Intent and silently drop them)."
+        );
+        return ExitCode::FAILURE;
+    }
     // A Flutter APK can only be driven by the confined child, so it always
     // routes through the daemon even without `--keep`: the session must outlive
     // this process for `acos observe`/`tap` to address it. `--engine art` also
     // needs the daemon: the ART guest is its own process, not this one.
     let flutter = !art && (args.flutter || detect_flutter(&args.apk));
     let rn = !art && (args.rn || detect_react_native(&args.apk));
+    // ADR-0029 item 4: validate every `--service` spec before a session exists,
+    // and refuse when this route has no service table to attach to.
+    let mut services = Vec::new();
+    for spec in &args.service {
+        match acos_services::module::ModuleSpec::parse(spec) {
+            Ok(parsed) => services.push(parsed.to_json()),
+            Err(error) => {
+                let envelope = Envelope::failure(
+                    request_id,
+                    ProtocolBackend::AcosNative,
+                    Fidelity::NativeRuntime,
+                    ProtocolError::new(ErrorCode::InvalidArgument, error.to_string())
+                        .with_hint(
+                            "Use `--service id[:profile][,config]`, e.g.                              `--service feedback.vibrator:stub`.",
+                        )
+                        .with_details(json!({"field": "service", "value": spec})),
+                    Metrics::wall_ms(0),
+                );
+                return finish_daemon(&envelope, args.json);
+            }
+        }
+    }
+    if !services.is_empty() && !(args.keep || flutter || rn || art) {
+        let envelope = Envelope::failure(
+            request_id,
+            ProtocolBackend::AcosNative,
+            Fidelity::NativeRuntime,
+            ProtocolError::new(
+                ErrorCode::UnsupportedBackend,
+                "--service requires a session host",
+            )
+            .with_hint(
+                "The bare `acos launch` runs the in-process Rust VM, which has no service table.                  Add `--engine art` (or `--keep`) so the module is attached to a real session;                  the reply then reports the attached set and the verdict names its fidelity.",
+            )
+            .with_details(json!({
+                "field": "service",
+                "capability": "service.modules",
+                "requested": services,
+            })),
+            Metrics::wall_ms(0),
+        );
+        return finish_daemon(&envelope, args.json);
+    }
     if let Some(value) = args.animations.as_deref() {
         if !value.eq_ignore_ascii_case("on") && !value.eq_ignore_ascii_case("off") {
             eprintln!("launch: animations must be \"on\" or \"off\" (got {value:?})");
@@ -220,7 +330,7 @@ pub fn run(args: LaunchArgs) -> ExitCode {
                 return reject_native_gate(&request_id, &args, &err);
             }
         }
-        return run_keep(&args, &request_id, flutter, rn, engine);
+        return run_keep(&args, &request_id, flutter, rn, engine, &services);
     }
     if crate::native_launch::native_requested(args.native) {
         if let Err(err) = gate_native(&args.apk) {
@@ -266,6 +376,7 @@ fn run_keep(
     flutter: bool,
     rn: bool,
     engine: Option<Engine>,
+    services: &[serde_json::Value],
 ) -> ExitCode {
     let display = display_override_from_args(args);
     let native = crate::native_launch::native_requested(args.native) || flutter || rn;
@@ -287,9 +398,53 @@ fn run_keep(
         "display": display.map(|o| o.spec()),
         "insets": args.insets.clone(),
         "animations": args.animations.clone(),
+        "extra_apks": args
+            .extra_apk
+            .iter()
+            .map(|path| json!(path.display().to_string()))
+            .collect::<Vec<_>>(),
         "timeout_ms": args.timeout.saturating_mul(1000),
+        "services": services,
         "label": args.label.clone(),
     });
+    // Optional wire fields are *omitted*, never sent as JSON null: the daemon's
+    // argument validation treats a present-but-null `idle_kill_seconds` as an
+    // invalid integer (`null` is not a JSON `None` on the wire), so sending the
+    // key unconditionally made every `acos launch --keep` fail with
+    // INVALID_ARGUMENT (GL1 kept-session tests, 2026-11-17). One rule: a field
+    // whose Rust value is `None` is absent from the request.
+    if let Some(seconds) = args.idle_kill_seconds {
+        daemon_args["idle_kill_seconds"] = json!(seconds);
+    }
+    // LAUNCHEXTRAS: the same three fields the MCP tool takes, and only the ones
+    // the caller set (like every other optional wire field above).
+    if let Some(action) = args.intent_action.as_deref() {
+        daemon_args["intent_action"] = json!(action);
+    }
+    if let Some(data) = args.data.as_deref() {
+        daemon_args["data"] = json!(data);
+    }
+    if !args.extra.is_empty() {
+        let mut extras = serde_json::Map::new();
+        for raw in &args.extra {
+            match crate::engine::serve::parse_extra_argument(raw) {
+                Ok((key, value)) => match serde_json::to_value(value) {
+                    Ok(value) => {
+                        extras.insert(key, value);
+                    }
+                    Err(error) => {
+                        eprintln!("launch: --extra {key}: {error}");
+                        return ExitCode::FAILURE;
+                    }
+                },
+                Err(error) => {
+                    eprintln!("launch: {error}");
+                    return ExitCode::FAILURE;
+                }
+            }
+        }
+        daemon_args["extras"] = serde_json::Value::Object(extras);
+    }
     // The engine is forwarded verbatim: the daemon must answer with the engine
     // that actually ran and must never fall back to another one.
     if let Some(engine) = engine {

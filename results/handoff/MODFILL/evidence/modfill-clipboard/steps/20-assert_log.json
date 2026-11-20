@@ -1,0 +1,59 @@
+{
+  "assertions": [
+    {
+      "actual": {
+        "matched_lines": 9,
+        "sample": [
+          "clipprobe: QUERY hasPrimaryClip=false",
+          "clipprobe: LISTENER registered",
+          "clipprobe: COPY ok text=proof-one hasPrimaryClip=true",
+          "clipprobe: CLIPCHANGED n=1 text=proof-one",
+          "clipprobe: PASTED items=1 text=proof-one"
+        ]
+      },
+      "expected": {
+        "min_matches": 1,
+        "ordered": true,
+        "patterns": [
+          "QUERY hasPrimaryClip=false",
+          "LISTENER registered",
+          "COPY ok text=proof-one hasPrimaryClip=true",
+          "CLIPCHANGED n=1 text=proof-one",
+          "PASTED items=1 text=proof-one",
+          "CLIPCHANGED n=2 text=proof-two",
+          "DESCRIBE label=acos items=1 mimes=1",
+          "CLEARED hasPrimaryClip=false",
+          "CLIPCHANGED n=3 text=none"
+        ],
+        "since_previous_step": false,
+        "tag": "clipprobe"
+      },
+      "kind": "log",
+      "matched_node_ids": [],
+      "passed": true
+    }
+  ],
+  "certification": "certified-with-limits",
+  "certification_limits": {
+    "doc": "docs/SANDBOX_CERTIFICATION.md",
+    "section": "§8.7"
+  },
+  "duration_ms": 0,
+  "evidence": [
+    {
+      "kind": "log",
+      "path": "logs/logcat.txt"
+    },
+    {
+      "kind": "step",
+      "path": "steps/20-assert_log.json"
+    }
+  ],
+  "index": 20,
+  "provenance": {
+    "logs": "guest-asserted"
+  },
+  "status": "pass",
+  "step": "assert_log",
+  "trust": "trusted"
+}

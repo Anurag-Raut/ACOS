@@ -1,0 +1,10 @@
+{
+  "mode": "referenced",
+  "decision": "keep-all",
+  "reason": "status `fail` is not a pass: a non-pass run keeps all of its artifacts",
+  "kept_files": 57,
+  "kept_bytes": 14107754,
+  "pruned_files": 0,
+  "pruned_bytes": 0,
+  "pruned": []
+}

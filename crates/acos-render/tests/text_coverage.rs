@@ -294,8 +294,13 @@ fn text_coverage_matches_device_reference() {
         return;
     }
     let reference_png = reference_path();
-    if !reference_png.exists() {
-        eprintln!("SKIP: no reference screenshot at {}", reference_png.display());
+    if acos_test_support::require_prereq(
+        reference_png.exists(),
+        "text_coverage_matches_device_reference",
+        &format!("no reference screenshot at {}", reference_png.display()),
+    )
+    .is_none()
+    {
         return;
     }
 
@@ -303,8 +308,7 @@ fn text_coverage_matches_device_reference() {
     let scene_path = workspace_path("tests/scenes/hello-views.json");
     let scene = Scene::load(&scene_path).expect("hello-views scene");
     let mut ctx = acos_render::RenderContext::new();
-    if !ctx.has_fonts() {
-        eprintln!("SKIP: no fonts available (set ACOS_FONT_DIR)");
+    if acos_test_support::require_prereq(ctx.has_fonts(), "text_coverage_matches_device_reference", "no fonts available (set ACOS_FONT_DIR)").is_none() {
         return;
     }
     assert!(

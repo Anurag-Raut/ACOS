@@ -22,7 +22,7 @@ use std::path::{Path, PathBuf};
 
 use acos_apk::{AbiGate, Apk};
 
-use crate::error::{ServiceError, Result};
+use crate::error::{Result, ServiceError};
 
 /// The ABI this host can execute, re-exported from [`acos_apk::HOST_ABI`] so a
 /// caller (the launcher) can name it in a refusal's `details` without taking a

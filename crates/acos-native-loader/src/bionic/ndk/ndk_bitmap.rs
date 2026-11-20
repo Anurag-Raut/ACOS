@@ -62,7 +62,12 @@ pub unsafe extern "C" fn androidbitmap_getinfo(
 ) -> c_int {
     match with_host(|h| h.bitmap_info(env as usize, bitmap as usize)) {
         Ok(i) => fill(info, &i),
-        Err(e) => host_failed(LIB, "AndroidBitmap_getInfo", e, ANDROID_BITMAP_RESULT_BAD_PARAMETER),
+        Err(e) => host_failed(
+            LIB,
+            "AndroidBitmap_getInfo",
+            e,
+            ANDROID_BITMAP_RESULT_BAD_PARAMETER,
+        ),
     }
 }
 
@@ -114,7 +119,10 @@ pub unsafe extern "C" fn androidbitmap_unlockpixels(
 /// Table entries for `libjnigraphics`.
 pub fn table() -> Vec<(&'static str, *const c_void)> {
     vec![
-        ("AndroidBitmap_getInfo", androidbitmap_getinfo as *const c_void),
+        (
+            "AndroidBitmap_getInfo",
+            androidbitmap_getinfo as *const c_void,
+        ),
         (
             "AndroidBitmap_lockPixels",
             androidbitmap_lockpixels as *const c_void,

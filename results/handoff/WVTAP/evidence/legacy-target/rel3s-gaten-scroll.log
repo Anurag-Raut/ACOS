@@ -1,0 +1,8 @@
+verify: timeout (ok=false, backend=acos-native, fidelity=art-reference)
+  engine: art (mode: live)
+  services: core:real attached; off: accessibility, system.permissions, system.notifications, sensors, feedback.vibrator, location, net.telephony, hw.bluetooth, hw.biometric, network, webview, hw.usb, system.dropbox, hw.nfc, system.wallpaper, system.print, system.search, system.usage, system.dpm, system.role, geo.country
+  provenance: scenario /home/Qui/Projects/acos/.cache/wt-wvtap/scenarios/rel3s-gaten-scroll.yaml (sha 90e4b470b4ba), apk /home/Qui/Projects/acos/.cache/gaten/gaten-dev-f344272-x86_64-release-unsigned.apk (sha e04c7ffcf012), engine art, fidelity art-reference
+  error: TIMEOUT: tap: strict settle timed out (newer-store); the step is a non-pass because the screen was still changing when the deadline elapsed
+  artifacts: results/handoff/WVTAP/evidence/legacy-target/rel3s-gaten-scroll
+  steps: 2
+verify: TIMEOUT (infra_timeout): tap: strict settle timed out (newer-store); the step is a non-pass because the screen was still changing when the deadline elapsed [class=infra_timeout, retryable=true]

@@ -81,12 +81,10 @@ pub fn take_deliveries() -> Result<Vec<BinderDelivery>, String> {
             ) {
                 continue;
             }
-            let data = pc.callback.to_parcel().map_err(|e| {
-                format!(
-                    "wms_java: callback {} encode: {e}",
-                    pc.callback.method()
-                )
-            })?;
+            let data = pc
+                .callback
+                .to_parcel()
+                .map_err(|e| format!("wms_java: callback {} encode: {e}", pc.callback.method()))?;
             out.push(BinderDelivery {
                 target: pc.window,
                 code: pc.callback.code(),
@@ -268,7 +266,11 @@ fn present<T: ParcelCodec>(p: &mut Parcel, v: Option<&T>) -> WResult<()> {
 /// keeps the dispatcher end.
 fn encode_input_channel(add: &acos_wm::wms::AddWindowResult, p: &mut Parcel) -> WResult<()> {
     let handle = add.input_channel.channel_handle;
-    let fd = with_wms(|s| s.wm.channels.get(handle).and_then(|c| c.duplicate_client_fd()));
+    let fd = with_wms(|s| {
+        s.wm.channels
+            .get(handle)
+            .and_then(|c| c.duplicate_client_fd())
+    });
     let Some(fd) = fd else {
         // No fd-backed channel (unit-test in-memory pair): write an absent
         // channel rather than a bogus descriptor.
@@ -276,7 +278,8 @@ fn encode_input_channel(add: &acos_wm::wms::AddWindowResult, p: &mut Parcel) -> 
         return Ok(());
     };
     p.write_int32(1);
-    p.write_string16_opt(Some(&add.input_channel.name)).map_err(perr)?;
+    p.write_string16_opt(Some(&add.input_channel.name))
+        .map_err(perr)?;
     p.write_file_descriptor(fd.as_fd()).map_err(perr)?;
     p.write_strong_binder_opt(add.input_channel.token);
     Ok(())
@@ -444,10 +447,8 @@ fn handle_session(
             // leave the client's out-params stale).
             let params = match args.params.clone() {
                 Some(p) => p,
-                None => with_wms(|s| {
-                    s.wm.windows.get(&window.0).map(|rec| rec.params.clone())
-                })
-                .ok_or_else(|| err("relayout: missing LayoutParams and unknown window"))?,
+                None => with_wms(|s| s.wm.windows.get(&window.0).map(|rec| rec.params.clone()))
+                    .ok_or_else(|| err("relayout: missing LayoutParams and unknown window"))?,
             };
             // The relayout argument order is `requestedWidth, requestedHeight,
             // viewVisibility, flags, seq, lastSyncSeqId`; the sync seq is the
@@ -642,11 +643,9 @@ impl WmSurfaceBackend {
         if let Some(layer) = self.layers.get(&handle) {
             return *layer;
         }
-        let layer = self.compositor.create_layer(
-            None,
-            format!("frame-handoff-{handle}"),
-            handle as i64,
-        );
+        let layer =
+            self.compositor
+                .create_layer(None, format!("frame-handoff-{handle}"), handle as i64);
         self.layers.insert(handle, layer);
         layer
     }
@@ -718,21 +717,27 @@ impl SurfaceBackend for WmSurfaceBackend {
         for op in ops {
             let txn = match op {
                 SurfaceOp::Alpha { layer, alpha } => {
-                    let Some(l) = self.layer(*layer) else { continue };
+                    let Some(l) = self.layer(*layer) else {
+                        continue;
+                    };
                     Transaction::SetAlpha {
                         layer: l,
                         alpha: *alpha,
                     }
                 }
                 SurfaceOp::Position { layer, x, y } => {
-                    let Some(l) = self.layer(*layer) else { continue };
+                    let Some(l) = self.layer(*layer) else {
+                        continue;
+                    };
                     Transaction::SetPosition {
                         layer: l,
                         position: PointI::new(*x as i32, *y as i32),
                     }
                 }
                 SurfaceOp::Layer { layer, z } => {
-                    let Some(l) = self.layer(*layer) else { continue };
+                    let Some(l) = self.layer(*layer) else {
+                        continue;
+                    };
                     Transaction::SetLayer {
                         layer: l,
                         z: *z as i64,
@@ -806,9 +811,7 @@ pub const fn relayout_surface_changed() -> i32 {
 /// The reference display with the process's `ACOS_WM_INSETS` model.
 #[must_use]
 pub fn reference_display() -> DisplaySpec {
-    DisplaySpec::reference_with_insets(InsetsMode::from_env(
-        acos_wm::display::DEFAULT_INSETS_MODE,
-    ))
+    DisplaySpec::reference_with_insets(InsetsMode::from_env(acos_wm::display::DEFAULT_INSETS_MODE))
 }
 
 /// The reference `ClientWindowFrames` for the hello-views window.

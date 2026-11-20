@@ -90,7 +90,11 @@ fn refuses_to_run_when_no_cgroup_can_be_created() {
     let _g = guard();
     let dir = scratch("no-cgroup");
     let fake = dir.join("systemd-run");
-    std::fs::write(&fake, "#!/bin/sh\necho 'Failed to connect to bus' >&2\nexit 1\n").unwrap();
+    std::fs::write(
+        &fake,
+        "#!/bin/sh\necho 'Failed to connect to bus' >&2\nexit 1\n",
+    )
+    .unwrap();
     std::fs::set_permissions(&fake, std::os::unix::fs::PermissionsExt::from_mode(0o755)).unwrap();
     // The probe from this directory, the stamp from this (empty) data root.
     set_capability_test_seam(Some(&dir), Some(&dir));
@@ -167,10 +171,13 @@ fn parse_snapshot(path: &Path) -> (u64, u64) {
 fn allocator_bomb_is_oom_killed_inside_the_scope_and_the_host_is_untouched() {
     let _g = guard();
     let dir = scratch("alloc-bomb");
-    let limits = MemoryLimits { mem_bytes: 128 * 1024 * 1024, pids_max: 64 };
+    let limits = MemoryLimits {
+        mem_bytes: 128 * 1024 * 1024,
+        pids_max: 64,
+    };
     let info = dir.join("cgroup-info");
-    let mut cg = RunCgroup::prepare(limits, &info)
-        .expect("this host must provide a user scope (see S5.md)");
+    let mut cg =
+        RunCgroup::prepare(limits, &info).expect("this host must provide a user scope (see S5.md)");
     let observer = write_bomb_observer(&dir);
     let mut sh = Command::new("/bin/sh");
     sh.arg(&observer).arg(&info).args([
@@ -181,10 +188,14 @@ fn allocator_bomb_is_oom_killed_inside_the_scope_and_the_host_is_untouched() {
     let mut wrapped = cg.wrap(&sh).unwrap();
     let host_before = host_available_mb();
     let mut child = wrapped.spawn().expect("spawn inside the scope");
-    cg.confirm(Duration::from_secs(10)).expect("cgroup proven before the bomb");
+    cg.confirm(Duration::from_secs(10))
+        .expect("cgroup proven before the bomb");
     let cg_path = cg.path().to_path_buf();
     eprintln!("alloc bomb: cgroup={}", cg_path.display());
-    assert!(processes_in(&cg_path).len() >= 1, "the bomb runs in the scope");
+    assert!(
+        processes_in(&cg_path).len() >= 1,
+        "the bomb runs in the scope"
+    );
 
     let deadline = Instant::now() + Duration::from_secs(60);
     let status = loop {
@@ -276,7 +287,10 @@ fn snapshot_parser_reads_only_real_counters() {
 fn fork_bomb_is_bounded_by_pids_max() {
     let _g = guard();
     let dir = scratch("fork-bomb");
-    let limits = MemoryLimits { mem_bytes: 256 * 1024 * 1024, pids_max: 24 };
+    let limits = MemoryLimits {
+        mem_bytes: 256 * 1024 * 1024,
+        pids_max: 24,
+    };
     let mut cg = RunCgroup::prepare(limits, dir.join("cgroup-info")).expect("user scope");
     let mut sh = Command::new("/bin/sh");
     // Classic sh fork bomb: each iteration doubles the number of sleepers.
@@ -302,7 +316,10 @@ fn fork_bomb_is_bounded_by_pids_max() {
         "fork bomb reached {max_seen} processes with pids.max={}",
         limits.pids_max
     );
-    assert!(max_seen >= 2, "the bomb did fork at least once (saw {max_seen})");
+    assert!(
+        max_seen >= 2,
+        "the bomb did fork at least once (saw {max_seen})"
+    );
     let deadline = Instant::now() + Duration::from_secs(5);
     while !processes_in(&cg_path).is_empty() && Instant::now() < deadline {
         std::thread::sleep(Duration::from_millis(20));
@@ -362,13 +379,21 @@ fn forbidden_syscall_is_denied_and_logged_in_the_guest() {
     let _g = guard();
     let dir = scratch("seccomp-probe");
     let Some(probe) = build_probe(&dir) else {
-        eprintln!("SKIP: no static-capable host cc for the probe");
+        acos_test_support::require_prereq(
+            false,
+            "seccomp probe test",
+            "no static-capable host cc for the probe (a musl/static gcc is needed)",
+        );
         return;
     };
     let root = match ArtRoot::resolve(None, Some(dir.join("data"))) {
         Ok(r) => r,
         Err(e) => {
-            eprintln!("SKIP seccomp probe: no ART sysroot ({e})");
+            acos_test_support::require_prereq(
+                false,
+                "seccomp probe test",
+                &format!("no ART sysroot ({e}) — run tools/art-sysroot.sh"),
+            );
             return;
         }
     };
@@ -405,7 +430,11 @@ fn forbidden_syscall_is_denied_and_logged_in_the_guest() {
         stdout.contains("DENIED ptrace errno=EACCES"),
         "ptrace must be denied with EACCES in the guest; stdout={stdout:?}"
     );
-    assert_eq!(output.status.code(), Some(0), "the probe itself must survive");
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "the probe itself must survive"
+    );
     assert!(
         log.contains("OK guard=active"),
         "the guard must prove it installed; log={log:?}"
@@ -424,15 +453,24 @@ fn default_memory_limit_is_two_gib() {
 fn scope_observer_is_the_payload_and_propagates_the_exit_status() {
     let _g = guard();
     let dir = scratch("scope-observer");
-    let limits = MemoryLimits { mem_bytes: 128 * 1024 * 1024, pids_max: 64 };
+    let limits = MemoryLimits {
+        mem_bytes: 128 * 1024 * 1024,
+        pids_max: 64,
+    };
     let info = dir.join("cgroup-info");
     let mut cg = RunCgroup::prepare(limits, &info).expect("user scope");
     let observer = write_bomb_observer(&dir);
     let mut sh = Command::new("/bin/sh");
-    sh.arg(&observer).arg(&info).args(["/bin/sh", "-c", "exit 7"]);
+    sh.arg(&observer)
+        .arg(&info)
+        .args(["/bin/sh", "-c", "exit 7"]);
     let mut wrapped = cg.wrap(&sh).unwrap();
     let status = wrapped.status().expect("run in the scope");
-    assert_eq!(status.code(), Some(7), "the payload's exit status is propagated");
+    assert_eq!(
+        status.code(),
+        Some(7),
+        "the payload's exit status is propagated"
+    );
     cg.sample();
     let (oom, peak) = parse_snapshot(&PathBuf::from(format!("{}.final", info.display())));
     assert_eq!(oom, 0, "a clean run records no OOM kill");

@@ -1,0 +1,99 @@
+{
+  "mode": "referenced",
+  "decision": "prune-unreferenced",
+  "reason": "passing run (mode `referenced`): declared evidence plus the first and last frame kept, intermediate frames and mirrored captures pruned",
+  "kept_files": 95,
+  "kept_bytes": 28394020,
+  "pruned_files": 22,
+  "pruned_bytes": 4271400,
+  "pruned": [
+    {
+      "path": "art-frames/live-frames/acos-c1-layer6-frame-409-g412-c3.png",
+      "bytes": 226943
+    },
+    {
+      "path": "art-frames/live-frames/acos-c1-layer6-frame-411-g414-c4.png",
+      "bytes": 172050
+    },
+    {
+      "path": "art-frames/live-frames/acos-c1-layer6-frame-413-g416-c5.png",
+      "bytes": 145442
+    },
+    {
+      "path": "art-frames/live-frames/acos-c1-layer6-frame-415-g418-c6.png",
+      "bytes": 183432
+    },
+    {
+      "path": "art-frames/live-frames/acos-c1-layer6-frame-423-g426-c7.png",
+      "bytes": 194369
+    },
+    {
+      "path": "art-frames/live-frames/acos-c1-layer6-frame-423-g426-c8.png",
+      "bytes": 194369
+    },
+    {
+      "path": "art-frames/live-frames/acos-c1-layer7-frame-107-g533-c14.png",
+      "bytes": 205481
+    },
+    {
+      "path": "art-frames/live-frames/acos-c1-layer7-frame-107-g533-c15.png",
+      "bytes": 205481
+    },
+    {
+      "path": "art-frames/live-frames/acos-c1-layer7-frame-107-g533-c16.png",
+      "bytes": 205481
+    },
+    {
+      "path": "art-frames/live-frames/acos-c1-layer7-frame-120-g546-c18.png",
+      "bytes": 205425
+    },
+    {
+      "path": "art-frames/live-frames/acos-c1-layer7-frame-120-g546-c19.png",
+      "bytes": 205425
+    },
+    {
+      "path": "art-frames/live-frames/acos-c1-layer7-frame-179-g605-c20.png",
+      "bytes": 185402
+    },
+    {
+      "path": "art-frames/live-frames/acos-c1-layer7-frame-179-g605-c21.png",
+      "bytes": 185402
+    },
+    {
+      "path": "art-frames/live-frames/acos-c1-layer7-frame-179-g605-c22.png",
+      "bytes": 185402
+    },
+    {
+      "path": "art-frames/live-frames/acos-c1-layer7-frame-220-g646-c24.png",
+      "bytes": 205425
+    },
+    {
+      "path": "art-frames/live-frames/acos-c1-layer7-frame-220-g646-c25.png",
+      "bytes": 205425
+    },
+    {
+      "path": "art-frames/live-frames/acos-c1-layer7-frame-234-g660-c27.png",
+      "bytes": 205481
+    },
+    {
+      "path": "art-frames/live-frames/acos-c1-layer7-frame-295-g721-c28.png",
+      "bytes": 190993
+    },
+    {
+      "path": "art-frames/live-frames/acos-c1-layer7-frame-295-g721-c29.png",
+      "bytes": 190993
+    },
+    {
+      "path": "art-frames/live-frames/acos-c1-layer7-frame-65-g491-c10.png",
+      "bytes": 190993
+    },
+    {
+      "path": "art-frames/live-frames/acos-c1-layer7-frame-65-g491-c11.png",
+      "bytes": 190993
+    },
+    {
+      "path": "art-frames/live-frames/acos-c1-layer7-frame-65-g491-c12.png",
+      "bytes": 190993
+    }
+  ]
+}

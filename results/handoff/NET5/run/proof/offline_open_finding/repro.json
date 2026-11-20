@@ -1,0 +1,17 @@
+{
+  "acos_version": "0.2.2",
+  "apk_path": "fixtures/build/apps/net-check.apk",
+  "apk_sha256": "7b976b629a8f1035e0ac835d78ec35e17d2365652bddc97b9e7424fabcb75df3",
+  "scenario_path": "/home/Qui/.t3/worktrees/acos/t3-ba8936f8-e31a438bba670ddc/results/handoff/NET5/scenarios/open-finding-offline.yaml",
+  "scenario_sha256": "cd42666648e81fc208b8ad1aee95032f7adea1b4133ffc2681e071c0f7dd6d2a",
+  "flags": [],
+  "isolation": "process",
+  "display": {
+    "mode": "offscreen",
+    "width": 1080,
+    "height": 2400,
+    "density_dpi": 420
+  },
+  "fidelity": "art-reference",
+  "backend": "acos-native"
+}

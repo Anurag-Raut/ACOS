@@ -55,8 +55,15 @@ fn every_probe_wake_reaches_the_zygote_child_side_of_the_fifo() {
     ));
     let path = dir.join(GUEST_PROBE_FIFO);
     assert_eq!(GUEST_PROBE_FIFO, "probe.fifo");
-    let mode = std::fs::metadata(&path).expect("fifo metadata").permissions().mode();
-    assert_eq!(mode & 0o777, 0o600, "the probe FIFO stays private: {mode:o}");
+    let mode = std::fs::metadata(&path)
+        .expect("fifo metadata")
+        .permissions()
+        .mode();
+    assert_eq!(
+        mode & 0o777,
+        0o600,
+        "the probe FIFO stays private: {mode:o}"
+    );
 
     let (tx, rx) = mpsc::channel();
     let reader_path = path.clone();

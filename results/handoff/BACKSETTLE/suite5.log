@@ -1,0 +1,914 @@
+warning: acos-binder-peer@0.3.0: built /home/Qui/.t3/worktrees/acos/t3-6219a35a-eb2ef407add7c3f9/.cache/backsettle-target/debug/build/acos-binder-peer-f45e34fef9d893ae/out/libacos_binder_driver.so
+warning: variable does not need to be mutable
+   --> crates/acos-netd-ctl/src/client.rs:574:13
+    |
+574 |         let mut r = self.request(&Request::KillPasta { hold })?;
+    |             ----^
+    |             |
+    |             help: remove this `mut`
+    |
+    = note: `#[warn(unused_mut)]` on by default
+
+warning: variable does not need to be mutable
+   --> crates/acos-netd-ctl/src/client.rs:584:13
+    |
+584 |         let mut r = self.request(&Request::Shutdown)?;
+    |             ----^
+    |             |
+    |             help: remove this `mut`
+
+warning: `acos-netd-ctl` (lib) generated 2 warnings (run `cargo fix --lib -p acos-netd-ctl` to apply 2 suggestions)
+   Compiling acos-mcp v0.3.0 (/home/Qui/.t3/worktrees/acos/t3-6219a35a-eb2ef407add7c3f9/crates/acos-mcp)
+warning: unreachable pattern
+   --> crates/acos-services/src/intents.rs:151:21
+    |
+146 |                     Extra::Short(number) => serde_json::json!(number),
+    |                     -------------------- matches all the relevant values
+...
+151 |                     Extra::Short(short) => serde_json::json!(short),
+    |                     ^^^^^^^^^^^^^^^^^^^ no value can reach this
+    |
+    = note: `#[warn(unreachable_patterns)]` on by default
+
+warning: variable does not need to be mutable
+   --> crates/acos-services/src/modules/notifications.rs:309:13
+    |
+309 |         let mut store = store
+    |             ----^^^^^
+    |             |
+    |             help: remove this `mut`
+    |
+    = note: `#[warn(unused_mut)]` on by default
+
+warning: unreachable pattern
+    --> crates/acos-services/src/parcelable.rs:2474:9
+     |
+2454 |         FieldOp::BoolCond(fields) => {
+     |         ------------------------- matches all the relevant values
+...
+2474 |         FieldOp::BoolCond(fields) => {
+     |         ^^^^^^^^^^^^^^^^^^^^^^^^^ no value can reach this
+
+warning: unreachable pattern
+    --> crates/acos-services/src/parcelable.rs:2894:9
+     |
+2838 |         FieldOp::BoolCond(fields) => {
+     |         ------------------------- matches all the relevant values
+...
+2894 |         FieldOp::BoolCond(fields) => {
+     |         ^^^^^^^^^^^^^^^^^^^^^^^^^ no value can reach this
+
+warning: unreachable pattern
+    --> crates/acos-services/src/parcelable.rs:2973:9
+     |
+2956 |         FieldOp::Icon => {
+     |         ------------- matches all the relevant values
+...
+2973 |         FieldOp::Icon => {
+     |         ^^^^^^^^^^^^^ no value can reach this
+
+warning: unreachable pattern
+    --> crates/acos-services/src/parcelable.rs:2977:9
+     |
+2960 |         FieldOp::ArraySet => match value {
+     |         ----------------- matches all the relevant values
+...
+2977 |         FieldOp::ArraySet => match value {
+     |         ^^^^^^^^^^^^^^^^^ no value can reach this
+
+warning: unreachable pattern
+    --> crates/acos-services/src/parcelable.rs:4801:9
+     |
+4748 |         FieldOp::BoolCond(_) => call == "writeBoolean",
+     |         -------------------- matches all the relevant values
+...
+4801 |         FieldOp::BoolCond(_) => call == "writeBoolean",
+     |         ^^^^^^^^^^^^^^^^^^^^ no value can reach this
+
+warning: unreachable pattern
+    --> crates/acos-services/src/parcelable.rs:4884:9
+     |
+4842 |         FieldOp::BoolCond(inner) => {
+     |         ------------------------ matches all the relevant values
+...
+4884 |         FieldOp::BoolCond(inner) => {
+     |         ^^^^^^^^^^^^^^^^^^^^^^^^ no value can reach this
+
+warning: unused variable: `intent`
+   --> crates/acos-services/src/service_bind.rs:292:13
+    |
+292 |         let intent = bind_intent(package, class);
+    |             ^^^^^^ help: if this is intentional, prefix it with an underscore: `_intent`
+    |
+    = note: `#[warn(unused_variables)]` on by default
+
+warning: constant `ACTION_MASK` is never used
+   --> crates/acos-services/src/a11y_native.rs:102:7
+    |
+102 | const ACTION_MASK: i32 = 0xff;
+    |       ^^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` on by default
+
+warning: constant `RESTRICTIONS_GET_APPLICATION_PER_ADMIN` is never used
+   --> crates/acos-services/src/extras.rs:693:7
+    |
+693 | const RESTRICTIONS_GET_APPLICATION_PER_ADMIN: u32 = 2;
+    |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: constant `SERVICE_MANAGER_DESCRIPTOR` is never used
+  --> crates/acos-services/src/host.rs:82:7
+   |
+82 | const SERVICE_MANAGER_DESCRIPTOR: &str = "android.os.IServiceManager";
+   |       ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: `acos-services` (lib) generated 12 warnings (run `cargo fix --lib -p acos-services` to apply 1 suggestion)
+warning: unused variable: `net`
+   --> crates/acos-netd/src/plan.rs:270:29
+    |
+270 | pub fn session_offline_cmds(net: &SessionNet, netns_pid: u32) -> Vec<String> {
+    |                             ^^^ help: if this is intentional, prefix it with an underscore: `_net`
+    |
+    = note: `#[warn(unused_variables)]` on by default
+
+warning: variable does not need to be mutable
+  --> crates/acos-netd/src/lib.rs:99:16
+   |
+99 |         let Ok(mut conn) = conn else { continue };
+   |                ----^^^^
+   |                |
+   |                help: remove this `mut`
+   |
+   = note: `#[warn(unused_mut)]` on by default
+
+warning: function `handle` is never used
+   --> crates/acos-netd/src/lib.rs:215:4
+    |
+215 | fn handle(relay: &Arc<Mutex<supervisor::Relay>>, req: Request) -> Reply {
+    |    ^^^^^^
+    |
+    = note: `#[warn(dead_code)]` on by default
+
+warning: field `cgroup` is never read
+  --> crates/acos-netd/src/supervisor.rs:69:5
+   |
+49 | struct Session {
+   |        ------- field in this struct
+...
+69 |     cgroup: Option<String>,
+   |     ^^^^^^
+
+warning: methods `start_forwarder` and `restart_pasta` are never used
+   --> crates/acos-netd/src/supervisor.rs:949:8
+    |
+127 | impl Relay {
+    | ---------- methods in this implementation
+...
+949 |     fn start_forwarder(&mut self, s: &mut Session, port: u16) -> Result<(), ProtoError> {
+    |        ^^^^^^^^^^^^^^^
+...
+984 |     fn restart_pasta(&mut self) -> Result<(), ProtoError> {
+    |        ^^^^^^^^^^^^^
+
+warning: unused imports: `F_DEATH` and `RSP_DEAD`
+  --> crates/acos-binder-peer/src/peer.rs:43:12
+   |
+43 |     Frame, F_DEATH, F_HELLO, F_REF, F_REP, F_REQ, F_RSP, F_TXN, INTERFACE_TRANSACTION,
+   |            ^^^^^^^
+44 |     PING_TRANSACTION, PROTOCOL_VERSION, REF_RELEASE, RSP_DEAD, TF_ONE_WAY, TF_STATUS_CODE,
+   |                                                      ^^^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` on by default
+
+warning: unused variable: `objects`
+    --> crates/acos-binder-peer/src/peer.rs:2475:13
+     |
+2475 |     let mut objects: Vec<usize> = Vec::new();
+     |             ^^^^^^^ help: if this is intentional, prefix it with an underscore: `_objects`
+     |
+     = note: `#[warn(unused_variables)]` on by default
+
+warning: variable does not need to be mutable
+    --> crates/acos-binder-peer/src/peer.rs:2475:9
+     |
+2475 |     let mut objects: Vec<usize> = Vec::new();
+     |         ----^^^^^^^
+     |         |
+     |         help: remove this `mut`
+     |
+     = note: `#[warn(unused_mut)]` on by default
+
+warning: `acos-netd` (lib) generated 5 warnings (run `cargo fix --lib -p acos-netd` to apply 1 suggestion)
+warning: `acos-binder-peer` (lib) generated 3 warnings (run `cargo fix --lib -p acos-binder-peer` to apply 2 suggestions)
+   Compiling acos-art v0.3.0 (/home/Qui/.t3/worktrees/acos/t3-6219a35a-eb2ef407add7c3f9/crates/acos-art)
+warning: value assigned to `unsettled` is never read
+    --> crates/acos-verify/src/executor.rs:1243:21
+     |
+1243 |             let mut unsettled: Option<BackendError> = None;
+     |                     ^^^^^^^^^
+     |
+     = help: maybe it is overwritten before being read?
+     = note: `#[warn(unused_assignments)]` on by default
+
+warning: value assigned to `unsettled` is never read
+    --> crates/acos-verify/src/executor.rs:2363:13
+     |
+2363 |     let mut unsettled: Option<BackendError> = None;
+     |             ^^^^^^^^^
+     |
+     = help: maybe it is overwritten before being read?
+
+warning: `acos-verify` (lib) generated 2 warnings
+warning: `acos-verify` (lib test) generated 2 warnings (2 duplicates)
+warning: method `with_settle_pixels` is never used
+   --> crates/acos-verify/tests/scenarios.rs:436:8
+    |
+420 | impl SliceBackend {
+    | ----------------- method in this implementation
+...
+436 |     fn with_settle_pixels(mut self, pixels_changed: bool) -> Self {
+    |        ^^^^^^^^^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` on by default
+
+warning: `acos-verify` (test "scenarios") generated 1 warning
+warning: unused variable: `started`
+   --> crates/acos-art/src/boot_image.rs:919:13
+    |
+919 |         let started = Instant::now();
+    |             ^^^^^^^ help: if this is intentional, prefix it with an underscore: `_started`
+    |
+    = note: `#[warn(unused_variables)]` on by default
+
+warning: variable does not need to be mutable
+   --> crates/acos-art/src/launch.rs:755:9
+    |
+755 |     let mut cmd = shared.command(spec, app_meta, providers)?;
+    |         ----^^^
+    |         |
+    |         help: remove this `mut`
+    |
+    = note: `#[warn(unused_mut)]` on by default
+
+warning: unused variable: `webview_gate`
+    --> crates/acos-art/src/launch.rs:3132:9
+     |
+3132 |     let webview_gate = webview_gate;
+     |         ^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_webview_gate`
+
+warning: unused import: `std::io::Write`
+   --> crates/acos-art/src/spike_net.rs:721:9
+    |
+721 |     use std::io::Write as _;
+    |         ^^^^^^^^^^^^^^
+    |
+    = note: `#[warn(unused_imports)]` on by default
+
+warning: unreachable pattern
+    --> crates/acos-art/src/launch.rs:8234:21
+     |
+8194 |                     ("tap", _) => {
+     |                     ---------- matches all the relevant values
+...
+8234 |                     ("tap", _) => live.input.tap(x, y, ack_wait),
+     |                     ^^^^^^^^^^ no value can reach this
+     |
+     = note: `#[warn(unreachable_patterns)]` on by default
+
+warning: method `cache_str` is never used
+   --> crates/acos-art/src/boot_image.rs:598:8
+    |
+597 | impl CacheOutcome {
+    | ----------------- method in this implementation
+598 |     fn cache_str(&self) -> &'static str {
+    |        ^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` on by default
+
+warning: fields `guest_lib_dir` and `uid` are never read
+   --> crates/acos-art/src/launch.rs:556:5
+    |
+542 | struct SecondarySpec {
+    |        ------------- fields in this struct
+...
+556 |     guest_lib_dir: String,
+    |     ^^^^^^^^^^^^^
+557 |     /// `ApplicationInfo.uid` the package manager assigned.
+558 |     uid: Option<i32>,
+    |     ^^^
+    |
+    = note: `SecondarySpec` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: field `argv` is never read
+   --> crates/acos-art/src/launch.rs:592:5
+    |
+584 | struct SecondaryGuest {
+    |        -------------- field in this struct
+...
+592 |     argv: Vec<String>,
+    |     ^^^^
+
+warning: field `animations_on` is never read
+    --> crates/acos-art/src/launch.rs:3368:5
+     |
+3345 | struct ProbeSample {
+     |        ----------- field in this struct
+...
+3368 |     animations_on: Option<bool>,
+     |     ^^^^^^^^^^^^^
+     |
+     = note: `ProbeSample` has a derived impl for the trait `Clone`, but this is intentionally ignored during dead code analysis
+
+warning: function `adler32` is never used
+    --> crates/acos-art/src/launch.rs:9197:4
+     |
+9197 | fn adler32(data: &[u8]) -> u32 {
+     |    ^^^^^^^
+
+warning: field `spawn_requests` is never read
+    --> crates/acos-art/src/launch.rs:9343:5
+     |
+9338 | struct PeerSummary {
+     |        ----------- field in this struct
+...
+9343 |     spawn_requests: u64,
+     |     ^^^^^^^^^^^^^^
+
+warning: function `write_out` is never used
+    --> crates/acos-art/src/launch.rs:9542:4
+     |
+9542 | fn write_out(fd: RawFd, outs: Vec<Frame>, context: &str) -> std::io::Result<()> {
+     |    ^^^^^^^^^
+
+warning: hiding a lifetime that's elided elsewhere is confusing
+   --> crates/acos-art/src/lib.rs:917:20
+    |
+917 |     pub fn sandbox(&self) -> Sandbox {
+    |                    ^^^^^     ------- the same lifetime is hidden here
+    |                    |
+    |                    the lifetime is elided here
+    |
+    = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+    = note: `#[warn(mismatched_lifetime_syntaxes)]` on by default
+help: use `'_` for type paths
+    |
+917 |     pub fn sandbox(&self) -> Sandbox<'_> {
+    |                                     ++++
+
+warning: variable does not need to be mutable
+   --> crates/acos-art/src/probe_channel_tests.rs:122:9
+    |
+122 |     let mut writer = match channel.as_mut() {
+    |         ----^^^^^^
+    |         |
+    |         help: remove this `mut`
+
+warning: variable does not need to be mutable
+    --> crates/acos-art/src/live_view.rs:2183:13
+     |
+2183 |         let mut first_frame_for = |label: &str| -> bool {
+     |             ----^^^^^^^^^^^^^^^
+     |             |
+     |             help: remove this `mut`
+
+warning: function `solid` is never used
+    --> crates/acos-art/src/live_view.rs:1878:8
+     |
+1878 |     fn solid(width: u32, height: u32, rgba: [u8; 4]) -> Vec<u8> {
+     |        ^^^^^
+
+warning: method `nudge` is never used
+    --> crates/acos-art/src/live_view.rs:1951:12
+     |
+1943 |     impl TestWake {
+     |     ------------- method in this implementation
+...
+1951 |         fn nudge(&self) {
+     |            ^^^^^
+
+warning: `acos-art` (lib) generated 12 warnings (run `cargo fix --lib -p acos-art` to apply 1 suggestion)
+   Compiling acos-cli v0.3.0 (/home/Qui/.t3/worktrees/acos/t3-6219a35a-eb2ef407add7c3f9/crates/acos-cli)
+warning: field `sockets` is never read
+   --> crates/acos-cli/tests/rel3a_settle_status.rs:121:5
+    |
+117 | struct Daemon {
+    |        ------ field in this struct
+...
+121 |     sockets: ShortSocketDir,
+    |     ^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` on by default
+
+warning: unused variable: `rest`
+   --> crates/acos-art/src/main.rs:102:13
+    |
+102 |     let mut rest: Vec<String> = Vec::new();
+    |             ^^^^ help: if this is intentional, prefix it with an underscore: `_rest`
+    |
+    = note: `#[warn(unused_variables)]` on by default
+
+warning: unused variable: `dir`
+  --> crates/acos-art/tests/w37_build_cache.rs:94:16
+   |
+94 |     let (_env, dir, _root) = isolate("corrupt");
+   |                ^^^ help: if this is intentional, prefix it with an underscore: `_dir`
+   |
+   = note: `#[warn(unused_variables)]` on by default
+
+warning: variable does not need to be mutable
+   --> crates/acos-art/src/main.rs:102:9
+    |
+102 |     let mut rest: Vec<String> = Vec::new();
+    |         ----^^^^
+    |         |
+    |         help: remove this `mut`
+    |
+    = note: `#[warn(unused_mut)]` on by default
+
+warning: variable does not need to be mutable
+   --> crates/acos-art/src/main.rs:149:13
+    |
+149 |         let mut next = |i: &mut usize| -> Result<String> {
+    |             ----^^^^
+    |             |
+    |             help: remove this `mut`
+
+warning: field `socket_dir` is never read
+   --> crates/acos-cli/tests/fb1_live_input.rs:191:5
+    |
+185 | struct Daemon {
+    |        ------ field in this struct
+...
+191 |     socket_dir: common::ShortSocketDir,
+    |     ^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` on by default
+
+warning: field `sockets` is never read
+  --> crates/acos-cli/tests/w50_serve_art.rs:81:5
+   |
+75 | struct Daemon {
+   |        ------ field in this struct
+...
+81 |     sockets: ShortSocketDir,
+   |     ^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` on by default
+
+warning: `acos-cli` (test "rel3a_settle_status") generated 1 warning
+warning: field `sockets` is never read
+   --> crates/acos-cli/tests/w55_dead_guest.rs:126:5
+    |
+120 | struct Daemon {
+    |        ------ field in this struct
+...
+126 |     sockets: ShortSocketDir,
+    |     ^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` on by default
+
+warning: `acos-cli` (test "w50_serve_art") generated 1 warning
+warning: `acos-cli` (test "w55_dead_guest") generated 1 warning
+warning: `acos-cli` (test "fb1_live_input") generated 1 warning
+warning: `acos-art` (bin "acos-art" test) generated 3 warnings (3 duplicates)
+warning: `acos-art` (test "w37_build_cache") generated 1 warning
+warning: `acos-art` (bin "acos-art") generated 3 warnings (run `cargo fix --bin "acos-art"` to apply 2 suggestions)
+warning: unused import: `std::io::Write`
+    --> crates/acos-cli/src/view/mod.rs:1003:17
+     |
+1003 |             use std::io::Write;
+     |                 ^^^^^^^^^^^^^^
+     |
+     = note: `#[warn(unused_imports)]` on by default
+
+warning: `acos-art` (lib test) generated 16 warnings (11 duplicates) (run `cargo fix --lib -p acos-art --tests` to apply 2 suggestions)
+warning: value assigned to `tap_target` is never read
+    --> crates/acos-cli/src/engine/mod.rs:1294:25
+     |
+1294 |                 let mut tap_target: Option<serde_json::Value> = None;
+     |                         ^^^^^^^^^^
+     |
+     = help: maybe it is overwritten before being read?
+     = note: `#[warn(unused_assignments)]` on by default
+
+warning: variable does not need to be mutable
+   --> crates/acos-cli/src/serve.rs:837:16
+    |
+837 |             Ok(mut client) => match client.mismatch() {
+    |                ----^^^^^^
+    |                |
+    |                help: remove this `mut`
+    |
+    = note: `#[warn(unused_mut)]` on by default
+
+warning: method `label` is never used
+   --> crates/acos-cli/src/engine/mod.rs:268:12
+    |
+261 | impl FrameEvidence {
+    | ------------------ method in this implementation
+...
+268 |     pub fn label(&self) -> String {
+    |            ^^^^^
+    |
+    = note: `#[warn(dead_code)]` on by default
+
+warning: multiple associated items are never used
+    --> crates/acos-cli/src/engine/art.rs:1578:12
+     |
+1560 | impl ArtSession {
+     | --------------- associated items in this implementation
+...
+1578 |     pub fn start(apk: &Path, artifacts: &Path) -> Result<ArtSession, BackendError> {
+     |            ^^^^^
+...
+1586 |     pub fn start_with_animations(
+     |            ^^^^^^^^^^^^^^^^^^^^^
+...
+1600 |     pub fn start_with_options(
+     |            ^^^^^^^^^^^^^^^^^^
+...
+1615 |     pub fn start_with_apks(
+     |            ^^^^^^^^^^^^^^^
+...
+1647 |     pub fn start_with_zygote(
+     |            ^^^^^^^^^^^^^^^^^
+...
+1668 |     pub fn start_with_session(
+     |            ^^^^^^^^^^^^^^^^^^
+...
+2357 |     pub fn zygote_facts(&self) -> Option<&ZygoteFacts> {
+     |            ^^^^^^^^^^^^
+...
+2362 |     pub fn zygote_previous_child_pid(&self) -> Option<u32> {
+     |            ^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+2391 |     pub fn services(&self) -> &[serde_json::Value] {
+     |            ^^^^^^^^
+...
+2612 |     pub fn observation_settle(&self) -> &'static str {
+     |            ^^^^^^^^^^^^^^^^^^
+
+warning: method `first_frame_bound` is never used
+    --> crates/acos-cli/src/engine/art.rs:4587:19
+     |
+4253 | impl ArtSession {
+     | --------------- method in this implementation
+...
+4587 |     pub(crate) fn first_frame_bound(&self) -> Option<(bool, Option<String>)> {
+     |                   ^^^^^^^^^^^^^^^^^
+
+warning: function `read_png` is never used
+    --> crates/acos-cli/src/engine/art.rs:6153:4
+     |
+6153 | fn read_png(path: &Path) -> Result<Vec<u8>, BackendError> {
+     |    ^^^^^^^^
+
+warning: function `kill_group_signals` is never used
+    --> crates/acos-cli/src/engine/art.rs:6272:15
+     |
+6272 | pub(crate) fn kill_group_signals() -> usize {
+     |               ^^^^^^^^^^^^^^^^^^
+
+warning: associated function `new` is never used
+   --> crates/acos-cli/src/engine/serve.rs:196:12
+    |
+190 | impl ServeEngine {
+    | ---------------- associated function in this implementation
+...
+196 |     pub fn new(
+    |            ^^^
+
+warning: function `flat_text` is never used
+    --> crates/acos-cli/src/engine/serve.rs:4047:4
+     |
+4047 | fn flat_text(tree: &UiTree) -> String {
+     |    ^^^^^^^^^
+
+warning: associated items `disabled`, `keeper_count`, and `keeper_pids` are never used
+   --> crates/acos-cli/src/engine/zygote_host.rs:164:12
+    |
+ 93 | impl ZygoteHost {
+    | --------------- associated items in this implementation
+...
+164 |     pub fn disabled() -> Self {
+    |            ^^^^^^^^
+...
+179 |     pub fn keeper_count(&self) -> usize {
+    |            ^^^^^^^^^^^^
+...
+184 |     pub fn keeper_pids(&self) -> Vec<u32> {
+    |            ^^^^^^^^^^^
+
+warning: associated function `at` is never used
+   --> crates/acos-cli/src/live_registry.rs:123:12
+    |
+ 95 | impl LiveRegistry {
+    | ----------------- associated function in this implementation
+...
+123 |     pub fn at(dir: PathBuf) -> Self {
+    |            ^^
+
+warning: unused variable: `next`
+    --> crates/acos-cli/src/engine/serve.rs:4595:47
+     |
+4595 |         let (view, _, count, truncated, path, next) =
+     |                                               ^^^^ help: if this is intentional, prefix it with an underscore: `_next`
+     |
+     = note: `#[warn(unused_variables)]` on by default
+
+warning: function `make_run` is never used
+   --> crates/acos-cli/src/artifacts_gc.rs:403:8
+    |
+403 |     fn make_run(root: &Path, relative: &str, status: &str, age_secs: u64, bytes: usize) -> PathBuf {
+    |        ^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` on by default
+
+warning: associated items `start_with_zygote`, `start_with_session`, `zygote_facts`, `zygote_previous_child_pid`, `services`, and `observation_settle` are never used
+    --> crates/acos-cli/src/engine/art.rs:1647:12
+     |
+1560 | impl ArtSession {
+     | --------------- associated items in this implementation
+...
+1647 |     pub fn start_with_zygote(
+     |            ^^^^^^^^^^^^^^^^^
+...
+1668 |     pub fn start_with_session(
+     |            ^^^^^^^^^^^^^^^^^^
+...
+2357 |     pub fn zygote_facts(&self) -> Option<&ZygoteFacts> {
+     |            ^^^^^^^^^^^^
+...
+2362 |     pub fn zygote_previous_child_pid(&self) -> Option<u32> {
+     |            ^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+2391 |     pub fn services(&self) -> &[serde_json::Value] {
+     |            ^^^^^^^^
+...
+2612 |     pub fn observation_settle(&self) -> &'static str {
+     |            ^^^^^^^^^^^^^^^^^^
+
+warning: method `stats` is never used
+   --> crates/acos-cli/src/view/hub.rs:354:12
+    |
+331 | impl Watcher {
+    | ------------ method in this implementation
+...
+354 |     pub fn stats(&self) -> SlotStats {
+    |            ^^^^^
+
+warning: method `url` is never used
+   --> crates/acos-cli/src/view/mod.rs:684:12
+    |
+666 |     impl Server {
+    |     ----------- method in this implementation
+...
+684 |         fn url(&self, path: &str) -> String {
+    |            ^^^
+
+warning: `acos-cli` (bin "acos") generated 11 warnings (run `cargo fix --bin "acos"` to apply 1 suggestion)
+warning: `acos-cli` (bin "acos" test) generated 11 warnings (5 duplicates) (run `cargo fix --bin "acos" --tests` to apply 1 suggestion)
+    Finished `test` profile [unoptimized] target(s) in 7.16s
+     Running unittests src/lib.rs (.cache/backsettle-target/debug/deps/acos_art-6dc32126cf6b8417)
+
+running 196 tests
+test app::tests::guest_line_parses ... ok
+test app::tests::font_customization_merges_new_named_families_only ... ok
+test boot_image::tests::modes_parse_exactly ... ok
+test boot_image::tests::a_missing_explicit_image_is_refused ... ok
+test boot_image::tests::the_window_is_the_same_range_art_uses ... ok
+test build_cache::tests::digest_is_length_prefixed ... ok
+test boot_image::tests::random_bases_are_aligned_and_in_arts_window ... ok
+test boot_image::tests::a_build_failure_is_a_structured_error_and_leaves_no_entry ... ok
+test build_cache::tests::tmp_is_never_the_staging_root ... ok
+test capture::tests::parse_bytes_accepts_suffixes ... ok
+test capture::tests::small_stream_is_kept_whole_without_a_marker ... ok
+test cgroup::tests::cgroup_line_is_parsed ... ok
+test cgroup::tests::capability_stamp_is_boot_scoped_and_never_guesses ... ok
+test cgroup::tests::sizes_parse ... ok
+test cgroup::tests::zero_limits_are_refused_not_silently_unbounded ... ok
+test cgroup::tests::wrap_puts_the_command_behind_systemd_run_with_the_limits ... ok
+test capture::tests::a_single_write_bigger_than_the_cap_keeps_only_its_tail ... ok
+test crash::tests::nothing_is_not_a_crash_record ... ok
+test crash::tests::art_dump_yields_signal_code_addr_thread_and_library_frames ... ok
+test crash::tests::shim_line_alone_is_enough_for_the_primary_fields ... ok
+test crash::tests::truncated_dump_keeps_what_exists ... ok
+test landlock::tests::fallback_is_only_accepted_as_an_explicit_skip ... ok
+test landlock::tests::landlock_failure_has_its_own_code ... ok
+test jvm::tests::d8_args_survive_the_build_tools_wrapper_dash ... ok
+test launch::backsettle_tests::a_draw_after_the_action_supersedes_the_re_shown_frame ... ok
+test launch::abi_gate_tests::a_guest_launch_record_has_no_abi_block ... ok
+test jvm::tests::dump_args_are_absolute_and_pid_scoped ... ok
+test landlock::tests::plan_grants_writes_only_on_the_per_run_roots ... ok
+test boot_image::tests::the_same_image_at_two_paths_has_one_key ... ok
+test launch::backsettle_tests::an_empty_tree_is_not_a_bindable_observation ... ok
+test launch::abi_gate_tests::the_refusal_names_unsupported_abi_and_the_apk_inventory ... ok
+test launch::backsettle_tests::an_unchanged_window_forest_keeps_the_shipped_semantics ... ok
+test launch::crash_evidence_tests::the_guest_stream_tail_is_bounded_and_ordered ... ok
+test launch::backsettle_tests::a_window_created_by_the_action_never_binds_as_reshown ... ok
+test launch::png_checksum_tests::adler32_matches_the_standard_check_vector ... ok
+test launch::png_checksum_tests::crc32_matches_the_standard_check_vector ... ok
+test launch::backsettle_tests::an_empty_forest_is_not_a_re_show ... ok
+test launch::png_checksum_tests::empty_and_single_byte_inputs_match_the_oracle ... ok
+test launch::backsettle_tests::a_re_shown_window_without_a_complete_frame_never_binds ... ok
+test launch::backsettle_tests::a_second_window_change_restarts_the_confirmation_window ... ok
+test launch::backsettle_tests::only_a_settled_post_change_sample_binds_the_re_shown_window ... ok
+test launch::probe_channel_tests::a_vanished_reader_cannot_break_the_next_wake ... ok
+test launch::backsettle_tests::a_host_window_change_binds_the_existing_top_window_and_its_frame ... ok
+test launch::backsettle_tests::a_top_window_that_was_already_top_at_the_ack_never_binds ... ok
+test launch::crash_evidence_tests::the_guest_crash_line_is_kept_and_parsed ... ok
+test app::tests::no_layout_is_a_tool_error ... ok
+test launch::probe_line_tests::a_fast_commit_binds_its_own_draw_only_with_proof ... ok
+test launch::probe_channel_tests::the_forked_child_installs_the_probe_fifo_as_stdin_before_its_sandbox ... ok
+test launch::probe_line_tests::a_refused_probe_wake_is_counted_and_a_written_one_is_counted_separately ... ok
+test launch::probe_line_tests::an_oversized_line_is_drained_and_counted ... ok
+test launch::probe_line_tests::a_starved_probe_and_a_stale_sample_are_counted_for_the_timeout_evidence ... ok
+test launch::probe_line_tests::an_invalid_probe_line_is_counted ... ok
+test launch::probe_line_tests::a_thrown_probe_surfaces_acosprobe_error ... ok
+test launch::probe_line_tests::fast_tree_rejects_a_probe_from_before_the_entry_generation ... ok
+test launch::probe_line_tests::window_gone_state_changed_is_computed ... ok
+test launch::png_checksum_tests::stride_padding_and_short_rows_still_decode_to_the_padded_rows ... ok
+test launch::rel3h_unhandled_input_tests::every_published_event_must_be_acked_unhandled ... ok
+test launch::probe_line_tests::the_served_sample_is_the_foreground_processes ... ok
+test launch::rel3h_unhandled_input_tests::gate::a_draw_inside_the_window_restarts_it_instead_of_binding ... ok
+test launch::rel3h_unhandled_input_tests::gate::a_reset_forgets_the_window ... ok
+test launch::probe_line_tests::window_gone_sample_is_parsed_and_binds_only_with_state_proof ... ok
+test launch::rel3h_unhandled_input_tests::gate::a_sample_after_the_ack_binds_only_after_the_window ... ok
+test launch::rel3h_unhandled_input_tests::gate::a_sample_at_or_before_the_last_ack_never_binds ... ok
+test launch::rel3h_unhandled_input_tests::the_unhandled_input_settle_is_settled_with_its_own_reason ... ok
+test launch::shotz_png_tests::png_encoder_candidates_on_real_frames ... ignored, measurement: prints the size/time table for the handoff, needs $SHOTZ_FRAMES
+test launch::shared_boot_image_tests::unset_means_the_default_lz4_path ... ok
+test launch::shared_boot_image_tests::a_directory_without_the_main_image_is_an_error ... ok
+test launch::shared_boot_image_tests::a_directory_with_the_main_image_is_accepted ... ok
+test launch::skipped_traversal_tests::a_live_frame_leaves_the_normal_skipped_traversal_untouched ... ok
+test launch::skipped_traversal_tests::a_skipped_traversal_with_no_frame_fails_within_the_bounded_budget ... ok
+test launch::skipped_traversal_tests::the_budget_is_two_frames_and_at_most_the_guest_resume_deadline ... ok
+test launch::skipped_traversal_tests::the_failure_reply_names_post_resume_not_ready_and_draw_skip ... ok
+test launch::skipped_traversal_tests::the_marker_evidence_fields_are_parsed ... ok
+test launcher::tests::aborter_log_entry_is_fatal ... ok
+test launcher::tests::check_failure_is_art_fatal_check ... ok
+test launch::view_socket_dir_tests::private_dir_tightens_ours_and_refuses_a_file_or_a_symlink ... ok
+test launcher::tests::segv_is_art_crash ... ok
+test launcher::tests::sigabrt_from_fatal_check_is_art_fatal_check ... ok
+test launcher::tests::sigsys_is_unsupported ... ok
+test launcher::tests::timeout_wins ... ok
+test launcher::tests::uncaught_main_exception_is_ok ... ok
+test live_view::tests::a_fallback_shaped_tree_masks_a_password_or_undecidable_focus ... ok
+test launch::probe_line_tests::a_probe_line_above_the_old_128k_cap_is_parsed ... ok
+test app::tests::apk_chrome_reads_the_manifest ... ok
+test cgroup::tests::warm_stamp_answers_without_probing_and_a_cold_root_probes ... ok
+test launch::probe_line_tests::a_dead_demand_channel_switches_the_guest_fallback_to_a_fast_poll ... ok
+test capture::tests::flood_keeps_the_tail_and_counts_the_drops ... ok
+test capture::tests::tail_text_keeps_the_truncation_marker ... ok
+test live_view::tests::downscale_box_averages_2x2_blocks ... ok
+test live_view::tests::event_text_is_truncated_and_password_text_masked ... ok
+test live_view::tests::focused_password_nodes_are_detected_in_the_probe_tree ... ok
+test live_view::tests::framing_round_trips_a_hello_a_frame_and_an_event ... ok
+test live_view::tests::no_subscriber_means_no_source_call_and_no_encode ... ok
+test live_view::tests::event_queue_drops_the_oldest_when_full ... ok
+test live_view::tests::peer_credentials_report_our_own_uid ... ok
+test live_view::tests::the_scratch_root_leaves_room_for_the_stream_socket ... ok
+test launch::view_socket_dir_tests::the_view_directory_is_not_the_guest_mounted_socket_directory ... ok
+test boot_image::tests::cold_miss_builds_and_the_second_run_hits ... ok
+test logd::tests::frame_roundtrip ... ok
+test launch::skipped_traversal_tests::the_process_initializer_install_is_driven_by_the_manifest ... ok
+test live_view::tests::a_non_password_state_does_not_survive_a_detach ... ok
+test live_view::tests::typed_input_is_masked_unless_a_fresh_tree_proves_a_non_password_focus ... ok
+test live_view::tests::the_view_socket_is_private_in_a_private_directory_never_chmodded_by_path ... ok
+test logd::tests::stopping_an_idle_sink_does_not_wait_out_the_read_timeout ... ok
+test props::tests::defaults_are_servable ... ok
+test props::tests::heap_defaults_unchanged ... ok
+test props::tests::heap_each_override_applied ... ok
+test props::tests::heap_invalid_format_rejected ... ok
+test props::tests::heap_metadata_reports_effective_values ... ok
+test props::tests::long_values_are_truncated ... ok
+test props::tests::heap_start_and_growth_override_together ... ok
+test seccomp::tests::art_needs_are_not_denied ... ok
+test props::tests::heap_inconsistent_ordering_rejected ... ok
+test seccomp::tests::audit_action_kills_and_never_returns_eacces ... ok
+test seccomp::tests::blob_has_the_sock_filter_layout ... ok
+test seccomp::tests::deny_terminal_returns_eacces_and_default_allows ... ok
+test seccomp::tests::every_escape_syscall_is_denied ... ok
+test seccomp::tests::program_is_small_enough_for_u8_jumps_and_ends_in_return ... ok
+test session::tests::argv_order_is_the_guest_contract ... ok
+test session::tests::guest_paths_map_onto_the_data_dir ... ok
+test seccomp::tests::socket_families_follow_the_spike_flag ... ok
+test session::tests::peak_rss_comes_from_the_verdict ... ok
+test session::tests::protocol_line_parses_only_with_the_prefix ... ok
+test spike_net::dns_tests::pasta_args_use_the_connectivity_constants ... ok
+test session::tests::reply_maps_png_and_keeps_the_tree ... ok
+test spike_net::tests::boundary_marker_file_is_opt_in ... ok
+test spike_net::tests::boundary_script_installs_verifies_and_fails_closed ... ok
+test spike_net::tests::pasta_args_keep_host_loopback_closed ... ok
+test tests::acos_home_overrides_every_root_lookup ... ok
+test tests::apex_manifest_name_wins_over_dir_name ... ok
+test tests::classpath_env_parses_device_environ ... ok
+test tests::classpath_env_rejects_incomplete_files ... ok
+test tests::compiled_root_is_the_checkout ... ok
+test spike_net::dns_tests::dnsproxyd_socket_is_world_writable_and_answers ... ok
+test launch::skipped_traversal_tests::the_guest_ready_path_has_no_forced_traversal_and_publishes_the_evidence ... ok
+test tests::gwp_asan_is_off_for_guests_unless_asked ... ok
+test tests::only_a_guest_crash_with_evidence_keeps_the_run_tree ... ok
+test tests::guest_asset_resolves_home_then_checkout_then_compiled_path ... ok
+test tests::kept_crash_trees_are_pruned_oldest_first_and_unmarked_trees_survive ... ok
+test tests::publish_atomic_never_truncates_a_live_reader ... ok
+test launch::probe_line_tests::the_change_wake_is_event_driven_and_loses_no_edge ... ok
+test tests::sandbox_argv_hardens_before_first_mount ... ok
+test tests::run_root_makes_shared_inputs_read_only ... ok
+test tests::run_root_maps_the_webview_session_socket ... ok
+test tests::unset_home_resolves_to_the_checkout_unchanged ... ok
+test tests::stage_apk_leaves_the_previous_copy_intact ... ok
+test tests::varint_roundtrip ... ok
+test launch::png_checksum_tests::unaligned_random_slices_match_the_oracle ... ok
+test watchdog::tests::data_limit_defaults_above_the_rss_ceiling ... ok
+test watchdog::tests::relax_child_limits_is_safe_to_call ... ok
+test watchdog::tests::rss_reading_works_on_linux ... ok
+test watchdog::tests::the_stock_init_rc_nice_limit_is_mirrored_and_safe_to_apply ... ok
+test webview_socket::tests::default_host_dir_is_the_short_runtime_session_directory ... ok
+test watchdog::tests::zero_ceiling_disables_the_watchdog ... ok
+test webview_socket::tests::env_override_wins_and_must_be_absolute ... ok
+test webview_socket::tests::default_paths_fit_the_sockaddr_un_budget ... ok
+test webview_socket::tests::guest_path_is_the_mount_point_plus_the_socket_file ... ok
+test webview_socket::tests::without_a_broker_the_connect_fails_with_the_kernels_enoent ... ok
+test webview_socket::tests::listener_at_the_mapped_path_receives_the_connect_and_bytes_round_trip ... ok
+test zygote_prod::tests::key_dir_names_are_stable_distinct_and_path_safe ... ok
+test zygote_prod::tests::kv_and_pid_contracts_parse_z4_shapes ... ok
+test zygote_prod::tests::a_dead_keeper_is_a_structured_error_never_a_write ... ok
+test zygote_prod::tests::prepare_session_wipes_the_previous_run_root_and_contract ... ok
+test zygote_prod::tests::publish_binds_writes_the_childs_run_root_and_socket_contract ... ok
+test build_cache::tests::sha256_matches_known_vectors ... ok
+test boot_image::tests::a_changed_input_set_invalidates_the_entry ... ok
+test spike_net::dns_tests::the_resolver_never_answers_an_address_family_the_session_lacks ... ok
+test watchdog::tests::a_one_byte_ceiling_trips_immediately ... ok
+test boot_image::tests::a_same_size_corruption_is_detected_by_the_sampled_checksum ... ok
+test watchdog::tests::arming_a_process_group_records_it_as_killed ... ok
+test boot_image::tests::a_truncated_file_is_detected_and_rebuilt ... ok
+test launch::probe_channel_tests::every_probe_wake_reaches_the_zygote_child_side_of_the_fifo ... ok
+test launch::png_checksum_tests::the_stored_baseline_is_the_encoder_v0_2_0_shipped ... ok
+test live_view::tests::a_secure_frame_is_published_blank_and_flagged ... ok
+test live_view::tests::a_viewer_that_arrives_on_an_idle_screen_still_gets_the_current_frame ... ok
+test zygote_prod::tests::the_keeper_protocol_spawn_kill_reset_and_shutdown ... ok
+test boot_image::tests::pruning_keeps_a_fresh_entry_and_evicts_a_stale_one ... ok
+test tests::publish_atomic_is_atomic_for_a_concurrent_reader ... ok
+test capture::tests::memory_stays_bounded_under_a_sustained_flood ... ok
+test zygote_prod::tests::one_session_bad_tag_is_a_structured_error_not_a_hang ... ok
+test launch::png_checksum_tests::the_streamed_encoder_writes_the_same_file_as_the_buffered_encoder ... ok
+test boot_image::tests::two_concurrent_builders_produce_one_build ... ok
+test logd::tests::listen_roundtrip ... ok
+test capture::tests::drain_to_tail_enforces_the_cap_on_a_reader ... ok
+test live_view::tests::a_subscriber_receives_hello_frames_and_events ... ok
+test launch::md5_frame_tests::streaming_hash_of_a_written_file_matches_the_whole_buffer ... ok
+test launch::md5_frame_tests::content_hash_matches_md5sum_on_a_real_frame ... ok
+test launch::shotz_png_tests::real_frames_round_trip_pixel_exact ... ok
+test launch::md5_frame_tests::streamed_encoder_is_byte_identical_to_the_buffered_encoder ... ok
+test logd::tests::spammer_is_capped_and_drop_oldest ... ok
+test launch::png_checksum_tests::random_buffers_match_the_oracle_at_every_boundary ... ok
+test live_view::tests::a_frame_larger_than_the_socket_buffer_is_delivered_to_a_slow_reader ... ok
+test launch::png_checksum_tests::a_high_entropy_canvas_is_never_materially_worse_than_stored ... ok
+test launch::shotz_png_tests::compressed_frames_are_much_smaller_than_the_stored_baseline ... ok
+test live_view::tests::a_slow_subscriber_is_dropped_without_blocking_the_encoder ... ok
+test live_view::tests::subscribe_threads_are_capped_and_a_trickling_peer_is_cut_off_by_one_deadline ... ok
+
+test result: ok. 195 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 10.67s
+
+     Running unittests src/main.rs (.cache/backsettle-target/debug/deps/acos_art-3ca66cb6961a879d)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/cleanup.rs (.cache/backsettle-target/debug/deps/cleanup-e1b3d9d40c7792c8)
+
+running 9 tests
+test the_scratch_root_leaves_room_for_the_run_sockets ... ok
+test janitor_reaps_stale_runs_and_keeps_live_ones ... ok
+test leak_scan_is_scoped_to_this_tests_own_processes ... ok
+test log_spam_keeps_the_launcher_peak_rss_under_256_mib ... ok
+test guest_crash_still_removes_the_run_root ... ok
+test render_app_leaves_no_processes_or_scratch_behind ... ok
+test guest_cannot_overwrite_boot_art_or_the_classpath ... ok
+test r1_watchdog_reports_host_memory_limit_and_leaves_no_orphans ... ok
+test sigkill_of_the_launcher_takes_the_guest_and_bwrap_with_it ... FAILED
+
+failures:
+
+---- sigkill_of_the_launcher_takes_the_guest_and_bwrap_with_it stdout ----
+
+thread 'sigkill_of_the_launcher_takes_the_guest_and_bwrap_with_it' panicked at crates/acos-art/tests/cleanup.rs:725:5:
+SIGKILL of the launcher (pid 252192) left 1 process(es) of this run alive after 3 s (S3: --die-with-parent must take the guest with the launcher).
+Started by the run:
+  pid=252192 ppid=251097 state=S comm=acos-art cmd=/home/Qui/.t3/worktrees/acos/t3-6219a35a-eb2ef407add7c3f9/.cache/backsettle-target/debug/acos-art session --data /dev/shm/acos-cleanup-tests/sigkill-251097/data --apk /home/Qui/.t3/worktrees/acos/t3-6219a35a-eb2ef407add7c3f9/fixtures/build/apps/counter.apk --out /dev/shm/acos-cleanup-tests/sigkill-251097/out --socket /dev/shm/acos-cleanup-tests/sigkill-251097/session.sock --session-id h1sigkill --timeout 120
+  pid=252315 ppid=252192 state=R comm=bwrap cmd=bwrap --unshare-pid --unshare-net --unshare-ipc --unshare-uts --unshare-cgroup-try --die-with-parent --clearenv --cap-drop ALL --unshare-user --uid 10192 --tmpfs / --ro-bind /home/Qui/.t3/worktrees/acos/t3-6219a35a-eb2ef407add7c3f9/.cache/art/sysroot/system /system --dir /apex --ro-bind /dev/shm/acos-cleanup-tests/sigkill-251097/data/apex-info-list.xml /apex/apex-info-list.xml --ro-bind /home/Qui/.t3/worktrees/acos/t3-6219a35a-eb2ef407add7c3f9/.cache/art/sysroot/system/apex/com.android.adbd /apex/com.android.adbd --ro-bind /home/Qui/.t3/worktrees/acos/t3-6219a35a-eb2ef407add7c3f9/.cache/art/sysroot/system/apex/com.android.adservices /apex/com.android.adservices --ro-bind /home/Qui/.t3/worktrees/acos/t3-6219a35a-eb2ef407add7c3f9/.cache/art/sysroot/system/apex/com.android.apex.cts.shim /apex/com.android.apex.cts.shim --ro-bind /home/Qui/.t3/worktrees/acos/t3-6219a35a-eb2ef407add7c3f9/.cache/art/sysroot/system/apex/com.android.appsearch /apex/com.android.appsearch --ro-bind /home/Qui/.t3/worktrees/acos/t3-6219a35a-eb2ef407add7c3f9/.cache/art/sysroot/system/apex/com.android.art /apex/com.android.art --ro-bind /home/Qui/.t3/worktrees/acos/t3-6219a35a-eb2ef407add7c3f9/.cache/art/sysroot/system/apex/com.android.btservices /apex/com.android.btservices --ro-bind /home/Qui/.t3/worktrees/acos/t3-6219a35a-eb2ef407add7c3f9/.cache/art/sysroot/system/apex/com.android.cellbroadcast /apex/com.android.cellbroadcast --ro-bind /home/Qui/.t3/worktrees/acos/t3-6219a35a-eb2ef407add7c3f9/.cache/art/sysroot/system/apex/com.android.conscrypt /apex/com.android.conscrypt --ro-bind /home/Qui/.t3/worktrees/acos/t3-6219a35a-eb2ef407add7c3f9/.cache/art/sysroot/system/apex/com.android.devicelock /apex/com.android.devicelock --ro-bind /home/Qui/.t3/worktrees/acos/t3-6219a35a-eb2ef407add7c3f9/.cache/art/sysroot/system/apex/com.android.extservices /apex/com.android.extservices --ro-bind /home/Qui/.t3/worktrees/acos/t3-6219a35a-eb2ef407add7c3f9/.cache/art/sysroot/system/apex/com.android.healthfitness /apex/com.android.healthfitness --ro-bind /home/Qui/.t3/worktrees/acos/t3-6219a35a-eb2ef407add7c3f9/.cache/art/sysroot/system/apex/com.android.i18n /apex/com.android.i18n --ro-bind /home/Qui/.t3/worktrees/acos/t3-6219a35a-eb2ef407add7c3f9/.cache/art/sysroot/system/apex/com.android.ipsec /apex/com.android.ipsec --ro-bind /home/Qui/.t3/worktrees/acos/t3-6219a35a-eb2ef407add7c3f9/.cache/art/sysroot/system/apex/com.android.media /apex/com.android.media --ro-bind /home/Qui/.t3/worktrees/acos/t3-6219a35a-eb2ef407add7c3f9/.cache/art/sysroot/system/apex/com.android.mediaprovider /apex/com.android.mediaprovider --ro-bind /home/Qui/.t3/worktrees/acos/t3-6219a35a-eb2ef407add7c3f9/.cache/art/sysroot/system/apex/com.android.media.swcodec /apex/com.android.media.swcodec --ro-bind /home/Qui/.t3/worktrees/acos/t3-6219a35a-eb2ef407add7c3f9/.cache/art/sysroot/system/apex/com.android.neuralnetworks /apex/com.android.neuralnetworks --ro-bind /home/Qui/.t3/worktrees/acos/t3-6219a35a-eb2ef407add7c3f9/.cache/art/sysroot/system/apex/com.android.os.statsd /apex/com.android.os.statsd --ro-bind /home/Qui/.t3/worktrees/acos/t3-6219a35a-eb2ef407add7c3f9/.cache/art/sysroot/system/apex/com.android.permission /apex/com.android.permission --ro-bind /home/Qui/.t3/worktrees/acos/t3-6219a35a-eb2ef407add7c3f9/.cache/art/sysroot/system/apex/com.android.resolv /apex/com.android.resolv --ro-bind /home/Qui/.t3/worktrees/acos/t3-6219a35a-eb2ef407add7c3f9/.cache/art/sysroot/system/apex/com.android.rkpd /apex/com.android.rkpd --ro-bind /home/Qui/.t3/worktrees/acos/t3-6219a35a-eb2ef407add7c3f9/.cache/art/sysroot/system/apex/com.android.runtime /apex/com.android.runtime --ro-bind /home/Qui/.t3/worktrees/acos/t3-6219a35a-eb2ef407add7c3f9/.cache/art/sysroot/system/apex/com.android.scheduling /apex/com.android.scheduling --ro-bind /home/Qui/.t3/worktrees/acos/t3-6219a35a-eb2ef407add7c3f9/.cache/art/sysroot/system/apex/com.android.sdkext /apex/com.android.sdkext --ro-bind /home/Qui/.t3/worktrees/acos/t3-6219a35a-eb2ef407add7c3f9/.cache/art/sysroot/system/apex/com.android.tethering /apex/com.android.tethering --ro-bind /home/Qui/.t3/worktrees/acos/t3-6219a35a-eb2ef407add7c3f9/.cache/art/sysroot/system/apex/com.android.tzdata /apex/com.android.tzdata --ro-bind /home/Qui/.t3/worktrees/acos/t3-6219a35a-eb2ef407add7c3f9/.cache/art/sysroot/system/apex/com.android.uwb /apex/com.android.uwb --ro-bind /home/Qui/.t3/worktrees/acos/t3-6219a35a-eb2ef407add7c3f9/.cache/art/sysroot/system/apex/com.android.virt /apex/com.android.virt --ro-bind /home/Qui/.t3/worktrees/acos/t3-6219a35a-eb2ef407add7c3f9/.cache/art/sysroot/system/apex/com.android.vndk.v34 /apex/com.android.vndk.v34 --ro-bind /home/Qui/.t3/worktrees/acos/t3-6219a35a-eb2ef407add7c3f9/.cache/art/sysroot/system/apex/com.android.wifi /apex/com.android.wifi --ro-bind /home/Qui/.t3/worktrees/acos/t3-6219a35a-eb2ef407add7c3f9/.cache/art/sysroot/system/apex/com.google.android.configinfrastructure /apex/com.android.configinfrastructure --ro-bind /home/Qui/.t3/worktrees/acos/t3-6219a35a-eb2ef407add7c3f9/.cache/art/sysroot/system/apex/com.google.android.ondevicepersonalization /apex/com.android.ondevicepersonalization --ro-bind /home/Qui/.t3/worktrees/acos/t3-6219a35a-eb2ef407add7c3f9/.cache/art/sysroot/system/apex/com.google.mainline.primary.libs /apex/sharedlibs --ro-bind /dev/shm/acos-cleanup-tests/sigkill-251097/data/linkerconfig /linkerconfig --dir /data --ro-bind /dev/shm/acos-cleanup-tests/sigkill-251097/data/system /data/system --ro-bind /dev/shm/acos-cleanup-tests/sigkill-251097/data/app /data/app --ro-bind /dev/shm/acos-cleanup-tests/sigkill-251097/data/overlay /data/overlay --ro-bind /dev/shm/acos-cleanup-tests/sigkill-251097/data/lib /data/lib --ro-bind /dev/shm/acos-cleanup-tests/sigkill-251097/data/shim /data/shim --ro-bind /dev/shm/acos-cleanup-tests/sigkill-251097/data/apex-info-list.xml /data/apex-info-list.xml --ro-bind /dev/shm/acos-cleanup-tests/sigkill-251097/data/acos.properties /data/acos.properties --bind /dev/shm/acos-cleanup-tests/sigkill-251097/data/runs/252192-0/dalvik-cache /data/dalvik-cache --bind /dev/shm/acos-cleanup-tests/sigkill-251097/data/runs/252192-0/misc /data/misc --bind /dev/shm/acos-cleanup-tests/sigkill-251097/data/runs/252192-0/tmp /data/tmp --bind /dev/shm/acos-cleanup-tests/sigkill-251097/data/runs/252192-0/out /data/out --bind /dev/shm/acos-cleanup-tests/sigkill-251097/data/runs/252192-0/task /data/task --bind /dev/shm/acos-cleanup-tests/sigkill-251097/data/runs/252192-0/app-data /data/app-data --dir /data/session --ro-bind /run/user/1000/acos-wv/252192-0 /run/acos --dev /dev --proc /proc --ro-bind /sys /sys --dir /vendor --dir /product --dir /system_ext --dir /data/local/tmp --ro-bind /etc/passwd /etc/passwd --ro-bind /dev/shm/acos-cleanup-tests/sigkill-251097/data/shim/libartshim.so /data/shim/libartshim.so --ro-bind /dev/shm/acos-cleanup-tests/sigkill-251097/data/app/libacosart.so /data/app/libacosart.so --ro-bind /dev/shm/acos-cleanup-tests/sigkill-251097/data/runs/252192-0/app/counter.apk /data/app/counter.apk --ro-bind /home/Qui/.t3/worktrees/acos/t3-6219a35a-eb2ef407add7c3f9/.cache/art/sysroot/shim/libacoshw.so /data/libacoshw.so --bind /dev/shm/acos-cleanup-tests/sigkill-251097/data/runs/252192-0 /data/session/h1sigkill --bind /dev/shm/acos-cleanup-tests/sigkill-251097/data/runs/252192-0/socket /dev/socket --ro-bind /dev/shm/acos-cleanup-tests/sigkill-251097/data/seccomp /data/seccomp --setenv ANDROID_ROOT /system/ --setenv ANDROID_RUNTIME_ROOT /apex/com.android.runtime --setenv ANDROID_ART_ROOT /apex/com.android.art --setenv ANDROID_I18N_ROOT /apex/com.android.i18n --setenv ANDROID_TZDATA_ROOT /apex/com.google.android.tzdata5 --setenv ANDROID_DATA /data --setenv ANDROID_STORAGE /data --setenv ANDROID_TMP /data/tmp --setenv ANDROID_ART_PROPERTIES /data/acos.properties --setenv BOOTCLASSPATH /apex/com.android.art/javalib/core-oj.jar:/apex/com.android.art/javalib/core-libart.jar:/apex/com.android.art/javalib/okhttp.jar:/apex/com.android.art/javalib/bouncycastle.jar:/apex/com.android.art/javalib/apache-xml.jar:/system/framework/framework.jar:/system/framework/framework-graphics.jar:/system/framework/ext.jar:/system/framework/telephony-common.jar:/system/framework/voip-common.jar:/system/framework/ims-common.jar:/apex/com.android.i18n/javalib/core-icu4j.jar:/apex/com.android.adservices/javalib/framework-adservices.jar:/apex/com.android.adservices/javalib/framework-sdksandbox.jar:/apex/com.android.appsearch/javalib/framework-appsearch.jar:/apex/com.android.btservices/javalib/framework-bluetooth.jar:/apex/com.android.configinfrastructure/javalib/framework-configinfrastructure.jar:/apex/com.android.conscrypt/javalib/conscrypt.jar:/apex/com.android.devicelock/javalib/framework-devicelock.jar:/apex/com.android.healthfitness/javalib/framework-healthfitness.jar:/apex/com.android.ipsec/javalib/android.net.ipsec.ike.jar:/apex/com.android.media/javalib/updatable-media.jar:/apex/com.android.mediaprovider/javalib/framework-mediaprovider.jar:/apex/com.android.ondevicepersonalization/javalib/framework-ondevicepersonalization.jar:/apex/com.android.os.statsd/javalib/framework-statsd.jar:/apex/com.android.permission/javalib/framework-permission.jar:/apex/com.android.permission/javalib/framework-permission-s.jar:/apex/com.android.scheduling/javalib/framework-scheduling.jar:/apex/com.android.sdkext/javalib/framework-sdkextensions.jar:/apex/com.android.tethering/javalib/framework-connectivity.jar:/apex/com.android.tethering/javalib/framework-connectivity-t.jar:/apex/com.android.tethering/javalib/framework-tethering.jar:/apex/com.android.uwb/javalib/framework-uwb.jar:/apex/com.android.virt/javalib/framework-virtualization.jar:/apex/com.android.wifi/javalib/framework-wifi.jar --setenv ACOSART_LOAD libandroid_runtime.so:libhwui.so --setenv ACOSART_BINDER_FAKE 1 --setenv DEX2OATBOOTCLASSPATH /apex/com.android.art/javalib/core-oj.jar:/apex/com.android.art/javalib/core-libart.jar:/apex/com.android.art/javalib/okhttp.jar:/apex/com.android.art/javalib/bouncycastle.jar:/apex/com.android.art/javalib/apache-xml.jar:/system/framework/framework.jar:/system/framework/framework-graphics.jar:/system/framework/ext.jar:/system/framework/telephony-common.jar:/system/framework/voip-common.jar:/system/framework/ims-common.jar:/apex/com.android.i18n/javalib/core-icu4j.jar --setenv LD_PRELOAD /data/seccomp/libacos_seccomp_guest.so /data/shim/libartshim.so:/data/app/libacosart.so:/data/libacoshw.so -- /system/apex/com.android.art/bin/dalvikvm64 -cp /data/app/session-guest/classes.dex dev.acos.art.SessionMain /data/app/counter.apk dev.acos.fixtures.counter /data/session/h1sigkill/out 1080 2062 420 /data/session/h1sigkill/overlay/PixelConfigOverlayCommon.idmap 2400 128 63 0 Counter 34 dev.acos.fixtures.counter.MainActivity h1sigkill
+Survivors:
+  pid=252333 ppid=1 state=S comm=bwrap cmd=bwrap --unshare-pid --unshare-net --unshare-ipc --unshare-uts --unshare-cgroup-try --die-with-parent --clearenv --cap-drop ALL --unshare-user --uid 10192 --tmpfs / --ro-bind /home/Qui/.t3/worktrees/acos/t3-6219a35a-eb2ef407add7c3f9/.cache/art/sysroot/system /system --dir /apex --ro-bind /dev/shm/acos-cleanup-tests/sigkill-251097/data/apex-info-list.xml /apex/apex-info-list.xml --ro-bind /home/Qui/.t3/worktrees/acos/t3-6219a35a-eb2ef407add7c3f9/.cache/art/sysroot/system/apex/com.android.adbd /apex/com.android.adbd --ro-bind /home/Qui/.t3/worktrees/acos/t3-6219a35a-eb2ef407add7c3f9/.cache/art/sysroot/system/apex/com.android.adservices /apex/com.android.adservices --ro-bind /home/Qui/.t3/worktrees/acos/t3-6219a35a-eb2ef407add7c3f9/.cache/art/sysroot/system/apex/com.android.apex.cts.shim /apex/com.android.apex.cts.shim --ro-bind /home/Qui/.t3/worktrees/acos/t3-6219a35a-eb2ef407add7c3f9/.cache/art/sysroot/system/apex/com.android.appsearch /apex/com.android.appsearch --ro-bind /home/Qui/.t3/worktrees/acos/t3-6219a35a-eb2ef407add7c3f9/.cache/art/sysroot/system/apex/com.android.art /apex/com.android.art --ro-bind /home/Qui/.t3/worktrees/acos/t3-6219a35a-eb2ef407add7c3f9/.cache/art/sysroot/system/apex/com.android.btservices /apex/com.android.btservices --ro-bind /home/Qui/.t3/worktrees/acos/t3-6219a35a-eb2ef407add7c3f9/.cache/art/sysroot/system/apex/com.android.cellbroadcast /apex/com.android.cellbroadcast --ro-bind /home/Qui/.t3/worktrees/acos/t3-6219a35a-eb2ef407add7c3f9/.cache/art/sysroot/system/apex/com.android.conscrypt /apex/com.android.conscrypt --ro-bind /home/Qui/.t3/worktrees/acos/t3-6219a35a-eb2ef407add7c3f9/.cache/art/sysroot/system/apex/com.android.devicelock /apex/com.android.devicelock --ro-bind /home/Qui/.t3/worktrees/acos/t3-6219a35a-eb2ef407add7c3f9/.cache/art/sysroot/system/apex/com.android.extservices /apex/com.android.extservices --ro-bind /home/Qui/.t3/worktrees/acos/t3-6219a35a-eb2ef407add7c3f9/.cache/art/sysroot/system/apex/com.android.healthfitness /apex/com.android.healthfitness --ro-bind /home/Qui/.t3/worktrees/acos/t3-6219a35a-eb2ef407add7c3f9/.cache/art/sysroot/system/apex/com.android.i18n /apex/com.android.i18n --ro-bind /home/Qui/.t3/worktrees/acos/t3-6219a35a-eb2ef407add7c3f9/.cache/art/sysroot/system/apex/com.android.ipsec /apex/com.android.ipsec --ro-bind /home/Qui/.t3/worktrees/acos/t3-6219a35a-eb2ef407add7c3f9/.cache/art/sysroot/system/apex/com.android.media /apex/com.android.media --ro-bind /home/Qui/.t3/worktrees/acos/t3-6219a35a-eb2ef407add7c3f9/.cache/art/sysroot/system/apex/com.android.mediaprovider /apex/com.android.mediaprovider --ro-bind /home/Qui/.t3/worktrees/acos/t3-6219a35a-eb2ef407add7c3f9/.cache/art/sysroot/system/apex/com.android.media.swcodec /apex/com.android.media.swcodec --ro-bind /home/Qui/.t3/worktrees/acos/t3-6219a35a-eb2ef407add7c3f9/.cache/art/sysroot/system/apex/com.android.neuralnetworks /apex/com.android.neuralnetworks --ro-bind /home/Qui/.t3/worktrees/acos/t3-6219a35a-eb2ef407add7c3f9/.cache/art/sysroot/system/apex/com.android.os.statsd /apex/com.android.os.statsd --ro-bind /home/Qui/.t3/worktrees/acos/t3-6219a35a-eb2ef407add7c3f9/.cache/art/sysroot/system/apex/com.android.permission /apex/com.android.permission --ro-bind /home/Qui/.t3/worktrees/acos/t3-6219a35a-eb2ef407add7c3f9/.cache/art/sysroot/system/apex/com.android.resolv /apex/com.android.resolv --ro-bind /home/Qui/.t3/worktrees/acos/t3-6219a35a-eb2ef407add7c3f9/.cache/art/sysroot/system/apex/com.android.rkpd /apex/com.android.rkpd --ro-bind /home/Qui/.t3/worktrees/acos/t3-6219a35a-eb2ef407add7c3f9/.cache/art/sysroot/system/apex/com.android.runtime /apex/com.android.runtime --ro-bind /home/Qui/.t3/worktrees/acos/t3-6219a35a-eb2ef407add7c3f9/.cache/art/sysroot/system/apex/com.android.scheduling /apex/com.android.scheduling --ro-bind /home/Qui/.t3/worktrees/acos/t3-6219a35a-eb2ef407add7c3f9/.cache/art/sysroot/system/apex/com.android.sdkext /apex/com.android.sdkext --ro-bind /home/Qui/.t3/worktrees/acos/t3-6219a35a-eb2ef407add7c3f9/.cache/art/sysroot/system/apex/com.android.tethering /apex/com.android.tethering --ro-bind /home/Qui/.t3/worktrees/acos/t3-6219a35a-eb2ef407add7c3f9/.cache/art/sysroot/system/apex/com.android.tzdata /apex/com.android.tzdata --ro-bind /home/Qui/.t3/worktrees/acos/t3-6219a35a-eb2ef407add7c3f9/.cache/art/sysroot/system/apex/com.android.uwb /apex/com.android.uwb --ro-bind /home/Qui/.t3/worktrees/acos/t3-6219a35a-eb2ef407add7c3f9/.cache/art/sysroot/system/apex/com.android.virt /apex/com.android.virt --ro-bind /home/Qui/.t3/worktrees/acos/t3-6219a35a-eb2ef407add7c3f9/.cache/art/sysroot/system/apex/com.android.vndk.v34 /apex/com.android.vndk.v34 --ro-bind /home/Qui/.t3/worktrees/acos/t3-6219a35a-eb2ef407add7c3f9/.cache/art/sysroot/system/apex/com.android.wifi /apex/com.android.wifi --ro-bind /home/Qui/.t3/worktrees/acos/t3-6219a35a-eb2ef407add7c3f9/.cache/art/sysroot/system/apex/com.google.android.configinfrastructure /apex/com.android.configinfrastructure --ro-bind /home/Qui/.t3/worktrees/acos/t3-6219a35a-eb2ef407add7c3f9/.cache/art/sysroot/system/apex/com.google.android.ondevicepersonalization /apex/com.android.ondevicepersonalization --ro-bind /home/Qui/.t3/worktrees/acos/t3-6219a35a-eb2ef407add7c3f9/.cache/art/sysroot/system/apex/com.google.mainline.primary.libs /apex/sharedlibs --ro-bind /dev/shm/acos-cleanup-tests/sigkill-251097/data/linkerconfig /linkerconfig --dir /data --ro-bind /dev/shm/acos-cleanup-tests/sigkill-251097/data/system /data/system --ro-bind /dev/shm/acos-cleanup-tests/sigkill-251097/data/app /data/app --ro-bind /dev/shm/acos-cleanup-tests/sigkill-251097/data/overlay /data/overlay --ro-bind /dev/shm/acos-cleanup-tests/sigkill-251097/data/lib /data/lib --ro-bind /dev/shm/acos-cleanup-tests/sigkill-251097/data/shim /data/shim --ro-bind /dev/shm/acos-cleanup-tests/sigkill-251097/data/apex-info-list.xml /data/apex-info-list.xml --ro-bind /dev/shm/acos-cleanup-tests/sigkill-251097/data/acos.properties /data/acos.properties --bind /dev/shm/acos-cleanup-tests/sigkill-251097/data/runs/252192-0/dalvik-cache /data/dalvik-cache --bind /dev/shm/acos-cleanup-tests/sigkill-251097/data/runs/252192-0/misc /data/misc --bind /dev/shm/acos-cleanup-tests/sigkill-251097/data/runs/252192-0/tmp /data/tmp --bind /dev/shm/acos-cleanup-tests/sigkill-251097/data/runs/252192-0/out /data/out --bind /dev/shm/acos-cleanup-tests/sigkill-251097/data/runs/252192-0/task /data/task --bind /dev/shm/acos-cleanup-tests/sigkill-251097/data/runs/252192-0/app-data /data/app-data --dir /data/session --ro-bind /run/user/1000/acos-wv/252192-0 /run/acos --dev /dev --proc /proc --ro-bind /sys /sys --dir /vendor --dir /product --dir /system_ext --dir /data/local/tmp --ro-bind /etc/passwd /etc/passwd --ro-bind /dev/shm/acos-cleanup-tests/sigkill-251097/data/shim/libartshim.so /data/shim/libartshim.so --ro-bind /dev/shm/acos-cleanup-tests/sigkill-251097/data/app/libacosart.so /data/app/libacosart.so --ro-bind /dev/shm/acos-cleanup-tests/sigkill-251097/data/runs/252192-0/app/counter.apk /data/app/counter.apk --ro-bind /home/Qui/.t3/worktrees/acos/t3-6219a35a-eb2ef407add7c3f9/.cache/art/sysroot/shim/libacoshw.so /data/libacoshw.so --bind /dev/shm/acos-cleanup-tests/sigkill-251097/data/runs/252192-0 /data/session/h1sigkill --bind /dev/shm/acos-cleanup-tests/sigkill-251097/data/runs/252192-0/socket /dev/socket --ro-bind /dev/shm/acos-cleanup-tests/sigkill-251097/data/seccomp /data/seccomp --setenv ANDROID_ROOT /system/ --setenv ANDROID_RUNTIME_ROOT /apex/com.android.runtime --setenv ANDROID_ART_ROOT /apex/com.android.art --setenv ANDROID_I18N_ROOT /apex/com.android.i18n --setenv ANDROID_TZDATA_ROOT /apex/com.google.android.tzdata5 --setenv ANDROID_DATA /data --setenv ANDROID_STORAGE /data --setenv ANDROID_TMP /data/tmp --setenv ANDROID_ART_PROPERTIES /data/acos.properties --setenv BOOTCLASSPATH /apex/com.android.art/javalib/core-oj.jar:/apex/com.android.art/javalib/core-libart.jar:/apex/com.android.art/javalib/okhttp.jar:/apex/com.android.art/javalib/bouncycastle.jar:/apex/com.android.art/javalib/apache-xml.jar:/system/framework/framework.jar:/system/framework/framework-graphics.jar:/system/framework/ext.jar:/system/framework/telephony-common.jar:/system/framework/voip-common.jar:/system/framework/ims-common.jar:/apex/com.android.i18n/javalib/core-icu4j.jar:/apex/com.android.adservices/javalib/framework-adservices.jar:/apex/com.android.adservices/javalib/framework-sdksandbox.jar:/apex/com.android.appsearch/javalib/framework-appsearch.jar:/apex/com.android.btservices/javalib/framework-bluetooth.jar:/apex/com.android.configinfrastructure/javalib/framework-configinfrastructure.jar:/apex/com.android.conscrypt/javalib/conscrypt.jar:/apex/com.android.devicelock/javalib/framework-devicelock.jar:/apex/com.android.healthfitness/javalib/framework-healthfitness.jar:/apex/com.android.ipsec/javalib/android.net.ipsec.ike.jar:/apex/com.android.media/javalib/updatable-media.jar:/apex/com.android.mediaprovider/javalib/framework-mediaprovider.jar:/apex/com.android.ondevicepersonalization/javalib/framework-ondevicepersonalization.jar:/apex/com.android.os.statsd/javalib/framework-statsd.jar:/apex/com.android.permission/javalib/framework-permission.jar:/apex/com.android.permission/javalib/framework-permission-s.jar:/apex/com.android.scheduling/javalib/framework-scheduling.jar:/apex/com.android.sdkext/javalib/framework-sdkextensions.jar:/apex/com.android.tethering/javalib/framework-connectivity.jar:/apex/com.android.tethering/javalib/framework-connectivity-t.jar:/apex/com.android.tethering/javalib/framework-tethering.jar:/apex/com.android.uwb/javalib/framework-uwb.jar:/apex/com.android.virt/javalib/framework-virtualization.jar:/apex/com.android.wifi/javalib/framework-wifi.jar --setenv ACOSART_LOAD libandroid_runtime.so:libhwui.so --setenv ACOSART_BINDER_FAKE 1 --setenv DEX2OATBOOTCLASSPATH /apex/com.android.art/javalib/core-oj.jar:/apex/com.android.art/javalib/core-libart.jar:/apex/com.android.art/javalib/okhttp.jar:/apex/com.android.art/javalib/bouncycastle.jar:/apex/com.android.art/javalib/apache-xml.jar:/system/framework/framework.jar:/system/framework/framework-graphics.jar:/system/framework/ext.jar:/system/framework/telephony-common.jar:/system/framework/voip-common.jar:/system/framework/ims-common.jar:/apex/com.android.i18n/javalib/core-icu4j.jar --setenv LD_PRELOAD /data/seccomp/libacos_seccomp_guest.so /data/shim/libartshim.so:/data/app/libacosart.so:/data/libacoshw.so -- /system/apex/com.android.art/bin/dalvikvm64 -cp /data/app/session-guest/classes.dex dev.acos.art.SessionMain /data/app/counter.apk dev.acos.fixtures.counter /data/session/h1sigkill/out 1080 2062 420 /data/session/h1sigkill/overlay/PixelConfigOverlayCommon.idmap 2400 128 63 0 Counter 34 dev.acos.fixtures.counter.MainActivity h1sigkill
+(other processes on this host, not this test's, ignored:
+  pid=252339 ppid=251036 state=S comm=bash cmd=/bin/bash -c cd /home/Qui/Projects/acos/.cache/wt-wvtap && source .cache/env.sh && (tools/guarded.sh --mem 12G --time 900 -- cargo build --release --offline -p acos-cli -p acos-art -p acos-webview 2>&1 | tail -2) && (tools/art-runtime/run-exclusive.sh --task WVTAP -- tools/guarded.sh --mem 12G --time 600 -- cargo test --offline -p acos-services --lib window_session::input_dispatch 2>&1 | grep -E 'test result'))
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    sigkill_of_the_launcher_takes_the_guest_and_bwrap_with_it
+
+test result: FAILED. 8 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 17.51s
+
+error: test failed, to rerun pass `-p acos-art --test cleanup`

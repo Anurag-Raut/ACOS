@@ -68,9 +68,7 @@ fn string16_array_bytes_match_parcel_writeStringArray() {
 fn the_two_array_encodings_differ() {
     let items: [Option<&str>; 2] = [Some("requested.permission"), Some("x")];
     let mut eight = Parcel::new();
-    eight
-        .write_string8_array(Some(&items))
-        .expect("String8[]");
+    eight.write_string8_array(Some(&items)).expect("String8[]");
     let mut sixteen = Parcel::new();
     sixteen
         .write_string16_array_nullable(Some(&items))

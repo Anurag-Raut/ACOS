@@ -31,10 +31,8 @@ fn workspace() -> PathBuf {
 fn scratch(name: &str) -> PathBuf {
     static COUNTER: AtomicU64 = AtomicU64::new(0);
     let n = COUNTER.fetch_add(1, Ordering::Relaxed);
-    let dir = std::env::temp_dir().join(format!(
-        "acos-cli-engine-{}-{n}-{name}",
-        std::process::id()
-    ));
+    let dir =
+        std::env::temp_dir().join(format!("acos-cli-engine-{}-{n}-{name}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).expect("scratch dir");
     dir
@@ -219,8 +217,8 @@ fn run_verify_scenario(name: &str, fault: &str, scenario: &Path) -> Run {
 }
 
 fn verdict(run: &Run) -> Value {
-    let text = std::fs::read_to_string(run.artifacts.join("verdict.json"))
-        .unwrap_or_else(|error| {
+    let text =
+        std::fs::read_to_string(run.artifacts.join("verdict.json")).unwrap_or_else(|error| {
             panic!(
                 "verdict.json must exist: {error}\nstdout: {}\nstderr: {}",
                 String::from_utf8_lossy(&run.output.stdout),
@@ -264,10 +262,7 @@ fn art_counter_scenario_passes_on_a_live_session_and_tears_the_tree_down() {
 
     // The decisive transition ran three times: Increment, Reset, Increment.
     let steps = verdict["steps"].as_array().unwrap();
-    let taps: Vec<&Value> = steps
-        .iter()
-        .filter(|step| step["step"] == "tap")
-        .collect();
+    let taps: Vec<&Value> = steps.iter().filter(|step| step["step"] == "tap").collect();
     assert_eq!(taps.len(), 3, "tap Increment, Reset, then Increment again");
     assert!(
         !steps.iter().any(|step| step["step"] == "reset"),
@@ -330,7 +325,10 @@ fn a_tap_that_completes_no_new_frame_is_refused() {
         "the error must name the stale frame: {detail}"
     );
     let pid = run.helper_pid.expect("helper pid");
-    assert!(wait_gone(pid), "teardown must still clean the tree on failure");
+    assert!(
+        wait_gone(pid),
+        "teardown must still clean the tree on failure"
+    );
 }
 
 #[test]
@@ -351,7 +349,10 @@ fn a_session_without_a_live_frame_fails_honestly() {
         "the failure must name the missing live frame: {message}"
     );
     let pid = run.helper_pid.expect("helper pid");
-    assert!(wait_gone(pid), "teardown must still clean the tree on failure");
+    assert!(
+        wait_gone(pid),
+        "teardown must still clean the tree on failure"
+    );
 }
 
 /// A selector the live tree does not contain must fail with a structured
@@ -368,7 +369,10 @@ fn a_tap_on_a_missing_selector_is_a_structured_failure() {
     let scenario = dir.join("w10-missing-selector.yaml");
     std::fs::write(&scenario, scenario_text).expect("write the negative scenario");
     let run = run_verify_scenario("missing-selector-run", "", &scenario);
-    assert!(!run.output.status.success(), "a missing selector must not pass");
+    assert!(
+        !run.output.status.success(),
+        "a missing selector must not pass"
+    );
     let verdict = verdict(&run);
     assert_ne!(verdict["verdict"], "pass");
     assert_eq!(verdict["engine"], "art");
@@ -388,5 +392,8 @@ fn a_tap_on_a_missing_selector_is_a_structured_failure() {
     );
     // The tap was never published: the session tree has no such node.
     let pid = run.helper_pid.expect("helper pid");
-    assert!(wait_gone(pid), "teardown must still clean the tree on failure");
+    assert!(
+        wait_gone(pid),
+        "teardown must still clean the tree on failure"
+    );
 }

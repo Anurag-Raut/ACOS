@@ -1,0 +1,17 @@
+{
+  "acos_version": "0.2.2",
+  "apk_path": "fixtures/build/apps/a11y-probe.apk",
+  "apk_sha256": "d96a92287479412b8bc613aa15753f4fa4793dfcfb794abeba53dd8ef07d4809",
+  "scenario_path": "scenarios/a11y-probe.yaml",
+  "scenario_sha256": "9dca5083fda261c4623a2ab2d3dc0570bd79ac4615b92f0cbc86cd0cb219c043",
+  "flags": [],
+  "isolation": "process",
+  "display": {
+    "mode": "offscreen",
+    "width": 1080,
+    "height": 2400,
+    "density_dpi": 420
+  },
+  "fidelity": "art-reference",
+  "backend": "acos-native"
+}

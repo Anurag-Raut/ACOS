@@ -292,7 +292,12 @@ pub struct SessionError {
 /// each front-end) so the CLI and MCP server answer identically.
 #[must_use]
 pub fn session_error_hint(code: &str, details: &[(String, String)]) -> Option<&'static str> {
-    let get = |key: &str| details.iter().find(|(k, _)| k == key).map(|(_, v)| v.as_str());
+    let get = |key: &str| {
+        details
+            .iter()
+            .find(|(k, _)| k == key)
+            .map(|(_, v)| v.as_str())
+    };
     match code {
         "UNSUPPORTED_BACKEND" => match get("capability") {
             Some("ui.tree") => Some(
@@ -739,10 +744,7 @@ fn worker_loop(rx: Receiver<Cmd>, limits: SessionOptions) {
                     (report, _) => report,
                 });
             }
-            Cmd::Relaunch {
-                orientation,
-                reply,
-            } => {
+            Cmd::Relaunch { orientation, reply } => {
                 let _ = reply.send(do_relaunch(&mut state, orientation));
             }
             Cmd::Logs { reply } => {
@@ -826,9 +828,7 @@ fn do_text(state: &mut WorkerState, text: &str) -> Result<InputReport, SessionEr
     let Some(runtime) = state.runtime.as_mut() else {
         return Err(SessionError::new(
             "UNSUPPORTED_BACKEND",
-            format!(
-                "cannot type text: the runtime is not booted (stage reached: {stage})"
-            ),
+            format!("cannot type text: the runtime is not booted (stage reached: {stage})"),
         )
         .with_details(vec![
             ("reason", "not_ready".to_string()),
@@ -844,9 +844,10 @@ fn do_text(state: &mut WorkerState, text: &str) -> Result<InputReport, SessionEr
             // The text commit is the visible change; `state_changed` is the
             // before/after tree diff, not a guess. A follow-up `capture` forces
             // the fresh frame (the looper pump is used by taps, not by text).
-            let after = crate::view_tree::walk(runtime.vm_mut(), crate::view_tree::DEFAULT_MAX_NODES)
-                .map(|tree| tree_state_summary(&tree))
-                .unwrap_or_default();
+            let after =
+                crate::view_tree::walk(runtime.vm_mut(), crate::view_tree::DEFAULT_MAX_NODES)
+                    .map(|tree| tree_state_summary(&tree))
+                    .unwrap_or_default();
             Ok(InputReport {
                 kind: "text".to_string(),
                 accepted: true,
@@ -909,7 +910,8 @@ fn do_capture(
 fn do_observe(
     state: &WorkerState,
     screenshot: Option<&Path>,
-) -> Result<ObserveReport, SessionError> {    let published = state.store.published_count();
+) -> Result<ObserveReport, SessionError> {
+    let published = state.store.published_count();
     let Some(frame) = state.store.latest() else {
         return Err(SessionError::new(
             "UNSUPPORTED_BACKEND",
@@ -964,10 +966,7 @@ fn do_observe(
 /// across the public API) so `observe --screenshot` is honest: the bytes are the
 /// pixels of the frame that was actually published.
 /// Walk the live `View` hierarchy of the session VM, or report why not.
-fn do_observe_tree(
-    state: &mut WorkerState,
-    max_nodes: usize,
-) -> Result<ViewTree, SessionError> {
+fn do_observe_tree(state: &mut WorkerState, max_nodes: usize) -> Result<ViewTree, SessionError> {
     let stage = state.stage_reached;
     let Some(runtime) = state.runtime.as_mut() else {
         return Err(SessionError::new(
@@ -991,11 +990,13 @@ fn do_observe_tree(
         .map(|tree| crate::view_tree::append_toasts(tree, &overlays))
     {
         Ok(tree) => Ok(tree),
-        Err(e) => Err(SessionError::new(e.code(), e.message().to_string()).with_details(vec![
-            ("reason", e.reason().to_string()),
-            ("capability", "ui.tree".to_string()),
-            ("stage_reached", stage.to_string()),
-        ])),
+        Err(e) => Err(
+            SessionError::new(e.code(), e.message().to_string()).with_details(vec![
+                ("reason", e.reason().to_string()),
+                ("capability", "ui.tree".to_string()),
+                ("stage_reached", stage.to_string()),
+            ]),
+        ),
     }
 }
 
@@ -1117,10 +1118,12 @@ fn do_relaunch(state: &mut WorkerState, orientation: i32) -> Result<InputReport,
         ]));
     };
     runtime.relaunch_activity(orientation).map_err(|e| {
-        SessionError::new("UNSUPPORTED_BACKEND", format!("relaunch failed: {e}")).with_details(vec![
-            ("capability", "input.rotate".to_string()),
-            ("stage_reached", stage.to_string()),
-        ])
+        SessionError::new("UNSUPPORTED_BACKEND", format!("relaunch failed: {e}")).with_details(
+            vec![
+                ("capability", "input.rotate".to_string()),
+                ("stage_reached", stage.to_string()),
+            ],
+        )
     })?;
     let mut report = InputReport {
         kind: "rotate".to_string(),
@@ -1140,7 +1143,11 @@ fn do_relaunch(state: &mut WorkerState, orientation: i32) -> Result<InputReport,
 }
 
 /// Run the interaction pump and set `state_changed` from a pre/post tree diff.
-fn input_after_pump(state: &mut WorkerState, mut report: InputReport, before: String) -> InputReport {
+fn input_after_pump(
+    state: &mut WorkerState,
+    mut report: InputReport,
+    before: String,
+) -> InputReport {
     if let Some(rt) = state.runtime.as_mut() {
         if let Err(e) = rt.pump() {
             eprintln!("acos-session: interaction pump failed: {e}");
@@ -1251,13 +1258,9 @@ fn find_node_by_text<'a>(tree: &'a ViewTree, label: &str) -> Option<&'a ViewNode
         if node.text == label {
             return Some(node);
         }
-        node.children
-            .iter()
-            .find_map(|child| search(child, label))
+        node.children.iter().find_map(|child| search(child, label))
     }
-    tree.nodes
-        .iter()
-        .find_map(|root| search(root, label))
+    tree.nodes.iter().find_map(|root| search(root, label))
 }
 
 fn encode_png(rgba: &[u8], width: u32, height: u32) -> Result<Vec<u8>, String> {
@@ -1615,9 +1618,7 @@ fn do_launch(state: &mut WorkerState, apk: &Path) -> Result<LaunchReport, Sessio
 /// disabled (`ACOS_NO_BOOT_CACHE=1` / `ACOS_BOOT_CACHE=0`) or on any template
 /// failure this is the plain `Runtime::standard_with` boot and the caller runs
 /// the normal `boot_app_process` lifecycle.
-fn build_launch_runtime(
-    options: VmOptions,
-) -> Result<(Runtime, Option<u32>), acos_vm::VmError> {
+fn build_launch_runtime(options: VmOptions) -> Result<(Runtime, Option<u32>), acos_vm::VmError> {
     if let Some(cache) = crate::boot_image_cache::from_env() {
         if let Ok(template) =
             crate::session_pool::RuntimeTemplate::boot_with_options(options.clone(), Some(&cache))

@@ -44,7 +44,10 @@ fn damage_tracking_skips_raster_when_unchanged() {
     // Unchanged tree: no raster work, but a fresh frame sequence.
     let seq2 = ctx.surface_render_node(surface, root, 2).unwrap();
     assert_eq!(seq2, seq1 + 1);
-    assert_eq!(ctx.surfaces.get(surface).unwrap().raster_ops, ops_after_first);
+    assert_eq!(
+        ctx.surfaces.get(surface).unwrap().raster_ops,
+        ops_after_first
+    );
 
     // Touch the tree: raster work resumes.
     ctx.render_node_set_alpha(root, 0.999).unwrap();
@@ -61,8 +64,10 @@ fn unsupported_ops_are_recorded_not_skipped() {
     let val = ctx.matrix_create();
     let path = ctx.path_create();
     let other = ctx.path_create();
-    ctx.path_add_rect(path, RectF::new(0.0, 0.0, 10.0, 10.0), false).unwrap();
-    ctx.path_add_rect(other, RectF::new(5.0, 5.0, 15.0, 15.0), false).unwrap();
+    ctx.path_add_rect(path, RectF::new(0.0, 0.0, 10.0, 10.0), false)
+        .unwrap();
+    ctx.path_add_rect(other, RectF::new(5.0, 5.0, 15.0, 15.0), false)
+        .unwrap();
     // Path.op is explicitly unsupported.
     let ok = ctx.path_op(path, other, 2).unwrap();
     assert!(!ok);
@@ -165,7 +170,10 @@ fn render_error_codes_are_stable() {
             "RENDER_FONT_NOT_FOUND",
         ),
         (
-            RenderError::NoFreshFrame { after: 1, latest: 0 },
+            RenderError::NoFreshFrame {
+                after: 1,
+                latest: 0,
+            },
             "NO_FRESH_FRAME",
         ),
         (
@@ -173,10 +181,7 @@ fn render_error_codes_are_stable() {
             "RENDER_INVALID_ARGUMENT",
         ),
         (RenderError::Size { msg: "x".into() }, "RENDER_SIZE"),
-        (
-            RenderError::Decode { msg: "x".into() },
-            "RENDER_DECODE",
-        ),
+        (RenderError::Decode { msg: "x".into() }, "RENDER_DECODE"),
         (RenderError::Io { msg: "x".into() }, "RENDER_IO"),
         (RenderError::Strict { msg: "x".into() }, "RENDER_STRICT"),
     ];
@@ -189,7 +194,10 @@ fn render_error_codes_are_stable() {
 struct Rng(u64);
 impl Rng {
     fn next(&mut self) -> u64 {
-        self.0 = self.0.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+        self.0 = self
+            .0
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
         self.0 >> 33
     }
     fn f(&mut self, lo: f32, hi: f32) -> f32 {
@@ -211,11 +219,22 @@ fn fuzz_random_op_sequences_never_panic() {
         for _ in 0..200 {
             match rng.next() % 10 {
                 0 => {
-                    let r = RectF::new(rng.f(-20.0, 60.0), rng.f(-20.0, 60.0), rng.f(20.0, 100.0), rng.f(20.0, 100.0));
+                    let r = RectF::new(
+                        rng.f(-20.0, 60.0),
+                        rng.f(-20.0, 60.0),
+                        rng.f(20.0, 100.0),
+                        rng.f(20.0, 100.0),
+                    );
                     let _ = ctx.canvas_draw_rect(surface, r, paint);
                 }
                 1 => {
-                    let _ = ctx.canvas_draw_circle(surface, rng.f(0.0, 64.0), rng.f(0.0, 64.0), rng.f(1.0, 40.0), paint);
+                    let _ = ctx.canvas_draw_circle(
+                        surface,
+                        rng.f(0.0, 64.0),
+                        rng.f(0.0, 64.0),
+                        rng.f(1.0, 40.0),
+                        paint,
+                    );
                 }
                 2 => {
                     let _ = ctx.canvas_translate(surface, rng.f(-10.0, 10.0), rng.f(-10.0, 10.0));
@@ -227,13 +246,26 @@ fn fuzz_random_op_sequences_never_panic() {
                     let _ = ctx.canvas_restore(surface);
                 }
                 5 => {
-                    let _ = ctx.canvas_clip_rect(surface, RectF::new(0.0, 0.0, 32.0, 32.0), ClipOp::Intersect, true);
+                    let _ = ctx.canvas_clip_rect(
+                        surface,
+                        RectF::new(0.0, 0.0, 32.0, 32.0),
+                        ClipOp::Intersect,
+                        true,
+                    );
                 }
                 6 => {
                     let path = ctx.path_create();
                     let _ = ctx.path_move_to(path, rng.f(0.0, 64.0), rng.f(0.0, 64.0));
                     let _ = ctx.path_line_to(path, rng.f(0.0, 64.0), rng.f(0.0, 64.0));
-                    let _ = ctx.path_cubic_to(path, rng.f(0.0, 64.0), rng.f(0.0, 64.0), rng.f(0.0, 64.0), rng.f(0.0, 64.0), rng.f(0.0, 64.0), rng.f(0.0, 64.0));
+                    let _ = ctx.path_cubic_to(
+                        path,
+                        rng.f(0.0, 64.0),
+                        rng.f(0.0, 64.0),
+                        rng.f(0.0, 64.0),
+                        rng.f(0.0, 64.0),
+                        rng.f(0.0, 64.0),
+                        rng.f(0.0, 64.0),
+                    );
                     let _ = ctx.canvas_draw_path(surface, path, paint);
                 }
                 7 => {
@@ -264,10 +296,15 @@ fn draw_lines_points_and_paint() {
     ctx.paint_set_style(paint, 1).unwrap();
     ctx.paint_set_stroke_width(paint, 4.0).unwrap();
     // Two horizontal lines.
-    ctx.canvas_draw_lines(surface, &[0.0, 5.0, 40.0, 5.0, 0.0, 20.0, 40.0, 20.0], paint)
-        .unwrap();
+    ctx.canvas_draw_lines(
+        surface,
+        &[0.0, 5.0, 40.0, 5.0, 0.0, 20.0, 40.0, 20.0],
+        paint,
+    )
+    .unwrap();
     // A point at (30, 30).
-    ctx.canvas_draw_points(surface, &[30.0, 30.0], paint).unwrap();
+    ctx.canvas_draw_points(surface, &[30.0, 30.0], paint)
+        .unwrap();
     let fill = ctx.paint_create();
     ctx.paint_set_color(fill, 0xffff0000).unwrap();
     ctx.canvas_draw_paint(surface, fill).unwrap();

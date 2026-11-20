@@ -1,0 +1,108 @@
+{
+  "assertions": [
+    {
+      "actual": {
+        "focus": "application",
+        "focus_type": "TYPE_BASE_APPLICATION",
+        "order": [
+          "application"
+        ],
+        "types": [
+          "TYPE_BASE_APPLICATION"
+        ],
+        "z": [
+          0
+        ]
+      },
+      "diff": {
+        "actual": {
+          "focus": "application",
+          "focus_type": "TYPE_BASE_APPLICATION",
+          "order": [
+            "application"
+          ],
+          "types": [
+            "TYPE_BASE_APPLICATION"
+          ],
+          "z": [
+            0
+          ]
+        },
+        "detail": "window kinds are [\"application\"], expected [\"application\", \"accessibility_overlay\"]",
+        "expected": {
+          "focus": null,
+          "focus_type": null,
+          "order": [
+            "application",
+            "accessibility_overlay"
+          ],
+          "types": [
+            "TYPE_BASE_APPLICATION",
+            "TYPE_ACCESSIBILITY_OVERLAY"
+          ]
+        }
+      },
+      "expected": {
+        "focus": null,
+        "focus_type": null,
+        "order": [
+          "application",
+          "accessibility_overlay"
+        ],
+        "types": [
+          "TYPE_BASE_APPLICATION",
+          "TYPE_ACCESSIBILITY_OVERLAY"
+        ]
+      },
+      "kind": "windows",
+      "matched_node_ids": [],
+      "passed": false
+    }
+  ],
+  "certification": "certified-with-limits",
+  "certification_limits": {
+    "doc": "docs/SANDBOX_CERTIFICATION.md",
+    "section": "§8.7"
+  },
+  "duration_ms": 0,
+  "error": {
+    "class": "assertion",
+    "code": "ASSERTION_FAILED",
+    "details": {
+      "polls": 1,
+      "waited_ms": 0
+    },
+    "hint": "Compare expected vs actual in the assertion diff, inspect the linked frame/tree, then fix the app or the expectation. Rerun the scenario.",
+    "message": "window kinds are [\"application\"], expected [\"application\", \"accessibility_overlay\"]",
+    "retryable": false
+  },
+  "evidence": [
+    {
+      "kind": "tree",
+      "path": "tree/15.json"
+    },
+    {
+      "kind": "frame",
+      "path": "frames/15.png"
+    },
+    {
+      "kind": "step",
+      "path": "steps/14-assert_windows.json"
+    }
+  ],
+  "frame_seq": 15,
+  "index": 14,
+  "provenance": {},
+  "settle": {
+    "bound": "strict-event",
+    "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
+    "mode": "strict",
+    "probe_seq": 329,
+    "settled": true,
+    "strict_rule": "event",
+    "tree_age_ms": 42
+  },
+  "status": "fail",
+  "step": "assert_windows",
+  "trust": "trusted"
+}

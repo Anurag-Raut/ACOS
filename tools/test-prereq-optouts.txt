@@ -1,0 +1,19 @@
+# Tests whose prerequisite cannot exist on this host. Format: <test-name> <prerequisite and why it cannot exist here>.
+# test-crates.sh runs the gate with --skip for each name below; a direct run of the test fails loudly.
+#
+# Empty of prerequisites that cannot exist. spike_net_boundary (pasta) is NOT listed: it is red until pasta is discoverable (see results/handoff/HYG3/README.md).
+#
+# HYG4 (b): heavy Chromium tests of acos-webview. They are gated on ACOS_WEBVIEW_TEST=1 because each
+# starts the real pinned engine (Chrome for Testing headless shell, downloaded once into the engine cache).
+# The default gate (tools/art-runtime/test-crates.sh) excludes them with --skip, and a direct run without the env
+# fails with the remedy. The release gate runs them EXPLICITLY with the env set, through
+# tools/art-runtime/test-webview-heavy.sh, which fails if any of them is skipped.
+engine_handshake_over_the_devtools_pipe the pinned engine starts a real Chromium (ACOS_WEBVIEW_TEST=1; release gate runs it)
+ending_one_session_does_not_kill_the_shared_engine_of_the_other the real engine (ACOS_WEBVIEW_TEST=1; release gate runs it)
+two_sessions_get_their_own_context_and_a_real_png_frame_through_the_gate the real engine (ACOS_WEBVIEW_TEST=1; release gate runs it)
+the_default_arm_lays_out_at_the_view_width_and_ignores_meta_viewport the real engine (ACOS_WEBVIEW_TEST=1; release gate runs it)
+the_wide_arm_honours_meta_viewport_and_the_980_default_and_overview_fits_it the real engine (ACOS_WEBVIEW_TEST=1; release gate runs it)
+a_broker_in_its_own_scope_outlives_the_session_scope_that_spawned_it a real engine and a systemd --user transient scope (ACOS_WEBVIEW_TEST=1; release gate runs it)
+engine_gate the real engine measured against the ADR-0031 gate (ACOS_WEBVIEW_TEST=1; release gate runs it)
+frame_pulls_are_fair_between_two_views_one_of_them_slow the real engine (ACOS_WEBVIEW_TEST=1; release gate runs it)
+hostile_live_run_is_gated_and_recorded_separately the real-ART hostile run; opt-in by ACOS_S8_LIVE_HOSTILE=1 (recorded in results/art-runtime/S8.md); the release gate runs it explicitly with the env set, see tools/art-runtime/test-s8-live.sh

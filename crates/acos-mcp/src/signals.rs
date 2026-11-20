@@ -204,7 +204,10 @@ mod tests {
             worker.set(Phase::Done);
         });
         let started = Instant::now();
-        assert!(state.wait_finished(Duration::from_secs(5)), "joined the teardown");
+        assert!(
+            state.wait_finished(Duration::from_secs(5)),
+            "joined the teardown"
+        );
         assert!(
             started.elapsed() >= Duration::from_millis(100),
             "waited for the teardown, not just returned"
@@ -217,7 +220,10 @@ mod tests {
         let state = TeardownState::new();
         state.set(Phase::Running);
         let started = Instant::now();
-        assert!(!state.wait_finished(Duration::from_millis(120)), "bound elapsed");
+        assert!(
+            !state.wait_finished(Duration::from_millis(120)),
+            "bound elapsed"
+        );
         assert!(started.elapsed() < Duration::from_secs(2), "exits promptly");
     }
 }

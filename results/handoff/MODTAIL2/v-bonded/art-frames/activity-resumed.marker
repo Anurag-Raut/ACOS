@@ -1,0 +1,11 @@
+package=dev.acos.fixtures.tailprobe
+activity=dev.acos.fixtures.tailprobe.MainActivity
+lifecycle=onCreate,onStart,onResume
+resumed=true
+called=true
+stopped=false
+window=com.android.internal.policy.PhoneWindow@e2346c7
+timeout_ms=12000
+first_traversal=traversed=true app_visible=true skip=traversal:view_not_visible
+draw_skip=traversal:view_not_visible
+resume_ready=first-traversal

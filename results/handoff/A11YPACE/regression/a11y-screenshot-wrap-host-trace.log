@@ -1,0 +1,148 @@
+1794934729309 ACOSWMS enter code=2 (addToDisplayAsUser) avail=476
+1794934729309 ACOSWMS lock-wait code=2
+1794934729309 ACOSWMS locked code=2
+1794934729309 ACOSWMS exit code=2
+1794934729314 ACOSWMS enter code=39 (setOnBackInvokedCallbackInfo) avail=60
+1794934729314 ACOSWMS lock-wait code=39
+1794934729314 ACOSWMS locked code=39
+1794934729314 ACOSWMS exit code=39
+1794934729317 ACOSWMS enter code=5 (relayout) avail=480
+1794934729317 ACOSWMS lock-wait code=5
+1794934729317 ACOSWMS locked code=5
+1794934729317 ACOSWMS exit code=5
+1794934729318 ACOSWMS enter code=9 (finishDrawing) avail=164
+1794934729318 ACOSWMS lock-wait code=9
+1794934729318 ACOSWMS locked code=9
+1794934729318 ACOSWMS exit code=9
+1794934729319 ACOSA11Y getWindows enter
+1794934729319 ACOSA11Y getWindows snapshot=1
+1794934729330 ACOSWMS enter code=5 (relayout) avail=52
+1794934729330 ACOSWMS lock-wait code=5
+1794934729330 ACOSWMS locked code=5
+1794934729330 ACOSWMS exit code=5
+1794934729352 ACOSA11Y dispatchGesture enter
+1794934729352 ACOSA11Y dispatchGesture decoded seq=1 events=4 display=0
+1794934729352 ACOSA11Y dispatchGesture seq=1 t=0 action=0 at=(540.0,1261.0)
+1794934729352 ACOSA11Y dispatchGesture seq=1 t=16 action=2 at=(540.0,1261.0)
+1794934729352 ACOSA11Y dispatchGesture seq=1 t=32 action=2 at=(540.0,1261.0)
+1794934729352 ACOSA11Y dispatchGesture seq=1 t=40 action=1 at=(540.0,1261.0)
+1794934729352 ACOSA11Y dispatchGesture seq=1 paced events=4 span_ms=40 token=0x100000009
+1794934729352 ACOSA11Y dispatchGesture seq=1 paced event=1/4 action=0 t=+0ms
+1794934729367 ACOSWMS enter code=2 (addToDisplayAsUser) avail=392
+1794934729367 ACOSWMS lock-wait code=2
+1794934729367 ACOSWMS locked code=2
+1794934729367 ACOSWMS exit code=2
+1794934729368 ACOSA11Y dispatchGesture seq=1 paced event=2/4 action=2 t=+16ms
+1794934729382 ACOSWMS enter code=39 (setOnBackInvokedCallbackInfo) avail=60
+1794934729382 ACOSWMS lock-wait code=39
+1794934729382 ACOSWMS locked code=39
+1794934729382 ACOSWMS exit code=39
+1794934729382 ACOSWMS enter code=5 (relayout) avail=396
+1794934729382 ACOSWMS lock-wait code=5
+1794934729382 ACOSWMS locked code=5
+1794934729382 ACOSWMS exit code=5
+1794934729383 ACOSWMS enter code=9 (finishDrawing) avail=164
+1794934729383 ACOSWMS lock-wait code=9
+1794934729383 ACOSWMS locked code=9
+1794934729383 ACOSWMS exit code=9
+1794934729384 ACOSA11Y dispatchGesture seq=1 paced event=3/4 action=2 t=+32ms
+1794934729392 ACOSA11Y dispatchGesture seq=1 paced event=4/4 action=1 t=+40ms
+1794934729392 ACOSA11Y dispatchGesture seq=1 completed=true
+1794934729397 ACOSWMS enter code=5 (relayout) avail=52
+1794934729397 ACOSWMS lock-wait code=5
+1794934729397 ACOSWMS locked code=5
+1794934729397 ACOSWMS exit code=5
+1794934729416 ACOSA11Y dispatchGesture enter
+1794934729416 ACOSA11Y dispatchGesture decoded seq=2 events=14 display=0
+1794934729416 ACOSA11Y dispatchGesture seq=2 t=0 action=0 at=(540.0,1860.0)
+1794934729416 ACOSA11Y dispatchGesture seq=2 t=16 action=2 at=(540.0,1828.0)
+1794934729416 ACOSA11Y dispatchGesture seq=2 t=32 action=2 at=(540.0,1796.0)
+1794934729416 ACOSA11Y dispatchGesture seq=2 t=48 action=2 at=(540.0,1764.0)
+1794934729416 ACOSA11Y dispatchGesture seq=2 t=64 action=2 at=(540.0,1732.0)
+1794934729416 ACOSA11Y dispatchGesture seq=2 t=80 action=2 at=(540.0,1700.0)
+1794934729416 ACOSA11Y dispatchGesture seq=2 t=96 action=2 at=(540.0,1668.0)
+1794934729416 ACOSA11Y dispatchGesture seq=2 t=112 action=2 at=(540.0,1636.0)
+1794934729416 ACOSA11Y dispatchGesture seq=2 t=128 action=2 at=(540.0,1604.0)
+1794934729416 ACOSA11Y dispatchGesture seq=2 t=144 action=2 at=(540.0,1572.0)
+1794934729416 ACOSA11Y dispatchGesture seq=2 t=160 action=2 at=(540.0,1540.0)
+1794934729416 ACOSA11Y dispatchGesture seq=2 t=176 action=2 at=(540.0,1508.0)
+1794934729416 ACOSA11Y dispatchGesture seq=2 t=192 action=2 at=(540.0,1476.0)
+1794934729416 ACOSA11Y dispatchGesture seq=2 t=200 action=1 at=(540.0,1460.0)
+1794934729416 ACOSA11Y dispatchGesture seq=2 paced events=14 span_ms=200 token=0x100000009
+1794934729416 ACOSA11Y dispatchGesture seq=2 paced event=1/14 action=0 t=+0ms
+1794934729432 ACOSA11Y dispatchGesture seq=2 paced event=2/14 action=2 t=+16ms
+1794934729448 ACOSA11Y dispatchGesture seq=2 paced event=3/14 action=2 t=+32ms
+1794934729465 ACOSA11Y dispatchGesture seq=2 paced event=4/14 action=2 t=+48ms
+1794934729480 ACOSA11Y dispatchGesture seq=2 paced event=5/14 action=2 t=+64ms
+1794934729496 ACOSA11Y dispatchGesture seq=2 paced event=6/14 action=2 t=+80ms
+1794934729513 ACOSA11Y dispatchGesture seq=2 paced event=7/14 action=2 t=+96ms
+1794934729529 ACOSA11Y dispatchGesture seq=2 paced event=8/14 action=2 t=+112ms
+1794934729545 ACOSA11Y dispatchGesture seq=2 paced event=9/14 action=2 t=+128ms
+1794934729561 ACOSA11Y dispatchGesture seq=2 paced event=10/14 action=2 t=+144ms
+1794934729568 ACOSA11Y getWindows enter
+1794934729568 ACOSA11Y getWindows snapshot=2
+1794934729568 ACOSA11Y takeScreenshot enter
+1794934729584 ACOSA11Y takeScreenshot success display=0 1080x2400 stride=1080
+1794934729584 ACOSA11Y dispatchGesture seq=2 paced event=11/14 action=2 t=+160ms
+1794934729584 ACOSA11Y takeScreenshot enter
+1794934729592 ACOSA11Y dispatchGesture seq=2 paced event=12/14 action=2 t=+176ms
+1794934729608 ACOSA11Y dispatchGesture seq=2 paced event=13/14 action=2 t=+192ms
+1794934729617 ACOSA11Y dispatchGesture seq=2 paced event=14/14 action=1 t=+200ms
+1794934729617 ACOSA11Y dispatchGesture seq=2 completed=true
+1794934729617 ACOSA11Y dispatchGesture enter
+1794934729617 ACOSA11Y dispatchGesture decoded seq=3 events=26 display=0
+1794934729617 ACOSA11Y dispatchGesture seq=3 t=0 action=0 at=(540.0,2002.0)
+1794934729617 ACOSA11Y dispatchGesture seq=3 t=16 action=2 at=(528.0,2002.0)
+1794934729617 ACOSA11Y dispatchGesture seq=3 t=32 action=2 at=(516.0,2002.0)
+1794934729617 ACOSA11Y dispatchGesture seq=3 t=48 action=2 at=(504.0,2002.0)
+1794934729617 ACOSA11Y dispatchGesture seq=3 t=64 action=2 at=(492.0,2002.0)
+1794934729617 ACOSA11Y dispatchGesture seq=3 t=80 action=2 at=(480.0,2002.0)
+1794934729617 ACOSA11Y dispatchGesture seq=3 t=96 action=2 at=(468.0,2002.0)
+1794934729617 ACOSA11Y dispatchGesture seq=3 t=112 action=2 at=(456.0,2002.0)
+1794934729617 ACOSA11Y dispatchGesture seq=3 t=128 action=2 at=(444.0,2002.0)
+1794934729617 ACOSA11Y dispatchGesture seq=3 t=144 action=2 at=(432.0,2002.0)
+1794934729617 ACOSA11Y dispatchGesture seq=3 t=160 action=2 at=(420.0,2002.0)
+1794934729617 ACOSA11Y dispatchGesture seq=3 t=176 action=2 at=(408.0,2002.0)
+1794934729617 ACOSA11Y dispatchGesture seq=3 t=192 action=2 at=(396.0,2002.0)
+1794934729617 ACOSA11Y dispatchGesture seq=3 t=208 action=2 at=(384.0,2002.0)
+1794934729617 ACOSA11Y dispatchGesture seq=3 t=224 action=2 at=(372.0,2002.0)
+1794934729617 ACOSA11Y dispatchGesture seq=3 t=240 action=2 at=(360.0,2002.0)
+1794934729617 ACOSA11Y dispatchGesture seq=3 t=256 action=2 at=(348.0,2002.0)
+1794934729617 ACOSA11Y dispatchGesture seq=3 t=272 action=2 at=(336.0,2002.0)
+1794934729617 ACOSA11Y dispatchGesture seq=3 t=288 action=2 at=(324.0,2002.0)
+1794934729617 ACOSA11Y dispatchGesture seq=3 t=304 action=2 at=(312.0,2002.0)
+1794934729617 ACOSA11Y dispatchGesture seq=3 t=320 action=2 at=(300.0,2002.0)
+1794934729617 ACOSA11Y dispatchGesture seq=3 t=336 action=2 at=(288.0,2002.0)
+1794934729617 ACOSA11Y dispatchGesture seq=3 t=352 action=2 at=(276.0,2002.0)
+1794934729617 ACOSA11Y dispatchGesture seq=3 t=368 action=2 at=(264.0,2002.0)
+1794934729617 ACOSA11Y dispatchGesture seq=3 t=384 action=2 at=(252.0,2002.0)
+1794934729617 ACOSA11Y dispatchGesture seq=3 t=400 action=1 at=(240.0,2002.0)
+1794934729617 ACOSA11Y dispatchGesture seq=3 paced events=26 span_ms=400 token=0x100000009
+1794934729617 ACOSA11Y dispatchGesture seq=3 paced event=1/26 action=0 t=+0ms
+1794934729633 ACOSA11Y dispatchGesture seq=3 paced event=2/26 action=2 t=+16ms
+1794934729650 ACOSA11Y dispatchGesture seq=3 paced event=3/26 action=2 t=+32ms
+1794934729666 ACOSA11Y dispatchGesture seq=3 paced event=4/26 action=2 t=+48ms
+1794934729681 ACOSA11Y dispatchGesture seq=3 paced event=5/26 action=2 t=+64ms
+1794934729697 ACOSA11Y dispatchGesture seq=3 paced event=6/26 action=2 t=+80ms
+1794934729713 ACOSA11Y dispatchGesture seq=3 paced event=7/26 action=2 t=+96ms
+1794934729730 ACOSA11Y dispatchGesture seq=3 paced event=8/26 action=2 t=+112ms
+1794934729746 ACOSA11Y dispatchGesture seq=3 paced event=9/26 action=2 t=+128ms
+1794934729762 ACOSA11Y dispatchGesture seq=3 paced event=10/26 action=2 t=+144ms
+1794934729778 ACOSA11Y dispatchGesture seq=3 paced event=11/26 action=2 t=+160ms
+1794934729793 ACOSA11Y dispatchGesture seq=3 paced event=12/26 action=2 t=+176ms
+1794934729809 ACOSA11Y dispatchGesture seq=3 paced event=13/26 action=2 t=+192ms
+1794934729826 ACOSA11Y dispatchGesture seq=3 paced event=14/26 action=2 t=+208ms
+1794934729841 ACOSA11Y dispatchGesture seq=3 paced event=15/26 action=2 t=+224ms
+1794934729857 ACOSA11Y dispatchGesture seq=3 paced event=16/26 action=2 t=+240ms
+1794934729874 ACOSA11Y dispatchGesture seq=3 paced event=17/26 action=2 t=+256ms
+1794934729889 ACOSA11Y dispatchGesture seq=3 paced event=18/26 action=2 t=+272ms
+1794934729905 ACOSA11Y dispatchGesture seq=3 paced event=19/26 action=2 t=+288ms
+1794934729922 ACOSA11Y dispatchGesture seq=3 paced event=20/26 action=2 t=+304ms
+1794934729937 ACOSA11Y dispatchGesture seq=3 paced event=21/26 action=2 t=+320ms
+1794934729954 ACOSA11Y dispatchGesture seq=3 paced event=22/26 action=2 t=+336ms
+1794934729969 ACOSA11Y dispatchGesture seq=3 paced event=23/26 action=2 t=+352ms
+1794934729984 ACOSA11Y takeScreenshot enter
+1794934729986 ACOSA11Y dispatchGesture seq=3 paced event=24/26 action=2 t=+368ms
+1794934730002 ACOSA11Y dispatchGesture seq=3 paced event=25/26 action=2 t=+384ms
+1794934730018 ACOSA11Y dispatchGesture seq=3 paced event=26/26 action=1 t=+400ms
+1794934730018 ACOSA11Y dispatchGesture seq=3 completed=true

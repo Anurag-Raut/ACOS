@@ -1,92 +1,76 @@
 {
   "after_test_id": [
     {
-      "children": [
-        {
-          "children": [
-            {
-              "children": [
-                {
-                  "children": [
-                    {
-                      "class": "RCTRawText",
-                      "clickable": false,
-                      "tag": 3,
-                      "text": "Hello ACOS"
-                    }
-                  ],
-                  "class": "RCTText",
-                  "clickable": false,
-                  "tag": 5,
-                  "testID": "hello-text",
-                  "text": "Hello ACOS"
-                },
-                {
-                  "children": [
-                    {
-                      "class": "RCTRawText",
-                      "clickable": false,
-                      "tag": 7,
-                      "text": "React Native + Hermes"
-                    }
-                  ],
-                  "class": "RCTText",
-                  "clickable": false,
-                  "tag": 9,
-                  "text": "React Native + Hermes"
-                },
-                {
-                  "children": [
-                    {
-                      "children": [
-                        {
-                          "class": "RCTRawText",
-                          "clickable": false,
-                          "tag": 13,
-                          "text": "TAP ME"
-                        }
-                      ],
-                      "class": "RCTText",
-                      "clickable": false,
-                      "tag": 15,
-                      "text": "TAP ME"
-                    }
-                  ],
-                  "class": "RCTView",
-                  "clickable": true,
-                  "tag": 17,
-                  "testID": "hello-button"
-                },
-                {
-                  "children": [
-                    {
-                      "class": "RCTRawText",
-                      "clickable": false,
-                      "tag": 19,
-                      "text": "count: 1"
-                    }
-                  ],
-                  "class": "RCTText",
-                  "clickable": false,
-                  "tag": 23,
-                  "testID": "count-text",
-                  "text": "count: 1"
-                }
-              ],
-              "class": "RCTView",
-              "clickable": false,
-              "tag": 25,
-              "testID": "hello-root"
-            }
-          ],
-          "class": "RCTView",
-          "clickable": false,
-          "tag": 27
-        }
-      ],
-      "class": "",
+      "bounds": "",
+      "class": "RCTText",
       "clickable": false,
-      "tag": 44261
+      "content_desc": "",
+      "id": "",
+      "resource_id": "",
+      "text": "Hello ACOS"
+    },
+    {
+      "bounds": "",
+      "class": "RCTRawText",
+      "clickable": false,
+      "content_desc": "",
+      "id": "",
+      "resource_id": "",
+      "text": "Hello ACOS"
+    },
+    {
+      "bounds": "",
+      "class": "RCTText",
+      "clickable": false,
+      "content_desc": "",
+      "id": "",
+      "resource_id": "",
+      "text": "React Native + Hermes"
+    },
+    {
+      "bounds": "",
+      "class": "RCTRawText",
+      "clickable": false,
+      "content_desc": "",
+      "id": "",
+      "resource_id": "",
+      "text": "React Native + Hermes"
+    },
+    {
+      "bounds": "",
+      "class": "RCTText",
+      "clickable": false,
+      "content_desc": "",
+      "id": "",
+      "resource_id": "",
+      "text": "TAP ME"
+    },
+    {
+      "bounds": "",
+      "class": "RCTRawText",
+      "clickable": false,
+      "content_desc": "",
+      "id": "",
+      "resource_id": "",
+      "text": "TAP ME"
+    },
+    {
+      "bounds": "",
+      "class": "RCTText",
+      "clickable": false,
+      "content_desc": "",
+      "id": "",
+      "resource_id": "",
+      "text": "count: 1"
+    },
+    {
+      "bounds": "",
+      "class": "RCTRawText",
+      "clickable": false,
+      "content_desc": "",
+      "id": "",
+      "resource_id": "",
+      "text": "count: 1"
     }
   ],
   "launch": {
@@ -101,6 +85,19 @@
     "natives": 85,
     "package": "",
     "peak_rss_bytes": 0,
+    "provenance": {
+      "apk": {
+        "mtime_ns": 1794439656484830880,
+        "path": "/home/Qui/.t3/worktrees/acos/t3-f542bcec-f3354b9a0075e3ab/fixtures/build/apps/rn-hello.apk",
+        "sha256": "9ddb7acfa0912324aee65aba41014ae3f03d7d5a8b0af91ceebfa75b3090f6da",
+        "sha256_12": "9ddb7acfa091",
+        "size_bytes": 9570593
+      },
+      "engine": "rust-vm",
+      "fidelity": "native-runtime",
+      "scenario": null,
+      "warnings": []
+    },
     "reached_stage": "ui_tree",
     "real_boot": true,
     "renderer": false,
@@ -124,11 +121,11 @@
         "status": "ok"
       }
     ],
-    "wall_ms": 17637
+    "wall_ms": 15175
   },
   "summary": {
     "frame_code": "UNSUPPORTED_RN_NO_RENDERER",
-    "launch_ms": 17637,
+    "launch_ms": 15175,
     "log_count": 90,
     "natives": 85,
     "nodes_after": 12,
@@ -139,92 +136,76 @@
   },
   "tree": [
     {
-      "children": [
-        {
-          "children": [
-            {
-              "children": [
-                {
-                  "children": [
-                    {
-                      "class": "RCTRawText",
-                      "clickable": false,
-                      "tag": 3,
-                      "text": "Hello ACOS"
-                    }
-                  ],
-                  "class": "RCTText",
-                  "clickable": false,
-                  "tag": 5,
-                  "testID": "hello-text",
-                  "text": "Hello ACOS"
-                },
-                {
-                  "children": [
-                    {
-                      "class": "RCTRawText",
-                      "clickable": false,
-                      "tag": 7,
-                      "text": "React Native + Hermes"
-                    }
-                  ],
-                  "class": "RCTText",
-                  "clickable": false,
-                  "tag": 9,
-                  "text": "React Native + Hermes"
-                },
-                {
-                  "children": [
-                    {
-                      "children": [
-                        {
-                          "class": "RCTRawText",
-                          "clickable": false,
-                          "tag": 13,
-                          "text": "TAP ME"
-                        }
-                      ],
-                      "class": "RCTText",
-                      "clickable": false,
-                      "tag": 15,
-                      "text": "TAP ME"
-                    }
-                  ],
-                  "class": "RCTView",
-                  "clickable": true,
-                  "tag": 17,
-                  "testID": "hello-button"
-                },
-                {
-                  "children": [
-                    {
-                      "class": "RCTRawText",
-                      "clickable": false,
-                      "tag": 19,
-                      "text": "count: 0"
-                    }
-                  ],
-                  "class": "RCTText",
-                  "clickable": false,
-                  "tag": 23,
-                  "testID": "count-text",
-                  "text": "count: 0"
-                }
-              ],
-              "class": "RCTView",
-              "clickable": false,
-              "tag": 25,
-              "testID": "hello-root"
-            }
-          ],
-          "class": "RCTView",
-          "clickable": false,
-          "tag": 27
-        }
-      ],
-      "class": "",
+      "bounds": "",
+      "class": "RCTText",
       "clickable": false,
-      "tag": 44261
+      "content_desc": "",
+      "id": "",
+      "resource_id": "",
+      "text": "Hello ACOS"
+    },
+    {
+      "bounds": "",
+      "class": "RCTRawText",
+      "clickable": false,
+      "content_desc": "",
+      "id": "",
+      "resource_id": "",
+      "text": "Hello ACOS"
+    },
+    {
+      "bounds": "",
+      "class": "RCTText",
+      "clickable": false,
+      "content_desc": "",
+      "id": "",
+      "resource_id": "",
+      "text": "React Native + Hermes"
+    },
+    {
+      "bounds": "",
+      "class": "RCTRawText",
+      "clickable": false,
+      "content_desc": "",
+      "id": "",
+      "resource_id": "",
+      "text": "React Native + Hermes"
+    },
+    {
+      "bounds": "",
+      "class": "RCTText",
+      "clickable": false,
+      "content_desc": "",
+      "id": "",
+      "resource_id": "",
+      "text": "TAP ME"
+    },
+    {
+      "bounds": "",
+      "class": "RCTRawText",
+      "clickable": false,
+      "content_desc": "",
+      "id": "",
+      "resource_id": "",
+      "text": "TAP ME"
+    },
+    {
+      "bounds": "",
+      "class": "RCTText",
+      "clickable": false,
+      "content_desc": "",
+      "id": "",
+      "resource_id": "",
+      "text": "count: 0"
+    },
+    {
+      "bounds": "",
+      "class": "RCTRawText",
+      "clickable": false,
+      "content_desc": "",
+      "id": "",
+      "resource_id": "",
+      "text": "count: 0"
     }
   ]
 }

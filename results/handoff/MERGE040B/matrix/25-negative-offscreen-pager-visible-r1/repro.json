@@ -1,0 +1,17 @@
+{
+  "acos_version": "0.3.0",
+  "apk_path": "/home/Qui/.t3/worktrees/acos/t3-7941bd5d-f2cbf7e1581aeebb/fixtures/build/apps/offscreen-pager.apk",
+  "apk_sha256": "f651c82ec2c3e4e538f94814c3eb711ccd0fd50787dd4c1654ee19c6027f9d11",
+  "scenario_path": "/home/Qui/.t3/worktrees/acos/t3-7941bd5d-f2cbf7e1581aeebb/scenarios/negative/offscreen-pager-visible.yaml",
+  "scenario_sha256": "634a0dd579f7a65d8967c888470e419a71de688811b428d218ff97be5917b847",
+  "flags": [],
+  "isolation": "process",
+  "display": {
+    "mode": "offscreen",
+    "width": 1080,
+    "height": 2400,
+    "density_dpi": 420
+  },
+  "fidelity": "art-reference",
+  "backend": "acos-native"
+}

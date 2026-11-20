@@ -1,0 +1,75 @@
+{
+  "assertions": [
+    {
+      "actual": {
+        "bounds": [
+          0,
+          275,
+          1080,
+          695
+        ],
+        "hint": "",
+        "node": "n5_dev.acos.fixtures.webview:id/status",
+        "text": "hasSystemFeature(android.software.webview)=true\nWebView.getCurrentWebViewPackage()=PackageInfo{cfa7c04 com.android.webview}\nWebView created: dev.acos.fixtures.webview.MainActivity$ProbeWebView{7bb5c22 VFED..... ......I. 0,0-0,0 #7f010002 app:id/webview}\nWebView created: dev.acos.fixtures.webview.MainActivity$ProbeWebView{2bf43e9 VFED..... ......I. 0,0-0,0 #7f010003 app:id/webview2}\nA laid out 900x560\nB laid out 900x560\nA loadUrl issued\nB loadUrl issued\nA onPageFinished file:///android_asset/test.html\nB onPageFinished file:///android_asset/viewport-meta.html\nA evaluateJavascript -> \"acos asset page\"\nB evaluateJavascript -> \"acos meta page\"\nA viewport -> \"343x1.00\"\nB viewport#0 -> \"640x0.54\"\nJS->Java: tapped\nviewport arms: start (after the tap)\narm 2: wide, page without <meta viewport>\nB onPageFinished data:text/html;base64,…\nB evaluateJavascript -> \"acos data page\"\nB viewport#1 -> \"980x0.35\"\narm 3: back to the default (narrow) arm\nB onPageFinished data:text/html;base64,…\nB evaluateJavascript -> \"acos data page\"\nB viewport#2 -> \"343x1.00\"\n",
+        "visible": true
+      },
+      "expected": {
+        "bounds": null,
+        "selector": {
+          "id": "status"
+        },
+        "text": {
+          "contains": "JS->Java: tapped"
+        }
+      },
+      "kind": "text",
+      "matched_node_ids": [
+        "n5_dev.acos.fixtures.webview:id/status"
+      ],
+      "passed": true
+    }
+  ],
+  "certification": "certified-with-limits",
+  "certification_limits": {
+    "doc": "docs/SANDBOX_CERTIFICATION.md",
+    "section": "§8.7"
+  },
+  "duration_ms": 1,
+  "evidence": [
+    {
+      "kind": "tree",
+      "path": "tree/4.json"
+    },
+    {
+      "kind": "frame",
+      "path": "frames/4.png"
+    },
+    {
+      "kind": "step",
+      "path": "steps/12-assert_text.json"
+    }
+  ],
+  "frame_seq": 4,
+  "index": 12,
+  "provenance": {
+    "tree": "guest-asserted"
+  },
+  "settle": {
+    "ack_ms": 5,
+    "bound": "strict-event",
+    "first_change_ms": 157,
+    "frame_ms": 197,
+    "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
+    "mode": "strict",
+    "pixels_changed": false,
+    "reason": "strict-event",
+    "settled": true,
+    "state_changed": null,
+    "strict_rule": "event",
+    "waited_ms": 0,
+    "waited_ms_source": "step"
+  },
+  "status": "pass",
+  "step": "assert_text",
+  "trust": "trusted"
+}

@@ -84,9 +84,14 @@ fn rn_product_child_worker() {
         profile = profile.with_read_only(parent);
     }
     let apk_parent = apk.parent().map(Path::to_path_buf);
-    for base in [Some(libdir.clone()), Some(data_dir.clone()), apk_parent.clone(), dex.parent().map(Path::to_path_buf)]
-        .into_iter()
-        .flatten()
+    for base in [
+        Some(libdir.clone()),
+        Some(data_dir.clone()),
+        apk_parent.clone(),
+        dex.parent().map(Path::to_path_buf),
+    ]
+    .into_iter()
+    .flatten()
     {
         if let Ok(real) = std::fs::canonicalize(&base) {
             profile = profile.with_read_only(&real);
@@ -202,10 +207,7 @@ fn rn_product_child_worker() {
 #[test]
 fn rn_product_launches_observes_and_taps() {
     if !acos_test_support::have_fixture("fixtures/build/apps/rn-hello.apk") {
-        eprintln!(
-            "SKIP rn_product_launches_observes_and_taps: fixtures/build/apps/rn-hello.apk is absent \
-             (build with tools/build-rn-hello.sh)"
-        );
+        acos_test_support::require_prereq(false, "rn_product_launches_observes_and_taps", "rn_product_launches_observes_and_taps: fixtures/build/apps/rn-hello.apk is absent (build with tools/build-rn-hello.sh)");
         return;
     }
     let apk = repo_root().join("fixtures/build/apps/rn-hello.apk");
@@ -250,7 +252,7 @@ fn rn_product_launches_observes_and_taps() {
         None => serde_json::json!({"crashed": true, "exit": output.status.code()}),
     };
 
-    let out_dir = repo_root().join("results/rn");
+    let out_dir = acos_test_support::test_artifacts_dir("rn");
     let _ = std::fs::create_dir_all(&out_dir);
     let _ = std::fs::write(
         out_dir.join("w158a-product.json"),
@@ -270,7 +272,10 @@ fn rn_product_launches_observes_and_taps() {
         summary["launched"], true,
         "RnSession::launch failed:\n{summary}\nstderr:\n{stderr}"
     );
-    assert_eq!(summary["hello"], true, "tree missing 'Hello ACOS':\n{summary}");
+    assert_eq!(
+        summary["hello"], true,
+        "tree missing 'Hello ACOS':\n{summary}"
+    );
     assert_eq!(summary["tap_me"], true, "tree missing 'TAP ME':\n{summary}");
     assert!(
         summary["tap_tag"].as_i64().unwrap_or(-1) > 0,

@@ -52,7 +52,9 @@ pub const MIN_CONTENT_WINDOW_MS: u64 = DEFAULT_CONTENT_WINDOW_MS;
 
 /// The configured window, never below the floor.
 pub fn content_window_ms(requested: Option<u64>) -> u64 {
-    requested.unwrap_or(DEFAULT_CONTENT_WINDOW_MS).max(MIN_CONTENT_WINDOW_MS)
+    requested
+        .unwrap_or(DEFAULT_CONTENT_WINDOW_MS)
+        .max(MIN_CONTENT_WINDOW_MS)
 }
 
 /// REL3A: the settle rule an **observation** (a `wait_for`, an assertion, a
@@ -212,7 +214,7 @@ pub fn observation_settle_record(
 /// `assert_visible`, `assert_state`, `assert_offscreen`, ...) can read, plus the
 /// structural facts that decide whether a read is even meaningful. A field an
 /// assertion reads may never change without changing the signature.
-pub const SIGNATURE_FIELDS: [&str; 14] = [
+pub const SIGNATURE_FIELDS: [&str; 16] = [
     "class",
     "resource_id",
     "text",
@@ -226,6 +228,8 @@ pub const SIGNATURE_FIELDS: [&str; 14] = [
     "checked",
     "selected",
     "window",
+    "window_kind",
+    "window_z",
     "package",
 ];
 
@@ -279,6 +283,10 @@ fn hash_node<H: std::hash::Hasher>(node: &UiNode, hasher: &mut H) {
     node.visible.hash(hasher);
     // GR4: the window label decides which frame a bounds value refers to.
     node.window.hash(hasher);
+    // LAYER1: a window's kind/z is content too. A dialog appearing or an
+    // overlay changing the stack must restart the content window.
+    node.window_kind.hash(hasher);
+    node.window_z.hash(hasher);
     node.package.hash(hasher);
     // The child count is hashed so a subtree cannot collide with its sibling
     // sequence by concatenation alone.
@@ -704,7 +712,10 @@ mod tests {
     #[test]
     fn a_reply_without_probe_seq_fails_closed() {
         let mut window = ContentProbeWindow::new(300, 0);
-        assert_eq!(window.attempt(7, None, 0, 10_000), ContentAttempt::TimedOut(CONTENT_PROBE_UNPROVEN));
+        assert_eq!(
+            window.attempt(7, None, 0, 10_000),
+            ContentAttempt::TimedOut(CONTENT_PROBE_UNPROVEN)
+        );
         assert_eq!(window.fresh_traversals(), 0);
     }
 
@@ -712,14 +723,33 @@ mod tests {
     #[test]
     fn a_repeated_probe_sample_does_not_count_as_a_distinct_traversal() {
         let mut window = ContentProbeWindow::new(300, 0);
-        assert_eq!(window.attempt(7, Some(11), 0, 10_000), ContentAttempt::Continue);
-        assert_eq!(window.attempt(7, Some(11), 150, 10_000), ContentAttempt::TimedOut(CONTENT_PROBE_UNPROVEN));
-        assert_eq!(window.fresh_traversals(), 1, "a repeated sample is not a second traversal");
+        assert_eq!(
+            window.attempt(7, Some(11), 0, 10_000),
+            ContentAttempt::Continue
+        );
+        assert_eq!(
+            window.attempt(7, Some(11), 150, 10_000),
+            ContentAttempt::TimedOut(CONTENT_PROBE_UNPROVEN)
+        );
+        assert_eq!(
+            window.fresh_traversals(),
+            1,
+            "a repeated sample is not a second traversal"
+        );
         // A genuinely newer sample continues the same window.
         let mut window = ContentProbeWindow::new(300, 0);
-        assert_eq!(window.attempt(7, Some(11), 0, 10_000), ContentAttempt::Continue);
-        assert_eq!(window.attempt(7, Some(12), 150, 10_000), ContentAttempt::Continue);
-        assert_eq!(window.attempt(7, Some(13), 300, 10_000), ContentAttempt::Settled);
+        assert_eq!(
+            window.attempt(7, Some(11), 0, 10_000),
+            ContentAttempt::Continue
+        );
+        assert_eq!(
+            window.attempt(7, Some(12), 150, 10_000),
+            ContentAttempt::Continue
+        );
+        assert_eq!(
+            window.attempt(7, Some(13), 300, 10_000),
+            ContentAttempt::Settled
+        );
     }
 
     /// SE2b finding 1: `next_floor` advances with each consumed sample, so the
@@ -728,7 +758,10 @@ mod tests {
     fn the_next_floor_is_the_last_consumed_sample() {
         let mut window = ContentProbeWindow::new(300, 4);
         assert_eq!(window.next_floor(), 4);
-        assert_eq!(window.attempt(7, Some(5), 0, 10_000), ContentAttempt::Continue);
+        assert_eq!(
+            window.attempt(7, Some(5), 0, 10_000),
+            ContentAttempt::Continue
+        );
         assert_eq!(window.next_floor(), 5);
         assert_eq!(window.first_probe_seq(), Some(5));
     }
@@ -761,7 +794,10 @@ mod tests {
                 }
             }
         }
-        assert!(attempts >= 10, "the deadline, not a traversal count, ended it");
+        assert!(
+            attempts >= 10,
+            "the deadline, not a traversal count, ended it"
+        );
     }
 
     /// SE2b finding 5: every field an assertion or selector can read is hashed.
@@ -797,7 +833,10 @@ mod tests {
         changed.push(("tree.package", content_signature(&t)));
 
         for (field, signature) in changed {
-            assert_ne!(base_sig, signature, "a {field} change must change the signature");
+            assert_ne!(
+                base_sig, signature,
+                "a {field} change must change the signature"
+            );
         }
         // Geometry is the audited *exclusion*: a translated view changes its
         // rect every frame, so these are not hashed - and a bounds claim on a
@@ -823,13 +862,30 @@ mod tests {
         // The published field list is the audited one: every field here is
         // named, so a reader can check the signature against the assertions.
         for field in [
-            "class", "resource_id", "text", "content_desc", "hint",
-            "visible", "enabled", "focused", "clickable", "scrollable", "checked", "selected",
-            "window", "package",
+            "class",
+            "resource_id",
+            "text",
+            "content_desc",
+            "hint",
+            "visible",
+            "enabled",
+            "focused",
+            "clickable",
+            "scrollable",
+            "checked",
+            "selected",
+            "window",
+            "package",
         ] {
-            assert!(SIGNATURE_FIELDS.contains(&field), "{field} missing from SIGNATURE_FIELDS");
+            assert!(
+                SIGNATURE_FIELDS.contains(&field),
+                "{field} missing from SIGNATURE_FIELDS"
+            );
         }
-        assert_eq!(SIGNATURE_TREE_FIELDS, ["package", "truncated", "text_available"]);
+        assert_eq!(
+            SIGNATURE_TREE_FIELDS,
+            ["package", "truncated", "text_available"]
+        );
     }
 
     #[test]

@@ -57,7 +57,9 @@ fn compile_case(name: &str) -> Option<PathBuf> {
     if dex.is_file() {
         return Some(dex);
     }
-    let src = root.join("crates/acos-vm/tests/java").join(format!("{name}.java"));
+    let src = root
+        .join("crates/acos-vm/tests/java")
+        .join(format!("{name}.java"));
     if !src.is_file() {
         return None;
     }
@@ -180,7 +182,7 @@ fn gfx_canvas_records_renders_and_round_trips() {
     let out = match run_case("GfxCanvasMain") {
         Ok(out) => out,
         Err(m) => {
-            eprintln!("SKIP gfx_canvas_records_renders_and_round_trips: {m}");
+            acos_test_support::require_prereq(false, "gfx_canvas_records_renders_and_round_trips", &format!("gfx_canvas_records_renders_and_round_trips: {m}"));
             return;
         }
     };
@@ -261,5 +263,8 @@ fn stale_graphics_handle_is_structured_not_a_panic() {
         other => panic!("expected a structured stale-handle error, got {other:?}"),
     }
     // A forged value is stale too.
-    assert!(matches!(t.get(acos_vm::natives::gfx_handles::Handle(0xdead_beef)), Err(HandleError::Stale { .. })));
+    assert!(matches!(
+        t.get(acos_vm::natives::gfx_handles::Handle(0xdead_beef)),
+        Err(HandleError::Stale { .. })
+    ));
 }

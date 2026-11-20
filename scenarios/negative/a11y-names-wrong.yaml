@@ -1,0 +1,37 @@
+# PARITYFIX F1 NEGATIVE CONTROL: names that a phone's tree does not expose in
+# that attribute. Each selector below names a real string of the screen under the
+# WRONG attribute (a label as text, a placeholder as content-desc, a plain text as
+# content-desc). They must NOT resolve; the verdict must be fail, never pass.
+version: 1
+name: a11y-names-wrong
+description: >-
+  Select the token field by its placeholder as content-desc (not exposed there):
+  must fail.
+app: fixtures/build/apps/a11y-names-probe.apk
+engine: native-preferred
+fallback: report-and-escalate
+api_level: 34
+isolation: process
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+capabilities:
+  - lifecycle
+  - ui.offscreen
+  - ui.text
+expectation: fail
+budgets:
+  memory_mib: 512
+  wall_ms: 60000
+steps:
+  - launch:
+      activity: dev.acos.fixtures.a11ynames/.MainActivity
+      clear_state: true
+  - wait_for:
+      selector: {id: token}
+      timeout_ms: 5000
+  - assert_text:
+      selector: {content_desc: {exact: "Paste your token"}}
+      text: {exact: "Paste your token"}

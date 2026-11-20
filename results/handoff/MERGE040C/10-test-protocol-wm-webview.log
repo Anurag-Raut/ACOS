@@ -1,0 +1,673 @@
+   Compiling cfg-if v1.0.5
+   Compiling memchr v2.8.3
+   Compiling typenum v1.20.1
+   Compiling itoa v1.0.19
+   Compiling cpufeatures v0.2.17
+   Compiling regex-syntax v0.8.11
+   Compiling unsafe-libyaml v0.2.11
+   Compiling ryu v1.0.23
+   Compiling dyn-clone v1.0.20
+   Compiling simd-adler32 v0.3.10
+   Compiling bitflags v2.13.2
+   Compiling adler2 v2.0.1
+   Compiling rand_core v0.10.1
+   Compiling rustix v1.1.6
+   Compiling serde_core v1.0.229
+   Compiling zmij v1.0.23
+   Compiling libc v0.2.191
+   Compiling crossbeam-utils v0.8.23
+   Compiling linux-raw-sys v0.12.1
+   Compiling bytemuck v1.25.2
+   Compiling borsh v1.8.1
+   Compiling libm v0.2.16
+   Compiling either v1.19.0
+   Compiling bitflags v1.3.2
+   Compiling log v0.4.35
+   Compiling strict-num v0.1.1
+   Compiling arrayref v0.3.9
+   Compiling num-traits v0.2.19
+   Compiling thiserror v2.0.21
+   Compiling quick-error v2.0.1
+   Compiling smallvec v1.16.5
+   Compiling unicode-bidi-mirroring v0.4.0
+   Compiling crc32fast v1.5.5
+   Compiling unicode-properties v0.1.5
+   Compiling byteorder-lite v0.1.0
+   Compiling once_cell v1.21.4
+   Compiling unicode-ccc v0.4.0
+   Compiling fastrand v2.5.0
+   Compiling arrayvec v0.7.8
+   Compiling unicode-script v0.5.9
+   Compiling unicode-bidi v0.3.18
+   Compiling miniz_oxide v0.9.1
+   Compiling miniz_oxide v0.8.9
+   Compiling fdeflate v0.3.7
+   Compiling cpufeatures v0.3.1
+   Compiling fnv v1.0.7
+   Compiling bit-vec v0.10.1
+   Compiling xxhash-rust v0.8.19
+   Compiling quick-error v1.2.3
+   Compiling chacha20 v0.10.2
+   Compiling rand_xorshift v0.5.0
+   Compiling core_detect v1.0.0
+   Compiling unarray v0.1.4
+   Compiling tiny-skia-path v0.11.4
+   Compiling hex v0.4.3
+   Compiling image-webp v0.2.4
+   Compiling bit-set v0.11.1
+   Compiling crossbeam-epoch v0.9.21
+   Compiling aho-corasick v1.1.5
+   Compiling roxmltree v0.21.2
+   Compiling acos-dex v0.3.0 (/home/Qui/.t3/worktrees/acos/t3-2f630078-d1c2107b4b54fe17/crates/acos-dex)
+   Compiling flate2 v1.1.11
+   Compiling crossbeam-deque v0.8.8
+   Compiling rayon-core v1.13.0
+   Compiling generic-array v0.14.7
+   Compiling png v0.17.16
+   Compiling core_maths v0.1.1
+   Compiling ttf-parser v0.25.1
+   Compiling rayon v1.12.0
+   Compiling getrandom v0.4.3
+   Compiling libz-sys v1.1.33
+   Compiling memmap2 v0.9.12
+   Compiling wait-timeout v0.2.1
+   Compiling freetype-sys v0.23.0
+   Compiling rand v0.10.3
+   Compiling crypto-common v0.1.7
+   Compiling block-buffer v0.10.4
+   Compiling digest v0.10.7
+   Compiling sha2 v0.10.9
+   Compiling tiny-skia v0.11.4
+   Compiling regex-automata v0.4.18
+   Compiling serde v1.0.229
+   Compiling serde_json v1.0.154
+   Compiling serde_yaml_ng v0.10.0
+   Compiling rustybuzz v0.20.1
+   Compiling schemars v0.8.22
+   Compiling acos-aidl v0.3.0 (/home/Qui/.t3/worktrees/acos/t3-2f630078-d1c2107b4b54fe17/crates/acos-aidl)
+   Compiling acos-webview v0.3.0 (/home/Qui/.t3/worktrees/acos/t3-2f630078-d1c2107b4b54fe17/crates/acos-webview)
+   Compiling jpeg-decoder v0.3.2
+   Compiling regex v1.13.1
+warning: field `view` is never read
+   --> crates/acos-webview/src/fair.rs:177:5
+    |
+176 | struct Running {
+    |        ------- field in this struct
+177 |     view: u64,
+    |     ^^^^
+    |
+    = note: `#[warn(dead_code)]` on by default
+
+   Compiling acos-protocol v0.3.0 (/home/Qui/.t3/worktrees/acos/t3-2f630078-d1c2107b4b54fe17/crates/acos-protocol)
+   Compiling tempfile v3.27.0
+   Compiling acos-parcel v0.3.0 (/home/Qui/.t3/worktrees/acos/t3-2f630078-d1c2107b4b54fe17/crates/acos-parcel)
+   Compiling rusty-fork v0.3.1
+warning: `acos-webview` (lib) generated 1 warning
+warning: `acos-webview` (lib test) generated 1 warning (1 duplicate)
+   Compiling proptest v1.12.0
+warning: fields `seen` and `closed` are never read
+  --> crates/acos-webview/tests/common/mod.rs:24:5
+   |
+18 | pub struct WireGuest {
+   |            --------- fields in this struct
+...
+24 |     seen: Arc<Mutex<Vec<(String, Value)>>>,
+   |     ^^^^
+25 |     next: AtomicU32,
+26 |     pub closed: Arc<AtomicBool>,
+   |         ^^^^^^
+   |
+   = note: `#[warn(dead_code)]` on by default
+
+warning: associated items `connect_attached` and `seen` are never used
+   --> crates/acos-webview/tests/common/mod.rs:38:12
+    |
+ 29 | impl WireGuest {
+    | -------------- associated items in this implementation
+...
+ 38 |     pub fn connect_attached(path: &Path, session: &str) -> Self {
+    |            ^^^^^^^^^^^^^^^^
+...
+215 |     pub fn seen(&self) -> Vec<(String, Value)> {
+    |            ^^^^
+
+warning: struct `WireGuest` is never constructed
+  --> crates/acos-webview/tests/common/mod.rs:18:12
+   |
+18 | pub struct WireGuest {
+   |            ^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` on by default
+
+warning: multiple associated items are never used
+   --> crates/acos-webview/tests/common/mod.rs:31:12
+    |
+ 29 | impl WireGuest {
+    | -------------- associated items in this implementation
+ 30 |     /// Connect to a session socket. The reader thread lives until EOF.
+ 31 |     pub fn connect(path: &Path) -> Self {
+    |            ^^^^^^^
+...
+ 38 |     pub fn connect_attached(path: &Path, session: &str) -> Self {
+    |            ^^^^^^^^^^^^^^^^
+...
+ 42 |     fn connect_inner(path: &Path, session: Option<&str>) -> Self {
+    |        ^^^^^^^^^^^^^
+...
+139 |     fn send(&self, msg: &Value) -> std::io::Result<()> {
+    |        ^^^^
+...
+145 |     fn pending_for(&self, id: &str) -> Receiver<Value> {
+    |        ^^^^^^^^^^^
+...
+153 |     pub fn call(&self, op: &str, mut params: Value) -> Result<Value, Value> {
+    |            ^^^^
+...
+171 |     pub fn hello(&self) -> Value {
+    |            ^^^^^
+...
+180 |     pub fn render(&self, view: i64) -> (Value, Blob) {
+    |            ^^^^^^
+...
+209 |     pub fn close(&self) {
+    |            ^^^^^
+...
+215 |     pub fn seen(&self) -> Vec<(String, Value)> {
+    |            ^^^^
+
+warning: function `assert_png` is never used
+   --> crates/acos-webview/tests/common/mod.rs:221:8
+    |
+221 | pub fn assert_png(bytes: &[u8]) {
+    |        ^^^^^^^^^^
+
+warning: fields `blobs`, `seen`, and `closed` are never read
+  --> crates/acos-webview/tests/common/mod.rs:21:5
+   |
+18 | pub struct WireGuest {
+   |            --------- fields in this struct
+...
+21 |     blobs: Mutex<Receiver<Blob>>,
+   |     ^^^^^
+...
+24 |     seen: Arc<Mutex<Vec<(String, Value)>>>,
+   |     ^^^^
+25 |     next: AtomicU32,
+26 |     pub closed: Arc<AtomicBool>,
+   |         ^^^^^^
+   |
+   = note: `#[warn(dead_code)]` on by default
+
+warning: associated items `connect_attached`, `render`, and `seen` are never used
+   --> crates/acos-webview/tests/common/mod.rs:38:12
+    |
+ 29 | impl WireGuest {
+    | -------------- associated items in this implementation
+...
+ 38 |     pub fn connect_attached(path: &Path, session: &str) -> Self {
+    |            ^^^^^^^^^^^^^^^^
+...
+180 |     pub fn render(&self, view: i64) -> (Value, Blob) {
+    |            ^^^^^^
+...
+215 |     pub fn seen(&self) -> Vec<(String, Value)> {
+    |            ^^^^
+
+warning: associated items `connect` and `seen` are never used
+   --> crates/acos-webview/tests/common/mod.rs:31:12
+    |
+ 29 | impl WireGuest {
+    | -------------- associated items in this implementation
+ 30 |     /// Connect to a session socket. The reader thread lives until EOF.
+ 31 |     pub fn connect(path: &Path) -> Self {
+    |            ^^^^^^^
+...
+215 |     pub fn seen(&self) -> Vec<(String, Value)> {
+    |            ^^^^
+
+warning: `acos-webview` (test "gate_cost") generated 3 warnings
+warning: `acos-webview` (test "wv8_viewport") generated 3 warnings (3 duplicates)
+warning: `acos-webview` (test "gate_engine") generated 2 warnings
+warning: `acos-webview` (test "gate_lazy") generated 3 warnings (1 duplicate)
+warning: `acos-webview` (test "fair_pulls") generated 2 warnings (1 duplicate)
+   Compiling acos-render v0.3.0 (/home/Qui/.t3/worktrees/acos/t3-2f630078-d1c2107b4b54fe17/crates/acos-render)
+   Compiling acos-wm v0.3.0 (/home/Qui/.t3/worktrees/acos/t3-2f630078-d1c2107b4b54fe17/crates/acos-wm)
+    Finished `test` profile [unoptimized] target(s) in 5.22s
+     Running unittests src/lib.rs (.cache/mc-target/debug/deps/acos_protocol-37952f09b232ba58)
+
+running 97 tests
+test artifacts::tests::capture_names_are_sanitised_and_deterministic ... ok
+test artifacts::tests::claim_accepts_an_absent_or_empty_directory ... ok
+test artifacts::tests::claim_accepts_pre_created_empty_subdirectories ... ok
+test artifacts::tests::claim_refuses_a_directory_another_run_owns ... ok
+test artifacts::tests::claim_overwrite_replaces_the_previous_run_and_records_it ... ok
+test commands::flag_tests::name_value_flags_are_accepted ... ok
+test artifacts::tests::non_pass_verdict_does_not_require_evidence ... ok
+test artifacts::tests::claim_refuses_a_partial_run_without_a_marker ... ok
+test commands::tests::action_validation_catches_ambiguity ... ok
+test artifacts::tests::claimed_pass_without_evidence_is_invalid ... ok
+test artifacts::tests::path_escape_is_rejected ... ok
+test commands::flag_tests::option_like_and_malformed_flags_are_rejected ... ok
+test commands::tests::typed_union_round_trips ... ok
+test diff::tests::no_baseline_invents_nothing ... ok
+test artifacts::tests::missing_step_artifact_is_invalid ... ok
+test diff::tests::identical_trees_report_no_change ... ok
+test diff::tests::one_text_change_is_the_only_change ... ok
+test diff::tests::duplicate_identities_stay_distinct ... ok
+test artifacts::tests::missing_frame_makes_claimed_pass_invalid ... ok
+test diff::tests::added_and_removed_nodes_are_matched_by_id_path_not_position ... ok
+test diff::tests::flag_and_bounds_changes_carry_old_and_new ... ok
+test diff::tests::pure_addition_reports_only_added ... ok
+test diff::tests::pure_removal_reports_only_removed ... ok
+test artifacts::tests::valid_directory_is_accepted ... ok
+test diff::tests::lists_are_capped_and_say_so ... ok
+test artifacts::tests::validator_rejects_status_that_disagrees_with_verdict ... ok
+test envelope::tests::invalid_json_envelopes_are_rejected_on_deserialize ... ok
+test envelope::tests::failure_status_is_derived_from_code ... ok
+test envelope::tests::pass_is_the_only_ok_envelope ... ok
+test error::tests::deserialization_derives_class_and_defaults_from_the_code ... ok
+test error::tests::error_object_carries_hint_and_retryable ... ok
+test events::tests::monotonic_helper ... ok
+test envelope::tests::typed_results_round_trip ... ok
+test frame::tests::a_whole_display_frame_needs_no_origin ... ok
+test error::tests::existing_crate_codes_are_all_represented ... ok
+test events::tests::wire_shape_is_flat ... ok
+test frame::tests::freshness_is_strict ... ok
+test frame::tests::display_geometry_serde_is_additive ... ok
+test frame::tests::the_status_bar_has_no_pixels_in_an_app_area_frame ... ok
+test frame::tests::tree_bound_to_frame_crop_round_trip ... ok
+test identity::tests::display_wire_shape ... ok
+test identity::tests::isolation_ranking ... ok
+test error::tests::every_code_has_a_class_and_the_new_host_codes_are_registered ... ok
+test diff::tests::removed_and_changed_lists_are_capped_with_true_counts ... ok
+test launch::tests::the_cli_extra_spelling_is_json_first_then_a_bare_string ... ok
+test error::tests::all_codes_are_unique_and_round_trip ... ok
+test artifacts::tests::validator_rejects_a_capture_map_that_dangles_or_is_incomplete ... ok
+test launch::tests::the_json_wire_keeps_the_two_types_inference_cannot_recover ... ok
+test provenance::tests::short_sha_is_twelve_characters ... ok
+test provenance::tests::a_file_identity_carries_the_full_digest_and_its_prefix ... ok
+test provenance::tests::paths_are_absolute_even_when_they_do_not_exist ... ok
+test provenance::tests::an_input_identity_carries_the_size_and_mtime_it_was_hashed_at ... ok
+test provenance::tests::a_launch_block_has_a_null_scenario_and_named_engine ... ok
+test provenance::tests::the_summary_line_names_both_inputs_and_their_short_digests ... ok
+test scenario::tests::action_alias_is_a_string ... ok
+test scenario::tests::swipe_direction_up_moves_the_finger_toward_the_top ... ok
+test ui::tests::a_host_window_removal_outranks_an_unhandled_ack ... ok
+test reply::tests::a_different_tree_for_a_used_sequence_gets_its_own_artifact ... ok
+test ui::tests::bounds_round_trip_and_parse ... ok
+test ui::tests::include_invisible_is_not_a_matching_field ... ok
+test reply::tests::identical_tree_content_reuses_the_named_artifact ... ok
+test reply::tests::the_full_tree_is_written_once_and_named ... ok
+test ui::tests::content_desc_is_an_explicit_selector_field ... ok
+test ui::tests::selector_human_form_is_not_a_debug_dump ... ok
+test scenario::tests::missing_version_is_a_parse_error ... ok
+test ui::tests::selectors_skip_offscreen_nodes_and_tap_the_visible_rect ... ok
+test ui::tests::several_visible_matches_are_all_returned_as_candidates ... ok
+test ui::tests::selectors_are_stable ... ok
+test scenario::tests::expect_handled_rejects_a_non_bool ... ok
+test scenario::tests::semantic_errors_have_paths ... ok
+test scenario::tests::expect_change_rejects_a_non_bool ... ok
+test reply::tests::an_oversized_string_is_bounded_in_place_before_the_result_is_replaced ... ok
+test verdict::tests::reproducer_flags_are_deterministic ... ok
+test scenario::tests::expect_change_with_fast_settle_is_invalid ... ok
+test scenario::tests::expect_handled_parses_and_defaults_to_unset ... ok
+test scenario::tests::expect_change_parses_as_a_bool_and_defaults_false ... ok
+test scenario::tests::swipe_geometry_errors_have_paths ... ok
+test ui::tests::tap_hit_finds_the_deepest_node_and_prefers_a_clickable_sibling ... ok
+test ui::tests::the_text_stage_wins_over_the_content_desc_stage ... ok
+test reply::tests::the_second_page_reaches_the_middle_and_later_rows ... ok
+test verdict::tests::status_mirrors_verdict_with_the_envelope_vocabulary ... ok
+test scenario::tests::parses_and_validates ... ok
+test verdict::tests::a_verdict_without_status_reads_as_fail_never_pass ... ok
+test scenario::tests::a11ypace_tap_expect_change_false_is_an_explicit_no_change_claim ... ok
+test scenario::tests::swipe_and_scroll_until_parse_and_validate ... ok
+test ui::tests::regex_and_validation ... ok
+test reply::tests::compact_view_keeps_the_middle_text_and_the_ids ... ok
+test reply::tests::a_capped_launch_ladder_keeps_every_rung_and_the_blocker ... ok
+test reply::tests::an_enormous_non_tree_result_is_replaced_by_a_pointer_not_silently_cut ... ok
+test reply::tests::a_blocked_launch_keeps_its_ladder_and_shortens_the_repeated_blocker ... ok
+test mcp::tests::one_tool_per_command_with_schema ... ok
+test reply::tests::enforce_cap_shrinks_a_compact_page_instead_of_cutting_the_middle ... ok
+test provenance::tests::an_input_rewritten_during_the_run_is_reported_not_silent ... ok
+test provenance::tests::the_digest_is_cached_for_an_unchanged_file_and_recomputed_when_it_changes ... ok
+test reply::tests::a_capped_verify_reply_keeps_the_outcome_failing_step_and_provenance ... ok
+test provenance::tests::a_warm_capture_of_a_large_file_costs_no_hash ... ok
+test provenance::tests::a_warm_launch_of_the_gaten_apk_pays_no_digest ... ok
+
+test result: ok. 97 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.89s
+
+     Running tests/golden.rs (.cache/mc-target/debug/deps/golden-00dc4ecf2dbc1ac4)
+
+running 3 tests
+test a_pass_never_serializes_an_error_and_a_failure_never_serializes_ok ... ok
+test inspect_pass_envelope_is_golden ... ok
+test unsupported_envelope_is_golden ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/invariants.rs (.cache/mc-target/debug/deps/invariants-40a4ca53113cc8cf)
+
+running 7 tests
+test envelope_helpers_preserve_identity_and_evidence ... ok
+test failure_constructors_map_codes_to_honest_statuses ... ok
+test envelope_deserialization_cannot_create_a_false_pass ... ok
+test fidelity_semantics_are_explicit ... ok
+test ok_is_equivalent_to_pass_for_every_status ... ok
+test frames_cannot_be_reused_after_the_requested_sequence ... ok
+test unsupported_is_never_a_pass ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/roundtrip.rs (.cache/mc-target/debug/deps/roundtrip-a74d92b54ca105f1)
+
+running 9 tests
+test every_launch_extra_type_survives_the_json_wire ... ok
+test ui_round_trips ... ok
+test events_round_trip ... ok
+test envelope_and_identity_round_trip ... ok
+test assertion_round_trips ... ok
+test error_taxonomy_round_trips ... ok
+test command_requests_and_responses_round_trip ... ok
+test scenario_all_steps_round_trip_json_and_yaml ... ok
+test verdict_and_mcp_round_trip ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/scenarios.rs (.cache/mc-target/debug/deps/scenarios-c6b0809453d59025)
+
+running 10 tests
+test an_engine_mismatch_names_both_engines ... ok
+test the_declared_engine_is_the_parsed_yaml_value_not_a_trimmed_line ... ok
+test fixture_scenarios_contain_the_art_reference_strings ... ok
+test a_legacy_engine_with_a_trailing_comment_still_warns ... ok
+test a_launch_with_an_action_data_and_typed_extras_is_valid ... ok
+test valid_scenario_has_no_errors_and_warns_on_optional_step ... ok
+test a_legacy_engine_value_warns_with_the_canonical_name ... ok
+test the_scenario_engine_field_uses_the_cli_vocabulary ... ok
+test at_least_thirty_negative_validation_cases_are_rejected ... ok
+test every_checked_in_scenario_parses_and_validates ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.11s
+
+     Running tests/schemas.rs (.cache/mc-target/debug/deps/schemas-16b38e41f3cfbaa8)
+
+running 2 tests
+test every_command_has_a_request_schema ... ok
+test schemas_are_up_to_date ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/services_block.rs (.cache/mc-target/debug/deps/services_block-b10b464455ff75bc)
+
+running 3 tests
+test a_step_can_require_a_service_module ... ok
+test a_services_block_round_trips_into_the_scenario ... ok
+test an_unknown_profile_or_field_is_an_invalid_scenario ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (.cache/mc-target/debug/deps/acos_webview-730c56242bfdb238)
+
+running 25 tests
+test broker::tests::a_miss_before_any_restart_is_an_unknown_view ... ok
+test broker::tests::a_session_is_only_replaced_when_the_engine_generation_changed ... ok
+test broker::tests::a_miss_after_a_restart_names_the_restart_not_the_wrong_id ... ok
+test broker::tests::a_restart_empties_the_view_map_and_closes_the_views ... ok
+test engine::tests::a_marker_with_the_wrong_pin_is_rejected ... ok
+test engine::tests::cache_root_follows_the_acos_rule ... ok
+test engine::tests::paths_are_pinned_to_the_version ... ok
+test engine::tests::an_empty_dir_is_not_a_trusted_install ... ok
+test sandbox::tests::argv_isolates_home_and_keeps_the_pipe ... ok
+test view::tests::key_info_covers_text_and_named_keys ... ok
+test sandbox::tests::profile_is_throwaway_and_unique ... ok
+test view::tests::viewport_validation_is_structured ... ok
+test wire::tests::blob_and_json_stay_ordered_on_one_stream ... ok
+test wire::tests::oversized_frame_is_rejected_before_allocating ... ok
+test wire::tests::blob_frame_round_trips ... ok
+test wire::tests::json_frame_round_trips ... ok
+test wire::tests::truncated_body_is_bad_frame_not_eof ... ok
+test wire::tests::responses_and_events_have_the_documented_shape ... ok
+test view::tests::base64_round_trips_binary ... ok
+test wire::tests::unknown_kind_and_non_object_json_are_rejected ... ok
+test wire::tests::zero_length_frame_is_rejected ... ok
+test fair::tests::a_pull_that_never_gets_a_frame_fails_and_leaves_no_slot ... ok
+test fair::tests::a_preempted_attempt_does_not_spend_the_pulls_attempt_budget ... ok
+test fair::tests::an_input_join_promotes_the_outstanding_pull_to_input_priority ... ok
+test fair::tests::a_queued_input_frame_preempts_the_running_non_input_attempt ... ok
+
+test result: ok. 25 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.82s
+
+     Running unittests src/main.rs (.cache/mc-target/debug/deps/acos_webview-7ff10c36337956be)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/engine_bare.rs (.cache/mc-target/debug/deps/engine_bare-0703ff0b6724ff9a)
+
+running 1 test
+test engine_handshake_over_the_devtools_pipe ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/engine_gate.rs (.cache/mc-target/debug/deps/engine_gate-87a22e13fe668b77)
+
+running 1 test
+test engine_gate ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/fair_pulls.rs (.cache/mc-target/debug/deps/fair_pulls-0a910c1c6db325b1)
+
+running 2 tests
+test viewport_geometry_matches_the_probe ... ok
+test frame_pulls_are_fair_between_two_views_one_of_them_slow ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/gate_cost.rs (.cache/mc-target/debug/deps/gate_cost-ec8bbfd31b9b3fa9)
+
+running 1 test
+test a_session_that_never_connects_pays_a_socket_and_a_thread ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.08s
+
+     Running tests/gate_engine.rs (.cache/mc-target/debug/deps/gate_engine-d7a7e8673ee5bf83)
+
+running 1 test
+test two_sessions_get_their_own_context_and_a_real_png_frame_through_the_gate ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/gate_lazy.rs (.cache/mc-target/debug/deps/gate_lazy-6301cb07442c2e5b)
+
+running 3 tests
+test gate_proxies_a_session_to_the_shared_daemon_byte_for_byte ... ok
+test gate_keeps_one_connection_per_session_and_reattaches_after_it_closes ... ok
+test gate_is_lazy_and_reports_engine_unavailable_on_the_wire ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.33s
+
+     Running tests/wv8_viewport.rs (.cache/mc-target/debug/deps/wv8_viewport-a163b57cd1f6f6bc)
+
+running 2 tests
+test the_default_arm_lays_out_at_the_view_width_and_ignores_meta_viewport ... ok
+test the_wide_arm_honours_meta_viewport_and_the_980_default_and_overview_fits_it ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (.cache/mc-target/debug/deps/acos_wm-fb140eae36c4dfb3)
+
+running 78 tests
+test callbacks::tests::insets_control_changed_round_trips_frames ... ok
+test clock::tests::real_clock_is_monotonic ... ok
+test clock::tests::virtual_clock_arms_and_disarms ... ok
+test callbacks::tests::visibility_delivers_one_bool ... ok
+test compositor::tests::cause_id_is_propagated ... ok
+test display::tests::config_change_bits_follow_the_manifest_that_declares_them ... ok
+test compositor::tests::two_layers_z_order_opaque_wins ... ok
+test compositor::tests::present_is_skipped_without_damage ... ok
+test compositor::tests::removed_layer_area_is_repainted ... ok
+test display::tests::control_positions_match_dumpsys ... ok
+test display::tests::every_rotation_matches_the_reference_decor_insets ... ok
+test compositor::tests::translucent_alpha_does_not_occlude_the_layer_below ... ok
+test display::tests::reference_numbers_are_the_measured_ones ... ok
+test display::tests::rotate_back_restores_the_portrait_geometry ... ok
+test display::tests::custom_display_applies_phone_geometry ... ok
+test display::tests::rotate_to_landscape_swaps_the_frame_and_moves_the_bars ... ok
+test display::tests::every_rotation_matches_the_reference_config_insets ... ok
+test display::tests::rotated_twice_is_a_half_turn_and_the_other_quarter_is_its_mirror ... ok
+test compositor::tests::negative_position_and_crop_stay_in_bounds ... ok
+test ime::tests::editor_info_round_trips ... ok
+test ime::tests::show_hide_are_honest ... ok
+test ime::tests::input_bind_result_round_trips ... ok
+test ime::tests::start_input_without_connection_is_no_ime ... ok
+test ime::tests::tracker_tokens_are_monotonic ... ok
+test compositor::tests::damage_tracking_keeps_only_the_changed_region ... ok
+test ime::tests::typing_round_trip_through_input_connection ... ok
+test input::tests::anr_arms_only_while_unacked ... ok
+test input::tests::hit_test_prefers_topmost_z ... ok
+test input::tests::message_round_trip_is_exact ... ok
+test input::tests::sessions_never_see_each_others_events ... ok
+test input::tests::swipe_interpolation_action_sequence ... ok
+test input::tests::unknown_ack_is_structured ... ok
+test input::tests::tap_delivers_down_and_up_with_ack_latency ... ok
+test layers::tests::a_media_sub_window_is_behind_its_parent_and_a_panel_above_it ... ok
+test layers::tests::a_not_touchable_overlay_lets_the_touch_through_to_the_activity ... ok
+test layers::tests::a_relayout_does_not_jump_a_window_up_the_stack ... ok
+test layers::tests::a_sub_window_is_placed_directly_above_its_parent ... ok
+test layers::tests::a_sub_window_with_a_dead_token_keeps_a_defined_place ... ok
+test layers::tests::application_overlay_is_above_every_activity_window_below_critical_system_windows ... ok
+test layers::tests::application_types_are_the_application_band ... ok
+test layers::tests::describe_reports_window_type_and_z_for_every_window ... ok
+test layers::tests::flags_decide_touchability_and_focusability ... ok
+test layers::tests::focus_goes_to_the_topmost_focusable_window ... ok
+test layers::tests::hit_test_returns_the_topmost_touchable_window_at_the_point ... ok
+test layers::tests::policy_layers_match_the_aosp_table ... ok
+test layers::tests::sub_window_types_are_1000_to_1999 ... ok
+test layers::tests::system_types_are_2000_to_2999_and_out_of_range_is_unknown ... ok
+test layers::tests::stack_order_is_policy_layer_then_creation_order ... ok
+test replay::tests::relayout_request_and_reply_shapes_match_the_layout ... ok
+test replay::tests::wm_owned_classification_is_exact ... ok
+test transport::tests::socketpair_round_trips_and_is_nonblocking ... ok
+test vsync::tests::idle_has_no_timer_and_zero_arms ... ok
+test vsync::tests::fixed_grid_is_deterministic ... ok
+test transport::tests::registry_handles_are_stable_and_reusable ... ok
+test vsync::tests::pipe_record_layout_is_stable ... ok
+test vsync::tests::concurrent_clients_share_one_deadline ... ok
+test wms::tests::accessibility_overlay_needs_the_accessibility_overlay_token ... ok
+test vsync::tests::unlimited_mode_delivers_immediately ... ok
+test replay::tests::tsv_parser_reads_both_traces ... ok
+test wms::tests::a_same_layer_window_added_later_is_above_one_with_a_smaller_binder_id ... ok
+test wms::tests::add_returns_measured_app_frame_and_insets ... ok
+test wms::tests::reference_screen_layout_is_normal_long_not_xlarge ... ok
+test wms::tests::relayout_is_stable_and_first_time_only_once ... ok
+test wms::tests::rotated_display_reports_a_landscape_merged_configuration ... ok
+test wms::tests::rotated_insets_state_delivers_the_config_strip ... ok
+test wms::tests::focus_moves_with_the_layer_stack_on_add_and_remove ... ok
+test wms::tests::hit_test_and_focus_follow_the_stack_and_the_flags ... ok
+test wms::tests::hit_test_candidates_lists_the_stack_from_the_top ... ok
+test wms::tests::wrap_content_window_uses_client_requested_size ... ok
+test wms::tests::update_requested_visible_types_shows_ime ... ok
+test wms::tests::focus_and_visibility_callbacks_are_queued_in_order ... ok
+test transport::tests::in_memory_preserves_boundaries ... ok
+test wms::tests::match_parent_window_ignores_requested_size ... ok
+test wms::tests::the_layer_stack_orders_application_overlay_and_ime_by_window_type ... ok
+test wms::tests::wrap_content_without_measure_falls_back_to_parent ... ok
+test wms::tests::duplicate_add_and_unknown_window_are_structured ... ok
+test replay::tests::full_replay_reports_no_wm_errors ... ok
+test compositor::tests::damage_matches_full ... ok
+
+test result: ok. 78 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.46s
+
+     Running tests/codec_golden.rs (.cache/mc-target/debug/deps/codec_golden-b162a579cfd80804)
+
+running 10 tests
+test client_window_frames_golden_layout ... ok
+test layout_params_full_round_trip ... ok
+test rect_golden_bytes ... ok
+test configuration_round_trips ... ok
+test insets_state_round_trips_with_reference_sources ... ok
+test display_cutout_marker_is_present_zero_or_minus_one ... ok
+test insets_state_ime_visible_round_trips ... ok
+test optional_codecs_round_trip ... ok
+test point_and_insets_golden_bytes ... ok
+test derived_layout_file_exists_and_covers_every_codec ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/compositor.rs (.cache/mc-target/debug/deps/compositor-01f3850779ad0f93)
+
+running 4 tests
+test remove_window_drops_layer_and_input_route ... ok
+test window_frame_is_the_measured_app_bounds ... ok
+test two_windows_z_order_and_opaque_overlap ... ok
+test finish_drawing_produces_a_fresh_frame_with_cause ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.31s
+
+     Running tests/fuzz.rs (.cache/mc-target/debug/deps/fuzz-71ad404418e9a144)
+
+running 2 tests
+test a_fixed_workload_runs_cleanly ... ok
+test random_operation_sequences_never_panic ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.15s
+
+     Running tests/input.rs (.cache/mc-target/debug/deps/input-d2301f931f7e1345)
+
+running 6 tests
+test idle_input_has_no_wakeups ... ok
+test anr_is_detected_only_while_unacked ... ok
+test swipe_produces_down_moves_up_in_order ... ok
+test focus_change_reports_to_the_new_window ... ok
+test type_text_reaches_the_registered_input_connection ... ok
+test tap_is_hit_tested_delivered_and_acked ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/multi_session.rs (.cache/mc-target/debug/deps/multi_session-f9c6fa10406438f3)
+
+running 2 tests
+test concurrent_sessions_do_not_share_events ... ok
+test concurrent_sessions_keep_independent_frames ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.19s
+
+     Running tests/replay.rs (.cache/mc-target/debug/deps/replay-368c35a2facbe3c6)
+
+running 3 tests
+test aidl_tables_cover_the_owned_methods ... ok
+test coverage_table_counts_are_sane ... ok
+test replay_covers_every_wm_owned_row ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.11s
+
+     Running tests/vsync.rs (.cache/mc-target/debug/deps/vsync-8b4af83b054aa3be)
+
+running 4 tests
+test idle_vsync_has_zero_wakeups ... ok
+test deterministic_60hz_sequence ... ok
+test pipe_record_has_the_dispatch_vsync_shape ... ok
+test vrr_refresh_rate_is_queryable ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests acos_protocol
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests acos_webview
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests acos_wm
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

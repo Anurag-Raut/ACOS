@@ -44,7 +44,10 @@ fn compile_java(names: &[&str]) -> Option<PathBuf> {
     let root = repo_root();
     // Key the output on the source set so two tests compiling different
     // classes do not collide on one cached `classes.dex`.
-    let out = root.join(format!("target/tmp/acos-java-cases/looper-{}", names.join("-")));
+    let out = root.join(format!(
+        "target/tmp/acos-java-cases/looper-{}",
+        names.join("-")
+    ));
     let dex = out.join("classes.dex");
     if dex.is_file() {
         return Some(dex);
@@ -60,7 +63,10 @@ fn compile_java(names: &[&str]) -> Option<PathBuf> {
     std::fs::create_dir_all(&classes).ok()?;
     let sources: Vec<PathBuf> = names
         .iter()
-        .map(|n| root.join("crates/acos-vm/tests/java").join(format!("{n}.java")))
+        .map(|n| {
+            root.join("crates/acos-vm/tests/java")
+                .join(format!("{n}.java"))
+        })
         .collect();
     let status = Command::new(javac)
         .args(["--release", "11", "-encoding", "UTF-8", "-cp"])
@@ -119,8 +125,7 @@ fn run_real(dex: &Path, main: &str) -> Option<(i32, String, Option<VmError>)> {
 
 #[test]
 fn real_looper_delayed_and_green_thread_wake() {
-    let Some(dex) = compile_java(&["LooperMain"]) else {
-        eprintln!("SKIP real_looper_delayed_and_green_thread_wake: javac/d8 unavailable");
+    let Some(dex) = acos_test_support::require_some(compile_java(&["LooperMain"]), "real_looper_delayed_and_green_thread_wake", "javac/d8 unavailable") else {
         return;
     };
     let Some((code, stdout, err)) = run_real(&dex, "LooperMain") else {
@@ -175,8 +180,7 @@ fn looper_handle_wakes_from_host_thread() {
 /// wall time, and the guest must still observe the full 60 s of uptime.
 #[test]
 fn virtual_looper_advances_clock_to_future_deadline() {
-    let Some(dex) = compile_java(&["LooperVirtual"]) else {
-        eprintln!("SKIP virtual_looper_advances_clock_to_future_deadline: javac/d8 unavailable");
+    let Some(dex) = acos_test_support::require_some(compile_java(&["LooperVirtual"]), "virtual_looper_advances_clock_to_future_deadline", "javac/d8 unavailable") else {
         return;
     };
     let Some(mut vm) = new_real_vm() else {

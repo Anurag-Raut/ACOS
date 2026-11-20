@@ -1,0 +1,6 @@
+acos-net: session=1 netns=net:[4026533585] iface=acoss1 addr=10.163.1.2/30 gw=10.163.1.1
+curl: (7) Failed to connect to example.com:443 after 10 ms: Could not connect to server
+acos-net: session=1 netns=net:[4026533634] iface=acoss1 addr=10.163.1.2/30 gw=10.163.1.1
+curl: (7) Failed to connect to example.com:443 after 0 ms: Could not connect to server
+acos-net: session=1 netns=net:[4026533573] iface=acoss1 addr=10.163.1.2/30 gw=10.163.1.1
+curl: (7) Failed to connect to example.com:443 after 2 ms: Could not connect to server

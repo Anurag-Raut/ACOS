@@ -1,0 +1,1184 @@
+   Compiling acos-test-support v0.3.0 (/home/Qui/.t3/worktrees/acos/t3-8b6da58a-9747ae19d84c6160/crates/acos-test-support)
+   Compiling acos-binder-peer v0.3.0 (/home/Qui/.t3/worktrees/acos/t3-8b6da58a-9747ae19d84c6160/crates/acos-binder-peer)
+   Compiling zune-core v0.5.1
+   Compiling pxfm v0.1.30
+   Compiling hex v0.4.3
+   Compiling num-traits v0.2.19
+   Compiling png v0.18.1
+warning: variable does not need to be mutable
+   --> crates/acos-netd-ctl/src/client.rs:574:13
+    |
+574 |         let mut r = self.request(&Request::KillPasta { hold })?;
+    |             ----^
+    |             |
+    |             help: remove this `mut`
+    |
+    = note: `#[warn(unused_mut)]` on by default
+
+warning: variable does not need to be mutable
+   --> crates/acos-netd-ctl/src/client.rs:584:13
+    |
+584 |         let mut r = self.request(&Request::Shutdown)?;
+    |             ----^
+    |             |
+    |             help: remove this `mut`
+
+warning: `acos-netd-ctl` (lib) generated 2 warnings (run `cargo fix --lib -p acos-netd-ctl` to apply 2 suggestions)
+warning: unreachable pattern
+   --> crates/acos-services/src/intents.rs:151:21
+    |
+146 |                     Extra::Short(number) => serde_json::json!(number),
+    |                     -------------------- matches all the relevant values
+...
+151 |                     Extra::Short(short) => serde_json::json!(short),
+    |                     ^^^^^^^^^^^^^^^^^^^ no value can reach this
+    |
+    = note: `#[warn(unreachable_patterns)]` on by default
+
+warning: variable does not need to be mutable
+   --> crates/acos-services/src/modules/notifications.rs:341:13
+    |
+341 |         let mut store = store
+    |             ----^^^^^
+    |             |
+    |             help: remove this `mut`
+    |
+    = note: `#[warn(unused_mut)]` on by default
+
+warning: unreachable pattern
+    --> crates/acos-services/src/parcelable.rs:2741:9
+     |
+2721 |         FieldOp::BoolCond(fields) => {
+     |         ------------------------- matches all the relevant values
+...
+2741 |         FieldOp::BoolCond(fields) => {
+     |         ^^^^^^^^^^^^^^^^^^^^^^^^^ no value can reach this
+
+warning: unreachable pattern
+    --> crates/acos-services/src/parcelable.rs:3167:9
+     |
+3105 |         FieldOp::BoolCond(fields) => {
+     |         ------------------------- matches all the relevant values
+...
+3167 |         FieldOp::BoolCond(fields) => {
+     |         ^^^^^^^^^^^^^^^^^^^^^^^^^ no value can reach this
+
+warning: unreachable pattern
+    --> crates/acos-services/src/parcelable.rs:3246:9
+     |
+3229 |         FieldOp::Icon => {
+     |         ------------- matches all the relevant values
+...
+3246 |         FieldOp::Icon => {
+     |         ^^^^^^^^^^^^^ no value can reach this
+
+warning: unreachable pattern
+    --> crates/acos-services/src/parcelable.rs:3250:9
+     |
+3233 |         FieldOp::ArraySet => match value {
+     |         ----------------- matches all the relevant values
+...
+3250 |         FieldOp::ArraySet => match value {
+     |         ^^^^^^^^^^^^^^^^^ no value can reach this
+
+warning: unreachable pattern
+    --> crates/acos-services/src/parcelable.rs:5086:9
+     |
+5032 |         FieldOp::BoolCond(_) => call == "writeBoolean",
+     |         -------------------- matches all the relevant values
+...
+5086 |         FieldOp::BoolCond(_) => call == "writeBoolean",
+     |         ^^^^^^^^^^^^^^^^^^^^ no value can reach this
+
+warning: unreachable pattern
+    --> crates/acos-services/src/parcelable.rs:5169:9
+     |
+5127 |         FieldOp::BoolCond(inner) => {
+     |         ------------------------ matches all the relevant values
+...
+5169 |         FieldOp::BoolCond(inner) => {
+     |         ^^^^^^^^^^^^^^^^^^^^^^^^ no value can reach this
+
+warning: unused variable: `intent`
+   --> crates/acos-services/src/service_bind.rs:292:13
+    |
+292 |         let intent = bind_intent(package, class);
+    |             ^^^^^^ help: if this is intentional, prefix it with an underscore: `_intent`
+    |
+    = note: `#[warn(unused_variables)]` on by default
+
+warning: constant `ACTION_MASK` is never used
+   --> crates/acos-services/src/a11y_native.rs:102:7
+    |
+102 | const ACTION_MASK: i32 = 0xff;
+    |       ^^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` on by default
+
+warning: constant `RESTRICTIONS_GET_APPLICATION_PER_ADMIN` is never used
+   --> crates/acos-services/src/extras.rs:693:7
+    |
+693 | const RESTRICTIONS_GET_APPLICATION_PER_ADMIN: u32 = 2;
+    |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: constant `SERVICE_MANAGER_DESCRIPTOR` is never used
+  --> crates/acos-services/src/host.rs:82:7
+   |
+82 | const SERVICE_MANAGER_DESCRIPTOR: &str = "android.os.IServiceManager";
+   |       ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: `acos-services` (lib) generated 12 warnings (run `cargo fix --lib -p acos-services` to apply 1 suggestion)
+   Compiling acos-netd v0.3.0 (/home/Qui/.t3/worktrees/acos/t3-8b6da58a-9747ae19d84c6160/crates/acos-netd)
+   Compiling acos-runtime v0.3.0 (/home/Qui/.t3/worktrees/acos/t3-8b6da58a-9747ae19d84c6160/crates/acos-runtime)
+   Compiling zune-jpeg v0.5.15
+   Compiling acos-webview v0.3.0 (/home/Qui/.t3/worktrees/acos/t3-8b6da58a-9747ae19d84c6160/crates/acos-webview)
+warning: unused variable: `net`
+   --> crates/acos-netd/src/plan.rs:270:29
+    |
+270 | pub fn session_offline_cmds(net: &SessionNet, netns_pid: u32) -> Vec<String> {
+    |                             ^^^ help: if this is intentional, prefix it with an underscore: `_net`
+    |
+    = note: `#[warn(unused_variables)]` on by default
+
+warning: variable does not need to be mutable
+  --> crates/acos-netd/src/lib.rs:99:16
+   |
+99 |         let Ok(mut conn) = conn else { continue };
+   |                ----^^^^
+   |                |
+   |                help: remove this `mut`
+   |
+   = note: `#[warn(unused_mut)]` on by default
+
+warning: function `handle` is never used
+   --> crates/acos-netd/src/lib.rs:215:4
+    |
+215 | fn handle(relay: &Arc<Mutex<supervisor::Relay>>, req: Request) -> Reply {
+    |    ^^^^^^
+    |
+    = note: `#[warn(dead_code)]` on by default
+
+warning: field `cgroup` is never read
+  --> crates/acos-netd/src/supervisor.rs:69:5
+   |
+49 | struct Session {
+   |        ------- field in this struct
+...
+69 |     cgroup: Option<String>,
+   |     ^^^^^^
+
+warning: methods `start_forwarder` and `restart_pasta` are never used
+   --> crates/acos-netd/src/supervisor.rs:949:8
+    |
+127 | impl Relay {
+    | ---------- methods in this implementation
+...
+949 |     fn start_forwarder(&mut self, s: &mut Session, port: u16) -> Result<(), ProtoError> {
+    |        ^^^^^^^^^^^^^^^
+...
+984 |     fn restart_pasta(&mut self) -> Result<(), ProtoError> {
+    |        ^^^^^^^^^^^^^
+
+warning: acos-binder-peer@0.3.0: built /home/Qui/.t3/worktrees/acos/t3-8b6da58a-9747ae19d84c6160/target/debug/build/acos-binder-peer-f45e34fef9d893ae/out/libacos_binder_driver.so
+warning: unused imports: `F_DEATH` and `RSP_DEAD`
+  --> crates/acos-binder-peer/src/peer.rs:43:12
+   |
+43 |     Frame, F_DEATH, F_HELLO, F_REF, F_REP, F_REQ, F_RSP, F_TXN, INTERFACE_TRANSACTION,
+   |            ^^^^^^^
+44 |     PING_TRANSACTION, PROTOCOL_VERSION, REF_RELEASE, RSP_DEAD, TF_ONE_WAY, TF_STATUS_CODE,
+   |                                                      ^^^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` on by default
+
+warning: function `obj` is never used
+  --> crates/acos-runtime/tests/activity_result_delivery.rs:60:4
+   |
+60 | fn obj(h: Handle) -> Option<Handle> {
+   |    ^^^
+   |
+   = note: `#[warn(dead_code)]` on by default
+
+warning: field `token` is never read
+   --> crates/acos-runtime/tests/activity_result_delivery.rs:109:5
+    |
+108 | struct Installed {
+    |        --------- field in this struct
+109 |     token: Handle,
+    |     ^^^^^
+
+warning: unused variable: `objects`
+    --> crates/acos-binder-peer/src/peer.rs:2492:13
+     |
+2492 |     let mut objects: Vec<usize> = Vec::new();
+     |             ^^^^^^^ help: if this is intentional, prefix it with an underscore: `_objects`
+     |
+     = note: `#[warn(unused_variables)]` on by default
+
+warning: variable does not need to be mutable
+    --> crates/acos-binder-peer/src/peer.rs:2492:9
+     |
+2492 |     let mut objects: Vec<usize> = Vec::new();
+     |         ----^^^^^^^
+     |         |
+     |         help: remove this `mut`
+     |
+     = note: `#[warn(unused_mut)]` on by default
+
+warning: `acos-netd` (lib) generated 5 warnings (run `cargo fix --lib -p acos-netd` to apply 1 suggestion)
+warning: field `view` is never read
+   --> crates/acos-webview/src/fair.rs:114:5
+    |
+112 | struct Queued {
+    |        ------ field in this struct
+113 |     seq: u64,
+114 |     view: u64,
+    |     ^^^^
+    |
+    = note: `#[warn(dead_code)]` on by default
+
+warning: `acos-binder-peer` (lib) generated 3 warnings (run `cargo fix --lib -p acos-binder-peer` to apply 2 suggestions)
+warning: `acos-runtime` (test "activity_result_delivery") generated 2 warnings
+warning: `acos-webview` (lib) generated 1 warning
+   Compiling moxcms v0.8.1
+   Compiling image v0.25.10
+   Compiling acos-art v0.3.0 (/home/Qui/.t3/worktrees/acos/t3-8b6da58a-9747ae19d84c6160/crates/acos-art)
+warning: unused variable: `started`
+   --> crates/acos-art/src/boot_image.rs:919:13
+    |
+919 |         let started = Instant::now();
+    |             ^^^^^^^ help: if this is intentional, prefix it with an underscore: `_started`
+    |
+    = note: `#[warn(unused_variables)]` on by default
+
+warning: variable does not need to be mutable
+   --> crates/acos-art/src/launch.rs:761:9
+    |
+761 |     let mut cmd = shared.command(spec, app_meta, providers)?;
+    |         ----^^^
+    |         |
+    |         help: remove this `mut`
+    |
+    = note: `#[warn(unused_mut)]` on by default
+
+warning: unused variable: `webview_gate`
+    --> crates/acos-art/src/launch.rs:3186:9
+     |
+3186 |     let webview_gate = webview_gate;
+     |         ^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_webview_gate`
+
+warning: unreachable pattern
+    --> crates/acos-art/src/launch.rs:7902:21
+     |
+7862 |                     ("tap", _) => {
+     |                     ---------- matches all the relevant values
+...
+7902 |                     ("tap", _) => live.input.tap(x, y, ack_wait),
+     |                     ^^^^^^^^^^ no value can reach this
+     |
+     = note: `#[warn(unreachable_patterns)]` on by default
+
+warning: unused import: `std::io::Write`
+   --> crates/acos-art/src/spike_net.rs:721:9
+    |
+721 |     use std::io::Write as _;
+    |         ^^^^^^^^^^^^^^
+    |
+    = note: `#[warn(unused_imports)]` on by default
+
+warning: method `cache_str` is never used
+   --> crates/acos-art/src/boot_image.rs:598:8
+    |
+597 | impl CacheOutcome {
+    | ----------------- method in this implementation
+598 |     fn cache_str(&self) -> &'static str {
+    |        ^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` on by default
+
+warning: fields `guest_lib_dir` and `uid` are never read
+   --> crates/acos-art/src/launch.rs:563:5
+    |
+549 | struct SecondarySpec {
+    |        ------------- fields in this struct
+...
+563 |     guest_lib_dir: String,
+    |     ^^^^^^^^^^^^^
+564 |     /// `ApplicationInfo.uid` the package manager assigned.
+565 |     uid: Option<i32>,
+    |     ^^^
+    |
+    = note: `SecondarySpec` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: field `argv` is never read
+   --> crates/acos-art/src/launch.rs:599:5
+    |
+591 | struct SecondaryGuest {
+    |        -------------- field in this struct
+...
+599 |     argv: Vec<String>,
+    |     ^^^^
+
+warning: field `animations_on` is never read
+    --> crates/acos-art/src/launch.rs:3422:5
+     |
+3399 | struct ProbeSample {
+     |        ----------- field in this struct
+...
+3422 |     animations_on: Option<bool>,
+     |     ^^^^^^^^^^^^^
+     |
+     = note: `ProbeSample` has a derived impl for the trait `Clone`, but this is intentionally ignored during dead code analysis
+
+warning: function `adler32` is never used
+    --> crates/acos-art/src/launch.rs:8858:4
+     |
+8858 | fn adler32(data: &[u8]) -> u32 {
+     |    ^^^^^^^
+
+warning: field `spawn_requests` is never read
+    --> crates/acos-art/src/launch.rs:9004:5
+     |
+8999 | struct PeerSummary {
+     |        ----------- field in this struct
+...
+9004 |     spawn_requests: u64,
+     |     ^^^^^^^^^^^^^^
+
+warning: function `write_out` is never used
+    --> crates/acos-art/src/launch.rs:9203:4
+     |
+9203 | fn write_out(fd: RawFd, outs: Vec<Frame>, context: &str) -> std::io::Result<()> {
+     |    ^^^^^^^^^
+
+warning: hiding a lifetime that's elided elsewhere is confusing
+    --> crates/acos-art/src/lib.rs:1064:20
+     |
+1064 |     pub fn sandbox(&self) -> Sandbox {
+     |                    ^^^^^     ------- the same lifetime is hidden here
+     |                    |
+     |                    the lifetime is elided here
+     |
+     = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+     = note: `#[warn(mismatched_lifetime_syntaxes)]` on by default
+help: use `'_` for type paths
+     |
+1064 |     pub fn sandbox(&self) -> Sandbox<'_> {
+     |                                     ++++
+
+warning: variable does not need to be mutable
+   --> crates/acos-art/src/probe_channel_tests.rs:122:9
+    |
+122 |     let mut writer = match channel.as_mut() {
+    |         ----^^^^^^
+    |         |
+    |         help: remove this `mut`
+
+warning: variable does not need to be mutable
+    --> crates/acos-art/src/live_view.rs:2183:13
+     |
+2183 |         let mut first_frame_for = |label: &str| -> bool {
+     |             ----^^^^^^^^^^^^^^^
+     |             |
+     |             help: remove this `mut`
+
+warning: `acos-art` (lib) generated 12 warnings (run `cargo fix --lib -p acos-art` to apply 1 suggestion)
+warning: function `solid` is never used
+    --> crates/acos-art/src/live_view.rs:1878:8
+     |
+1878 |     fn solid(width: u32, height: u32, rgba: [u8; 4]) -> Vec<u8> {
+     |        ^^^^^
+
+warning: method `nudge` is never used
+    --> crates/acos-art/src/live_view.rs:1951:12
+     |
+1943 |     impl TestWake {
+     |     ------------- method in this implementation
+...
+1951 |         fn nudge(&self) {
+     |            ^^^^^
+
+warning: unused variable: `dir`
+  --> crates/acos-art/tests/w37_build_cache.rs:94:16
+   |
+94 |     let (_env, dir, _root) = isolate("corrupt");
+   |                ^^^ help: if this is intentional, prefix it with an underscore: `_dir`
+   |
+   = note: `#[warn(unused_variables)]` on by default
+
+warning: unused variable: `rest`
+   --> crates/acos-art/src/main.rs:102:13
+    |
+102 |     let mut rest: Vec<String> = Vec::new();
+    |             ^^^^ help: if this is intentional, prefix it with an underscore: `_rest`
+    |
+    = note: `#[warn(unused_variables)]` on by default
+
+warning: variable does not need to be mutable
+   --> crates/acos-art/src/main.rs:102:9
+    |
+102 |     let mut rest: Vec<String> = Vec::new();
+    |         ----^^^^
+    |         |
+    |         help: remove this `mut`
+    |
+    = note: `#[warn(unused_mut)]` on by default
+
+warning: variable does not need to be mutable
+   --> crates/acos-art/src/main.rs:149:13
+    |
+149 |         let mut next = |i: &mut usize| -> Result<String> {
+    |             ----^^^^
+    |             |
+    |             help: remove this `mut`
+
+warning: `acos-art` (bin "acos-art" test) generated 3 warnings (run `cargo fix --bin "acos-art" --tests` to apply 2 suggestions)
+warning: `acos-art` (test "w37_build_cache") generated 1 warning
+warning: `acos-art` (bin "acos-art") generated 3 warnings (3 duplicates)
+warning: `acos-art` (lib test) generated 16 warnings (11 duplicates) (run `cargo fix --lib -p acos-art --tests` to apply 2 suggestions)
+    Finished `test` profile [unoptimized] target(s) in 6.49s
+     Running unittests src/lib.rs (target/debug/deps/acos_art-7cc54a0eb696ef2e)
+
+running 186 tests
+test app::tests::guest_line_parses ... ok
+test app::tests::font_customization_merges_new_named_families_only ... ok
+test boot_image::tests::a_missing_explicit_image_is_refused ... ok
+test boot_image::tests::the_window_is_the_same_range_art_uses ... ok
+test build_cache::tests::digest_is_length_prefixed ... ok
+test boot_image::tests::a_build_failure_is_a_structured_error_and_leaves_no_entry ... ok
+test build_cache::tests::tmp_is_never_the_staging_root ... ok
+test boot_image::tests::modes_parse_exactly ... ok
+test capture::tests::small_stream_is_kept_whole_without_a_marker ... ok
+test capture::tests::parse_bytes_accepts_suffixes ... ok
+test boot_image::tests::random_bases_are_aligned_and_in_arts_window ... ok
+test cgroup::tests::capability_stamp_is_boot_scoped_and_never_guesses ... ok
+test cgroup::tests::cgroup_line_is_parsed ... ok
+test cgroup::tests::sizes_parse ... ok
+test capture::tests::a_single_write_bigger_than_the_cap_keeps_only_its_tail ... ok
+test cgroup::tests::wrap_puts_the_command_behind_systemd_run_with_the_limits ... ok
+test boot_image::tests::the_same_image_at_two_paths_has_one_key ... ok
+test crash::tests::nothing_is_not_a_crash_record ... ok
+test crash::tests::art_dump_yields_signal_code_addr_thread_and_library_frames ... ok
+test cgroup::tests::zero_limits_are_refused_not_silently_unbounded ... ok
+test landlock::tests::landlock_failure_has_its_own_code ... ok
+test landlock::tests::fallback_is_only_accepted_as_an_explicit_skip ... ok
+test crash::tests::shim_line_alone_is_enough_for_the_primary_fields ... ok
+test jvm::tests::d8_args_survive_the_build_tools_wrapper_dash ... ok
+test jvm::tests::dump_args_are_absolute_and_pid_scoped ... ok
+test landlock::tests::plan_grants_writes_only_on_the_per_run_roots ... ok
+test crash::tests::truncated_dump_keeps_what_exists ... ok
+test launch::crash_evidence_tests::the_guest_crash_line_is_kept_and_parsed ... ok
+test launch::abi_gate_tests::a_guest_launch_record_has_no_abi_block ... ok
+test launch::png_checksum_tests::adler32_matches_the_standard_check_vector ... ok
+test launch::abi_gate_tests::the_refusal_names_unsupported_abi_and_the_apk_inventory ... ok
+test launch::crash_evidence_tests::the_guest_stream_tail_is_bounded_and_ordered ... ok
+test launch::png_checksum_tests::crc32_matches_the_standard_check_vector ... ok
+test launch::probe_channel_tests::the_forked_child_installs_the_probe_fifo_as_stdin_before_its_sandbox ... ok
+test app::tests::no_layout_is_a_tool_error ... ok
+test launch::png_checksum_tests::empty_and_single_byte_inputs_match_the_oracle ... ok
+test launch::probe_channel_tests::a_vanished_reader_cannot_break_the_next_wake ... ok
+test launch::probe_line_tests::a_fast_commit_binds_its_own_draw_only_with_proof ... ok
+test launch::probe_line_tests::an_oversized_line_is_drained_and_counted ... ok
+test launch::probe_line_tests::a_refused_probe_wake_is_counted_and_a_written_one_is_counted_separately ... ok
+test launch::probe_line_tests::fast_tree_rejects_a_probe_from_before_the_entry_generation ... ok
+test launch::probe_line_tests::an_invalid_probe_line_is_counted ... ok
+test launch::probe_line_tests::a_thrown_probe_surfaces_acosprobe_error ... ok
+test launch::probe_line_tests::a_starved_probe_and_a_stale_sample_are_counted_for_the_timeout_evidence ... ok
+test launch::probe_line_tests::window_gone_state_changed_is_computed ... ok
+test launch::probe_line_tests::the_served_sample_is_the_foreground_processes ... ok
+test launch::rel3h_unhandled_input_tests::every_published_event_must_be_acked_unhandled ... ok
+test launch::probe_line_tests::window_gone_sample_is_parsed_and_binds_only_with_state_proof ... ok
+test launch::rel3h_unhandled_input_tests::gate::a_draw_inside_the_window_restarts_it_instead_of_binding ... ok
+test launch::rel3h_unhandled_input_tests::gate::a_reset_forgets_the_window ... ok
+test launch::rel3h_unhandled_input_tests::gate::a_sample_after_the_ack_binds_only_after_the_window ... ok
+test launch::rel3h_unhandled_input_tests::gate::a_sample_at_or_before_the_last_ack_never_binds ... ok
+test launch::png_checksum_tests::stride_padding_and_short_rows_still_decode_to_the_padded_rows ... ok
+test launch::rel3h_unhandled_input_tests::the_unhandled_input_settle_is_settled_with_its_own_reason ... ok
+test launch::shotz_png_tests::png_encoder_candidates_on_real_frames ... ignored, measurement: prints the size/time table for the handoff, needs $SHOTZ_FRAMES
+test launch::shared_boot_image_tests::unset_means_the_default_lz4_path ... ok
+test launch::shared_boot_image_tests::a_directory_without_the_main_image_is_an_error ... ok
+test launch::skipped_traversal_tests::a_live_frame_leaves_the_normal_skipped_traversal_untouched ... ok
+test launch::shared_boot_image_tests::a_directory_with_the_main_image_is_accepted ... ok
+test launch::skipped_traversal_tests::the_budget_is_two_frames_and_at_most_the_guest_resume_deadline ... ok
+test launch::skipped_traversal_tests::a_skipped_traversal_with_no_frame_fails_within_the_bounded_budget ... ok
+test launch::skipped_traversal_tests::the_failure_reply_names_post_resume_not_ready_and_draw_skip ... ok
+test launch::skipped_traversal_tests::the_marker_evidence_fields_are_parsed ... ok
+test launcher::tests::aborter_log_entry_is_fatal ... ok
+test launcher::tests::check_failure_is_art_fatal_check ... ok
+test launch::view_socket_dir_tests::private_dir_tightens_ours_and_refuses_a_file_or_a_symlink ... ok
+test launcher::tests::segv_is_art_crash ... ok
+test launcher::tests::sigabrt_from_fatal_check_is_art_fatal_check ... ok
+test launcher::tests::sigsys_is_unsupported ... ok
+test launcher::tests::timeout_wins ... ok
+test launcher::tests::uncaught_main_exception_is_ok ... ok
+test live_view::tests::a_fallback_shaped_tree_masks_a_password_or_undecidable_focus ... ok
+test cgroup::tests::warm_stamp_answers_without_probing_and_a_cold_root_probes ... ok
+test launch::probe_line_tests::a_probe_line_above_the_old_128k_cap_is_parsed ... ok
+test app::tests::apk_chrome_reads_the_manifest ... ok
+test launch::probe_line_tests::a_dead_demand_channel_switches_the_guest_fallback_to_a_fast_poll ... ok
+test capture::tests::flood_keeps_the_tail_and_counts_the_drops ... ok
+test live_view::tests::downscale_box_averages_2x2_blocks ... ok
+test live_view::tests::event_queue_drops_the_oldest_when_full ... ok
+test live_view::tests::event_text_is_truncated_and_password_text_masked ... ok
+test live_view::tests::focused_password_nodes_are_detected_in_the_probe_tree ... ok
+test live_view::tests::framing_round_trips_a_hello_a_frame_and_an_event ... ok
+test capture::tests::tail_text_keeps_the_truncation_marker ... ok
+test live_view::tests::no_subscriber_means_no_source_call_and_no_encode ... ok
+test live_view::tests::peer_credentials_report_our_own_uid ... ok
+test live_view::tests::the_scratch_root_leaves_room_for_the_stream_socket ... ok
+test live_view::tests::a_non_password_state_does_not_survive_a_detach ... ok
+test live_view::tests::typed_input_is_masked_unless_a_fresh_tree_proves_a_non_password_focus ... ok
+test logd::tests::frame_roundtrip ... ok
+test launch::view_socket_dir_tests::the_view_directory_is_not_the_guest_mounted_socket_directory ... ok
+test boot_image::tests::cold_miss_builds_and_the_second_run_hits ... ok
+test logd::tests::stopping_an_idle_sink_does_not_wait_out_the_read_timeout ... ok
+test live_view::tests::the_view_socket_is_private_in_a_private_directory_never_chmodded_by_path ... ok
+test props::tests::defaults_are_servable ... ok
+test props::tests::heap_defaults_unchanged ... ok
+test props::tests::heap_each_override_applied ... ok
+test props::tests::heap_invalid_format_rejected ... ok
+test props::tests::heap_inconsistent_ordering_rejected ... ok
+test props::tests::heap_metadata_reports_effective_values ... ok
+test props::tests::long_values_are_truncated ... ok
+test props::tests::heap_start_and_growth_override_together ... ok
+test seccomp::tests::art_needs_are_not_denied ... ok
+test seccomp::tests::blob_has_the_sock_filter_layout ... ok
+test seccomp::tests::audit_action_kills_and_never_returns_eacces ... ok
+test seccomp::tests::deny_terminal_returns_eacces_and_default_allows ... ok
+test seccomp::tests::every_escape_syscall_is_denied ... ok
+test seccomp::tests::program_is_small_enough_for_u8_jumps_and_ends_in_return ... ok
+test session::tests::argv_order_is_the_guest_contract ... ok
+test seccomp::tests::socket_families_follow_the_spike_flag ... ok
+test session::tests::guest_paths_map_onto_the_data_dir ... ok
+test session::tests::peak_rss_comes_from_the_verdict ... ok
+test session::tests::protocol_line_parses_only_with_the_prefix ... ok
+test session::tests::reply_maps_png_and_keeps_the_tree ... ok
+test spike_net::dns_tests::pasta_args_use_the_connectivity_constants ... ok
+test launch::skipped_traversal_tests::the_guest_ready_path_has_no_forced_traversal_and_publishes_the_evidence ... ok
+test spike_net::dns_tests::dnsproxyd_socket_is_world_writable_and_answers ... ok
+test spike_net::tests::boundary_marker_file_is_opt_in ... ok
+test spike_net::tests::pasta_args_keep_host_loopback_closed ... ok
+test spike_net::tests::boundary_script_installs_verifies_and_fails_closed ... ok
+test tests::apex_manifest_name_wins_over_dir_name ... ok
+test tests::acos_home_overrides_every_root_lookup ... ok
+test tests::classpath_env_parses_device_environ ... ok
+test tests::classpath_env_rejects_incomplete_files ... ok
+test tests::compiled_root_is_the_checkout ... ok
+test tests::gwp_asan_is_off_for_guests_unless_asked ... ok
+test tests::guest_asset_resolves_home_then_checkout_then_compiled_path ... ok
+test tests::only_a_guest_crash_with_evidence_keeps_the_run_tree ... ok
+test tests::kept_crash_trees_are_pruned_oldest_first_and_unmarked_trees_survive ... ok
+test launch::skipped_traversal_tests::the_process_initializer_install_is_driven_by_the_manifest ... ok
+test tests::publish_atomic_never_truncates_a_live_reader ... ok
+test launch::probe_line_tests::the_change_wake_is_event_driven_and_loses_no_edge ... ok
+test tests::sandbox_argv_hardens_before_first_mount ... ok
+test tests::run_root_makes_shared_inputs_read_only ... ok
+test tests::unset_home_resolves_to_the_checkout_unchanged ... ok
+test tests::varint_roundtrip ... ok
+test tests::run_root_maps_the_webview_session_socket ... ok
+test tests::stage_apk_leaves_the_previous_copy_intact ... ok
+test watchdog::tests::data_limit_defaults_above_the_rss_ceiling ... ok
+test launch::png_checksum_tests::unaligned_random_slices_match_the_oracle ... ok
+test watchdog::tests::relax_child_limits_is_safe_to_call ... ok
+test watchdog::tests::the_stock_init_rc_nice_limit_is_mirrored_and_safe_to_apply ... ok
+test watchdog::tests::rss_reading_works_on_linux ... ok
+test watchdog::tests::zero_ceiling_disables_the_watchdog ... ok
+test webview_socket::tests::default_paths_fit_the_sockaddr_un_budget ... ok
+test webview_socket::tests::default_host_dir_is_the_short_runtime_session_directory ... ok
+test webview_socket::tests::guest_path_is_the_mount_point_plus_the_socket_file ... ok
+test webview_socket::tests::env_override_wins_and_must_be_absolute ... ok
+test webview_socket::tests::listener_at_the_mapped_path_receives_the_connect_and_bytes_round_trip ... ok
+test webview_socket::tests::without_a_broker_the_connect_fails_with_the_kernels_enoent ... ok
+test zygote_prod::tests::key_dir_names_are_stable_distinct_and_path_safe ... ok
+test zygote_prod::tests::a_dead_keeper_is_a_structured_error_never_a_write ... ok
+test zygote_prod::tests::kv_and_pid_contracts_parse_z4_shapes ... ok
+test zygote_prod::tests::prepare_session_wipes_the_previous_run_root_and_contract ... ok
+test zygote_prod::tests::publish_binds_writes_the_childs_run_root_and_socket_contract ... ok
+test launch::probe_channel_tests::every_probe_wake_reaches_the_zygote_child_side_of_the_fifo ... ok
+test boot_image::tests::a_changed_input_set_invalidates_the_entry ... ok
+test boot_image::tests::a_same_size_corruption_is_detected_by_the_sampled_checksum ... ok
+test spike_net::dns_tests::the_resolver_never_answers_an_address_family_the_session_lacks ... ok
+test boot_image::tests::a_truncated_file_is_detected_and_rebuilt ... ok
+test watchdog::tests::a_one_byte_ceiling_trips_immediately ... ok
+test watchdog::tests::arming_a_process_group_records_it_as_killed ... ok
+test launch::png_checksum_tests::the_stored_baseline_is_the_encoder_v0_2_0_shipped ... ok
+test live_view::tests::a_secure_frame_is_published_blank_and_flagged ... ok
+test live_view::tests::a_viewer_that_arrives_on_an_idle_screen_still_gets_the_current_frame ... ok
+test build_cache::tests::sha256_matches_known_vectors ... ok
+test tests::publish_atomic_is_atomic_for_a_concurrent_reader ... ok
+test boot_image::tests::pruning_keeps_a_fresh_entry_and_evicts_a_stale_one ... ok
+test zygote_prod::tests::the_keeper_protocol_spawn_kill_reset_and_shutdown ... ok
+test capture::tests::memory_stays_bounded_under_a_sustained_flood ... ok
+test launch::png_checksum_tests::the_streamed_encoder_writes_the_same_file_as_the_buffered_encoder ... ok
+test zygote_prod::tests::one_session_bad_tag_is_a_structured_error_not_a_hang ... ok
+test boot_image::tests::two_concurrent_builders_produce_one_build ... ok
+test logd::tests::listen_roundtrip ... ok
+test capture::tests::drain_to_tail_enforces_the_cap_on_a_reader ... ok
+test live_view::tests::a_subscriber_receives_hello_frames_and_events ... ok
+test launch::md5_frame_tests::content_hash_matches_md5sum_on_a_real_frame ... ok
+test launch::md5_frame_tests::streaming_hash_of_a_written_file_matches_the_whole_buffer ... ok
+test launch::md5_frame_tests::streamed_encoder_is_byte_identical_to_the_buffered_encoder ... ok
+test logd::tests::spammer_is_capped_and_drop_oldest ... ok
+test launch::shotz_png_tests::real_frames_round_trip_pixel_exact ... ok
+test live_view::tests::a_frame_larger_than_the_socket_buffer_is_delivered_to_a_slow_reader ... ok
+test launch::png_checksum_tests::random_buffers_match_the_oracle_at_every_boundary ... ok
+test launch::png_checksum_tests::a_high_entropy_canvas_is_never_materially_worse_than_stored ... ok
+test launch::shotz_png_tests::compressed_frames_are_much_smaller_than_the_stored_baseline ... ok
+test live_view::tests::a_slow_subscriber_is_dropped_without_blocking_the_encoder ... ok
+test live_view::tests::subscribe_threads_are_capped_and_a_trickling_peer_is_cut_off_by_one_deadline ... ok
+
+test result: ok. 185 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 10.74s
+
+     Running unittests src/main.rs (target/debug/deps/acos_art-a5542ba6a3109f2e)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/cleanup.rs (target/debug/deps/cleanup-ef136b4664cc51ac)
+
+running 8 tests
+test guest_cannot_overwrite_boot_art_or_the_classpath ... ok
+test guest_crash_still_removes_the_run_root ... ok
+test janitor_reaps_stale_runs_and_keeps_live_ones ... ok
+test log_spam_keeps_the_launcher_peak_rss_under_256_mib ... ok
+test r1_watchdog_reports_host_memory_limit_and_leaves_no_orphans ... ok
+test sigkill_of_the_launcher_takes_the_guest_and_bwrap_with_it ... ok
+test render_app_leaves_no_processes_or_scratch_behind ... ok
+test leak_scan_is_scoped_to_this_tests_own_processes ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.10s
+
+     Running tests/launch_hang.rs (target/debug/deps/launch_hang-14f5bc15737abcfb)
+
+running 5 tests
+test promptness_bound_still_bites ... ok
+test guest_exits_before_milestone_returns_exit_code_and_cleans_up ... ok
+test guest_killed_by_signal_returns_signal_and_cleans_up ... ok
+test ordinary_launch_to_application_created_stays_fast ... ok
+test milestone_timeout_returns_timeout_and_cleans_up ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.85s
+
+     Running tests/logd_route.rs (target/debug/deps/logd_route-98d01d437bd2e0b3)
+
+running 3 tests
+test the_default_sink_path_is_the_guest_socket ... ok
+/home/Qui/.t3/worktrees/acos/t3-8b6da58a-9747ae19d84c6160/.cache/z7/187279-two-sessions/s.c:95:13: warning: unused function 'sys6' [-Wunused-function]
+   95 | static long sys6(long n, long a, long b, long c, long d, long e, long f) {
+      |             ^~~~
+/home/Qui/.t3/worktrees/acos/t3-8b6da58a-9747ae19d84c6160/.cache/z7/187279-two-sessions/s.c:111:13: warning: unused function 'sb_putn' [-Wunused-function]
+  111 | static void sb_putn(struct sbuf *s, const char *p, usize n) { while (n--) sb_putc(s, *p++); }
+      |             ^~~~~~~
+/home/Qui/.t3/worktrees/acos/t3-8b6da58a-9747ae19d84c6160/.cache/z7/187279-late-sink/s.c:95:13: warning: unused function 'sys6' [-Wunused-function]
+   95 | static long sys6(long n, long a, long b, long c, long d, long e, long f) {
+      |             ^~~~
+/home/Qui/.t3/worktrees/acos/t3-8b6da58a-9747ae19d84c6160/.cache/z7/187279-late-sink/s.c:111:13: warning: unused function 'sb_putn' [-Wunused-function]
+  111 | static void sb_putn(struct sbuf *s, const char *p, usize n) { while (n--) sb_putc(s, *p++); }
+      |             ^~~~~~~
+2 warnings generated.
+2 warnings generated.
+test two_concurrent_forked_children_each_log_only_into_their_own_session ... ok
+test an_entry_written_before_the_sink_exists_does_not_silence_the_stream ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.11s
+
+     Running tests/memory_caps.rs (target/debug/deps/memory_caps-056eb9dc76008d8f)
+
+running 6 tests
+test every_cap_is_smaller_than_the_watchdog_ceiling ... ok
+test drain_to_tail_on_a_finite_reader_keeps_the_whole_stream ... ok
+test stream_cap_is_configurable_but_never_absent ... ok
+test logd_spammer_keeps_only_the_cap_and_counts_the_drops ... ok
+test stderr_spammer_is_capped_too ... ok
+test stdout_spammer_is_capped_and_the_host_rss_stays_flat ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.50s
+
+     Running tests/priority_adapter.rs (target/debug/deps/priority_adapter-ca2733e2e1d13dba)
+
+running 1 test
+test the_preloaded_shim_clamps_a_negative_nice_only_inside_the_process ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+
+     Running tests/r3_crash_evidence.rs (target/debug/deps/r3_crash_evidence-ff338778c5987147)
+
+running 2 tests
+test a_host_sigkill_does_not_keep_the_run_tree ... ok
+test a_guest_killed_by_a_signal_leaves_fault_addr_code_thread_and_a_native_frame ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.55s
+
+     Running tests/sandbox_s5.rs (target/debug/deps/sandbox_s5-3a8e99dc98e47fe7)
+
+running 7 tests
+test default_memory_limit_is_two_gib ... ok
+test snapshot_parser_reads_only_real_counters ... ok
+/home/Qui/.t3/worktrees/acos/t3-8b6da58a-9747ae19d84c6160/.cache/s5-tests/alloc-bomb-187734/bomb-observer.sh: line 6: 187763 Killed                     "$@"
+test allocator_bomb_is_oom_killed_inside_the_scope_and_the_host_is_untouched ... ok
+test forbidden_syscall_is_denied_and_logged_in_the_guest ... ok
+test scope_observer_is_the_payload_and_propagates_the_exit_status ... ok
+test refuses_to_run_when_no_cgroup_can_be_created ... ok
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+/bin/sh: fork: retry: Resource temporarily unavailable
+test fork_bomb_is_bounded_by_pids_max ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.17s
+
+     Running tests/sandbox_s6.rs (target/debug/deps/sandbox_s6-df679b7cc4b13a92)
+
+running 5 tests
+test userfaultfd_is_denied_and_expected_in_a_normal_run ... ok
+test escape_corpus_is_denied_in_the_real_guest ... ok
+test fork_bomb_in_the_guest_stays_under_pids_max ... ok
+test missing_plan_fails_closed_on_a_landlock_kernel ... ok
+test memory_bomb_in_the_guest_is_oom_killed_at_the_cap ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 4.25s
+
+     Running tests/spike_net_boundary.rs (target/debug/deps/spike_net_boundary-f17900ddc80614a5)
+
+running 2 tests
+test boundary_failure_never_starts_the_guest ... ok
+test guest_cannot_change_the_lan_drop_rules ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/w31_tree_evidence.rs (target/debug/deps/w31_tree_evidence-e9d30ab53d6293c4)
+
+running 3 tests
+test a_decor_only_saved_tree_is_rejected ... ok
+test a_tree_at_the_node_budget_must_be_marked_truncated ... ok
+test saved_wait_for_and_assert_text_trees_contain_the_matched_node ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/w37_build_cache.rs (target/debug/deps/w37_build_cache-e145c6de7e195717)
+
+running 5 tests
+test cold_cohort_compiles_once ... ok
+test corrupted_entry_is_detected_and_rebuilt ... ok
+test install_replaces_a_stale_copy_atomically ... ok
+test disabled_cache_builds_but_never_publishes ... ok
+test second_build_is_a_cache_hit ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.13s
+
+     Running tests/w39_stage_cache.rs (target/debug/deps/w39_stage_cache-9ab2233bd77626da)
+
+running 5 tests
+test corrupted_nested_file_is_detected_and_reports_miss ... ok
+test publish_tree_skips_stamps_and_logs ... ok
+test tree_entry_reuses_every_nested_file ... ok
+test unlisted_extra_file_is_a_corrupt_entry ... ok
+test image_digest_follows_the_extracted_image ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running tests/w43_session_exit.rs (target/debug/deps/w43_session_exit-3f8dcf53df868c3c)
+
+running 4 tests
+test enospc_and_edquot_are_host_disk_full_and_other_errors_are_not ... ok
+test free_space_is_readable_on_a_real_directory ... ok
+test free_space_of_a_missing_path_is_none_not_zero ... ok
+test the_preflight_refuses_only_below_the_threshold ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/acos_runtime-a6a2db67df669044)
+
+running 37 tests
+test apk_loader::tests::app_data_dirs_ignore_paths_outside_data ... ok
+test boot_image_cache::tests::lock_is_exclusive_and_publish_is_safe_without_it ... ok
+test boot_image_cache::tests::private_directory_permissions ... ok
+test boot_image_cache::tests::miss_for_unknown_key ... ok
+test apk_loader::tests::app_data_dirs_are_created_for_both_storage_trees ... ok
+test boot_image_cache::tests::non_directory_cache_root_is_rejected ... ok
+test boot_image_cache::tests::symlinked_cache_dir_is_rejected ... ok
+test private_root::tests::a_missing_root_is_left_to_the_caller ... ok
+test private_root::tests::a_group_writable_root_is_rejected ... ok
+test boot_image_cache::tests::round_trip_and_atomic_publish ... ok
+test private_root::tests::a_private_directory_is_accepted ... ok
+test boot_image_cache::tests::corrupt_payload_is_a_miss ... ok
+test rn_session::tests::abi_miss_is_unsupported_abi ... ok
+test boot_image_cache::tests::truncated_and_oversized_are_misses ... ok
+test boot_image_cache::tests::wrong_key_version_and_magic_are_refused ... ok
+test session::tests::not_ready_hints_override_the_generic_backend_hint ... ok
+test private_root::tests::a_symlinked_or_file_root_is_rejected ... ok
+test session::tests::observe_without_a_frame_is_not_ready ... ok
+test session::tests::buried_java_cause_is_surfaced_and_parsed ... ok
+test session::tests::png_encoder_is_a_valid_png ... ok
+test boot_image_cache::tests::writable_by_others_cache_dir_is_rejected ... ok
+test private_root::tests::a_world_writable_root_is_rejected ... ok
+test private_root::tests::a_read_only_for_others_directory_is_tightened ... ok
+test session_pool::payload_tests::crafted_lengths_are_errors_not_panics ... ok
+test session::tests::unsupported_message_yields_api_and_at_details ... ok
+test text_java::tests::errors_are_coded_not_passes ... ok
+test session::tests::crc32_and_adler32_match_known_vectors ... ok
+test text_java::tests::key_map_covers_lowercase_digits_space_newline ... ok
+test text_java::tests::key_map_refuses_what_it_cannot_type ... ok
+test view_tree::tests::errors_are_coded_not_passes ... ok
+test session_pool::payload_tests::valid_frame_round_trips ... ok
+test session_pool::payload_tests::truncated_frames_are_errors ... ok
+test boot_image_cache::tests::concurrent_writers_publish_a_valid_entry ... ok
+test transport::tests::binder_identity_caches_are_bounded ... ok
+test boot_image_cache::tests::eviction_keeps_the_directory_bounded ... ok
+test lifecycle::tests::describe_throwable_unwraps_exception_in_initializer_error ... ok
+test boot_image_cache::tests::key_changes_with_boot_dir_content ... ok
+
+test result: ok. 37 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.10s
+
+     Running tests/activity_result_delivery.rs (target/debug/deps/activity_result_delivery-c35654abff9502b1)
+
+running 1 test
+test the_hosts_result_transaction_reaches_the_caller_in_every_lifecycle_state ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 5.26s
+
+     Running tests/ams_java.rs (target/debug/deps/ams_java-51e69ac0ce2410e7)
+
+running 7 tests
+test get_content_provider_does_not_treat_the_calling_package_as_the_authority ... ok
+test content_provider_call_and_query_return_registry_data_through_ams_java ... ok
+test component_name_reply_is_a_real_component_name ... ok
+test get_content_provider_reads_the_authority_and_carries_the_provider ... ok
+test content_provider_holder_comes_from_the_services_registry ... ok
+test unsupported_extra_type_is_a_structured_error ... ok
+test intent_facts_round_trip_through_the_real_creators ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.55s
+
+     Running tests/app_matrix_interaction.rs (target/debug/deps/app_matrix_interaction-6899ca04dcc3e364)
+
+running 10 tests
+test dialogs_alert_opens_and_cancel_dismisses ... ignored, frozen legacy Rust VM: AlertDialog's button-bar Button inflation throws Resources$NotFoundException Resource ID #0x0 from AnimatorInflater.loadStateListAnimator — the theme attr View_stateListAnimator is not resolved, a legacy-VM resource/theme gap (open since 7248e31, 2026-11-10) — see results/handoff/TESTHYG2.md
+test list_row_click_sets_selected_text ... ignored, OPEN: ListView row click never reaches AbsListView; DOWN is logged by the Activity but no list touch listener fires
+test list_scroll_button_moves_the_recycled_window ... ignored, frozen legacy Rust VM: the bounded vsync frame budget added in f0c9fdb (W191-A) stops AbsListView.smoothScrollToPosition advancing inside the pump; the tap reports state_changed while the tree still holds the old rows — see results/handoff/TESTHYG2.md
+test popup_menu_item_select_sets_status ... ignored, OPEN: taps inside a PopupWindow are not routed to the popup; Rename/Delete stay visible and no popup_rename log
+test scroll_gesture_moves_the_list ... ignored, OPEN: raw vertical swipe does not scroll AbsListView; the programmatic smoothScrollToPosition path works
+test spinner_item_select_updates_selection ... ignored, OPEN: Spinner dropdown opens but a row tap is not routed; no spinner_pos=1 log
+test toast_text_is_observable ... ok
+test dialogs_spinner_dropdown_opens ... ok
+test dialogs_popup_menu_opens_with_items ... ok
+test fragments_nav_replace_and_pop_change_the_container ... ok
+
+test result: ok. 4 passed; 0 failed; 6 ignored; 0 measured; 0 filtered out; finished in 23.54s
+
+     Running tests/binder_transport.rs (target/debug/deps/binder_transport-1548d4aecc6af698)
+
+running 2 tests
+test service_manager_get_service_returns_a_working_proxy ... ok
+test fake_service_round_trips_binder_and_fd_and_reenters_the_looper ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.76s
+
+     Running tests/boot.rs (target/debug/deps/boot-7efb1983a1adda32)
+
+running 2 tests
+test missing_apk_is_a_structured_error ... ok
+test activity_thread_attach_reaches_atms_attach_application ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.62s
+
+     Running tests/boot_classpath.rs (target/debug/deps/boot_classpath-0b11f15713fe09b1)
+
+running 1 test
+test boot_classpath_resolves_classes_from_apex_jars ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.70s
+
+     Running tests/boot_image_cache.rs (target/debug/deps/boot_image_cache-fbdc5ec9f4139eb3)
+
+running 6 tests
+test cold_restore_helper ... ok
+test cached_snapshot_restores_a_runnable_vm ... ok
+test template_cache_hit_skips_the_framework_boot ... ok
+test restored_template_carries_deterministic_clinit ... ok
+test corrupt_template_entry_falls_back_and_reboots ... ok
+test cold_restore_matches_uncached_ladder ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 26.50s
+
+     Running tests/client_transaction.rs (target/debug/deps/client_transaction-225960cec9b96abc)
+
+running 1 test
+test client_transaction_is_built_and_delivered_to_the_real_application_thread ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.23s
+
+     Running tests/client_transaction_java.rs (target/debug/deps/client_transaction_java-91d1a4d296e893ca)
+
+running 1 test
+Note: /home/Qui/.t3/worktrees/acos/t3-8b6da58a-9747ae19d84c6160/crates/acos-runtime/../../crates/acos-runtime/tests/java/client_transaction/ClientTransactionCompareMain.java uses or overrides a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+test real_java_client_transaction_matches_the_host_encoder ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 18.95s
+
+     Running tests/counter_interaction.rs (target/debug/deps/counter_interaction-12fbf40e565f461d)
+
+running 3 tests
+test counter_launch_publishes_a_real_frame_and_live_tree ... ok
+test counter_tap_repaints_the_count_region ... ok
+test counter_tap_increment_updates_the_tree ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 19.12s
+
+     Running tests/dex_loader.rs (target/debug/deps/dex_loader-b44966ca5a1bd3d9)
+
+running 1 test
+test path_class_loader_loads_app_class_from_counter_apk_dex ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.15s
+
+     Running tests/display.rs (target/debug/deps/display-cf6559fbfbd88850)
+
+running 1 test
+test display_manager_reply_round_trips_through_the_real_java_creators ... ignored, frozen legacy Rust VM: asserts the pre-W7 DisplayInfo app bounds 1080x2209; W7b (18622e5) made report the default inset model (ADR-0026 #6), which reports appBounds as the full display 1080x2400 — see results/handoff/TESTHYG2.md
+
+test result: ok. 0 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/egl_swap_frame.rs (target/debug/deps/egl_swap_frame-b62938531ef9ea95)
+
+running 1 test
+test egl_swap_publishes_a_completed_frame ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.07s
+
+     Running tests/exception_floor.rs (target/debug/deps/exception_floor-e74ef98a3293e1e9)
+
+running 1 test
+test exception_floor_rethrows_native_init_failure ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.69s
+
+     Running tests/frame_handoff.rs (target/debug/deps/frame_handoff-942feb7a11f35145)
+
+running 3 tests
+test install_frame_handoff_is_idempotent ... ok
+test finish_drawing_alone_publishes_nothing ... ok
+test frame_handoff_publishes_on_real_submission ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.12s
+
+     Running tests/frame_reference_diff.rs (target/debug/deps/frame_reference_diff-6ec72250428a44eb)
+
+running 1 test
+test synthetic_frame_reaches_frame_store_and_matches_reference ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.13s
+
+     Running tests/input.rs (target/debug/deps/input-72512f76c1dce842)
+
+running 3 tests
+test tap_outside_every_window_is_a_structured_error ... ignored, frozen legacy Rust VM: a tap at (5,5) is inside the app window since W7b (18622e5) made report the default inset model (ADR-0026 #6): the window is the full display and the bars are only reported as insets — see results/handoff/TESTHYG2.md
+test dispatcher_errors_when_no_window_is_registered ... ok
+test injected_tap_reaches_the_real_window_channel ... ok
+
+test result: ok. 2 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/m2.rs (target/debug/deps/m2-6fbd18822ad3ff49)
+
+running 3 tests
+test bind_application_is_delivered_to_the_real_application_thread ... ok
+test lifecycle_never_claims_an_undelivered_transaction ... ok
+test m2_lifecycle_create_start_resume_matches_reference ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 39.76s
+
+     Running tests/parcelable_java.rs (target/debug/deps/parcelable_java-388f2007bac9ae76)
+
+running 2 tests
+/home/Qui/.t3/worktrees/acos/t3-8b6da58a-9747ae19d84c6160/crates/acos-runtime/../../crates/acos-runtime/tests/java/ParcelableCompareMain.java:263: error: illegal start of expression
+    static Bundle rssiBundle() {
+    ^
+/home/Qui/.t3/worktrees/acos/t3-8b6da58a-9747ae19d84c6160/crates/acos-runtime/../../crates/acos-runtime/tests/java/ParcelableCompareMain.java:263: error: illegal start of expression
+    static Bundle rssiBundle() {
+    ^
+1 error
+1 error
+test real_java_write_to_parcel_matches_the_rust_codec ... ok
+test webview_provider_package_info_reads_back_in_the_framework_order ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.21s
+
+     Running tests/pms.rs (target/debug/deps/pms-0513c1f30ac85e91)
+
+running 1 test
+Note: /home/Qui/.t3/worktrees/acos/t3-8b6da58a-9747ae19d84c6160/crates/acos-runtime/../../crates/acos-runtime/tests/java/PmsMain.java uses or overrides a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+test pms_java_app_info_matches_the_reference_capture ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.29s
+
+     Running tests/provider_java.rs (target/debug/deps/provider_java-6f813e9e048e0c14)
+
+running 1 test
+test app_provider_is_installed_published_and_reachable_through_the_binder ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 6.59s
+
+     Running tests/reflect_fields.rs (target/debug/deps/reflect_fields-7da105ad17d0d92d)
+
+running 1 test
+test reflect_field_slots_match_art ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.86s
+
+     Running tests/rn_pixels.rs (target/debug/deps/rn_pixels-3f5baf9af132ae30)
+
+running 2 tests
+test rn_pixels_child_worker ... ok
+test rn_platform_launch_probe ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 23.36s
+
+     Running tests/rn_product.rs (target/debug/deps/rn_product-504805e751e2971f)
+
+running 2 tests
+test rn_product_child_worker ... ok
+test rn_product_launches_observes_and_taps ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 17.24s
+
+     Running tests/rn_runtime.rs (target/debug/deps/rn_runtime-7f70f7d91d7812c2)
+
+running 2 tests
+test rn_runtime_child_worker ... ok
+test rn_bridge_runs_on_a_real_runtime_session_and_taps_the_button ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 18.36s
+
+     Running tests/services_t38.rs (target/debug/deps/services_t38-02bd427f336018c8)
+
+running 13 tests
+test every_declared_service_is_reachable_through_service_manager ... ok
+test connectivity_get_proxy_for_network_is_null ... ok
+test clipboard_set_primary_clip_without_a_vm_is_a_structured_error ... ok
+test ime_unknown_transaction_is_a_structured_error ... ok
+test status_bar_is_minimal_and_system_effects_are_unsupported ... ok
+test ime_client_registers_and_start_input_returns_no_ime ... ok
+test app_ops_check_operation_is_denied_without_a_grant ... ok
+test ime_session_and_tracker_transactions_are_served ... ok
+test user_manager_serves_exactly_one_user ... ok
+test clipboard_round_trips_the_marshalled_clipdata_bytes ... ok
+test permission_manager_denies_runtime_grants_explicitly ... ok
+test ime_show_and_hide_soft_input_are_recorded_false ... ok
+test notifications_are_reported_as_not_enabled_and_post_is_unsupported ... ok
+
+test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/services_t38_java.rs (target/debug/deps/services_t38_java-f6b83a36f8c954c0)
+
+running 1 test
+test ime_and_clipboard_replies_round_trip_through_real_java_proxies ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.27s
+
+     Running tests/session_pool.rs (target/debug/deps/session_pool-fa63dbbb9f822559)
+
+running 4 tests
+test reset_restores_clean_state ... ok
+test panicking_session_is_isolated_and_replaced ... ok
+test deterministic_across_worker_counts ... ok
+test looping_session_is_killed_by_wall_guard ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.52s
+
+     Running tests/settings.rs (target/debug/deps/settings-e5e0395c408782f2)
+
+running 1 test
+test settings_provider_generation_matches_the_golden ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.19s
+
+     Running tests/text_input.rs (target/debug/deps/text_input-55298d5e7e729e30)
+
+running 2 tests
+test commit_text_refuses_what_it_cannot_type ... ok
+test commit_text_calls_the_real_input_connection ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.13s
+
+     Running tests/vsync_natives.rs (target/debug/deps/vsync_natives-295c39c3d3a1280f)
+
+running 3 tests
+test choreographer_frames_are_monotonic_and_stop_when_idle ... ok
+test choreographer_frames_run_under_virtual_time ... ok
+test no_ticks_when_nothing_is_scheduled ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.98s
+
+     Running tests/wms.rs (target/debug/deps/wms-95c980308b64e410)
+
+running 8 tests
+test add_to_display_as_user_returns_reference_frame_and_insets ... ignored, frozen legacy Rust VM: asserts the pre-W7 carved outFrame (0,128,1080,2337); W7b (18622e5) made report the default inset model, ADR-0026 #6, so the app window is the full display — see results/handoff/TESTHYG2.md
+test relayout_returns_a_valid_surface_control_and_reference_frames ... ignored, frozen legacy Rust VM: asserts the pre-W7 carved ClientWindowFrames (frame 0,128,1080,2337, surface 1080x2209); W7b (18622e5) made report the default inset model, ADR-0026 #6, so the window is the full display — see results/handoff/TESTHYG2.md
+test window_manager_scalars_and_open_session ... ok
+test viewrootimpl_handlers_return_faithful_scalars ... ok
+test finish_drawing_is_recorded_but_never_publishes_a_frame ... ok
+test wm_surface_backend_publishes_only_on_buffer_submission ... ok
+test wms_java_stub_proxy_matches_the_reference ... ok
+test wms_java_session_add_and_relayout_are_accepted ... ok
+
+test result: ok. 6 passed; 0 failed; 2 ignored; 0 measured; 0 filtered out; finished in 1.19s
+
+   Doc-tests acos_art
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests acos_runtime
+
+running 1 test
+test crates/acos-runtime/src/lib.rs - (line 16) ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.23s
+

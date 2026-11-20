@@ -22,10 +22,18 @@
 #   framework-res.apk                   /system/framework/framework-res.apk
 #   overlays/<name>.apk                 static RROs over `android` (product/,
 #                                       system_ext/ `overlay/` partitions)
-#   manifest.json                       size + sha256 of every output file
+#   system-apps/com.android.webview.apk the ACOS WebView provider (ADR-0031),
+#                                       built by tools/build-webview-provider.sh
+#                                       so the image **ships** it: a fresh install
+#                                       needs no separate APK build step and
+#                                       tools/release/install.sh carries it
+#   manifest.json                       size + sha256 of every output file, plus
+#                                       the `system_apps` list
 #
 # Reproducible + idempotent: if a complete manifest already exists the script
-# skips extraction (use --force to redo). Large intermediates (super.img, the
+# skips extraction (use --force to redo). An image built before `system-apps/`
+# existed gets it staged in place (`--system-apps-only` forces just that step),
+# so upgrading an image does not mean re-extracting 400 files. Large intermediates (super.img, the
 # ext4 partition images, APEX payloads) live in a work dir under .cache and are
 # deleted at the end, including on failure, so peak disk stays ~1-2 GB.
 #
@@ -40,7 +48,18 @@ CACHE="${ACOS_CACHE:-$ROOT/.cache}"
 OUT="$CACHE/boot/android-34"
 WORK="$OUT/.work"
 FORCE=0
-[ "${1:-}" = "--force" ] && FORCE=1
+SYSTEM_APPS_ONLY=0
+for arg in "$@"; do
+    case "$arg" in
+        --force) FORCE=1 ;;
+        --system-apps-only) SYSTEM_APPS_ONLY=1 ;;
+        -h|--help)
+            sed -n '2,40p' "$0" | sed 's/^# \{0,1\}//'
+            exit 0
+            ;;
+        *) printf '[extract-bootclasspath] error: unknown argument: %s (try --help)\n' "$arg" >&2; exit 2 ;;
+    esac
+done
 
 log()  { printf '[extract-bootclasspath] %s\n' "$*"; }
 die()  { printf '[extract-bootclasspath] error: %s\n' "$*" >&2; exit 1; }
@@ -60,20 +79,120 @@ PYTHON="$(need python3)"
 SHA256="$(need sha256sum)"
 [ -f "$IMG_DIR/system.img" ] || die "system image not found: $IMG_DIR/system.img (set ANDROID_HOME/ANDROID_IMAGE_REL)"
 
+# --- clean work dir, always, even on failure --------------------------------
+cleanup() {
+    rm -rf "$WORK"
+}
+trap cleanup EXIT
+
+SYSTEM_APPS_DIR="$OUT/system-apps"
+PROVIDER_APK="$SYSTEM_APPS_DIR/com.android.webview.apk"
+BUILD_PROVIDER="$ROOT/tools/build-webview-provider.sh"
+
+# The ACOS WebView provider package (ADR-0031). The image is what a fresh
+# install copies, so the provider ships **in** the image: one build
+# implementation (`tools/build-webview-provider.sh`, the same one
+# tools/build-apps.sh uses for the fixture), staged here and listed in
+# manifest.json under `system_apps`.
+stage_system_apps() {
+    log "building the WebView provider package (com.android.webview)"
+    [ -x "$BUILD_PROVIDER" ] || die "missing $BUILD_PROVIDER"
+    mkdir -p "$SYSTEM_APPS_DIR"
+    "$BUILD_PROVIDER" --out "$PROVIDER_APK" --work "$WORK/system-apps" \
+        || die "building the WebView provider failed"
+    [ -f "$PROVIDER_APK" ] || die "the provider build produced no APK at $PROVIDER_APK"
+    log "system app: $PROVIDER_APK ($(stat -c '%s' "$PROVIDER_APK") bytes)"
+}
+
+# `--system-apps-only`: stage the system apps into an existing image and update
+# its manifest, without touching the extraction.
+if [ "$SYSTEM_APPS_ONLY" -eq 1 ]; then
+    [ -f "$OUT/manifest.json" ] || die "$OUT has no manifest.json; run the full extraction first"
+    rm -rf "$WORK"
+    mkdir -p "$WORK"
+    trap cleanup EXIT
+    stage_system_apps
+    "$PYTHON" - "$OUT" <<'PYEOF' || die "failed to update manifest.json"
+import hashlib, json, os, sys
+out = sys.argv[1]
+path = os.path.join(out, "manifest.json")
+with open(path) as f:
+    manifest = json.load(f)
+SYSTEM_APPS = [("com.android.webview", "system-apps/com.android.webview.apk")]
+files = [e for e in manifest["files"] if e["path"] != "manifest.json"]
+entries = []
+for package, rel in SYSTEM_APPS:
+    full = os.path.join(out, rel)
+    h = hashlib.sha256()
+    with open(full, "rb") as fh:
+        for chunk in iter(lambda: fh.read(1 << 20), b""):
+            h.update(chunk)
+    entries.append({"package": package, "path": rel,
+                    "size": os.path.getsize(full), "sha256": h.hexdigest()})
+    files = [e for e in files if e["path"] != rel]
+    files.append({"path": rel, "size": os.path.getsize(full), "sha256": h.hexdigest()})
+files.sort(key=lambda e: e["path"])
+manifest["files"] = files
+manifest["file_count"] = len(files)
+manifest["total_bytes"] = sum(e["size"] for e in files)
+manifest["system_apps"] = entries
+with open(path, "w") as f:
+    json.dump(manifest, f, indent=2, sort_keys=True)
+    f.write("\n")
+print("manifest: %d files, %d system app(s)" % (len(files), len(entries)))
+PYEOF
+    rm -rf "$WORK"
+    log "system apps staged in $OUT"
+    exit 0
+fi
+
 # --- idempotency fast path ---------------------------------------------------
 if [ "$FORCE" -ne 1 ] && [ -f "$OUT/manifest.json" ] && [ -f "$OUT/BOOTCLASSPATH" ] \
     && [ -f "$OUT/SYSTEMSERVERCLASSPATH" ]; then
+    # An image is only complete when it ships the provider package: an image
+    # built before `system-apps/` existed is upgraded in place (no
+    # re-extraction), and a fresh install then needs no separate step.
+    if [ ! -f "$PROVIDER_APK" ]; then
+        log "already extracted: $OUT (staging the missing WebView provider)"
+        rm -rf "$WORK"
+        mkdir -p "$WORK"
+        trap cleanup EXIT
+        stage_system_apps
+        "$PYTHON" - "$OUT" <<'PYEOF' || die "failed to update manifest.json"
+import hashlib, json, os, sys
+out = sys.argv[1]
+path = os.path.join(out, "manifest.json")
+with open(path) as f:
+    manifest = json.load(f)
+rel = "system-apps/com.android.webview.apk"
+full = os.path.join(out, rel)
+h = hashlib.sha256()
+with open(full, "rb") as fh:
+    for chunk in iter(lambda: fh.read(1 << 20), b""):
+        h.update(chunk)
+entry = {"package": "com.android.webview", "path": rel,
+         "size": os.path.getsize(full), "sha256": h.hexdigest()}
+files = [e for e in manifest["files"] if e["path"] != rel]
+files.append({"path": rel, "size": entry["size"], "sha256": entry["sha256"]})
+files.sort(key=lambda e: e["path"])
+manifest["files"] = files
+manifest["file_count"] = len(files)
+manifest["total_bytes"] = sum(e["size"] for e in files)
+manifest["system_apps"] = [entry]
+with open(path, "w") as f:
+    json.dump(manifest, f, indent=2, sort_keys=True)
+    f.write("\n")
+print("manifest: %d files, 1 system app(s)" % len(files))
+PYEOF
+        rm -rf "$WORK"
+        exit 0
+    fi
     log "already extracted: $OUT (use --force to redo)"
     log "BOOTCLASSPATH:"
     sed 's/^/    /' "$OUT/BOOTCLASSPATH"
     exit 0
 fi
 
-# --- clean work dir, always, even on failure --------------------------------
-cleanup() {
-    rm -rf "$WORK"
-}
-trap cleanup EXIT
 rm -rf "$OUT"
 mkdir -p "$OUT/jars" "$OUT/dex" "$OUT/fonts" "$OUT/overlays" "$WORK"
 
@@ -423,6 +542,9 @@ for jar in "$OUT/jars"/*.jar; do
     fi
 done
 
+# --- 5b. the system apps the image ships -------------------------------------
+stage_system_apps
+
 # --- 6. manifest.json --------------------------------------------------------
 log "writing manifest.json"
 "$PYTHON" - "$OUT" <<'PYEOF' || die "failed to write manifest.json"
@@ -442,6 +564,15 @@ for dirpath, dirnames, filenames in os.walk(out):
                 h.update(chunk)
         files.append({"path": rel, "size": os.path.getsize(full), "sha256": h.hexdigest()})
 files.sort(key=lambda e: e["path"])
+# The system apps the image ships (`system-apps/*`): the ACOS WebView provider
+# (ADR-0031) is one, so a fresh install needs no separate APK build step.
+SYSTEM_APPS = [("com.android.webview", "system-apps/com.android.webview.apk")]
+system_apps = []
+for package, rel in SYSTEM_APPS:
+    entry = next((e for e in files if e["path"] == rel), None)
+    if entry is None:
+        sys.exit("missing system app %s in %s" % (rel, out))
+    system_apps.append({"package": package, **entry})
 manifest = {
     "fidelity": "art-reference",
     "description": "Android 14 (API 34) boot classpath jars + system files extracted from the SDK system image",
@@ -453,6 +584,7 @@ manifest = {
     "file_count": len(files),
     "total_bytes": sum(e["size"] for e in files),
     "files": files,
+    "system_apps": system_apps,
 }
 with open(os.path.join(out, "manifest.json"), "w") as f:
     json.dump(manifest, f, indent=2, sort_keys=True)
@@ -477,3 +609,4 @@ printf '    %-18s %s\n' "fonts"         "$(find "$OUT/fonts" -type f | wc -l)"
 printf '    %-18s %s\n' "total size"    "$(du -sh --exclude=.work "$OUT" | cut -f1) (peak work +$(du -sh "$WORK" 2>/dev/null | cut -f1))"
 printf '    %-18s %s\n' "BOOTCLASSPATH" "$(paste -sd, "$OUT/BOOTCLASSPATH")"
 printf '    %-18s %s\n' "SYSTEMSERVERCLASSPATH" "$(paste -sd, "$OUT/SYSTEMSERVERCLASSPATH")"
+printf '    %-18s %s\n' "system apps"  "$(find "$OUT/system-apps" -name '*.apk' -printf '%f ' 2>/dev/null)"

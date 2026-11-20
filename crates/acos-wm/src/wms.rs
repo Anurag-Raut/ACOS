@@ -11,7 +11,7 @@
 //! ten `InsetsSource` rows from `display.txt` (status bar 128 px, nav bar
 //! 63 px, IME `[0,2274][1080,2400]`, cutout 128 px).
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use acos_parcel::binder::BinderId;
 
@@ -19,9 +19,8 @@ use crate::callbacks::{CallbackQueue, WmCallback};
 use crate::codec::{
     inset_type, ClientWindowFrames, Configuration, Cutout, CutoutPathParserInfo, DisplayCutout,
     DisplayShape, InsetsSource, InsetsSourceControl, InsetsSourceControlArray, InsetsState,
-    LayoutParams,
-    MergedConfiguration, PrivacyIndicatorBounds, RoundedCorner, RoundedCorners, SurfaceControlInfo,
-    WindowConfiguration,
+    LayoutParams, MergedConfiguration, PrivacyIndicatorBounds, RoundedCorner, RoundedCorners,
+    SurfaceControlInfo, WindowConfiguration,
 };
 use crate::display::{DisplaySpec, InsetsMode};
 use crate::error::{Result, WmError};
@@ -109,8 +108,15 @@ pub struct WindowRecord {
     pub requested_visible_types: i32,
     /// Whether the window may hold focus.
     pub focusable: bool,
-    /// Z-order.
+    /// Z-order: the window's index in the layer stack (AOSP policy layer, then
+    /// creation order; sub-windows next to their parent). See [`crate::layers`].
     pub z: i64,
+    /// Creation order inside the display, the same-band tie-breaker
+    /// (`WindowManagerPolicy` "added later wins"). Unlike the `IWindow` binder
+    /// id this is monotonic, so a dialog added after the activity is above it.
+    pub seq: u64,
+    /// The window's kind, classified from `LayoutParams.type`.
+    pub kind: crate::layers::WindowKind,
     /// Monotonic relayout sequence (the `syncSeqId`).
     pub relayout_seq: u64,
     /// Last insets state sent to the client.
@@ -239,6 +245,19 @@ pub struct WindowManager {
     next_layer: u64,
     /// Session id allocator.
     next_session: u64,
+    /// Window creation-order allocator (a same-policy-layer tie-breaker).
+    next_window_seq: u64,
+    /// `TYPE_ACCESSIBILITY_OVERLAY` window tokens the accessibility manager
+    /// service created (`WindowManagerService.addWindowToken(token,
+    /// TYPE_ACCESSIBILITY_OVERLAY, ...)`).
+    ///
+    /// AOSP `sanitizeWindowType` (`WindowManagerService.java:9914-9928`) only
+    /// assigns `TYPE_ACCESSIBILITY_OVERLAY` to a client whose token *is* such a
+    /// token, and `addWindow` answers `ADD_BAD_APP_TOKEN` for an
+    /// accessibility-overlay window added with a token of another type
+    /// (`WindowManagerService.java:1630-1640`). Without this set any app could
+    /// stack a window above the accessibility overlay layer.
+    overlay_tokens: BTreeSet<u64>,
 }
 
 impl WindowManager {
@@ -255,6 +274,8 @@ impl WindowManager {
             touch_mode: true,
             next_layer: 0x1000,
             next_session: 0,
+            next_window_seq: 0,
+            overlay_tokens: BTreeSet::new(),
         }
     }
 
@@ -310,8 +331,29 @@ impl WindowManager {
                 window: window.0,
             });
         }
+        // AOSP `addWindow`/`sanitizeWindowType`: an accessibility overlay is
+        // only accepted on the accessibility manager's own overlay token. Any
+        // other type keeps the previous behaviour (the add path has no token
+        // policy for it yet).
+        if params.type_ == crate::layers::TYPE_ACCESSIBILITY_OVERLAY
+            && !params
+                .token
+                .is_some_and(|token| self.overlay_tokens.contains(&token.0))
+        {
+            return Ok(AddWindowResult {
+                result: ADD_BAD_APP_TOKEN,
+                input_channel: crate::codec::InputChannelParcel::absent(),
+                insets_state: empty_insets_state(&self.display),
+                insets_controls: InsetsSourceControlArray(vec![]),
+                out_frame: RectI::default(),
+                out_float: vec![],
+                window: 0,
+            });
+        }
 
         let frame = self.compute_frame(&params);
+        let seq = self.next_window_seq;
+        self.next_window_seq += 1;
         let layer = self.alloc_layer();
         let name = format!(
             "Surface(name={}/{})/@0x{:x}",
@@ -339,8 +381,15 @@ impl WindowManager {
                 leash.handle = Some(self.alloc_layer());
             }
         }
-        let focusable = !params.is_system_window();
-        let z = self.windows.len() as i64 + 1;
+        // A window may hold focus when the framework would let it: it does not
+        // set `FLAG_NOT_FOCUSABLE`. LAYER1: the old `!is_system_window` guard
+        // was wrong for a focusable `TYPE_APPLICATION_OVERLAY` (AOSP lets it
+        // receive keys) and disagreed with the layer stack's `focus_target`.
+        let focusable = crate::layers::focusable(params.flags);
+        let kind = crate::layers::WindowKind::of(params.type_);
+        // Provisional z; `renumber_z` sets the real layer-stack index once the
+        // record is in `self.windows`.
+        let z = 0;
 
         let record = WindowRecord {
             id,
@@ -359,6 +408,8 @@ impl WindowManager {
             requested_visible_types,
             focusable,
             z,
+            seq,
+            kind,
             relayout_seq: 0,
             insets_state: insets_state.clone(),
             insets_controls: insets_controls.clone(),
@@ -369,17 +420,18 @@ impl WindowManager {
         if let Some(s) = self.sessions.get_mut(&session) {
             s.windows.push(id);
         }
+        self.renumber_z();
 
         // Measured launch order: visibility → focus → insetsControlChanged.
-        self.callbacks.push(
-            id,
-            WmCallback::DispatchAppVisibility { visible: true },
-        );
-        if focusable && self.focus.is_none() {
-            self.focus = Some(id);
-            self.callbacks
-                .push(id, WmCallback::WindowFocusChanged { focused: true });
-        }
+        self.callbacks
+            .push(id, WmCallback::DispatchAppVisibility { visible: true });
+        // LAYER1: focus follows the layer stack, not "first focusable add":
+        // a dialog above the activity takes focus; a FLAG_NOT_FOCUSABLE
+        // overlay above it does not. The transition is published as
+        // WindowFocusChanged(false) for the old window and (true) for the new
+        // one, on add *and* remove (`WmsState::remove`), so a listener sees the
+        // same focus the hit test and the tree report.
+        self.publish_focus_transition();
         self.callbacks.push(
             id,
             WmCallback::InsetsControlChanged {
@@ -466,8 +518,8 @@ impl WindowManager {
         let (surface_width, surface_height) = record.surface_size();
         // Stock resizes the window surface when the frame *or* the surface
         // insets change (`RELAYOUT_RES_SURFACE_RESIZED`).
-        let resized = record.frame != old_frame
-            || (surface_width, surface_height) != old_surface_size;
+        let resized =
+            record.frame != old_frame || (surface_width, surface_height) != old_surface_size;
         record.relayout_seq += 1;
         let sync_seq_out = if sync_seq >= 0 {
             sync_seq as u64
@@ -527,6 +579,11 @@ impl WindowManager {
                 state: Box::new(insets_state.clone()),
                 controls: Box::new(insets_controls.clone()), ime: false, },
         );
+        // LAYER1: `relayout` carries the current `LayoutParams.flags`, so a
+        // window that just became/stopped being `FLAG_NOT_FOCUSABLE` changes
+        // who the stack's `focus_target()` is. Publish that transition here so
+        // focus never disagrees with `hit_test`/the tree.
+        self.publish_focus_transition();
 
         Ok(RelayoutResult {
             result,
@@ -539,6 +596,28 @@ impl WindowManager {
         })
     }
 
+    /// Session death (stock `Session.kill` / process death): drop the session
+    /// and every window it owns, returning the window ids that went with it.
+    ///
+    /// An unknown session is not an error here: the caller is a teardown path
+    /// that races nothing (a second death report must not fail).
+    pub fn close_session(&mut self, session: SessionId) -> Vec<WindowId> {
+        let Some(record) = self.sessions.remove(&session) else {
+            return Vec::new();
+        };
+        let windows = record.windows.clone();
+        for window in &windows {
+            let _ = self.remove(*window);
+        }
+        windows
+    }
+
+    /// The session that owns `window`, when the window is known.
+    #[must_use]
+    pub fn window_session(&self, window: WindowId) -> Option<SessionId> {
+        self.windows.get(&window).map(|record| record.session)
+    }
+
     /// `IWindowSession.remove`.
     pub fn remove(&mut self, window: WindowId) -> Result<()> {
         let record = self
@@ -549,17 +628,36 @@ impl WindowManager {
         if let Some(s) = self.sessions.get_mut(&record.session) {
             s.windows.retain(|w| *w != window);
         }
+        self.renumber_z();
         if self.focus == Some(window) {
+            // The focused window just went away: focus the topmost remaining
+            // focusable window (layer order, not insertion order), and publish
+            // the transition to it. The removed window's channel is closed.
             self.focus = None;
-            // Focus the topmost remaining focusable window.
-            self.focus = self
-                .windows
-                .values()
-                .filter(|w| w.focusable)
-                .max_by_key(|w| w.z)
-                .map(|w| w.id);
+            self.publish_focus_transition();
         }
         Ok(())
+    }
+
+    /// Move focus to the topmost focusable window and queue the two
+    /// `WindowFocusChanged` callbacks. No-op when focus did not change.
+    fn publish_focus_transition(&mut self) {
+        let target = self.focus_target();
+        let old = self.focus;
+        if old == target {
+            return;
+        }
+        if let Some(old) = old {
+            if self.windows.contains_key(&old) {
+                self.callbacks
+                    .push(old, WmCallback::WindowFocusChanged { focused: false });
+            }
+        }
+        if let Some(new) = target {
+            self.callbacks
+                .push(new, WmCallback::WindowFocusChanged { focused: true });
+        }
+        self.focus = target;
     }
 
     /// `IWindowSession.finishDrawing`: record that the buffer arrived for
@@ -758,6 +856,71 @@ impl WindowManager {
         self.focus.and_then(|id| self.windows.get(&id))
     }
 
+    /// The display's window layer stack: every live window with its real type,
+    /// frame, flags and attachment, in AOSP z-order.
+    ///
+    /// This is the one description of the stack that composition (C1's layer
+    /// placement), the UI tree and input hit-testing read, so an overlay cannot
+    /// be drawn in one order and tapped in another.
+    #[must_use]
+    pub fn layer_stack(&self) -> crate::layers::WindowLayerStack {
+        let mut stack = crate::layers::WindowLayerStack::new();
+        for record in self.windows.values() {
+            // A sub-window's `LayoutParams.token` is the window it is attached
+            // to; only a token that names a live window becomes the parent.
+            let parent = record
+                .params
+                .token
+                .filter(|t| self.windows.contains_key(&t.0))
+                .map(|t| t.0);
+            stack.upsert(crate::layers::LayerEntry {
+                window: record.id,
+                type_: record.params.type_,
+                flags: record.params.flags,
+                frame: record.frame,
+                parent,
+                seq: record.seq,
+                // ACOS runs a normal (non-system) app: no `INTERNAL_SYSTEM_WINDOW`,
+                // so the alert/system-overlay/system-error arms use their low
+                // layers (WindowManagerPolicy.java:553,583,596).
+                can_add_internal_system_window: false,
+            });
+        }
+        stack
+    }
+
+    /// Re-index every window's `z` from the layer stack. Called after an add and
+    /// after a remove, so `z` is always the stack position (band-major, then
+    /// creation order, with sub-windows next to their parent).
+    fn renumber_z(&mut self) {
+        let stack = self.layer_stack();
+        for record in self.windows.values_mut() {
+            if let Some(z) = stack.z_of(record.id) {
+                record.z = z;
+            }
+        }
+    }
+
+    /// The window a touch at display point `p` goes to: the topmost **touchable**
+    /// window whose frame contains the point (`FLAG_NOT_TOUCHABLE` is skipped).
+    #[must_use]
+    pub fn hit_test(&self, point: PointI) -> Option<WindowId> {
+        self.layer_stack().hit_test(point)
+    }
+
+    /// Every touchable window under `p`, topmost first (`InputDispatcher`'s own
+    /// search order; the input host skips the ones with no live input channel).
+    #[must_use]
+    pub fn hit_test_candidates(&self, point: PointI) -> Vec<WindowId> {
+        self.layer_stack().hit_test_candidates(point)
+    }
+
+    /// The window that may take focus: the topmost focusable window.
+    #[must_use]
+    pub fn focus_target(&self) -> Option<WindowId> {
+        self.layer_stack().focus_target()
+    }
+
     /// Compute the frame for `params` on this display.
     #[must_use]
     pub fn compute_frame(&self, params: &LayoutParams) -> RectI {
@@ -769,6 +932,25 @@ impl WindowManager {
     #[must_use]
     pub fn merged_configuration(&self) -> MergedConfiguration {
         reference_merged_configuration(&self.display)
+    }
+
+    /// `WindowManagerService.addWindowToken(token, TYPE_ACCESSIBILITY_OVERLAY,
+    /// displayId)`: the accessibility manager service created an overlay window
+    /// token, and a `TYPE_ACCESSIBILITY_OVERLAY` window may now be added on it.
+    pub fn add_overlay_token(&mut self, token: BinderId) {
+        self.overlay_tokens.insert(token.0);
+    }
+
+    /// `WindowManagerService.removeWindowToken`: the service is gone, so the
+    /// token stops authorising overlays.
+    pub fn remove_overlay_token(&mut self, token: BinderId) {
+        self.overlay_tokens.remove(&token.0);
+    }
+
+    /// True when `token` is an accessibility overlay token this state created.
+    #[must_use]
+    pub fn is_overlay_token(&self, token: BinderId) -> bool {
+        self.overlay_tokens.contains(&token.0)
     }
 
     fn alloc_layer(&mut self) -> u64 {
@@ -876,11 +1058,19 @@ pub fn compute_frame_for_requested(
         rw = if params.width >= 0 { params.width } else { pw };
     }
     if rh == UNSPECIFIED_LENGTH {
-        rh = if params.height >= 0 { params.height } else { ph };
+        rh = if params.height >= 0 {
+            params.height
+        } else {
+            ph
+        };
     }
 
     let w = if params.width == MATCH_PARENT { pw } else { rw };
-    let h = if params.height == MATCH_PARENT { ph } else { rh };
+    let h = if params.height == MATCH_PARENT {
+        ph
+    } else {
+        rh
+    };
 
     let x = params.x + (params.horizontal_margin * pw as f32) as i32;
     let y = params.y + (params.vertical_margin * ph as f32) as i32;
@@ -1065,7 +1255,12 @@ pub fn reference_insets_state(display: &DisplaySpec, ime_visible: bool) -> Inset
         RectI::new(0, 0, 0, 0)
     };
     let mut sources = vec![
-        InsetsSource::new(0x9b1a_0000u32 as i32, inset_type::STATUS_BAR, b.status_bar, true),
+        InsetsSource::new(
+            0x9b1a_0000u32 as i32,
+            inset_type::STATUS_BAR,
+            b.status_bar,
+            true,
+        ),
         InsetsSource::new(
             0xfc05_0001u32 as i32,
             inset_type::NAVIGATION_BAR,
@@ -1081,12 +1276,7 @@ pub fn reference_insets_state(display: &DisplaySpec, ime_visible: bool) -> Inset
             flags: 0,
             insets_rounded_corner_frame: false,
         },
-        InsetsSource::new(
-            27,
-            inset_type::DISPLAY_CUTOUT,
-            b.display_cutout,
-            true,
-        ),
+        InsetsSource::new(27, inset_type::DISPLAY_CUTOUT, b.display_cutout, true),
         InsetsSource::new(
             0x9b1a_0005u32 as i32,
             inset_type::MANDATORY_SYSTEM_GESTURES,
@@ -1298,16 +1488,16 @@ pub fn reference_merged_configuration(display: &DisplaySpec) -> MergedConfigurat
         mnc: 260,
         locale_list: Some("en-US".to_string()),
         user_set_locale: false,
-        touchscreen: 3,       // TOUCHSCREEN_FINGER
-        keyboard: 2,          // KEYBOARD_QWERTY
-        keyboard_hidden: 1,   // KEYBOARDHIDDEN_YES
+        touchscreen: 3,     // TOUCHSCREEN_FINGER
+        keyboard: 2,        // KEYBOARD_QWERTY
+        keyboard_hidden: 1, // KEYBOARDHIDDEN_YES
         hard_keyboard_hidden: 1,
-        navigation: 1,        // NAVIGATION_DPAD
+        navigation: 1, // NAVIGATION_DPAD
         navigation_hidden: 1,
         orientation: if display.is_landscape() { 2 } else { 1 },
         screen_layout: REFERENCE_SCREEN_LAYOUT, // ldltr nrml long (measured `display.txt`)
-        color_mode: 0,        // HDR_UNDEFINED / sRGB
-        ui_mode: 0x11,        // UI_MODE_TYPE_NORMAL | NIGHT_NO
+        color_mode: 0,                          // HDR_UNDEFINED / sRGB
+        ui_mode: 0x11,                          // UI_MODE_TYPE_NORMAL | NIGHT_NO
         // W7: under `report` the configuration describes the full display,
         // exactly like the device (`sw432dp w432dp h960dp` on the Moto G35 at
         // 400 dpi). `carve` keeps the measured API-34 application-area values
@@ -1338,7 +1528,8 @@ pub fn reference_merged_configuration(display: &DisplaySpec) -> MergedConfigurat
         } else {
             842
         },
-        compat_smallest_screen_width_dp: if display.insets_mode.is_report() || display.rotation != 0 {
+        compat_smallest_screen_width_dp: if display.insets_mode.is_report() || display.rotation != 0
+        {
             display.screen_width_dp().min(display.screen_height_dp())
         } else {
             411
@@ -1416,7 +1607,11 @@ mod tests {
         assert_eq!(REFERENCE_SCREEN_LAYOUT & 0x0f, 0x02, "SIZE_NORMAL");
         assert_eq!(REFERENCE_SCREEN_LAYOUT & 0x30, 0x20, "LONG_YES");
         assert_eq!(REFERENCE_SCREEN_LAYOUT & 0xc0, 0x40, "LAYOUTDIR_LTR");
-        assert_ne!(REFERENCE_SCREEN_LAYOUT & 0x0f, 0x04, "must not be SIZE_XLARGE");
+        assert_ne!(
+            REFERENCE_SCREEN_LAYOUT & 0x0f,
+            0x04,
+            "must not be SIZE_XLARGE"
+        );
 
         // Negative check: the pre-fix values really are different. `0x1a` is
         // not a valid size (0xa), and the guest's `0` is SIZE_UNDEFINED; both
@@ -1432,6 +1627,64 @@ mod tests {
         assert_eq!(screen_layout_for_dp(1000, 800) & 0x0f, 0x04); // XLARGE
     }
 
+    /// MODA11Y5: AOSP `WindowManagerService.addWindow` accepts a
+    /// `TYPE_ACCESSIBILITY_OVERLAY` window only on the accessibility manager's
+    /// own overlay window token (`addWindow` 1630-1640, `sanitizeWindowType`
+    /// 9914-9928). Without the token check any app could add a window into the
+    /// accessibility overlay layer, above every activity.
+    #[test]
+    fn accessibility_overlay_needs_the_accessibility_overlay_token() {
+        let mut wm = WindowManager::new(DisplaySpec::reference_1080x2400());
+        let (sess, _b) = wm.open_session(None);
+        let token = BinderId(0x0A11_0000_0000_7001);
+        let mut params = LayoutParams::application("dev.acos.fixtures.a11yprobe", "overlay");
+        params.type_ = crate::layers::TYPE_ACCESSIBILITY_OVERLAY;
+        params.token = Some(token);
+
+        // No token was created: the add is refused, exactly like AOSP's
+        // `ADD_BAD_APP_TOKEN`, and no window is created.
+        let refused = wm
+            .add_to_display_as_user(sess, BinderId(0x7001), params.clone(), 0)
+            .expect("the add path answers, it does not error");
+        assert_eq!(refused.result, ADD_BAD_APP_TOKEN);
+        assert!(wm.windows.is_empty(), "a refused add creates no window");
+
+        // A foreign token is still refused (the token is the authority, not the
+        // window type alone).
+        let mut foreign = params.clone();
+        foreign.token = Some(BinderId(0xBAD0_0000));
+        let refused = wm
+            .add_to_display_as_user(sess, BinderId(0x7002), foreign, 0)
+            .expect("the add path answers");
+        assert_eq!(refused.result, ADD_BAD_APP_TOKEN);
+
+        // `addWindowToken`: now the add is accepted and lands in the
+        // accessibility overlay policy layer (31).
+        wm.add_overlay_token(token);
+        assert!(wm.is_overlay_token(token));
+        let added = wm
+            .add_to_display_as_user(sess, BinderId(0x7003), params, 0)
+            .expect("the add path answers");
+        assert_eq!(added.result, ADD_OKAY);
+        let record = wm.windows.get(&0x7003).expect("the overlay window");
+        assert_eq!(record.kind, crate::layers::WindowKind::AccessibilityOverlay);
+        assert_eq!(
+            crate::layers::policy_layer(crate::layers::TYPE_ACCESSIBILITY_OVERLAY, false),
+            31,
+            "the overlay's LAYER1 policy layer"
+        );
+
+        // `removeWindowToken` (the service went away) revokes the authority.
+        wm.remove_overlay_token(token);
+        let mut again = LayoutParams::application("dev.acos.fixtures.a11yprobe", "overlay");
+        again.type_ = crate::layers::TYPE_ACCESSIBILITY_OVERLAY;
+        again.token = Some(token);
+        let refused = wm
+            .add_to_display_as_user(sess, BinderId(0x7004), again, 0)
+            .expect("the add path answers");
+        assert_eq!(refused.result, ADD_BAD_APP_TOKEN);
+    }
+
     #[test]
     fn add_returns_measured_app_frame_and_insets() {
         let mut wm = WindowManager::new(DisplaySpec::reference_1080x2400());
@@ -1441,17 +1694,19 @@ mod tests {
             .unwrap();
         assert_eq!(r.result, ADD_OKAY);
         assert_eq!(r.out_frame, RectI::new(0, 128, 1080, 2337));
-        assert_eq!(r.insets_state.visible_insets_for(inset_type::STATUS_BAR).top, 128);
+        assert_eq!(
+            r.insets_state
+                .visible_insets_for(inset_type::STATUS_BAR)
+                .top,
+            128
+        );
         assert_eq!(
             r.insets_state
                 .visible_insets_for(inset_type::NAVIGATION_BAR)
                 .bottom,
             63
         );
-        assert!(matches!(
-            r.insets_state.display_cutout,
-            Cutout::Present(_)
-        ));
+        assert!(matches!(r.insets_state.display_cutout, Cutout::Present(_)));
     }
 
     #[test]
@@ -1608,6 +1863,237 @@ mod tests {
         assert_eq!(physical.frame, RectI::new(0, 0, 128, 1080));
         // No control is invented for the strip: it owns no surface.
         let controls = reference_insets_controls(&land, 0x100);
-        assert!(!controls.0.iter().any(|c| c.id == CONFIG_STATUS_BAR_SOURCE_ID));
+        assert!(!controls
+            .0
+            .iter()
+            .any(|c| c.id == CONFIG_STATUS_BAR_SOURCE_ID));
+    }
+
+    // ------------------------------------------------------- LAYER0 (stack)
+
+    fn overlay_params(type_: i32, flags: i32) -> LayoutParams {
+        LayoutParams {
+            type_,
+            flags,
+            ..LayoutParams::application("dev.acos.fixtures.overlaystack", "Overlay")
+        }
+    }
+
+    /// The layer stack the WMS reports is the order C1 draws in and the order
+    /// input hit-tests against: the activity bottom, an application overlay
+    /// above every activity window, the IME above the overlay.
+    ///
+    /// Before LAYER0 `z` was the insertion order, so an overlay added before the
+    /// activity was drawn *below* it and the tree reported that order as truth.
+    #[test]
+    fn the_layer_stack_orders_application_overlay_and_ime_by_window_type() {
+        use crate::layers::{TYPE_APPLICATION, TYPE_APPLICATION_OVERLAY, TYPE_INPUT_METHOD};
+        let mut wm = WindowManager::new(DisplaySpec::reference_1080x2400());
+        let (sess, _b) = wm.open_session(None);
+        // Overlay and IME first, the activity last (a real launch order: the
+        // system windows exist before the app's window does).
+        wm.add_to_display_as_user(
+            sess,
+            BinderId(0x20),
+            overlay_params(TYPE_INPUT_METHOD, 0),
+            0,
+        )
+        .unwrap();
+        wm.add_to_display_as_user(
+            sess,
+            BinderId(0x10),
+            overlay_params(TYPE_APPLICATION_OVERLAY, 0),
+            0,
+        )
+        .unwrap();
+        wm.add_to_display_as_user(sess, BinderId(0x01), overlay_params(TYPE_APPLICATION, 0), 0)
+            .unwrap();
+
+        let rows = wm.layer_stack().describe();
+        let ids: Vec<u64> = rows.iter().map(|r| r.0).collect();
+        assert_eq!(ids, vec![0x01u64, 0x10, 0x20], "activity < overlay < IME");
+        // `z` is the stack index and is what C1 receives as placement.z.
+        assert_eq!(wm.windows[&0x01u64].z, 0);
+        assert_eq!(wm.windows[&0x10].z, 1);
+        assert_eq!(wm.windows[&0x20].z, 2);
+        assert_eq!(wm.windows[&0x10].kind.name(), "application_overlay");
+        assert_eq!(wm.windows[&0x20].kind.name(), "input_method");
+        // Removing the bottom window renumbers the rest (no hole).
+        wm.remove(0x01).unwrap();
+        assert_eq!(wm.windows[&0x10u64].z, 0);
+        assert_eq!(wm.windows[&0x20].z, 1);
+    }
+
+    /// A tap goes to the topmost **touchable** window at the point, so an
+    /// overlay that sets `FLAG_NOT_TOUCHABLE` passes touches through to the
+    /// activity below it, and a touchable one takes them.
+    #[test]
+    fn hit_test_and_focus_follow_the_stack_and_the_flags() {
+        use crate::layers::{
+            FLAG_NOT_FOCUSABLE, FLAG_NOT_TOUCHABLE, TYPE_APPLICATION, TYPE_APPLICATION_OVERLAY,
+        };
+        let mut wm = WindowManager::new(DisplaySpec::reference_1080x2400());
+        let (sess, _b) = wm.open_session(None);
+        let activity = wm
+            .add_to_display_as_user(sess, BinderId(0x01), overlay_params(TYPE_APPLICATION, 0), 0)
+            .unwrap()
+            .window;
+        // The overlay covers the top-left 300x300 of the display.
+        let mut params = overlay_params(TYPE_APPLICATION_OVERLAY, 0);
+        params.width = 300;
+        params.height = 300;
+        wm.add_to_display_as_user(sess, BinderId(0x10), params, 0)
+            .unwrap();
+        let overlay_frame = wm.windows[&0x10].frame;
+        let inside = PointI::new(overlay_frame.left + 5, overlay_frame.top + 5);
+        // Above every activity window: the overlay's own top-left corner is its.
+        assert_eq!(wm.hit_test(inside), Some(0x10));
+        assert_eq!(wm.focus_target(), Some(0x10));
+        // Beside it: the activity.
+        assert_eq!(wm.hit_test(PointI::new(900, 2000)), Some(activity));
+
+        // Flip the overlay to NOT_TOUCHABLE | NOT_FOCUSABLE: the same point now
+        // belongs to the activity, and focus goes back to it.
+        wm.windows.get_mut(&0x10).unwrap().params.flags = FLAG_NOT_TOUCHABLE | FLAG_NOT_FOCUSABLE;
+        assert_eq!(wm.hit_test(inside), Some(activity));
+        assert_eq!(wm.focus_target(), Some(activity));
+        // It is still drawn: composition order does not depend on touchability.
+        assert_eq!(wm.layer_stack().z_of(0x10), Some(1));
+    }
+
+    /// WVTAP: the input host needs the **ordered** candidates under a point
+    /// (`InputDispatcher` walks the stack from the top and takes the first
+    /// window that can receive the event), not just the topmost one: a window
+    /// whose input channel is gone must be skipped, never replaced by "the
+    /// newest window".
+    #[test]
+    fn hit_test_candidates_lists_the_stack_from_the_top() {
+        use crate::layers::{FLAG_NOT_TOUCHABLE, TYPE_APPLICATION, TYPE_APPLICATION_OVERLAY};
+        let mut wm = WindowManager::new(DisplaySpec::reference_1080x2400());
+        let (sess, _b) = wm.open_session(None);
+        let activity = wm
+            .add_to_display_as_user(sess, BinderId(0x01), overlay_params(TYPE_APPLICATION, 0), 0)
+            .unwrap()
+            .window;
+        let overlay = wm
+            .add_to_display_as_user(sess, BinderId(0x10), overlay_params(TYPE_APPLICATION_OVERLAY, 0), 0)
+            .unwrap()
+            .window;
+        // Both windows cover the display; a point well inside both (a window
+        // frame starts below the status bar under the `report` inset model).
+        let frame = wm.windows[&activity].frame;
+        let point = PointI::new(frame.left + 20, frame.top + 20);
+        assert_eq!(
+            wm.hit_test_candidates(point),
+            vec![overlay, activity],
+            "topmost first"
+        );
+        // A NOT_TOUCHABLE overlay is not a candidate at all (it passes through).
+        wm.windows.get_mut(&overlay).unwrap().params.flags = FLAG_NOT_TOUCHABLE;
+        assert_eq!(wm.hit_test_candidates(point), vec![activity]);
+    }
+
+    /// LAYER1: two windows in the same policy layer are ordered by creation,
+    /// not by the numeric `IWindow` binder id. A dialog added after its
+    /// activity is above it even when its binder id is smaller.
+    #[test]
+    fn a_same_layer_window_added_later_is_above_one_with_a_smaller_binder_id() {
+        use crate::layers::TYPE_APPLICATION;
+        let mut wm = WindowManager::new(DisplaySpec::reference_1080x2400());
+        let (sess, _b) = wm.open_session(None);
+        let activity = wm
+            .add_to_display_as_user(sess, BinderId(0x99), overlay_params(TYPE_APPLICATION, 0), 0)
+            .unwrap()
+            .window;
+        let dialog = wm
+            .add_to_display_as_user(sess, BinderId(0x11), overlay_params(TYPE_APPLICATION, 0), 0)
+            .unwrap()
+            .window;
+        assert_eq!(wm.windows[&activity].z, 0);
+        assert_eq!(wm.windows[&dialog].z, 1);
+        assert_eq!(wm.layer_stack().ordered()[1].window, dialog);
+    }
+
+    /// LAYER1: focus follows the layer stack on add and on remove, and the
+    /// transition is published as `WindowFocusChanged(false)` for the window
+    /// that lost focus and `(true)` for the one that gained it.
+    #[test]
+    fn focus_moves_with_the_layer_stack_on_add_and_remove() {
+        use crate::callbacks::WmCallback;
+        use crate::layers::{FLAG_NOT_FOCUSABLE, TYPE_APPLICATION, TYPE_APPLICATION_OVERLAY};
+        let mut wm = WindowManager::new(DisplaySpec::reference_1080x2400());
+        let (sess, _b) = wm.open_session(None);
+        let activity = wm
+            .add_to_display_as_user(sess, BinderId(0x01), overlay_params(TYPE_APPLICATION, 0), 0)
+            .unwrap()
+            .window;
+        assert_eq!(wm.focus, Some(activity));
+        let dialog = wm
+            .add_to_display_as_user(sess, BinderId(0x02), overlay_params(TYPE_APPLICATION, 0), 0)
+            .unwrap()
+            .window;
+        assert_eq!(
+            wm.focus,
+            Some(dialog),
+            "a dialog above the activity takes focus"
+        );
+
+        // A focusable overlay above the dialog takes focus too...
+        let overlay = wm
+            .add_to_display_as_user(
+                sess,
+                BinderId(0x03),
+                overlay_params(TYPE_APPLICATION_OVERLAY, 0),
+                0,
+            )
+            .unwrap()
+            .window;
+        assert_eq!(wm.focus, Some(overlay));
+
+        // ...but a FLAG_NOT_FOCUSABLE overlay does not, even though it is on top.
+        let passive = wm
+            .add_to_display_as_user(
+                sess,
+                BinderId(0x04),
+                overlay_params(TYPE_APPLICATION_OVERLAY, FLAG_NOT_FOCUSABLE),
+                0,
+            )
+            .unwrap()
+            .window;
+        assert_eq!(wm.focus, Some(overlay));
+        assert!(wm.windows[&passive].z > wm.windows[&overlay].z);
+
+        let mut transitions = Vec::new();
+        while let Some(pc) = wm.callbacks.pop() {
+            if let WmCallback::WindowFocusChanged { focused } = pc.callback {
+                transitions.push((pc.window, focused));
+            }
+        }
+        // add(activity): activity true; add(dialog): activity false, dialog
+        // true; add(overlay): dialog false, overlay true; add(passive): no
+        // transition.
+        assert_eq!(
+            transitions,
+            vec![
+                (activity, true),
+                (activity, false),
+                (dialog, true),
+                (dialog, false),
+                (overlay, true)
+            ]
+        );
+
+        // Removing the focused overlay publishes (true) for the topmost
+        // focusable window that remains (the dialog). The removed window's own
+        // channel is closed, so it gets no callback.
+        wm.remove(overlay).unwrap();
+        assert_eq!(wm.focus, Some(dialog));
+        let mut after = Vec::new();
+        while let Some(pc) = wm.callbacks.pop() {
+            if let WmCallback::WindowFocusChanged { focused } = pc.callback {
+                after.push((pc.window, focused));
+            }
+        }
+        assert_eq!(after, vec![(dialog, true)]);
     }
 }

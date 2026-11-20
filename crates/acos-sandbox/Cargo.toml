@@ -22,3 +22,5 @@ thiserror = { workspace = true }
 
 [dev-dependencies]
 serde_json = { workspace = true }
+# HYG3: a missing test prerequisite fails loudly instead of printing SKIP.
+acos-test-support = { path = "../acos-test-support" }

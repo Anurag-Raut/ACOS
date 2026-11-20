@@ -1,0 +1,49 @@
+{
+  "assertions": [
+    {
+      "actual": {
+        "matched_lines": 2,
+        "sample": [
+          "AcosIntentProbe: ACOSPROBE shared action=android.intent.action.SEND type=text/plain text=Shared from ACOS",
+          "AcosIntentProbe: ACOSPROBE pick-request action=android.intent.action.GET_CONTENT type=image/* request=42"
+        ]
+      },
+      "expected": {
+        "min_matches": 1,
+        "ordered": true,
+        "patterns": [
+          "^ACOSPROBE shared action=android\\.intent\\.action\\.SEND type=text/plain text=Shared from ACOS$",
+          "^ACOSPROBE pick-request action=android\\.intent\\.action\\.GET_CONTENT type=image/\\* request=42$"
+        ],
+        "since_previous_step": false,
+        "tag": "AcosIntentProbe"
+      },
+      "kind": "log",
+      "matched_node_ids": [],
+      "passed": true
+    }
+  ],
+  "certification": "certified-with-limits",
+  "certification_limits": {
+    "doc": "docs/SANDBOX_CERTIFICATION.md",
+    "section": "§8.7"
+  },
+  "duration_ms": 0,
+  "evidence": [
+    {
+      "kind": "log",
+      "path": "logs/logcat.txt"
+    },
+    {
+      "kind": "step",
+      "path": "steps/02-assert_log.json"
+    }
+  ],
+  "index": 2,
+  "provenance": {
+    "logs": "guest-asserted"
+  },
+  "status": "pass",
+  "step": "assert_log",
+  "trust": "trusted"
+}

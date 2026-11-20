@@ -7,10 +7,8 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 fn fixture() -> Vec<u8> {
-    std::fs::read(
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/data/fixtures.dex"),
-    )
-    .expect("fixture")
+    std::fs::read(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/data/fixtures.dex"))
+        .expect("fixture")
 }
 
 /// Recompute the Adler-32 checksum and SHA-1 signature so the parser proceeds

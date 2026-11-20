@@ -163,7 +163,12 @@ impl SystemBars {
             status_bar: RectI::new(0, 0, DISPLAY_WIDTH, STATUS_BAR_TOP),
             status_bar_tappable: RectI::new(0, 0, DISPLAY_WIDTH, STATUS_BAR_TOP),
             status_bar_config: RectI::new(0, 0, 0, 0),
-            nav_bar: RectI::new(0, DISPLAY_HEIGHT - NAV_BAR_BOTTOM, DISPLAY_WIDTH, DISPLAY_HEIGHT),
+            nav_bar: RectI::new(
+                0,
+                DISPLAY_HEIGHT - NAV_BAR_BOTTOM,
+                DISPLAY_WIDTH,
+                DISPLAY_HEIGHT,
+            ),
             nav_bar_tappable: RectI::new(0, 0, 0, 0),
             ime_visible: RectI::new(
                 0,
@@ -309,7 +314,12 @@ impl DisplaySpec {
         Self {
             id: 0,
             frame: RectI::new(0, 0, DISPLAY_WIDTH, DISPLAY_HEIGHT),
-            app_bounds: RectI::new(0, STATUS_BAR_TOP, DISPLAY_WIDTH, DISPLAY_HEIGHT - NAV_BAR_BOTTOM),
+            app_bounds: RectI::new(
+                0,
+                STATUS_BAR_TOP,
+                DISPLAY_WIDTH,
+                DISPLAY_HEIGHT - NAV_BAR_BOTTOM,
+            ),
             density_dpi: DENSITY_DPI,
             density: DENSITY,
             refresh_hz: REFRESH_HZ,
@@ -376,12 +386,7 @@ impl DisplaySpec {
             ime_visible: RectI::new(0, height, width, height),
             display_cutout: RectI::new(0, 0, width, status_bar_top),
             mandatory_system_gestures_top: RectI::new(0, 0, width, status_bar_top),
-            mandatory_system_gestures_bottom: RectI::new(
-                0,
-                height - nav_bar_bottom,
-                width,
-                height,
-            ),
+            mandatory_system_gestures_bottom: RectI::new(0, height - nav_bar_bottom, width, height),
             system_gestures_left: RectI::new(0, 0, 0, height),
             system_gestures_right: RectI::new(width, 0, width, height),
         };
@@ -455,7 +460,12 @@ impl DisplaySpec {
             RectI::new(0, 0, 0, 0)
         } else {
             let h = out.config_status_bar_height();
-            RectI::new(out.frame.left, out.frame.top, out.frame.right, out.frame.top + h)
+            RectI::new(
+                out.frame.left,
+                out.frame.top,
+                out.frame.right,
+                out.frame.top + h,
+            )
         };
         out
     }
@@ -537,8 +547,18 @@ impl DisplaySpec {
     #[must_use]
     pub const fn source_control_positions(&self) -> [(&'static str, i32, PointI, InsetsI); 3] {
         [
-            ("ime", 3, PointI::new(0, STATUS_BAR_TOP), InsetsI::new(0, 0, 0, 883)),
-            ("statusBars", 0x9b1a_0000u32 as i32, PointI::new(0, 0), InsetsI::new(0, STATUS_BAR_TOP, 0, 0)),
+            (
+                "ime",
+                3,
+                PointI::new(0, STATUS_BAR_TOP),
+                InsetsI::new(0, 0, 0, 883),
+            ),
+            (
+                "statusBars",
+                0x9b1a_0000u32 as i32,
+                PointI::new(0, 0),
+                InsetsI::new(0, STATUS_BAR_TOP, 0, 0),
+            ),
             (
                 "navigationBars",
                 0xfc05_0001u32 as i32,
@@ -673,7 +693,10 @@ mod tests {
             let back = there.rotated(0);
             assert_eq!(back.frame, portrait.frame, "rotation {target} frame");
             assert_eq!(back.bars, portrait.bars, "rotation {target} bars");
-            assert_eq!(back.app_bounds, portrait.app_bounds, "rotation {target} app bounds");
+            assert_eq!(
+                back.app_bounds, portrait.app_bounds,
+                "rotation {target} app bounds"
+            );
             assert_eq!(back.rotation, 0);
         }
         // Half turn keeps the portrait frame; the status bar moves to the
@@ -752,7 +775,11 @@ mod tests {
                 r.bars.system_gestures_left,
                 r.bars.system_gestures_right,
             ] {
-                assert_eq!(rect.intersect(r.frame), rect, "rotation {rotation} bar inside frame");
+                assert_eq!(
+                    rect.intersect(r.frame),
+                    rect,
+                    "rotation {rotation} bar inside frame"
+                );
             }
         }
     }
@@ -778,7 +805,9 @@ mod tests {
     #[test]
     fn config_change_bits_follow_the_manifest_that_declares_them() {
         // `android:configChanges="orientation|screenSize"` handles a rotation.
-        let handled = CONFIG_ORIENTATION | CONFIG_SCREEN_SIZE | CONFIG_SCREEN_LAYOUT
+        let handled = CONFIG_ORIENTATION
+            | CONFIG_SCREEN_SIZE
+            | CONFIG_SCREEN_LAYOUT
             | CONFIG_SMALLEST_SCREEN_SIZE;
         assert!(!RotationRelaunch::for_rotation(handled).relaunches());
         // The framework default (no `configChanges`) recreates the Activity.
@@ -841,8 +870,16 @@ mod tests {
         ];
         for (rotation, non_decor, config, config_frame) in table {
             let r = d.rotated(rotation);
-            assert_eq!(r.app_insets(), non_decor, "rotation {rotation} nonDecorInsets");
-            assert_eq!(r.config_insets(), config, "rotation {rotation} configInsets");
+            assert_eq!(
+                r.app_insets(),
+                non_decor,
+                "rotation {rotation} nonDecorInsets"
+            );
+            assert_eq!(
+                r.config_insets(),
+                config,
+                "rotation {rotation} configInsets"
+            );
             // configFrame = frame - configInsets, the row the reference prints
             // next to configInsets.
             assert_eq!(

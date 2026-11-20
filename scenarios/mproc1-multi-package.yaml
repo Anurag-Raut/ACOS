@@ -1,0 +1,81 @@
+# MPROC1 step 1: a multi-package session.
+#
+# The launched APK is `multi-package-probe`; `extra_apks` installs `counter.apk`
+# into the same session beside it (own uid, own guest sourceDir and
+# nativeLibraryDir). The app asks its PackageManager about that second package
+# and builds its Context, so this scenario proves the whole chain end to end:
+#
+#   getPackageInfo(other)      -> the other package's version/sourceDir/uid
+#   getApplicationInfo(other)  -> the other package (NOT the launched one)
+#   createPackageContext(other)-> a Context whose resources belong to the other
+#                                 APK (`create_package_context` string)
+#   getPackagesForUid(other)   -> exactly the other package's name
+#
+# Before MPROC1 this failed twice over: the launch could not install a second
+# package at all, and `IPackageManager.getApplicationInfo` was answered from a
+# guest-built template that ignored the requested package, so the "other"
+# ApplicationInfo was the launched app's own.
+version: 1
+name: mproc1-multi-package
+description: >-
+  Launch the multi-package probe with a second APK installed in the session and
+  verify, from the guest, that the package manager, the per-package
+  ApplicationInfo and createPackageContext all describe the second package.
+app: fixtures/build/apps/multi-package-probe.apk
+extra_apks:
+  - fixtures/build/apps/counter.apk
+engine: native-preferred
+fallback: report-and-escalate
+api_level: 34
+isolation: process
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+capabilities:
+  - lifecycle
+  - ui.offscreen
+  - ui.text
+expectation: pass
+budgets:
+  memory_mib: 512
+  wall_ms: 60000
+steps:
+  - launch:
+      activity: dev.acos.fixtures.multipkg/.MainActivity
+      clear_state: true
+
+  - wait_for:
+      selector: {id: probe}
+      timeout_ms: 5000
+
+  # The PackageInfo of the second package (real parsed facts from its APK).
+  - assert_log:
+      tag: AcosMultiPkg
+      since_previous_step: false
+      ordered: true
+      patterns:
+        - '^ACOSPROBE ok pkg=dev\.acos\.fixtures\.counter version=1\.0 src=/data/app/counter\.apk uid=[0-9]+$'
+        # getApplicationInfo() must answer the *requested* package, and the
+        # context built from it must be that package's (its resources resolve
+        # the other APK's string, and only that APK has it).
+        - '^ACOSPROBE ai pkg=dev\.acos\.fixtures\.counter .* src=/data/app/counter\.apk$'
+        - '^ACOSPROBE ctx appInfo=dev\.acos\.fixtures\.counter pkg=dev\.acos\.fixtures\.counter .*app_name=Counter$'
+        - '^ACOSPROBE uid [0-9]+ -> \[dev\.acos\.fixtures\.counter\]$'
+
+  # On screen: the same facts, so a pixel/tree observer sees the result too.
+  - assert_text:
+      selector: {id: probe}
+      text: {contains: "dev.acos.fixtures.counter"}
+      timeout_ms: 5000
+
+  - assert_text:
+      selector: {id: probe}
+      text: {contains: "uid 1019"}
+      timeout_ms: 5000
+
+  - assert_text:
+      selector: {id: probe}
+      text: {contains: "Counter"}
+      timeout_ms: 5000

@@ -278,9 +278,11 @@ impl TextEngine {
         if let Some(para) = bidi.paragraphs.first() {
             let (_levels, runs) = bidi.visual_runs(para, para.range.clone());
             for run in runs {
-                let level = bidi.levels.get(run.start).copied().unwrap_or_else(|| {
-                    unicode_bidi::Level::ltr()
-                });
+                let level = bidi
+                    .levels
+                    .get(run.start)
+                    .copied()
+                    .unwrap_or_else(|| unicode_bidi::Level::ltr());
                 visual_ranges.push((run.start, run.end, level.is_rtl()));
             }
         }
@@ -374,12 +376,7 @@ impl TextEngine {
         }
     }
 
-    fn pick_font(
-        &self,
-        chain: &[usize],
-        ch: char,
-        style: &TextStyle,
-    ) -> Option<FontRef> {
+    fn pick_font(&self, chain: &[usize], ch: char, style: &TextStyle) -> Option<FontRef> {
         // Fast path: the primary font covers the char.
         if face_has_glyph(&style.font, ch) {
             return Some(style.font.clone());
@@ -553,7 +550,11 @@ impl TextEngine {
         // Pen positions are computed in visual order.
         for run in &shaped.runs {
             let upem = face_units_per_em(&run.font);
-            let scale = if upem > 0 { style.size / upem as f32 } else { 1.0 };
+            let scale = if upem > 0 {
+                style.size / upem as f32
+            } else {
+                1.0
+            };
             let face = parse_face(&run.font);
             let mut pen = 0.0f32;
             for g in &run.glyphs {
@@ -598,16 +599,17 @@ impl TextEngine {
     /// Android `Paint.getRunAdvance`: advance from `start` to `index`.
     pub fn get_run_advance(&mut self, text: &[u16], style: &TextStyle, index: usize) -> f32 {
         let shaped = self.shape(text, style);
-        shaped
-            .char_advances
-            .iter()
-            .take(index)
-            .sum::<f32>()
+        shaped.char_advances.iter().take(index).sum::<f32>()
     }
 
     /// Android `Paint.getOffsetForAdvance` — the char boundary closest to an
     /// advance.
-    pub fn get_offset_for_advance(&mut self, text: &[u16], style: &TextStyle, advance: f32) -> usize {
+    pub fn get_offset_for_advance(
+        &mut self,
+        text: &[u16],
+        style: &TextStyle,
+        advance: f32,
+    ) -> usize {
         let shaped = self.shape(text, style);
         let mut acc = 0.0f32;
         for (i, a) in shaped.char_advances.iter().enumerate() {
@@ -644,7 +646,11 @@ impl TextEngine {
         let mut pen_x = x;
         for run in &shaped.runs {
             let upem = face_units_per_em(&run.font);
-            let scale = if upem > 0 { style.size / upem as f32 } else { 1.0 };
+            let scale = if upem > 0 {
+                style.size / upem as f32
+            } else {
+                1.0
+            };
             let face = parse_face(&run.font);
             for g in &run.glyphs {
                 append_glyph(
@@ -751,8 +757,7 @@ fn decode_utf16(text: &[u16]) -> (String, Vec<usize>) {
             && (0xDC00..0xE000).contains(&text[i + 1])
         {
             let low = text[i + 1];
-            let cp = 0x10000
-                + (((unit as u32 - 0xD800) << 10) | (low as u32 - 0xDC00));
+            let cp = 0x10000 + (((unit as u32 - 0xD800) << 10) | (low as u32 - 0xDC00));
             (char::from_u32(cp).unwrap_or('\u{FFFD}'), 2)
         } else {
             (char::from_u32(unit as u32).unwrap_or('\u{FFFD}'), 1)
@@ -784,10 +789,12 @@ pub fn append_glyph(
     }
     impl ttf_parser::OutlineBuilder for Builder<'_> {
         fn move_to(&mut self, x: f32, y: f32) {
-            self.path.move_to(self.x + x * self.scale, self.y - y * self.scale);
+            self.path
+                .move_to(self.x + x * self.scale, self.y - y * self.scale);
         }
         fn line_to(&mut self, x: f32, y: f32) {
-            self.path.line_to(self.x + x * self.scale, self.y - y * self.scale);
+            self.path
+                .line_to(self.x + x * self.scale, self.y - y * self.scale);
         }
         fn quad_to(&mut self, x1: f32, y1: f32, x: f32, y: f32) {
             self.path.quad_to(
@@ -879,8 +886,7 @@ mod tests {
     /// rounded 37 px, whose `top=-40 bot=11` gives the ART reference's 51 px.
     #[test]
     fn skia_metrics_match_art_api34_emulator() {
-        let Some(e) = engine_or_skip() else {
-            eprintln!("SKIP: no fonts available");
+        let Some(e) = acos_test_support::require_some(engine_or_skip(), "skia_metrics_match_art_api34_emulator", "no fonts available") else {
             return;
         };
         // The host font set is not necessarily Roboto; only assert on Roboto.
@@ -891,7 +897,7 @@ mod tests {
         };
         let check = at(36.75);
         if !(check.ascent == -34 && check.descent == 9) {
-            eprintln!("SKIP: default font is not the ART Roboto ({check:?})");
+            acos_test_support::require_prereq(false, "skia_metrics_match_art_api34_emulator", &format!("default font is not the ART Roboto ({check:?})"));
             return;
         }
         assert_eq!(check.top, -39, "14sp/36.75px top");
@@ -912,8 +918,7 @@ mod tests {
 
     #[test]
     fn advances_sum_equals_measure_text() {
-        let Some(mut e) = engine_or_skip() else {
-            eprintln!("SKIP: no fonts available");
+        let Some(mut e) = acos_test_support::require_some(engine_or_skip(), "advances_sum_equals_measure_text", "no fonts available") else {
             return;
         };
         let st = style(&e);
@@ -922,14 +927,16 @@ mod tests {
         let total = e.get_text_run_advances(&text, &st, &mut advances);
         let sum: f32 = advances.iter().sum();
         let measured = e.measure_text(&text, &st);
-        assert!((sum - measured).abs() < 0.01, "sum={sum} measured={measured}");
+        assert!(
+            (sum - measured).abs() < 0.01,
+            "sum={sum} measured={measured}"
+        );
         assert!((total - measured).abs() < 0.01);
     }
 
     #[test]
     fn non_ascii_text_shapes_without_panic() {
-        let Some(mut e) = engine_or_skip() else {
-            eprintln!("SKIP: no fonts available");
+        let Some(mut e) = acos_test_support::require_some(engine_or_skip(), "non_ascii_text_shapes_without_panic", "no fonts available") else {
             return;
         };
         let st = style(&e);
@@ -945,8 +952,7 @@ mod tests {
 
     #[test]
     fn shaping_cache_reports_hit_rate() {
-        let Some(mut e) = engine_or_skip() else {
-            eprintln!("SKIP: no fonts available");
+        let Some(mut e) = acos_test_support::require_some(engine_or_skip(), "shaping_cache_reports_hit_rate", "no fonts available") else {
             return;
         };
         let st = style(&e);
@@ -961,8 +967,7 @@ mod tests {
 
     #[test]
     fn empty_text_is_zero_width() {
-        let Some(mut e) = engine_or_skip() else {
-            eprintln!("SKIP: no fonts available");
+        let Some(mut e) = acos_test_support::require_some(engine_or_skip(), "empty_text_is_zero_width", "no fonts available") else {
             return;
         };
         let st = style(&e);
@@ -971,8 +976,7 @@ mod tests {
 
     #[test]
     fn font_metrics_have_positive_descent() {
-        let Some(e) = engine_or_skip() else {
-            eprintln!("SKIP: no fonts available");
+        let Some(e) = acos_test_support::require_some(engine_or_skip(), "font_metrics_have_positive_descent", "no fonts available") else {
             return;
         };
         let st = style(&e);
@@ -983,8 +987,7 @@ mod tests {
 
     #[test]
     fn kerning_is_applied_for_av() {
-        let Some(mut e) = engine_or_skip() else {
-            eprintln!("SKIP: no fonts available");
+        let Some(mut e) = acos_test_support::require_some(engine_or_skip(), "kerning_is_applied_for_av", "no fonts available") else {
             return;
         };
         let st = style(&e);
@@ -996,8 +999,7 @@ mod tests {
 
     #[test]
     fn text_path_is_non_empty() {
-        let Some(mut e) = engine_or_skip() else {
-            eprintln!("SKIP: no fonts available");
+        let Some(mut e) = acos_test_support::require_some(engine_or_skip(), "text_path_is_non_empty", "no fonts available") else {
             return;
         };
         let st = style(&e);

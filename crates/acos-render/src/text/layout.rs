@@ -437,9 +437,8 @@ mod tests {
                 assert!(l.width <= 80.0 + 1e-3, "{l:?}");
             }
         }
-        let ragged = |lines: &[LineBreak]| -> f32 {
-            lines.iter().map(|l| (80.0 - l.width).powi(2)).sum()
-        };
+        let ragged =
+            |lines: &[LineBreak]| -> f32 { lines.iter().map(|l| (80.0 - l.width).powi(2)).sum() };
         assert!(
             ragged(&balanced) <= ragged(&greedy) + 1e-3,
             "balanced {} > greedy {}",

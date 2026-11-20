@@ -1,0 +1,75 @@
+# WV5a — wall 9 (guest provider surface) acceptance arm: the WV4 probe scenario
+# with the expectation at the post-wall-9 truth (`pass`), run against
+# results/handoff/WV5a/evidence/minimal-wire-listener.py on the mapped host
+# socket. The listener has no engine (the broker is WVB's crate), so this proves
+# the guest provider's walk — construct, attach, measure, layout, draw, load —
+# and the WIRE v1 order it produces, not that a page rendered.
+#
+# The `status` TextView carries the fixture's own stage log (tag WVProbe), so
+# each assert_text below is a stage of the walk, not a liveness check.
+version: 1
+name: webview-probe-provider
+description: >-
+  Launch webview-probe with com.android.webview installed and assert the
+  fixture's own WebView status: the WebView is constructed, laid out at its real
+  900x700 size, and a navigation is issued — with a minimal WIRE-v1 test
+  listener on the mapped host socket (no broker, no engine).
+app: fixtures/build/apps/webview-probe.apk
+engine: native-preferred
+fallback: report-and-escalate
+api_level: 34
+isolation: process
+extra_apks:
+  - fixtures/build/apps/webview-provider.apk
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+capabilities:
+  - lifecycle
+  - ui.offscreen
+  - ui.text
+expectation: pass
+budgets:
+  memory_mib: 512
+  wall_ms: 120000
+steps:
+  - launch:
+      activity: dev.acos.fixtures.webview/.MainActivity
+      clear_state: true
+  - wait_for:
+      selector: {id: status}
+      timeout_ms: 8000
+  # Stage 1: `new WebView(this)` returned (provider created, View ctor surface
+  # walked: setOverScrollMode, init, ...).
+  - assert_text:
+      selector: {id: status}
+      text: {contains: "WebView created:"}
+      timeout_ms: 12000
+  # Stage 2: `getSettings()` + `setJavaScriptEnabled` worked (a WebSettings
+  # object the provider owns, not a stub that reports success).
+  - assert_text:
+      selector: {id: status}
+      text: {contains: "settings ok: jsEnabled=true"}
+      timeout_ms: 12000
+  # Stage 3: both clients are stored guest-side.
+  - assert_text:
+      selector: {id: status}
+      text: {contains: "clients set"}
+      timeout_ms: 12000
+  # Stage 4: the framework laid the view out — the size the
+  # engine was told (view.create / view.setViewport) is this one.
+  - assert_text:
+      selector: {id: status}
+      text: {contains: "laid out 900x700"}
+      timeout_ms: 12000
+  # Stage 5: `loadUrl` reached the wire (`view.loadUrl`).
+  - assert_text:
+      selector: {id: status}
+      text: {contains: "loadUrl issued"}
+      timeout_ms: 12000
+  # A throw would stop the stage log at the failing stage (the fixture reports
+  # "WebView FAILED: <throwable>" instead of the later stage lines), so the five
+  # assertions above are jointly the "nothing threw" gate; the no-listener arm
+  # below is the negative control that proves it.

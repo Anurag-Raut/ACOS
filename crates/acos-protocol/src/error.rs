@@ -298,6 +298,11 @@ pub enum ErrorCode {
     /// the last zygote log lines, and the session is closed fail-closed.
     ZygoteDead,
 
+    /// The network relay (`acos-netd`) is down, so the session has **no**
+    /// network: reported instead of a silent offline session or a fake success
+    /// (fail closed, ADR-0030 amendment 3). The supervisor restarts `pasta`
+    /// itself, so a retry after the relay is back succeeds.
+    NetworkUnavailable,
     /// The session daemon answered (or refused to identify itself) from a
     /// **different build** than the caller: crate version, build id (git sha +
     /// source digest) or the binary at the same path differ. The client never
@@ -482,6 +487,7 @@ impl ErrorCode {
             ErrorCode::SeccompUnavailable => "SECCOMP_UNAVAILABLE",
             ErrorCode::GuestExited => "GUEST_EXITED",
             ErrorCode::ZygoteDead => "ZYGOTE_DEAD",
+            ErrorCode::NetworkUnavailable => "NETWORK_UNAVAILABLE",
             ErrorCode::DaemonVersionMismatch => "DAEMON_VERSION_MISMATCH",
             ErrorCode::Internal => "INTERNAL",
         }
@@ -733,6 +739,9 @@ impl ErrorCode {
             ErrorCode::ZygoteDead => {
                 "The persistent zygote keeper died or stopped acking (ACOS_ART_ZYGOTE=on). Read error.details.zygote for the keeper exit status and the last zygote log lines; the session is closed, not silently re-run on the exec path. Re-launch the session (a fresh keeper boots a new zygote and a new boot epoch) after the log names the cause."
             }
+            ErrorCode::NetworkUnavailable => {
+                "The shared network relay (`acos-netd`) is down, so this session has no network. This is a host condition, not app behaviour: the guest's own failure (an exception in the app) is a different code. The relay supervisor restarts `pasta` on its next tick, so retry once it is back; `acos net status` reports `up`."
+            }
             ErrorCode::DaemonVersionMismatch => {
                 "Do not use that daemon's answer: it runs a different build (error.details carries rule, client and daemon identities). `acos session …` and the MCP server replace an idle auto-started daemon and otherwise start a build-private one, so rerunning the same command is safe. An operator-started `acos serve` must be restarted after an upgrade; `acos doctor` prints its identity next to the CLI's."
             }
@@ -762,6 +771,7 @@ impl ErrorCode {
                 | ErrorCode::HostDiskFull
                 | ErrorCode::HostMemoryLimit
                 | ErrorCode::ZygoteDead
+                | ErrorCode::NetworkUnavailable
                 | ErrorCode::HostMemoryLow
         )
     }
@@ -799,9 +809,9 @@ impl ErrorCode {
             | ErrorCode::UntrustedApkNotCertified => ErrorClass::Unsupported,
 
             // The app is wrong, or the evidence check is.
-            ErrorCode::JavaException
-            | ErrorCode::AppCrashed
-            | ErrorCode::AppNotResponding => ErrorClass::AppCrash,
+            ErrorCode::JavaException | ErrorCode::AppCrashed | ErrorCode::AppNotResponding => {
+                ErrorClass::AppCrash
+            }
             ErrorCode::AssertionFailed
             | ErrorCode::ElementNotFound
             | ErrorCode::ElementOffscreen
@@ -821,6 +831,7 @@ impl ErrorCode {
             | ErrorCode::HostDiskFull
             | ErrorCode::HostMemoryLimit
             | ErrorCode::ZygoteDead
+            | ErrorCode::NetworkUnavailable
             | ErrorCode::HostMemoryLow => ErrorClass::HostGuard,
 
             // Harness/parse/protocol/invariant failures and codes that need
@@ -1105,6 +1116,7 @@ pub const ALL_ERROR_CODES: &[ErrorCode] = &[
     ErrorCode::SeccompUnavailable,
     ErrorCode::GuestExited,
     ErrorCode::ZygoteDead,
+    ErrorCode::NetworkUnavailable,
     ErrorCode::DaemonVersionMismatch,
     ErrorCode::Internal,
 ];
@@ -1226,12 +1238,18 @@ mod tests {
         assert_eq!(ErrorCode::HostPanic.retryable(), false);
         assert_eq!(ErrorCode::HostPanic.class(), ErrorClass::Harness);
         assert_eq!(ErrorCode::HostMemoryLimit.retryable(), true);
-        assert_eq!(ErrorCode::SeccompUnavailable.class(), ErrorClass::Unsupported);
+        assert_eq!(
+            ErrorCode::SeccompUnavailable.class(),
+            ErrorClass::Unsupported
+        );
         assert_eq!(ErrorCode::GuestExited.class(), ErrorClass::Harness);
         assert_eq!(ErrorCode::HostDiskFull.as_str(), "HOST_DISK_FULL");
         assert_eq!(ErrorCode::HostPanic.as_str(), "HOST_PANIC");
         assert_eq!(ErrorCode::HostMemoryLimit.as_str(), "HOST_MEMORY_LIMIT");
-        assert_eq!(ErrorCode::SeccompUnavailable.as_str(), "SECCOMP_UNAVAILABLE");
+        assert_eq!(
+            ErrorCode::SeccompUnavailable.as_str(),
+            "SECCOMP_UNAVAILABLE"
+        );
         assert_eq!(ErrorCode::GuestExited.as_str(), "GUEST_EXITED");
     }
 

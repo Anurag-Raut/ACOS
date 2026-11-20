@@ -136,6 +136,8 @@ pub struct SessionCapabilities {
     pub logs: bool,
     /// Environment changes (`set_*`).
     pub environment: bool,
+    /// Service-module operations (`service_ctl`).
+    pub services: bool,
     /// Crash/ANR reports distinct from logs.
     pub crash_reports: bool,
 }
@@ -177,6 +179,7 @@ impl SessionCapabilities {
             ("close", self.close),
             ("logs", self.logs),
             ("environment", self.environment),
+            ("service_ctl", self.services),
             ("crash_reports", self.crash_reports),
         ]
     }
@@ -193,6 +196,7 @@ impl SessionCapabilities {
             reset: self.reset,
             environment: self.environment,
             crash_reports: self.crash_reports,
+            services: self.services,
         }
     }
 }
@@ -339,6 +343,51 @@ pub trait SessionBackend {
 
     /// The commands this backend executes today.
     fn capabilities(&self) -> SessionCapabilities;
+
+    /// ADR-0029 item 4: the service modules the session attached (verdict
+    /// rows). Engines with no module registry report none, never a guess.
+    fn modules(&self) -> Vec<serde_json::Value> {
+        Vec::new()
+    }
+
+    /// ADR-0029 item 4: the **one** service-module command on a live session.
+    ///
+    /// Every agent spelling ends here: `acos_services {op: list|status|attach|
+    /// detach}`, `acos_service_ctl {module, op, args}` (which the serve route
+    /// turns into `{op: "ctl", id, ctl_op, args}`) and a scenario's
+    /// `service_ctl:` step. An engine with no service table refuses; none of
+    /// them answers a no-op.
+    fn service_op(
+        &mut self,
+        _request: serde_json::Value,
+    ) -> Result<serde_json::Value, BackendError> {
+        Err(BackendError::unsupported(
+            "services",
+            format!(
+                "the {} engine has no service-module command",
+                match self.engine() {
+                    Engine::Art => "ART",
+                    Engine::RustVm => "Rust VM",
+                }
+            ),
+        ))
+    }
+
+    /// The live module rows, when the engine can publish them after the run
+    /// (the verdict cites the final state, not the launch snapshot).
+    fn module_rows_handle(
+        &self,
+    ) -> Option<std::sync::Arc<std::sync::Mutex<Vec<serde_json::Value>>>> {
+        None
+    }
+
+    /// LAUNCHEXTRAS: the launch `Intent` this session started with, when the
+    /// engine delivers one. `None` means the engine has no such concept (the
+    /// Rust VM builds what it builds); the ART engine returns it so a launch
+    /// step can never ask for a different Intent than the process received.
+    fn launch_intent(&self) -> Option<&acos_protocol::LaunchIntent> {
+        None
+    }
 
     /// Start the app and return the first completed frame.
     fn launch(&mut self, apk: &Path) -> Result<LaunchOutcome, BackendError>;
@@ -770,6 +819,23 @@ impl EngineBackend {
         }
     }
 
+    /// The live module rows' shared handle, so a verdict can read the final set.
+    #[must_use]
+    pub fn module_rows(&self) -> Option<std::sync::Arc<std::sync::Mutex<Vec<serde_json::Value>>>> {
+        match self {
+            EngineBackend::Native(_) => None,
+            EngineBackend::Session { session, .. } => session.module_rows_handle(),
+        }
+    }
+
+    /// ADR-0029 item 4: the modules the session attached.
+    pub fn modules(&self) -> Vec<serde_json::Value> {
+        match self {
+            EngineBackend::Native(_) => Vec::new(),
+            EngineBackend::Session { session, .. } => session.modules(),
+        }
+    }
+
     /// The session command surface (empty for the native forwarding path).
     pub fn session_capabilities(&self) -> Option<SessionCapabilities> {
         match self {
@@ -893,11 +959,7 @@ impl EngineBackend {
         };
         if let EngineBackend::Session { session, .. } = self {
             if let Some(settle) = session.input_settle_timeout() {
-                return Err(settle_timeout_error(
-                    settle,
-                    context,
-                    observed.frame_seq(),
-                ));
+                return Err(settle_timeout_error(settle, context, observed.frame_seq()));
             }
         }
         if observed.frame_seq() <= previous || !observed.frame.is_fresh() {
@@ -1008,6 +1070,20 @@ impl EngineBackend {
     }
 }
 
+/// LAUNCHEXTRAS: the launch `Intent` a [`LaunchRequest`] declares.
+///
+/// `activity` is deliberately **not** part of it: a scenario names the Activity
+/// it asserts (Gaten's launcher entry is a splash/router alias that starts
+/// `MainActivity`), and the executor already refuses an activity the manifest
+/// does not declare. The Intent fields are action, data URI and typed extras.
+fn request_launch_intent(request: &LaunchRequest) -> acos_protocol::LaunchIntent {
+    acos_protocol::LaunchIntent {
+        action: request.intent_action.clone(),
+        data: request.data.clone(),
+        extras: request.extras.clone(),
+    }
+}
+
 impl Backend for EngineBackend {
     fn id(&self) -> &'static str {
         match self {
@@ -1075,6 +1151,44 @@ impl Backend for EngineBackend {
                 cause_id,
                 ..
             } => {
+                // LAUNCHEXTRAS (WVFAIR finding): a scenario's `intent_action`,
+                // `data` and typed `extras` reach the guest through the
+                // session-start `LaunchActivityItem` Intent (the host builds the
+                // transaction), so the activity's real `getIntent()` carries
+                // them and the run asserts what the app received. Two honest
+                // refusals remain, by name and before anything runs:
+                //
+                // * a `Parcelable` extra: ACOS cannot build that payload from a
+                //   scenario; dropping it would be the old silent bug;
+                // * an Intent that differs from the one the live session was
+                //   started with: the process already received its first Intent
+                //   and a launch step cannot replace it.
+                if session.engine() == Engine::Art {
+                    let declared = request_launch_intent(request);
+                    if let Some(detail) = declared.unsupported_detail() {
+                        return Err(BackendError::Error {
+                            code: acos_protocol::ErrorCode::UnsupportedAndroidApi,
+                            detail,
+                        });
+                    }
+                    if !declared.is_empty() {
+                        if let Some(held) = session.launch_intent() {
+                            if held != &declared {
+                                return Err(BackendError::Error {
+                                    code: acos_protocol::ErrorCode::InvalidArgument,
+                                    detail: format!(
+                                        "this launch declares a different Intent than the one the \
+                                         live session started with (session {}, scenario {}). One \
+                                         guest process receives one first Intent; launch a fresh \
+                                         session (clear_state) for a different one.",
+                                        serde_json::to_string(held).unwrap_or_default(),
+                                        serde_json::to_string(&declared).unwrap_or_default()
+                                    ),
+                                });
+                            }
+                        }
+                    }
+                }
                 *cause_id = request.cause_id.clone();
                 // SE2: the launch's first tree may be bound by the content rule
                 // (a screen whose pixels animate forever); strict stays the
@@ -1460,6 +1574,35 @@ impl Backend for EngineBackend {
         }
     }
 
+    fn service_ctl(
+        &mut self,
+        request: &acos_verify::backend::ServiceCtlRequest,
+    ) -> Result<serde_json::Value, BackendError> {
+        match self {
+            // The Rust VM has no service table at all: a structured refusal, not
+            // a silent no-op (ADR-0029 item 4).
+            EngineBackend::Native(_) => Err(BackendError::unsupported(
+                "services",
+                format!(
+                    "the Rust VM backend has no service modules (asked for `{}`)",
+                    request.kind()
+                ),
+            )),
+            EngineBackend::Session { session, .. } => {
+                if !session.capabilities().services {
+                    return Err(BackendError::unsupported(
+                        "services",
+                        format!(
+                            "this engine has no `services` command (asked for `{}`)",
+                            request.kind()
+                        ),
+                    ));
+                }
+                session.service_op(request.to_json())
+            }
+        }
+    }
+
     fn capture(&mut self) -> Result<SessionObservation, BackendError> {
         match self {
             EngineBackend::Native(backend) => backend.capture(),
@@ -1510,11 +1653,7 @@ impl Backend for EngineBackend {
 /// `settled:false` so an agent can still see the screen; `verify` must not
 /// assert on that transient state. Keep the guest's settle reason, the
 /// animating flag and the latest frame sequence in the step evidence.
-fn settle_timeout_error(
-    settle: serde_json::Value,
-    context: &str,
-    frame_seq: u64,
-) -> BackendError {
+fn settle_timeout_error(settle: serde_json::Value, context: &str, frame_seq: u64) -> BackendError {
     let reason = settle
         .get("reason")
         .and_then(serde_json::Value::as_str)
@@ -1625,7 +1764,187 @@ pub fn ui_tree_from_json(
         .get("truncated")
         .and_then(|value| value.as_bool())
         .unwrap_or(false);
+    // LAYER1: apply the AOSP layer policy to the guest's window facts and tag
+    // every node with its window. The guest sends insertion order + raw
+    // `LayoutParams.type`/flags; the host owns the one layer table
+    // (`acos_wm::layers::policy_layer`), so the reply's z order, the tree order
+    // and C1's placement cannot drift (D1/D3).
+    tree.windows = windows_from_json(value);
+    apply_window_tags(&mut tree);
     Ok(tree)
+}
+
+/// Parse the probe's `windows:[{z,window,id,type,focus,touch,bounds,parent}]`
+/// block into protocol [`WindowInfo`] rows, **ordered by the AOSP layer policy**
+/// (bottom first).
+///
+/// A probe without the block yields no rows; its nodes keep their `window`
+/// label, which is the pre-LAYER1 reply shape. A `type` the table does not know
+/// is reported as `TYPE_<n>` / kind `unknown`, never merged into the app band.
+fn windows_from_json(value: &serde_json::Value) -> Vec<acos_protocol::ui::WindowInfo> {
+    use acos_protocol::ui::WindowInfo;
+    use acos_wm::layers::{policy_layer, sub_window_layer, type_name, WindowKind};
+    let Some(rows) = value.get("windows").and_then(|v| v.as_array()) else {
+        return Vec::new();
+    };
+    struct Raw {
+        info: WindowInfo,
+        layer: i32,
+        seq: i64,
+        sublayer: i32,
+        is_sub: bool,
+        parent: String,
+    }
+    let mut raw = Vec::with_capacity(rows.len());
+    for (index, row) in rows.iter().enumerate() {
+        let label = row
+            .get("window")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+        let type_ = row.get("type").and_then(|v| v.as_i64());
+        let kind = type_
+            .map(|t| WindowKind::of(t as i32))
+            .unwrap_or(WindowKind::Unknown);
+        let type_text = match type_ {
+            Some(t) => type_name(t as i32)
+                .map(str::to_string)
+                .unwrap_or_else(|| format!("TYPE_{t}")),
+            None => String::new(),
+        };
+        let seq = row
+            .get("z")
+            .and_then(|v| v.as_i64())
+            .unwrap_or(index as i64);
+        let mut info = WindowInfo::new(0);
+        info.id = row
+            .get("id")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+        info.label = label.clone();
+        info.type_name = type_text;
+        info.kind = if type_.is_some() {
+            kind.name().to_string()
+        } else {
+            String::new()
+        };
+        info.focus = row.get("focus").and_then(|v| v.as_bool()).unwrap_or(false);
+        info.touchable = row.get("touch").and_then(|v| v.as_bool()).unwrap_or(false);
+        info.renderer_fallback = row
+            .get("hw_fallback")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+        info.bounds = row
+            .get("bounds")
+            .and_then(|v| v.as_str())
+            .and_then(parse_bounds);
+        let is_sub = kind.is_sub_window();
+        raw.push(Raw {
+            layer: type_
+                .map(|t| policy_layer(t as i32, false))
+                .unwrap_or(acos_wm::layers::APPLICATION_LAYER),
+            sublayer: type_.map(|t| sub_window_layer(t as i32)).unwrap_or(0),
+            parent: row
+                .get("parent")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string(),
+            is_sub,
+            seq,
+            info,
+        });
+    }
+    // Top-level windows by (policy layer, creation order); a sub-window is
+    // placed next to its parent at its own sub-layer, exactly as
+    // `WindowLayerStack::ordered` does from the WMS records.
+    let mut top: Vec<usize> = (0..raw.len()).filter(|i| !raw[*i].is_sub).collect();
+    top.sort_by_key(|i| (raw[*i].layer, raw[*i].seq));
+    let mut subs: Vec<usize> = (0..raw.len()).filter(|i| raw[*i].is_sub).collect();
+    subs.sort_by_key(|i| (raw[*i].sublayer, raw[*i].seq));
+    let mut order = Vec::with_capacity(raw.len());
+    for i in &top {
+        for s in &subs {
+            if raw[*s].parent == raw[*i].info.label && raw[*s].sublayer < 0 {
+                order.push(*s);
+            }
+        }
+        order.push(*i);
+        for s in &subs {
+            if raw[*s].parent == raw[*i].info.label && raw[*s].sublayer >= 0 {
+                order.push(*s);
+            }
+        }
+    }
+    let known: Vec<&str> = top.iter().map(|i| raw[*i].info.label.as_str()).collect();
+    for s in subs {
+        if !known.contains(&raw[s].parent.as_str()) {
+            order.push(s);
+        }
+    }
+    // A label that appeared twice (a guest that reuses a title) is still one
+    // row per root: the z index is the row's own position.
+    let mut out = Vec::with_capacity(order.len());
+    for (z, i) in order.into_iter().enumerate() {
+        let mut info = raw[i].info.clone();
+        info.z = z as i64;
+        out.push(info);
+    }
+    out
+}
+
+/// Tag every node with its window's id/type/kind/z and put the roots in window
+/// z order (bottom first). Nodes whose label has no window row are untouched.
+fn apply_window_tags(tree: &mut UiTree) {
+    use std::collections::HashMap;
+    if tree.windows.is_empty() {
+        return;
+    }
+    let by_label: HashMap<String, (String, String, String, i64)> = tree
+        .windows
+        .iter()
+        .map(|w| {
+            (
+                w.label.clone(),
+                (w.id.clone(), w.type_name.clone(), w.kind.clone(), w.z),
+            )
+        })
+        .collect();
+    // A single-window probe may leave `window` empty on the nodes; the one row
+    // is then the owner.
+    let single = (tree.windows.len() == 1).then(|| tree.windows[0].clone());
+    fn tag(
+        node: &mut UiNode,
+        by_label: &HashMap<String, (String, String, String, i64)>,
+        single: Option<&acos_protocol::ui::WindowInfo>,
+    ) {
+        let found = by_label
+            .get(&node.window)
+            .cloned()
+            .or_else(|| single.map(|w| (w.id.clone(), w.type_name.clone(), w.kind.clone(), w.z)));
+        if let Some((id, type_name, kind, z)) = found {
+            node.window_id = id;
+            node.window_type = type_name;
+            node.window_kind = kind;
+            node.window_z = Some(z);
+        }
+        for child in &mut node.children {
+            tag(child, by_label, single);
+        }
+    }
+    for node in &mut tree.nodes {
+        tag(node, &by_label, single.as_ref());
+    }
+    tree.nodes.sort_by_key(|node| {
+        if node.window.is_empty() && single.is_some() {
+            node.window_z.unwrap_or(0)
+        } else {
+            by_label
+                .get(&node.window)
+                .map(|(_, _, _, z)| *z)
+                .unwrap_or(i64::MAX)
+        }
+    });
 }
 
 fn ui_node_from_json(value: &serde_json::Value, depth: usize) -> UiNode {
@@ -1822,10 +2141,14 @@ mod tests {
                 "rotate",
                 "logs",
                 "environment",
+                // ADR-0029 item 4: a session without the `services` command
+                // cannot run a `service_ctl` step.
+                "service_ctl",
                 "crash_reports"
             ]
         );
         assert!(!caps.to_protocol().environment);
+        assert!(!caps.to_protocol().services);
         assert!(caps.to_protocol().input);
     }
 
@@ -1982,14 +2305,18 @@ mod tests {
 
         let search = tree
             .find_one(&Selector {
-                content_desc: Some(acos_protocol::TextMatch::exact("Search Japanese dictionary")),
+                content_desc: Some(acos_protocol::TextMatch::exact(
+                    "Search Japanese dictionary",
+                )),
                 ..Selector::default()
             })
             .expect("the RN accessibilityLabel is the node's content description");
         assert_eq!(search.text, "猫, ねこ, neko...");
         assert_eq!(search.hint, "猫, ねこ, neko...");
 
-        let name = tree.find_one(&Selector::by_text("Ada")).expect("typed text");
+        let name = tree
+            .find_one(&Selector::by_text("Ada"))
+            .expect("typed text");
         assert_eq!(name.text, "Ada");
         assert_eq!(name.hint, "Name");
 
@@ -2009,7 +2336,9 @@ mod tests {
             .expect("TextView text is unchanged");
         assert_eq!(label.content_desc, "");
 
-        let skip = tree.find_one(&Selector::by_text("Skip")).expect("Button text");
+        let skip = tree
+            .find_one(&Selector::by_text("Skip"))
+            .expect("Button text");
         assert_eq!(skip.content_desc, "Skip onboarding");
     }
 
@@ -2181,7 +2510,9 @@ mod tests {
             }]
         });
         let tree = ui_tree_from_json("dev.acos.fixtures.offscreenpager", frame(), &value).unwrap();
-        assert!(tree.find_input_target(&Selector::by_text("Hidden")).is_none());
+        assert!(tree
+            .find_input_target(&Selector::by_text("Hidden"))
+            .is_none());
         assert!(tree
             .find_input_target(&Selector::by_text("Hidden page action"))
             .is_none());
@@ -2362,9 +2693,16 @@ mod engine_tests {
             backend.session_capabilities().as_ref(),
             crate::trust::Trust::Trusted,
             &dir,
+            // boot ms, animations, insets, extra APKs, boot image, the attached
+            // module set, session id (MERGEMPROC: the merged annotate facts; a
+            // test session booted no image, attaches no module and holds no
+            // serve id).
             None,
             None,
             None,
+            &[],
+            None,
+            &[],
             None,
         );
         let verdict = envelope.result().unwrap().get("verdict").unwrap();
@@ -2401,7 +2739,10 @@ mod engine_tests {
         let mut backend = EngineBackend::session(Box::new(FakeSession::timed_out_tap()));
         let req = request("scenarios/v2-art-counter.yaml", &dir);
         let envelope = acos_verify::verify(&req, &mut backend);
-        assert!(!envelope.status().is_pass(), "a timed-out settle must not pass");
+        assert!(
+            !envelope.status().is_pass(),
+            "a timed-out settle must not pass"
+        );
         assert_eq!(envelope.status(), Status::Timeout);
         let verdict = envelope.result().unwrap().get("verdict").unwrap();
         assert_eq!(verdict["verdict"], "timeout");
@@ -2608,12 +2949,7 @@ mod engine_tests {
             self.seq
         }
 
-        fn tap_in_window(
-            &mut self,
-            window: &str,
-            x: i32,
-            y: i32,
-        ) -> Result<(), BackendError> {
+        fn tap_in_window(&mut self, window: &str, x: i32, y: i32) -> Result<(), BackendError> {
             self.record(format!("tap_in_window({window},{x},{y})"));
             self.publish(self.fresh_top);
             Ok(())
@@ -2629,7 +2965,10 @@ mod engine_tests {
         }
 
         fn type_text(&mut self, _text: &str) -> Result<(), BackendError> {
-            Err(BackendError::unsupported("input.type_text", "the fake has no text"))
+            Err(BackendError::unsupported(
+                "input.type_text",
+                "the fake has no text",
+            ))
         }
 
         fn key(&mut self, _key: &str) -> Result<(), BackendError> {
@@ -2719,9 +3058,16 @@ mod engine_tests {
             backend.session_capabilities().as_ref(),
             crate::trust::Trust::Trusted,
             &dir,
+            // boot ms, animations, insets, extra APKs, boot image, the attached
+            // module set, session id (MERGEMPROC: the merged annotate facts; a
+            // test session booted no image, attaches no module and holds no
+            // serve id).
             None,
             None,
             None,
+            &[],
+            None,
+            &[],
             None,
         );
         assert!(!envelope.status().is_pass());
@@ -2844,6 +3190,77 @@ mod engine_tests {
             cause_id: "req_engine_test:launch:0".to_string(),
             settle: acos_protocol::scenario::StepSettle::Strict,
         }
+    }
+
+    /// LAUNCHEXTRAS (WVFAIR finding): a scenario's supported extras are no
+    /// longer refused — they reach the session-start Intent. What stays refused
+    /// is the type ACOS genuinely cannot carry (`Parcelable`), by name, and a
+    /// different Intent than the live session already started with.
+    #[test]
+    fn a_parcelable_extra_is_refused_loudly_not_silently_dropped() {
+        let dir = artifacts("launch-extras");
+        let mut backend = EngineBackend::session(Box::new(FakeSession::live()));
+        let mut request = launch_request(&dir);
+        request.extras.insert(
+            "device".to_string(),
+            acos_protocol::ExtraValue::Parcelable("android.os.Bundle".to_string()),
+        );
+        let err = backend
+            .launch(&request)
+            .expect_err("a Parcelable extra must be refused, not dropped");
+        match err {
+            acos_verify::backend::BackendError::Error { code, detail } => {
+                assert_eq!(code, acos_protocol::ErrorCode::UnsupportedAndroidApi);
+                assert!(detail.contains("device"), "the extra is named: {detail}");
+                assert!(
+                    detail.contains("android.os.Bundle"),
+                    "the class is named: {detail}"
+                );
+            }
+            other => panic!("unexpected error {other:?}"),
+        }
+    }
+
+    /// The pure decision: the normal launch declares nothing; a declared
+    /// Activity is not an Intent field (the executor checks the manifest); and
+    /// a typed extra set is representable. Only a `Parcelable` names a refusal.
+    #[test]
+    fn the_launch_intent_a_session_can_carry_is_named() {
+        let dir = artifacts("launch-intent-fields");
+        let base = launch_request(&dir);
+        assert!(request_launch_intent(&base).is_empty());
+        assert!(request_launch_intent(&base).unsupported_extra().is_none());
+        let mut other = base.clone();
+        other.activity = Some("dev.acos.fixtures.counter/.SecondActivity".to_string());
+        assert!(request_launch_intent(&other).is_empty());
+        let mut action = base.clone();
+        action.intent_action = Some("android.intent.action.SEND".to_string());
+        assert_eq!(
+            request_launch_intent(&action).action.as_deref(),
+            Some("android.intent.action.SEND")
+        );
+        assert!(request_launch_intent(&action).unsupported_extra().is_none());
+        let mut data = base.clone();
+        data.data = Some("content://x/y".to_string());
+        assert_eq!(
+            request_launch_intent(&data).data.as_deref(),
+            Some("content://x/y")
+        );
+        let mut typed = base.clone();
+        typed.extras.insert(
+            "count".to_string(),
+            acos_protocol::ExtraValue::Long(5_000_000_000),
+        );
+        assert!(request_launch_intent(&typed).unsupported_extra().is_none());
+        let mut parcelable = base;
+        parcelable.extras.insert(
+            "device".to_string(),
+            acos_protocol::ExtraValue::Parcelable("android.os.Bundle".to_string()),
+        );
+        assert_eq!(
+            request_launch_intent(&parcelable).unsupported_extra(),
+            Some(("device", "android.os.Bundle"))
+        );
     }
 
     #[test]
@@ -3082,6 +3499,88 @@ mod engine_tests {
             "clear: false must not delete anything: {calls:?}"
         );
         assert!(calls.iter().any(|call| call == "type_text(8)"));
+    }
+
+    /// LAYER1: the tree applies the AOSP policy order, not the guest's
+    /// `WindowManagerGlobal` insertion order, and tags every node with its
+    /// window's id/type/kind/z. Fails before `windows_from_json` existed (the
+    /// reply kept insertion order and carried no window rows).
+    #[test]
+    fn a_probe_tree_is_ordered_by_the_layer_policy_and_every_node_is_window_tagged() {
+        let probe = serde_json::json!({
+            // Insertion order: the overlay was added first, then the activity,
+            // then the dialog. The policy order is activity, dialog, overlay.
+            "windows": [
+                {"z":0,"window":"Overlay#0","id":"aa","type":2038,"focus":false,"touch":true,
+                 "bounds":"[0,128][300,428]"},
+                {"z":1,"window":"main","id":"bb","type":2,"focus":true,"touch":true,
+                 "bounds":"[0,128][1080,2337]"},
+                {"z":2,"window":"Dialog#2","id":"cc","type":2,"focus":false,"touch":true,
+                 "bounds":"[28,976][1052,1489]"},
+            ],
+            "nodes": [
+                {"class":"android.widget.TextView","id":"overlay_text","window":"Overlay#0",
+                 "bounds":"[0,0][300,300]","bounds_on_screen":"[0,128][300,428]"},
+                {"class":"android.widget.FrameLayout","id":"main_root","window":"main",
+                 "bounds":"[0,0][1080,2209]","bounds_on_screen":"[0,128][1080,2337]"},
+                {"class":"android.widget.TextView","id":"message","window":"Dialog#2",
+                 "bounds":"[0,0][1024,513]","bounds_on_screen":"[28,976][1052,1489]"},
+            ],
+            "truncated": false,
+        });
+        let tree = ui_tree_from_json(
+            "dev.acos.fixtures.overlaystack",
+            FrameMeta::new(1, "t", "c", 1080, 2400, 420, "h", true),
+            &probe,
+        )
+        .expect("tree");
+        let kinds: Vec<&str> = tree.windows.iter().map(|w| w.kind.as_str()).collect();
+        assert_eq!(
+            kinds,
+            vec!["application", "application", "application_overlay"]
+        );
+        let types: Vec<&str> = tree.windows.iter().map(|w| w.type_name.as_str()).collect();
+        assert_eq!(
+            types,
+            vec![
+                "TYPE_APPLICATION",
+                "TYPE_APPLICATION",
+                "TYPE_APPLICATION_OVERLAY"
+            ]
+        );
+        let zs: Vec<i64> = tree.windows.iter().map(|w| w.z).collect();
+        assert_eq!(zs, vec![0, 1, 2]);
+        assert!(tree.windows[0].focus && !tree.windows[1].focus && !tree.windows[2].focus);
+        // The roots are in window z order, and every node carries the window.
+        let ids: Vec<&str> = tree.nodes.iter().map(|n| n.resource_id.as_str()).collect();
+        assert_eq!(ids, vec!["main_root", "message", "overlay_text"]);
+        assert_eq!(tree.nodes[0].window_kind, "application");
+        assert_eq!(tree.nodes[0].window_z, Some(0));
+        assert_eq!(tree.nodes[1].window_kind, "application");
+        assert_eq!(tree.nodes[1].window_z, Some(1));
+        assert_eq!(tree.nodes[2].window_kind, "application_overlay");
+        assert_eq!(tree.nodes[2].window_z, Some(2));
+        assert_eq!(tree.nodes[2].window_id, "aa");
+        assert_eq!(tree.nodes[2].window_type, "TYPE_APPLICATION_OVERLAY");
+    }
+
+    /// A probe that predates the window block keeps its old shape: no window
+    /// rows, no invented type, nodes unchanged.
+    #[test]
+    fn a_legacy_probe_without_windows_keeps_the_pre_layer1_shape() {
+        let probe = serde_json::json!({
+            "nodes": [{"class":"android.widget.TextView","id":"t","window":"main",
+                       "bounds":"[0,0][10,10]","bounds_on_screen":"[0,0][10,10]"}],
+        });
+        let tree = ui_tree_from_json(
+            "p",
+            FrameMeta::new(1, "t", "c", 1080, 2400, 420, "h", true),
+            &probe,
+        )
+        .expect("tree");
+        assert!(tree.windows.is_empty());
+        assert!(tree.nodes[0].window_kind.is_empty());
+        assert_eq!(tree.nodes[0].window_z, None);
     }
 
     #[test]

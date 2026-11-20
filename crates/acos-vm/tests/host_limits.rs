@@ -104,8 +104,7 @@ fn run_with_guard(dex: &Path, guard: HostGuard, deadline: Duration) -> Option<St
 
 #[test]
 fn wall_watchdog_aborts_infinite_loop() {
-    let Some(dex) = compile_busy_loop() else {
-        eprintln!("SKIP wall_watchdog_aborts_infinite_loop: javac/d8 unavailable");
+    let Some(dex) = acos_test_support::require_some(compile_busy_loop(), "wall_watchdog_aborts_infinite_loop", "javac/d8 unavailable") else {
         return;
     };
     let code = run_with_guard(&dex, HostGuard::new(0, 1), Duration::from_secs(15));
@@ -118,8 +117,7 @@ fn wall_watchdog_aborts_infinite_loop() {
 
 #[test]
 fn host_rss_ceiling_aborts_allocation() {
-    let Some(dex) = compile_busy_loop() else {
-        eprintln!("SKIP host_rss_ceiling_aborts_allocation: javac/d8 unavailable");
+    let Some(dex) = acos_test_support::require_some(compile_busy_loop(), "host_rss_ceiling_aborts_allocation", "javac/d8 unavailable") else {
         return;
     };
     // A one-byte ceiling is below any live process RSS, so the first allocation

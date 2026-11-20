@@ -14,37 +14,29 @@ use acos_dex::DexFile;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 
+/// Extract the `classes*.dex` entries of one APK/JAR. An unreadable or malformed
+/// input **fails the run** (HYG4 decision): an input that cannot be read must
+/// not shrink the verified set without a word.
 fn extract_dex(apk: &Path) -> Vec<(String, Vec<u8>)> {
-    let data = match std::fs::read(apk) {
-        Ok(d) => d,
-        Err(e) => {
-            eprintln!("skip {apk:?}: {e}");
-            return Vec::new();
-        }
-    };
+    let data = std::fs::read(apk).unwrap_or_else(|e| panic!("read legacy input {apk:?}: {e}"));
     let cursor = std::io::Cursor::new(data);
-    let mut archive = match zip::ZipArchive::new(cursor) {
-        Ok(a) => a,
-        Err(e) => {
-            eprintln!("skip {apk:?}: not a zip ({e})");
-            return Vec::new();
-        }
-    };
+    let mut archive = zip::ZipArchive::new(cursor)
+        .unwrap_or_else(|e| panic!("legacy input {apk:?} is not a zip: {e}"));
     let mut out = Vec::new();
     for i in 0..archive.len() {
-        let mut entry = match archive.by_index(i) {
-            Ok(e) => e,
-            Err(_) => continue,
-        };
+        let mut entry = archive
+            .by_index(i)
+            .unwrap_or_else(|e| panic!("legacy input {apk:?} entry {i}: {e}"));
         let name = entry.name().to_string();
         let is_dex = name.starts_with("classes") && name.ends_with(".dex");
         if !is_dex {
             continue;
         }
         let mut bytes = Vec::new();
-        if entry.read_to_end(&mut bytes).is_ok() {
-            out.push((name, bytes));
-        }
+        entry
+            .read_to_end(&mut bytes)
+            .unwrap_or_else(|e| panic!("legacy input {apk:?}!{name}: {e}"));
+        out.push((name, bytes));
     }
     out
 }
@@ -104,8 +96,13 @@ fn collect_sdk_apks(dir: &Path, out: &mut Vec<PathBuf>, depth: usize) {
 #[test]
 fn legacy_apk_dex_parse_and_verify() {
     let apks = collect_apks();
-    if apks.is_empty() {
-        eprintln!("no legacy APKs found; skipping");
+    if acos_test_support::require_prereq(
+        !apks.is_empty(),
+        "legacy_apk_dex_parse_and_verify",
+        "no legacy APKs: set ACOS_LEGACY_APK_DIR or ACOS_EXTRA_APKS",
+    )
+    .is_none()
+    {
         return;
     }
 

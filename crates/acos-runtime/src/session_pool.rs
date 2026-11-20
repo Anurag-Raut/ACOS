@@ -114,9 +114,7 @@ pub const DETERMINISTIC_CLINIT_CLASSES: &[&str] = &[
 fn prime_deterministic_classes(vm: &mut Vm) -> Vec<String> {
     // Benchmark/AB escape hatch: `ACOS_CLINIT_PRIME=0` disables priming so a
     // single binary can measure the before/after in interleaved rounds.
-    if std::env::var("ACOS_CLINIT_PRIME")
-        .is_ok_and(|v| v == "0" || v.eq_ignore_ascii_case("off"))
-    {
+    if std::env::var("ACOS_CLINIT_PRIME").is_ok_and(|v| v == "0" || v.eq_ignore_ascii_case("off")) {
         return Vec::new();
     }
     let trace = std::env::var_os("ACOS_BOOT_TRACE").is_some();
@@ -284,7 +282,8 @@ fn decode_boot_payload(bytes: &[u8]) -> Result<BootPayload<'_>, String> {
             let app_thread =
                 u64::from_le_bytes(bytes[pos - 20..pos - 12].try_into().unwrap_or_default());
             let seq = i64::from_le_bytes(bytes[pos - 12..pos - 4].try_into().unwrap_or_default());
-            let plen = u32::from_le_bytes(bytes[pos - 4..pos].try_into().unwrap_or_default()) as usize;
+            let plen =
+                u32::from_le_bytes(bytes[pos - 4..pos].try_into().unwrap_or_default()) as usize;
             pos = take(pos, plen)?;
             let package = std::str::from_utf8(&bytes[pos - plen..pos])
                 .map_err(|_| "attach package is not utf-8".to_string())?
@@ -661,10 +660,7 @@ impl Worker {
 }
 
 /// Restore one session and apply its quota. Runs on the owning worker thread.
-fn restore_session(
-    template: &SessionTemplate,
-    limits: &SessionLimits,
-) -> Result<Vm, PoolError> {
+fn restore_session(template: &SessionTemplate, limits: &SessionLimits) -> Result<Vm, PoolError> {
     let mut vm = template.restore()?;
     vm.host = HostGuard::new(limits.rss_max_bytes, limits.wall_secs);
     if limits.heap_max_bytes != 0 {
@@ -932,12 +928,7 @@ impl SessionPool {
         let mut workers = Vec::with_capacity(sessions);
         for index in 0..sessions {
             let stats = Arc::new(WorkerStats::default());
-            workers.push(Worker::spawn(
-                index,
-                Arc::clone(&template),
-                limits,
-                stats,
-            ));
+            workers.push(Worker::spawn(index, Arc::clone(&template), limits, stats));
         }
         Ok(SessionPool {
             template,
@@ -989,7 +980,10 @@ impl SessionPool {
         }
         let mut reports = Vec::with_capacity(pending.len());
         for (index, rx) in pending {
-            reports.push(rx.recv().map_err(|_| PoolError::WorkerGone { session: index })?);
+            reports.push(
+                rx.recv()
+                    .map_err(|_| PoolError::WorkerGone { session: index })?,
+            );
         }
         reports.sort_by_key(|r| r.session);
         Ok(reports)
@@ -1015,7 +1009,10 @@ impl SessionPool {
         }
         let mut results = Vec::with_capacity(pending.len());
         for (index, rx) in pending {
-            results.push(rx.recv().map_err(|_| PoolError::WorkerGone { session: index })?);
+            results.push(
+                rx.recv()
+                    .map_err(|_| PoolError::WorkerGone { session: index })?,
+            );
         }
         results.sort_by_key(|r| r.job_id);
         Ok(results)
@@ -1054,7 +1051,10 @@ impl SessionPool {
         }
         let mut reports = Vec::with_capacity(pending.len());
         for (index, rx) in pending {
-            reports.push(rx.recv().map_err(|_| PoolError::WorkerGone { session: index })?);
+            reports.push(
+                rx.recv()
+                    .map_err(|_| PoolError::WorkerGone { session: index })?,
+            );
         }
         reports.sort_by_key(|r| r.session);
         Ok(reports)
@@ -1091,7 +1091,6 @@ impl Drop for SessionPool {
         }
     }
 }
-
 
 // ---------------------------------------------------------------------------
 // Framework-init runtime template (W45-A)
@@ -1220,11 +1219,12 @@ impl RuntimeTemplate {
             rt.host().borrow().export_binder_layout();
         // The ATMS attach record is per-process state the restored heap has
         // already executed; replay it into the fresh host on restore.
-        let attach_seed: Option<(u64, i64, String)> = rt
-            .host()
-            .borrow_mut()
-            .attached_process()
-            .or_else(|| attach.app_thread.map(|b| (b.0, attach.start_seq, String::new())));
+        let attach_seed: Option<(u64, i64, String)> =
+            rt.host().borrow_mut().attached_process().or_else(|| {
+                attach
+                    .app_thread
+                    .map(|b| (b.0, attach.start_seq, String::new()))
+            });
         let t = Instant::now();
         let snapshot = rt.vm().snapshot().map_err(PoolError::Boot)?;
         let snapshot_ms = t.elapsed().as_secs_f64() * 1000.0;
@@ -1249,12 +1249,8 @@ impl RuntimeTemplate {
             } else {
                 rt.vm().boot_image_bytes().unwrap_or_default()
             };
-            let payload = encode_boot_payload(
-                &snapshot,
-                &binder_layout,
-                attach_seed.as_ref(),
-                &image,
-            );
+            let payload =
+                encode_boot_payload(&snapshot, &binder_layout, attach_seed.as_ref(), &image);
             let _ = cache.store(key, &payload);
         }
         drop(guard);
@@ -1272,11 +1268,7 @@ impl RuntimeTemplate {
     }
 
     /// Validate a loaded entry and rebuild the template without booting.
-    fn cached_hit(
-        cache: &BootImageCache,
-        key: u64,
-        started: Instant,
-    ) -> Option<RuntimeTemplate> {
+    fn cached_hit(cache: &BootImageCache, key: u64, started: Instant) -> Option<RuntimeTemplate> {
         match cache.load(key) {
             LoadResult::Hit(bytes) => match Self::from_cached(bytes, started) {
                 Ok(t) => Some(t),
@@ -1313,11 +1305,10 @@ impl RuntimeTemplate {
     /// launch; the restored `Vm` is dropped after recovering the preserved
     /// `ActivityThread` handle.
     fn from_cached(bytes: Vec<u8>, started: Instant) -> Result<RuntimeTemplate, PoolError> {
-        let (snapshot, binder_layout, attach, image) = decode_boot_payload(&bytes).map_err(|e| {
-            PoolError::Restore(VmError::SnapshotFormat(format!(
-                "boot cache payload: {e}"
-            )))
-        })?;
+        let (snapshot, binder_layout, attach, image) =
+            decode_boot_payload(&bytes).map_err(|e| {
+                PoolError::Restore(VmError::SnapshotFormat(format!("boot cache payload: {e}")))
+            })?;
         let vm = if image.is_empty() {
             Vm::restore(&snapshot).map_err(PoolError::Restore)?
         } else {
@@ -1561,13 +1552,9 @@ fn launch_inner(
     report.app_load_ms = t.elapsed().as_secs_f64() * 1000.0;
 
     let manifest = opened.manifest().map_err(|e| format!("manifest: {e}"))?;
-    let mut app = acos_services::pms::AppInfo::from_manifest(
-        &manifest,
-        apk,
-        acos_services::pms::FIXTURE_UID,
-    );
-    crate::apk_loader::stage(rt.vm(), apk, &mut app)
-        .map_err(|e| format!("stage apk: {e}"))?;
+    let mut app =
+        acos_services::pms::AppInfo::from_manifest(&manifest, apk, acos_services::pms::FIXTURE_UID);
+    crate::apk_loader::stage(rt.vm(), apk, &mut app).map_err(|e| format!("stage apk: {e}"))?;
     launch_loaded_inner(rt, apk, activity_thread, &app, report)
 }
 
@@ -1704,8 +1691,7 @@ mod payload_tests {
     #[test]
     fn valid_frame_round_trips() {
         let frame = valid_frame();
-        let (snapshot, layout, attach, image) =
-            decode_boot_payload(&frame).expect("valid frame");
+        let (snapshot, layout, attach, image) = decode_boot_payload(&frame).expect("valid frame");
         assert_eq!(snapshot, b"S");
         assert!(layout.is_empty());
         assert!(attach.is_none());

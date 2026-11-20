@@ -47,7 +47,10 @@ pub fn acos_home() -> Option<PathBuf> {
 #[must_use]
 pub fn dev_root() -> Option<PathBuf> {
     let manifest = Path::new(env!("CARGO_MANIFEST_DIR"));
-    manifest.parent().and_then(Path::parent).map(Path::to_path_buf)
+    manifest
+        .parent()
+        .and_then(Path::parent)
+        .map(Path::to_path_buf)
 }
 
 /// A read-only file that ships with the tree, resolved against the runtime
@@ -55,6 +58,34 @@ pub fn dev_root() -> Option<PathBuf> {
 #[must_use]
 pub fn runtime_path(rel: &str) -> PathBuf {
     runtime_path_with(acos_home().as_deref(), rel)
+}
+
+/// The guest sysroot that holds `<sysroot>/gles/<provider>`:
+/// `$ACOS_ART_SYSROOT`, else `<runtime root>/.cache/art/sysroot`, then
+/// `.cache/art-exp/sysroot` (the same order `acos_art::ArtRoot::resolve` uses;
+/// this crate does not link the launcher).
+#[must_use]
+pub fn sysroot() -> Option<PathBuf> {
+    sysroot_with(acos_home().as_deref())
+}
+
+/// [`sysroot`] with the install root passed in (testable): the two lookups
+/// under `home`, else under the checkout.
+#[must_use]
+pub fn sysroot_with(home: Option<&Path>) -> Option<PathBuf> {
+    if let Some(dir) = std::env::var_os("ACOS_ART_SYSROOT") {
+        return Some(PathBuf::from(dir));
+    }
+    for candidate in [".cache/art/sysroot", ".cache/art-exp/sysroot"] {
+        let dir = match home {
+            Some(home) => home.join(candidate),
+            None => dev_root()?.join(candidate),
+        };
+        if dir.join("system/apex").is_dir() {
+            return Some(dir);
+        }
+    }
+    None
 }
 
 /// [`runtime_path`] with the install root passed in, so tests can prove both
@@ -100,6 +131,21 @@ mod tests {
     }
 
     #[test]
+    fn the_guest_sysroot_is_resolved_like_the_launcher_does() {
+        // MERGE040D(a): `acos_capabilities` reports the GL provider from the
+        // launcher's own sysroot rule (`.cache/art/sysroot` under the runtime
+        // root, else the feasibility scratch) without linking `acos-art`.
+        let home = unique_dir("sysroot");
+        assert_eq!(sysroot_with(Some(&home)), None, "no sysroot installed");
+        std::fs::create_dir_all(home.join(".cache/art/sysroot/system/apex")).expect("dirs");
+        assert_eq!(
+            sysroot_with(Some(&home)),
+            Some(home.join(".cache/art/sysroot"))
+        );
+        std::fs::remove_dir_all(&home).ok();
+    }
+
+    #[test]
     fn acos_home_wins_over_the_checkout() {
         let home = unique_dir("home");
         let rel = "crates/acos-jni/tests/data/flutter-probe.dex";
@@ -114,7 +160,10 @@ mod tests {
     fn unset_keeps_the_legacy_developer_lookup() {
         // A cwd-relative file that exists is returned as-is (cargo runs unit
         // tests with the crate directory as the cwd).
-        assert_eq!(runtime_path_with(None, "Cargo.toml"), PathBuf::from("Cargo.toml"));
+        assert_eq!(
+            runtime_path_with(None, "Cargo.toml"),
+            PathBuf::from("Cargo.toml")
+        );
         // A path that only exists in the checkout resolves to the checkout,
         // exactly as before REL1c.
         let checkout_owned = "crates/acos-mcp/Cargo.toml";

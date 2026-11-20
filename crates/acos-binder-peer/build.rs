@@ -39,7 +39,10 @@ fn main() {
     };
     let clang = ndk.join("toolchains/llvm/prebuilt/linux-x86_64/bin/x86_64-linux-android34-clang");
     if !clang.is_file() {
-        println!("cargo:warning={} missing; skipping driver build", clang.display());
+        println!(
+            "cargo:warning={} missing; skipping driver build",
+            clang.display()
+        );
         return;
     }
     let status = Command::new(&clang)

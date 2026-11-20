@@ -229,7 +229,11 @@ mod tests {
             "expected >=15 ms of uptime, got {}",
             end - start
         );
-        assert!(end - start < 5_000, "unexpected clock jump: {}", end - start);
+        assert!(
+            end - start < 5_000,
+            "unexpected clock jump: {}",
+            end - start
+        );
     }
 
     #[test]

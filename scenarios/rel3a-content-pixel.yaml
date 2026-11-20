@@ -27,6 +27,10 @@ capabilities:
   - input
 animations: on
 expectation: non_pass
+expectation_reason: >-
+  Content stability proves the tree, never pixels: a pixel assertion on the
+  content-settled frame of an animating screen fails closed
+  (ASSERTION_FAILED, reason content_settle_pixel).
 budgets:
   memory_mib: 512
   wall_ms: 180000

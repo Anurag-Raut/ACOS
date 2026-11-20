@@ -42,36 +42,14 @@ fn repo_root() -> PathBuf {
         .expect("the crate lives at <repo>/crates/acos-art")
 }
 
-fn sysroot() -> PathBuf {
-    std::env::var_os("ACOS_ART_SYSROOT")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| repo_root().join(".cache/art/sysroot"))
-}
-
 fn warm_data() -> PathBuf {
-    if let Some(p) = std::env::var_os("ACOS_ART_TEST_DATA") {
-        return PathBuf::from(p);
-    }
-    let from_env = std::env::var_os("ACOS_ART_DATA").map(PathBuf::from);
-    if let Some(p) = from_env.filter(|p| p.join("app/guest/classes.dex").is_file()) {
-        return p;
-    }
-    repo_root().join(".cache/art/data")
+    acos_test_support::art_warm_data(&repo_root())
 }
 
+/// HYG2: a missing ART input fails the test by name (or is a counted skip under
+/// `ACOS_ALLOW_ART_SKIP=1`), never a silent pass.
 fn require_art() -> Option<()> {
-    if !sysroot().join("system/apex").is_dir() {
-        eprintln!("SKIP R3 crash evidence: no ART sysroot at {}", sysroot().display());
-        return None;
-    }
-    if !warm_data().join("app/guest/classes.dex").is_file() {
-        eprintln!(
-            "SKIP R3 crash evidence: no cached guest dex under {}",
-            warm_data().display()
-        );
-        return None;
-    }
-    Some(())
+    acos_test_support::require_art(&repo_root(), "R3 crash evidence").map(|_| ())
 }
 
 fn apk() -> PathBuf {
@@ -99,7 +77,11 @@ fn seed_data(tag: &str) -> PathBuf {
         .arg(&data)
         .status()
         .expect("cp is available");
-    assert!(st.success(), "could not seed /data from {}", warm_data().display());
+    assert!(
+        st.success(),
+        "could not seed /data from {}",
+        warm_data().display()
+    );
     let runs = data.join("runs");
     let _ = std::fs::remove_dir_all(&runs);
     std::fs::create_dir_all(&runs).expect("create runs dir");
@@ -180,14 +162,21 @@ fn a_guest_killed_by_a_signal_leaves_fault_addr_code_thread_and_a_native_frame()
     let _ = std::fs::remove_dir_all(&out);
     let t0 = Instant::now();
     let (stdout, stderr, timed_out) = run_crash_launch(&data, &out);
-    eprintln!("R3: launch wall={:?} out={} timed_out={timed_out}", t0.elapsed(), out.display());
+    eprintln!(
+        "R3: launch wall={:?} out={} timed_out={timed_out}",
+        t0.elapsed(),
+        out.display()
+    );
     assert!(
         !timed_out,
         "the crash launch never returned.\nstdout:\n{stdout}\nstderr:\n{stderr}"
     );
 
     let record = std::fs::read_to_string(out.join("session-exit.json")).unwrap_or_else(|e| {
-        panic!("no session-exit.json in {}: {e}\nstderr:\n{stderr}", out.display())
+        panic!(
+            "no session-exit.json in {}: {e}\nstderr:\n{stderr}",
+            out.display()
+        )
     });
     let doc: serde_json::Value = serde_json::from_str(&record).expect("session-exit.json is JSON");
 
@@ -246,11 +235,7 @@ fn a_guest_killed_by_a_signal_leaves_fault_addr_code_thread_and_a_native_frame()
         .as_str()
         .map(PathBuf::from)
         .expect("a kept crash tree must be recorded in session-exit.json");
-    assert!(
-        kept.is_dir(),
-        "kept_run_dir must exist: {}",
-        kept.display()
-    );
+    assert!(kept.is_dir(), "kept_run_dir must exist: {}", kept.display());
     assert!(
         kept.join("kept-for-crash.json").is_file(),
         "the kept tree carries the retention marker: {}",

@@ -22,7 +22,7 @@ use std::sync::{Arc, Mutex};
 
 use acos_parcel::binder::BinderId;
 
-use crate::error::{ServiceError, Result};
+use crate::error::{Result, ServiceError};
 use crate::host::{CallResult, ServiceObject};
 use crate::value::Value;
 
@@ -41,6 +41,10 @@ pub struct ClipFacts {
     pub has_uri: bool,
     /// `ClipData.getItemAt(0).getIntent() != null`.
     pub has_intent: bool,
+    /// The marshalled `ClipDescription` (the clip's leading bytes), replayed
+    /// verbatim by `getPrimaryClipDescription` on the ART wire path. Empty when
+    /// the facts were not read from a parcel.
+    pub description_bytes: Vec<u8>,
 }
 
 impl ClipFacts {
@@ -54,6 +58,7 @@ impl ClipFacts {
             has_text: !text.is_empty(),
             has_uri: false,
             has_intent: false,
+            description_bytes: Vec::new(),
         }
     }
 }
@@ -165,18 +170,199 @@ fn unsupported(interface: &str, method: &acos_aidl::MethodInfo) -> ServiceError 
 /// structured error, never a silent drop.
 pub struct ClipboardService {
     state: Arc<Mutex<ClipboardState>>,
+    /// `onPrimaryClipChanged` deliveries a raw clip transaction queued.
+    pending: Vec<crate::host::PendingDelivery>,
 }
+
+/// `IOnPrimaryClipChangedListener`.
+const LISTENER_DESCRIPTOR: &str = "android.content.IOnPrimaryClipChangedListener";
 
 impl ClipboardService {
     /// Wrap shared state.
     #[must_use]
     pub fn new(state: Arc<Mutex<ClipboardState>>) -> Self {
-        Self { state }
+        Self {
+            state,
+            pending: Vec::new(),
+        }
+    }
+
+    /// Queue `onPrimaryClipChanged()` for every registered listener.
+    fn notify_listeners(&mut self, listeners: &[BinderId]) {
+        for listener in listeners {
+            let mut data = acos_parcel::Parcel::new();
+            let _ = data.write_interface_token(LISTENER_DESCRIPTOR);
+            self.pending.push(crate::host::PendingDelivery {
+                target: *listener,
+                interface: LISTENER_DESCRIPTOR.to_string(),
+                // The AIDL's only method (`oneway void onPrimaryClipChanged()`).
+                code: 1,
+                method: "onPrimaryClipChanged".to_string(),
+                data,
+            });
+        }
     }
 }
 
+fn bad_request(method: &str, error: impl std::fmt::Display) -> ServiceError {
+    ServiceError::BadRequest {
+        interface: "android.content.IClipboard".to_string(),
+        method: method.to_string(),
+        detail: error.to_string(),
+    }
+}
+
+/// The four trailing `(String callingPackage, String attributionTag, int userId,
+/// int deviceId)` arguments every `IClipboard` clip method ends with; returns
+/// the calling package.
+fn read_caller(data: &mut acos_parcel::Parcel, method: &str) -> Result<String> {
+    let package = data
+        .read_string16()
+        .map_err(|e| bad_request(method, e))?
+        .unwrap_or_default();
+    let _attribution = data.read_string16().map_err(|e| bad_request(method, e))?;
+    let _user = data.read_int32().map_err(|e| bad_request(method, e))?;
+    let _device = data.read_int32().map_err(|e| bad_request(method, e))?;
+    Ok(package)
+}
+
 impl ServiceObject for ClipboardService {
-    fn call(&mut self, interface: &str, method: &acos_aidl::MethodInfo, args: &[Value]) -> Result<CallResult> {
+    fn serves_raw(&self, interface: &str, method: &str) -> bool {
+        interface == "android.content.IClipboard"
+            && matches!(
+                method,
+                "setPrimaryClip"
+                    | "setPrimaryClipAsPackage"
+                    | "getPrimaryClip"
+                    | "getPrimaryClipDescription"
+                    | "clearPrimaryClip"
+            )
+    }
+
+    fn drain_raw_deliveries(&mut self) -> Vec<crate::host::PendingDelivery> {
+        std::mem::take(&mut self.pending)
+    }
+
+    /// The `ClipData`-carrying methods, on the wire path of the ART engine.
+    ///
+    /// The clip is stored as the **bytes the framework's own
+    /// `ClipData.writeToParcel` produced** (located with
+    /// [`crate::parcelable::read_clip_shape`], which walks the image's field
+    /// order), and `getPrimaryClip` replays them, so the caller's
+    /// `ClipData.CREATOR` reads exactly what was copied. No `ClipData` is ever
+    /// re-encoded here.
+    fn raw_transact(
+        &mut self,
+        interface: &str,
+        code: u32,
+        data: &mut acos_parcel::Parcel,
+        reply: &mut acos_parcel::Parcel,
+    ) -> Result<bool> {
+        if interface != "android.content.IClipboard" {
+            return Ok(false);
+        }
+        let Some(method) = acos_aidl::lookup(interface, code) else {
+            return Ok(false);
+        };
+        let name = method.name.clone();
+        match name.as_str() {
+            "setPrimaryClip" | "setPrimaryClipAsPackage" => {
+                let present = data.read_int32().map_err(|e| bad_request(&name, e))?;
+                if present == 0 {
+                    return Err(bad_request(&name, "clip is null"));
+                }
+                let start = data.data_position();
+                let shape = crate::parcelable::read_clip_shape(data)?;
+                let end = data.data_position();
+                let whole = data.marshall();
+                let bytes = whole
+                    .get(start..end)
+                    .ok_or_else(|| bad_request(&name, "clip extent is outside the parcel"))?
+                    .to_vec();
+                let package = read_caller(data, &name)?;
+                let source = if name == "setPrimaryClipAsPackage" {
+                    data.read_string16()
+                        .map_err(|e| bad_request(&name, e))?
+                        .unwrap_or_default()
+                } else {
+                    package
+                };
+                let facts = ClipFacts {
+                    label: shape.label,
+                    mime_types: shape.mime_types,
+                    item_count: shape.item_count,
+                    has_text: shape.has_text,
+                    has_uri: shape.has_uri,
+                    has_intent: shape.has_intent,
+                    description_bytes: bytes[..shape.description_len.min(bytes.len())].to_vec(),
+                };
+                let listeners = {
+                    let mut state = self.state.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+                    state.set_primary_clip(bytes, facts, source);
+                    state.listeners.clone()
+                };
+                self.notify_listeners(&listeners);
+                crate::exception::write_no_exception(reply);
+                Ok(true)
+            }
+            "clearPrimaryClip" => {
+                let _ = read_caller(data, &name)?;
+                let listeners = {
+                    let mut state = self.state.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+                    let had = state.has_primary_clip();
+                    state.clear();
+                    if had { state.listeners.clone() } else { Vec::new() }
+                };
+                self.notify_listeners(&listeners);
+                crate::exception::write_no_exception(reply);
+                Ok(true)
+            }
+            "getPrimaryClip" => {
+                let _ = read_caller(data, &name)?;
+                let entry = self
+                    .state
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .get_primary_clip()
+                    .cloned();
+                crate::exception::write_no_exception(reply);
+                match entry {
+                    Some(entry) => {
+                        reply.write_int32(1);
+                        reply.write_raw_bytes(&entry.bytes);
+                    }
+                    None => reply.write_int32(0),
+                }
+                Ok(true)
+            }
+            "getPrimaryClipDescription" => {
+                let _ = read_caller(data, &name)?;
+                let facts = self
+                    .state
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .description()
+                    .cloned();
+                crate::exception::write_no_exception(reply);
+                match facts {
+                    Some(facts) if !facts.description_bytes.is_empty() => {
+                        reply.write_int32(1);
+                        reply.write_raw_bytes(&facts.description_bytes);
+                    }
+                    _ => reply.write_int32(0),
+                }
+                Ok(true)
+            }
+            _ => Ok(false),
+        }
+    }
+
+    fn call(
+        &mut self,
+        interface: &str,
+        method: &acos_aidl::MethodInfo,
+        args: &[Value],
+    ) -> Result<CallResult> {
         if interface != "android.content.IClipboard" {
             return Err(unsupported(interface, method));
         }
@@ -225,10 +411,13 @@ impl ServiceObject for ClipboardService {
                 vec![Value::Bool(state.access_notifications)]
             }
             "setClipboardAccessNotificationsEnabledForUser" => {
-                state.access_notifications = args.first().and_then(|v| match v {
-                    Value::Bool(b) => Some(*b),
-                    _ => None,
-                }).unwrap_or(false);
+                state.access_notifications = args
+                    .first()
+                    .and_then(|v| match v {
+                        Value::Bool(b) => Some(*b),
+                        _ => None,
+                    })
+                    .unwrap_or(false);
                 Vec::new()
             }
             // Needs the real `ClipData` reader; handled on the wire path.

@@ -116,7 +116,7 @@ pub fn display_override() -> Option<DisplayOverride> {
 
 use acos_aidl::MethodInfo;
 
-use crate::error::{ServiceError, Result};
+use crate::error::{Result, ServiceError};
 use crate::host::{CallResult, ServiceObject};
 use crate::parcelable;
 use crate::value::{Parcelable, Value};
@@ -548,14 +548,14 @@ impl DisplayInfo {
                 Value::Int(self.smallest_nominal_app_height),
                 Value::Int(self.largest_nominal_app_width),
                 Value::Int(self.largest_nominal_app_height),
-                Value::Int(self.logical_width),  // writeInt(logicalWidth)
+                Value::Int(self.logical_width), // writeInt(logicalWidth)
                 Value::Int(self.logical_height), // writeInt(logicalHeight)
                 // DisplayCutout$ParcelableWrapper.writeCutoutToParcel
                 Value::Parcelable(self.cutout.to_parcelable()),
-                Value::Int(self.rotation),          // writeInt(rotation)
-                Value::Int(self.mode_id),           // writeInt(modeId)
-                Value::Float(self.refresh_rate),    // writeFloat(renderFrameRate)
-                Value::Int(self.default_mode_id),   // writeInt(defaultModeId)
+                Value::Int(self.rotation),        // writeInt(rotation)
+                Value::Int(self.mode_id),         // writeInt(modeId)
+                Value::Float(self.refresh_rate),  // writeFloat(renderFrameRate)
+                Value::Int(self.default_mode_id), // writeInt(defaultModeId)
                 Value::Int(self.user_preferred_mode_id),
                 // writeInt(supportedModes.length) + each Mode.writeToParcel
                 Value::List(Some(
@@ -570,7 +570,7 @@ impl DisplayInfo {
                 // writeParcelable(hdrCapabilities) — ACOS reports no HDR.
                 Value::NamedParcelable(Parcelable::Null),
                 Value::Bool(self.minimal_post_processing_supported),
-                Value::Int(self.density_dpi),      // writeInt(logicalDensityDpi)
+                Value::Int(self.density_dpi), // writeInt(logicalDensityDpi)
                 Value::Float(self.physical_x_dpi), // writeFloat(physicalXDpi)
                 Value::Float(self.physical_y_dpi), // writeFloat(physicalYDpi)
                 Value::Long(self.app_vsync_offset_nanos),
@@ -723,12 +723,7 @@ impl DisplayService {
 }
 
 impl ServiceObject for DisplayService {
-    fn call(
-        &mut self,
-        interface: &str,
-        method: &MethodInfo,
-        args: &[Value],
-    ) -> Result<CallResult> {
+    fn call(&mut self, interface: &str, method: &MethodInfo, args: &[Value]) -> Result<CallResult> {
         if interface != "android.hardware.display.IDisplayManager" {
             return Err(ServiceError::UnsupportedAndroidApi {
                 interface: interface.to_string(),

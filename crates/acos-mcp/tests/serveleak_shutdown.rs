@@ -15,18 +15,16 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use acos_mcp::{BackendConfig, CliBackend, Server, ServerConfig, SessionBackend};
-use acos_protocol::{
-    Backend as ProtocolBackend, Envelope, Fidelity, Metrics,
-};
+use acos_protocol::{Backend as ProtocolBackend, Envelope, Fidelity, Metrics};
 use acos_runtime::session::SessionOptions;
 use serde_json::{json, Value};
 
 /// A short scratch directory: a unix socket path must fit `SUN_LEN` (108 bytes),
 /// so this deliberately does not live under the repo path.
 fn scratch(name: &str) -> PathBuf {
-    let dir = PathBuf::from(std::env::var_os("ACOS_TEST_SCRATCH").unwrap_or_else(|| {
-        std::env::temp_dir().into()
-    }))
+    let dir = PathBuf::from(
+        std::env::var_os("ACOS_TEST_SCRATCH").unwrap_or_else(|| std::env::temp_dir().into()),
+    )
     .join(format!(
         "acos-sl-{}-{}-{name}",
         std::process::id(),
@@ -41,9 +39,7 @@ fn scratch(name: &str) -> PathBuf {
 
 /// A fake `acos serve`: speaks the line-JSON daemon protocol and records every
 /// tool call it is asked to perform.
-fn fake_daemon(
-    path: &std::path::Path,
-) -> (Receiver<Value>, Sender<()>) {
+fn fake_daemon(path: &std::path::Path) -> (Receiver<Value>, Sender<()>) {
     let listener = UnixListener::bind(path).expect("bind fake daemon");
     let (tx, rx) = channel::<Value>();
     let (stop_tx, stop_rx) = channel::<()>();

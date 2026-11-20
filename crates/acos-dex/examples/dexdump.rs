@@ -264,7 +264,11 @@ fn emit_mnemonics(dex: &DexFile) {
             Ok(Some(d)) => d,
             _ => continue,
         };
-        for m in data.direct_methods.iter().chain(data.virtual_methods.iter()) {
+        for m in data
+            .direct_methods
+            .iter()
+            .chain(data.virtual_methods.iter())
+        {
             if m.code_off == 0 {
                 continue;
             }
@@ -310,8 +314,14 @@ fn emit_text(dex: &DexFile, report: &acos_dex::VerifyReport) {
     println!("type_ids: {} @ {:#x}", h.type_ids_size, h.type_ids_off);
     println!("proto_ids: {} @ {:#x}", h.proto_ids_size, h.proto_ids_off);
     println!("field_ids: {} @ {:#x}", h.field_ids_size, h.field_ids_off);
-    println!("method_ids: {} @ {:#x}", h.method_ids_size, h.method_ids_off);
-    println!("class_defs: {} @ {:#x}", h.class_defs_size, h.class_defs_off);
+    println!(
+        "method_ids: {} @ {:#x}",
+        h.method_ids_size, h.method_ids_off
+    );
+    println!(
+        "class_defs: {} @ {:#x}",
+        h.class_defs_size, h.class_defs_off
+    );
     println!("call_site_ids: {}", dex.call_site_ids().len());
     println!("method_handles: {}", dex.method_handles().len());
     println!(
@@ -345,7 +355,11 @@ fn emit_text(dex: &DexFile, report: &acos_dex::VerifyReport) {
                 continue;
             }
         };
-        for m in data.direct_methods.iter().chain(data.virtual_methods.iter()) {
+        for m in data
+            .direct_methods
+            .iter()
+            .chain(data.virtual_methods.iter())
+        {
             let label = class_method_label(dex, m.method_idx);
             if m.code_off == 0 {
                 println!(
@@ -402,7 +416,11 @@ fn emit_json(dex: &DexFile, report: &acos_dex::VerifyReport) {
             .unwrap_or("<none>");
         let mut methods = Vec::new();
         if let Ok(Some(data)) = dex.class_data(def) {
-            for m in data.direct_methods.iter().chain(data.virtual_methods.iter()) {
+            for m in data
+                .direct_methods
+                .iter()
+                .chain(data.virtual_methods.iter())
+            {
                 let label = class_method_label(dex, m.method_idx);
                 let (regs, ins, outs, disasm) = match dex.code_item(m.code_off) {
                     Ok(code) if m.code_off != 0 => {

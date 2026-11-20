@@ -27,7 +27,11 @@ fn main() {
         "## scanning {} boot-classpath DEX dirs: {}",
         dirs.len(),
         dirs.iter()
-            .map(|d| d.file_name().unwrap_or_default().to_string_lossy().to_string())
+            .map(|d| d
+                .file_name()
+                .unwrap_or_default()
+                .to_string_lossy()
+                .to_string())
             .collect::<Vec<_>>()
             .join(" ")
     );

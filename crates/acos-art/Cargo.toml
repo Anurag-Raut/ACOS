@@ -16,12 +16,22 @@ path = "src/main.rs"
 
 [dependencies]
 acos-sandbox = { path = "../acos-sandbox" }
+# GLSHIP/GPUSPIKE: the guest GL provider contract (selection rule, manifest,
+# verify cache), shared with `acos doctor` and `acos_capabilities`.
+acos-gles-provider = { path = "../acos-gles-provider" }
 acos-binder-peer = { path = "../acos-binder-peer" }
 acos-render = { path = "../acos-render" }
 acos-services = { path = "../acos-services" }
+# LAUNCHEXTRAS: the typed launch `Intent` (action/data/extras) the host encodes.
+acos-protocol = { path = "../acos-protocol" }
+# WV5b: the lazy WebView gate + the shared broker endpoint contract.
+acos-webview = { path = "../acos-webview" }
+acos-wm = { path = "../acos-wm" }
 # REL3I3: `BinderId` names the input channel an action was delivered to (the
 # settle's window-removal witness is keyed by it).
 acos-parcel = { path = "../acos-parcel" }
+# NET2: the relay client (`spike_net` under ACOS_NET_ARM=relay).
+acos-netd = { path = "../acos-netd" }
 # VIEW1a: the live-view frame encoder (jpeg/png only, no default formats).
 image = { version = "0.25", default-features = false, features = ["jpeg", "png"] }
 libc = "0.2"

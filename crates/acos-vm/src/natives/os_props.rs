@@ -414,12 +414,7 @@ pub(crate) fn install(vm: &mut Vm) {
     vm.register_native(c, "native_get", "(J)Ljava/lang/String;", native_get_handle);
     vm.register_native(c, "native_get_int", "(JI)I", native_get_int_handle);
     vm.register_native(c, "native_get_long", "(JJ)J", native_get_long_handle);
-    vm.register_native(
-        c,
-        "native_get_boolean",
-        "(JZ)Z",
-        native_get_boolean_handle,
-    );
+    vm.register_native(c, "native_get_boolean", "(JZ)Z", native_get_boolean_handle);
     vm.register_native(
         c,
         "native_add_change_callback",
@@ -741,10 +736,7 @@ ro.build.version.sdk=34
         // Unit tests run with CWD = crates/acos-vm; `default_boot_dir` walks up
         // to the repo root, so this exercises the shipped seed.
         if matches!(seed_source(), SeedSource::Embedded) {
-            eprintln!(
-                "SKIP real_build_prop_matches_the_reference_image: \
-                 no .cache/boot/android-34/build.prop (embedded ART capture in use)"
-            );
+            acos_test_support::require_prereq(false, "real_build_prop_matches_the_reference_image", "real_build_prop_matches_the_reference_image: no .cache/boot/android-34/build.prop (embedded ART capture in use)");
             return;
         }
         assert_eq!(get("ro.build.version.sdk").as_deref(), Some("34"));
@@ -753,7 +745,10 @@ ro.build.version.sdk=34
         assert_eq!(get("ro.build.type").as_deref(), Some("userdebug"));
         assert_eq!(get("ro.debuggable").as_deref(), Some("1"));
         // Derived, not stored, in the extracted build.prop.
-        assert_eq!(provenance("ro.build.fingerprint"), Some(Provenance::Derived));
+        assert_eq!(
+            provenance("ro.build.fingerprint"),
+            Some(Provenance::Derived)
+        );
         assert_eq!(
             get("ro.build.fingerprint").as_deref(),
             Some(

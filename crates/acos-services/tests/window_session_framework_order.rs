@@ -68,7 +68,9 @@ fn add_request(window: BinderId) -> Parcel {
     data.write_interface_token(IWINDOW_SESSION).expect("token");
     data.write_strong_binder_opt(Some(window));
     data.write_int32(1); // writeTypedObject(LayoutParams)
-    app_params().write_to_parcel(&mut data).expect("LayoutParams");
+    app_params()
+        .write_to_parcel(&mut data)
+        .expect("LayoutParams");
     data.write_int32(0); // viewVisibility
     data.write_int32(-1); // layerStackId
     data.write_int32(0); // userId
@@ -83,7 +85,9 @@ fn relayout_request(window: BinderId) -> Parcel {
     data.write_interface_token(IWINDOW_SESSION).expect("token");
     data.write_strong_binder_opt(Some(window));
     data.write_int32(1);
-    app_params().write_to_parcel(&mut data).expect("LayoutParams");
+    app_params()
+        .write_to_parcel(&mut data)
+        .expect("LayoutParams");
     data.write_int32(-1); // requestedWidth
     data.write_int32(-1); // requestedHeight
     data.write_int32(0); // viewVisibility
@@ -112,7 +116,10 @@ fn open_session(host: &mut ServiceHost) -> BinderId {
         .binder_for_descriptor(IWINDOW_MANAGER)
         .expect("window service");
     let mut reply = transact(host, window, OPEN_SESSION, &mut open_session_request());
-    reply.read_strong_binder().expect("session").expect("session")
+    reply
+        .read_strong_binder()
+        .expect("session")
+        .expect("session")
 }
 
 // ---------------------------------------------------------------------------
@@ -196,7 +203,7 @@ struct FwInsetsState {
 
 fn fw_insets_state(p: &mut Parcel) -> FwInsetsState {
     let display_frame = fw_rect(p); // mDisplayFrame.writeToParcel / readFromParcel
-    // mDisplayCutout.readFromParcel -> readCutoutFromParcel
+                                    // mDisplayCutout.readFromParcel -> readCutoutFromParcel
     let variant = p.read_int32().expect("cutout variant");
     let mut cutout_bounds = None;
     let mut cutout_spec = None;
@@ -209,12 +216,18 @@ fn fw_insets_state(p: &mut Parcel) -> FwInsetsState {
         }
         _ => {
             let safe_insets = fw_typed(p, fw_rect); // readTypedObject(Rect)
-            assert!(safe_insets.is_some(), "a present cutout carries safe insets");
+            assert!(
+                safe_insets.is_some(),
+                "a present cutout carries safe insets"
+            );
             // `new Rect[4]` + readTypedArray(val, Rect.CREATOR)
             let bounds = fw_typed_array_fixed(p, 4);
             cutout_bounds = Some(bounds);
             let waterfall = fw_typed(p, fw_insets); // readTypedObject(Insets)
-            assert!(waterfall.is_some(), "a present cutout carries waterfall insets");
+            assert!(
+                waterfall.is_some(),
+                "a present cutout carries waterfall insets"
+            );
             let _display_width = p.read_int32().expect("cutout displayWidth");
             let _display_height = p.read_int32().expect("cutout displayHeight");
             let _physical_width = p.read_int32().expect("cutout physicalDisplayWidth");
@@ -223,7 +236,9 @@ fn fw_insets_state(p: &mut Parcel) -> FwInsetsState {
             cutout_spec = p.read_string16().expect("cutout cutoutSpec");
             let _rotation = p.read_int32().expect("cutout rotation");
             let _scale = p.read_float().expect("cutout scale");
-            let _ratio = p.read_float().expect("cutout physicalPixelDisplaySizeRatio");
+            let _ratio = p
+                .read_float()
+                .expect("cutout physicalPixelDisplaySizeRatio");
         }
     }
     // mRoundedCorners = in.readTypedObject(RoundedCorners.CREATOR)
@@ -242,7 +257,7 @@ fn fw_insets_state(p: &mut Parcel) -> FwInsetsState {
         .len()
     });
     let _rounded_corner_frame = fw_rect(p); // mRoundedCornerFrame.readFromParcel
-    // mPrivacyIndicatorBounds = in.readTypedObject(...)
+                                            // mPrivacyIndicatorBounds = in.readTypedObject(...)
     let privacy_bounds = fw_typed(p, |p| {
         // PrivacyIndicatorBounds(Parcel): createTypedArray(Rect.CREATOR), rotation
         let bounds = fw_typed_array(p, fw_rect);
@@ -421,7 +436,12 @@ fn add_to_display_as_user_reply_reads_exactly_in_the_framework_order() {
     let mut host = ServiceHost::standard_with_insets(acos_services::wms::InsetsMode::Carve);
     let session = open_session(&mut host);
     let window = BinderId(0x6101);
-    let mut reply = transact(&mut host, session, ADD_TO_DISPLAY_AS_USER, &mut add_request(window));
+    let mut reply = transact(
+        &mut host,
+        session,
+        ADD_TO_DISPLAY_AS_USER,
+        &mut add_request(window),
+    );
 
     // int result
     let result = reply.read_int32().expect("result");
@@ -437,7 +457,10 @@ fn add_to_display_as_user_reply_reads_exactly_in_the_framework_order() {
     );
     let token = reply.read_strong_binder().expect("InputChannel token");
     assert!(token.is_some(), "the channel must carry a token binder");
-    let name = reply.read_string16().expect("InputChannel name").expect("name");
+    let name = reply
+        .read_string16()
+        .expect("InputChannel name")
+        .expect("name");
     assert!(
         name.contains("dev.acos.fixtures.helloviews/MainActivity"),
         "channel name was {name}"
@@ -449,7 +472,9 @@ fn add_to_display_as_user_reply_reads_exactly_in_the_framework_order() {
     assert_eq!(reply.read_int32().expect("InsetsState presence"), 1);
     let insets = fw_insets_state(&mut reply);
     assert_eq!(insets.display_frame, [0, 0, 1080, 2400]);
-    let bounds = insets.cutout_bounds.expect("the reference display has a cutout");
+    let bounds = insets
+        .cutout_bounds
+        .expect("the reference display has a cutout");
     assert_eq!(bounds.len(), 4, "DisplayCutout.Bounds is a fixed Rect[4]");
     assert!(
         bounds[1].expect("top cutout rect").eq(&[492, 0, 610, 128]),
@@ -457,14 +482,24 @@ fn add_to_display_as_user_reply_reads_exactly_in_the_framework_order() {
         bounds[1]
     );
     assert!(
-        insets.cutout_spec.as_deref().unwrap_or_default().contains("a 33,33"),
+        insets
+            .cutout_spec
+            .as_deref()
+            .unwrap_or_default()
+            .contains("a 33,33"),
         "the cutout path spec is carried inline"
     );
     assert_eq!(insets.rounded_corners, Some(4), "four 28px rounded corners");
     assert_eq!(insets.privacy_bounds, Some(1), "one privacy indicator rect");
-    let shape = insets.display_shape.expect("mDisplayShape must not be null");
+    let shape = insets
+        .display_shape
+        .expect("mDisplayShape must not be null");
     assert_eq!((shape.1, shape.2), (0, 0), "DisplayShape.NONE is 0x0");
-    assert_eq!(insets.sources.len(), 10, "the ten display.txt InsetsSources");
+    assert_eq!(
+        insets.sources.len(),
+        10,
+        "the ten display.txt InsetsSources"
+    );
     let status = insets
         .sources
         .iter()
@@ -507,7 +542,12 @@ fn relayout_reply_reads_exactly_in_the_framework_order() {
     let mut host = ServiceHost::standard_with_insets(acos_services::wms::InsetsMode::Carve);
     let session = open_session(&mut host);
     let window = BinderId(0x6102);
-    let _ = transact(&mut host, session, ADD_TO_DISPLAY_AS_USER, &mut add_request(window));
+    let _ = transact(
+        &mut host,
+        session,
+        ADD_TO_DISPLAY_AS_USER,
+        &mut add_request(window),
+    );
     let mut reply = transact(&mut host, session, RELAYOUT, &mut relayout_request(window));
 
     let result = reply.read_int32().expect("result");
@@ -519,7 +559,10 @@ fn relayout_reply_reads_exactly_in_the_framework_order() {
     assert_eq!(frame, [0, 128, 1080, 2337]);
     assert_eq!(display_frame, [0, 0, 1080, 2400]);
     assert!(parent_frame[2] >= parent_frame[0]);
-    assert!(attached.is_some(), "attachedFrame is written for the first relayout");
+    assert!(
+        attached.is_some(),
+        "attachedFrame is written for the first relayout"
+    );
 
     // out MergedConfiguration: three bare Configuration payloads
     assert_eq!(reply.read_int32().expect("MergedConfiguration presence"), 1);

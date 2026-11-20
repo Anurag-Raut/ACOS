@@ -241,12 +241,7 @@ fn swipe_scrolls_a_long_list_and_scroll_until_finds_a_deep_row() {
     let apk = repo_root().join("fixtures/build/apps/scroll-list.apk");
     let art = art_bin();
     if !apk.is_file() || !art.is_file() {
-        eprintln!(
-            "SKIP: {} or {} missing (build with ACOS_APP_ONLY=scroll-list tools/build-apps.sh \
-             and cargo build --release -p acos-art/acos-cli)",
-            apk.display(),
-            art.display()
-        );
+        acos_test_support::require_prereq(false, "swipe_scrolls_a_long_list_and_scroll_until_finds_a_deep_row", &format!("{} or {} missing (build with ACOS_APP_ONLY=scroll-list tools/build-apps.sh and cargo build --release -p acos-art/acos-cli)", apk.display(), art.display()));
         return;
     }
     let daemon = Daemon::start("swipe");

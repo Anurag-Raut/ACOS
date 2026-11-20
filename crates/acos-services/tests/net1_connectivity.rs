@@ -135,7 +135,7 @@ fn default_network_callback_request(messenger: Option<BinderId>) -> Parcel {
     rewritten.write_interface_token(IFACE).expect("token");
     rewritten.write_int32(-1);
     rewritten.write_int32(0); // null NetworkCapabilities
-    // Re-append everything after the capabilities argument.
+                              // Re-append everything after the capabilities argument.
     let mut rest = Parcel::new();
     rest.write_int32(2);
     write_messenger_arg(&mut rest, messenger);
@@ -204,15 +204,35 @@ fn read_message(parcel: &Parcel) -> (i32, i32, Vec<(String, Option<String>)>) {
             continue;
         }
         assert_eq!(tag, 4, "VAL_PARCELABLE");
+        // `Parcel.writeValue` length-prefixes VAL_PARCELABLE
+        // (`isLengthPrefixed`), covering the class name plus the payload.
+        let value_len = p.read_int32().expect("value length");
+        assert!(value_len > 0, "a parcelable value is length-prefixed");
+        let value_start = p.data_position();
         let class = p.read_string16().expect("class").expect("class");
-        // Walk the payload with the real spec so the next key lands right.
+        // Walk the payload with the real spec so the next key lands right, and
+        // check the length prefix agrees with what was consumed.
         read_payload(&class, &mut p).expect("parcelable payload");
+        assert_eq!(
+            p.data_position() - value_start,
+            value_len as usize,
+            "VAL_PARCELABLE length must cover class name + payload"
+        );
         out.push((key, Some(class)));
     }
-    // `replyTo` is a null strong binder: one zero word.
+    // `replyTo` is a null strong binder: one zero word, then `sendingUid`.
+    //
+    // The API-34 *image* ends `Message.writeToParcel` there. The r75 source
+    // cache has one more field (`workSourceUid`); NET6 measured the image reject
+    // a message carrying it with `Parcel data not fully consumed, unread size: 4`
+    // (an app's `NetworkCallback` then never fires), so the image wins.
     assert_eq!(p.read_int32().expect("replyTo"), 0);
     assert_eq!(p.read_int32().expect("sendingUid"), 0);
-    assert_eq!(p.read_int32().expect("workSourceUid"), 0);
+    assert_eq!(
+        p.data_size() - p.data_position(),
+        0,
+        "a callback Message must end exactly after sendingUid (image layout)"
+    );
     (what, arg1, out)
 }
 
@@ -312,6 +332,7 @@ fn the_same_network_request_is_echoed_in_every_callback_message() {
             if tag == -1 {
                 continue;
             }
+            let _value_len = q.read_int32().expect("value length");
             let class = q.read_string16().expect("class").expect("class");
             let value = read_payload(&class, &mut q).expect("payload");
             if key == "NetworkRequest" {
@@ -357,8 +378,7 @@ fn a_request_without_a_messenger_queues_no_callbacks() {
     let mut host = ServiceHost::standard();
     let conn = connectivity(&mut host);
     let mut data = request_network_request(5, None);
-    let mut reply =
-        transact(&mut host, conn, REQUEST_NETWORK, &mut data).expect("requestNetwork");
+    let mut reply = transact(&mut host, conn, REQUEST_NETWORK, &mut data).expect("requestNetwork");
     expects_no_exception(&mut reply);
     let request = read_network_request(&mut reply);
     assert_eq!(
@@ -376,10 +396,7 @@ fn listen_for_network_is_a_listen_request() {
     let mut reply = transact(&mut host, conn, LISTEN_FOR_NETWORK, &mut data).expect("listen");
     expects_no_exception(&mut reply);
     let request = read_network_request(&mut reply);
-    assert_eq!(
-        field(&request, 3),
-        &Value::Str(Some("LISTEN".to_string()))
-    );
+    assert_eq!(field(&request, 3), &Value::Str(Some("LISTEN".to_string())));
     assert_eq!(host.take_deliveries().len(), 4);
 }
 
@@ -451,11 +468,7 @@ fn network_queries_describe_the_emulated_default_network() {
         0,
         "NET_CAPABILITY_VALIDATED must stay unset: ACOS cannot probe the internet"
     );
-    assert_eq!(
-        bits & (1 << 13),
-        1 << 13,
-        "NET_CAPABILITY_NOT_RESTRICTED"
-    );
+    assert_eq!(bits & (1 << 13), 1 << 13, "NET_CAPABILITY_NOT_RESTRICTED");
     assert_eq!(field(&caps, 2), &Value::Long(1 << 1), "TRANSPORT_WIFI");
 
     // getLinkProperties(Network).
@@ -533,9 +546,8 @@ fn state_counters_record_each_registration_and_release() {
     let mut host = ServiceHost::standard();
     // The registry owns its own state; this test drives the handler directly
     // through the public `ServiceObject` surface to observe the counters.
-    let mut svc = acos_services::connectivity::ConnectivityService::new(std::sync::Arc::clone(
-        &state,
-    ));
+    let mut svc =
+        acos_services::connectivity::ConnectivityService::new(std::sync::Arc::clone(&state));
     let method = acos_aidl::lookup(IFACE, REQUEST_NETWORK).expect("requestNetwork in the table");
     assert_eq!(method.code, REQUEST_NETWORK);
     let _ = connectivity(&mut host);
@@ -575,9 +587,8 @@ fn the_connectivity_specs_match_the_boot_images_write_to_parcel() {
     // REL3P2: scanning the whole boot classpath is the point. If this test used
     // one directory again, `android.net.*` would be "class not found" and the
     // specs would go back to being unverified.
-    let framework_only =
-        acos_services::workspace_path(".cache/boot/android-34/dex/framework")
-            .expect("boot DEX cache (run from the repo root)");
+    let framework_only = acos_services::workspace_path(".cache/boot/android-34/dex/framework")
+        .expect("boot DEX cache (run from the repo root)");
     assert!(
         acos_services::parcelable::Scanner::write_to_parcel(
             &framework_only,
@@ -609,10 +620,9 @@ fn the_connectivity_specs_match_the_boot_images_write_to_parcel() {
     }
 
     // The image's `NetworkCapabilities.writeToParcel`, helper body included.
-    let caps = acos_services::parcelable::Scanner::write_to_parcel_boot(
-        "android.net.NetworkCapabilities",
-    )
-    .expect("NetworkCapabilities writeToParcel");
+    let caps =
+        acos_services::parcelable::Scanner::write_to_parcel_boot("android.net.NetworkCapabilities")
+            .expect("NetworkCapabilities writeToParcel");
     assert_eq!(
         caps.calls,
         vec![
@@ -644,10 +654,9 @@ fn the_connectivity_specs_match_the_boot_images_write_to_parcel() {
     // The image's `LinkProperties.writeToParcel`: the three `writeAddresses`
     // helpers and `writeAddress(dhcp)` are inlined, so each address list shows
     // its count and one collapsed element body.
-    let link = acos_services::parcelable::Scanner::write_to_parcel_boot(
-        "android.net.LinkProperties",
-    )
-    .expect("LinkProperties writeToParcel");
+    let link =
+        acos_services::parcelable::Scanner::write_to_parcel_boot("android.net.LinkProperties")
+            .expect("LinkProperties writeToParcel");
     assert_eq!(
         link.calls,
         vec![
@@ -709,7 +718,10 @@ fn net_capabilities_and_link_properties_round_trip_through_their_specs() {
         back.unmarshall(&bytes);
         back.set_data_position(0);
         let decoded = read_payload(class, &mut back).expect("decode reply");
-        assert_eq!(decoded, value, "{class} does not round-trip through its spec");
+        assert_eq!(
+            decoded, value,
+            "{class} does not round-trip through its spec"
+        );
         assert_eq!(
             back.data_position() as usize,
             bytes.len(),

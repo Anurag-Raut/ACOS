@@ -1,0 +1,2 @@
+status=pass
+steps=launch:pass,tap:pass,tap:pass,tap:pass,tap:pass,wait_for:pass,capture:pass,tap:pass,wait_for:pass,capture:pass,assert_text:pass,assert_text:pass,tap:pass,wait_for:pass,capture:pass,assert_text:pass,assert_text:pass,assert_text:pass,assert_visible:pass,back:pass,wait_for:pass,capture:pass,assert_text:pass,assert_text:pass,assert_not_visible:pass

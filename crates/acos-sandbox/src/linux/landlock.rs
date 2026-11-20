@@ -328,7 +328,9 @@ fn check_guest_path(path: &str) -> Result<(), String> {
         return Err(format!("landlock plan path {path:?} is not absolute"));
     }
     if path.contains(|c: char| c.is_whitespace() || c == '\0') {
-        return Err(format!("landlock plan path {path:?} contains whitespace or NUL"));
+        return Err(format!(
+            "landlock plan path {path:?} contains whitespace or NUL"
+        ));
     }
     Ok(())
 }
@@ -401,14 +403,24 @@ mod tests {
     #[test]
     fn device_nodes_accept_read_only_path_rules() {
         let Some(abi) = abi() else {
-            eprintln!("SKIP landlock device-node rule test: Landlock unavailable");
+            let _ = acos_test_support::require_prereq(
+                false,
+                "device_nodes_accept_read_only_path_rules",
+                "Landlock unavailable on this host — the kernel must be built with \
+                 CONFIG_SECURITY_LANDLOCK (Linux >= 5.13)",
+            );
             return;
         };
         let (ruleset_fd, _scope) = create_ruleset(abi).expect("create landlock ruleset");
         for raw in ["/dev/urandom", "/dev/null"] {
             let path = Path::new(raw);
-            if !path.exists() {
-                eprintln!("SKIP {raw}: missing on this host");
+            if acos_test_support::require_prereq(
+                path.exists(),
+                "device_nodes_accept_read_only_path_rules",
+                &format!("{raw} is missing on this host"),
+            )
+            .is_none()
+            {
                 continue;
             }
             match add_path_rule(ruleset_fd, path, read_only_access()) {
@@ -429,7 +441,10 @@ mod tests {
     fn directory_only_rights_are_masked_for_files() {
         assert_eq!(read_only_access() & DIRECTORY_ONLY_RIGHTS, FS_READ_DIR);
         // A directory keeps the directory-only rights; a file loses them.
-        assert_eq!(read_only_access() & !DIRECTORY_ONLY_RIGHTS, FS_EXECUTE | FS_READ_FILE);
+        assert_eq!(
+            read_only_access() & !DIRECTORY_ONLY_RIGHTS,
+            FS_EXECUTE | FS_READ_FILE
+        );
     }
 
     /// W120-A: an ancestor grant carries search only. It must not leak the
@@ -448,7 +463,12 @@ mod tests {
     #[test]
     fn guest_plan_confines_writes_to_the_rw_roots() {
         let Some(abi) = abi() else {
-            eprintln!("SKIP guest plan test: Landlock unavailable");
+            let _ = acos_test_support::require_prereq(
+                false,
+                "guest_plan_confines_writes_to_the_rw_roots",
+                "Landlock unavailable on this host — the kernel must be built with \
+                 CONFIG_SECURITY_LANDLOCK (Linux >= 5.13)",
+            );
             return;
         };
         let blob = plan(&["/"], &["/data/out", "/data/tmp"]).expect("plan");

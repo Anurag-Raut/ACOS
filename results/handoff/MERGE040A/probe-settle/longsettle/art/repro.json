@@ -1,0 +1,17 @@
+{
+  "acos_version": "0.3.0",
+  "apk_path": "/home/Qui/Projects/acos/.cache/gaten/gaten-dev-f344272-x86_64-release-unsigned.apk",
+  "apk_sha256": "e04c7ffcf01209c98e511e1ab01a7f68d6decb178d14a08f2b7f0a6539e2ee29",
+  "scenario_path": "/home/Qui/.t3/worktrees/acos/t3-121d3058-b4fc4c69978d9127/results/handoff/MERGE040A/probe-settle/gaten-backstack-longsettle.yaml",
+  "scenario_sha256": "6b81dd135565b7007ac737d7b2c5dc8b5c28b5012ae91ded1ef3f0f65fd27e98",
+  "flags": [],
+  "isolation": "process",
+  "display": {
+    "mode": "offscreen",
+    "width": 1080,
+    "height": 2400,
+    "density_dpi": 400
+  },
+  "fidelity": "art-reference",
+  "backend": "acos-native"
+}

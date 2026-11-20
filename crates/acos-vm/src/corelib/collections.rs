@@ -83,17 +83,30 @@ fn install_array_list(vm: &mut Vm) -> VmResult<()> {
         Some("Ljava/lang/Object;"),
         &["Ljava/util/List;"],
     )?;
-    vm.builtin_alloc.insert(id, crate::corelib::BuiltinAlloc::List);
+    vm.builtin_alloc
+        .insert(id, crate::corelib::BuiltinAlloc::List);
     let p = access::PUBLIC;
     vm.add_native(id, "<init>", "()V", p, al_init);
-    vm.add_native(id, "<init>", "(Ljava/util/Collection;)V", p, al_init_collection);
+    vm.add_native(
+        id,
+        "<init>",
+        "(Ljava/util/Collection;)V",
+        p,
+        al_init_collection,
+    );
     vm.add_native(id, "add", "(Ljava/lang/Object;)Z", p, al_add);
     vm.add_native(id, "get", "(I)Ljava/lang/Object;", p, al_get);
     vm.add_native(id, "size", "()I", p, al_size);
     vm.add_native(id, "isEmpty", "()Z", p, al_is_empty);
     vm.add_native(id, "contains", "(Ljava/lang/Object;)Z", p, al_contains);
     vm.add_native(id, "indexOf", "(Ljava/lang/Object;)I", p, al_index_of);
-    vm.add_native(id, "lastIndexOf", "(Ljava/lang/Object;)I", p, al_last_index_of);
+    vm.add_native(
+        id,
+        "lastIndexOf",
+        "(Ljava/lang/Object;)I",
+        p,
+        al_last_index_of,
+    );
     vm.add_native(id, "remove", "(Ljava/lang/Object;)Z", p, al_remove);
     vm.add_native(id, "iterator", "()Ljava/util/Iterator;", p, al_iterator);
     vm.add_native(id, "toArray", "()[Ljava/lang/Object;", p, al_to_array);
@@ -161,7 +174,10 @@ fn al_get(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let i = vm.arg_i32(ctx, 0);
     let len = list_len(vm, this);
     if i < 0 || i as usize >= len {
-        return Err(vm.throw_new("Ljava/lang/IndexOutOfBoundsException;", Some(&format!("Index: {i}, Size: {len}"))));
+        return Err(vm.throw_new(
+            "Ljava/lang/IndexOutOfBoundsException;",
+            Some(&format!("Index: {i}, Size: {len}")),
+        ));
     }
     let item = match vm.heap.get(this) {
         Some(Object::Builtin {
@@ -315,8 +331,20 @@ fn install_arrays(vm: &mut Vm) -> VmResult<()> {
         &[],
     )?;
     let s = access::PUBLIC | access::STATIC;
-    vm.add_native(id, "asList", "([Ljava/lang/Object;)Ljava/util/List;", s, arrays_as_list);
-    vm.add_native(id, "toString", "([Ljava/lang/Object;)Ljava/lang/String;", s, arrays_to_string);
+    vm.add_native(
+        id,
+        "asList",
+        "([Ljava/lang/Object;)Ljava/util/List;",
+        s,
+        arrays_as_list,
+    );
+    vm.add_native(
+        id,
+        "toString",
+        "([Ljava/lang/Object;)Ljava/lang/String;",
+        s,
+        arrays_to_string,
+    );
     vm.link_class(id)?;
     Ok(())
 }
@@ -412,9 +440,27 @@ fn install_maps(vm: &mut Vm) -> VmResult<()> {
         Some("Ljava/lang/Object;"),
         &["Ljava/util/Map$Entry;"],
     )?;
-    vm.add_native(node, "getKey", "()Ljava/lang/Object;", access::PUBLIC, entry_get_key);
-    vm.add_native(node, "getValue", "()Ljava/lang/Object;", access::PUBLIC, entry_get_value);
-    vm.add_native(node, "toString", "()Ljava/lang/String;", access::PUBLIC, entry_to_string);
+    vm.add_native(
+        node,
+        "getKey",
+        "()Ljava/lang/Object;",
+        access::PUBLIC,
+        entry_get_key,
+    );
+    vm.add_native(
+        node,
+        "getValue",
+        "()Ljava/lang/Object;",
+        access::PUBLIC,
+        entry_get_value,
+    );
+    vm.add_native(
+        node,
+        "toString",
+        "()Ljava/lang/String;",
+        access::PUBLIC,
+        entry_to_string,
+    );
     vm.link_class(node)?;
 
     let hash = vm.def_class(
@@ -423,21 +469,41 @@ fn install_maps(vm: &mut Vm) -> VmResult<()> {
         Some("Ljava/lang/Object;"),
         &["Ljava/util/Map;"],
     )?;
-    vm.builtin_alloc.insert(hash, crate::corelib::BuiltinAlloc::Map);
+    vm.builtin_alloc
+        .insert(hash, crate::corelib::BuiltinAlloc::Map);
     let tree = vm.def_class(
         "Ljava/util/TreeMap;",
         access::PUBLIC,
         Some("Ljava/lang/Object;"),
         &["Ljava/util/Map;"],
     )?;
-    vm.builtin_alloc.insert(tree, crate::corelib::BuiltinAlloc::SortedMap);
+    vm.builtin_alloc
+        .insert(tree, crate::corelib::BuiltinAlloc::SortedMap);
 
     for id in [hash, tree] {
         let p = access::PUBLIC;
         vm.add_native(id, "<init>", "()V", p, map_init);
-        vm.add_native(id, "put", "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;", p, map_put);
-        vm.add_native(id, "get", "(Ljava/lang/Object;)Ljava/lang/Object;", p, map_get);
-        vm.add_native(id, "containsKey", "(Ljava/lang/Object;)Z", p, map_contains_key);
+        vm.add_native(
+            id,
+            "put",
+            "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;",
+            p,
+            map_put,
+        );
+        vm.add_native(
+            id,
+            "get",
+            "(Ljava/lang/Object;)Ljava/lang/Object;",
+            p,
+            map_get,
+        );
+        vm.add_native(
+            id,
+            "containsKey",
+            "(Ljava/lang/Object;)Z",
+            p,
+            map_contains_key,
+        );
         vm.add_native(id, "size", "()I", p, map_size);
         vm.add_native(id, "toString", "()Ljava/lang/String;", p, map_to_string);
         vm.add_native(id, "keySet", "()Ljava/util/Set;", p, map_key_set);
@@ -671,7 +737,8 @@ fn install_enum_set(vm: &mut Vm) -> VmResult<()> {
         Some("Ljava/lang/Object;"),
         &["Ljava/util/Set;"],
     )?;
-    vm.builtin_alloc.insert(id, crate::corelib::BuiltinAlloc::EnumSet);
+    vm.builtin_alloc
+        .insert(id, crate::corelib::BuiltinAlloc::EnumSet);
     // Concrete implementation class.
     let impl_id = vm.def_class(
         "Ljava/util/RegularEnumSet;",
@@ -679,14 +746,39 @@ fn install_enum_set(vm: &mut Vm) -> VmResult<()> {
         Some("Ljava/util/EnumSet;"),
         &[],
     )?;
-    vm.builtin_alloc.insert(impl_id, crate::corelib::BuiltinAlloc::EnumSet);
+    vm.builtin_alloc
+        .insert(impl_id, crate::corelib::BuiltinAlloc::EnumSet);
     let s = access::PUBLIC | access::STATIC;
-    vm.add_native(id, "of", "(Ljava/lang/Enum;Ljava/lang/Enum;)Ljava/util/EnumSet;", s, enumset_of);
+    vm.add_native(
+        id,
+        "of",
+        "(Ljava/lang/Enum;Ljava/lang/Enum;)Ljava/util/EnumSet;",
+        s,
+        enumset_of,
+    );
     let p = access::PUBLIC;
-    vm.add_native(impl_id, "contains", "(Ljava/lang/Object;)Z", p, enumset_contains);
+    vm.add_native(
+        impl_id,
+        "contains",
+        "(Ljava/lang/Object;)Z",
+        p,
+        enumset_contains,
+    );
     vm.add_native(impl_id, "size", "()I", p, enumset_size);
-    vm.add_native(impl_id, "toString", "()Ljava/lang/String;", p, enumset_to_string);
-    vm.add_native(impl_id, "iterator", "()Ljava/util/Iterator;", p, enumset_iterator);
+    vm.add_native(
+        impl_id,
+        "toString",
+        "()Ljava/lang/String;",
+        p,
+        enumset_to_string,
+    );
+    vm.add_native(
+        impl_id,
+        "iterator",
+        "()Ljava/util/Iterator;",
+        p,
+        enumset_iterator,
+    );
     vm.link_class(id)?;
     vm.link_class(impl_id)?;
     Ok(())
@@ -695,7 +787,11 @@ fn install_enum_set(vm: &mut Vm) -> VmResult<()> {
 fn enumset_parts(vm: &Vm, this: Handle) -> (u32, Vec<Handle>) {
     match vm.heap.get(this) {
         Some(Object::Builtin {
-            data: BuiltinData::EnumSet { enum_class, elements },
+            data:
+                BuiltinData::EnumSet {
+                    enum_class,
+                    elements,
+                },
             ..
         }) => (*enum_class, elements.clone()),
         _ => (0, Vec::new()),
@@ -728,9 +824,9 @@ fn enumset_contains(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let this = vm.ctx_this(ctx).unwrap_or(NULL);
     let o = vm.arg_ref(ctx, 0);
     let (_, elems) = enumset_parts(vm, this);
-    let r = elems.iter().any(|e| {
-        vm.value_equals(*e, o).unwrap_or(false) || (o != NULL && *e == o)
-    });
+    let r = elems
+        .iter()
+        .any(|e| vm.value_equals(*e, o).unwrap_or(false) || (o != NULL && *e == o));
     vm.ret_bool(ctx, r);
     Ok(())
 }

@@ -17,10 +17,7 @@ use common::{compile_case, run_ok};
 #[ignore = "frozen legacy Rust VM: asserts the pre-W7 DisplayInfo app bounds 1080x2209; W7b (18622e5) made report the default inset model (ADR-0026 #6), which reports appBounds as the full display 1080x2400 — see results/handoff/TESTHYG2.md"]
 fn display_manager_reply_round_trips_through_the_real_java_creators() {
     let Some(dex) = compile_case(&["DisplayMain"]) else {
-        eprintln!(
-            "SKIP display_manager_reply_round_trips_through_the_real_java_creators: \
-             javac/d8/android.jar unavailable"
-        );
+        acos_test_support::require_prereq(false, "display_manager_reply_round_trips_through_the_real_java_creators", "display_manager_reply_round_trips_through_the_real_java_creators: javac/d8/android.jar unavailable");
         return;
     };
     let Some(stdout) = run_ok(&dex, "DisplayMain", "DisplayMain") else {

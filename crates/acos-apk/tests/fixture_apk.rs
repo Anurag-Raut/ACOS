@@ -3,6 +3,7 @@
 use std::path::PathBuf;
 
 use acos_apk::{Apk, ComponentKind};
+use acos_test_support::require_prereq;
 
 fn data(name: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -137,8 +138,16 @@ fn gaten_apk_reports_its_alias_launcher() {
 
     let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../../.cache/gaten/gaten-dev-f344272-x86_64-release-unsigned.apk");
-    if !path.is_file() {
-        eprintln!("SKIP gaten_apk_reports_its_alias_launcher: {} missing", path.display());
+    if require_prereq(
+        path.is_file(),
+        "gaten_apk_reports_its_alias_launcher",
+        &format!(
+            "{} is missing — put the Gaten release APK there (.cache/gaten)",
+            path.display()
+        ),
+    )
+    .is_none()
+    {
         return;
     }
     let apk = Apk::open(&path).expect("open gaten");

@@ -72,13 +72,8 @@ unsafe fn write_all(fd: libc::c_int, mut bytes: &[u8]) {
     while !bytes.is_empty() {
         // SAFETY: `bytes` is a live slice and `fd` is a valid descriptor; the
         // kernel only reads from the slice.
-        let written = unsafe {
-            libc::write(
-                fd,
-                bytes.as_ptr() as *const libc::c_void,
-                bytes.len(),
-            )
-        };
+        let written =
+            unsafe { libc::write(fd, bytes.as_ptr() as *const libc::c_void, bytes.len()) };
         if written <= 0 {
             return;
         }

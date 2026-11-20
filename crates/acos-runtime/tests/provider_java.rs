@@ -75,8 +75,7 @@ fn string(vm: &mut acos_vm::Vm, s: &str) -> Handle {
 
 #[test]
 fn app_provider_is_installed_published_and_reachable_through_the_binder() {
-    let Some(apk_path) = service_provider_apk() else {
-        eprintln!("SKIP app_provider_is_installed_published_and_reachable_through_the_binder: fixture APK not built");
+    let Some(apk_path) = acos_test_support::require_some(service_provider_apk(), "app_provider_is_installed_published_and_reachable_through_the_binder", "fixture APK not built") else {
         return;
     };
     let Some(mut rt) = new_runtime() else {
@@ -104,13 +103,15 @@ fn app_provider_is_installed_published_and_reachable_through_the_binder() {
             let shared = c.permission.clone().unwrap_or_default();
             let class = acos_apk::manifest::fq_name(&manifest.package, &c.name);
             let exported = c.exported.unwrap_or(false);
-            c.authorities.iter().map(move |authority| bind_app::ProviderSpec {
-                class: class.clone(),
-                authority: authority.clone(),
-                read_permission: shared.clone(),
-                write_permission: shared.clone(),
-                exported,
-            })
+            c.authorities
+                .iter()
+                .map(move |authority| bind_app::ProviderSpec {
+                    class: class.clone(),
+                    authority: authority.clone(),
+                    read_permission: shared.clone(),
+                    write_permission: shared.clone(),
+                    exported,
+                })
         })
         .collect();
     assert_eq!(
@@ -138,7 +139,10 @@ fn app_provider_is_installed_published_and_reachable_through_the_binder() {
         .expect("publishContentProviders recorded the fixture authority");
     assert_eq!(record.class, PROVIDER_CLASS);
     assert_eq!(record.package, manifest.package);
-    assert_ne!(record.binder, 0, "published holder carries the provider binder");
+    assert_ne!(
+        record.binder, 0,
+        "published holder carries the provider binder"
+    );
 
     // --- call the provider through the framework's own proxy --------------
     let vm = rt.vm_mut();
@@ -169,15 +173,14 @@ fn app_provider_is_installed_published_and_reachable_through_the_binder() {
         )
         .expect("AttributionSource");
     let uri_text = string(vm, URI);
-    let uri = obj(
-        vm.call_static(
+    let uri = obj(vm
+        .call_static(
             "android.net.Uri",
             "parse",
             "(Ljava/lang/String;)Landroid/net/Uri;",
             &[JavaValue::Object(uri_text)],
         )
-        .expect("Uri.parse"),
-    );
+        .expect("Uri.parse"));
 
     // insert
     let values = vm
@@ -209,10 +212,9 @@ fn app_provider_is_installed_published_and_reachable_through_the_binder() {
         )
         .expect("ContentProviderProxy.insert"),
     );
-    let inserted_text = obj(
-        vm.call_method(inserted, "toString", "()Ljava/lang/String;", &[])
-            .expect("Uri.toString"),
-    );
+    let inserted_text = obj(vm
+        .call_method(inserted, "toString", "()Ljava/lang/String;", &[])
+        .expect("Uri.toString"));
     assert_eq!(
         vm.java_string_to_rust(inserted_text).expect("inserted uri"),
         "content://dev.acos.fixtures.svcprovider/echo/0"
@@ -221,15 +223,14 @@ fn app_provider_is_installed_published_and_reachable_through_the_binder() {
     // getType: `ContentProvider.Transport.getType` is reached through the
     // framework's own `ContentProviderProxy` / `ContentProviderNative` pair, and
     // the reply is the string the app's provider declares.
-    let type_h = obj(
-        vm.call_method(
+    let type_h = obj(vm
+        .call_method(
             proxy,
             "getType",
             "(Landroid/content/AttributionSource;Landroid/net/Uri;)Ljava/lang/String;",
             &[JavaValue::Object(attribution), JavaValue::Object(uri)],
         )
-        .expect("ContentProviderProxy.getType"),
-    );
+        .expect("ContentProviderProxy.getType"));
     assert_eq!(
         vm.java_string_to_rust(type_h).expect("getType string"),
         "vnd.android.cursor.dir/vnd.acos.echo"
@@ -263,18 +264,26 @@ fn app_provider_is_installed_published_and_reachable_through_the_binder() {
         )
         .expect("ContentProviderProxy.query"),
     );
-    match vm.call_method(cursor, "getCount", "()I", &[]).expect("getCount") {
+    match vm
+        .call_method(cursor, "getCount", "()I", &[])
+        .expect("getCount")
+    {
         JavaValue::Int(1) => {}
         other => panic!("expected one cursor row, got {}", other.kind()),
     }
     assert!(matches!(
-        vm.call_method(cursor, "moveToFirst", "()Z", &[]).expect("moveToFirst"),
+        vm.call_method(cursor, "moveToFirst", "()Z", &[])
+            .expect("moveToFirst"),
         JavaValue::Boolean(true)
     ));
-    let payload = obj(
-        vm.call_method(cursor, "getString", "(I)Ljava/lang/String;", &[JavaValue::Int(1)])
-            .expect("getString"),
-    );
+    let payload = obj(vm
+        .call_method(
+            cursor,
+            "getString",
+            "(I)Ljava/lang/String;",
+            &[JavaValue::Int(1)],
+        )
+        .expect("getString"));
     assert_eq!(vm.java_string_to_rust(payload).expect("payload"), "hello");
     vm.call_method(cursor, "close", "()V", &[]).expect("close");
 

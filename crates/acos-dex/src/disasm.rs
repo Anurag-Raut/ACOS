@@ -125,13 +125,7 @@ fn write_operands(
         ),
         Format::F21s | Format::F21h => write!(f, " {}, {}", reg(insn, 0), lit(op, insn.literal)),
         Format::F21c => write!(f, " {}, {}", reg(insn, 0), idx(insn.index)),
-        Format::F23x => write!(
-            f,
-            " {}, {}, {}",
-            reg(insn, 0),
-            reg(insn, 1),
-            reg(insn, 2)
-        ),
+        Format::F23x => write!(f, " {}, {}, {}", reg(insn, 0), reg(insn, 1), reg(insn, 2)),
         Format::F22b => write!(
             f,
             " {}, {}, {}",
@@ -153,7 +147,13 @@ fn write_operands(
             reg(insn, 1),
             lit(op, insn.literal)
         ),
-        Format::F22c => write!(f, " {}, {}, {}", reg(insn, 0), reg(insn, 1), idx(insn.index)),
+        Format::F22c => write!(
+            f,
+            " {}, {}, {}",
+            reg(insn, 0),
+            reg(insn, 1),
+            idx(insn.index)
+        ),
         Format::F30t => write!(f, " {:#x}", (pc as i64 + insn.target as i64) as u32),
         Format::F32x => write!(f, " {}, {}", reg(insn, 0), reg(insn, 1)),
         Format::F31i => write!(f, " {}, {}", reg(insn, 0), lit(op, insn.literal)),
@@ -208,15 +208,7 @@ pub fn format_instruction(dex: &DexFile, insn: &Instruction, pc: usize) -> Strin
         }
     }
     use std::fmt::Write;
-    let _ = write!(
-        s,
-        "{}",
-        Adapter {
-            dex,
-            insn,
-            pc
-        }
-    );
+    let _ = write!(s, "{}", Adapter { dex, insn, pc });
     s
 }
 

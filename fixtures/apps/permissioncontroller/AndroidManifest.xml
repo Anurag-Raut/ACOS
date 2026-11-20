@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  SYSUI1: the permission controller system app (ADR-0029 amendment: system UI
+  comes from system apps in the guest).
+
+  `PackageManager.buildRequestPermissionsIntent` (PackageManager.java:7049)
+  addresses `ACTION_REQUEST_PERMISSIONS` to `com.android.permissioncontroller`;
+  this app's `GrantPermissionsActivity` is what the host resolves that intent
+  to. It runs in its own guest process, spawned lazily by the multi-process
+  launcher when the first `requestPermissions` arrives.
+
+  The activity is the AOSP class path (`com.android.permissioncontroller.
+  permission.ui.GrantPermissionsActivity`), so a tree/screenshot names what a
+  device names.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.android.permissioncontroller"
+    android:versionCode="1"
+    android:versionName="1.0">
+
+    <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="34" />
+
+    <application
+        android:label="@string/app_name"
+        android:allowBackup="false"
+        android:debuggable="true">
+        <activity
+            android:name=".permission.ui.GrantPermissionsActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:launchMode="singleTop">
+            <!-- The framework's intent carries no category, and Android's
+                 activity matching then requires the filter to declare
+                 `CATEGORY_DEFAULT` (the rule ACOS implements with
+                 `Filter::matches`). -->
+            <intent-filter>
+                <action android:name="android.content.pm.action.REQUEST_PERMISSIONS" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>

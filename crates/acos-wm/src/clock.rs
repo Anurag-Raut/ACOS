@@ -68,7 +68,10 @@ impl VirtualClock {
 
     /// Move time forward by `nanos`.
     pub fn advance(&self, nanos: i64) {
-        let mut now = self.now.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let mut now = self
+            .now
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         *now += nanos.max(0);
     }
 

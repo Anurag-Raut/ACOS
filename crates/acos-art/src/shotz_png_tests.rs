@@ -15,10 +15,7 @@ use std::path::PathBuf;
 
 /// The frames are 1080x2400 ART captures, re-compressed losslessly for the repo
 /// (a stored-block copy is 10.4 MB each; git is not a frame dump).
-const FIXTURES: [&str; 2] = [
-    "counter-1080x2400.png",
-    "dialog-menu-1080x2400.png",
-];
+const FIXTURES: [&str; 2] = ["counter-1080x2400.png", "dialog-menu-1080x2400.png"];
 
 fn fixture_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/art-frames")
@@ -50,12 +47,7 @@ fn real_frames_round_trip_pixel_exact() {
         assert!(
             decoded == pixels,
             "{name}: the encoder is not lossless ({} pixels differ)",
-            decoded
-                .iter()
-                .zip(&pixels)
-                .filter(|(a, b)| a != b)
-                .count()
-                / 4
+            decoded.iter().zip(&pixels).filter(|(a, b)| a != b).count() / 4
         );
         assert!(
             png.len() < 1_000_000,

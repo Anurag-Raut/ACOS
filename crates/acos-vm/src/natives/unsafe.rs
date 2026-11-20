@@ -17,23 +17,58 @@ const INSTANCE_BASE: i32 = 8;
 
 pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
     for c in ["Ljdk/internal/misc/Unsafe;", "Lsun/misc/Unsafe;"] {
-        vm.register_native(c, "arrayBaseOffset", "(Ljava/lang/Class;)I", array_base_offset);
-        vm.register_native(c, "arrayIndexScale", "(Ljava/lang/Class;)I", array_index_scale);
+        vm.register_native(
+            c,
+            "arrayBaseOffset",
+            "(Ljava/lang/Class;)I",
+            array_base_offset,
+        );
+        vm.register_native(
+            c,
+            "arrayIndexScale",
+            "(Ljava/lang/Class;)I",
+            array_index_scale,
+        );
         vm.register_native(c, "addressSize", "()I", address_size);
         vm.register_native(c, "pageSize", "()I", page_size);
-        vm.register_native(c, "allocateInstance", "(Ljava/lang/Class;)Ljava/lang/Object;", allocate_instance);
+        vm.register_native(
+            c,
+            "allocateInstance",
+            "(Ljava/lang/Class;)Ljava/lang/Object;",
+            allocate_instance,
+        );
         vm.register_native(c, "allocateMemory", "(J)J", allocate_memory);
         vm.register_native(c, "freeMemory", "(J)V", free_memory);
         vm.register_native(c, "reallocateMemory", "(JJ)J", reallocate_memory);
         vm.register_native(c, "setMemory", "(JJB)V", set_memory_addr);
         vm.register_native(c, "setMemory", "(Ljava/lang/Object;JJB)V", set_memory_obj);
         vm.register_native(c, "copyMemory", "(JJJ)V", copy_memory_addr);
-        vm.register_native(c, "copyMemory", "(Ljava/lang/Object;JLjava/lang/Object;JJ)V", copy_memory_obj);
+        vm.register_native(
+            c,
+            "copyMemory",
+            "(Ljava/lang/Object;JLjava/lang/Object;JJ)V",
+            copy_memory_obj,
+        );
         // `jdk.internal.misc.Unsafe.copyMemory(Object,long,Object,long,long)`
         // funnels through this private native.
-        vm.register_native(c, "copyMemory0", "(Ljava/lang/Object;JLjava/lang/Object;JJ)V", copy_memory_obj);
-        vm.register_native(c, "copyMemoryFromPrimitiveArray", "(Ljava/lang/Object;JJJ)V", copy_from_array);
-        vm.register_native(c, "copyMemoryToPrimitiveArray", "(JLjava/lang/Object;JJ)V", copy_to_array);
+        vm.register_native(
+            c,
+            "copyMemory0",
+            "(Ljava/lang/Object;JLjava/lang/Object;JJ)V",
+            copy_memory_obj,
+        );
+        vm.register_native(
+            c,
+            "copyMemoryFromPrimitiveArray",
+            "(Ljava/lang/Object;JJJ)V",
+            copy_from_array,
+        );
+        vm.register_native(
+            c,
+            "copyMemoryToPrimitiveArray",
+            "(JLjava/lang/Object;JJ)V",
+            copy_to_array,
+        );
         // Raw-address (long) get/put family used by `java.nio.Bits` and
         // `DirectByteBuffer`. Byte order is native little-endian.
         vm.register_native(c, "getByte", "(J)B", get_byte_addr);
@@ -74,33 +109,133 @@ pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
         vm.register_native(c, "putFloat", "(Ljava/lang/Object;JF)V", put_float);
         vm.register_native(c, "getDouble", "(Ljava/lang/Object;J)D", get_double);
         vm.register_native(c, "putDouble", "(Ljava/lang/Object;JD)V", put_double);
-        vm.register_native(c, "getReference", "(Ljava/lang/Object;J)Ljava/lang/Object;", get_object);
-        vm.register_native(c, "getObject", "(Ljava/lang/Object;J)Ljava/lang/Object;", get_object);
-        vm.register_native(c, "getObjectVolatile", "(Ljava/lang/Object;J)Ljava/lang/Object;", get_object);
-        vm.register_native(c, "getReferenceVolatile", "(Ljava/lang/Object;J)Ljava/lang/Object;", get_object);
-        vm.register_native(c, "getReferenceAcquire", "(Ljava/lang/Object;J)Ljava/lang/Object;", get_object);
-        vm.register_native(c, "getReferenceOpaque", "(Ljava/lang/Object;J)Ljava/lang/Object;", get_object);
-        vm.register_native(c, "putReference", "(Ljava/lang/Object;JLjava/lang/Object;)V", put_object);
-        vm.register_native(c, "putObject", "(Ljava/lang/Object;JLjava/lang/Object;)V", put_object);
-        vm.register_native(c, "putObjectVolatile", "(Ljava/lang/Object;JLjava/lang/Object;)V", put_object);
-        vm.register_native(c, "putReferenceVolatile", "(Ljava/lang/Object;JLjava/lang/Object;)V", put_object);
-        vm.register_native(c, "putReferenceRelease", "(Ljava/lang/Object;JLjava/lang/Object;)V", put_object);
-        vm.register_native(c, "putReferenceOpaque", "(Ljava/lang/Object;JLjava/lang/Object;)V", put_object);
+        vm.register_native(
+            c,
+            "getReference",
+            "(Ljava/lang/Object;J)Ljava/lang/Object;",
+            get_object,
+        );
+        vm.register_native(
+            c,
+            "getObject",
+            "(Ljava/lang/Object;J)Ljava/lang/Object;",
+            get_object,
+        );
+        vm.register_native(
+            c,
+            "getObjectVolatile",
+            "(Ljava/lang/Object;J)Ljava/lang/Object;",
+            get_object,
+        );
+        vm.register_native(
+            c,
+            "getReferenceVolatile",
+            "(Ljava/lang/Object;J)Ljava/lang/Object;",
+            get_object,
+        );
+        vm.register_native(
+            c,
+            "getReferenceAcquire",
+            "(Ljava/lang/Object;J)Ljava/lang/Object;",
+            get_object,
+        );
+        vm.register_native(
+            c,
+            "getReferenceOpaque",
+            "(Ljava/lang/Object;J)Ljava/lang/Object;",
+            get_object,
+        );
+        vm.register_native(
+            c,
+            "putReference",
+            "(Ljava/lang/Object;JLjava/lang/Object;)V",
+            put_object,
+        );
+        vm.register_native(
+            c,
+            "putObject",
+            "(Ljava/lang/Object;JLjava/lang/Object;)V",
+            put_object,
+        );
+        vm.register_native(
+            c,
+            "putObjectVolatile",
+            "(Ljava/lang/Object;JLjava/lang/Object;)V",
+            put_object,
+        );
+        vm.register_native(
+            c,
+            "putReferenceVolatile",
+            "(Ljava/lang/Object;JLjava/lang/Object;)V",
+            put_object,
+        );
+        vm.register_native(
+            c,
+            "putReferenceRelease",
+            "(Ljava/lang/Object;JLjava/lang/Object;)V",
+            put_object,
+        );
+        vm.register_native(
+            c,
+            "putReferenceOpaque",
+            "(Ljava/lang/Object;JLjava/lang/Object;)V",
+            put_object,
+        );
         vm.register_native(c, "compareAndSetInt", "(Ljava/lang/Object;JII)Z", cas_int);
         vm.register_native(c, "compareAndSetLong", "(Ljava/lang/Object;JJJ)Z", cas_long);
-        vm.register_native(c, "compareAndSetReference", "(Ljava/lang/Object;JLjava/lang/Object;Ljava/lang/Object;)Z", cas_object);
-        vm.register_native(c, "compareAndSetObject", "(Ljava/lang/Object;JLjava/lang/Object;Ljava/lang/Object;)Z", cas_object);
-        vm.register_native(c, "getAndAddInt", "(Ljava/lang/Object;JI)I", get_and_add_int);
-        vm.register_native(c, "getAndAddLong", "(Ljava/lang/Object;JJ)J", get_and_add_long);
-        vm.register_native(c, "getAndSetInt", "(Ljava/lang/Object;JI)I", get_and_set_int);
-        vm.register_native(c, "getAndSetLong", "(Ljava/lang/Object;JJ)J", get_and_set_long);
-        vm.register_native(c, "getAndSetReference", "(Ljava/lang/Object;JLjava/lang/Object;)Ljava/lang/Object;", get_and_set_object);
+        vm.register_native(
+            c,
+            "compareAndSetReference",
+            "(Ljava/lang/Object;JLjava/lang/Object;Ljava/lang/Object;)Z",
+            cas_object,
+        );
+        vm.register_native(
+            c,
+            "compareAndSetObject",
+            "(Ljava/lang/Object;JLjava/lang/Object;Ljava/lang/Object;)Z",
+            cas_object,
+        );
+        vm.register_native(
+            c,
+            "getAndAddInt",
+            "(Ljava/lang/Object;JI)I",
+            get_and_add_int,
+        );
+        vm.register_native(
+            c,
+            "getAndAddLong",
+            "(Ljava/lang/Object;JJ)J",
+            get_and_add_long,
+        );
+        vm.register_native(
+            c,
+            "getAndSetInt",
+            "(Ljava/lang/Object;JI)I",
+            get_and_set_int,
+        );
+        vm.register_native(
+            c,
+            "getAndSetLong",
+            "(Ljava/lang/Object;JJ)J",
+            get_and_set_long,
+        );
+        vm.register_native(
+            c,
+            "getAndSetReference",
+            "(Ljava/lang/Object;JLjava/lang/Object;)Ljava/lang/Object;",
+            get_and_set_object,
+        );
         vm.register_native(c, "loadFence", "()V", noop);
         vm.register_native(c, "storeFence", "()V", noop);
         vm.register_native(c, "fullFence", "()V", noop);
         vm.register_native(c, "park", "(ZJ)V", park);
         vm.register_native(c, "unpark", "(Ljava/lang/Object;)V", unpark);
-        vm.register_native(c, "objectFieldOffset", "(Ljava/lang/reflect/Field;)J", object_field_offset);
+        vm.register_native(
+            c,
+            "objectFieldOffset",
+            "(Ljava/lang/reflect/Field;)J",
+            object_field_offset,
+        );
     }
     Ok(())
 }
@@ -604,7 +739,12 @@ fn obj_write(vm: &mut Vm, obj: crate::heap::Handle, off: i64, n: usize, v: u64) 
 }
 
 /// Read `len` bytes from an array/native object (used by `setMemory`/`copyMemory`).
-fn obj_read_bytes(vm: &mut Vm, obj: crate::heap::Handle, off: i64, len: usize) -> VmResult<Vec<u8>> {
+fn obj_read_bytes(
+    vm: &mut Vm,
+    obj: crate::heap::Handle,
+    off: i64,
+    len: usize,
+) -> VmResult<Vec<u8>> {
     if len == 0 {
         return Ok(Vec::new());
     }

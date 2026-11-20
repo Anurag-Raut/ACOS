@@ -1,0 +1,17 @@
+{
+  "acos_version": "0.2.2",
+  "apk_path": "fixtures/build/apps/location-probe.apk",
+  "apk_sha256": "83955924571f855c3e8af4b4ce56975d4ce428cfe67e65a56ac0e4eff1220564",
+  "scenario_path": "results/handoff/MODLOC2/location-probe.yaml",
+  "scenario_sha256": "3e30864eff8909df50aec991a07e7b96f23a1198021a4fdc0c325af9454691fb",
+  "flags": [],
+  "isolation": "process",
+  "display": {
+    "mode": "offscreen",
+    "width": 1080,
+    "height": 2400,
+    "density_dpi": 420
+  },
+  "fidelity": "art-reference",
+  "backend": "acos-native"
+}

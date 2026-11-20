@@ -1,0 +1,84 @@
+ACOSLAUNCH MARK resume-budget ms=12000 ready_ms=2000
+ACOSLAUNCH MARK natives registered
+ACOSLAUNCH MARK android-runtime ready rc=1
+ACOSLAUNCH MARK crash-handler rc=1
+ACOSLAUNCH MARK animations on=true scale=1.0 applied=true source=env:on
+ACOSLAUNCH MARK overlays applied=1 base=1 total=2 idmaps=/data/overlay/PixelConfigOverlayCommon.idmap
+ACOSLAUNCH MARK binder-looper started
+ACOSLAUNCH MARK app-flags flags=0x10883e46 source=manifest
+ACOSLAUNCH MARK providers count=0
+ACOSLAUNCH MARK bind-request-marshalled appInfo=(com.android.permissioncontroller sourceDir=/data/app/permissioncontroller.apk uid=10192) bytes=1464
+ACOSLAUNCH MARK bind-request-pushed bytes=1464
+ACOSLAUNCH MARK displayinfo-field refreshRate -> java.lang.NoSuchFieldException: refreshRate
+ACOSLAUNCH MARK displayinfo-reply-pushed bytes=256
+ACOSLAUNCH MARK instrumentationinfo-reply-pushed bytes=460
+ACOSLAUNCH MARK attach-returned startSeq=1794929265251
+ACOSLAUNCH MARK start-activity-guard installed call=android.app.IActivityTaskManager
+ACOSLAUNCH MARK activity-result-watcher started
+ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.app.ActivityThread$H) {489b221} null: 138
+ACOSLAUNCH TRACE <<<<< Finished to Handler (android.app.ActivityThread$H) {489b221} null
+ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.app.ActivityThread$H) {489b221} null: 110
+ACOSLAUNCH TRACE <<<<< Finished to Handler (android.app.ActivityThread$H) {489b221} null
+ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.app.ActivityThread$H) {489b221} null: 159
+ACOSLAUNCH MARK application-created package=com.android.permissioncontroller application=android.app.Application base=com.android.permissioncontroller//data/app/permissioncontroller.apk instrumentation=android.app.Instrumentation
+ACOSLAUNCH MARK waiting-for-host-transaction activity=com.android.permissioncontroller.permission.ui.GrantPermissionsActivity
+ACOSLAUNCH TRACE <<<<< Finished to Handler (android.app.ActivityThread$H) {489b221} null
+ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.app.ActivityThread$H) {489b221} null: 164
+ACOSLAUNCH TRACE <<<<< Finished to Handler (android.app.ActivityThread$H) {489b221} null
+ACOSLAUNCH MARK host-transaction-timeout activity=com.android.permissioncontroller.permission.ui.GrantPermissionsActivity timeout_ms=12000
+ACOSLAUNCH MARK mBoundApplication=AppBindData{appInfo=ApplicationInfo{cd0f8b2 com.android.permissioncontroller}}
+ACOSLAUNCH MARK mInitialApplication=android.app.Application@c6c5003
+ACOSLAUNCH MARK mInstrumentation=android.app.Instrumentation@fd12b80
+ACOSLAUNCH MARK mSystemThread=false
+ACOSLAUNCH MARK mActivities=1
+ACOSLAUNCH MARK   token=android.os.BinderProxy@b509d20 info=ActivityInfo{c50b5b9 com.android.permissioncontroller.permission.ui.GrantPermissionsActivity} activity=com.android.permissioncontroller.permission.ui.GrantPermissionsActivity@bd1edfe paused=true stopped=true
+ACOSLAUNCH MARK   resumed=false called=true finished=true window=com.android.internal.policy.PhoneWindow@f59e95f
+ACOSLAUNCH THREAD HeapTaskDaemon WAITING
+ACOSLAUNCH THREAD FinalizerDaemon WAITING
+ACOSLAUNCH   at java.lang.Object.wait(Native Method)
+ACOSLAUNCH   at java.lang.Object.wait(Object.java:386)
+ACOSLAUNCH   at java.lang.ref.ReferenceQueue.remove(ReferenceQueue.java:210)
+ACOSLAUNCH   at java.lang.ref.ReferenceQueue.remove(ReferenceQueue.java:231)
+ACOSLAUNCH   at java.lang.Daemons$FinalizerDaemon.runInternal(Daemons.java:309)
+ACOSLAUNCH   at java.lang.Daemons$Daemon.run(Daemons.java:145)
+ACOSLAUNCH   at java.lang.Thread.run(Thread.java:1012)
+ACOSLAUNCH THREAD acos-result-watcher TIMED_WAITING
+ACOSLAUNCH   at java.lang.Thread.sleep(Native Method)
+ACOSLAUNCH   at java.lang.Thread.sleep(Thread.java:450)
+ACOSLAUNCH   at java.lang.Thread.sleep(Thread.java:355)
+ACOSLAUNCH   at dev.acos.art.LaunchMain$18.run(LaunchMain.java:5049)
+ACOSLAUNCH   at java.lang.Thread.run(Thread.java:1012)
+ACOSLAUNCH THREAD Jit thread pool worker thread 0 RUNNABLE
+ACOSLAUNCH THREAD main RUNNABLE
+ACOSLAUNCH   at android.os.MessageQueue.nativePollOnce(Native Method)
+ACOSLAUNCH   at android.os.MessageQueue.next(MessageQueue.java:335)
+ACOSLAUNCH   at android.os.Looper.loopOnce(Looper.java:162)
+ACOSLAUNCH   at android.os.Looper.loop(Looper.java:294)
+ACOSLAUNCH   at dev.acos.art.LaunchMain.run(LaunchMain.java:487)
+ACOSLAUNCH   at dev.acos.art.LaunchMain.main(LaunchMain.java:226)
+ACOSLAUNCH THREAD ReferenceQueueDaemon WAITING
+ACOSLAUNCH   at java.lang.Object.wait(Native Method)
+ACOSLAUNCH   at java.lang.Object.wait(Object.java:386)
+ACOSLAUNCH   at java.lang.Object.wait(Object.java:524)
+ACOSLAUNCH   at java.lang.Daemons$ReferenceQueueDaemon.runInternal(Daemons.java:239)
+ACOSLAUNCH   at java.lang.Daemons$Daemon.run(Daemons.java:145)
+ACOSLAUNCH   at java.lang.Thread.run(Thread.java:1012)
+ACOSLAUNCH THREAD Thread-1 RUNNABLE
+ACOSLAUNCH THREAD FinalizerWatchdogDaemon WAITING
+ACOSLAUNCH   at java.lang.Object.wait(Native Method)
+ACOSLAUNCH   at java.lang.Object.wait(Object.java:386)
+ACOSLAUNCH   at java.lang.Object.wait(Object.java:524)
+ACOSLAUNCH   at java.lang.Daemons$FinalizerWatchdogDaemon.sleepUntilNeeded(Daemons.java:428)
+ACOSLAUNCH   at java.lang.Daemons$FinalizerWatchdogDaemon.runInternal(Daemons.java:408)
+ACOSLAUNCH   at java.lang.Daemons$Daemon.run(Daemons.java:145)
+ACOSLAUNCH   at java.lang.Thread.run(Thread.java:1012)
+ACOSLAUNCH THREAD Signal Catcher WAITING
+ACOSLAUNCH THREAD acos-launch-watcher RUNNABLE
+ACOSLAUNCH   at dalvik.system.VMStack.getThreadStackTrace(Native Method)
+ACOSLAUNCH   at java.lang.Thread.getStackTrace(Thread.java:1841)
+ACOSLAUNCH   at java.lang.Thread.getAllStackTraces(Thread.java:1909)
+ACOSLAUNCH   at dev.acos.art.LaunchMain.dumpThreads(LaunchMain.java:3580)
+ACOSLAUNCH   at dev.acos.art.LaunchMain.dumpActivityState(LaunchMain.java:3575)
+ACOSLAUNCH   at dev.acos.art.LaunchMain.watch(LaunchMain.java:3165)
+ACOSLAUNCH   at dev.acos.art.LaunchMain$12.run(LaunchMain.java:3011)
+ACOSLAUNCH   at java.lang.Thread.run(Thread.java:1012)

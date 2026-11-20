@@ -1,0 +1,123 @@
+{
+  "backend": "acos-native",
+  "capabilities_used": [
+    "input",
+    "lifecycle",
+    "static-manifest",
+    "ui.tree"
+  ],
+  "evidence": {
+    "events": "events.jsonl",
+    "log": "logs/logcat.txt",
+    "verdict": "verdict.json"
+  },
+  "fidelity": "art-reference",
+  "isolation": "process",
+  "metrics": {
+    "peak_rss_bytes": 15654912,
+    "wall_ms": 485
+  },
+  "ok": true,
+  "request_id": "req_13076f_18e8e8c646cf8450",
+  "result": {
+    "artifacts_dir": "/home/Qui/.t3/worktrees/acos/t3-121d3058-b4fc4c69978d9127/results/handoff/MERGE040A/corpus3/touchdisp-posted-side-effect/art",
+    "cap_bytes": 20480,
+    "evidence_provenance": {
+      "binder_transactions": "host-observed",
+      "crash_reports": "guest-asserted",
+      "frames": "host-observed",
+      "host_input": "host-observed",
+      "input_acks": "guest-asserted",
+      "launch_markers": "guest-asserted",
+      "lifecycle_markers": "guest-asserted",
+      "logs": "guest-asserted",
+      "static_manifest": "host-observed",
+      "tree": "guest-asserted"
+    },
+    "note": "this result was larger than the reply cap; only the bulk (tree, steps, logs) was dropped and the full evidence is in the artifacts paths named here",
+    "provenance": {
+      "apk": {
+        "mtime_ns": 1794937493079297561,
+        "path": "/home/Qui/.t3/worktrees/acos/t3-121d3058-b4fc4c69978d9127/fixtures/build/apps/touch-probe.apk",
+        "sha256": "16280810f1aadf2a31298b5951a957a49b439ccf36a511855e611d673fcca95d",
+        "sha256_12": "16280810f1aa",
+        "size_bytes": 16852
+      },
+      "engine": "art",
+      "fidelity": "art-reference",
+      "scenario": {
+        "mtime_ns": 1794939542407994079,
+        "path": "/home/Qui/.t3/worktrees/acos/t3-121d3058-b4fc4c69978d9127/scenarios/touchdisp-posted-side-effect.yaml",
+        "sha256": "e2da25d065126dba48bd8fde3d697ea1e69ecb6ffc374c45ff368a286a01e6e5",
+        "sha256_12": "e2da25d06512",
+        "size_bytes": 2037
+      },
+      "scenario_engine": "art",
+      "warnings": [
+        {
+          "acked": 2,
+          "code": "INPUT_UNHANDLED",
+          "handled": false,
+          "hint": "nothing tappable there: the node at this point is dev.acos.fixtures.touchprobe.ProbeView (no name) at [42,695][1038,1115], which is not clickable and neither is any ances… [ACOS: result.result.provenance.warnings[0].hint bounded for size — 382 bytes total, keeping the first 170 and the last 85 bytes; the full text is in the run's artifacts] …le android.widget.Button \"Increment\" at [42,1535][273,1661] (centre 157,1598) instead",
+          "message": "step 1 (tap): the gesture was delivered and the app window acknowledged every event `finishInputEvent(handled) = false` - nothing consumed it. The step is `pass` because it made no change claim; it is not evidence that the input reached a control.",
+          "published": 2,
+          "step": 1,
+          "step_kind": "tap",
+          "target": {
+            "hit": {
+              "clickable": false,
+              "consumer": null,
+              "method": "tree-geometry",
+              "node": {
+                "bounds": "[42,695][1038,1115]",
+                "class": "dev.acos.fixtures.touchprobe.ProbeView",
+                "clickable": false,
+                "content_desc": "",
+                "enabled": true,
+                "focused": false,
+                "id": "n4_dev.acos.fixtures.touchprobe:id/probe",
+                "password": false,
+                "resource_id": "dev.acos.fixtures.touchprobe:id/probe",
+                "scrollable": false,
+                "text": "",
+                "visible_bounds": "[42,695][1038,1115]",
+                "window": "main"
+              },
+              "suggest": {
+                "bounds": "[42,1535][273,1661]",
+                "class": "android.widget.Button",
+                "clickable": true,
+                "content_desc": "",
+                "enabled": true,
+                "focused": false,
+                "id": "n5_dev.acos.fixtures.touchprobe:id/inc",
+                "password": false,
+                "resource_id": "dev.acos.fixtures.touchprobe:id/inc",
+                "scrollable": false,
+                "text": "Increment",
+                "visible_bounds": "[42,1535][273,1661]",
+                "window": "main"
+              }
+            },
+            "point": {
+              "x": 540,
+              "y": 905
+            },
+            "selector": {
+              "selector": "id==\"probe\""
+            }
+          },
+          "unhandled": [
+            3,
+            4
+          ]
+        }
+      ]
+    },
+    "reply_capped": true,
+    "verdict_path": "/home/Qui/.t3/worktrees/acos/t3-121d3058-b4fc4c69978d9127/results/handoff/MERGE040A/corpus3/touchdisp-posted-side-effect/art/verdict.json",
+    "verdict_status": "pass"
+  },
+  "session_id": "s_art_touch-probe",
+  "status": "pass"
+}

@@ -131,9 +131,7 @@ impl ApkAssets {
                 if let Some(slice) = backing.as_slice().get(start..start.saturating_add(size)) {
                     resource_table = ResTableIndex::parse(slice).ok();
                 }
-            } else if let Ok(mut archive) =
-                zip::ZipArchive::new(Cursor::new(backing.as_slice()))
-            {
+            } else if let Ok(mut archive) = zip::ZipArchive::new(Cursor::new(backing.as_slice())) {
                 if let Ok(mut file) = archive.by_name("resources.arsc") {
                     let mut buf = Vec::new();
                     if file.read_to_end(&mut buf).is_ok() {

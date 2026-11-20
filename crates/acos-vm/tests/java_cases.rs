@@ -93,8 +93,7 @@ fn run_full(dex: &Path, main: &str, heap_max: usize) -> acos_vm::RunOutcome {
 
 #[test]
 fn stack_overflow_is_catchable() {
-    let Some(dex) = compile_case("StackOverflowMain") else {
-        eprintln!("SKIP stack_overflow_is_catchable: javac/d8 unavailable");
+    let Some(dex) = acos_test_support::require_some(compile_case("StackOverflowMain"), "stack_overflow_is_catchable", "javac/d8 unavailable") else {
         return;
     };
     let (code, stdout, _) = run(&dex, "StackOverflowMain", 256 * 1024 * 1024);
@@ -104,8 +103,7 @@ fn stack_overflow_is_catchable() {
 
 #[test]
 fn out_of_memory_is_catchable_with_small_heap() {
-    let Some(dex) = compile_case("OomMain") else {
-        eprintln!("SKIP out_of_memory_is_catchable_with_small_heap: javac/d8 unavailable");
+    let Some(dex) = acos_test_support::require_some(compile_case("OomMain"), "out_of_memory_is_catchable_with_small_heap", "javac/d8 unavailable") else {
         return;
     };
     let (code, stdout, _) = run(&dex, "OomMain", 4 * 1024 * 1024);
@@ -115,8 +113,7 @@ fn out_of_memory_is_catchable_with_small_heap() {
 
 #[test]
 fn unsupported_java_api_is_structured() {
-    let Some(dex) = compile_case("UnsupportedMain") else {
-        eprintln!("SKIP unsupported_java_api_is_structured: javac/d8 unavailable");
+    let Some(dex) = acos_test_support::require_some(compile_case("UnsupportedMain"), "unsupported_java_api_is_structured", "javac/d8 unavailable") else {
         return;
     };
     let (code, _stdout, err) = run(&dex, "UnsupportedMain", 256 * 1024 * 1024);
@@ -138,8 +135,7 @@ fn unsupported_java_api_is_structured() {
 /// `ExceptionInInitializerError`), not unwind past it with a stale frame index.
 #[test]
 fn exception_floor_rethrows_at_the_rust_call_base() {
-    let Some(dex) = compile_case("ExceptionFloorMain") else {
-        eprintln!("SKIP exception_floor_rethrows_at_the_rust_call_base: javac/d8 unavailable");
+    let Some(dex) = acos_test_support::require_some(compile_case("ExceptionFloorMain"), "exception_floor_rethrows_at_the_rust_call_base", "javac/d8 unavailable") else {
         return;
     };
     let outcome = run_full(&dex, "ExceptionFloorMain", 256 * 1024 * 1024);
@@ -191,12 +187,11 @@ fn real_corelib_available() -> bool {
 /// observes. Checked on both tiers and under GC stress.
 #[test]
 fn reflection_static_set_survives_compiled_getstatic() {
-    let Some(dex) = compile_case("ReflectStaticInitMain") else {
-        eprintln!("SKIP reflection_static_set_survives_compiled_getstatic: javac/d8 unavailable");
+    let Some(dex) = acos_test_support::require_some(compile_case("ReflectStaticInitMain"), "reflection_static_set_survives_compiled_getstatic", "javac/d8 unavailable") else {
         return;
     };
     if !real_corelib_available() {
-        eprintln!("SKIP reflection_static_set_survives_compiled_getstatic: real boot classpath absent");
+        acos_test_support::require_prereq(false, "reflection_static_set_survives_compiled_getstatic", "reflection_static_set_survives_compiled_getstatic: real boot classpath absent");
         return;
     }
     for (ir, stress) in [(true, false), (false, false), (true, true), (false, true)] {
@@ -220,13 +215,11 @@ fn reflection_static_set_survives_compiled_getstatic() {
 #[test]
 fn thread_stack_traces_are_non_empty_under_real_corelib() {
     let Some(dex) = compile_case("VmStackMain") else {
-        eprintln!("SKIP thread_stack_traces_are_non_empty_under_real_corelib: javac/d8 unavailable");
+        acos_test_support::require_prereq(false, "thread_stack_traces_are_non_empty_under_real_corelib", "thread_stack_traces_are_non_empty_under_real_corelib: javac/d8 unavailable");
         return;
     };
     if !real_corelib_available() {
-        eprintln!(
-            "SKIP thread_stack_traces_are_non_empty_under_real_corelib: real boot classpath absent"
-        );
+        acos_test_support::require_prereq(false, "thread_stack_traces_are_non_empty_under_real_corelib", "thread_stack_traces_are_non_empty_under_real_corelib: real boot classpath absent");
         return;
     }
     for (ir, stress) in [(true, false), (false, false), (true, true)] {
@@ -256,13 +249,11 @@ fn thread_stack_traces_are_non_empty_under_real_corelib() {
 #[test]
 fn atomic_reference_varhandle_surface_under_real_corelib() {
     let Some(dex) = compile_case("AtomicReferenceMain") else {
-        eprintln!("SKIP atomic_reference_varhandle_surface_under_real_corelib: javac/d8 unavailable");
+        acos_test_support::require_prereq(false, "atomic_reference_varhandle_surface_under_real_corelib", "atomic_reference_varhandle_surface_under_real_corelib: javac/d8 unavailable");
         return;
     };
     if !real_corelib_available() {
-        eprintln!(
-            "SKIP atomic_reference_varhandle_surface_under_real_corelib: real boot classpath absent"
-        );
+        acos_test_support::require_prereq(false, "atomic_reference_varhandle_surface_under_real_corelib", "atomic_reference_varhandle_surface_under_real_corelib: real boot classpath absent");
         return;
     }
     let expected = "get=a\ngetAndSet=a\nafter=b\ncas-ok=true\ncas-fail=false\nval=c\n\

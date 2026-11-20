@@ -1,0 +1,13 @@
+acos-webview: shared broker on /home/Qui/.t3/worktrees/acos/t3-43746ade-7323e343b6e1642d/.cache/rt-wvtail/probe20-18/broker.sock (engine=157.0.8103.78, idle=0s, pid=589024)
+acos-webview: engine pid=589034 generation=1 died (watcher restart): exit status signal: 9 (SIGKILL); stderr tail (last 10 line(s)):
+[1118/105252.281251:ERROR:dbus/bus.cc:406] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are "tcp" and on UNIX "unix")
+[1118/105252.281267:ERROR:dbus/bus.cc:406] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are "tcp" and on UNIX "unix")
+[1118/105252.281288:WARNING:dbus/object_proxy.cc:439] Failed to connect to NameOwnerChanged signal for object: /org/freedesktop/portal/desktop
+[1118/105252.281296:ERROR:dbus/bus.cc:406] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are "tcp" and on UNIX "unix")
+[1118/105252.281300:ERROR:dbus/bus.cc:406] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are "tcp" and on UNIX "unix")
+[1118/105252.287184:ERROR:dbus/object_proxy.cc:572] Failed to call method: org.freedesktop.DBus.NameHasOwner: object_path= /org/freedesktop/DBus: unknown error type: 
+[1118/105252.287221:ERROR:dbus/bus.cc:406] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are "tcp" and on UNIX "unix")
+[1118/105252.288028:WARNING:sandbox/policy/linux/sandbox_linux.cc:405] InitializeSandbox() called with multiple threads in process gpu-process.
+[1118/105252.288462:ERROR:dbus/object_proxy.cc:572] Failed to call method: org.freedesktop.DBus.NameHasOwner: object_path= /org/freedesktop/DBus: unknown error type: 
+[1118/105252.331294:WARNING:headless/lib/browser/headless_web_contents_impl.cc:379] Readback from surface failed.
+acos-webview: session wv: engine restarted (restart 1, generation 1), dropped 2 view(s): every target died with the engine

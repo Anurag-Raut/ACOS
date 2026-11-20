@@ -84,7 +84,8 @@ fn composer(host: &mut ServiceHost) -> BinderId {
 /// `BpSurfaceComposer::createDisplayEventConnection`'s request, exactly.
 fn create_connection_request(vsync_source: i32, event_registration: i32, layer: bool) -> Parcel {
     let mut data = Parcel::new();
-    data.write_interface_token(ISURFACE_COMPOSER).expect("token");
+    data.write_interface_token(ISURFACE_COMPOSER)
+        .expect("token");
     data.write_int32(vsync_source);
     data.write_int32(event_registration);
     if layer {
@@ -113,7 +114,8 @@ fn surfaceflinger_resolves_and_answers_the_display_queries_the_image_makes() {
 
     // getPhysicalDisplayIds: `long[]` = int32 count + int64 elements.
     let mut data = Parcel::new();
-    data.write_interface_token(ISURFACE_COMPOSER).expect("token");
+    data.write_interface_token(ISURFACE_COMPOSER)
+        .expect("token");
     data.set_data_position(0);
     let mut reply =
         transact(&mut host, sf, GET_PHYSICAL_DISPLAY_IDS, 0, &mut data).expect("transact");
@@ -124,7 +126,8 @@ fn surfaceflinger_resolves_and_answers_the_display_queries_the_image_makes() {
 
     // getPhysicalDisplayToken(long) -> IBinder, and it must be routable.
     let mut data = Parcel::new();
-    data.write_interface_token(ISURFACE_COMPOSER).expect("token");
+    data.write_interface_token(ISURFACE_COMPOSER)
+        .expect("token");
     data.write_int64(0);
     data.set_data_position(0);
     let mut reply =
@@ -141,11 +144,11 @@ fn surfaceflinger_resolves_and_answers_the_display_queries_the_image_makes() {
     // vsyncPeriod; }, with vsyncTime on CLOCK_MONOTONIC and vsyncPeriod the same
     // period the vsync thread uses.
     let mut data = Parcel::new();
-    data.write_interface_token(ISURFACE_COMPOSER).expect("token");
+    data.write_interface_token(ISURFACE_COMPOSER)
+        .expect("token");
     data.write_strong_binder_opt(Some(token));
     data.set_data_position(0);
-    let mut reply =
-        transact(&mut host, sf, GET_DISPLAY_STATS, 0, &mut data).expect("transact");
+    let mut reply = transact(&mut host, sf, GET_DISPLAY_STATS, 0, &mut data).expect("transact");
     no_exception(&mut reply);
     let vsync_time = reply.read_int64().expect("vsyncTime");
     let vsync_period = reply.read_int64().expect("vsyncPeriod");
@@ -161,11 +164,11 @@ fn surfaceflinger_resolves_and_answers_the_display_queries_the_image_makes() {
     // orientation; Size layerStackSpaceRect; } (Rotation is @Backing(type="int"),
     // Size is two ints).
     let mut data = Parcel::new();
-    data.write_interface_token(ISURFACE_COMPOSER).expect("token");
+    data.write_interface_token(ISURFACE_COMPOSER)
+        .expect("token");
     data.write_strong_binder_opt(Some(token));
     data.set_data_position(0);
-    let mut reply =
-        transact(&mut host, sf, GET_DISPLAY_STATE, 0, &mut data).expect("transact");
+    let mut reply = transact(&mut host, sf, GET_DISPLAY_STATE, 0, &mut data).expect("transact");
     no_exception(&mut reply);
     assert_eq!(reply.read_int32().expect("layerStack"), 0);
     assert_eq!(reply.read_int32().expect("orientation"), 0);
@@ -175,16 +178,11 @@ fn surfaceflinger_resolves_and_answers_the_display_queries_the_image_makes() {
 
     // getSupportedFrameTimestamps() -> FrameEvent[] (int-backed enum).
     let mut data = Parcel::new();
-    data.write_interface_token(ISURFACE_COMPOSER).expect("token");
+    data.write_interface_token(ISURFACE_COMPOSER)
+        .expect("token");
     data.set_data_position(0);
-    let mut reply = transact(
-        &mut host,
-        sf,
-        GET_SUPPORTED_FRAME_TIMESTAMPS,
-        0,
-        &mut data,
-    )
-    .expect("transact");
+    let mut reply =
+        transact(&mut host, sf, GET_SUPPORTED_FRAME_TIMESTAMPS, 0, &mut data).expect("transact");
     no_exception(&mut reply);
     let events = reply
         .read_int32_array()
@@ -197,16 +195,11 @@ fn surfaceflinger_resolves_and_answers_the_display_queries_the_image_makes() {
     // declaration order would give 65): a wrong code here is an
     // UNSUPPORTED_ANDROID_API, not a wrong number.
     let mut data = Parcel::new();
-    data.write_interface_token(ISURFACE_COMPOSER).expect("token");
+    data.write_interface_token(ISURFACE_COMPOSER)
+        .expect("token");
     data.set_data_position(0);
-    let mut reply = transact(
-        &mut host,
-        sf,
-        GET_MAX_ACQUIRED_BUFFER_COUNT,
-        0,
-        &mut data,
-    )
-    .expect("transact");
+    let mut reply =
+        transact(&mut host, sf, GET_MAX_ACQUIRED_BUFFER_COUNT, 0, &mut data).expect("transact");
     no_exception(&mut reply);
     // W10: BLAST sizes its whole buffer pool from this value. ACOS answers a
     // verification-session depth (the default constant), not the old
@@ -228,7 +221,8 @@ fn create_connection_answers_a_routable_surface_client_node() {
     let mut host = ServiceHost::standard();
     let sf = composer(&mut host);
     let mut data = Parcel::new();
-    data.write_interface_token(ISURFACE_COMPOSER).expect("token");
+    data.write_interface_token(ISURFACE_COMPOSER)
+        .expect("token");
     data.set_data_position(0);
     let mut reply =
         transact(&mut host, sf, CREATE_CONNECTION, 0, &mut data).expect("createConnection");
@@ -245,11 +239,8 @@ fn create_connection_answers_a_routable_surface_client_node() {
 fn create_display_event_connection_answers_a_routable_connection_binder() {
     let mut host = ServiceHost::standard();
     let sf = composer(&mut host);
-    let mut data = create_connection_request(
-        acos_services::compositor_client::VSYNC_SOURCE_APP,
-        0,
-        false,
-    );
+    let mut data =
+        create_connection_request(acos_services::compositor_client::VSYNC_SOURCE_APP, 0, false);
     let mut reply =
         transact(&mut host, sf, CREATE_DISPLAY_EVENT_CONNECTION, 0, &mut data).expect("transact");
     no_exception(&mut reply);
@@ -257,7 +248,10 @@ fn create_display_event_connection_answers_a_routable_connection_binder() {
         .read_strong_binder()
         .expect("IDisplayEventConnection")
         .expect("non-null: the framework treats null as a creation failure");
-    assert_eq!(host.descriptor_of(connection), Some(IDISPLAY_EVENT_CONNECTION));
+    assert_eq!(
+        host.descriptor_of(connection),
+        Some(IDISPLAY_EVENT_CONNECTION)
+    );
     assert_eq!(reply.data_avail(), 0);
 
     // The request must not be mis-read: an unknown VsyncSource is a bad request,
@@ -265,30 +259,40 @@ fn create_display_event_connection_answers_a_routable_connection_binder() {
     let mut data = create_connection_request(7, 0, false);
     let err = transact(&mut host, sf, CREATE_DISPLAY_EVENT_CONNECTION, 0, &mut data)
         .expect_err("unknown VsyncSource");
-    assert!(matches!(err, ServiceError::BadRequest { .. }), "got {err:?}");
+    assert!(
+        matches!(err, ServiceError::BadRequest { .. }),
+        "got {err:?}"
+    );
 }
 
 #[test]
 fn steal_receive_channel_carries_two_descriptors_and_nothing_else() {
     let mut host = ServiceHost::standard();
     let sf = composer(&mut host);
-    let mut data = create_connection_request(
-        acos_services::compositor_client::VSYNC_SOURCE_APP,
-        0,
-        false,
-    );
+    let mut data =
+        create_connection_request(acos_services::compositor_client::VSYNC_SOURCE_APP, 0, false);
     let mut reply =
         transact(&mut host, sf, CREATE_DISPLAY_EVENT_CONNECTION, 0, &mut data).expect("transact");
     no_exception(&mut reply);
-    let connection = reply.read_strong_binder().expect("binder").expect("non-null");
+    let connection = reply
+        .read_strong_binder()
+        .expect("binder")
+        .expect("non-null");
 
     let mut data = steal_request();
     let mut reply =
         transact(&mut host, connection, STEAL_RECEIVE_CHANNEL, 0, &mut data).expect("transact");
     no_exception(&mut reply);
     let (receive, send) = display_events::read_bit_tube(&mut reply).expect("two fds");
-    assert_ne!(receive, send, "receive and send must be distinct descriptors");
-    assert_eq!(reply.data_avail(), 0, "the reply is exactly status + present + 2 fds");
+    assert_ne!(
+        receive, send,
+        "receive and send must be distinct descriptors"
+    );
+    assert_eq!(
+        reply.data_avail(),
+        0,
+        "the reply is exactly status + present + 2 fds"
+    );
     assert_eq!(reply.owned_file_descriptors().len(), 2);
 
     // `BitTube::readFromParcel` dups both; a second steal has nothing to give
@@ -303,22 +307,28 @@ fn steal_receive_channel_carries_two_descriptors_and_nothing_else() {
 fn latest_vsync_event_data_decodes_in_the_frameworks_read_order() {
     let mut host = ServiceHost::standard();
     let sf = composer(&mut host);
-    let mut data = create_connection_request(
-        acos_services::compositor_client::VSYNC_SOURCE_APP,
-        0,
-        false,
-    );
+    let mut data =
+        create_connection_request(acos_services::compositor_client::VSYNC_SOURCE_APP, 0, false);
     let mut reply =
         transact(&mut host, sf, CREATE_DISPLAY_EVENT_CONNECTION, 0, &mut data).expect("transact");
     no_exception(&mut reply);
-    let connection = reply.read_strong_binder().expect("binder").expect("non-null");
+    let connection = reply
+        .read_strong_binder()
+        .expect("binder")
+        .expect("non-null");
 
     let mut data = Parcel::new();
     data.write_interface_token(IDISPLAY_EVENT_CONNECTION)
         .expect("token");
     data.set_data_position(0);
-    let mut reply = transact(&mut host, connection, GET_LATEST_VSYNC_EVENT_DATA, 0, &mut data)
-        .expect("transact");
+    let mut reply = transact(
+        &mut host,
+        connection,
+        GET_LATEST_VSYNC_EVENT_DATA,
+        0,
+        &mut data,
+    )
+    .expect("transact");
     no_exception(&mut reply);
     // `BpDisplayEventConnection::getLatestVsyncEventData` reads the return with
     // `Parcel::readParcelable` (libgui.so 0x161ac5), i.e. present flag first.
@@ -351,22 +361,28 @@ fn latest_vsync_event_data_decodes_in_the_frameworks_read_order() {
 fn latest_vsync_event_data_is_the_parcelable_wire_form_byte_for_byte() {
     let mut host = ServiceHost::standard();
     let sf = composer(&mut host);
-    let mut data = create_connection_request(
-        acos_services::compositor_client::VSYNC_SOURCE_APP,
-        0,
-        false,
-    );
+    let mut data =
+        create_connection_request(acos_services::compositor_client::VSYNC_SOURCE_APP, 0, false);
     let mut reply =
         transact(&mut host, sf, CREATE_DISPLAY_EVENT_CONNECTION, 0, &mut data).expect("transact");
     no_exception(&mut reply);
-    let connection = reply.read_strong_binder().expect("binder").expect("non-null");
+    let connection = reply
+        .read_strong_binder()
+        .expect("binder")
+        .expect("non-null");
 
     let mut data = Parcel::new();
     data.write_interface_token(IDISPLAY_EVENT_CONNECTION)
         .expect("token");
     data.set_data_position(0);
-    let mut reply = transact(&mut host, connection, GET_LATEST_VSYNC_EVENT_DATA, 0, &mut data)
-        .expect("transact");
+    let mut reply = transact(
+        &mut host,
+        connection,
+        GET_LATEST_VSYNC_EVENT_DATA,
+        0,
+        &mut data,
+    )
+    .expect("transact");
 
     // Total wire size: exception header (4) + present flag (4) + body (8+4+4+24).
     assert_eq!(reply.data_size(), 48, "status + flag + one timeline");
@@ -378,8 +394,10 @@ fn latest_vsync_event_data_is_the_parcelable_wire_form_byte_for_byte() {
     assert_eq!(decoded.frame_interval, PERIOD_NS_60HZ);
     assert_eq!(decoded.preferred_frame_timeline_index, 0);
     assert_eq!(decoded.frame_timelines_length, 1);
-    assert_eq!(decoded.frame_timelines[0].expected_presentation_time,
-        decoded.frame_timelines[0].deadline_timestamp + PERIOD_NS_60HZ);
+    assert_eq!(
+        decoded.frame_timelines[0].expected_presentation_time,
+        decoded.frame_timelines[0].deadline_timestamp + PERIOD_NS_60HZ
+    );
     assert_eq!(reply.data_avail(), 0);
 
     // The framework's own reader must accept the whole reply (flag + body).
@@ -387,8 +405,14 @@ fn latest_vsync_event_data_is_the_parcelable_wire_form_byte_for_byte() {
     data.write_interface_token(IDISPLAY_EVENT_CONNECTION)
         .expect("token");
     data.set_data_position(0);
-    let mut reply = transact(&mut host, connection, GET_LATEST_VSYNC_EVENT_DATA, 0, &mut data)
-        .expect("transact");
+    let mut reply = transact(
+        &mut host,
+        connection,
+        GET_LATEST_VSYNC_EVENT_DATA,
+        0,
+        &mut data,
+    )
+    .expect("transact");
     no_exception(&mut reply);
     display_events::VsyncEventData::read_parcelable_from(&mut reply)
         .expect("Parcel::readParcelable accepts the reply");
@@ -401,15 +425,15 @@ fn latest_vsync_event_data_is_the_parcelable_wire_form_byte_for_byte() {
 fn requested_vsyncs_arrive_at_sixty_hertz_and_only_when_requested() {
     let mut host = ServiceHost::standard();
     let sf = composer(&mut host);
-    let mut data = create_connection_request(
-        acos_services::compositor_client::VSYNC_SOURCE_APP,
-        0,
-        false,
-    );
+    let mut data =
+        create_connection_request(acos_services::compositor_client::VSYNC_SOURCE_APP, 0, false);
     let mut reply =
         transact(&mut host, sf, CREATE_DISPLAY_EVENT_CONNECTION, 0, &mut data).expect("transact");
     no_exception(&mut reply);
-    let connection = reply.read_strong_binder().expect("binder").expect("non-null");
+    let connection = reply
+        .read_strong_binder()
+        .expect("binder")
+        .expect("non-null");
 
     let mut data = steal_request();
     let mut reply =
@@ -424,9 +448,7 @@ fn requested_vsyncs_arrive_at_sixty_hertz_and_only_when_requested() {
             .borrowed_file_descriptor(receive_raw)
             .expect("parcel owns the receive fd");
         assert!(
-            display_events::recv_event(receive)
-                .expect("recv")
-                .is_none(),
+            display_events::recv_event(receive).expect("recv").is_none(),
             "a connection that was never asked for a vsync must stay silent"
         );
     }
@@ -498,15 +520,15 @@ fn requested_vsyncs_arrive_at_sixty_hertz_and_only_when_requested() {
 fn set_vsync_rate_makes_the_clock_continuous_until_it_is_zeroed() {
     let mut host = ServiceHost::standard();
     let sf = composer(&mut host);
-    let mut data = create_connection_request(
-        acos_services::compositor_client::VSYNC_SOURCE_APP,
-        0,
-        false,
-    );
+    let mut data =
+        create_connection_request(acos_services::compositor_client::VSYNC_SOURCE_APP, 0, false);
     let mut reply =
         transact(&mut host, sf, CREATE_DISPLAY_EVENT_CONNECTION, 0, &mut data).expect("transact");
     no_exception(&mut reply);
-    let connection = reply.read_strong_binder().expect("binder").expect("non-null");
+    let connection = reply
+        .read_strong_binder()
+        .expect("binder")
+        .expect("non-null");
 
     let mut data = steal_request();
     let mut reply =
@@ -519,8 +541,8 @@ fn set_vsync_rate_makes_the_clock_continuous_until_it_is_zeroed() {
         .expect("token");
     data.write_int32(1);
     data.set_data_position(0);
-    let mut rate_reply = transact(&mut host, connection, SET_VSYNC_RATE, 0, &mut data)
-        .expect("setVsyncRate(1)");
+    let mut rate_reply =
+        transact(&mut host, connection, SET_VSYNC_RATE, 0, &mut data).expect("setVsyncRate(1)");
     no_exception(&mut rate_reply);
     assert_eq!(rate_reply.data_avail(), 0);
 
@@ -536,15 +558,18 @@ fn set_vsync_rate_makes_the_clock_continuous_until_it_is_zeroed() {
             std::thread::sleep(Duration::from_millis(2));
         }
     }
-    assert!(seen >= 3, "a non-zero vsync rate must keep the clock running");
+    assert!(
+        seen >= 3,
+        "a non-zero vsync rate must keep the clock running"
+    );
 
     let mut data = Parcel::new();
     data.write_interface_token(IDISPLAY_EVENT_CONNECTION)
         .expect("token");
     data.write_int32(0);
     data.set_data_position(0);
-    let mut zero = transact(&mut host, connection, SET_VSYNC_RATE, 0, &mut data)
-        .expect("setVsyncRate(0)");
+    let mut zero =
+        transact(&mut host, connection, SET_VSYNC_RATE, 0, &mut data).expect("setVsyncRate(0)");
     no_exception(&mut zero);
 }
 

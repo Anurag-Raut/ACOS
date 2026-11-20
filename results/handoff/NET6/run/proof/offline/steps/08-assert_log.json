@@ -1,0 +1,47 @@
+{
+  "assertions": [
+    {
+      "actual": {
+        "matched_lines": 1,
+        "sample": [
+          "NetCheck: fetch failed: java.net.ConnectException: Failed to connect to example.com/104.20.23.154:443"
+        ]
+      },
+      "expected": {
+        "min_matches": 1,
+        "ordered": true,
+        "patterns": [
+          "^fetch failed: (java\\.net\\.UnknownHostException|java\\.net\\.(ConnectException|SocketException|NoRouteToHostException))(:|$)"
+        ],
+        "since_previous_step": false,
+        "tag": "NetCheck"
+      },
+      "kind": "log",
+      "matched_node_ids": [],
+      "passed": true
+    }
+  ],
+  "certification": "certified-with-limits",
+  "certification_limits": {
+    "doc": "docs/SANDBOX_CERTIFICATION.md",
+    "section": "§8.7"
+  },
+  "duration_ms": 0,
+  "evidence": [
+    {
+      "kind": "log",
+      "path": "logs/logcat.txt"
+    },
+    {
+      "kind": "step",
+      "path": "steps/08-assert_log.json"
+    }
+  ],
+  "index": 8,
+  "provenance": {
+    "logs": "guest-asserted"
+  },
+  "status": "pass",
+  "step": "assert_log",
+  "trust": "trusted"
+}

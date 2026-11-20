@@ -58,7 +58,7 @@
 use acos_aidl::MethodInfo;
 use acos_parcel::{BinderId, Parcel};
 
-use crate::error::{ServiceError, Result};
+use crate::error::{Result, ServiceError};
 use crate::exception::{write_no_exception, NO_EXCEPTION};
 use crate::host::{CallResult, ServiceObject};
 use crate::parcelable;
@@ -259,8 +259,7 @@ impl CursorResult {
             .map_err(ServiceError::Parcel)?;
         parcel.write_uint32(num_rows);
         parcel.write_uint32(num_columns);
-        parcel
-            .write_uint32(u32::try_from(bytes.len()).unwrap_or(u32::MAX));
+        parcel.write_uint32(u32::try_from(bytes.len()).unwrap_or(u32::MAX));
         parcel.write_int32(0); // `writeBool(false)`: inline frame, not an fd
         debug_assert_eq!(bytes.len() % 4, 0, "compacted window is 4-byte aligned");
         for word in bytes.chunks_exact(4) {
@@ -336,9 +335,7 @@ impl CursorWindowView {
             return Err(ServiceError::BadRequest {
                 interface: "android.database.CursorWindow".into(),
                 method: "createFromParcel".into(),
-                detail: format!(
-                    "size {size} cannot hold {num_rows}×{num_columns} slots"
-                ),
+                detail: format!("size {size} cannot hold {num_rows}×{num_columns} slots"),
             });
         }
         let is_ashmem = parcel.read_int32()? != 0;
@@ -410,7 +407,9 @@ impl CursorWindowView {
                 let raw = &self.data[offset..offset + len];
                 if kind == FIELD_TYPE_STRING {
                     let text = raw.strip_suffix(&[0]).unwrap_or(raw);
-                    Some(WindowField::Text(String::from_utf8_lossy(text).into_owned()))
+                    Some(WindowField::Text(
+                        String::from_utf8_lossy(text).into_owned(),
+                    ))
                 } else {
                     Some(WindowField::Blob(raw.to_vec()))
                 }
@@ -527,7 +526,9 @@ impl QueryRequest {
             None
         } else {
             // Guest-controlled count: each String16 takes at least 4 bytes.
-            let cap = usize::try_from(count).unwrap_or(0).min(parcel.remaining() / 4);
+            let cap = usize::try_from(count)
+                .unwrap_or(0)
+                .min(parcel.remaining() / 4);
             let mut columns = Vec::with_capacity(cap);
             for _ in 0..count {
                 columns.push(parcel.read_string16()?.unwrap_or_default());

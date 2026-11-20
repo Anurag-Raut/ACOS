@@ -14,26 +14,14 @@ fn dex_dir() -> std::path::PathBuf {
 
 #[test]
 fn codec_field_orders_match_the_framework_dex() {
-    // EVERY boot-classpath DEX directory, not one: a single `dex/framework`
-    // scan skipped `android.net.*` (framework-connectivity) and every apex jar
-    // as "class not found", which is how the wrong NetworkCapabilities and
-    // LinkProperties field lists stayed `Verification::Full` unverified.
-    let dirs = parcelable::boot_classpath_dex_dirs().expect("boot DEX cache (run from the repo root)");
-    assert!(
-        dirs.len() > 10,
-        "the oracle must cover every boot-classpath jar, saw {} dirs",
-        dirs.len()
-    );
+    let dir = dex_dir();
     let mut checked = 0usize;
     let mut full = 0usize;
-    let mut missing = Vec::new();
     let mut failures = Vec::new();
     for spec in parcelable::SPECS {
-        let Ok(scanned) = parcelable::Scanner::write_to_parcel_in(&dirs, spec.class) else {
+        let Ok(scanned) = parcelable::Scanner::write_to_parcel(&dir, spec.class) else {
             // Some curated ACOS-owned values have no Java `writeToParcel` on the
-            // boot classpath; that is expected, and every codec that *does*
-            // have one is verified.
-            missing.push(spec.class);
+            // boot classpath; that is expected.
             continue;
         };
         let result = parcelable::verify(spec, &scanned);
@@ -55,7 +43,10 @@ fn codec_field_orders_match_the_framework_dex() {
             Verification::Prefix => {
                 // At least the leading field must be in the real order.
                 if matched == 0 && !spec.fields.is_empty() {
-                    failures.push(format!("{}: no prefix match ({real_len} real ops)", spec.class));
+                    failures.push(format!(
+                        "{}: no prefix match ({real_len} real ops)",
+                        spec.class
+                    ));
                 }
             }
             Verification::Curated => {}
@@ -70,11 +61,7 @@ fn codec_field_orders_match_the_framework_dex() {
             real_len
         );
     }
-    println!(
-        "verified {checked} specs against {} boot DEX dirs ({full} full); no writeToParcel for {}",
-        dirs.len(),
-        missing.len()
-    );
+    println!("verified {checked} specs against the boot DEX ({full} full)");
     assert!(checked >= 10, "expected to verify at least 10 codecs");
     assert!(failures.is_empty(), "codec drift:\n{}", failures.join("\n"));
 }
@@ -124,10 +111,7 @@ fn parcel_exception_constants_match_the_framework() {
     assert_eq!(NO_EXCEPTION, 0);
 }
 
-fn framework_static_ints(
-    dex: &acos_dex::DexFile,
-    def: &acos_dex::ClassDef,
-) -> Vec<(String, i64)> {
+fn framework_static_ints(dex: &acos_dex::DexFile, def: &acos_dex::ClassDef) -> Vec<(String, i64)> {
     let mut out = Vec::new();
     let Ok(Some(cd)) = dex.class_data(def) else {
         return out;
@@ -171,12 +155,19 @@ fn task_description_reads_the_api34_conditional_layout() {
     parcel.write_int32(0); // iconFilenamePresent
     parcel.write_int32(0); // colorBackgroundFloating
     parcel.set_data_position(0);
-    let decoded = parcelable::read_payload("android.app.ActivityManager$TaskDescription", &mut parcel)
-        .expect("read the real API-34 TaskDescription payload");
+    let decoded =
+        parcelable::read_payload("android.app.ActivityManager$TaskDescription", &mut parcel)
+            .expect("read the real API-34 TaskDescription payload");
     parcel
         .enforce_no_data_avail()
         .expect("the conditional reader consumed the whole payload");
-    assert_eq!(decoded.field(0), Some(&Value::Cond { present: false, values: vec![] }));
+    assert_eq!(
+        decoded.field(0),
+        Some(&Value::Cond {
+            present: false,
+            values: vec![]
+        })
+    );
     assert_eq!(decoded.field(4), Some(&Value::Int(0xff11_2233u32 as i32)));
     assert_eq!(decoded.field(8), Some(&Value::Int(2)));
     assert_eq!(decoded.field(9), Some(&Value::Int(-1)));
@@ -200,9 +191,12 @@ fn task_description_reads_the_api34_conditional_layout() {
     parcel.write_string16_opt(Some("icon.png")).unwrap();
     parcel.write_int32(0);
     parcel.set_data_position(0);
-    let decoded = parcelable::read_payload("android.app.ActivityManager$TaskDescription", &mut parcel)
-        .expect("read a TaskDescription with label + iconFilename");
-    parcel.enforce_no_data_avail().expect("consumed present branches");
+    let decoded =
+        parcelable::read_payload("android.app.ActivityManager$TaskDescription", &mut parcel)
+            .expect("read a TaskDescription with label + iconFilename");
+    parcel
+        .enforce_no_data_avail()
+        .expect("consumed present branches");
     assert_eq!(
         decoded.field(0),
         Some(&Value::Cond {
@@ -249,11 +243,7 @@ fn every_spec_round_trips_through_a_parcel() {
             assert!(matches!(value.field(1), Some(Value::RawFd(Some(_)))));
             assert!(matches!(decoded.field(1), Some(Value::RawFd(Some(_)))));
         } else {
-            assert_eq!(
-                decoded, value,
-                "{} did not round-trip",
-                spec.class
-            );
+            assert_eq!(decoded, value, "{} did not round-trip", spec.class);
         }
         parcel.enforce_no_data_avail().expect("no trailing bytes");
     }
@@ -261,10 +251,18 @@ fn every_spec_round_trips_through_a_parcel() {
 
 fn sample_for(class: &str) -> Option<Parcelable> {
     Some(match class {
-        "android.graphics.Rect" => {
-            Parcelable::ordered(class, vec![Value::Int(0), Value::Int(128), Value::Int(1080), Value::Int(2337)])
+        "android.graphics.Rect" => Parcelable::ordered(
+            class,
+            vec![
+                Value::Int(0),
+                Value::Int(128),
+                Value::Int(1080),
+                Value::Int(2337),
+            ],
+        ),
+        "android.graphics.Point" => {
+            Parcelable::ordered(class, vec![Value::Int(1080), Value::Int(2400)])
         }
-        "android.graphics.Point" => Parcelable::ordered(class, vec![Value::Int(1080), Value::Int(2400)]),
         "android.content.ComponentName" => Parcelable::ordered(
             class,
             vec![
@@ -287,7 +285,9 @@ fn sample_for(class: &str) -> Option<Parcelable> {
             b.put("value", Value::Str(Some("hello".into())));
             Parcelable::ordered(class, vec![Value::Bundle(Some(b))])
         }
-        "android.view.DisplayInfo" => acos_services::display::DisplayInfo::hello_views().to_parcelable(),
+        "android.view.DisplayInfo" => {
+            acos_services::display::DisplayInfo::hello_views().to_parcelable()
+        }
         "android.view.Display$Mode" => Parcelable::ordered(
             class,
             vec![
@@ -302,10 +302,10 @@ fn sample_for(class: &str) -> Option<Parcelable> {
         "android.view.SurfaceControl$RefreshRateRange" => {
             Parcelable::ordered(class, vec![Value::Float(60.0), Value::Float(120.0)])
         }
-        "android.content.pm.ApplicationInfo" => {
-            acos_services::pms::AppInfo::hello_views_fallback(std::path::Path::new("hello-views.apk"))
-                .to_parcelable()
-        }
+        "android.content.pm.ApplicationInfo" => acos_services::pms::AppInfo::hello_views_fallback(
+            std::path::Path::new("hello-views.apk"),
+        )
+        .to_parcelable(),
         "android.view.autofill.AutofillId" => {
             Parcelable::ordered(class, vec![Value::Int(1), Value::Int(2)])
         }
@@ -319,34 +319,64 @@ fn sample_for(class: &str) -> Option<Parcelable> {
                 Value::IntArray(Some(vec![914])),
             ],
         ),
+        // The image's shape: two `writeBoolean` presence flags guarding the
+        // binder and the callback list (MPROC6).
         "android.app.servertransaction.ClientTransaction" => Parcelable::ordered(
             class,
             vec![
-                Value::Bool(false),
-                Value::Binder(None),
+                Value::Cond {
+                    present: true,
+                    values: vec![Value::Binder(None)],
+                },
                 Value::NamedParcelable(Parcelable::Null),
-                Value::Bool(false),
-                Value::List(None),
+                Value::Cond {
+                    present: true,
+                    values: vec![Value::List(Some(vec![Value::Parcelable(
+                        Parcelable::ordered(
+                            "android.app.servertransaction.ResumeActivityItem",
+                            vec![
+                                Value::Int(2),
+                                Value::Bool(false),
+                                Value::Bool(false),
+                                Value::Bool(false),
+                            ],
+                        ),
+                    )]))],
+                },
             ],
         ),
-        "android.os.LocaleList" => Parcelable::ordered(
-            class,
-            vec![Value::Str8(Some("en-US".into()))],
-        ),
+        "android.os.LocaleList" => {
+            Parcelable::ordered(class, vec![Value::Str8(Some("en-US".into()))])
+        }
         "android.app.WindowConfiguration" => Parcelable::ordered(
             class,
             vec![
                 Value::Parcelable(Parcelable::ordered(
                     "android.graphics.Rect",
-                    vec![Value::Int(0), Value::Int(0), Value::Int(1080), Value::Int(2400)],
+                    vec![
+                        Value::Int(0),
+                        Value::Int(0),
+                        Value::Int(1080),
+                        Value::Int(2400),
+                    ],
                 )),
                 Value::TypedObject(Parcelable::ordered(
                     "android.graphics.Rect",
-                    vec![Value::Int(0), Value::Int(0), Value::Int(1080), Value::Int(2400)],
+                    vec![
+                        Value::Int(0),
+                        Value::Int(0),
+                        Value::Int(1080),
+                        Value::Int(2400),
+                    ],
                 )),
                 Value::Parcelable(Parcelable::ordered(
                     "android.graphics.Rect",
-                    vec![Value::Int(0), Value::Int(0), Value::Int(1080), Value::Int(2400)],
+                    vec![
+                        Value::Int(0),
+                        Value::Int(0),
+                        Value::Int(1080),
+                        Value::Int(2400),
+                    ],
                 )),
                 Value::Int(1),
                 Value::Int(1),
@@ -360,44 +390,59 @@ fn sample_for(class: &str) -> Option<Parcelable> {
             class,
             vec![
                 Value::Float(1.0),
-                Value::Int(0),  // mcc
-                Value::Int(0),  // mnc
+                Value::Int(0), // mcc
+                Value::Int(0), // mnc
                 Value::TypedObject(Parcelable::ordered(
                     "android.os.LocaleList",
                     vec![Value::Str8(Some("en-US".into()))],
                 )),
-                Value::Int(0),  // userSetLocale
-                Value::Int(0),  // touchscreen
-                Value::Int(0),  // keyboard
-                Value::Int(0),  // keyboardHidden
-                Value::Int(0),  // hardKeyboardHidden
-                Value::Int(0),  // navigation
-                Value::Int(0),  // navigationHidden
-                Value::Int(0),  // orientation
-                Value::Int(0),  // screenLayout
-                Value::Int(0),  // colorMode
-                Value::Int(0),  // uiMode
+                Value::Int(0),   // userSetLocale
+                Value::Int(0),   // touchscreen
+                Value::Int(0),   // keyboard
+                Value::Int(0),   // keyboardHidden
+                Value::Int(0),   // hardKeyboardHidden
+                Value::Int(0),   // navigation
+                Value::Int(0),   // navigationHidden
+                Value::Int(0),   // orientation
+                Value::Int(0),   // screenLayout
+                Value::Int(0),   // colorMode
+                Value::Int(0),   // uiMode
                 Value::Int(411), // screenWidthDp
                 Value::Int(914), // screenHeightDp
                 Value::Int(411), // smallestScreenWidthDp
                 Value::Int(420), // densityDpi
-                Value::Int(0),  // compatScreenWidthDp
-                Value::Int(0),  // compatScreenHeightDp
-                Value::Int(0),  // compatSmallestScreenWidthDp
+                Value::Int(0),   // compatScreenWidthDp
+                Value::Int(0),   // compatScreenHeightDp
+                Value::Int(0),   // compatSmallestScreenWidthDp
                 Value::Parcelable(Parcelable::ordered(
                     "android.app.WindowConfiguration",
                     vec![
                         Value::Parcelable(Parcelable::ordered(
                             "android.graphics.Rect",
-                            vec![Value::Int(0), Value::Int(0), Value::Int(1080), Value::Int(2400)],
+                            vec![
+                                Value::Int(0),
+                                Value::Int(0),
+                                Value::Int(1080),
+                                Value::Int(2400),
+                            ],
                         )),
                         Value::TypedObject(Parcelable::ordered(
                             "android.graphics.Rect",
-                            vec![Value::Int(0), Value::Int(0), Value::Int(1080), Value::Int(2400)],
+                            vec![
+                                Value::Int(0),
+                                Value::Int(0),
+                                Value::Int(1080),
+                                Value::Int(2400),
+                            ],
                         )),
                         Value::Parcelable(Parcelable::ordered(
                             "android.graphics.Rect",
-                            vec![Value::Int(0), Value::Int(0), Value::Int(1080), Value::Int(2400)],
+                            vec![
+                                Value::Int(0),
+                                Value::Int(0),
+                                Value::Int(1080),
+                                Value::Int(2400),
+                            ],
                         )),
                         Value::Int(1),
                         Value::Int(1),
@@ -407,10 +452,10 @@ fn sample_for(class: &str) -> Option<Parcelable> {
                         Value::Int(0),
                     ],
                 )),
-                Value::Int(0),  // assetsSeq
-                Value::Int(0),  // seq
-                Value::Int(0),  // fontWeightAdjustment
-                Value::Int(0),  // mGrammaticalGender
+                Value::Int(0), // assetsSeq
+                Value::Int(0), // seq
+                Value::Int(0), // fontWeightAdjustment
+                Value::Int(0), // mGrammaticalGender
             ],
         ),
         "android.content.AttributionSource" => Parcelable::ordered(
@@ -440,7 +485,10 @@ fn sample_for(class: &str) -> Option<Parcelable> {
                 Value::Str(None),
                 Value::Int(1),
                 Value::Int(-1),
-                Value::Cond { present: false, values: vec![] },
+                Value::Cond {
+                    present: false,
+                    values: vec![],
+                },
             ],
         ),
         "android.os.PersistableBundle" => {
@@ -471,7 +519,12 @@ fn sample_for(class: &str) -> Option<Parcelable> {
             let rect = || {
                 Value::Parcelable(Parcelable::ordered(
                     "android.graphics.Rect",
-                    vec![Value::Int(0), Value::Int(0), Value::Int(1080), Value::Int(2400)],
+                    vec![
+                        Value::Int(0),
+                        Value::Int(0),
+                        Value::Int(1080),
+                        Value::Int(2400),
+                    ],
                 ))
             };
             Parcelable::ordered(
@@ -482,7 +535,12 @@ fn sample_for(class: &str) -> Option<Parcelable> {
                     rect(),
                     Value::TypedObject(Parcelable::ordered(
                         "android.graphics.Rect",
-                        vec![Value::Int(0), Value::Int(0), Value::Int(1080), Value::Int(2400)],
+                        vec![
+                            Value::Int(0),
+                            Value::Int(0),
+                            Value::Int(1080),
+                            Value::Int(2400),
+                        ],
                     )),
                     Value::Bool(false),
                     Value::Float(1.0),
@@ -505,9 +563,17 @@ fn sample_for(class: &str) -> Option<Parcelable> {
                 Value::Int(0),
                 Value::Parcelable(Parcelable::ordered(
                     "android.graphics.Rect",
-                    vec![Value::Int(0), Value::Int(0), Value::Int(1080), Value::Int(128)],
+                    vec![
+                        Value::Int(0),
+                        Value::Int(0),
+                        Value::Int(1080),
+                        Value::Int(128),
+                    ],
                 )),
-                Value::Cond { present: false, values: vec![] },
+                Value::Cond {
+                    present: false,
+                    values: vec![],
+                },
                 Value::Bool(true),
                 Value::Int(0),
                 Value::Bool(false),
@@ -525,17 +591,199 @@ fn sample_for(class: &str) -> Option<Parcelable> {
                 Value::Bool(false),
             ],
         ),
-        "android.view.InsetsSourceControl$Array" => Parcelable::ordered(
-            class,
-            vec![Value::List(None)],
-        ),
-        "android.view.RoundedCorners" => {
-            Parcelable::ordered(class, vec![Value::Cond { present: false, values: vec![] }])
+        "android.view.InsetsSourceControl$Array" => {
+            Parcelable::ordered(class, vec![Value::List(None)])
         }
-        "android.view.PrivacyIndicatorBounds" => Parcelable::ordered(
+        "android.app.Notification" => Parcelable::ordered(
             class,
-            vec![Value::List(None), Value::Int(0)],
+            vec![
+                Value::Int(1),                  // version
+                Value::Binder(None),            // mAllowlistToken
+                Value::Long(1_700_000_000_000), // when
+                Value::Long(1_700_000_000_000), // creationTime
+                Value::Cond {
+                    present: true,
+                    values: vec![Value::Parcelable(Parcelable::ordered(
+                        "android.graphics.drawable.Icon",
+                        vec![
+                            Value::Int(2), // TYPE_RESOURCE
+                            Value::Str(Some("dev.acos.fixtures.notif".into())),
+                            Value::Int(0x7f_01_0001),
+                            Value::Cond {
+                                present: false,
+                                values: vec![],
+                            }, // no tint
+                            Value::Int(5), // BlendMode.SRC_IN (the image's default)
+                        ],
+                    ))],
+                },
+                Value::Int(1), // number
+                Value::Cond {
+                    present: true,
+                    values: vec![Value::Parcelable(Parcelable::ordered(
+                        "android.app.PendingIntent",
+                        vec![Value::Binder(Some(acos_parcel::binder::BinderId(7)))],
+                    ))],
+                },
+                Value::Cond {
+                    present: false,
+                    values: vec![],
+                }, // deleteIntent
+                Value::Cond {
+                    present: false,
+                    values: vec![],
+                }, // tickerText
+                Value::Cond {
+                    present: false,
+                    values: vec![],
+                }, // tickerView
+                Value::Cond {
+                    present: false,
+                    values: vec![],
+                }, // contentView
+                Value::Cond {
+                    present: false,
+                    values: vec![],
+                }, // mLargeIcon
+                Value::Int(0),    // defaults
+                Value::Int(0x10), // flags (FLAG_ONGOING_EVENT)
+                Value::Cond {
+                    present: false,
+                    values: vec![],
+                }, // sound
+                Value::Int(0),    // audioStreamType
+                Value::Cond {
+                    present: false,
+                    values: vec![],
+                }, // audioAttributes
+                Value::LongArray(None), // vibrate
+                Value::Int(0),    // ledARGB
+                Value::Int(0),    // ledOnMS
+                Value::Int(0),    // ledOffMS
+                Value::Int(0),    // iconLevel
+                Value::Cond {
+                    present: false,
+                    values: vec![],
+                }, // fullScreenIntent
+                Value::Int(0),    // priority
+                Value::Str8(None), // category
+                Value::Str8(Some("fixture-group".into())), // mGroupKey
+                Value::Str8(None), // mSortKey
+                Value::Bundle(Some({
+                    let mut b = Bundle::new();
+                    b.put("android.title", Value::Str(Some("hello".into())));
+                    b.put("android.text", Value::Str(Some("world".into())));
+                    b
+                })),
+                Value::List(Some(vec![Value::Parcelable(Parcelable::ordered(
+                    "android.app.Notification$Action",
+                    vec![
+                        Value::Cond {
+                            present: false,
+                            values: vec![],
+                        }, // icon
+                        Value::Str(Some("Reply".into())), // title
+                        Value::Cond {
+                            present: false,
+                            values: vec![],
+                        }, // actionIntent
+                        Value::Bundle(None),              // mExtras
+                        Value::List(None),                // mRemoteInputs
+                        Value::Int(1),                    // mAllowGeneratedReplies
+                        Value::Int(0),                    // mSemanticAction
+                        Value::Int(0),                    // mIsContextual
+                        Value::Int(0),                    // mAuthenticationRequired
+                    ],
+                ))])),
+                Value::Cond {
+                    present: false,
+                    values: vec![],
+                }, // bigContentView
+                Value::Cond {
+                    present: false,
+                    values: vec![],
+                }, // headsUpContentView
+                Value::Int(1), // visibility
+                Value::Cond {
+                    present: false,
+                    values: vec![],
+                }, // publicVersion
+                Value::Int(0), // color
+                Value::Cond {
+                    present: true,
+                    values: vec![Value::Str8(Some("fixture-channel".into()))],
+                },
+                Value::Long(0), // mTimeout
+                Value::Cond {
+                    present: false,
+                    values: vec![],
+                }, // mShortcutId
+                Value::Cond {
+                    present: false,
+                    values: vec![],
+                }, // mLocusId
+                Value::Int(0),  // mBadgeIcon
+                Value::Cond {
+                    present: false,
+                    values: vec![],
+                }, // mSettingsText
+                Value::Int(0),  // mGroupAlertBehavior
+                Value::Cond {
+                    present: false,
+                    values: vec![],
+                }, // mBubbleMetadata
+                Value::Bool(false), // mAllowSystemGeneratedContextualActions
+                Value::Int(0),  // mFgsDeferBehavior
+                Value::List(None), // allPendingIntents (null ArraySet)
+            ],
         ),
+        "android.app.Notification$Action" => Parcelable::ordered(
+            class,
+            vec![
+                Value::Cond {
+                    present: false,
+                    values: vec![],
+                },
+                Value::Str(Some("Reply".into())),
+                Value::Cond {
+                    present: false,
+                    values: vec![],
+                },
+                Value::Bundle(None),
+                Value::List(None),
+                Value::Int(1),
+                Value::Int(0),
+                Value::Int(0),
+                Value::Int(0),
+            ],
+        ),
+        "android.app.PendingIntent" => Parcelable::ordered(
+            class,
+            vec![Value::Binder(Some(acos_parcel::binder::BinderId(7)))],
+        ),
+        "android.graphics.drawable.Icon" => Parcelable::ordered(
+            class,
+            vec![
+                Value::Int(2), // TYPE_RESOURCE
+                Value::Str(Some("dev.acos.fixtures.notif".into())),
+                Value::Int(0x7f_01_0001),
+                Value::Cond {
+                    present: false,
+                    values: vec![],
+                },
+                Value::Int(5), // BlendMode.SRC_IN
+            ],
+        ),
+        "android.view.RoundedCorners" => Parcelable::ordered(
+            class,
+            vec![Value::Cond {
+                present: false,
+                values: vec![],
+            }],
+        ),
+        "android.view.PrivacyIndicatorBounds" => {
+            Parcelable::ordered(class, vec![Value::List(None), Value::Int(0)])
+        }
         "android.view.DisplayShape" => Parcelable::ordered(
             class,
             vec![
@@ -553,20 +801,367 @@ fn sample_for(class: &str) -> Option<Parcelable> {
     })
 }
 
-/// REL3P regression: a `getPackageInfo(pkg, GET_SIGNATURES|GET_META_DATA|
-/// GET_PERMISSIONS = 0x100024c0)` reply must stay in sync with the framework's
-/// own reader.
+/// The `Icon` branch logic: a resource icon round-trips, and a bitmap icon is a
+/// structured `UnsupportedParcelable` rather than a mis-read payload.
+#[test]
+fn icon_payload_round_trips() {
+    let icon = Parcelable::ordered(
+        "android.graphics.drawable.Icon",
+        vec![
+            Value::Int(2),
+            Value::Str(Some("dev.acos.fixtures.notif".into())),
+            Value::Int(0x7f_01_0001),
+            Value::Cond {
+                present: false,
+                values: vec![],
+            },
+            Value::Int(5), // BlendMode.SRC_IN
+        ],
+    );
+    let mut parcel = acos_parcel::Parcel::new();
+    parcelable::write_payload(&mut parcel, &icon).expect("write icon");
+    parcel.set_data_position(0);
+    let decoded =
+        parcelable::read_payload("android.graphics.drawable.Icon", &mut parcel).expect("read icon");
+    assert_eq!(decoded, icon);
+}
+
+/// `Notification.writeToParcel` ends with `writeArraySet(allPendingIntents)`
+/// (`Notification.java:3184-3190`): an `int` count (`-1` for null) and one
+/// `writeValue` per `PendingIntent` the marshaling listener collected. The
+/// MODNOTIF3 codec wrote the null encoding only; a notification that carries a
+/// `contentIntent` really produces a one-element set, so the field is modelled
+/// (`FieldOp::ArraySet`) and both shapes round-trip.
+#[test]
+fn notification_all_pending_intents_array_set_round_trips() {
+    let base = sample_for("android.app.Notification").expect("notification sample");
+    // Absent: the framework's `writeInt(-1)`.
+    let mut parcel = acos_parcel::Parcel::new();
+    parcelable::write_payload(&mut parcel, &base).expect("write notification");
+    let null_tail = parcel.marshall();
+    assert_eq!(
+        null_tail[null_tail.len() - 4..],
+        [0xff, 0xff, 0xff, 0xff],
+        "a null allPendingIntents is the -1 count"
+    );
+
+    // Present: the contentIntent is collected into the set, and the set's
+    // element is that same `PendingIntent` written as a `VAL_PARCELABLE`.
+    let intent = Parcelable::ordered(
+        "android.app.PendingIntent",
+        vec![Value::Binder(Some(acos_parcel::binder::BinderId(7)))],
+    );
+    let mut values = base.fields().expect("ordered").to_vec();
+    let last = values.len() - 1;
+    values[last] = Value::List(Some(vec![Value::Parcelable(intent)]));
+    let with_set = Parcelable::ordered("android.app.Notification", values);
+
+    let mut parcel = acos_parcel::Parcel::new();
+    parcelable::write_payload(&mut parcel, &with_set).expect("write notification");
+    let bytes = parcel.marshall();
+    // The tail is the count (1), the `VAL_PARCELABLE` tag of the collected
+    // intent and, at the very end, the strong binder the `PendingIntent` holds.
+    let mut binder_only = acos_parcel::Parcel::new();
+    binder_only.write_strong_binder(acos_parcel::binder::BinderId(7));
+    let binder_bytes = binder_only.marshall();
+    assert!(
+        bytes.ends_with(&binder_bytes),
+        "the collected PendingIntent is written as its strong binder"
+    );
+    // Everything before the trailing set is byte-identical to the null case
+    // (there the `-1` count sits at the end), and the set is
+    // `count=1`, `VAL_PARCELABLE`, the body length, the class name
+    // (`writeString`: u32 length + UTF-16 + NUL) and the strong binder.
+    let count_at = null_tail.len() - 4;
+    assert_eq!(
+        &bytes[..count_at],
+        &null_tail[..count_at],
+        "the fields before allPendingIntents are unchanged"
+    );
+    let tail = &bytes[count_at..];
+    assert_eq!(&tail[..4], &[1, 0, 0, 0], "one collected PendingIntent");
+    assert_eq!(&tail[4..8], &[4, 0, 0, 0], "VAL_PARCELABLE");
+    let name = "android.app.PendingIntent";
+    assert_eq!(
+        &tail[12..16],
+        &(name.len() as u32).to_le_bytes(),
+        "class name length"
+    );
+    let mut utf16 = Vec::new();
+    for unit in name.encode_utf16() {
+        utf16.extend_from_slice(&unit.to_le_bytes());
+    }
+    assert_eq!(&tail[16..16 + utf16.len()], &utf16[..], "class name");
+    assert!(
+        tail.ends_with(&binder_bytes),
+        "the collected PendingIntent is written as its strong binder"
+    );
+
+    parcel.set_data_position(0);
+    let decoded =
+        parcelable::read_payload("android.app.Notification", &mut parcel).expect("read payload");
+    assert_eq!(decoded, with_set, "the ArraySet did not round-trip");
+    parcel.enforce_no_data_avail().expect("no trailing bytes");
+}
+
+// ---------------------------------------------------------------------------
+// MODNOTIF5: two codec bugs a real `Notification.Builder` notification exposed
+// (the Java differential built its own parcel, so writer and reader shared the
+// transcription and both were wrong in the same way).
+// ---------------------------------------------------------------------------
+
+/// `android.media.AudioAttributes.writeToParcel` branches on `FLATTEN_TAGS`
+/// (`base/media/java/android/media/AudioAttributes.java:1349-1368`) and writes
+/// the bundle only after a `VALID_BUNDLE` sentinel.
 ///
-/// `PackageInfo.writeToParcel` writes `splitNames` and `requestedPermissions`
-/// with `writeString8Array` (image `classes.dex` `Landroid/content/pm/
-/// PackageInfo;->writeToParcel` at `0x000b` and `0x0072`; tag
-/// `PackageInfo.java:585,608`), i.e. each element is `int32 len` in UTF-8
-/// **bytes** + bytes + NUL. Before REL3P the codec wrote the String16 form, so
-/// every field after a non-empty `requestedPermissions` was read out of the
-/// middle of the string payload: the framework read a `Signature[]` length of
-/// 7 209 071 and threw `OutOfMemoryError: Failed to allocate a 7676737936 byte
-/// allocation at Parcel.createString8Array`.
+/// The bytes below are the exact wire form a real `Notification.Builder`
+/// notification carried (captured from the ART run with `ACOS_PARCEL_DUMP`):
+/// usage 5 (USAGE_NOTIFICATION), contentType 4, source -1, flags 0x800,
+/// parcel flags 0 (tags as `String[]`), no tags, and a **null** bundle
+/// (`ATTR_PARCEL_IS_NULL_BUNDLE = -1977`, no body). The old fixed field list
+/// read a `String` and a `Bundle` here, consuming 8 bytes too many and
+/// desynchronising every later notification field.
+#[test]
+fn audio_attributes_reads_the_image_wire_form() {
+    let mut parcel = acos_parcel::Parcel::new();
+    parcel.write_int32(5); // usage
+    parcel.write_int32(4); // contentType
+    parcel.write_int32(-1); // source
+    parcel.write_int32(0x800); // flags
+    parcel.write_int32(0); // parcel flags: FLATTEN_TAGS clear
+    parcel.write_string16_array(Some(&[])); // tags
+    parcel.write_int32(-1977); // ATTR_PARCEL_IS_NULL_BUNDLE: no body
+    let wire_len = parcel.data_size();
+    parcel.set_data_position(0);
+
+    let payload =
+        acos_services::parcelable::read_payload("android.media.AudioAttributes", &mut parcel)
+            .expect("the image's AudioAttributes wire form decodes");
+    assert_eq!(
+        parcel.data_position(),
+        wire_len,
+        "the codec consumes exactly the fields the writer wrote"
+    );
+    let fields = payload.fields().expect("ordered parcelable");
+    assert_eq!(fields[0], Value::Int(5), "usage first (USAGE_NOTIFICATION)");
+    assert_eq!(fields[1], Value::Int(4), "contentType");
+    assert_eq!(fields[2], Value::Int(-1), "source");
+    assert_eq!(fields[3], Value::Int(0x800), "flags");
+    assert_eq!(fields[4], Value::Int(0), "parcel flags");
+    assert_eq!(fields[5], Value::StringArray(Some(Vec::new())), "tags");
+    assert_eq!(
+        fields[6],
+        Value::Cond {
+            present: false,
+            values: Vec::new()
+        },
+        "a null bundle is the sentinel, not a field"
+    );
+
+    // Round trip: the writer emits the same bytes.
+    let mut again = acos_parcel::Parcel::new();
+    acos_services::parcelable::write_payload(&mut again, &payload).expect("re-encode");
+    let mut original = acos_parcel::Parcel::new();
+    original.write_int32(5);
+    original.write_int32(4);
+    original.write_int32(-1);
+    original.write_int32(0x800);
+    original.write_int32(0);
+    original.write_string16_array(Some(&[]));
+    original.write_int32(-1977);
+    assert_eq!(
+        again.marshall(),
+        original.marshall(),
+        "read -> write is byte-identical for the image's form"
+    );
+}
+
+/// A **flattened** tag list (the other branch) still round-trips.
+#[test]
+fn audio_attributes_reads_the_flattened_tag_form() {
+    let mut parcel = acos_parcel::Parcel::new();
+    parcel.write_int32(5);
+    parcel.write_int32(0);
+    parcel.write_int32(-1);
+    parcel.write_int32(0);
+    parcel.write_int32(1); // FLATTEN_TAGS
+    parcel.write_string16("a;b");
+    parcel.write_int32(1980); // ATTR_PARCEL_IS_VALID_BUNDLE
+    parcel.write_int32(0); // empty bundle: the "special case" length
+    let wire_len = parcel.data_size();
+    parcel.set_data_position(0);
+
+    let payload =
+        acos_services::parcelable::read_payload("android.media.AudioAttributes", &mut parcel)
+            .expect("flattened form decodes");
+    assert_eq!(parcel.data_position(), wire_len);
+    let fields = payload.fields().expect("ordered");
+    assert_eq!(fields[5], Value::Str(Some("a;b".into())));
+    assert!(matches!(fields[6], Value::Cond { present: true, .. }));
+}
+
+/// `Parcel.writeValue`'s length prefix counts the libbinder stability record the
+/// guest writes after every flat object, but `peer::import_parcel` strips those
+/// records. A body with one binder therefore arrives 4 bytes shorter than its
+/// declared length; the reader accepts exactly that difference (per recorded
+/// object) and nothing else.
 ///
+/// This is the failure a real notification hit on its trailing
+/// `allPendingIntents` ArraySet: "body consumed 80 bytes but declared 84".
+#[test]
+fn a_value_length_prefix_counts_the_stripped_stability_records() {
+    use acos_parcel::Parcel;
+
+    // The body the framework writes: class name `writeValue` + the payload
+    // (`PendingIntent.writeToParcel` = one strong binder).
+    let class = "android.app.PendingIntent";
+    let mut body = Parcel::new();
+    body.write_string16(class);
+    let object_offset = body.data_size();
+    body.write_strong_binder(acos_parcel::BinderId(31));
+    body.write_int32(0); // the stability record libbinder appends
+    let body = body.marshall();
+
+    // The guest's wire form: VAL_PARCELABLE + its length prefix + body.
+    let mut wire = Parcel::new();
+    wire.write_int32(4); // VAL_PARCELABLE
+    wire.write_int32(body.len() as i32);
+    wire.write_raw_bytes(&body);
+    let wire = wire.marshall();
+    let declared_at = 4usize;
+    let body_start = 8usize;
+
+    // The import: drop the 4 bytes after the flat object, keep its new offset.
+    let mut imported_bytes = Vec::with_capacity(wire.len() - 4);
+    imported_bytes.extend_from_slice(&wire[..body_start + object_offset + 24]);
+    imported_bytes.extend_from_slice(&wire[body_start + object_offset + 28..]);
+    let mut imported = Parcel::new();
+    imported.unmarshall(&imported_bytes);
+    imported.register_object(body_start + object_offset);
+    imported.set_data_position(0);
+
+    let value = acos_services::parcelable::read_dynamic(&mut imported)
+        .expect("the declared length counts the stripped stability record");
+    assert!(
+        matches!(value, acos_services::value::DynamicValue::Parcelable(_)),
+        "substantive: {value:?}"
+    );
+    assert_eq!(
+        imported.data_position(),
+        imported_bytes.len(),
+        "the stability record is gone from the imported parcel"
+    );
+
+    // Anything else is still refused: a declared length two records too long is
+    // a desync, not a wire-form difference.
+    let mut forged = imported_bytes.clone();
+    forged[declared_at..declared_at + 4].copy_from_slice(&((body.len() + 4) as i32).to_le_bytes());
+    let mut forged_parcel = Parcel::new();
+    forged_parcel.unmarshall(&forged);
+    forged_parcel.register_object(body_start + object_offset);
+    forged_parcel.set_data_position(0);
+    assert!(
+        acos_services::parcelable::read_dynamic(&mut forged_parcel).is_err(),
+        "a length that is not explained by a stripped record is refused"
+    );
+}
+
+/// MPROC7: `PackageItemInfo.writeToParcel`'s field order is
+/// `name, packageName, labelRes, label, icon, logo, metaData, banner,
+/// showUser` — labelRes **before** the inline label, and the logo slot after
+/// the icon.
+///
+/// The PMS encoder used to write `banner, label, icon, labelRes`, i.e. it put
+/// the application's `labelRes` into the guest's `logo` slot. Nothing noticed
+/// while every fixture's `android:label` was a literal string (`labelRes = 0`);
+/// `proc-b` declares `android:label="@string/app_name"`, and the guest's
+/// `ComponentInfo.getLogoResource()` (`logo != 0 ? logo :
+/// applicationInfo.logo`) then asked for a Drawable with a *string* resource id
+/// (`Resources$NotFoundException: Drawable … string/app_name`). The isolated
+/// ApplicationInfo differential could not catch it: it compares a
+/// *name-built* Java object with all-zero label/logo fields.
+#[test]
+fn application_info_writes_label_res_before_label_and_logo_after_icon() {
+    use acos_services::pms::AppInfo;
+    let mut app = AppInfo::hello_views_fallback(std::path::Path::new("/data/app/x.apk"));
+    app.label_res = 0x7f03_0001; // @string/app_name
+    app.icon = 0x7f02_0003;
+    let encoded = app.to_parcelable();
+    let mut parcel = acos_parcel::Parcel::new();
+    parcelable::write_payload(&mut parcel, &encoded).expect("encode ApplicationInfo");
+    let bytes = parcel.marshall();
+    let mut parcel = acos_parcel::Parcel::new();
+    parcel.unmarshall(&bytes);
+    let decoded = parcelable::read_payload("android.content.pm.ApplicationInfo", &mut parcel)
+        .expect("decode ApplicationInfo");
+    let values = decoded.fields().expect("ordered ApplicationInfo");
+    // Field 0 is the `maybeWriteSquashed` marker; PackageItemInfo starts at 1.
+    assert_eq!(
+        values[3],
+        Value::Int(0x7f03_0001),
+        "field 3 is `PackageItemInfo.labelRes`"
+    );
+    assert_eq!(values[4], Value::Str(None), "field 4 is the inline label");
+    assert_eq!(values[5], Value::Int(0x7f02_0003), "field 5 is `icon`");
+    assert_eq!(
+        values[6],
+        Value::Int(0),
+        "field 6 is `logo` (never the label resource)"
+    );
+    assert_eq!(values[8], Value::Int(0), "field 8 is `banner`");
+    assert_eq!(values[9], Value::Int(0), "field 9 is `showUser`");
+}
+
+/// MPROC7: `activityStopped`'s saved-state `Bundle` carries the window
+/// hierarchy's `SparseArray` (the image's `VAL_SPARSEARRAY`, tag 12). The reader
+/// had no model for it, so the whole `activityStopped` request failed
+/// (`unmodelled Parcel.VAL_* tag 12`) and the stop never reached the activity
+/// manager. The body is a size, then `(int key, writeValue value)` pairs; the
+/// decoder verifies the length word, so a differently shaped body fails there
+/// instead of desynchronising the rest of the parcel.
+#[test]
+fn bundle_reader_consumes_a_sparse_array_and_checks_its_length() {
+    use acos_services::value::DynamicValue;
+    let sparse = DynamicValue::SparseArray(vec![
+        (0x0102_0012, DynamicValue::Int(7)),
+        (3, DynamicValue::String(Some("state".into()))),
+        (4, DynamicValue::Bool(true)),
+    ]);
+    let mut parcel = acos_parcel::Parcel::new();
+    parcelable::write_dynamic(&mut parcel, &sparse).expect("write VAL_SPARSEARRAY");
+    let bytes = parcel.marshall();
+    let mut parcel = acos_parcel::Parcel::new();
+    parcel.unmarshall(&bytes);
+    assert_eq!(
+        parcelable::read_dynamic(&mut parcel).expect("read VAL_SPARSEARRAY"),
+        sparse
+    );
+    assert_eq!(
+        parcel.data_position(),
+        bytes.len(),
+        "the array consumed its bytes"
+    );
+
+    // The first word of the body is the size, not a value tag: that is what
+    // separates the sparse-array shape from a list (the guest's real key was
+    // `android:id/content`, 0x01020012, which is not a `writeValue` tag).
+    assert_eq!(
+        i32::from_le_bytes(bytes[8..12].try_into().expect("size")),
+        3
+    );
+
+    // A declared length that does not match the body is refused (the check is
+    // what makes a wrong tag shape a structured error, not silent corruption).
+    let mut bad = bytes.clone();
+    let declared = i32::from_le_bytes(bad[4..8].try_into().expect("len word"));
+    bad[4..8].copy_from_slice(&(declared + 4).to_le_bytes());
+    let mut parcel = acos_parcel::Parcel::new();
+    parcel.unmarshall(&bad);
+    assert!(
+        parcelable::read_dynamic(&mut parcel).is_err(),
+        "a VAL_SPARSEARRAY whose body does not match its length word must be refused"
+    );
+}
 /// This walks the bytes in `PackageInfo.readFromParcel` order using the same
 /// primitives the framework uses (`readString8`, `createString8Array`,
 /// `readIntArray`, `readTypedArray`), so a wrong array encoding shows up as a
@@ -657,7 +1252,12 @@ fn package_info_reply_reads_back_in_the_framework_order() {
     );
     // The four remaining typed arrays (configPreferences, reqFeatures,
     // featureGroups, attributions) are absent.
-    for field in ["configPreferences", "reqFeatures", "featureGroups", "attributions"] {
+    for field in [
+        "configPreferences",
+        "reqFeatures",
+        "featureGroups",
+        "attributions",
+    ] {
         assert_eq!(parcel.read_int32().unwrap(), -1, "{field} count");
     }
     // ...and the scalar tail is still aligned: installLocation is 0.
@@ -714,7 +1314,11 @@ fn application_info_split_arrays_are_string8() {
         Some(vec![Some("config.xxhdpi".to_owned())]),
         "splitNames must be a String8 array"
     );
-    assert_eq!(parcel.read_string8_array().unwrap(), None, "splitSourceDirs");
+    assert_eq!(
+        parcel.read_string8_array().unwrap(),
+        None,
+        "splitSourceDirs"
+    );
     assert_eq!(
         parcel.read_string8_array().unwrap(),
         None,

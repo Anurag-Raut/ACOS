@@ -100,11 +100,9 @@ pub fn decode(data: &[u8]) -> RenderResult<DecodedImage> {
 pub fn decode_png(data: &[u8]) -> RenderResult<DecodedImage> {
     let mut decoder = png::Decoder::new(data);
     decoder.set_transformations(png::Transformations::EXPAND | png::Transformations::STRIP_16);
-    let mut reader = decoder
-        .read_info()
-        .map_err(|e| RenderError::Decode {
-            msg: format!("png header: {e}"),
-        })?;
+    let mut reader = decoder.read_info().map_err(|e| RenderError::Decode {
+        msg: format!("png header: {e}"),
+    })?;
     let mut buf = vec![0u8; reader.output_buffer_size()];
     let info = reader
         .next_frame(&mut buf)
@@ -167,9 +165,11 @@ pub fn decode_webp(data: &[u8]) -> RenderResult<DecodedImage> {
         }
     })?;
     let (w, h) = decoder.dimensions();
-    let size = decoder.output_buffer_size().ok_or_else(|| RenderError::Size {
-        msg: "webp image too large".to_string(),
-    })?;
+    let size = decoder
+        .output_buffer_size()
+        .ok_or_else(|| RenderError::Size {
+            msg: "webp image too large".to_string(),
+        })?;
     let mut buf = vec![0u8; size];
     decoder
         .read_image(&mut buf)
@@ -220,9 +220,18 @@ mod tests {
         }
         let img = decode_png(&buf).unwrap();
         assert_eq!((img.width, img.height), (2, 2));
-        assert_eq!(crate::color::unpack_unpremul(img.pixels[0]), (255, 0, 0, 255));
-        assert_eq!(crate::color::unpack_unpremul(img.pixels[1]), (0, 255, 0, 255));
-        assert_eq!(crate::color::unpack_unpremul(img.pixels[2]), (0, 0, 255, 255));
+        assert_eq!(
+            crate::color::unpack_unpremul(img.pixels[0]),
+            (255, 0, 0, 255)
+        );
+        assert_eq!(
+            crate::color::unpack_unpremul(img.pixels[1]),
+            (0, 255, 0, 255)
+        );
+        assert_eq!(
+            crate::color::unpack_unpremul(img.pixels[2]),
+            (0, 0, 255, 255)
+        );
         assert_eq!(crate::color::unpack_unpremul(img.pixels[3]).3, 0);
     }
 }

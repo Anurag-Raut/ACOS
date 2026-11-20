@@ -71,7 +71,9 @@ fn read_cond<T: ParcelCodec>(p: &mut Parcel) -> Option<T> {
 /// Decode the `addToDisplayAsUser` `out InputChannel` exactly like the real
 /// `InputChannel.nativeReadFromParcel`: the AIDL presence marker, then the
 /// native `String16 name`, file descriptor and token binder.
-fn read_wms_input_channel(p: &mut Parcel) -> Option<(String, std::os::fd::RawFd, Option<BinderId>)> {
+fn read_wms_input_channel(
+    p: &mut Parcel,
+) -> Option<(String, std::os::fd::RawFd, Option<BinderId>)> {
     if p.read_int32().unwrap() == 0 {
         return None;
     }
@@ -185,7 +187,10 @@ fn relayout_returns_a_valid_surface_control_and_reference_frames() {
     assert_eq!(merged, wms_java::reference_merged_configuration());
 
     let surface: SurfaceControlInfo = read_cond(&mut reply).expect("SurfaceControl");
-    assert!(surface.handle.is_some(), "SurfaceControl has a native handle");
+    assert!(
+        surface.handle.is_some(),
+        "SurfaceControl has a native handle"
+    );
     assert_eq!(surface.width, 1080);
     assert_eq!(surface.height, 2209);
 
@@ -252,7 +257,7 @@ fn finish_drawing_is_recorded_but_never_publishes_a_frame() {
 #[test]
 fn wms_java_stub_proxy_matches_the_reference() {
     let Some(dex) = common::compile_case(&["WmsMain"]) else {
-        eprintln!("SKIP wms_java_stub_proxy_matches_the_reference: javac/d8/android.jar unavailable");
+        acos_test_support::require_prereq(false, "wms_java_stub_proxy_matches_the_reference", "wms_java_stub_proxy_matches_the_reference: javac/d8/android.jar unavailable");
         return;
     };
     let Some(stdout) = common::run_ok(&dex, "WmsMain", "WmsMain") else {
@@ -279,15 +284,10 @@ fn wms_java_stub_proxy_matches_the_reference() {
 /// incoming `IWindow` callbacks must reach the app stub.
 #[test]
 fn wms_java_session_add_and_relayout_are_accepted() {
-    let Some(dex) = common::compile_case(&["WmsSessionMain"]) else {
-        eprintln!("SKIP wms_java_session_add_and_relayout_are_accepted: toolchain unavailable");
+    let Some(dex) = acos_test_support::require_some(common::compile_case(&["WmsSessionMain"]), "wms_java_session_add_and_relayout_are_accepted", "toolchain unavailable") else {
         return;
     };
-    let Some(stdout) = common::run_ok(
-        &dex,
-        "android.view.WmsSessionMain",
-        "WmsSessionMain",
-    ) else {
+    let Some(stdout) = common::run_ok(&dex, "android.view.WmsSessionMain", "WmsSessionMain") else {
         return;
     };
     let lines: Vec<&str> = stdout.lines().filter(|l| !l.is_empty()).collect();
@@ -326,16 +326,22 @@ fn viewrootimpl_handlers_return_faithful_scalars() {
     // `ViewRootImpl.dispatchFocusEvent`/`handleOutOfResourcesException`
     // call `outOfMemory` and expect a boolean; ACOS has no memory-pressure
     // signal, so the faithful answer is `false`.
-    let mut reply = simple(IWS, "outOfMemory", |p| {
-        p.write_strong_binder_opt(Some(BinderId(0x1111)))
-    }, 0);
+    let mut reply = simple(
+        IWS,
+        "outOfMemory",
+        |p| p.write_strong_binder_opt(Some(BinderId(0x1111))),
+        0,
+    );
     assert_eq!(reply.read_int32().unwrap(), 0, "no exception");
     assert!(!reply.read_bool().unwrap(), "not out of memory");
 
     // `ViewRootImpl.performTraversals` uses `cancelDraw` to drop a queued draw.
-    let mut reply = simple(IWS, "cancelDraw", |p| {
-        p.write_strong_binder_opt(Some(BinderId(0x1111)))
-    }, 0);
+    let mut reply = simple(
+        IWS,
+        "cancelDraw",
+        |p| p.write_strong_binder_opt(Some(BinderId(0x1111))),
+        0,
+    );
     assert_eq!(reply.read_int32().unwrap(), 0, "no exception");
     assert!(!reply.read_bool().unwrap(), "no queued draw to cancel");
 
@@ -348,17 +354,22 @@ fn viewrootimpl_handlers_return_faithful_scalars() {
         "dragRecipientExited",
         "reportDropResult",
     ] {
-        let mut reply = simple(IWS, name, |p| {
-            p.write_strong_binder_opt(Some(BinderId(0x1111)));
-            // `performHapticFeedbackAsync` takes (int, bool); the drag calls
-            // take an `IWindow` and a bool/PointF; `reportKeepClearAreasChanged`
-            // takes two typed lists. The exact payload is not asserted here;
-            // the handler only needs to consume a well-formed request.
-            p.write_int32(0);
-            p.write_bool(false);
-            p.write_int32(-1);
-            p.write_int32(-1);
-        }, 0);
+        let mut reply = simple(
+            IWS,
+            name,
+            |p| {
+                p.write_strong_binder_opt(Some(BinderId(0x1111)));
+                // `performHapticFeedbackAsync` takes (int, bool); the drag calls
+                // take an `IWindow` and a bool/PointF; `reportKeepClearAreasChanged`
+                // takes two typed lists. The exact payload is not asserted here;
+                // the handler only needs to consume a well-formed request.
+                p.write_int32(0);
+                p.write_bool(false);
+                p.write_int32(-1);
+                p.write_int32(-1);
+            },
+            0,
+        );
         assert_eq!(reply.read_int32().unwrap(), 0, "{name}: no exception");
     }
 
@@ -385,7 +396,11 @@ fn wm_surface_backend_publishes_only_on_buffer_submission() {
             alpha: 0.5,
         }])
         .unwrap();
-    assert_eq!(backend.generation(), g0 + 1, "apply bumped the compositor generation");
+    assert_eq!(
+        backend.generation(),
+        g0 + 1,
+        "apply bumped the compositor generation"
+    );
     let presented = backend.submit_buffer(0x2000, 1).unwrap();
     assert_eq!(presented, 1, "a real buffer submission publishes one frame");
     backend.release(0x2000);

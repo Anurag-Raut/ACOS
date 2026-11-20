@@ -8,6 +8,7 @@ use acos_protocol::assertion::{
     AssertionDiff, AssertionResult, LogAssertion, StateAssertion, TextAssertion,
     VisibilityAssertion,
 };
+use acos_protocol::scenario::WindowOrderAssertion;
 use acos_protocol::ui::UiNode;
 use acos_protocol::ErrorCode;
 use regex::Regex;
@@ -77,17 +78,20 @@ impl Evaluated {
 ///
 /// The selector's own visibility policy applies: only user-visible nodes match
 /// unless `selector.include_invisible` is set (see [`Selector::accepts_node`]).
-fn locate<'a>(observation: &'a SessionObservation, selector: &acos_protocol::Selector) -> Option<(usize, &'a UiNode)> {
-    let index = observation
+fn locate<'a>(
+    observation: &'a SessionObservation,
+    selector: &acos_protocol::Selector,
+) -> Option<(usize, &'a UiNode)> {
+    let index = observation.tree.all_nodes().into_iter().position(|node| {
+        let mut probe = selector.clone();
+        probe.index = None;
+        probe.accepts_node(node)
+    })?;
+    observation
         .tree
         .all_nodes()
-        .into_iter()
-        .position(|node| {
-            let mut probe = selector.clone();
-            probe.index = None;
-            probe.accepts_node(node)
-        })?;
-    observation.tree.all_nodes().get(index).map(|node| (index, *node))
+        .get(index)
+        .map(|node| (index, *node))
 }
 
 /// Locate a node even when it is not visible to the user (`assert_not_visible`
@@ -213,7 +217,11 @@ pub fn element_missing(
 /// Evaluate a `text` assertion (optional exact bounds).
 pub fn eval_text(assertion: &TextAssertion, observation: &SessionObservation) -> Evaluated {
     let Some((index, node)) = locate(observation, &assertion.selector) else {
-        if observation.tree.find_invisible(&assertion.selector).is_some() {
+        if observation
+            .tree
+            .find_invisible(&assertion.selector)
+            .is_some()
+        {
             return offscreen_error("text", &assertion.selector, observation);
         }
         return Evaluated::fail(
@@ -270,10 +278,7 @@ pub fn eval_text(assertion: &TextAssertion, observation: &SessionObservation) ->
                 },
                 BackendError::Failed {
                     code: ErrorCode::AssertionFailed,
-                    detail: format!(
-                        "expected bounds {expected_bounds}, got {}",
-                        node.bounds
-                    ),
+                    detail: format!("expected bounds {expected_bounds}, got {}", node.bounds),
                 },
             );
         }
@@ -298,9 +303,16 @@ pub fn eval_text(assertion: &TextAssertion, observation: &SessionObservation) ->
 }
 
 /// Evaluate a `visible` assertion (optional exact bounds).
-pub fn eval_visible(assertion: &VisibilityAssertion, observation: &SessionObservation) -> Evaluated {
+pub fn eval_visible(
+    assertion: &VisibilityAssertion,
+    observation: &SessionObservation,
+) -> Evaluated {
     let Some((index, node)) = locate(observation, &assertion.selector) else {
-        if observation.tree.find_invisible(&assertion.selector).is_some() {
+        if observation
+            .tree
+            .find_invisible(&assertion.selector)
+            .is_some()
+        {
             return offscreen_error("visible", &assertion.selector, observation);
         }
         return Evaluated::fail(
@@ -419,6 +431,114 @@ pub fn eval_not_visible(
             "visible": node.visible,
             "bounds": node.bounds,
             "visible_bounds": node.visible_bounds,
+        }),
+    )
+}
+
+/// Evaluate an `assert_windows` assertion: the tree's window stack in policy z
+/// order (bottom first), plus the focused window's kind.
+///
+/// A probe that reports no window block is a failed assertion, not a pass: the
+/// claim is about the stack, and an empty stack cannot support it.
+pub fn eval_windows(
+    assertion: &WindowOrderAssertion,
+    observation: &SessionObservation,
+) -> Evaluated {
+    let windows = &observation.tree.windows;
+    if windows.is_empty() {
+        return Evaluated::fail(
+            "windows",
+            Vec::new(),
+            AssertionDiff {
+                expected: json!({"order": assertion.order}),
+                actual: Value::Null,
+                path: None,
+                detail: Some(
+                    "the UI tree reports no windows[] block (the engine predates the window layer stack)"
+                        .to_string(),
+                ),
+            },
+            BackendError::Failed {
+                code: ErrorCode::AssertionFailed,
+                detail: "assert_windows needs a tree with a windows[] block; this engine reports none"
+                    .to_string(),
+            },
+        );
+    }
+    let kinds: Vec<String> = windows.iter().map(|w| w.kind.clone()).collect();
+    let types: Vec<String> = windows.iter().map(|w| w.type_name.clone()).collect();
+    let focused_window = windows.iter().find(|w| w.focus);
+    let focused = focused_window.map(|w| w.kind.clone());
+    let focused_type = focused_window.map(|w| w.type_name.clone());
+    let order_ok = kinds == assertion.order;
+    let types_ok = assertion
+        .types
+        .as_ref()
+        .map(|expected| expected == &types)
+        .unwrap_or(true);
+    let focus_ok = assertion
+        .focus
+        .as_ref()
+        .map(|expected| focused.as_deref() == Some(expected.as_str()))
+        .unwrap_or(true)
+        && assertion
+            .focus_type
+            .as_ref()
+            .map(|expected| focused_type.as_deref() == Some(expected.as_str()))
+            .unwrap_or(true);
+    if !order_ok || !types_ok || !focus_ok {
+        let detail = if !order_ok {
+            format!("window kinds are {kinds:?}, expected {:?}", assertion.order)
+        } else if !types_ok {
+            format!("window types are {types:?}, expected {:?}", assertion.types)
+        } else {
+            format!(
+                "focused window is kind {:?} / type {:?}, expected {:?} / {:?}",
+                focused, focused_type, assertion.focus, assertion.focus_type
+            )
+        };
+        return Evaluated::fail(
+            "windows",
+            Vec::new(),
+            AssertionDiff {
+                expected: json!({
+                    "order": assertion.order,
+                    "types": assertion.types,
+                    "focus": assertion.focus,
+                    "focus_type": assertion.focus_type,
+                }),
+                actual: json!({
+                    "order": kinds,
+                    "types": types,
+                    "focus": focused,
+                    "focus_type": focused_type,
+                    "z": windows.iter().map(|w| w.z).collect::<Vec<_>>(),
+                }),
+                path: None,
+                detail: Some(detail.clone()),
+            },
+            BackendError::Failed {
+                code: ErrorCode::AssertionFailed,
+                detail,
+            },
+        );
+    }
+    Evaluated::pass(
+        "windows",
+        Vec::new(),
+        Some(format!("{} windows in policy z order", windows.len())),
+        json!({
+            "order": assertion.order,
+            "types": assertion.types,
+            "focus": assertion.focus,
+            "focus_type": assertion.focus_type,
+        }),
+        json!({
+            "order": kinds,
+            "types": types,
+            "focus": focused,
+            "focus_type": focused_type,
+            "windows": windows,
         }),
     )
 }
@@ -660,10 +780,23 @@ mod tests {
     use acos_protocol::FrameMeta;
 
     fn observation() -> SessionObservation {
-        let result = UiNode::new("n1", "android.widget.TextView", Bounds::new(42, 612, 175, 663))
-            .with_resource_id("dev.acos.fixtures.helloviews:id/result")
-            .with_text("clicks: 0");
-        let frame = FrameMeta::new(1, "2026-11-10T13:51:14.000Z", "req:launch:0", 1080, 2400, 420, "abc", true);
+        let result = UiNode::new(
+            "n1",
+            "android.widget.TextView",
+            Bounds::new(42, 612, 175, 663),
+        )
+        .with_resource_id("dev.acos.fixtures.helloviews:id/result")
+        .with_text("clicks: 0");
+        let frame = FrameMeta::new(
+            1,
+            "2026-11-10T13:51:14.000Z",
+            "req:launch:0",
+            1080,
+            2400,
+            420,
+            "abc",
+            true,
+        );
         let tree = UiTree::new(frame.clone(), "dev.acos.fixtures.helloviews", vec![result]);
         SessionObservation {
             session_id: "s_test".to_string(),
@@ -673,8 +806,96 @@ mod tests {
             screenshot_png: None,
             crashed: None,
             input: None,
-        settle: None,
+            settle: None,
         }
+    }
+
+    fn windows_observation() -> SessionObservation {
+        let mut obs = observation();
+        obs.tree.windows = vec![
+            acos_protocol::ui::WindowInfo {
+                id: "aa".into(),
+                label: "main".into(),
+                type_name: "TYPE_BASE_APPLICATION".into(),
+                kind: "application".into(),
+                z: 0,
+                bounds: Some(Bounds::new(0, 0, 1080, 2400)),
+                focus: true,
+                touchable: true,
+                renderer_fallback: false,
+            },
+            acos_protocol::ui::WindowInfo {
+                id: "bb".into(),
+                label: "dialog".into(),
+                type_name: "TYPE_APPLICATION".into(),
+                kind: "application".into(),
+                z: 1,
+                bounds: Some(Bounds::new(28, 976, 1052, 1489)),
+                focus: false,
+                touchable: true,
+                renderer_fallback: false,
+            },
+            acos_protocol::ui::WindowInfo {
+                id: "cc".into(),
+                label: "overlay".into(),
+                type_name: "TYPE_APPLICATION_OVERLAY".into(),
+                kind: "application_overlay".into(),
+                z: 2,
+                bounds: Some(Bounds::new(40, 648, 520, 908)),
+                focus: false,
+                touchable: false,
+                renderer_fallback: false,
+            },
+        ];
+        obs
+    }
+
+    /// LAYER1: the window stack assertion reads the tree's policy order, not
+    /// the node order, and the precise `TYPE_*`/focus form distinguishes an
+    /// activity from a dialog (both kind `application`).
+    #[test]
+    fn window_order_assertion_passes_on_the_policy_stack_and_fails_on_a_reorder() {
+        let good = WindowOrderAssertion {
+            order: vec![
+                "application".into(),
+                "application".into(),
+                "application_overlay".into(),
+            ],
+            focus: Some("application".into()),
+            focus_type: Some("TYPE_BASE_APPLICATION".into()),
+            types: Some(vec![
+                "TYPE_BASE_APPLICATION".into(),
+                "TYPE_APPLICATION".into(),
+                "TYPE_APPLICATION_OVERLAY".into(),
+            ]),
+        };
+        let evaluated = eval_windows(&good, &windows_observation());
+        assert!(evaluated.result.passed, "{:?}", evaluated.error);
+        assert_eq!(evaluated.result.kind, "windows");
+
+        // Insertion order (overlay first) must fail: the assertion is about z.
+        let mut swapped = windows_observation();
+        swapped.tree.windows.swap(0, 2);
+        let evaluated = eval_windows(&good, &swapped);
+        assert!(!evaluated.result.passed);
+        assert_eq!(evaluated.error.unwrap().code(), ErrorCode::AssertionFailed);
+
+        // A dialog has kind `application` too; focus_type is what pins it.
+        let dialog_focus = WindowOrderAssertion {
+            focus: Some("application".into()),
+            focus_type: Some("TYPE_APPLICATION".into()),
+            ..good.clone()
+        };
+        assert!(
+            !eval_windows(&dialog_focus, &windows_observation())
+                .result
+                .passed
+        );
+
+        // No window block: fail closed, never a pass.
+        let mut empty = windows_observation();
+        empty.tree.windows.clear();
+        assert!(!eval_windows(&good, &empty).result.passed);
     }
 
     #[test]
@@ -725,7 +946,11 @@ mod tests {
             &observation(),
         );
         assert!(evaluated.result.passed);
-        let expected = evaluated.result.expected.as_ref().expect("expected is echoed");
+        let expected = evaluated
+            .result
+            .expected
+            .as_ref()
+            .expect("expected is echoed");
         let actual = evaluated.result.actual.as_ref().expect("actual is echoed");
         // What was asserted, from the artifacts alone.
         assert_eq!(expected["text"]["exact"], "clicks: 0");
@@ -831,14 +1056,30 @@ mod tests {
     /// GR2 W4: a warm-mounted page parked off screen is in the tree but is not a
     /// match, and `assert_visible` on it is `ELEMENT_OFFSCREEN`, never a pass.
     fn offscreen_observation() -> SessionObservation {
-        let visible = UiNode::new("n1", "android.widget.TextView", Bounds::new(42, 317, 196, 368))
-            .with_text("Page one")
-            .with_visible_bounds(Bounds::new(42, 317, 196, 368));
-        let mut hidden =
-            UiNode::new("n2", "android.widget.TextView", Bounds::new(1122, 317, 1239, 368))
-                .with_text("Hidden");
+        let visible = UiNode::new(
+            "n1",
+            "android.widget.TextView",
+            Bounds::new(42, 317, 196, 368),
+        )
+        .with_text("Page one")
+        .with_visible_bounds(Bounds::new(42, 317, 196, 368));
+        let mut hidden = UiNode::new(
+            "n2",
+            "android.widget.TextView",
+            Bounds::new(1122, 317, 1239, 368),
+        )
+        .with_text("Hidden");
         hidden.visible = false;
-        let frame = FrameMeta::new(1, "2026-11-13T10:00:00.000Z", "req:launch:0", 1080, 2400, 420, "abc", true);
+        let frame = FrameMeta::new(
+            1,
+            "2026-11-13T10:00:00.000Z",
+            "req:launch:0",
+            1080,
+            2400,
+            420,
+            "abc",
+            true,
+        );
         let tree = UiTree::new(
             frame.clone(),
             "dev.acos.fixtures.offscreenpager",
@@ -852,7 +1093,7 @@ mod tests {
             screenshot_png: None,
             crashed: None,
             input: None,
-        settle: None,
+            settle: None,
         }
     }
 
@@ -873,11 +1114,25 @@ mod tests {
             evaluated.error.as_ref().unwrap().code(),
             ErrorCode::ElementOffscreen
         );
-        let detail = evaluated.error.as_ref().unwrap().to_protocol_error().message;
-        assert!(detail.contains("1122"), "names the off-screen bounds: {detail}");
+        let detail = evaluated
+            .error
+            .as_ref()
+            .unwrap()
+            .to_protocol_error()
+            .message;
+        assert!(
+            detail.contains("1122"),
+            "names the off-screen bounds: {detail}"
+        );
         // The old false pass: the node used to be `visible: true`, so this hit.
-        assert!(observation.tree.find_invisible(&Selector::by_text("Hidden")).is_some());
-        assert!(observation.tree.find_one(&Selector::by_text("Hidden")).is_none());
+        assert!(observation
+            .tree
+            .find_invisible(&Selector::by_text("Hidden"))
+            .is_some());
+        assert!(observation
+            .tree
+            .find_one(&Selector::by_text("Hidden"))
+            .is_none());
     }
 
     #[test]

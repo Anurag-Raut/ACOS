@@ -88,7 +88,9 @@ pub fn bound_string(text: &str, cap: usize, where_: &str, artifacts: Option<&str
     let tail_text = &text[tail..];
     let where_full = match artifacts {
         Some(path) => format!("full text: {path} (and every steps/*.json of this run)"),
-        None => "full text: the run's artifacts directory, or re-run the CLI with --json".to_string(),
+        None => {
+            "full text: the run's artifacts directory, or re-run the CLI with --json".to_string()
+        }
     };
     let where_ = if where_.is_empty() { "text" } else { where_ };
     let marker = format!(
@@ -203,10 +205,7 @@ const EXEMPT_PATHS: &[&str] = &["/result/guide", "/result/markdown"];
 fn walk(value: &Value, path: &str, state: &mut State) -> Value {
     match value {
         Value::String(text) => {
-            if EXEMPT_PATHS.contains(&path)
-                || state.cap == 0
-                || text.len() <= state.cap
-            {
+            if EXEMPT_PATHS.contains(&path) || state.cap == 0 || text.len() <= state.cap {
                 return Value::String(text.clone());
             }
             if let Some(first) = state.seen.get(text).cloned() {
@@ -274,12 +273,22 @@ mod tests {
     fn a_huge_message_is_capped_and_names_its_artifacts() {
         let text = huge("verify", 400);
         let bounded = bound_string(&text, 4000, "/error/message", Some("out/run/verdict.json"));
-        assert!(bounded.text.len() <= 4000 + 400, "{} bytes", bounded.text.len());
+        assert!(
+            bounded.text.len() <= 4000 + 400,
+            "{} bytes",
+            bounded.text.len()
+        );
         assert!(bounded.text.contains("AssertionError"));
-        assert!(bounded.text.contains("caused by: java.lang.IllegalStateException"));
-        assert!(bounded.text.contains("ACOS MCP: /error/message bounded for size"));
+        assert!(bounded
+            .text
+            .contains("caused by: java.lang.IllegalStateException"));
+        assert!(bounded
+            .text
+            .contains("ACOS MCP: /error/message bounded for size"));
         assert!(bounded.text.contains("out/run/verdict.json"));
-        assert!(bounded.text.contains(&format!("{} bytes total", text.len())));
+        assert!(bounded
+            .text
+            .contains(&format!("{} bytes total", text.len())));
         assert_eq!(bounded.original_bytes, text.len());
         // No silent loss: the marker says how much was dropped.
         assert!(bounded.head_bytes > 0 && bounded.tail_bytes > 0);

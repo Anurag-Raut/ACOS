@@ -174,7 +174,9 @@ Server limits (all optional):
 
 **Real ART, by default.** The MCP session tools (`acos_launch`, `acos_observe`,
 `acos_observe_tree`, `acos_tap`, `acos_text`, `acos_key`, `acos_logs`,
-`acos_status`, `acos_reset`, `acos_destroy`) do not run on the frozen in-process
+`acos_status`, `acos_reset`, `acos_destroy`, and the network module's
+`acos_net` — same name and arguments as the session API's verb) do not run on the
+frozen in-process
 Rust VM any more. On the first session tool call the server lazily spawns **its
 own private** `acos serve --engine art` daemon on a socket under
 `$XDG_RUNTIME_DIR/acos/mcp-<pid>-<rand>/session.sock` and forwards every session
@@ -506,6 +508,7 @@ the `docs_tool_table_matches_descriptors` test fails if the docs drift from the
 server.
 
 <!-- ACOS_TOOLS_BEGIN -->
+
 | tool | kind | command | fidelity | required args |
 |---|---|---|---|---|
 | `acos_inspect` | protocol | `inspect` | `static-analysis` | `apk`, `base` |
@@ -523,6 +526,7 @@ server.
 | `acos_capability_report` | protocol | `capability-report` | `static-analysis` | `apk`, `base` |
 | `acos_capabilities` | server | - | `n/a` | - |
 | `acos_help` | server | - | `n/a` | - |
+| `acos_net` | server | - | `native-runtime` | - |
 | `acos_launch` | server | - | `native-runtime` | - |
 | `acos_observe_tree` | server | - | `native-runtime` | - |
 | `acos_tap` | server | - | `native-runtime` | - |
@@ -532,6 +536,9 @@ server.
 | `acos_logs` | server | - | `native-runtime` | - |
 | `acos_status` | server | - | `native-runtime` | - |
 | `acos_doctor` | server | - | `n/a` | - |
+| `acos_services` | server | - | `native-runtime` | `op` |
+| `acos_service_ctl` | server | - | `native-runtime` | `module`, `op` |
+
 <!-- ACOS_TOOLS_END -->
 
 Regenerate the block with `cargo run -p acos-mcp --example gen-tools-docs`.
@@ -608,6 +615,28 @@ the defaults that were applied. The guest buffer is untouched —
 `logs/logcat.txt` in a verify run is still the full log — and `"log_path"` in a
 live session reply names that complete file. `{"all": true}` (or
 `min_priority: "V"`) returns every record, subject to the 20 KiB reply cap.
+
+### Service modules (ADR-0029)
+
+`acos_launch {"services": [{"id": "feedback.vibrator", "profile": "stub"}]}`
+attaches modules before the guest boots (`core` is always attached first at
+`real`). The launch reply carries `modules[]` — `id`, `profile`, `attach`
+(`hot`/`at-launch`), `state` and `fidelity` — and that is what was **actually
+attached**, not what was requested. `acos_services {"op": "list",
+"base": {"session_id": …}}` returns the same rows for a live session;
+`{"op": "attach"|"detach", "id": …}` changes the set and answers with the new
+one. Only `hot` modules can change live: an `at-launch` module (e.g. `core`) is
+refused with a structured error naming the launch call, never silently ignored.
+`acos_capabilities {"session_id": …}` includes `session.attached` and
+`session.modules` for that session (the catalog alone when no session is named).
+
+A module at `stub` or `scripted` is a documented stand-in, not a real
+implementation. Its fidelity is reported in the launch reply, `acos_services`
+and every `verdict.json` that used it (plus a `notes` line saying the pass
+relied on it). A scenario step that declares `requires_services` is
+`unsupported` when the module is `off`, never a pass. The generated module
+catalog and the gap table are in `docs/AGENT_GUIDE.md` (`topic: "limits"`) and
+`acos_capabilities.modules`.
 
 The three **meta** tools (`acos_help`, `acos_capabilities`, `acos_doctor`)
 report `fidelity: "n/a"`: they say nothing about the app under test, so

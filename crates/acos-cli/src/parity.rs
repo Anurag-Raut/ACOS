@@ -127,7 +127,10 @@ pub fn element_differences(acos: &[ViewNode], phone: &[ViewNode]) -> Vec<Element
         let p = phone_by_id.get(key).copied();
         let mut entry = ElementDifference {
             resource_id: key.clone(),
-            class: a.map(|n| n.class.clone()).or_else(|| p.map(|n| n.class.clone())).unwrap_or_default(),
+            class: a
+                .map(|n| n.class.clone())
+                .or_else(|| p.map(|n| n.class.clone()))
+                .unwrap_or_default(),
             acos_text: a.map(|n| n.text.clone()).unwrap_or_default(),
             phone_text: p.map(|n| n.text.clone()).unwrap_or_default(),
             acos_bounds: a.map(|n| n.bounds),
@@ -164,7 +167,9 @@ pub fn element_differences(acos: &[ViewNode], phone: &[ViewNode]) -> Vec<Element
                 if a.text.trim() != p.text.trim() {
                     entry.kind = "text_differs".to_string();
                     score += ELEMENT_TEXT_WEIGHT;
-                } else if delta.iter().any(|d| i64::from(d.abs()) > ELEMENT_DELTA_FLOOR)
+                } else if delta
+                    .iter()
+                    .any(|d| i64::from(d.abs()) > ELEMENT_DELTA_FLOOR)
                     || entry
                         .size_delta
                         .unwrap()
@@ -242,8 +247,13 @@ pub struct ParityReport {
 /// the same the W130-A harness asserts (`global_ssim >= 0.98` and
 /// `mean_ssim >= 0.99`).
 fn flutter_frame_parity(candidate: &Path) -> Value {
-    let reference = repo_root().join("fixtures/reference-device/flutter-hello/screenshot_initial.png");
-    frame_parity(&reference, candidate, &[[0, 0, 1080, 108], [0, 2304, 1080, 2400]])
+    let reference =
+        repo_root().join("fixtures/reference-device/flutter-hello/screenshot_initial.png");
+    frame_parity(
+        &reference,
+        candidate,
+        &[[0, 0, 1080, 108], [0, 2304, 1080, 2400]],
+    )
 }
 
 /// The framework-app frame preset: the ART reference screenshot for a fixture
@@ -268,7 +278,11 @@ fn framework_frame_parity(app: &str, candidate: &Path) -> Value {
             ),
         });
     }
-    frame_parity(&reference, candidate, &[[0, 0, 1080, 64], [0, 2304, 1080, 2400]])
+    frame_parity(
+        &reference,
+        candidate,
+        &[[0, 0, 1080, 64], [0, 2304, 1080, 2400]],
+    )
 }
 
 /// Compare `candidate` against `reference`, masking `masks`, and report the
@@ -444,7 +458,10 @@ fn compare_pair(
     if opts.strict_state {
         let state = |a: bool, b: bool, label: &str, out: &mut Vec<Difference>| {
             if a != b {
-                out.push(base("state_differs", format!("{label}: device {a} vs acos {b}")));
+                out.push(base(
+                    "state_differs",
+                    format!("{label}: device {a} vs acos {b}"),
+                ));
             }
         };
         state(device.enabled, acos.enabled, "enabled", &mut out);
@@ -459,9 +476,7 @@ fn compare_pair(
             acos.bounds[2] - scaled[2],
             acos.bounds[3] - scaled[3],
         ];
-        let within = delta
-            .iter()
-            .all(|d| d.abs() <= opts.bounds_tolerance);
+        let within = delta.iter().all(|d| d.abs() <= opts.bounds_tolerance);
         if !within {
             let mut diff = base(
                 "bounds_differ",
@@ -591,10 +606,9 @@ pub fn run(args: ParityArgs) -> ExitCode {
         };
         let report = match preset {
             FramePreset::Flutter => flutter_frame_parity(&candidate),
-            FramePreset::Framework => framework_frame_parity(
-                args.recorded.as_deref().unwrap_or("counter"),
-                &candidate,
-            ),
+            FramePreset::Framework => {
+                framework_frame_parity(args.recorded.as_deref().unwrap_or("counter"), &candidate)
+            }
         };
         let identical = report["identical"].as_bool().unwrap_or(false);
         if args.json {
@@ -707,7 +721,6 @@ pub fn run(args: ParityArgs) -> ExitCode {
     }
 }
 
-
 /// A loud, structured skip/usage failure.
 #[derive(Debug, Clone, Serialize)]
 pub struct ParityFailure {
@@ -782,7 +795,10 @@ fn recorded_json(report: &ParityReport, app: &str, device_dir: &Path, acos_sourc
         map.insert("mode".to_string(), json!("recorded"));
         map.insert("fidelity".to_string(), json!("physical-device"));
         map.insert("app".to_string(), json!(app));
-        map.insert("device_dir".to_string(), json!(device_dir.display().to_string()));
+        map.insert(
+            "device_dir".to_string(),
+            json!(device_dir.display().to_string()),
+        );
         map.insert("acos_source".to_string(), json!(acos_source));
     }
     value
@@ -841,7 +857,10 @@ fn recorded_parity(
         }
     })?;
     let snapshot_json: Value = serde_json::from_str(&device_text).map_err(|e| {
-        ParityFailure::usage(format!("snapshot {} is not JSON: {e}", snapshot_path.display()))
+        ParityFailure::usage(format!(
+            "snapshot {} is not JSON: {e}",
+            snapshot_path.display()
+        ))
     })?;
     let device_nodes = parse_agent_device_snapshot(&snapshot_json).map_err(ParityFailure::usage)?;
 
@@ -963,9 +982,9 @@ fn live_parity(
             "`--device <serial>` needs an APK path: `acos parity --device ZA222WGJPP app.apk`",
         ));
     };
-    let apk = apk.canonicalize().map_err(|e| {
-        ParityFailure::usage(format!("APK {} is unreadable: {e}", apk.display()))
-    })?;
+    let apk = apk
+        .canonicalize()
+        .map_err(|e| ParityFailure::usage(format!("APK {} is unreadable: {e}", apk.display())))?;
 
     // Determine the package and refuse anything that is not ours.
     let manifest = acos_apk::Apk::open(&apk)
@@ -1017,11 +1036,8 @@ fn live_parity(
         })
         .map_err(|e| ParityFailure::no_device(format!("install failed: {e}"), json!({})))?;
     let _ = adb(serial, &["shell", "am", "force-stop", &package]);
-    adb(
-        serial,
-        &["shell", "am", "start", "-W", "-n", &activity],
-    )
-    .map_err(|e| ParityFailure::no_device(format!("launch failed: {e}"), json!({})))?;
+    adb(serial, &["shell", "am", "start", "-W", "-n", &activity])
+        .map_err(|e| ParityFailure::no_device(format!("launch failed: {e}"), json!({})))?;
 
     // Phone capture: screenshot first (screencap survives device memory
     // pressure better than uiautomator), then the uiautomator XML.
@@ -1133,8 +1149,14 @@ fn live_parity(
                 map.insert("device".to_string(), json!(serial));
                 map.insert("package".to_string(), json!(package));
                 map.insert("app".to_string(), json!(app));
-                map.insert("output".to_string(), json!(output_dir.display().to_string()));
-                map.insert("reference_dir".to_string(), json!(reference_dir.display().to_string()));
+                map.insert(
+                    "output".to_string(),
+                    json!(output_dir.display().to_string()),
+                );
+                map.insert(
+                    "reference_dir".to_string(),
+                    json!(reference_dir.display().to_string()),
+                );
                 map.insert("saved".to_string(), json!(saved));
                 map.insert(
                     "message".to_string(),
@@ -1175,8 +1197,14 @@ fn live_parity(
         map.insert("device".to_string(), json!(serial));
         map.insert("package".to_string(), json!(package));
         map.insert("app".to_string(), json!(app));
-        map.insert("output".to_string(), json!(output_dir.display().to_string()));
-        map.insert("reference_dir".to_string(), json!(reference_dir.display().to_string()));
+        map.insert(
+            "output".to_string(),
+            json!(output_dir.display().to_string()),
+        );
+        map.insert(
+            "reference_dir".to_string(),
+            json!(reference_dir.display().to_string()),
+        );
         map.insert("saved".to_string(), json!(saved));
     }
     Ok(value)
@@ -1232,10 +1260,9 @@ mod tests {
         }
         // Bounds differences are classified as density, not text, differences.
         assert!(
-            report
-                .differences
-                .iter()
-                .all(|d| d.kind == "bounds_differ" || d.kind == "missing_in_acos" || d.kind == "extra_in_acos"),
+            report.differences.iter().all(|d| d.kind == "bounds_differ"
+                || d.kind == "missing_in_acos"
+                || d.kind == "extra_in_acos"),
             "unexpected difference kinds: {:?}",
             report.differences
         );
@@ -1340,7 +1367,14 @@ mod tests {
             r#"<hierarchy><node text="Goodbye" resource-id="pkg:id/t" class="android.widget.TextView" bounds="[40,0][50,10]"/></hierarchy>"#,
         )
         .unwrap();
-        let report = compare(&a, &b, CompareOptions { bounds_tolerance: 2, ..CompareOptions::default() });
+        let report = compare(
+            &a,
+            &b,
+            CompareOptions {
+                bounds_tolerance: 2,
+                ..CompareOptions::default()
+            },
+        );
         assert!(!report.identical);
         assert!(report.differences.iter().any(|d| d.kind == "text_differs"));
         assert!(report.differences.iter().any(|d| d.kind == "bounds_differ"));

@@ -16,7 +16,9 @@
 use std::path::{Path, PathBuf};
 
 use acos_protocol::commands::ResetScope;
-use acos_protocol::{Backend as ProtocolBackend, ErrorCode, Fidelity, FrameMeta, LogLevel, Selector, UiNode, UiTree};
+use acos_protocol::{
+    Backend as ProtocolBackend, ErrorCode, Fidelity, FrameMeta, LogLevel, Selector, UiNode, UiTree,
+};
 
 use crate::backend::{
     Backend, BackendError, Capabilities, EnvironmentChange, InputAction, LaunchOutcome,
@@ -113,10 +115,11 @@ impl ReferenceBackend {
             code: ErrorCode::Internal,
             detail: format!("cannot read reference tree {}: {e}", ui_path.display()),
         })?;
-        let nodes = parse_reference_nodes(&raw, &package).map_err(|detail| BackendError::Error {
-            code: ErrorCode::Internal,
-            detail: format!("cannot parse {}: {detail}", ui_path.display()),
-        })?;
+        let nodes =
+            parse_reference_nodes(&raw, &package).map_err(|detail| BackendError::Error {
+                code: ErrorCode::Internal,
+                detail: format!("cannot parse {}: {detail}", ui_path.display()),
+            })?;
 
         let log_path = self.dir.join(self.state.log_file());
         let logs = std::fs::read_to_string(&log_path)
@@ -156,7 +159,7 @@ impl ReferenceBackend {
             screenshot_png: self.screenshot_png.clone(),
             crashed: self.crashed.clone(),
             input: None,
-        settle: None,
+            settle: None,
         })
     }
 }
@@ -185,6 +188,7 @@ impl Backend for ReferenceBackend {
             reset: false,
             environment: false,
             crash_reports: false,
+            services: false,
         }
     }
 
@@ -405,8 +409,17 @@ mod tests {
     #[test]
     fn parses_reference_tree_and_logs() {
         let dir = reference_dir("hello-views");
-        if !dir.is_dir() {
-            eprintln!("SKIP parses_reference_tree_and_logs: reference missing");
+        if acos_test_support::require_prereq(
+            dir.is_dir(),
+            "parses_reference_tree_and_logs",
+            &format!(
+                "no ART reference capture at {} — capture it with tools/oracle/ \
+                 (fixtures/reference/art-api34-x86_64)",
+                dir.display()
+            ),
+        )
+        .is_none()
+        {
             return;
         }
         let raw = std::fs::read_to_string(dir.join("ui_initial.json")).unwrap();
@@ -426,12 +439,21 @@ mod tests {
     #[test]
     fn backend_replays_initial_state() {
         let dir = reference_dir("hello-views");
-        if !dir.is_dir() {
-            eprintln!("SKIP backend_replays_initial_state: reference missing");
+        if acos_test_support::require_prereq(
+            dir.is_dir(),
+            "backend_replays_initial_state",
+            &format!(
+                "no ART reference capture at {} — capture it with tools/oracle/ \
+                 (fixtures/reference/art-api34-x86_64)",
+                dir.display()
+            ),
+        )
+        .is_none()
+        {
             return;
         }
-        let apk = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../fixtures/build/apps/hello-views.apk");
+        let apk =
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/build/apps/hello-views.apk");
         let mut backend = ReferenceBackend::new(&dir);
         if apk.is_file() {
             backend.manifest(&apk).unwrap();

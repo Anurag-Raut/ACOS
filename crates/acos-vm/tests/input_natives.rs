@@ -85,7 +85,10 @@ fn compile_cases(names: &[&str]) -> Option<PathBuf> {
     // 1. Compile the signature-only stubs for the hidden classes and jar them.
     let stub_srcs: Vec<PathBuf> = INPUT_STUBS
         .iter()
-        .map(|n| root.join("crates/acos-vm/tests/java/stubs/android/view").join(format!("{n}.java")))
+        .map(|n| {
+            root.join("crates/acos-vm/tests/java/stubs/android/view")
+                .join(format!("{n}.java"))
+        })
         .collect();
     let ok = Command::new(&tools.javac)
         .args(["--release", "11", "-encoding", "UTF-8", "-cp"])
@@ -116,11 +119,18 @@ fn compile_cases(names: &[&str]) -> Option<PathBuf> {
     // 2. Compile the fixtures against the stubs + the public SDK jar.
     let sources: Vec<PathBuf> = names
         .iter()
-        .map(|n| root.join("crates/acos-vm/tests/java").join(format!("{n}.java")))
+        .map(|n| {
+            root.join("crates/acos-vm/tests/java")
+                .join(format!("{n}.java"))
+        })
         .collect();
     let ok = Command::new(&tools.javac)
         .args(["--release", "11", "-encoding", "UTF-8", "-cp"])
-        .arg(format!("{}:{}", stub_jar.display(), tools.android_jar.display()))
+        .arg(format!(
+            "{}:{}",
+            stub_jar.display(),
+            tools.android_jar.display()
+        ))
         .args(["-d"])
         .arg(&classes)
         .args(&sources)
@@ -162,14 +172,20 @@ fn run(dex: &Path, main: &str) -> Option<(Vm, i32, String, String, Option<VmErro
     let mut vm = match Vm::new(options) {
         Ok(vm) => vm,
         Err(VmError::BootClasspathMissing(m)) => {
-            eprintln!("SKIP input natives: {m}");
+            acos_test_support::require_prereq(false, "run", &format!("input natives: {m}"));
             return None;
         }
         Err(e) => panic!("Vm::new failed: {e}"),
     };
     vm.add_dex(DexFile::parse(std::fs::read(dex).unwrap()).unwrap());
     let outcome = vm.run(main, &[]);
-    Some((vm, outcome.exit_code, outcome.stdout, outcome.stderr, outcome.vm_error))
+    Some((
+        vm,
+        outcome.exit_code,
+        outcome.stdout,
+        outcome.stderr,
+        outcome.vm_error,
+    ))
 }
 
 fn field(stdout: &str, key: &str) -> String {
@@ -183,8 +199,7 @@ fn field(stdout: &str, key: &str) -> String {
 
 #[test]
 fn motion_event_round_trips_and_receiver_finishes() {
-    let Some(dex) = compile_cases(&["InputMain"]) else {
-        eprintln!("SKIP input natives: javac/d8/android.jar unavailable");
+    let Some(dex) = acos_test_support::require_some(compile_cases(&["InputMain"]), "motion_event_round_trips_and_receiver_finishes", "input natives: javac/d8/android.jar unavailable") else {
         return;
     };
     fwk_input::reset_hits();
@@ -218,8 +233,7 @@ fn motion_event_round_trips_and_receiver_finishes() {
 
 #[test]
 fn sixteen_motion_event_natives_exercised() {
-    let Some(dex) = compile_cases(&["InputMain"]) else {
-        eprintln!("SKIP input natives: javac/d8/android.jar unavailable");
+    let Some(dex) = acos_test_support::require_some(compile_cases(&["InputMain"]), "sixteen_motion_event_natives_exercised", "input natives: javac/d8/android.jar unavailable") else {
         return;
     };
     fwk_input::reset_hits();
@@ -254,7 +268,8 @@ fn sixteen_motion_event_natives_exercised() {
         .expect("MotionEvent.obtain");
     let h = ev.as_handle().expect("MotionEvent handle");
     vm.call_method(h, "getId", "()I", &[]).expect("getId");
-    vm.call_method(h, "isTouchEvent", "()Z", &[]).expect("isTouchEvent");
+    vm.call_method(h, "isTouchEvent", "()Z", &[])
+        .expect("isTouchEvent");
     vm.call_method(
         h,
         "setTargetAccessibilityFocus",
@@ -294,20 +309,26 @@ fn sixteen_motion_event_natives_exercised() {
             missing.push(name);
         }
     }
-    assert!(missing.is_empty(), "natives not exercised: {missing:?}\nstdout={stdout}");
+    assert!(
+        missing.is_empty(),
+        "natives not exercised: {missing:?}\nstdout={stdout}"
+    );
 }
 
 #[test]
 fn thousand_events_leak_no_handles_or_fds() {
-    let Some(dex) = compile_cases(&["InputStressMain"]) else {
-        eprintln!("SKIP input natives: javac/d8/android.jar unavailable");
+    let Some(dex) = acos_test_support::require_some(compile_cases(&["InputStressMain"]), "thousand_events_leak_no_handles_or_fds", "input natives: javac/d8/android.jar unavailable") else {
         return;
     };
     let Some((_vm, code, stdout, stderr, err)) = run(&dex, "InputStressMain") else {
         return;
     };
-    assert_eq!(code, 0, "run failed: {err:?}\nstderr={stderr}\nstdout={stdout}");
-    assert_eq!(field(&stdout, "received"), "1000", "stdout:\n{stdout}");    assert_eq!(field(&stdout, "finished"), "1000", "stdout:\n{stdout}");
+    assert_eq!(
+        code, 0,
+        "run failed: {err:?}\nstderr={stderr}\nstdout={stdout}"
+    );
+    assert_eq!(field(&stdout, "received"), "1000", "stdout:\n{stdout}");
+    assert_eq!(field(&stdout, "finished"), "1000", "stdout:\n{stdout}");
     // Every native struct/channel/receiver was disposed by the Java program.
     // The channel descriptors and the native receivers are owned by ACOS and
     // are released by the Java program's `dispose()` calls: strictly zero.
@@ -317,7 +338,11 @@ fn thousand_events_leak_no_handles_or_fds() {
     // `NativeAllocationRegistry` (freed by the finalizer), and the Java
     // recycler pool reuses a bounded number of objects (MAX_RECYCLED = 10), so
     // 1000 events must not grow the live set proportionally.
-    assert_eq!(fwk_input::motion_created(), 2000, "expected 2 x 1000 events");
+    assert_eq!(
+        fwk_input::motion_created(),
+        2000,
+        "expected 2 x 1000 events"
+    );
     assert!(
         fwk_input::live_motion_events() <= 16,
         "MotionEvent structs grew with the event count: {}",
@@ -327,8 +352,7 @@ fn thousand_events_leak_no_handles_or_fds() {
 
 #[test]
 fn input_channel_round_trips_through_a_parcel() {
-    let Some(dex) = compile_cases(&["InputParcelMain"]) else {
-        eprintln!("SKIP input natives: javac/d8/android.jar unavailable");
+    let Some(dex) = acos_test_support::require_some(compile_cases(&["InputParcelMain"]), "input_channel_round_trips_through_a_parcel", "input natives: javac/d8/android.jar unavailable") else {
         return;
     };
     let Some((_vm, code, stdout, stderr, err)) = run(&dex, "InputParcelMain") else {

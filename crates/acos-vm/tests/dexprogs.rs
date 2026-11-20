@@ -75,15 +75,20 @@ const REAL_CORELIB_ONLY: &[&str] = &[
     // and `java.lang.reflect.Proxy`; verified against ART by
     // `tools/diff-dexprogs.sh --corelib real`.
     "27_annotations_reflection",
+    // Framework-backed (`android.database.sqlite.*`): the bootstrap corelib has
+    // no android.database, and the host JVM cannot run it either (its checked-in
+    // reference is the JVM's "Unable to initialize main class", exit 1). The
+    // real output is compared on ART by
+    // `tools/oracle/run-framework-dexprog-art.sh` (fixtures/expected-art).
+    // It was invisible to this test only while `build-fixtures.sh` kept
+    // deleting its build (MERGEFIX2); with the fixture built it must be named.
+    "28_sqlite_basic",
 ];
 
 #[test]
 fn dexprogs_match_jvm_reference() {
     if !acos_test_support::have_fixture("fixtures/build/dexprogs") {
-        eprintln!(
-            "SKIP dexprogs_match_jvm_reference: fixtures/build/dexprogs is absent \
-             (run tools/build-fixtures.sh)"
-        );
+        acos_test_support::require_prereq(false, "dexprogs_match_jvm_reference", "dexprogs_match_jvm_reference: fixtures/build/dexprogs is absent (run tools/build-fixtures.sh)");
         return;
     }
     let names = fixture_names();
@@ -126,8 +131,7 @@ fn dexprogs_match_jvm_reference() {
 /// still covered by the normal pass and by `tools/diff-dexprogs.sh --gc-stress`.)
 #[test]
 fn dexprogs_pass_gc_stress() {
-    if !acos_test_support::have_fixture("fixtures/build/dexprogs") {
-        eprintln!("SKIP dexprogs_pass_gc_stress: fixtures/build/dexprogs is absent");
+    if acos_test_support::require_prereq(acos_test_support::have_fixture("fixtures/build/dexprogs"), "dexprogs_pass_gc_stress", "fixtures/build/dexprogs is absent").is_none() {
         return;
     }
     let names = fixture_names();
@@ -151,7 +155,7 @@ fn dexprogs_pass_gc_stress() {
 }
 
 fn write_coverage(names: &[String], executed: &[u64; 256]) {
-    let out_dir = repo_root().join("results/vm");
+    let out_dir = acos_test_support::test_artifacts_dir("vm");
     let _ = std::fs::create_dir_all(&out_dir);
     let unsupported: [u8; 6] = [0xfa, 0xfb, 0xfc, 0xfd, 0xfe, 0xff];
     let mut exec = Vec::new();

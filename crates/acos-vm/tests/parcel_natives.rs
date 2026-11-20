@@ -112,7 +112,7 @@ fn compile_case(name: &str) -> Option<PathBuf> {
 #[test]
 fn parcel_round_trips_on_the_real_framework() {
     let Some(dex) = compile_case("ParcelMain") else {
-        eprintln!("SKIP parcel_round_trips_on_the_real_framework: javac/d8/android.jar unavailable");
+        acos_test_support::require_prereq(false, "parcel_round_trips_on_the_real_framework", "parcel_round_trips_on_the_real_framework: javac/d8/android.jar unavailable");
         return;
     };
     let options = VmOptions {
@@ -122,7 +122,7 @@ fn parcel_round_trips_on_the_real_framework() {
     let mut vm = match Vm::new(options) {
         Ok(vm) => vm,
         Err(VmError::BootClasspathMissing(m)) => {
-            eprintln!("SKIP parcel_round_trips_on_the_real_framework: {m}");
+            acos_test_support::require_prereq(false, "parcel_round_trips_on_the_real_framework", &format!("parcel_round_trips_on_the_real_framework: {m}"));
             return;
         }
         Err(e) => panic!("Vm::new failed: {e}"),

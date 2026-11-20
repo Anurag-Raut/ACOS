@@ -96,13 +96,17 @@ fn write_pattern(p: &mut Parcel, pattern: &str, kind: i32, parsed: &[i32]) {
 fn write_rich_filter(p: &mut Parcel) {
     // writeStringArray(actions)
     p.write_int32(2);
-    p.write_string16("android.intent.action.VIEW").expect("action");
-    p.write_string16("android.intent.action.SEND").expect("action");
+    p.write_string16("android.intent.action.VIEW")
+        .expect("action");
+    p.write_string16("android.intent.action.SEND")
+        .expect("action");
     // categories (present)
     p.write_int32(1);
     p.write_int32(2);
-    p.write_string16("android.intent.category.DEFAULT").expect("cat");
-    p.write_string16("android.intent.category.BROWSABLE").expect("cat");
+    p.write_string16("android.intent.category.DEFAULT")
+        .expect("cat");
+    p.write_string16("android.intent.category.BROWSABLE")
+        .expect("cat");
     // dataSchemes (present)
     p.write_int32(1);
     p.write_int32(1);
@@ -230,7 +234,9 @@ fn the_intent_filter_codec_matches_the_image_spec() {
     // The nested payloads are not `Parcelable`s on the wire (no presence marker,
     // no class name), so they need their own payload specs.
     assert!(parcelable::has_codec("android.os.PatternMatcher"));
-    assert!(parcelable::has_codec("android.content.IntentFilter$AuthorityEntry"));
+    assert!(parcelable::has_codec(
+        "android.content.IntentFilter$AuthorityEntry"
+    ));
 }
 
 #[test]
@@ -259,10 +265,14 @@ fn the_image_dev_support_filter_decodes_to_exactly_its_bytes() {
         );
     }
     assert_eq!(filter.field(9), Some(&Value::Int(0)), "priority");
-    assert_eq!(filter.field(15).and_then(|v| match v {
-        Value::Cond { present, .. } => Some(*present),
-        _ => None,
-    }), Some(false), "null extras");
+    assert_eq!(
+        filter.field(15).and_then(|v| match v {
+            Value::Cond { present, .. } => Some(*present),
+            _ => None,
+        }),
+        Some(false),
+        "null extras"
+    );
 }
 
 #[test]
@@ -357,7 +367,8 @@ fn register_receiver_code_18_uses_the_same_codec_and_records_the_full_filter() {
     // `registerReceiver(caller, callerPackage, receiver, filter, permission,
     // userId, flags)` -- code 18.
     let mut data = Parcel::new();
-    data.write_interface_token(IACTIVITY_MANAGER).expect("token");
+    data.write_interface_token(IACTIVITY_MANAGER)
+        .expect("token");
     data.write_strong_binder_opt(Some(BinderId(CALLER)));
     data.write_string16("com.gaten").expect("package");
     data.write_strong_binder_opt(Some(BinderId(RECEIVER)));
@@ -423,7 +434,8 @@ fn a_null_filter_is_recorded_as_an_empty_filter_not_an_error() {
         .expect("activity manager");
 
     let mut data = Parcel::new();
-    data.write_interface_token(IACTIVITY_MANAGER).expect("token");
+    data.write_interface_token(IACTIVITY_MANAGER)
+        .expect("token");
     data.write_strong_binder_opt(Some(BinderId(CALLER)));
     data.write_string16("com.gaten").expect("package");
     data.write_string16("").expect("feature id");
@@ -462,13 +474,18 @@ fn unregister_receiver_drops_the_registration() {
 
     // `unregisterReceiver(IIntentReceiver)` -- code 20, void.
     let mut data = Parcel::new();
-    data.write_interface_token(IACTIVITY_MANAGER).expect("token");
+    data.write_interface_token(IACTIVITY_MANAGER)
+        .expect("token");
     data.write_strong_binder_opt(Some(BinderId(RECEIVER)));
     data.set_data_position(0);
     let reply = transact(&mut host, am, 20, &mut data).expect("unregisterReceiver");
     let mut reply = reply;
     no_exception(&mut reply);
-    assert_eq!(reply.data_avail(), 0, "void reply: only the exception header");
+    assert_eq!(
+        reply.data_avail(),
+        0,
+        "void reply: only the exception header"
+    );
     assert!(
         host.receiver_registrations().is_empty(),
         "the registration is gone"
@@ -477,14 +494,15 @@ fn unregister_receiver_drops_the_registration() {
     // Unregistering an unknown receiver is swallowed (the guest's own bookkeeping
     // is authoritative); it must not be an error.
     let mut data = Parcel::new();
-    data.write_interface_token(IACTIVITY_MANAGER).expect("token");
+    data.write_interface_token(IACTIVITY_MANAGER)
+        .expect("token");
     data.write_strong_binder_opt(Some(BinderId(0x9999)));
     data.set_data_position(0);
     assert!(transact(&mut host, am, 20, &mut data).is_ok());
 }
 
 #[test]
-fn broadcast_intent_is_accepted_and_delivers_nothing() {
+fn broadcast_intent_delivers_to_a_matching_dynamic_receiver() {
     use acos_services::ams::{Extra, IntentFacts};
     use std::collections::BTreeMap;
 
@@ -494,10 +512,8 @@ fn broadcast_intent_is_accepted_and_delivers_nothing() {
         .expect("lookup")
         .expect("activity manager");
 
-    let mut data = register_with_feature(BinderId(RECEIVER), "", |p| {
-        write_dev_support_filter(p)
-    })
-    .into_parcel();
+    let mut data = register_with_feature(BinderId(RECEIVER), "", |p| write_dev_support_filter(p))
+        .into_parcel();
     transact(&mut host, am, 19, &mut data).expect("register");
     let _ = host.drain_events();
 
@@ -508,6 +524,7 @@ fn broadcast_intent_is_accepted_and_delivers_nothing() {
         component: None,
         categories: Vec::new(),
         extras: BTreeMap::<String, Extra>::new(),
+        ..IntentFacts::default()
     }
     .to_parcelable();
     // `broadcastIntent(caller, intent, resolvedType, resultTo, resultCode,
@@ -544,9 +561,32 @@ fn broadcast_intent_is_accepted_and_delivers_nothing() {
         "the recorded filter matches the broadcast exactly once, got {:?}",
         result.reply
     );
-    assert!(
-        result.deliveries.is_empty(),
-        "the broadcast must not enqueue a delivery"
+    // A matching **dynamic** receiver is delivered to: the ART host
+    // materialises `IIntentReceiver.performReceive` from the queued match (the
+    // old "no receiver scheduler" rule dropped it, which is why a service module
+    // could not raise an event). A one-way delivery carries a well-formed
+    // request parcel and targets the registered binder.
+    assert_eq!(
+        result.deliveries.len(),
+        1,
+        "the matching receiver gets one performReceive delivery: {:?}",
+        result.deliveries
+    );
+    let delivery = &result.deliveries[0];
+    assert_eq!(
+        delivery.interface, "android.content.IIntentReceiver",
+        "the delivery is performReceive"
+    );
+    assert_eq!(delivery.code, 1, "performReceive is the first transaction");
+    assert_eq!(
+        delivery.target.0, RECEIVER,
+        "the delivery targets the registered IIntentReceiver"
+    );
+    let mut data = delivery.data.clone();
+    data.set_data_position(0);
+    assert_eq!(
+        data.peek_interface_token().expect("token").as_deref(),
+        Some("android.content.IIntentReceiver")
     );
 
     // A different action does not match the recorded filter: the count is the
@@ -558,6 +598,7 @@ fn broadcast_intent_is_accepted_and_delivers_nothing() {
         component: None,
         categories: Vec::new(),
         extras: BTreeMap::<String, Extra>::new(),
+        ..IntentFacts::default()
     }
     .to_parcelable();
     let mut other_args = args.to_vec();
@@ -573,10 +614,14 @@ fn broadcast_intent_is_accepted_and_delivers_nothing() {
         result.reply
     );
 
-    // Nothing was delivered to the guest binder: the host has no receiver
-    // scheduler, so it says so instead of fabricating a call.
+    // A broadcast nobody matched delivers nothing and fabricates no event.
+    assert!(
+        result.deliveries.is_empty(),
+        "an unmatched broadcast has no delivery: {:?}",
+        result.deliveries
+    );
     let events = host.drain_events();
-    let note: Vec<&str> = events
+    let notes: Vec<&str> = events
         .iter()
         .filter_map(|e| match &e.body {
             acos_protocol::EventBody::Log { tag, message, .. }
@@ -587,8 +632,10 @@ fn broadcast_intent_is_accepted_and_delivers_nothing() {
             _ => None,
         })
         .collect();
-    assert_eq!(note.len(), 1, "one explicit no-delivery line: {events:?}");
-    assert!(note[0].contains("not delivered"), "{}", note[0]);
+    assert!(
+        notes.is_empty(),
+        "an unmatched broadcast is Android-normal, not a log line: {notes:?}"
+    );
     assert_eq!(
         host.receiver_registrations().len(),
         1,
@@ -715,10 +762,12 @@ fn a_dropped_presence_word_does_not_silently_decode() {
     // by four bytes; a codec that fuzzes over the mismatch would accept it.
     let mut p = Parcel::new();
     p.write_int32(1);
-    p.write_string16("android.intent.action.VIEW").expect("action");
+    p.write_string16("android.intent.action.VIEW")
+        .expect("action");
     // NOTE: no categories presence word -- this writes the count directly.
     p.write_int32(1);
-    p.write_string16("android.intent.category.DEFAULT").expect("category");
+    p.write_string16("android.intent.category.DEFAULT")
+        .expect("category");
     for _ in 0..4 {
         p.write_int32(0);
     }

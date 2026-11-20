@@ -53,15 +53,17 @@ fn launch_counter(session: &AgentSession, apk: &Path) -> bool {
     let report = match session.launch(apk) {
         Ok(r) => r,
         Err(e) => {
-            eprintln!("SKIP counter_interaction: launch failed: {e:?}");
+            acos_test_support::require_prereq(false, "launch_counter", &format!("counter_interaction: launch failed: {e:?}"));
             return false;
         }
     };
     // The launch ladder must reach the published-frame rung; anything less is
     // recorded as evidence, not silently skipped.
     assert!(
-        report.stages.iter().any(|s| s.name == "first_frame"
-            && s.status == acos_runtime::session::StageStatus::Ok),
+        report
+            .stages
+            .iter()
+            .any(|s| s.name == "first_frame" && s.status == acos_runtime::session::StageStatus::Ok),
         "counter did not reach `first_frame`: {:?}\nroot_blocker={:?}",
         report
             .stages
@@ -76,12 +78,10 @@ fn launch_counter(session: &AgentSession, apk: &Path) -> bool {
 #[test]
 fn counter_launch_publishes_a_real_frame_and_live_tree() {
     seed_boot_dir();
-    let Some(apk) = counter_apk() else {
-        eprintln!("SKIP counter_launch_publishes_a_real_frame_and_live_tree: no fixture apk");
+    let Some(apk) = acos_test_support::require_some(counter_apk(), "counter_launch_publishes_a_real_frame_and_live_tree", "no fixture apk") else {
         return;
     };
-    if !boot_available() {
-        eprintln!("SKIP counter_launch_publishes_a_real_frame_and_live_tree: no ACOS_BOOT_DIR");
+    if acos_test_support::require_prereq(boot_available(), "counter_launch_publishes_a_real_frame_and_live_tree", "no ACOS_BOOT_DIR").is_none() {
         return;
     }
 
@@ -102,7 +102,10 @@ fn counter_launch_publishes_a_real_frame_and_live_tree() {
         "frame RGBA byte length"
     );
     assert!(
-        frame.pixels.chunks_exact(4).any(|p| p[0] | p[1] | p[2] != 0),
+        frame
+            .pixels
+            .chunks_exact(4)
+            .any(|p| p[0] | p[1] | p[2] != 0),
         "frame is not entirely black: the app's View.draw produced pixels"
     );
 
@@ -155,10 +158,7 @@ fn counter_launch_publishes_a_real_frame_and_live_tree() {
         .iter()
         .find_map(|n| find_by_id(n, ":id/inc"))
         .expect("Increment button in the live tree");
-    assert_eq!(
-        inc[0], 42,
-        "Increment left is doubled (W179-A): {inc:?}"
-    );
+    assert_eq!(inc[0], 42, "Increment left is doubled (W179-A): {inc:?}");
 
     session.close();
 }
@@ -166,12 +166,10 @@ fn counter_launch_publishes_a_real_frame_and_live_tree() {
 #[test]
 fn counter_tap_increment_updates_the_tree() {
     seed_boot_dir();
-    let Some(apk) = counter_apk() else {
-        eprintln!("SKIP counter_tap_increment_updates_the_tree: no fixture apk");
+    let Some(apk) = acos_test_support::require_some(counter_apk(), "counter_tap_increment_updates_the_tree", "no fixture apk") else {
         return;
     };
-    if !boot_available() {
-        eprintln!("SKIP counter_tap_increment_updates_the_tree: no ACOS_BOOT_DIR");
+    if acos_test_support::require_prereq(boot_available(), "counter_tap_increment_updates_the_tree", "no ACOS_BOOT_DIR").is_none() {
         return;
     }
 
@@ -216,12 +214,10 @@ fn counter_tap_increment_updates_the_tree() {
 #[test]
 fn counter_tap_repaints_the_count_region() {
     seed_boot_dir();
-    let Some(apk) = counter_apk() else {
-        eprintln!("SKIP counter_tap_repaints_the_count_region: no fixture apk");
+    let Some(apk) = acos_test_support::require_some(counter_apk(), "counter_tap_repaints_the_count_region", "no fixture apk") else {
         return;
     };
-    if !boot_available() {
-        eprintln!("SKIP counter_tap_repaints_the_count_region: no ACOS_BOOT_DIR");
+    if acos_test_support::require_prereq(boot_available(), "counter_tap_repaints_the_count_region", "no ACOS_BOOT_DIR").is_none() {
         return;
     }
 

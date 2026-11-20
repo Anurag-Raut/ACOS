@@ -1,0 +1,20 @@
+version: 1
+name: diag-stack
+description: diag
+app: fixtures/build/apps/multi-activity.apk
+engine: native-preferred
+fallback: report-and-escalate
+api_level: 34
+isolation: process
+display: {mode: offscreen, width: 1080, height: 2400, density_dpi: 420}
+capabilities: [lifecycle, ui.offscreen, ui.text, input, storage]
+expectation: pass
+budgets: {memory_mib: 512, wall_ms: 60000}
+steps:
+  - launch:
+      activity: dev.acos.fixtures.multiactivity/.MainActivity
+      clear_state: true
+  - wait_for: {selector: {id: message}, timeout_ms: 5000}
+  - assert_windows: {order: ["application"]}
+  - key: {key: back, settle: content}
+  - assert_windows: {order: ["application"]}

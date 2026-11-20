@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Notification probe</string>
+    <string name="enabled_unknown">enabled: ?</string>
+    <string name="posted_none">posted: none</string>
+</resources>

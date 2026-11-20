@@ -138,7 +138,15 @@ impl NativeCrash {
 }
 
 /// Split `Fatal signal 11 (SIGSEGV), code 1 (SEGV_MAPERR) fault addr 0x0`.
-fn parse_fatal(line: &str) -> (Option<i64>, Option<String>, Option<i64>, Option<String>, Option<String>) {
+fn parse_fatal(
+    line: &str,
+) -> (
+    Option<i64>,
+    Option<String>,
+    Option<i64>,
+    Option<String>,
+    Option<String>,
+) {
     let mut signal = None;
     let mut signal_name = None;
     let mut code = None;
@@ -161,7 +169,10 @@ fn parse_fatal(line: &str) -> (Option<i64>, Option<String>, Option<i64>, Option<
     }
     if let Some(pos) = tail.find("code ") {
         let after = &tail[pos + 5..];
-        let num: String = after.chars().take_while(|c| c.is_ascii_digit() || *c == '-').collect();
+        let num: String = after
+            .chars()
+            .take_while(|c| c.is_ascii_digit() || *c == '-')
+            .collect();
         code = num.parse::<i64>().ok();
         if let Some(open) = after.find('(') {
             if let Some(close) = after[open..].find(')') {
@@ -171,7 +182,10 @@ fn parse_fatal(line: &str) -> (Option<i64>, Option<String>, Option<i64>, Option<
     }
     if let Some(pos) = tail.find("fault addr ") {
         let after = &tail[pos + 11..];
-        let addr: String = after.chars().take_while(|c| c.is_ascii_hexdigit() || *c == 'x' || *c == 'X').collect();
+        let addr: String = after
+            .chars()
+            .take_while(|c| c.is_ascii_hexdigit() || *c == 'x' || *c == 'X')
+            .collect();
         if !addr.is_empty() {
             fault_addr = Some(addr);
         }
@@ -204,7 +218,11 @@ fn parse_frame(line: &str) -> Option<Frame> {
         // The map is the first token that looks like a path or a file name.
         for token in remainder.split_whitespace() {
             let tok = token.trim_matches(|c| c == '(' || c == ')');
-            if tok.starts_with('/') || tok.ends_with(".so") || tok == "(deleted)" || tok.contains(".so") {
+            if tok.starts_with('/')
+                || tok.ends_with(".so")
+                || tok == "(deleted)"
+                || tok.contains(".so")
+            {
                 map = Some(tok.to_string());
                 break;
             }
@@ -227,7 +245,13 @@ fn parse_frame(line: &str) -> Option<Frame> {
             }
         }
     }
-    Some(Frame { index, pc, map, offset, symbol })
+    Some(Frame {
+        index,
+        pc,
+        map,
+        offset,
+        symbol,
+    })
 }
 
 /// Extract the ART dump block (header through the last backtrace frame) from a
@@ -378,10 +402,7 @@ pub fn analyze(stdout: &str, stderr: &str, logs: &[LogEntry]) -> Option<NativeCr
         }
     }
     if crash.signal_name.is_none() {
-        crash.signal_name = crash
-            .signal
-            .and_then(signal_name)
-            .map(str::to_string);
+        crash.signal_name = crash.signal.and_then(signal_name).map(str::to_string);
     }
     if crash.shim.is_none() && crash.raw.is_empty() {
         return None;

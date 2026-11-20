@@ -1,0 +1,8 @@
+{
+  "request_id": "req_c1ba2_18e8e47d977051d4",
+  "started_at": "2026-11-17T17:14:39.569Z",
+  "scenario": "scenarios/notif-perm-denied.yaml",
+  "apk": "",
+  "acos_version": "0.2.2",
+  "overwrote_run_id": "req_c1842_18e8e47a0ddd9111"
+}

@@ -1,0 +1,185 @@
+# WV6: the WebView end-to-end gate. Real WebViews against the host broker and the
+# pinned Chromium:
+#   A: file:///android_asset/test.html, served by the broker's interception
+#      from this APK's own assets (WIRE.md §4.3), on the default viewport arm;
+#   B: the WV8 viewport arms — a page with
+#      `<meta name="viewport" content="width=640">` loaded with
+#      `useWideViewPort` + `loadWithOverviewMode` set before the first load, then
+#      a page without a meta tag, then back to the default arm.
+# The page's text must appear in the ACOS UI tree through the WIRE v1.1
+# ax -> AccessibilityNodeProvider path, a tap by that text must reach the page,
+# the page's JS must change it (and call the Java bridge), and frames must be
+# captured. The viewport arms assert the layout width the page itself reports.
+# Only then is this expectation `pass`.
+version: 1
+name: webview-probe
+description: >-
+  Launch webview-probe with the `webview` module real (ADR-0029: the
+  com.android.webview provider package plus this session's gate socket, the
+  shared host Chromium started on the first connect) and drive a real page end
+  to end: asset + data URL loads, page text in the ACOS tree via the
+  accessibility provider, tap by text, page JS change, JS interface both ways,
+  the two viewport arms, and captured frames.
+app: fixtures/build/apps/webview-probe.apk
+engine: native-preferred
+fallback: report-and-escalate
+api_level: 34
+isolation: process
+# ADR-0029: the module installs the provider package itself (`system_apps`), so
+# there is no `extra_apks:` line to keep in step with the attached set.
+services:
+  - id: webview
+    profile: real
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+capabilities:
+  - lifecycle
+  - ui.offscreen
+  - ui.text
+  - input.tap
+  - screenshot
+expectation: pass
+budgets:
+  memory_mib: 768
+  wall_ms: 180000
+steps:
+  - launch:
+      activity: dev.acos.fixtures.webview/.MainActivity
+      clear_state: true
+  - wait_for:
+      selector: {id: status}
+      timeout_ms: 8000
+  # The WebView was constructed by the framework's own provider path — which
+  # works because the module installed `com.android.webview` (its package is what
+  # `hasSystemFeature` and `webviewupdate` answer from).
+  - assert_text:
+      selector: {id: status}
+      text: {contains: "WebView created:"}
+      timeout_ms: 12000
+  - assert_text:
+      selector: {id: status}
+      text: {contains: "hasSystemFeature(android.software.webview)=true"}
+      timeout_ms: 12000
+  # Page A came from the APK assets through req.intercept; page B reported a
+  # finished load and a JS evaluation result too.
+  - assert_text:
+      selector: {id: status}
+      text: {contains: "A onPageFinished file:///android_asset/test.html"}
+      timeout_ms: 20000
+  - assert_text:
+      selector: {id: status}
+      text: {contains: "evaluateJavascript -> \"acos asset page\""}
+      timeout_ms: 20000
+  # The page's own text is in the ACOS UI tree (ax -> AccessibilityNodeProvider).
+  - assert_text:
+      selector: {text: {exact: "acos asset page"}}
+      text: {contains: "acos asset page"}
+      timeout_ms: 12000
+  # A real engine frame was painted into the View.
+  #
+  # WV8 note (LOOPERWAKE track, not fixed here): a frame that the engine delivers
+  # while nothing else draws is painted only on the *next* draw — the guest does
+  # not run a traversal for an invalidation alone
+  # (`results/handoff/WV7/evidence/no-draw-after-frame.md`). The `assert_log`
+  # below therefore waits for the provider's own "frame decoded" line, which is
+  # what the wire delivered, and the captures that follow are taken after the
+  # steps that do force a traversal (the tap and the JS repaint). The generous
+  # timeout_ms is deliberate: it tolerates the deferred paint instead of
+  # encoding it as a failure of this scenario.
+  - capture:
+      name: webview-first-frame
+  # WVFAIR: wait for a frame from **each** view (provider view ids in creation
+  # order: A=1, B=2) before the input steps below. Both targets pull frames
+  # while their pages load, and the tap was measured to be lost when it landed
+  # in that storm (WV8 §5); waiting for both first frames makes the input
+  # measurement a measurement, not a race. This strengthens the old single-frame
+  # wait, it does not replace it.
+  # One step per view (each `assert_log` matches its patterns in order, and the
+  # two views' first frames may arrive in either order).
+  - assert_log:
+      tag: ACOSWvProvider
+      patterns:
+        - 'frame decoded view=1 [0-9]+x[0-9]+ seq=[0-9]+ bytes=[0-9]+'
+      timeout_ms: 30000
+  - assert_log:
+      tag: ACOSWvProvider
+      patterns:
+        - 'frame decoded view=2 [0-9]+x[0-9]+ seq=[0-9]+ bytes=[0-9]+'
+      timeout_ms: 30000
+  # Tap the page's button by the text the accessibility tree exposes; the page's
+  # own JS changes #out to "tapped" and calls the Java bridge.
+  #
+  # SCENHYG (measured 2026-11-17, 10 runs): this step's click is lost 2-4 times in
+  # 10 while the OTHER view (the viewport page, created at launch) is pulling a
+  # frame: the tap step still reports `handled: true` (the guest's WebView always
+  # consumes the touch) with `acked: 2` and a ~2.0-2.4 s `ack_ms`, the page never
+  # logs `JS->Java: tapped`, and this assertion sees no "tapped" node for its
+  # whole timeout. The cause is the engine-wide, serialised frame pull in the
+  # host broker (one `beginFrame` at a time; input on the same workers), which
+  # starves the second view's input/JS when the other one is rendering. Two
+  # aggravating factors were removed in SCENHYG (no frame pull between a
+  # gesture's phases; a non-final touch phase no longer waits the full CDP reply
+  # budget): 4/10 failures before, 2/10 after. The ROOT fix is WVFAIR's fair
+  # frame-pull gate (`crates/acos-webview/src/fair.rs` on branch `wvfair`:
+  # per-view coalescing, input frames first, render off the shared workers;
+  # measured 41-140 ms tap acks and webview-probe 3/3). This scenario stays
+  # `expectation: pass`: it must pass, and the residual flake is a broker defect,
+  # not a scenario expectation to weaken.
+  - tap:
+      selector: {text: {exact: "Tap me"}}
+  - assert_text:
+      selector: {text: {exact: "tapped"}}
+      text: {contains: "tapped"}
+      timeout_ms: 12000
+  - assert_text:
+      selector: {id: status}
+      text: {contains: "JS->Java: tapped"}
+      timeout_ms: 12000
+  - capture:
+      name: webview-tapped-frame
+  # WV8 viewport arms, asserted from the page's own JS (`clientWidth` and
+  # `visualViewport.scale`). They run **after** the input steps on purpose: the
+  # fixture starts them from the page's own `window.acosBridge.report("tapped")`,
+  # because two targets that load pages at the same time serialise their frame
+  # pulls on the broker and the guest's UI thread then blocks in `onDraw` — the
+  # tap's ack arrived ~2 s late and the click was lost (`Choreographer: Skipped
+  # 119 frames`, measured). Input fidelity is asserted first; the arms then use
+  # the same view and connection.
+  #  A (#0): the default arm — 343 CSS px = the 900-device-px View / 2.625
+  #          density (the View is 900x560 inside a 1080x2400 @420 dpi display);
+  #          the page has no meta viewport;
+  #  B (#0): `setUseWideViewPort(true)` + `setLoadWithOverviewMode(true)` set
+  #          *before* the first load, page has `<meta viewport content='width=640'>`
+  #          -> lays out at 640 CSS px, overview scales it to the 343 px View;
+  #  B (#1): the same view, a page without a meta tag -> Chromium's Android
+  #          default 980 CSS px, scaled to fit;
+  #  B (#2): the switch back to the default -> 343 CSS px and 100 % again.
+  - assert_text:
+      selector: {id: status}
+      text: {contains: 'A viewport -> "343x1.00"'}
+      timeout_ms: 20000
+  - assert_text:
+      selector: {id: status}
+      text: {contains: 'B viewport#0 -> "640x0.54"'}
+      timeout_ms: 20000
+  - assert_text:
+      selector: {id: status}
+      text: {contains: 'B viewport#1 -> "980x0.35"'}
+      timeout_ms: 20000
+  - assert_text:
+      selector: {id: status}
+      text: {contains: 'B viewport#2 -> "343x1.00"'}
+      timeout_ms: 20000
+  # The data page from the last arm is in the tree and the page's JS still
+  # answers (the same connection served every arm).
+  - assert_text:
+      selector: {id: status}
+      text: {contains: 'evaluateJavascript -> "acos data page"'}
+      timeout_ms: 20000
+  - assert_text:
+      selector: {text: {exact: "acos data page"}}
+      text: {contains: "acos data page"}
+      timeout_ms: 12000

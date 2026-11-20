@@ -451,6 +451,30 @@ pub struct Verdict {
     /// Additional human notes (warnings, reconciliation items).
     #[serde(default)]
     pub notes: Vec<String>,
+    /// ADR-0029 item 4/5: the service modules the session attached, with their
+    /// profile and honest state. `fidelity` is `real` only for `real`; a verdict
+    /// whose pass relied on `stub`/`scripted` names it here and in `notes`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub modules: Vec<ModuleState>,
+}
+
+/// One module row in `verdict.json`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct ModuleState {
+    /// Module id (`feedback.vibrator`).
+    pub id: String,
+    /// Attached profile, `off` when not attached.
+    pub profile: String,
+    /// `hot` or `at-launch`.
+    pub attach: String,
+    /// `attached` or `off`.
+    pub state: String,
+    /// The fidelity the module appended to the session (`real`/`stub`/
+    /// `scripted`/`off`).
+    pub fidelity: String,
+    /// Why it is off, or what is degraded while it is on.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
 }
 
 impl Verdict {
@@ -489,6 +513,7 @@ impl Verdict {
             reproducer,
             provenance: None,
             notes: Vec::new(),
+            modules: Vec::new(),
         }
     }
 

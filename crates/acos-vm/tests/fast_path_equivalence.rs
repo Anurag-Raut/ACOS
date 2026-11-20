@@ -33,10 +33,9 @@ fn fixture_names() -> Vec<String> {
 }
 
 fn run(name: &str, gc_stress: bool, fast: bool) -> (i32, String) {
-    let dex = std::fs::read(repo_root().join(format!(
-        "fixtures/build/dexprogs/{name}/classes.dex"
-    )))
-    .expect("read dex");
+    let dex =
+        std::fs::read(repo_root().join(format!("fixtures/build/dexprogs/{name}/classes.dex")))
+            .expect("read dex");
     let mut vm = Vm::new(VmOptions {
         heap_max_bytes: 256 * 1024 * 1024,
         gc_stress,
@@ -52,8 +51,7 @@ fn run(name: &str, gc_stress: bool, fast: bool) -> (i32, String) {
 
 fn check(gc_stress: bool, skip_threads: bool) {
     let names = fixture_names();
-    if names.is_empty() {
-        eprintln!("SKIP fast_path_equals_general_path: fixtures/build/dexprogs is absent");
+    if acos_test_support::require_prereq(!(names.is_empty()), "check", "fixtures/build/dexprogs is absent").is_none() {
         return;
     }
     for name in &names {

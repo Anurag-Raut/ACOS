@@ -183,6 +183,7 @@ def _environ_has(pid, needle):
     return wanted in env.split(b"\0")
 
 
+
 def ppid_map():
     """parent -> [child pid] (for descendant walks)."""
     out = {}
@@ -317,7 +318,8 @@ class WarmSampler(threading.Thread):
 
 # ---------------------------------------------------------------- serve control
 class Serve:
-    def __init__(self, acos, scratch, engine="art", max_sessions=8, idle=900):
+    def __init__(self, acos, scratch, engine="art", max_sessions=8, idle=900,
+                 extra_env=None):
         self.scratch = Path(scratch)
         self.socket_path = str(self.scratch / "serve.sock")
         self.stdout = open(self.scratch / "serve.stdout", "w")
@@ -325,7 +327,11 @@ class Serve:
         env = dict(os.environ,
                    ACOS_RUNTIME_DIR=str(self.scratch / "runtime"),
                    ACOS_CACHE_DIR=str(self.scratch / "cache"),
-                   ACOS_SERVE_ARTIFACTS=str(self.scratch / "sessions"))
+                   ACOS_SERVE_ARTIFACTS=str(self.scratch / "sessions"),
+                   # A harness may need the product's own instrumentation (the
+                   # APK-ready stage ladder, ACOS_ART_STAGE_TIMING). It inherits
+                   # to the launcher children, never set globally.
+                   **(extra_env or {}))
         # SERVELEAK: `--owner-pid` ties this rep's daemon to the harness. If the
         # harness dies hard (kill -9, a killed guard), the daemon destroys its
         # guest sessions and exits instead of holding live ART guests for

@@ -159,6 +159,12 @@ pub enum DynamicValue {
     String(Option<String>),
     /// `VAL_INTEGER`.
     Int(i32),
+    /// `VAL_SHORT`: `Bundle.putShort`/`Intent.putExtra(String, short)`. The
+    /// image writes the tag then a 4-byte int (`Parcel.writeValue` VAL_SHORT →
+    /// `writeInt`), and the client's `getShort` casts to `java.lang.Short` — an
+    /// `Integer` there is a `ClassCastException` warning and the default comes
+    /// back (`BluetoothDevice.EXTRA_RSSI` was read as 0 that way).
+    Short(i16),
     /// `VAL_LONG`.
     Long(i64),
     /// `VAL_FLOAT`.
@@ -181,8 +187,23 @@ pub enum DynamicValue {
     Binder(Option<BinderId>),
     /// A `VAL_MAP`/`VAL_BUNDLE`-shaped nested map (best effort).
     Map(Vec<(DynamicValue, DynamicValue)>),
+    /// A `VAL_SPARSEARRAY` (the image's tag 12): an `int` key per value.
+    ///
+    /// `activityStopped`'s saved-state `Bundle` carries the window hierarchy
+    /// state, which `Activity.onSaveInstanceState` puts in as a
+    /// `SparseArray<Parcelable>`; the reader had no model for the tag, so the
+    /// whole request failed (`unmodelled Parcel.VAL_* tag 12`) on every
+    /// `activityStopped` (MPROC7).
+    SparseArray(Vec<(i32, DynamicValue)>),
     /// A `VAL_PARCELABLE` payload.
     Parcelable(Parcelable),
+    /// `VAL_OBJECTARRAY`: `Parcel.writeArray(Object[])` — a count word then one
+    /// `writeValue` payload per element. Android's `SMS_RECEIVED` broadcast
+    /// carries its PDUs this way (`Object[]` of `byte[]`).
+    ObjectArray(Option<Vec<DynamicValue>>),
+    /// `VAL_LIST`: `Parcel.writeList(List)` — the Bluetooth bonded-device
+    /// result (a `List<BluetoothDevice>`) is written as one.
+    List(Option<Vec<DynamicValue>>),
     /// A value this crate does not model; its bytes were skipped.
     Skipped {
         /// `Parcel.VAL_*` tag.
@@ -254,6 +275,8 @@ pub enum Value {
     Unit,
     /// `int`.
     Int(i32),
+    /// `short` (a `Bundle`/`Intent` extra value, `VAL_SHORT`).
+    Short(i16),
     /// `long`.
     Long(i64),
     /// `float`.
@@ -288,6 +311,9 @@ pub enum Value {
     CharArray(Option<Vec<u16>>),
     /// `byte[]`.
     ByteArray(Option<Vec<u8>>),
+    /// `Object[]` (a `Parcel.writeArray` inside a `Bundle` value). Android's
+    /// `SMS_RECEIVED` broadcast stores its PDUs as `Object[]` of `byte[]`.
+    ObjectArray(Option<Vec<Value>>),
     /// `List<String>`.
     StringList(Option<Vec<Option<String>>>),
     /// A parcelable payload.

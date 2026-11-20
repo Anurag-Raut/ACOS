@@ -111,6 +111,19 @@ pub struct ArtSession {
     width: u32,
     height: u32,
     density: u32,
+    /// ADR-0029 item 4: the `services:` specs this session was launched with,
+    /// kept so a `reset`/relaunch attaches the same modules.
+    services: Vec<serde_json::Value>,
+    /// LAUNCHEXTRAS: the launch `Intent` this session was started with (action,
+    /// data URI, typed extras). Kept so a `reset` relaunch carries the same
+    /// Intent the scenario declared.
+    intent: acos_protocol::LaunchIntent,
+    /// The modules the guest's ready line reported as attached (verdict rows).
+    modules: Vec<serde_json::Value>,
+    /// The same rows, shared with `EngineBackend` so the verdict can cite the
+    /// session's **final** module state (delivered fixes included) instead of the
+    /// launch snapshot.
+    module_rows: Arc<Mutex<Vec<serde_json::Value>>>,
     /// H13b: the boot image this session's ready line reported —
     /// `{mode, cache: hit|built|fallback|external|none, reason}` — so a serve's
     /// launch reply and session list can say whether the shared-image cache hit.
@@ -193,6 +206,12 @@ pub struct ArtSession {
     /// Guest boot time: `acos-art` spawn to its ready line. Charged to the
     /// session, not to the `launch` step (the executor's clock starts later).
     session_start_ms: u64,
+    /// NET4: the id this session is addressed by — the `acos serve` session id,
+    /// or the run's own id for a one-shot `verify`. It is published to the
+    /// launcher (`ACOS_ART_SESSION_ID`) and names the relay session
+    /// (`acos-<id>`), the same rule `acos_net` resolves, so **every** session's
+    /// network is reachable, including a one-shot run's.
+    session_id: String,
     /// Guest-side input settle window the engine asked for (seconds).
     frame_wait_secs: u64,
     /// Engine settle budget after a refused input frame.
@@ -203,6 +222,14 @@ pub struct ArtSession {
     /// [`SessionBackend::begin_input`], before the traversal a selector tap
     /// needs to resolve its point): its content hash and its tree signature.
     input_baseline: Option<(String, u64)>,
+    /// SYSUI3A: the windows (label, id, z, bounds, touchable) the session held
+    /// immediately before the current input action, snapshotted by
+    /// [`Self::begin_input`] from the bound frame. A tap whose target window the
+    /// host recorded here and which the action's own observation no longer
+    /// records is a *window removal* the interaction caused (ADR-0032's
+    /// host-recorded removal): the strict settle's `detached` reason describes
+    /// that removal, not a screen that is still changing.
+    input_windows_before: Vec<acos_protocol::ui::WindowInfo>,
     /// FB3: the tree the session held immediately before the current input
     /// action, snapshotted by [`Self::begin_input`] from the already-bound
     /// frame (no traversal, no extra guest round trip). `None` when the action
@@ -262,6 +289,14 @@ pub struct ArtSession {
     /// reply states it so a functional result is never mistaken for animation
     /// evidence.
     animations: &'static str,
+    /// MPROC1: the extra APKs this session installed beside the launched one,
+    /// as the caller named them. Launch-time: a live session cannot gain a
+    /// package (the same rule `animations`/`insets` follow), and a `reset`
+    /// relaunch installs exactly this list again.
+    extra_apks: Vec<PathBuf>,
+    /// MPROC7: the launcher's idle kill in seconds (`None` keeps the launcher
+    /// default of 30; `Some(0)` disables it). Launch-time, like `extra_apks`.
+    idle_kill_seconds: Option<u64>,
     /// P12b: per-request strict/fast settle deadline (`settle_timeout_ms`).
     /// `None` keeps the engine's documented default; on timeout the guest still
     /// returns the latest tree and frame identity with `settled:false`.
@@ -901,6 +936,10 @@ fn probe_input_offset(tree: &serde_json::Value) -> Option<(i32, i32)> {
 /// The offset to subtract for one window. An unknown or empty label falls back
 /// to the first window's measured offset (a single-window tree, or an explicit
 /// screen point on a pre-multi-window probe).
+// LAYER1: taps now carry display coordinates and the guest picks the window by
+// policy, so this helper is only used by the probe-offset tests. Keep it: it is
+// the documented mapping for a future node -> window conversion.
+#[allow(dead_code)]
 fn offset_for_window(
     offsets: &HashMap<String, (i32, i32)>,
     fallback: (i32, i32),
@@ -1561,9 +1600,8 @@ impl ArtSession {
         artifacts: &Path,
         animations: &str,
     ) -> Result<ArtSession, BackendError> {
-        let insets = std::env::var("ACOS_WM_INSETS").unwrap_or_else(|_| {
-            acos_services::wms::DEFAULT_INSETS_MODE.as_str().to_string()
-        });
+        let insets = std::env::var("ACOS_WM_INSETS")
+            .unwrap_or_else(|_| acos_services::wms::DEFAULT_INSETS_MODE.as_str().to_string());
         Self::start_with_options(apk, artifacts, animations, &insets)
     }
 
@@ -1577,7 +1615,34 @@ impl ArtSession {
         animations: &str,
         insets: &str,
     ) -> Result<ArtSession, BackendError> {
-        Self::start_inner(apk, artifacts, animations, insets, None)
+        Self::start_with_apks(apk, &[], artifacts, animations, insets)
+    }
+
+    /// MPROC1: start a session that installs `extra_apks` beside the launched
+    /// APK. Each extra APK is staged into this session's own tree, bound at its
+    /// guest path, installed at its own uid and seeded into the activity
+    /// manager, so `PackageManager`/`createPackageContext` (and, later, a second
+    /// process) see every package. An empty list is exactly
+    /// [`ArtSession::start_with_options`]: no staging, no bind, no install.
+    pub fn start_with_apks(
+        apk: &Path,
+        extra_apks: &[PathBuf],
+        artifacts: &Path,
+        animations: &str,
+        insets: &str,
+    ) -> Result<ArtSession, BackendError> {
+        Self::start_with_apks_and_session(
+            apk,
+            extra_apks,
+            artifacts,
+            animations,
+            insets,
+            None,
+            None,
+            None,
+            &[],
+            &acos_protocol::LaunchIntent::default(),
+        )
     }
 
     /// ZPROD3: start a session that must run on a persistent zygote child
@@ -1598,22 +1663,102 @@ impl ArtSession {
         animations: &str,
         insets: &str,
         zygote: Option<Arc<ZygoteHost>>,
+        session_id: Option<&str>,
     ) -> Result<ArtSession, BackendError> {
-        let start = zygote.map(|host| ZygoteStart {
-            key: zygote_key_of(apk, insets, animations),
-            host,
-            reuse_tag: None,
-        });
-        Self::start_inner(apk, artifacts, animations, insets, start)
+        Self::start_with_session(apk, artifacts, animations, insets, zygote, session_id, &[])
     }
 
-    fn start_inner(
+    /// ADR-0029 item 4: [`Self::start_with_zygote`] plus the `services:` specs
+    /// the session attaches at launch. The specs are forwarded to `acos-art` in
+    /// its environment and echoed in the launch reply from the ready line, so a
+    /// reply reports what was attached, never what was requested.
+    ///
+    /// NET3/NET5: `session_id` is the addressable id of the session (the serve
+    /// daemon's own id, or `verify-<pid>` for a one-shot run): the module's
+    /// relay session is `acos-<id>`, the same rule `acos_net` resolves, so a
+    /// client can address the network of the session it holds.
+    #[allow(clippy::too_many_arguments)]
+    pub fn start_with_session(
         apk: &Path,
         artifacts: &Path,
         animations: &str,
         insets: &str,
-        zygote: Option<ZygoteStart>,
+        zygote: Option<Arc<ZygoteHost>>,
+        session_id: Option<&str>,
+        services: &[serde_json::Value],
     ) -> Result<ArtSession, BackendError> {
+        Self::start_with_apks_and_session(
+            apk,
+            &[],
+            artifacts,
+            animations,
+            insets,
+            None,
+            zygote,
+            session_id,
+            services,
+            &acos_protocol::LaunchIntent::default(),
+        )
+    }
+
+    /// MPROC1: [`ArtSession::start_with_zygote`] plus a list of extra APKs.
+    /// The extras are part of the zygote key: a keeper child's pre-fork heap is
+    /// only valid for the package set it was started for, so a session with
+    /// different extras never reuses another session's child.
+    /// Every constructor funnels here: the one place that builds the
+    /// `ZygoteStart`/launcher command and calls [`Self::start_inner`].
+    #[allow(clippy::too_many_arguments)]
+    pub fn start_with_apks_and_session(
+        apk: &Path,
+        extra_apks: &[PathBuf],
+        artifacts: &Path,
+        animations: &str,
+        insets: &str,
+        idle_kill_seconds: Option<u64>,
+        zygote: Option<Arc<ZygoteHost>>,
+        session_id: Option<&str>,
+        services: &[serde_json::Value],
+        intent: &acos_protocol::LaunchIntent,
+    ) -> Result<ArtSession, BackendError> {
+        let start = zygote.map(|host| ZygoteStart {
+            key: zygote_key_of(apk, insets, animations, extra_apks),
+            host,
+            reuse_tag: None,
+        });
+        Self::start_inner(
+            apk,
+            extra_apks,
+            artifacts,
+            animations,
+            insets,
+            idle_kill_seconds,
+            start,
+            session_id,
+            services,
+            intent,
+        )
+    }
+
+    fn start_inner(
+        apk: &Path,
+        extra_apks: &[PathBuf],
+        artifacts: &Path,
+        animations: &str,
+        insets: &str,
+        idle_kill_seconds: Option<u64>,
+        zygote: Option<ZygoteStart>,
+        session_id: Option<&str>,
+        services: &[serde_json::Value],
+        intent: &acos_protocol::LaunchIntent,
+    ) -> Result<ArtSession, BackendError> {
+        // NET4: every session has an id. `acos serve` supplies its own (the id
+        // a client addresses); a one-shot run gets one from this process, which
+        // is what makes its network addressable at all (`art-<pid>` was a name
+        // no client could ever hold).
+        let session_id = match session_id {
+            Some(id) if !id.is_empty() => id.to_string(),
+            _ => format!("verify-{}", std::process::id()),
+        };
         let insets: &'static str = match acos_services::wms::parse_insets_mode(insets) {
             Some(acos_services::wms::InsetsMode::Carve) => "carve",
             Some(acos_services::wms::InsetsMode::Report) => "report",
@@ -1710,11 +1855,61 @@ impl ArtSession {
             .arg(animations)
             .arg("--insets")
             .arg(insets)
+            // ADR-0029 item 4: the module specs. The launcher attaches them
+            // before the guest boots; an invalid spec is refused there with a
+            // structured error instead of a silently defaulted session.
+            .env(
+                "ACOS_ART_SERVICES",
+                serde_json::to_string(&services).unwrap_or_else(|_| "[]".to_string()),
+            )
             // The launcher reads this seam (no `acos-art` CLI flag change): a
             // live session instead of a one-shot launch. The guest publishes
             // the read-only view-tree probe the `tree`/`tap` replies carry.
             .env("ACOSLAUNCH_INTERACTIVE", "1")
             .env("ACOSLAUNCH_LIVE_PROBE", "1")
+            // The relay session is named `acos-<id>` from this id (`acos_net`
+            // resolves the same rule). Always set: a one-shot run publishes its
+            // own id, so no session's network is unreachable by construction.
+            .env(acos_art::spike_net::SESSION_ID_ENV, &session_id);
+        // MPROC1: the extra packages this session installs. Both spellings name
+        // the same list: the repeatable flags the launcher parses, and the
+        // `ACOSLAUNCH_EXTRA_APKS` env a frozen host-template child reads.
+        for extra in extra_apks {
+            command.arg("--extra-apk").arg(extra);
+        }
+        if !extra_apks.is_empty() {
+            command.env(
+                "ACOSLAUNCH_EXTRA_APKS",
+                std::env::join_paths(extra_apks.iter()).map_err(|error| BackendError::Failed {
+                    code: acos_protocol::ErrorCode::InvalidArgument,
+                    detail: format!(
+                        "extra APK paths cannot be forwarded in one environment value: {error}"
+                    ),
+                })?,
+            );
+        }
+        // LAUNCHEXTRAS: the caller's launch Intent, one JSON `LaunchIntent`. The
+        // launcher encodes it (the host builds the launch transaction) and the
+        // guest unmarshals the framework's own `Intent`. Omitted when the
+        // caller declared nothing, so a plain launch is byte-identical to
+        // before.
+        if !intent.is_empty() {
+            command.env(
+                "ACOSLAUNCH_INTENT",
+                serde_json::to_string(intent).map_err(|error| BackendError::Failed {
+                    code: acos_protocol::ErrorCode::InvalidArgument,
+                    detail: format!("launch Intent cannot be forwarded: {error}"),
+                })?,
+            );
+        }
+        // MPROC7: the session's idle kill. Both spellings: the launcher flag for
+        // the exec path, and the env a frozen host-template child reads
+        // (`host_zygote` builds the child's `LaunchOpts` from it).
+        if let Some(seconds) = idle_kill_seconds {
+            command.arg("--idle-kill-seconds").arg(seconds.to_string());
+            command.env("ACOSLAUNCH_IDLE_KILL_SECS", seconds.to_string());
+        }
+        command
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
@@ -1770,7 +1965,10 @@ impl ArtSession {
             std::env::var("ACOS_ART_STATUS_INSET"),
             std::env::var("ACOS_ART_NAV_INSET"),
         ) {
-            command.env("ACOS_DISPLAY_OVERRIDE", format!("{w}x{h}@{dpi}/{top}/{bottom}"));
+            command.env(
+                "ACOS_DISPLAY_OVERRIDE",
+                format!("{w}x{h}@{dpi}/{top}/{bottom}"),
+            );
         }
         if std::env::var_os("ACOSLAUNCH_FRAME_WAIT_SECS").is_none() {
             command.env("ACOSLAUNCH_FRAME_WAIT_SECS", frame_wait_secs.to_string());
@@ -1837,14 +2035,41 @@ impl ArtSession {
         {
             let tail = Arc::clone(&stderr_tail);
             let stderr = child.stderr.take().expect("piped stderr");
+            // Keep the whole launcher stderr in the run's artifacts as well as
+            // the bounded tail the replies carry. The launcher's own decisions
+            // (spawns, idle kills, spawn failures) and the guest's tee are what
+            // explains a process-level failure; an 8 KiB tail of the guest trace
+            // is not enough. Bounded at 16 MiB so a chatty guest cannot fill the
+            // disk.
+            let log_path = artifacts.join("launcher.stderr.log");
             std::thread::spawn(move || {
+                let mut file = std::fs::File::create(&log_path).ok();
+                let mut written = 0usize;
                 let mut reader = BufReader::new(stderr);
                 let mut line = String::new();
+                // NET3 left a hole here: `acos-art` writes its `stage()` markers to
+                // stderr and this drain swallowed them, so the documented
+                // `ACOS_ART_STAGE_TIMING=1` stage table never appeared in a
+                // `verify`/`launch` transcript (the NET3 report concluded "none
+                // fire on this path"). Forward the markers to this process's
+                // stderr when the caller asked for them; the tail keeps every
+                // line either way.
+                let forward_stages = std::env::var_os("ACOS_ART_STAGE_TIMING").is_some();
                 loop {
                     line.clear();
                     match reader.read_line(&mut line) {
                         Ok(0) | Err(_) => break,
                         Ok(_) => {
+                            if forward_stages && line.contains(": stage ") {
+                                eprint!("{line}");
+                            }
+                            if let Some(file) = file.as_mut() {
+                                if written < 16 * 1024 * 1024 {
+                                    use std::io::Write as _;
+                                    let _ = file.write_all(line.as_bytes());
+                                    written += line.len();
+                                }
+                            }
                             let mut tail = tail.lock().unwrap_or_else(|e| e.into_inner());
                             tail.extend(line.bytes());
                             while tail.len() > 8192 {
@@ -1964,6 +2189,10 @@ impl ArtSession {
             width: 1080,
             height: 2400,
             density: 420,
+            services: services.to_vec(),
+            intent: intent.clone(),
+            modules: Vec::new(),
+            module_rows: std::sync::Arc::new(std::sync::Mutex::new(Vec::new())),
             boot_image: None,
             stream_socket: None,
             cached: None,
@@ -1984,10 +2213,12 @@ impl ArtSession {
             input_offset: (0, 0),
             window_offsets: HashMap::new(),
             session_start_ms: 0,
+            session_id,
             frame_wait_secs,
             settle_budget,
             settle_polls,
             input_baseline: None,
+            input_windows_before: Vec::new(),
             diff_baseline: None,
             diff_requested: false,
             settle: SettleStats::default(),
@@ -2007,6 +2238,8 @@ impl ArtSession {
             last_reply_probe_seq: None,
             insets,
             animations,
+            extra_apks: extra_apks.to_vec(),
+            idle_kill_seconds,
             settle_timeout_ms: None,
             bound_settle: None,
             reset_settle_timeout_ms: None,
@@ -2103,6 +2336,9 @@ impl ArtSession {
         if let Some(boot) = ready.get("boot_image") {
             session.boot_image = Some(boot.clone());
         }
+        if let Some(modules) = ready.get("modules").and_then(|v| v.as_array()) {
+            session.modules = modules.clone();
+        }
         if let Some(package) = ready.get("package").and_then(|v| v.as_str()) {
             session.package = package.to_string();
         }
@@ -2127,6 +2363,13 @@ impl ArtSession {
     /// step clock starts, so no step could be charged with it.
     pub const fn session_start_ms(&self) -> u64 {
         self.session_start_ms
+    }
+
+    /// NET4: the id this session is addressed by (the `acos serve` id, or the
+    /// one-shot run's own id). The relay session is `acos-<id>`, which is what
+    /// `acos_net` resolves, so a client can control this session's network.
+    pub fn session_id(&self) -> &str {
+        &self.session_id
     }
 
     /// The guest's own pid: the process group `acos-art` started for it
@@ -2168,6 +2411,47 @@ impl ArtSession {
     #[must_use]
     pub fn boot_image(&self) -> Option<&serde_json::Value> {
         self.boot_image.as_ref()
+    }
+
+    /// ADR-0029 item 4: the modules the guest's ready line reported attached.
+    #[must_use]
+    pub fn modules(&self) -> &[serde_json::Value] {
+        &self.modules
+    }
+
+    /// ADR-0029 item 4: the `services:` specs this session was launched with.
+    #[must_use]
+    pub fn services(&self) -> &[serde_json::Value] {
+        &self.services
+    }
+
+    /// ADR-0029 item 4: one `acos_services` operation (list/status/attach/
+    /// detach) on this live guest. The launcher's peer thread owns the service
+    /// table, so this is a command, not a local mutation.
+    pub fn service_op(
+        &mut self,
+        request: serde_json::Value,
+    ) -> Result<serde_json::Value, BackendError> {
+        let mut request = request;
+        request["cmd"] = serde_json::json!("services");
+        let reply = self.command(request)?;
+        if let Some(modules) = reply.get("modules").and_then(|v| v.as_array()) {
+            self.modules = modules.clone();
+            self.publish_module_rows();
+        }
+        Ok(reply)
+    }
+
+    /// The live module rows (the verdict cites these after the run).
+    #[must_use]
+    pub fn module_rows(&self) -> std::sync::Arc<std::sync::Mutex<Vec<serde_json::Value>>> {
+        std::sync::Arc::clone(&self.module_rows)
+    }
+
+    fn publish_module_rows(&self) {
+        if let Ok(mut rows) = self.module_rows.lock() {
+            *rows = self.modules.clone();
+        }
     }
 
     /// The bound frame's identity: `(frame_seq, md5, captured_at)`.
@@ -2375,6 +2659,68 @@ impl ArtSession {
     /// P12: the animation choice this session was launched with (`"on"`/`"off"`).
     pub fn animations(&self) -> &'static str {
         self.animations
+    }
+
+    /// MPROC1: the extra APKs this session installed beside the launched one,
+    /// as the caller named them (launch-time; a `reset` relaunch reinstalls
+    /// exactly this list).
+    #[must_use]
+    pub fn extra_apks(&self) -> &[PathBuf] {
+        &self.extra_apks
+    }
+
+    /// MPROC7: the idle kill this session launched with (`None` = the
+    /// launcher's default 30 s, `Some(0)` = disabled).
+    #[must_use]
+    pub fn idle_kill_seconds(&self) -> Option<u64> {
+        self.idle_kill_seconds
+    }
+
+    /// LAUNCHEXTRAS: the launch `Intent` this session was started with.
+    #[must_use]
+    pub fn intent(&self) -> &acos_protocol::LaunchIntent {
+        &self.intent
+    }
+
+    /// MPROC1: run one session control op (`acos_service_ctl`).
+    ///
+    /// `module` names a session service (`intents` today); `op` is that
+    /// service's own operation and `args` its arguments. The launcher answers
+    /// with its own record, so the reply is the service's, not a translation:
+    /// an unknown module/op is a structured `UNSUPPORTED_ANDROID_API`/
+    /// `BAD_REQUEST` from the session, never a local guess.
+    pub fn ctl(
+        &mut self,
+        module: &str,
+        op: &str,
+        args: serde_json::Value,
+    ) -> Result<serde_json::Value, BackendError> {
+        let request = serde_json::json!({
+            "cmd": "ctl",
+            "module": module,
+            "op": op,
+            "args": args,
+        });
+        let reply = self.command(request)?;
+        if reply.get("ok").and_then(serde_json::Value::as_bool) != Some(true) {
+            let code = reply
+                .get("code")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or("INTERNAL");
+            let detail = reply
+                .get("error")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or("the session refused the control op");
+            return Err(BackendError::Failed {
+                code: match code {
+                    "BAD_REQUEST" => acos_protocol::ErrorCode::InvalidArgument,
+                    "UNSUPPORTED_ANDROID_API" => acos_protocol::ErrorCode::UnsupportedAndroidApi,
+                    _ => acos_protocol::ErrorCode::Internal,
+                },
+                detail: detail.to_string(),
+            });
+        }
+        Ok(reply)
     }
 
     /// W7: the app-window inset model this guest was launched with.
@@ -2784,6 +3130,7 @@ impl ArtSession {
         started: Instant,
         timing: &mut InputTiming,
     ) -> Result<(), BackendError> {
+        let gesture = request.clone();
         match self.command_raw(request) {
             Ok(reply) => {
                 timing.guest_ms = started.elapsed().as_millis() as u64;
@@ -2808,6 +3155,28 @@ impl ArtSession {
                     visual_change = changed;
                 }
                 self.last_input = Some(delivery(&reply, visual_change));
+                // SYSUI3A: a tap whose *target window* the host recorded before
+                // the gesture and no longer records afterwards is a completed
+                // interaction: the strict settle's `detached` reason is that
+                // removal, not a screen that is still changing. Never on its own
+                // (an un-delivered gesture keeps the timeout) - see
+                // [`removed_window_handled`].
+                if let Some(handled) = removed_window_handled(
+                    &gesture,
+                    self.last_input_settle.as_ref(),
+                    &self.input_windows_before,
+                    self.last_input.as_ref(),
+                    self.cached.as_ref().map(|frame| &frame.tree.windows),
+                ) {
+                    if let Some(input) = self.last_input.as_mut() {
+                        input.visual_change = true;
+                        // The observation/verdict carries the handled record, not
+                        // the raw timeout: this is the evidence the tap step
+                        // binds to.
+                        input.settle = Some(handled.clone());
+                    }
+                    self.last_input_settle = Some(handled);
+                }
                 // SE2: a content-stable input is only settled once the host has
                 // proven the tree content unchanged across its own traversals.
                 // The guest's fast block is replaced by the content report, so
@@ -3870,7 +4239,10 @@ fn relaunch_transport_reason(error: &BackendError, artifacts: &Path) -> Option<S
     }
     let lower = text.to_ascii_lowercase();
     for (needle, label) in [
-        ("vsync thread:", "host thread limit: vsync thread could not spawn"),
+        (
+            "vsync thread:",
+            "host thread limit: vsync thread could not spawn",
+        ),
         (
             "display event receiver",
             "host frame clock: DisplayEventReceiver init failed",
@@ -3932,10 +4304,7 @@ fn preserve_failed_relaunch(
                  own evidence (session-exit.json holds the guard line and the guest log).",
     });
     let path = dest.join("relaunch-retry.json");
-    let _ = std::fs::write(
-        &path,
-        serde_json::to_vec_pretty(&doc).unwrap_or_default(),
-    );
+    let _ = std::fs::write(&path, serde_json::to_vec_pretty(&doc).unwrap_or_default());
     let _ = std::fs::write(
         artifacts.join("relaunch-retry.json"),
         serde_json::to_vec_pretty(&doc).unwrap_or_default(),
@@ -4002,7 +4371,10 @@ impl ArtSession {
             .settle_timeout_ms
             .unwrap_or(DEFAULT_CONTENT_SETTLE_TIMEOUT_MS);
         if std::env::var_os("ACOS_CONTENT_TRACE").is_some() {
-            eprintln!("content_settle: step timeout {:?} -> {timeout_ms} ms", self.settle_timeout_ms);
+            eprintln!(
+                "content_settle: step timeout {:?} -> {timeout_ms} ms",
+                self.settle_timeout_ms
+            );
         }
         let started = Instant::now();
         // The floor: the newest sample this session already consumed. The first
@@ -4225,7 +4597,9 @@ impl ArtSession {
     /// a screenshot whose `frame_seq` was newer than the tree's and the two
     /// disagreed about what was on screen. A tree without its own pixels is now
     /// a structured refusal.
-    pub(crate) fn screenshot_source(&mut self) -> Result<(PathBuf, u64, String, u64), BackendError> {
+    pub(crate) fn screenshot_source(
+        &mut self,
+    ) -> Result<(PathBuf, u64, String, u64), BackendError> {
         if let Some(cached) = self.cached.as_ref() {
             if let Some(artifact) = cached.png.as_ref() {
                 if artifact.frame_seq == cached.seq {
@@ -4294,7 +4668,7 @@ impl ArtSession {
     /// G3c: a launch frame that is still the *window skeleton* is re-read (see
     /// [`ArtSession::bind_first_frame`]) so the first frame is the app's content
     /// frame, not the empty window that exists a moment before it mounts.
-pub(crate) fn ensure_launch_tree(
+    pub(crate) fn ensure_launch_tree(
         &mut self,
         settle: &'static str,
         pixels: bool,
@@ -4661,7 +5035,10 @@ pub(crate) fn ensure_launch_tree(
             ] {
                 let path = out.join(name);
                 if path.is_file() {
-                    files.insert(name.to_string(), serde_json::json!(path.display().to_string()));
+                    files.insert(
+                        name.to_string(),
+                        serde_json::json!(path.display().to_string()),
+                    );
                 }
             }
             files
@@ -4808,8 +5185,41 @@ fn content_capture_refusal(settle: Option<&serde_json::Value>) -> Option<Backend
 }
 
 impl SessionBackend for ArtSession {
+    fn launch_intent(&self) -> Option<&acos_protocol::LaunchIntent> {
+        Some(&self.intent)
+    }
+
     fn engine(&self) -> Engine {
         Engine::Art
+    }
+
+    fn modules(&self) -> Vec<serde_json::Value> {
+        self.modules.clone()
+    }
+
+    /// ADR-0029 item 4: the `acos_services`/`acos_service_ctl` command, forwarded
+    /// to the launcher's peer thread that owns the module registry. Without this
+    /// forward every `service_ctl` step is `unsupported` (the trait default),
+    /// which would read as "this engine cannot" instead of the module's answer.
+    ///
+    /// The forwarded reply is the launcher's own: `{op, id, ctl_op, value, ...}`
+    /// for a control op, `{attached, modules}` for attach/detach/list/status. The
+    /// inherent [`ArtSession::service_op`] refreshes this adapter's `modules`
+    /// rows from it, so a live attach/detach is visible to the next launch
+    /// reply without a second query.
+    fn service_op(
+        &mut self,
+        request: serde_json::Value,
+    ) -> Result<serde_json::Value, BackendError> {
+        ArtSession::service_op(self, request)
+    }
+
+    /// The live module rows, so a verdict cites the session's final module
+    /// state (a detached module's honest row) instead of the launch snapshot.
+    fn module_rows_handle(
+        &self,
+    ) -> Option<std::sync::Arc<std::sync::Mutex<Vec<serde_json::Value>>>> {
+        Some(self.module_rows())
     }
 
     fn bound_tree(&self) -> Option<UiTree> {
@@ -4861,6 +5271,10 @@ impl SessionBackend for ArtSession {
             // Fatal guest log entries (ART LOG(FATAL)/CHECK/abort_message and
             // the JVM's `FATAL EXCEPTION` line) are a real crash signature.
             crash_reports: true,
+            // ADR-0029 item 4: the launcher's peer thread owns the module
+            // registry, so `service_ctl` is a command to it (attach/detach and
+            // a module's own control ops).
+            services: true,
         }
     }
 
@@ -5077,8 +5491,8 @@ impl SessionBackend for ArtSession {
     /// **absolute ordinal** is `total - kept + index`; that ordinal + 1 is the
     /// record `seq`, which stays stable across snapshots (the executor asks for
     /// "everything after `since`"). The timestamp is the host time at which the
-    /// snapshot was read: the sink carries no guest timestamp, so this is an
-    /// ordering fact, not an emission instant. Entries are guest-asserted
+    /// snapshot was read only for an entry without a capture time; the sink
+    /// stamps each entry (`ts_ms`) when the write arrives. Entries are guest-asserted
     /// (S8 §7): a trusted fixture may use them; an untrusted run must refuse
     /// them (`trust::TrustGuard`).
     fn logs_since(&mut self, since: u64) -> Result<Vec<LogRecord>, BackendError> {
@@ -5143,6 +5557,14 @@ impl SessionBackend for ArtSession {
             .cached
             .as_ref()
             .map(|frame| (frame.md5.clone(), frame.signature));
+        // SYSUI3A: the window stack the action starts from. A tap that closes
+        // the window it landed on is only provable against this record: the
+        // window must have existed before and must be gone afterwards.
+        self.input_windows_before = self
+            .cached
+            .as_ref()
+            .map(|frame| frame.tree.windows.clone())
+            .unwrap_or_default();
         // FB3: the "before" side of the action's diff is the tree this session
         // already holds -- the bound frame of the previous observation. It is
         // only cloned when the caller asked for a diff (`diff:false` costs
@@ -5158,25 +5580,21 @@ impl SessionBackend for ArtSession {
     }
 
     fn tap(&mut self, x: i32, y: i32) -> Result<(), BackendError> {
-        // No window label: subtract the first window's measured origin. This is
-        // the pre-multi-window behaviour and is right for a single-window tree.
-        let (dx, dy) = self.input_offset;
-        self.input_command(
-            serde_json::json!({"cmd":"tap","x":x - dx,"y":y - dy}),
-            "input.tap",
-        )
+        // LAYER1: send display coordinates. The guest hit-tests them against the
+        // WMS layer stack and converts to the target window's own input space,
+        // so a tap beside an overlay reaches the activity below it and a
+        // `FLAG_NOT_TOUCHABLE` overlay passes the touch through. The CLI must
+        // not pre-subtract a window origin: it does not know which window the
+        // policy will pick.
+        self.input_command(serde_json::json!({"cmd":"tap","x":x,"y":y}), "input.tap")
     }
 
-    fn tap_in_window(&mut self, window: &str, x: i32, y: i32) -> Result<(), BackendError> {
-        // The engine's tap coordinates are display/screen coordinates (resolved
-        // from the probe's `bounds_on_screen`). The interactive input channel's
-        // transform is window-local (W10/I2), so subtract the origin of the
-        // window that contains the node, measured from the same probe tree.
-        let (dx, dy) = offset_for_window(&self.window_offsets, self.input_offset, window);
-        self.input_command(
-            serde_json::json!({"cmd":"tap","x":x - dx,"y":y - dy}),
-            "input.tap",
-        )
+    fn tap_in_window(&mut self, _window: &str, x: i32, y: i32) -> Result<(), BackendError> {
+        // The node's window label selects the *node*; the tap still carries
+        // display coordinates and the guest routes it by the layer stack (a
+        // point the policy sends to another window is a real disagreement, not
+        // something this layer hides).
+        self.tap(x, y)
     }
 
     /// REL3S: one real swipe/scroll gesture through the guest's live input
@@ -5282,9 +5700,7 @@ impl SessionBackend for ArtSession {
             if applied != u64::from(rotation) {
                 return Err(BackendError::unsupported(
                     "input.rotate",
-                    format!(
-                        "asked for rotation {rotation}, the session applied {applied}"
-                    ),
+                    format!("asked for rotation {rotation}, the session applied {applied}"),
                 ));
             }
         }
@@ -5296,7 +5712,11 @@ impl SessionBackend for ArtSession {
         if let Some(height) = reply.get("height").and_then(serde_json::Value::as_u64) {
             self.height = height as u32;
         }
-        let settle = if self.settle_mode == "fast" { "fast" } else { "strict" };
+        let settle = if self.settle_mode == "fast" {
+            "fast"
+        } else {
+            "strict"
+        };
         self.request_tree_with(settle, true)
     }
 
@@ -5393,10 +5813,17 @@ impl SessionBackend for ArtSession {
         for attempt in 1..=2 {
             match ArtSession::start_inner(
                 &apk,
+                &self.extra_apks.clone(),
                 &artifacts,
                 self.animations,
                 self.insets(),
+                self.idle_kill_seconds,
                 zygote_start.clone(),
+                // A relaunch is the same session: it keeps the id (and therefore
+                // the relay session name) the client already holds.
+                Some(&self.session_id),
+                &self.services,
+                &self.intent,
             ) {
                 Ok(session) => {
                     fresh = Some(session);
@@ -5496,7 +5923,14 @@ impl SessionBackend for ArtSession {
             return Ok(());
         }
         self.closed = true;
+        // ADR-0029: the verdict cites the session's final module rows, so ask
+        // the launcher for them once before the process goes away (the rows
+        // carry the delivered-fix record, which grows while the app runs).
+        if !self.modules.is_empty() {
+            let _ = self.service_op(serde_json::json!({"op": "list"}));
+        }
         let stopped = self.shutdown();
+
         // ZPROD3: a zygote session's app child lives inside the keeper's
         // sandbox, so closing the session must end *that child* too (by its
         // process group). A keeper that is already gone is not an error here:
@@ -5540,6 +5974,115 @@ fn timed_out_settle(settle: Option<&serde_json::Value>) -> Option<serde_json::Va
     } else {
         None
     }
+}
+
+/// SYSUI3A: the settle contract for **a tap that closes the window it landed
+/// on**.
+///
+/// The guest's strict settle names `detached` when a root it still holds has no
+/// `ViewRootImpl` any more (`LaunchMain.checkSettle`). That is exactly what a
+/// dismissed window looks like from inside the app, and the tap that dismissed
+/// it is the interaction that was asked for - not a screen that is still
+/// changing. Treating it as `TIMEOUT` reports a *successful* interaction as a
+/// failure (the notification shade's row tap on ART).
+///
+/// The rule is deliberately narrow, because a settle timeout is the one thing
+/// this must never turn into a pass by accident:
+///
+/// * the action must be a **tap**, and the gesture must have been **delivered**
+///   (host-observed) with at least one **handled** guest ack - a window that
+///   vanishes without any input delivered is not an interaction;
+/// * the settle must be the guest's strict timeout (any reason: a removed window
+///   reports `detached` when the stale root is still held, and
+///   `no-draw-after-action` when the removal left nothing newer to draw; the
+///   reason is copied into the handled record, never invented);
+/// * the window the tap landed on must be in the host's **own record of the
+///   window stack before the action** (top-most touchable window containing the
+///   point), and must be absent from the observation the action completed
+///   (matched by window id, else by its node label);
+/// * something must still be on screen afterwards, so "everything went away"
+///   never reads as a handled tap.
+///
+/// Returns the settle record to publish (`bound: "window-removed"`, the removal
+/// as evidence) or `None` to leave the timeout exactly as the guest reported it.
+fn removed_window_handled(
+    request: &serde_json::Value,
+    settle: Option<&serde_json::Value>,
+    before: &[acos_protocol::ui::WindowInfo],
+    input: Option<&InputDelivery>,
+    after: Option<&Vec<acos_protocol::ui::WindowInfo>>,
+) -> Option<serde_json::Value> {
+    if request.get("cmd").and_then(|v| v.as_str()) != Some("tap") {
+        return None;
+    }
+    let x = request.get("x").and_then(serde_json::Value::as_i64)? as i32;
+    let y = request.get("y").and_then(serde_json::Value::as_i64)? as i32;
+    let settle = settle?;
+    let timed_out = settle.get("settled").and_then(serde_json::Value::as_bool) == Some(false)
+        && settle.get("bound").and_then(serde_json::Value::as_str) == Some("timeout");
+    if !timed_out {
+        return None;
+    }
+    let reason = settle
+        .get("reason")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or("timeout")
+        .to_string();
+    // The interaction has to be one the host really delivered, and the guest has
+    // to have handled it: a window that is gone without any input is a failure,
+    // never a pass.
+    let input = input?;
+    if !input.delivered {
+        return None;
+    }
+    let handled_acks = input.acks.iter().filter(|ack| ack.handled).count();
+    if handled_acks == 0 {
+        return None;
+    }
+    let after = after?;
+    if after.is_empty() {
+        return None;
+    }
+    // The host's own hit test over the window stack it recorded before the tap:
+    // the top-most touchable window whose bounds contain the point.
+    let target = before
+        .iter()
+        .filter(|window| window.touchable)
+        .filter(|window| {
+            window
+                .bounds
+                .is_some_and(|b| x >= b.left() && x < b.right() && y >= b.top() && y < b.bottom())
+        })
+        .max_by_key(|window| window.z)?;
+    let gone = |window: &acos_protocol::ui::WindowInfo| -> bool {
+        !after.iter().any(|other| {
+            if !window.id.is_empty() && !other.id.is_empty() {
+                other.id == window.id
+            } else {
+                !window.label.is_empty() && other.label == window.label
+            }
+        })
+    };
+    if !gone(target) {
+        return None;
+    }
+    Some(serde_json::json!({
+        "mode": "strict",
+        "settled": false,
+        "bound": "window-removed",
+        "strict_rule": "event",
+        "reason": reason,
+        "animating": false,
+        "handled": "window-removed",
+        "handled_window": if target.id.is_empty() { target.label.clone() } else { target.id.clone() },
+        "handled_window_label": target.label.clone(),
+        "acked": handled_acks,
+        "windows_before": before.len(),
+        "windows_after": after.len(),
+        "meaning": "the window the tap landed on is gone from the host's window record: the \
+                    removal is the interaction's evidence, not a screen that is still changing \
+                    (a settle timeout with no delivered gesture stays a timeout)",
+    }))
 }
 
 impl Drop for ArtSession {
@@ -5599,8 +6142,9 @@ fn fatal_log(reply: &serde_json::Value) -> Option<CrashRecord> {
 ///
 /// The logd sink drops oldest first at its cap, so the absolute ordinal of
 /// `entries[i]` is `total - kept + i`; ordinal + 1 is the record `seq`, stable
-/// across snapshots. `timestamp_ms` is the host read time (the sink carries no
-/// guest timestamp): it orders records, it is not an emission instant.
+/// across snapshots. `timestamp_ms` is the sink's own capture time for the entry
+/// (`ts_ms`, the moment the host received the write); an entry without one (an
+/// older sink) gets `timestamp_ms`, the host read time, which only orders it.
 fn log_records_from_reply(
     reply: &serde_json::Value,
     since: u64,
@@ -5630,9 +6174,10 @@ fn log_records_from_reply(
             6 | 7 => LogLevel::Error,
             _ => LogLevel::Info,
         };
+        let captured = entry.get("ts_ms").and_then(|v| v.as_u64()).unwrap_or(0);
         records.push(LogRecord {
             seq,
-            timestamp_ms,
+            timestamp_ms: if captured > 0 { captured } else { timestamp_ms },
             level,
             tag: entry
                 .get("tag")
@@ -5761,7 +6306,12 @@ fn resolve_binary() -> Result<PathBuf, BackendError> {
 /// is only valid for one APK + boot-image mode + geometry + insets + animations
 /// tuple). Values are the launch-time ones the engine already decided, never a
 /// new source of truth.
-fn zygote_key_of(apk: &Path, insets: &str, animations: &str) -> acos_art::zygote_prod::ZygoteKey {
+fn zygote_key_of(
+    apk: &Path,
+    insets: &str,
+    animations: &str,
+    extra_apks: &[PathBuf],
+) -> acos_art::zygote_prod::ZygoteKey {
     let num = |name: &str, default: u32| {
         std::env::var(name)
             .ok()
@@ -5770,13 +6320,19 @@ fn zygote_key_of(apk: &Path, insets: &str, animations: &str) -> acos_art::zygote
     };
     acos_art::zygote_prod::ZygoteKey {
         apk: apk.display().to_string(),
-        boot_image: std::env::var("ACOS_ART_BOOT_IMAGE")
-            .unwrap_or_else(|_| "default".to_string()),
+        boot_image: std::env::var("ACOS_ART_BOOT_IMAGE").unwrap_or_else(|_| "default".to_string()),
         width: num("ACOS_ART_WIDTH", 1080),
         height: num("ACOS_ART_PANEL_HEIGHT", 2400),
         density: num("ACOS_ART_DENSITY", 420),
         insets: insets.trim().to_ascii_lowercase(),
         animations: animations.trim().to_ascii_lowercase(),
+        // MPROC1: the installed package set is part of the key. A keeper
+        // child forked for one set must never serve a session that asks for a
+        // different one.
+        extra_apks: extra_apks
+            .iter()
+            .map(|path| path.display().to_string())
+            .collect(),
     }
 }
 
@@ -6129,6 +6685,222 @@ mod tests {
         assert!(content_capture_refusal(None).is_none());
     }
 
+    /// A window record for the settle rule: `(id, label, z, bounds, touchable)`.
+    fn window(
+        id: &str,
+        label: &str,
+        z: i64,
+        bounds: (i32, i32, i32, i32),
+        touchable: bool,
+    ) -> acos_protocol::ui::WindowInfo {
+        let mut window = acos_protocol::ui::WindowInfo::new(z);
+        window.id = id.to_string();
+        window.label = label.to_string();
+        window.bounds = Some(acos_protocol::ui::Bounds::new(
+            bounds.0, bounds.1, bounds.2, bounds.3,
+        ));
+        window.touchable = touchable;
+        window
+    }
+
+    fn tap_at(x: i32, y: i32) -> serde_json::Value {
+        serde_json::json!({"cmd": "tap", "x": x, "y": y})
+    }
+
+    fn detached_timeout() -> serde_json::Value {
+        serde_json::json!({
+            "mode": "strict",
+            "settled": false,
+            "bound": "timeout",
+            "reason": "detached",
+            "ack_ms": 5,
+        })
+    }
+
+    fn delivered(handled: bool) -> InputDelivery {
+        // MERGE040A: REL3E/REL3I3 widened `InputDelivery` (the app window's own
+        // answer, its published/acked counts and the host's window-removal
+        // record). SYSUI3A's settle-rule tests only care about the ack and the
+        // settle block, so the added facts are spelled out here rather than
+        // defaulted: one ack, published, and no window removal unless a test
+        // sets it.
+        InputDelivery {
+            delivered: true,
+            visual_change: false,
+            handled: Some(handled),
+            published: 1,
+            acks: vec![InputAck {
+                seq: 1,
+                handled,
+                latency_us: Some(3000),
+            }],
+            window_removed: false,
+            target: None,
+            settle: Some(detached_timeout()),
+        }
+    }
+
+    /// SYSUI3A: the shade's row tap. The tapped window (the shade, top-most and
+    /// touchable at the point) is gone from the observation the tap completed,
+    /// the gesture was delivered and handled: the settle becomes the handled
+    /// `window-removed` record instead of a timeout.
+    #[test]
+    fn a_tap_that_closed_the_window_it_landed_on_is_handled() {
+        let before = vec![
+            window("w-app", "app", 0, (0, 0, 1080, 2400), true),
+            window("w-shade", "shade", 1, (0, 0, 1080, 2400), true),
+        ];
+        let after = vec![window("w-app", "app", 0, (0, 0, 1080, 2400), true)];
+        let handled = removed_window_handled(
+            &tap_at(500, 700),
+            Some(&detached_timeout()),
+            &before,
+            Some(&delivered(true)),
+            Some(&after),
+        )
+        .expect("a delivered tap that removed the window it landed on is handled");
+        assert_eq!(handled["bound"], "window-removed");
+        assert_eq!(handled["handled"], "window-removed");
+        assert_eq!(handled["handled_window"], "w-shade");
+        assert_eq!(handled["handled_window_label"], "shade");
+        // The step is not a settle timeout any more: the executor's gate reads
+        // exactly this predicate.
+        assert!(timed_out_settle(Some(&handled)).is_none());
+    }
+
+    /// The negative the orchestrator asked for: **a window that vanishes without
+    /// any input delivered is still not a pass**. No acks, a refused gesture, and
+    /// the host's own `delivered: false` all keep the guest's timeout.
+    #[test]
+    fn a_window_that_vanishes_without_a_delivered_gesture_stays_a_timeout() {
+        let before = vec![window("w-shade", "shade", 1, (0, 0, 1080, 2400), true)];
+        let after = vec![window("w-app", "app", 0, (0, 0, 1080, 2400), true)];
+        // Nothing was delivered at all.
+        let mut undelivered = delivered(true);
+        undelivered.delivered = false;
+        assert!(
+            removed_window_handled(
+                &tap_at(500, 700),
+                Some(&detached_timeout()),
+                &before,
+                Some(&undelivered),
+                Some(&after)
+            )
+            .is_none(),
+            "a window removal nobody interacted with is not evidence"
+        );
+        // Delivered, but the guest never handled it.
+        assert!(
+            removed_window_handled(
+                &tap_at(500, 700),
+                Some(&detached_timeout()),
+                &before,
+                Some(&delivered(false)),
+                Some(&after)
+            )
+            .is_none(),
+            "an unhandled gesture is not a handled window removal"
+        );
+        // No input record at all (the window vanished between two observations).
+        assert!(
+            removed_window_handled(
+                &tap_at(500, 700),
+                Some(&detached_timeout()),
+                &before,
+                None,
+                Some(&after)
+            )
+            .is_none()
+        );
+        // And an untouched settle stays untouched.
+        assert!(timed_out_settle(Some(&detached_timeout())).is_some());
+    }
+
+    /// The removal must be *the tapped* window: a tap beside an overlay does not
+    /// let an unrelated window's disappearance pass as its effect, and a timeout
+    /// with any other reason is none of this rule's business.
+    #[test]
+    fn only_the_tapped_window_going_away_counts() {
+        let before = vec![
+            window("w-app", "app", 0, (0, 0, 1080, 2400), true),
+            window("w-dialog", "dialog", 1, (100, 100, 500, 500), true),
+        ];
+        // The point is outside the dialog: the app window is the target and it is
+        // still there (only the dialog closed) - not this tap's removal.
+        let after = vec![window("w-app", "app", 0, (0, 0, 1080, 2400), true)];
+        assert!(
+            removed_window_handled(
+                &tap_at(900, 2000),
+                Some(&detached_timeout()),
+                &before,
+                Some(&delivered(true)),
+                Some(&after)
+            )
+            .is_none(),
+            "the tapped window (the app) did not go away"
+        );
+        // A non-touchable window is never the input target.
+        let before = vec![window("w-top", "overlay", 2, (0, 0, 1080, 2400), false)];
+        assert!(
+            removed_window_handled(
+                &tap_at(500, 700),
+                Some(&detached_timeout()),
+                &before,
+                Some(&delivered(true)),
+                Some(&after)
+            )
+            .is_none()
+        );
+        // A settle timeout whose reason is not `detached` is still handled when
+        // the tapped window really went away (the shade reports
+        // `no-draw-after-action` once the closed window leaves nothing newer to
+        // draw); the reason is copied, not rewritten.
+        let mut other = detached_timeout();
+        other["reason"] = serde_json::json!("no-draw-after-action");
+        let handled = removed_window_handled(
+            &tap_at(500, 700),
+            Some(&other),
+            &[window("w-shade", "shade", 1, (0, 0, 1080, 2400), true)],
+            Some(&delivered(true)),
+            Some(&after),
+        )
+        .expect("a removed tapped window is handled whatever the settle reason");
+        assert_eq!(handled["reason"], "no-draw-after-action");
+        // ... but an untouched window with any reason is still a timeout.
+        assert!(
+            removed_window_handled(
+                &tap_at(500, 700),
+                Some(&other),
+                &[window("w-app", "app", 0, (0, 0, 1080, 2400), true)],
+                Some(&delivered(true)),
+                Some(&after)
+            )
+            .is_none()
+        );
+        // "Everything vanished" is never a handled tap.
+        assert!(
+            removed_window_handled(
+                &tap_at(500, 700),
+                Some(&detached_timeout()),
+                &[window("w-shade", "shade", 1, (0, 0, 1080, 2400), true)],
+                Some(&delivered(true)),
+                Some(&Vec::new())
+            )
+            .is_none()
+        );
+        // A non-tap command is not affected by this rule.
+        assert!(
+            removed_window_handled(
+                &serde_json::json!({"cmd": "type_text", "text": "hi"}),
+                Some(&detached_timeout()),
+                &[window("w-shade", "shade", 1, (0, 0, 1080, 2400), true)],
+                Some(&delivered(true)),
+                Some(&Vec::new())
+            )
+            .is_none()
+        );
+    }
+
     /// G3c: the launch first-frame predicate must reject the *window skeleton*
     /// (decor + `action_bar_root` + `content` + an empty app root, no text) and
     /// must never touch a mounted screen — including a small, text-free one.
@@ -6154,7 +6926,10 @@ mod tests {
             "android.widget.LinearLayout",
             vec![content, node("android.view.ViewStub", vec![])],
         );
-        let mut skeleton = vec![node("com.android.internal.policy.DecorView", vec![action_bar_root])];
+        let mut skeleton = vec![node(
+            "com.android.internal.policy.DecorView",
+            vec![action_bar_root],
+        )];
         for _ in 0..5 {
             skeleton.push(node("android.view.ViewStub", vec![]));
         }
@@ -6311,16 +7086,32 @@ mod tests {
         );
         // No comparable digest: the frame identity decides.
         let no_digest_moved = evidence(
-            &FrameIdentity { seq: Some(1), frame_number: Some(1), md5: None },
-            &FrameIdentity { seq: Some(2), frame_number: Some(2), md5: None },
+            &FrameIdentity {
+                seq: Some(1),
+                frame_number: Some(1),
+                md5: None,
+            },
+            &FrameIdentity {
+                seq: Some(2),
+                frame_number: Some(2),
+                md5: None,
+            },
         );
         assert_eq!(
             first_frame_placeholder_verdict(&tree(skeleton.clone()), &no_digest_moved),
             (false, true)
         );
         let no_digest_still = evidence(
-            &FrameIdentity { seq: Some(1), frame_number: Some(1), md5: None },
-            &FrameIdentity { seq: Some(1), frame_number: Some(1), md5: None },
+            &FrameIdentity {
+                seq: Some(1),
+                frame_number: Some(1),
+                md5: None,
+            },
+            &FrameIdentity {
+                seq: Some(1),
+                frame_number: Some(1),
+                md5: None,
+            },
         );
         assert_eq!(
             first_frame_placeholder_verdict(&tree(skeleton.clone()), &no_digest_still),
@@ -6370,6 +7161,9 @@ mod tests {
             // Fatal guest log entries (ART LOG(FATAL)/CHECK/abort_message and
             // the JVM's `FATAL EXCEPTION` line) are a real crash signature.
             crash_reports: true,
+            // ADR-0029 item 4: the launcher's peer thread owns the module
+            // registry, so `service_ctl` is a command.
+            services: true,
         };
         assert_eq!(caps.missing(), vec!["environment"]);
         // The executor sees the same two gaps through its capability names.
@@ -6405,6 +7199,24 @@ mod tests {
         // An empty snapshot is valid (no logs yet).
         let empty = serde_json::json!({"total": 0, "entries": []});
         assert!(log_records_from_reply(&empty, 0, 7, 0).is_empty());
+    }
+
+    #[test]
+    fn log_snapshot_keeps_each_entrys_own_capture_time() {
+        // FLAKEFIX2: the column was the host read time of the whole snapshot, so
+        // one flush gave every line of a session step the same timestamp.
+        let reply = serde_json::json!({
+            "ok": true, "cmd": "logs", "total": 3, "kept": 3, "dropped": 0,
+            "entries": [
+                {"prio": 4, "tag": "a", "message": "one", "ts_ms": 1000},
+                {"prio": 4, "tag": "a", "message": "two", "ts_ms": 1042},
+                {"prio": 4, "tag": "a", "message": "old sink, no stamp"}
+            ]
+        });
+        let all = log_records_from_reply(&reply, 0, 7, 0);
+        assert_eq!(all[0].timestamp_ms, 1000);
+        assert_eq!(all[1].timestamp_ms, 1042);
+        assert_eq!(all[2].timestamp_ms, 7, "an unstamped entry falls back to the read time");
     }
 
     #[test]
@@ -6843,7 +7655,13 @@ mod tests {
                 .process_group(0);
             unsafe {
                 command.pre_exec(|| {
-                    libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGKILL as libc::c_ulong, 0, 0, 0);
+                    libc::prctl(
+                        libc::PR_SET_PDEATHSIG,
+                        libc::SIGKILL as libc::c_ulong,
+                        0,
+                        0,
+                        0,
+                    );
                     Ok(())
                 });
             }
@@ -7295,7 +8113,10 @@ mod tests {
 
         // A's teardown must not touch B's guest.
         let report_a = session_a.teardown().expect("A tears down cleanly");
-        assert!(report_a.is_clean(), "A's own tree is proved gone: {report_a:?}");
+        assert!(
+            report_a.is_clean(),
+            "A's own tree is proved gone: {report_a:?}"
+        );
         assert!(
             wait_until_gone(guest_a, Duration::from_secs(3)),
             "A's guest must be gone"
@@ -7371,7 +8192,9 @@ mod tests {
         assert!(wait_until_gone(guest, Duration::from_secs(3)));
         let settled = kill_group_signals();
         // A repeat teardown of the same session is still a clean proof...
-        let again = session.teardown().expect("a repeat teardown is still clean");
+        let again = session
+            .teardown()
+            .expect("a repeat teardown is still clean");
         assert!(again.is_clean(), "{again:?}");
         assert_eq!(
             kill_group_signals(),
@@ -7609,10 +8432,17 @@ mod tests {
         let guard = art_bin_env_lock();
         std::env::remove_var("ACOS_ART_TEARDOWN_GRACE_MS");
         assert_eq!(teardown_grace_ms_for(false), DEFAULT_TEARDOWN_GRACE_MS);
-        assert_eq!(teardown_grace_ms_for(true), DEFAULT_ZYGOTE_TEARDOWN_GRACE_MS);
+        assert_eq!(
+            teardown_grace_ms_for(true),
+            DEFAULT_ZYGOTE_TEARDOWN_GRACE_MS
+        );
         assert_eq!(teardown_grace_ms_for(true), 0, "no wait is the whole point");
         std::env::set_var("ACOS_ART_TEARDOWN_GRACE_MS", "120");
-        assert_eq!(teardown_grace_ms_for(true), 120, "the knob wins on both arms");
+        assert_eq!(
+            teardown_grace_ms_for(true),
+            120,
+            "the knob wins on both arms"
+        );
         assert_eq!(teardown_grace_ms_for(false), 120);
         std::env::remove_var("ACOS_ART_TEARDOWN_GRACE_MS");
         drop(guard);
@@ -7674,10 +8504,11 @@ mod tests {
         );
 
         // A zygote session: the same shim, but the app child is the keeper's.
-        let mut zg = ArtSession::start(&apk, &dir.join("zg")).expect("zygote-shaped session starts");
+        let mut zg =
+            ArtSession::start(&apk, &dir.join("zg")).expect("zygote-shaped session starts");
         zg.zygote = Some(ZygoteBinding {
             host: Arc::new(ZygoteHost::disabled()),
-            key: zygote_key_of(&apk, "report", "on"),
+            key: zygote_key_of(&apk, "report", "on", &[]),
             facts: ZygoteFacts {
                 tag: 0,
                 child_pid: 0,
@@ -7688,9 +8519,16 @@ mod tests {
         let started = Instant::now();
         let report = zg.teardown().expect("clean zygote stop");
         let zg_ms = started.elapsed();
+        // SCENHYG: the claim is *relative* — a zygote stop signals and proves,
+        // it does not wait the lifecycle grace the exec arm must wait (the
+        // arm above measured >= 250 ms). An absolute 100 ms bound made this a
+        // host-load flake (122 ms on a loaded host); comparing with the exec
+        // arm measured in the same run keeps the teeth (a wait would be within
+        // a few ms of it) without measuring the scheduler.
         assert!(
-            zg_ms < Duration::from_millis(100),
-            "a zygote stop must not wait a lifecycle its shim cannot deliver: {zg_ms:?}"
+            zg_ms + Duration::from_millis(50) < exec_ms,
+            "a zygote stop must not wait a lifecycle its shim cannot deliver: \
+             zygote {zg_ms:?} vs exec {exec_ms:?}"
         );
         assert!(report.is_clean(), "{report:?}");
         assert!(report.survivors.is_empty(), "{report:?}");
@@ -7833,7 +8671,10 @@ mod tests {
 
         let mut session = ArtSession::start(&apk, &dir).expect("fake session starts");
         assert_eq!(std::fs::read_to_string(&starts).unwrap().trim(), "1");
-        assert!(session.relaunch_retry().is_none(), "a first start never retries");
+        assert!(
+            session.relaunch_retry().is_none(),
+            "a first start never retries"
+        );
         let before = session.frame().expect("first frame").frame_seq();
 
         session
@@ -7877,7 +8718,12 @@ mod tests {
 
         // The relaunched guest is live: the retry is a real recovery, not a pass.
         let after = session.frame().expect("the retried guest serves a frame");
-        assert!(after.frame_seq() > before, "{} -> {}", before, after.frame_seq());
+        assert!(
+            after.frame_seq() > before,
+            "{} -> {}",
+            before,
+            after.frame_seq()
+        );
         session.close().expect("clean close");
         std::env::remove_var("ACOS_ART_BIN");
         let _ = std::fs::remove_dir_all(&dir);
@@ -7903,7 +8749,9 @@ mod tests {
         std::env::set_var("ACOS_ART_BIN", &script);
 
         let mut session = ArtSession::start(&apk, &dir).expect("fake session starts");
-        let error = session.reset().expect_err("an app wall must fail the reset");
+        let error = session
+            .reset()
+            .expect_err("an app wall must fail the reset");
         assert!(
             error.to_string().contains("LIVE_FRAME_UNAVAILABLE"),
             "the failure must stay visible: {error}"
@@ -7936,14 +8784,20 @@ mod tests {
             details: None,
         };
         // A real app wall is never retried.
-        write(r#"{"code":"GUEST_EXITED","guest_exit":1,"stdout_tail":["Application onCreate threw"]}"#);
+        write(
+            r#"{"code":"GUEST_EXITED","guest_exit":1,"stdout_tail":["Application onCreate threw"]}"#,
+        );
         assert!(relaunch_transport_reason(&error("GUEST_EXITED"), &dir).is_none());
         // The S3b host classes are.
-        write(r#"{"code":"GUEST_EXIT_AFTER_RESUME","guest_exit":1,"logd_tail":["vsync thread: Resource temporarily unavailable (os error 11)"]}"#);
+        write(
+            r#"{"code":"GUEST_EXIT_AFTER_RESUME","guest_exit":1,"logd_tail":["vsync thread: Resource temporarily unavailable (os error 11)"]}"#,
+        );
         assert!(relaunch_transport_reason(&error("GUEST_EXITED"), &dir)
             .unwrap()
             .contains("vsync thread"));
-        write(r#"{"code":"GUEST_EXIT_AFTER_RESUME","guest_exit":1,"stdout_tail":["E/Parcel: ipcSetDataReference: unsupported type object (7209057) at offset 16","Adding window failed"]}"#);
+        write(
+            r#"{"code":"GUEST_EXIT_AFTER_RESUME","guest_exit":1,"stdout_tail":["E/Parcel: ipcSetDataReference: unsupported type object (7209057) at offset 16","Adding window failed"]}"#,
+        );
         assert!(relaunch_transport_reason(&error("GUEST_EXITED"), &dir).is_some());
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -8108,7 +8962,10 @@ mod tests {
         let report = session.first_frame_report().expect("report");
         assert_eq!(report.traversals, 2, "{report:?}");
         assert_eq!(report.event_waits, 1, "{report:?}");
-        assert!(!report.placeholder, "content must not be a placeholder: {report:?}");
+        assert!(
+            !report.placeholder,
+            "content must not be a placeholder: {report:?}"
+        );
         assert!(report.settled, "a settled content bind says so: {report:?}");
         assert_eq!(report.bound.as_deref(), Some("strict-event"), "{report:?}");
         assert_eq!(report.nodes, ui_tree_node_count(&tree.nodes));
@@ -8209,9 +9066,18 @@ mod tests {
             .launch(&apk)
             .expect("a text-free mounted screen must not be a blocked launch");
         let report = session.first_frame_report().expect("report");
-        assert!(!report.placeholder, "changing pixels are app frame: {report:?}");
-        assert!(report.suspect, "…but the skeleton is still a suspicion: {report:?}");
-        assert!(report.pixels_compared && report.pixels_changed, "{report:?}");
+        assert!(
+            !report.placeholder,
+            "changing pixels are app frame: {report:?}"
+        );
+        assert!(
+            report.suspect,
+            "…but the skeleton is still a suspicion: {report:?}"
+        );
+        assert!(
+            report.pixels_compared && report.pixels_changed,
+            "{report:?}"
+        );
         assert!(
             !session.placeholder_frame(),
             "a suspect frame is not a placeholder: no screenshot may be refused"
@@ -8372,8 +9238,13 @@ mod tests {
         assert!(session.placeholder_frame(), "the launch is a placeholder");
         // The app mounts after all (the fake reads its mode each request).
         std::fs::write(dir.join("mode.txt"), "content-first").unwrap();
-        let tree = session.tree_with_settle("strict").expect("a later traversal");
-        assert!(ui_tree_has_app_text(&tree.nodes), "the frame has content now");
+        let tree = session
+            .tree_with_settle("strict")
+            .expect("a later traversal");
+        assert!(
+            ui_tree_has_app_text(&tree.nodes),
+            "the frame has content now"
+        );
         assert!(
             !session.placeholder_frame(),
             "the placeholder label must clear when content arrives"
@@ -8393,7 +9264,9 @@ mod tests {
             .expect("a traversal with pixels");
         let tree = session.require_cached_tree().expect("bound tree");
         assert!(!session.placeholder_frame());
-        let (path, seq, _md5, bytes) = session.screenshot_source().expect("pixels of the content frame");
+        let (path, seq, _md5, bytes) = session
+            .screenshot_source()
+            .expect("pixels of the content frame");
         assert!(path.is_file() && bytes > 0);
         assert_eq!(seq, tree.frame.frame_seq);
         std::env::remove_var("ACOS_ART_BIN");
@@ -8459,7 +9332,10 @@ mod tests {
             .expect("a traversal that captures");
         let (path, seq, _md5, bytes) = session.screenshot_source().expect("the same frame's PNG");
         assert!(path.is_file() && bytes > 0);
-        assert_eq!(seq, tree.frame.frame_seq, "screenshot.frame_seq == tree.frame_seq");
+        assert_eq!(
+            seq, tree.frame.frame_seq,
+            "screenshot.frame_seq == tree.frame_seq"
+        );
         std::env::remove_var("ACOS_ART_BIN");
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -8556,10 +9432,7 @@ mod tests {
             1,
             "a content-first launch must not re-traverse: {requests}"
         );
-        assert!(
-            !requests.contains("\"baseline_tree\""),
-            "{requests}"
-        );
+        assert!(!requests.contains("\"baseline_tree\""), "{requests}");
         std::env::remove_var("ACOS_ART_BIN");
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -8589,7 +9462,9 @@ mod tests {
         ));
         body.push_str("      exit 1\n");
         body.push_str("      ;;\n");
-        body.push_str("    *) echo '{\"ok\":false,\"code\":\"BAD_REQUEST\",\"error\":\"no\"}'; ;;\n");
+        body.push_str(
+            "    *) echo '{\"ok\":false,\"code\":\"BAD_REQUEST\",\"error\":\"no\"}'; ;;\n",
+        );
         body.push_str("  esac\n");
         body.push_str("done\n");
         std::fs::write(&script, body).unwrap();
@@ -8619,7 +9494,10 @@ mod tests {
             Some(false),
             "{evidence}"
         );
-        let logd = evidence["logd_tail"].as_array().cloned().unwrap_or_default();
+        let logd = evidence["logd_tail"]
+            .as_array()
+            .cloned()
+            .unwrap_or_default();
         assert!(
             logd.iter().any(|line| line
                 .as_str()
@@ -8627,7 +9505,10 @@ mod tests {
                 .contains("FATAL EXCEPTION")),
             "the guest's last logd lines must be kept: {evidence}"
         );
-        let kept = evidence["kept_path"].as_str().unwrap_or_default().to_string();
+        let kept = evidence["kept_path"]
+            .as_str()
+            .unwrap_or_default()
+            .to_string();
         assert!(evidence["kept"].as_bool().unwrap_or(false), "{evidence}");
         let doc: serde_json::Value =
             serde_json::from_str(&std::fs::read_to_string(&kept).unwrap()).unwrap();

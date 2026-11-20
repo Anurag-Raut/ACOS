@@ -1,0 +1,103 @@
+# net-check: the SPIKE-NET app-level proof (ADR-0030 gate, items 4/5/6).
+#
+# One screen, three observable facts:
+#   id=url   the URL fetched (constant)
+#   id=status "HTTP 200" on success, otherwise the exception class name
+#   id=connectivity  what ConnectivityManager/NetworkCapabilities report
+#
+# The pass arm attaches the `network` module with its real profile (the
+# `services:` block below; no environment variable): real HTTPS through the
+# session netns and the shared relay, DNS through dnsproxyd, TLS through the
+# image's CA store. Without the module the same APK shows the honest failure
+# (`net-check-offline.yaml`: UnknownHostException or SocketException), never a
+# fake success. NETREAL: this file used to depend on `ACOS_SPIKE_NET=1`, which
+# no matrix runner sets, so with a pinned pasta present the row ran the *off*
+# arm and failed on `HTTP 200`; it now names its module like every other arm.
+version: 1
+name: net-check
+description: >-
+  Launch net-check, assert that ConnectivityManager reports a validated
+  INTERNET network with a real interface/addresses/DNS/routes and that an
+  in-app HTTPS GET of https://example.com returns HTTP 200.
+app: fixtures/build/apps/net-check.apk
+# Run with `--engine art` on the command line. A scenario `engine:` field only
+# accepts the backend vocabulary (`native-preferred`, `native-only`,
+# `reference-only`); `engine: art` is rejected by the loader (v0.3.0 track B).
+fallback: report-and-escalate
+api_level: 34
+isolation: process
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+capabilities:
+  - lifecycle
+  - ui.offscreen
+  - ui.text
+services:
+  - id: network
+    profile: real
+# SCENHYG: needs a host capability, declared instead of leaving a red row that
+# is not the scenario's fault. The real HTTPS/DNS/connectivity arm runs through the session netns and needs the pinned host pasta binary (ADR-0030).
+# Without pasta the runner skips the file and says so; with pasta the scenario
+# must pass.
+expectation: pass
+needs_env: [pasta]
+expectation_reason: >-
+  Needs the pinned host `pasta` binary for a real session netns; without it the
+  arm cannot be honest, so it is skipped rather than failed.
+budgets:
+  memory_mib: 512
+  wall_ms: 120000
+steps:
+  - launch:
+      activity: dev.acos.fixtures.netcheck/.MainActivity
+      clear_state: true
+
+  - wait_for:
+      selector: {id: status}
+      timeout_ms: 5000
+
+  - assert_text:
+      selector: {id: url}
+      text: {exact: https://example.com}
+
+  # Item 6: a real HTTPS GET. The runtime waits for the matching tree, so this
+  # is event driven, not a sleep.
+  - assert_text:
+      selector: {id: status}
+      text: {exact: HTTP 200}
+      timeout_ms: 60000
+
+  # Item 5: the connectivity report an app sees, including the interface,
+  # addresses, DNS servers and default route (LinkProperties parity).
+  - assert_text:
+      selector: {id: connectivity}
+      text: {contains: "internet=true validated=true"}
+      timeout_ms: 5000
+
+  - assert_text:
+      selector: {id: connectivity}
+      text: {contains: "iface=wlan0 addrs=1 dns=1 dnsList=1.1.1.1 routes=1"}
+      timeout_ms: 5000
+
+  # Item 4: the resolver proxy the guest's own bionic reaches.
+  - assert_text:
+      selector: {id: dnsprobe}
+      text: {contains: "exists=true"}
+      timeout_ms: 5000
+
+  - assert_log:
+      tag: NetCheck
+      since_previous_step: false
+      ordered: true
+      patterns:
+        - '^fetch result=HTTP 200$'
+
+  - capture:
+      name: net-check-ok
+      format: png
+      fresh: true
+
+  - assert_no_crash: {}

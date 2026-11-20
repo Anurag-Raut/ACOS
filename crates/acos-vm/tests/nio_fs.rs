@@ -104,8 +104,7 @@ fn parse_stdout(stdout: &str) -> HashMap<String, String> {
 
 #[test]
 fn nio_fs_on_the_real_framework() {
-    let Some(dex) = compile_case("NioFsMain") else {
-        eprintln!("SKIP nio_fs_on_the_real_framework: javac/d8/android.jar unavailable");
+    let Some(dex) = acos_test_support::require_some(compile_case("NioFsMain"), "nio_fs_on_the_real_framework", "javac/d8/android.jar unavailable") else {
         return;
     };
     let options = VmOptions {
@@ -115,7 +114,7 @@ fn nio_fs_on_the_real_framework() {
     let mut vm = match Vm::new(options) {
         Ok(vm) => vm,
         Err(VmError::BootClasspathMissing(m)) => {
-            eprintln!("SKIP nio_fs_on_the_real_framework: {m}");
+            acos_test_support::require_prereq(false, "nio_fs_on_the_real_framework", &format!("nio_fs_on_the_real_framework: {m}"));
             return;
         }
         Err(e) => panic!("Vm::new failed: {e}"),
@@ -149,7 +148,10 @@ fn nio_fs_on_the_real_framework() {
     assert_eq!(get("list_size"), "1", "readdir must skip . and ..");
 
     // realpath returns an absolute guest path.
-    assert_eq!(get("realpath"), "/data/user/0/com.example.nio/files/probe.bin");
+    assert_eq!(
+        get("realpath"),
+        "/data/user/0/com.example.nio/files/probe.bin"
+    );
     assert_eq!(get("realpath_abs"), "true");
 
     // fstatat + getpwuid: attributes and an owner name resolved through the

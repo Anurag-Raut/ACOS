@@ -81,9 +81,8 @@ pub fn set_view_client(name: &str, version: &str) {
 pub fn view_client_env() -> Option<String> {
     let slot = VIEW_CLIENT.get_or_init(|| Mutex::new(None));
     let slot = slot.lock().unwrap_or_else(|e| e.into_inner());
-    slot.as_ref().map(|(name, version)| {
-        json!({"name": name, "version": version}).to_string()
-    })
+    slot.as_ref()
+        .map(|(name, version)| json!({"name": name, "version": version}).to_string())
 }
 
 /// The engine name to pass to `acos serve --engine`.
@@ -357,18 +356,23 @@ fn spawn_on_lifetime_thread(mut command: Command) -> io::Result<Child> {
 
 /// `$XDG_RUNTIME_DIR/acos/mcp-<pid>-<rand>` (falling back like the daemon does).
 fn private_runtime_dir() -> io::Result<PathBuf> {
+    private_runtime_dir_in(daemon::runtime_dir())
+}
+
+/// [`private_runtime_dir`] under an explicit base.
+///
+/// The base is a parameter so a test can hand in its own short one: the
+/// socket path must fit `sun_path` (108 bytes with the NUL), and a test's
+/// verdict must not depend on how deep the caller's `ACOS_RUNTIME_DIR` happens
+/// to be.
+fn private_runtime_dir_in(base: PathBuf) -> io::Result<PathBuf> {
     static NEXT: AtomicU64 = AtomicU64::new(0);
-    let base = daemon::runtime_dir();
     let nanos = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.subsec_nanos())
         .unwrap_or(0);
     let n = NEXT.fetch_add(1, Ordering::SeqCst);
-    Ok(base.join(format!(
-        "mcp-{}-{:08x}{n}",
-        std::process::id(),
-        nanos
-    )))
+    Ok(base.join(format!("mcp-{}-{:08x}{n}", std::process::id(), nanos)))
 }
 
 /// Create the per-process directory 0700 and make sure the **base** it sits in
@@ -412,10 +416,33 @@ pub(crate) fn dead_for_test(dir: PathBuf) -> PrivateDaemon {
 mod tests {
     use super::*;
 
+    /// A short runtime base the test owns: `/run/user/<uid>` when the host has
+    /// one, else the temp dir (the INTEG030 pattern). Never the caller's
+    /// `ACOS_RUNTIME_DIR`: its length is not this suite's business.
+    fn short_runtime_base() -> PathBuf {
+        // SAFETY: `geteuid` has no preconditions and cannot fail.
+        let uid = unsafe { libc::geteuid() };
+        for base in [
+            PathBuf::from(format!("/run/user/{uid}")),
+            std::env::temp_dir(),
+        ] {
+            if !base.is_dir() {
+                continue;
+            }
+            let dir = base.join(format!("acos-mcp-sunlen-{}", std::process::id()));
+            let _ = std::fs::remove_dir_all(&dir);
+            if std::fs::create_dir_all(&dir).is_ok() {
+                return dir;
+            }
+        }
+        panic!("no short runtime base available");
+    }
+
     #[test]
     fn private_dir_is_per_process_and_under_the_runtime_dir() {
-        let dir = private_runtime_dir().expect("dir");
-        assert!(dir.starts_with(daemon::runtime_dir()), "{}", dir.display());
+        let base = short_runtime_base();
+        let dir = private_runtime_dir_in(base.clone()).expect("dir");
+        assert!(dir.starts_with(&base), "{}", dir.display());
         let name = dir.file_name().unwrap().to_string_lossy().into_owned();
         assert!(
             name.starts_with(&format!("mcp-{}-", std::process::id())),

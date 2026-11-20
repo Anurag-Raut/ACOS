@@ -20,8 +20,11 @@ fn main() {
     );
 
     // C library.
-    let c = loader.load_file(&data("libtestc.so")).expect("load libtestc");
-    let run: extern "C" fn() -> i32 = unsafe { std::mem::transmute(c.symbol("tc_run_all").unwrap()) };
+    let c = loader
+        .load_file(&data("libtestc.so"))
+        .expect("load libtestc");
+    let run: extern "C" fn() -> i32 =
+        unsafe { std::mem::transmute(c.symbol("tc_run_all").unwrap()) };
     println!("tc_run_all = {} (0 == all pass)", run());
     println!("tc_ctor_ran = {}", unsafe {
         let f: extern "C" fn() -> i32 = std::mem::transmute(c.symbol("tc_ctor_ran").unwrap());
@@ -37,7 +40,9 @@ fn main() {
 
     // C++ library.
     eprintln!("loading libtestcpp...");
-    let cpp = loader.load_file(&data("libtestcpp.so")).expect("load libtestcpp");
+    let cpp = loader
+        .load_file(&data("libtestcpp.so"))
+        .expect("load libtestcpp");
     eprintln!("loaded libtestcpp");
     let crun: extern "C" fn() -> i32 =
         unsafe { std::mem::transmute(cpp.symbol("cpp_run_all").unwrap()) };

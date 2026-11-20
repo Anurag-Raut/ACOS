@@ -1,0 +1,15 @@
+acos serve: owned by pid 1912441; exiting when it is gone
+acos serve: listening on /home/Qui/.t3/worktrees/acos/t3-a531561b-3a8f5c6b7589fc68/.cache/net3/session.sock (engine=art, idle=120s, max_sessions=8)
+acos serve: prewarm: warmed 72 files, 63.7 MiB in 3 ms (cap 64.0 MiB, 11 skipped, 4 missing, 0 read errors)
+acos serve: prewarm: skipped /home/Qui/.t3/worktrees/acos/t3-a531561b-3a8f5c6b7589fc68/.cache/art/sysroot/system/apex/com.android.art/lib64/libart.so (8.8 MiB, cap reached)
+acos serve: prewarm: skipped /home/Qui/.t3/worktrees/acos/t3-a531561b-3a8f5c6b7589fc68/.cache/art/sysroot/system/lib64/libandroid_runtime.so (2.3 MiB, cap reached)
+acos serve: prewarm: skipped /home/Qui/.t3/worktrees/acos/t3-a531561b-3a8f5c6b7589fc68/.cache/art/sysroot/system/framework/framework.jar (38.2 MiB, cap reached)
+acos serve: prewarm: skipped /home/Qui/.t3/worktrees/acos/t3-a531561b-3a8f5c6b7589fc68/.cache/art/sysroot/system/framework/org.apache.http.legacy.jar (0.5 MiB, cap reached)
+acos serve: prewarm: skipped /home/Qui/.t3/worktrees/acos/t3-a531561b-3a8f5c6b7589fc68/.cache/art/sysroot/system/framework/am.jar (0.5 MiB, cap reached)
+acos serve: prewarm: skipped /home/Qui/.t3/worktrees/acos/t3-a531561b-3a8f5c6b7589fc68/.cache/art/sysroot/system/framework/ims-common.jar (0.6 MiB, cap reached)
+acos serve: prewarm: skipped /home/Qui/.t3/worktrees/acos/t3-a531561b-3a8f5c6b7589fc68/.cache/art/sysroot/system/framework/voip-common.jar (0.8 MiB, cap reached)
+acos serve: prewarm: skipped /home/Qui/.t3/worktrees/acos/t3-a531561b-3a8f5c6b7589fc68/.cache/art/sysroot/system/framework/ext.jar (2.2 MiB, cap reached)
+acos serve: prewarm: skipped /home/Qui/.t3/worktrees/acos/t3-a531561b-3a8f5c6b7589fc68/.cache/art/sysroot/system/framework/telephony-common.jar (4.1 MiB, cap reached)
+acos serve: prewarm: skipped /home/Qui/.t3/worktrees/acos/t3-a531561b-3a8f5c6b7589fc68/.cache/art/sysroot/system/framework/services.jar (19.7 MiB, cap reached)
+acos serve: prewarm: skipped /home/Qui/.t3/worktrees/acos/t3-a531561b-3a8f5c6b7589fc68/.cache/art/sysroot/system/fonts/Roboto-Regular.ttf (2.3 MiB, cap reached)
+acos serve: shutdown signal received; destroying 0 session(s) first

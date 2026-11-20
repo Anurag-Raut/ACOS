@@ -131,7 +131,10 @@ pub extern "C" fn acos_unregister_file(f: usize) {
 }
 
 fn file_is_known(f: usize) -> bool {
-    file_registry().lock().map(|g| g.contains(&f)).unwrap_or(false)
+    file_registry()
+        .lock()
+        .map(|g| g.contains(&f))
+        .unwrap_or(false)
 }
 
 /// Emit the structured, fail-closed error for a stream that is not a `FILE*`.
@@ -211,7 +214,10 @@ fn properties() -> &'static Mutex<HashMap<String, String>> {
             ("ro.build.version.codename", "REL"),
             ("ro.build.version.security_patch", "2024-01-05"),
             ("ro.product.cpu.abi", "x86_64"),
-            ("ro.product.cpu.abilist", "x86_64,x86,arm64-v8a,armeabi-v7a,armeabi"),
+            (
+                "ro.product.cpu.abilist",
+                "x86_64,x86,arm64-v8a,armeabi-v7a,armeabi",
+            ),
             ("ro.product.model", "ACOS"),
             ("ro.product.brand", "acos"),
             ("ro.product.manufacturer", "acos"),
@@ -250,7 +256,9 @@ pub unsafe extern "C" fn __system_property_get(name: *const c_char, value: *mut 
         return 0;
     }
     // SAFETY: caller-provided NUL-terminated string.
-    let key = std::ffi::CStr::from_ptr(name).to_string_lossy().into_owned();
+    let key = std::ffi::CStr::from_ptr(name)
+        .to_string_lossy()
+        .into_owned();
     let val = properties()
         .lock()
         .ok()
@@ -304,7 +312,10 @@ pub unsafe extern "C" fn android_set_abort_message(msg: *const c_char) {
     } else {
         Some(std::ffi::CStr::from_ptr(msg).to_string_lossy().into_owned())
     };
-    *ABORT_MESSAGE.get_or_init(|| Mutex::new(None)).lock().unwrap() = s;
+    *ABORT_MESSAGE
+        .get_or_init(|| Mutex::new(None))
+        .lock()
+        .unwrap() = s;
 }
 
 /// Last abort message set by the guest.
@@ -1199,7 +1210,10 @@ mod stdio_map_tests {
         unsafe {
             assert_eq!(acos_map_stream(base), stdin as usize);
             assert_eq!(acos_map_stream(base + BIONIC_FILE_BYTES), stdout as usize);
-            assert_eq!(acos_map_stream(base + BIONIC_FILE_BYTES * 2), stderr as usize);
+            assert_eq!(
+                acos_map_stream(base + BIONIC_FILE_BYTES * 2),
+                stderr as usize
+            );
             // The wrong stride and arbitrary pointers are not valid FILE*.
             assert_eq!(acos_map_stream(base + 256), 0);
             assert_eq!(acos_map_stream(0xdead_beef), 0);
@@ -1300,7 +1314,11 @@ mod sem_tests {
         // initialised semaphore, which is what a `memcpy`-ed holder looks like.
         unsafe {
             assert_eq!(sem_init(original.raw(), 0, 1), 0);
-            assert_eq!(sem_trywait(original.raw()), 0, "token taken at the original");
+            assert_eq!(
+                sem_trywait(original.raw()),
+                0,
+                "token taken at the original"
+            );
             assert_eq!(sem_post(original.raw()), 0);
             let mut moved = GuestSem::new();
             std::ptr::copy_nonoverlapping(

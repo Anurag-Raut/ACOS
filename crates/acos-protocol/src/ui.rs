@@ -523,6 +523,79 @@ pub struct UiNode {
     /// `bounds_on_screen` is display space.
     #[serde(default)]
     pub window: String,
+    /// Stable id of the owning window inside this tree (`""` when the engine
+    /// does not report one). Short on purpose: it is repeated on every node and
+    /// REL3C caps reply size.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub window_id: String,
+    /// Symbolic `LayoutParams.TYPE_*` name of the owning window (`""` when
+    /// unknown). Never a made-up name: an undocumented type is `TYPE_<n>`.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub window_type: String,
+    /// Agent-facing window kind (`application`, `application_overlay`, …).
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub window_kind: String,
+    /// Z-order index of the owning window, `0` = bottom. `None` only when the
+    /// node has no window tag (a probe that predates the window block).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub window_z: Option<i64>,
+}
+
+/// One window of a UI tree, in **policy z order** (bottom first).
+///
+/// This is the window-level half of the LAYER1 tree contract: every node names
+/// its window, and this block names the window's type, kind, z and input state,
+/// so an agent can tell an application overlay from the app without guessing
+/// from the label.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct WindowInfo {
+    /// Stable id inside this tree (short hex; `""` when the probe has none).
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub id: String,
+    /// The W36 `window` label the nodes carry (kept for compatibility).
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub label: String,
+    /// Symbolic `LayoutParams.TYPE_*` name.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub type_name: String,
+    /// Agent-facing kind ([`acos_wm::layers::WindowKind::name`] vocabulary).
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub kind: String,
+    /// Z-order index, `0` = bottom, contiguous over this vector.
+    pub z: i64,
+    /// Window frame in display pixels, when the probe reports it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bounds: Option<Bounds>,
+    /// Whether this window holds input focus.
+    #[serde(default)]
+    pub focus: bool,
+    /// Whether this window receives touches (`!FLAG_NOT_TOUCHABLE`); the value
+    /// an agent uses to explain why a tap passed through an overlay.
+    #[serde(default)]
+    pub touchable: bool,
+    /// The window asked for `FLAG_HARDWARE_ACCELERATED` but the guest has no
+    /// window GPU renderer, so it was painted in software (`Canvas.
+    /// isHardwareAccelerated()` is false). The verdict records a
+    /// `hardware_renderer_fallback` note for it.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub renderer_fallback: bool,
+}
+
+impl WindowInfo {
+    /// Construct the minimal window record.
+    pub fn new(z: i64) -> Self {
+        WindowInfo {
+            id: String::new(),
+            label: String::new(),
+            type_name: String::new(),
+            kind: String::new(),
+            z,
+            bounds: None,
+            focus: false,
+            touchable: false,
+            renderer_fallback: false,
+        }
+    }
 }
 
 impl UiNode {
@@ -548,6 +621,10 @@ impl UiNode {
             children: Vec::new(),
             package: String::new(),
             window: String::new(),
+            window_id: String::new(),
+            window_type: String::new(),
+            window_kind: String::new(),
+            window_z: None,
         }
     }
 
@@ -981,6 +1058,11 @@ pub struct UiTree {
     /// False when the text/semantics route was unavailable.
     #[serde(default = "default_true")]
     pub text_available: bool,
+    /// The tree's windows in policy z order (bottom first). Empty on a probe
+    /// that predates the window block; every node then still carries its
+    /// `window` label.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub windows: Vec<WindowInfo>,
 }
 
 const fn default_true() -> bool {
@@ -996,6 +1078,7 @@ impl UiTree {
             nodes,
             truncated: false,
             text_available: true,
+            windows: Vec::new(),
         }
     }
 
@@ -1300,15 +1383,26 @@ mod tests {
 
     #[test]
     fn selectors_skip_offscreen_nodes_and_tap_the_visible_rect() {
-        let mut hidden =
-            UiNode::new("off", "android.widget.TextView", Bounds::new(1122, 317, 1239, 368))
-                .with_text("Hidden");
+        let mut hidden = UiNode::new(
+            "off",
+            "android.widget.TextView",
+            Bounds::new(1122, 317, 1239, 368),
+        )
+        .with_text("Hidden");
         hidden.visible = false;
-        let shown = UiNode::new("on", "android.widget.TextView", Bounds::new(42, 317, 196, 368))
-            .with_text("Page one")
-            .with_visible_bounds(Bounds::new(52, 320, 186, 365));
+        let shown = UiNode::new(
+            "on",
+            "android.widget.TextView",
+            Bounds::new(42, 317, 196, 368),
+        )
+        .with_text("Page one")
+        .with_visible_bounds(Bounds::new(52, 320, 186, 365));
         let frame = frame();
-        let tree = UiTree::new(frame, "dev.acos.fixtures.offscreenpager", vec![hidden, shown]);
+        let tree = UiTree::new(
+            frame,
+            "dev.acos.fixtures.offscreenpager",
+            vec![hidden, shown],
+        );
 
         // GR2 W4: present in the tree but not a selector match.
         assert!(tree.find_one(&Selector::by_text("Hidden")).is_none());
@@ -1331,8 +1425,12 @@ mod tests {
         assert_eq!(node.visible_rect(), Bounds::new(52, 320, 186, 365));
         assert_eq!(node.tap_point(), (119, 342));
         // Same rect, moved so the full-bounds centre is outside the visible part.
-        let clipped = UiNode::new("on", "android.widget.TextView", Bounds::new(42, 317, 196, 368))
-            .with_visible_bounds(Bounds::new(120, 317, 196, 368));
+        let clipped = UiNode::new(
+            "on",
+            "android.widget.TextView",
+            Bounds::new(42, 317, 196, 368),
+        )
+        .with_visible_bounds(Bounds::new(120, 317, 196, 368));
         assert_eq!(clipped.tap_point(), (158, 342));
         assert_ne!(clipped.tap_point(), clipped.bounds.center());
     }
@@ -1353,7 +1451,11 @@ mod tests {
     /// field is empty) and whose accessible *name* is the content description.
     fn rn_search_field(collapsed_text: bool) -> UiNode {
         UiNode::new("n27_", "Z4.g", Bounds::new(189, 366, 978, 482))
-            .with_text(if collapsed_text { "猫, ねこ, neko..." } else { "" })
+            .with_text(if collapsed_text {
+                "猫, ねこ, neko..."
+            } else {
+                ""
+            })
             .with_password(false)
     }
 
@@ -1370,7 +1472,10 @@ mod tests {
         let tree = UiTree::new(
             frame(),
             "com.gaten",
-            vec![with_content_desc(rn_search_field(true), "Search Japanese dictionary")],
+            vec![with_content_desc(
+                rn_search_field(true),
+                "Search Japanese dictionary",
+            )],
         );
         let desc = Selector {
             content_desc: Some(TextMatch::exact("Search Japanese dictionary")),
@@ -1419,15 +1524,18 @@ mod tests {
         // RNTAP: an exact text match outranks a content-description match, and
         // the stages are never mixed, so the candidates of one answer belong to
         // one field.
-        let label = UiNode::new("n1", "X4.e", Bounds::new(362, 2214, 445, 2251))
-            .with_text("Home");
+        let label = UiNode::new("n1", "X4.e", Bounds::new(362, 2214, 445, 2251)).with_text("Home");
         let pressable = with_content_desc(
             UiNode::new("n2", "b5.g", Bounds::new(280, 2151, 453, 2316)),
             "Home",
         );
         let tree = UiTree::new(frame(), "com.gaten", vec![label, pressable]);
         let candidates = tree.find_input_candidates(&Selector::by_text("Home"));
-        assert_eq!(candidates.len(), 1, "the drawn label is the only text match");
+        assert_eq!(
+            candidates.len(),
+            1,
+            "the drawn label is the only text match"
+        );
         assert_eq!(candidates[0].class, "X4.e");
         // With no text match at all, the content description answers alone.
         let tree = UiTree::new(

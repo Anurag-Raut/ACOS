@@ -31,4 +31,10 @@ steps:
       ordered: true
       timeout_ms: 5000
       patterns: ['^validation_ok name=Ada email=ada@example\.com$']
-  - assert_text: {selector: {id: error}, text: {regex: "^$"}}
+  # SCENHYG: an empty inline error is a zero-height TextView, so it is present in
+  # the tree but not visible to the user (`setError(null)`/`setText("")` hides
+  # it on a real phone too). The old `assert_text text: {regex: "^$"}` demanded a
+  # *visible* empty node and failed ELEMENT_OFFSCREEN for a correct app; the
+  # faithful check is that the cleared error is not visible - if the app left any
+  # text it would be visible and this step fails.
+  - assert_not_visible: {selector: {id: error}}

@@ -1,0 +1,66 @@
+{
+  "backend": "acos-native",
+  "capabilities_used": [
+    "crash-reports",
+    "input",
+    "lifecycle",
+    "logs",
+    "static-manifest",
+    "ui.tree"
+  ],
+  "evidence": {
+    "events": "events.jsonl",
+    "log": "logs/logcat.txt",
+    "verdict": "verdict.json"
+  },
+  "fidelity": "art-reference",
+  "isolation": "process",
+  "metrics": {
+    "peak_rss_bytes": 18251776,
+    "wall_ms": 2917
+  },
+  "ok": true,
+  "request_id": "req_5ec96_18e9aca58ded46b8",
+  "result": {
+    "artifacts_dir": "/home/Qui/.t3/worktrees/acos/t3-f4bcc4d4-5c49b0ef4f83b639/.cache/rg4-mod-art/net-network-offline",
+    "cap_bytes": 20480,
+    "evidence_provenance": {
+      "binder_transactions": "host-observed",
+      "crash_reports": "guest-asserted",
+      "frames": "host-observed",
+      "host_input": "host-observed",
+      "input_acks": "guest-asserted",
+      "launch_markers": "guest-asserted",
+      "lifecycle_markers": "guest-asserted",
+      "logs": "guest-asserted",
+      "static_manifest": "host-observed",
+      "tree": "guest-asserted"
+    },
+    "note": "this result was larger than the reply cap; only the bulk (tree, steps, logs) was dropped and the full evidence is in the artifacts paths named here",
+    "provenance": {
+      "apk": {
+        "mtime_ns": 1795154459391179845,
+        "path": "/home/Qui/.t3/worktrees/acos/t3-f4bcc4d4-5c49b0ef4f83b639/fixtures/build/apps/net-check.apk",
+        "sha256": "75f6452f7ddb20d720165a7d67ed6d5aec6df6ac596dd3df243ae01f92d44381",
+        "sha256_12": "75f6452f7ddb",
+        "size_bytes": 20948
+      },
+      "engine": "art",
+      "fidelity": "art-reference",
+      "scenario": {
+        "mtime_ns": 1795154283734719300,
+        "path": "/home/Qui/.t3/worktrees/acos/t3-f4bcc4d4-5c49b0ef4f83b639/scenarios/net-network-offline.yaml",
+        "sha256": "5160bb99d15e7cf9cb4be0e4082e09deef1f0930229d72d9c0ae48e07c612ced",
+        "sha256_12": "5160bb99d15e",
+        "size_bytes": 4635
+      },
+      "scenario_engine": "art",
+      "warnings": []
+    },
+    "reply_capped": true,
+    "verdict_path": "/home/Qui/.t3/worktrees/acos/t3-f4bcc4d4-5c49b0ef4f83b639/.cache/rg4-mod-art/net-network-offline/verdict.json",
+    "verdict_status": "pass"
+  },
+  "session_id": "s_art_net-check",
+  "status": "pass"
+}

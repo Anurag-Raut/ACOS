@@ -138,8 +138,8 @@ pub fn deliver_launch(
     apk_path: &Path,
 ) -> Result<LaunchTransaction, ClientTransactionError> {
     let activity = launcher_activity(apk_path)?;
-    let info = pms_java::activity_info(vm, app, &activity)
-        .map_err(ClientTransactionError::Materialize)?;
+    let info =
+        pms_java::activity_info(vm, app, &activity).map_err(ClientTransactionError::Materialize)?;
 
     let package = vm.new_string_rooted(&activity.package_name)?;
     let intent = vm.new_instance_ctor("android.content.Intent", "()V", &[])?;
@@ -162,27 +162,27 @@ pub fn deliver_launch(
         "obtain",
         LAUNCH_OBTAIN_SIG,
         &[
-            JavaValue::Object(intent),           // intent
-            JavaValue::Int(0),                   // ident
-            JavaValue::Object(info),             // ActivityInfo
-            JavaValue::Object(config),           // curConfig
-            JavaValue::Object(config),           // overrideConfig
-            JavaValue::Int(0),                   // deviceId (DEVICE_ID_DEFAULT)
-            JavaValue::Null,                     // referrer
-            JavaValue::Null,                     // voiceInteractor
-            JavaValue::Int(2),                   // procState (PROCESS_STATE_TOP)
-            JavaValue::Null,                     // state
-            JavaValue::Null,                     // persistentState
-            JavaValue::Null,                     // pendingResults
-            JavaValue::Null,                     // pendingNewIntents
-            JavaValue::Null,                     // activityOptions
-            JavaValue::Boolean(false),           // isForward
-            JavaValue::Null,                     // profilerInfo
-            JavaValue::Null,                     // assistToken
-            JavaValue::Null,                     // activityClientController
-            JavaValue::Null,                     // shareableActivityToken
-            JavaValue::Boolean(false),           // launchedFromBubble
-            JavaValue::Null,                     // taskFragmentToken
+            JavaValue::Object(intent), // intent
+            JavaValue::Int(0),         // ident
+            JavaValue::Object(info),   // ActivityInfo
+            JavaValue::Object(config), // curConfig
+            JavaValue::Object(config), // overrideConfig
+            JavaValue::Int(0),         // deviceId (DEVICE_ID_DEFAULT)
+            JavaValue::Null,           // referrer
+            JavaValue::Null,           // voiceInteractor
+            JavaValue::Int(2),         // procState (PROCESS_STATE_TOP)
+            JavaValue::Null,           // state
+            JavaValue::Null,           // persistentState
+            JavaValue::Null,           // pendingResults
+            JavaValue::Null,           // pendingNewIntents
+            JavaValue::Null,           // activityOptions
+            JavaValue::Boolean(false), // isForward
+            JavaValue::Null,           // profilerInfo
+            JavaValue::Null,           // assistToken
+            JavaValue::Null,           // activityClientController
+            JavaValue::Null,           // shareableActivityToken
+            JavaValue::Boolean(false), // launchedFromBubble
+            JavaValue::Null,           // taskFragmentToken
         ],
     )?)?;
 

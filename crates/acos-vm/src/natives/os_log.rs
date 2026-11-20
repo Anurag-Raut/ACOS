@@ -88,12 +88,7 @@ fn push(record: LogRecord) {
 /// service was asked to show). The record is indistinguishable from a guest
 /// `android.util.Log` write, which is the point: it is the platform logging, not
 /// the app.
-pub fn push_record(
-    priority: i32,
-    tag: &str,
-    msg: &str,
-    buffer: i32,
-) {
+pub fn push_record(priority: i32, tag: &str, msg: &str, buffer: i32) {
     push(LogRecord {
         buffer,
         priority,
@@ -173,7 +168,9 @@ pub fn parse_priority(value: &str) -> Option<i32> {
         return None;
     }
     if let Ok(n) = value.parse::<i32>() {
-        return (PRIORITY_VERBOSE..=PRIORITY_ASSERT).contains(&n).then_some(n);
+        return (PRIORITY_VERBOSE..=PRIORITY_ASSERT)
+            .contains(&n)
+            .then_some(n);
     }
     match value.chars().next()?.to_ascii_uppercase() {
         'V' => Some(PRIORITY_VERBOSE),
@@ -348,16 +345,20 @@ fn logger_entry_max_payload_native(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> 
     Ok(())
 }
 
+/// The sink is process-wide; a test that reads `records()` must hold this guard so
+/// concurrent unit tests cannot interleave (HYG4: javabridge's native-root test raced
+/// the ring-buffer test without it).
+#[cfg(test)]
+pub(crate) fn sink_test_guard() -> MutexGuard<'static, ()> {
+    static GUARD: Mutex<()> = Mutex::new(());
+    GUARD.lock().unwrap_or_else(|p| p.into_inner())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::path::Path;
 
-    /// The sink is process-wide; tests that read it must not interleave.
-    fn sink_test_guard() -> MutexGuard<'static, ()> {
-        static GUARD: Mutex<()> = Mutex::new(());
-        GUARD.lock().unwrap_or_else(|p| p.into_inner())
-    }
 
     fn reference_logcat() -> Option<String> {
         let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
@@ -367,8 +368,7 @@ mod tests {
 
     #[test]
     fn threadtime_layout_matches_the_art_reference_capture() {
-        let Some(text) = reference_logcat() else {
-            eprintln!("SKIP threadtime_layout_matches_the_art_reference_capture: no capture");
+        let Some(text) = acos_test_support::require_some(reference_logcat(), "threadtime_layout_matches_the_art_reference_capture", "no capture") else {
             return;
         };
         let reference = text
@@ -437,8 +437,9 @@ mod tests {
         // 2000-01-01 and 2024-02-29 (leap day) as day counts since the epoch.
         assert!(line(10_957 * 86_400, 5).starts_with("01-01 00:00:00.005 "));
         assert!(line(19_782 * 86_400, 999).starts_with("02-29 00:00:00.999 "));
-        assert!(line(20_402 * 86_400 + 13 * 3_600 + 51 * 60 + 14, 9)
-            .starts_with("11-10 13:51:14.009 "));
+        assert!(
+            line(20_402 * 86_400 + 13 * 3_600 + 51 * 60 + 14, 9).starts_with("11-10 13:51:14.009 ")
+        );
         assert_eq!(
             line(0, 0),
             "01-01 00:00:00.000     1     2 D T: m",

@@ -98,15 +98,22 @@ mod tests {
     #[test]
     fn hello_views_manifest_resolves() {
         let apk = fixture("hello-views.apk");
-        if !apk.is_file() {
-            eprintln!("SKIP hello_views_manifest_resolves: fixture missing");
+        if acos_test_support::require_prereq(
+            apk.is_file(),
+            "hello_views_manifest_resolves",
+            &format!(
+                "{} is missing — run tools/build-apps.sh (or tools/build-fixtures.sh)",
+                apk.display()
+            ),
+        )
+        .is_none()
+        {
             return;
         }
         let manifest = load_manifest(&apk).unwrap();
         assert_eq!(manifest.package, "dev.acos.fixtures.helloviews");
         assert_eq!(manifest.target_sdk, 34);
-        assert!(manifest
-            .declares_activity("dev.acos.fixtures.helloviews/.MainActivity"));
+        assert!(manifest.declares_activity("dev.acos.fixtures.helloviews/.MainActivity"));
         assert!(!manifest.declares_activity("dev.acos.fixtures.helloviews/.Nope"));
         assert_eq!(manifest.sha256.len(), 64);
     }

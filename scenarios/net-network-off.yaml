@@ -1,0 +1,77 @@
+# net-network: the `network` service module (ADR-0029 + ADR-0030), three arms.
+#
+# One scenario file per arm, because the arm is a *launch-time* choice (a netns is
+# joined at exec):
+#
+#   net-network-off.yaml      module not attached  -> the honest offline device
+#   net-network-real.yaml     network:real         -> a real HTTPS fetch
+#   net-network-offline.yaml  network:real + hot offline/online controls
+#
+# The app is the NET3/NET4 fixture (`fixtures/apps/net-check`): one screen that
+# shows the URL, what `ConnectivityManager` reports, the dnsproxyd probe and the
+# fetch's outcome. `retry` re-runs the same fetch in the same guest process, which
+# is what makes a mid-session control observable by an app.
+version: 1
+name: net-network-off
+description: >-
+  With no `network` module attached, the app sees an honest device with no
+  network: `NetworkCapabilities` has no VALIDATED capability, `LinkProperties`
+  has no address, DNS server or route, `/dev/socket/dnsproxyd` does not exist,
+  and the real HTTPS GET fails with a Java exception (never a fake HTTP 200).
+app: fixtures/build/apps/net-check.apk
+fallback: report-and-escalate
+api_level: 34
+isolation: process
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+capabilities:
+  - lifecycle
+  - ui.offscreen
+  - ui.text
+expectation: pass
+budgets:
+  memory_mib: 512
+  wall_ms: 120000
+steps:
+  - launch:
+      activity: dev.acos.fixtures.netcheck/.MainActivity
+      clear_state: true
+
+  - wait_for:
+      selector: {id: status}
+      timeout_ms: 5000
+
+  # The app asked for example.com and got an exception class name, not a status
+  # code. (`status` is never "pending" once the fetch thread finished.)
+  - assert_text:
+      selector: {id: status}
+      text: {contains: Exception}
+      timeout_ms: 60000
+
+  # ConnectivityManager reports the emulated default network but not a validated
+  # one, and the interface has nothing on it: no address, no DNS, no route.
+  - assert_text:
+      selector: {id: connectivity}
+      text: {contains: "validated=false"}
+      timeout_ms: 5000
+  - assert_text:
+      selector: {id: connectivity}
+      text: {contains: "addrs=0 dns=0 dnsList=none routes=0"}
+      timeout_ms: 5000
+  # ...and there is no resolver proxy in the guest at all.
+  - assert_text:
+      selector: {id: dnsprobe}
+      text: {contains: "exists=false"}
+      timeout_ms: 5000
+
+  - assert_log:
+      tag: NetCheck
+      since_previous_step: false
+      ordered: true
+      patterns:
+        - '^fetch result=java\..*Exception.*$'
+
+  - assert_no_crash: {}

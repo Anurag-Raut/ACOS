@@ -1,0 +1,7 @@
+{
+  "request_id": "req_26fc2_18e916593923ec5b",
+  "started_at": "2026-11-18T08:28:18.950Z",
+  "scenario": "scenarios/tail-bluetooth.yaml",
+  "apk": "",
+  "acos_version": "0.3.0"
+}

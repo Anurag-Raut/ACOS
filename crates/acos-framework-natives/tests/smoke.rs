@@ -25,8 +25,11 @@ pub fn hello_views() -> Option<PathBuf> {
 
 #[test]
 fn framework_res_loads_and_resolves() {
-    let Some(path) = framework_res() else {
-        eprintln!("framework-res.apk missing; skipping");
+    let Some(path) = acos_test_support::require_some(
+        framework_res(),
+        "framework_res_loads_and_resolves",
+        "framework-res.apk missing",
+    ) else {
         return;
     };
     let apk = ApkAssets::open(&path).expect("open framework-res");
@@ -67,7 +70,9 @@ fn framework_res_loads_and_resolves() {
         .resolve(apk.resource_bytes().unwrap(), 0x0104_0000, &config)
         .unwrap();
     if s.value.data_type == 0x03 {
-        let text = table2.global_string(apk.resource_bytes().unwrap(), s.value.data).unwrap();
+        let text = table2
+            .global_string(apk.resource_bytes().unwrap(), s.value.data)
+            .unwrap();
         eprintln!("string/cancel = {text:?} (config {})", s.config_label);
         assert!(!text.is_empty());
     }
@@ -91,8 +96,9 @@ fn manager_reads_asset() {
 
 #[test]
 fn app_apk_parses() {
-    let Some(path) = hello_views() else {
-        eprintln!("hello-views.apk missing; skipping");
+    let Some(path) =
+        acos_test_support::require_some(hello_views(), "app_apk_parses", "hello-views.apk missing")
+    else {
         return;
     };
     let apk = ApkAssets::open(&path).unwrap();
@@ -100,7 +106,11 @@ fn app_apk_parses() {
     let pkg = &table.packages[0];
     assert_eq!(pkg.name, "dev.acos.fixtures.helloviews");
     // string/app_name = "Hello Views"
-    let entry = table.resolve(apk.resource_bytes().unwrap(), 0x7f03_0000, &ResConfig::default());
+    let entry = table.resolve(
+        apk.resource_bytes().unwrap(),
+        0x7f03_0000,
+        &ResConfig::default(),
+    );
     assert!(entry.is_some());
     let text = table.global_string(apk.resource_bytes().unwrap(), entry.unwrap().value.data);
     assert_eq!(text.as_deref(), Some("Hello Views"));

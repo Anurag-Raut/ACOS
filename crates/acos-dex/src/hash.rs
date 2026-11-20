@@ -22,7 +22,13 @@ pub fn adler32(data: &[u8]) -> u32 {
 
 /// SHA-1 digest.
 pub fn sha1(data: &[u8]) -> [u8; 20] {
-    let mut h: [u32; 5] = [0x6745_2301, 0xEFCD_AB89, 0x98BA_DCFE, 0x1032_5476, 0xC3D2_E1F0];
+    let mut h: [u32; 5] = [
+        0x6745_2301,
+        0xEFCD_AB89,
+        0x98BA_DCFE,
+        0x1032_5476,
+        0xC3D2_E1F0,
+    ];
 
     // Message padding.
     let bit_len = (data.len() as u64).wrapping_mul(8);
@@ -106,7 +112,9 @@ mod tests {
             "a9993e364706816aba3e25717850c26c9cd0d89d"
         );
         assert_eq!(
-            hex(&sha1(b"abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq")),
+            hex(&sha1(
+                b"abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq"
+            )),
             "84983e441c3bd26ebaae4aa1f95129e5e54670f1"
         );
     }

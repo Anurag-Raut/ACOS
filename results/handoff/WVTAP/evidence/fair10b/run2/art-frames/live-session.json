@@ -1,0 +1,1540 @@
+{
+  "capture_label": "screenshots are ACOS C1 buffer captures (compositor-client stored buffers), not device captures",
+  "capture_source": "acos-c1-buffer",
+  "heap": {
+    "bytes": {
+      "heapgrowthlimit": 201326592,
+      "heapmaxfree": 8388608,
+      "heapminfree": 524288,
+      "heapsize": 536870912,
+      "heapstartsize": 8388608
+    },
+    "heaptargetutilization": 0.75,
+    "mib": {
+      "heapgrowthlimit": 192.0,
+      "heapmaxfree": 8.0,
+      "heapminfree": 0.5,
+      "heapsize": 512.0,
+      "heapstartsize": 8.0
+    },
+    "overridden": [],
+    "prop": {
+      "dalvik.vm.heapgrowthlimit": "192m",
+      "dalvik.vm.heapmaxfree": "8m",
+      "dalvik.vm.heapminfree": "512k",
+      "dalvik.vm.heapsize": "512m",
+      "dalvik.vm.heapstartsize": "8m",
+      "dalvik.vm.heaptargetutilization": "0.75"
+    },
+    "source": "ACOS_ART_HEAP* overrides on the stock API-34 dalvik.vm.* table"
+  },
+  "protocol": "acos-art launch --interactive (ACOSLAUNCH_INTERACTIVE=1)",
+  "retention": {
+    "note": "passing run: intermediate C1 captures were pruned; the frames a step declared are in frames/<seq>.png",
+    "policy": "referenced",
+    "pruned_captures": 5
+  },
+  "steps": [
+    {
+      "activity": "dev.acos.fixtures.webview.MainActivity",
+      "boot_image": {
+        "base": "0x70000000",
+        "cache": "hit",
+        "dir": "/home/Qui/.cache/acos/art/boot-images/fixed-ff39b037f1d6b9ff",
+        "input_hash": "ff39b037f1d6b9ff",
+        "mode": "shared-fixed"
+      },
+      "buffer_generation": 1,
+      "capture_source": "acos-c1-buffer",
+      "cmd": "ready",
+      "density": 420,
+      "guest_process_group": 181212,
+      "height": 2400,
+      "label": "live ART session: real counter.apk Activity, in-guest view tree probe, ACOS C1 buffer captures",
+      "modules": [
+        {
+          "attach": "at-launch",
+          "details": null,
+          "fidelity": "real",
+          "id": "core",
+          "profile": "real",
+          "reason": null,
+          "state": "attached"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "accessibility",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"accessibility\", \"profile\": \"real\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "system.permissions",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.permissions\", \"profile\": \"real\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "system.notifications",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.notifications\", \"profile\": \"real\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "sensors",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"sensors\", \"profile\": \"scripted\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "feedback.vibrator",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"feedback.vibrator\", \"profile\": \"scripted\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "location",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"location\", \"profile\": \"scripted\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "at-launch",
+          "details": null,
+          "fidelity": "off",
+          "id": "net.telephony",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"net.telephony\", \"profile\": \"scripted\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "hw.bluetooth",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.bluetooth\", \"profile\": \"scripted\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "hw.biometric",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.biometric\", \"profile\": \"scripted\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "at-launch",
+          "details": null,
+          "fidelity": "off",
+          "id": "network",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"network\", \"profile\": \"real\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "at-launch",
+          "details": {
+            "fixed_host_ram_mib": 140,
+            "frame_resolution": "engine CSS pixels",
+            "provider_apk": "/home/Qui/Projects/acos/.cache/wt-wvtap/fixtures/build/apps/webview-provider.apk",
+            "provider_package": "com.android.webview"
+          },
+          "fidelity": "real",
+          "id": "webview",
+          "profile": "real",
+          "reason": "real WebView: provider package com.android.webview installed from /home/Qui/Projects/acos/.cache/wt-wvtap/fixtures/build/apps/webview-provider.apk, one shared host Chromium behind the session's gate socket (started on the first connect)",
+          "state": "attached"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "hw.usb",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.usb\", \"profile\": \"stub\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "system.dropbox",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.dropbox\", \"profile\": \"stub\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "hw.nfc",
+          "profile": "off",
+          "reason": "off: no NFC hardware: NfcAdapter throws UnsupportedOperationException before any binder (FEATURE_NFC is absent)",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "system.wallpaper",
+          "profile": "off",
+          "reason": "off: no wallpaper service; AOSP's own DisabledWallpaperManager is the working missing path (config_enableWallpaperService is false)",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "system.print",
+          "profile": "off",
+          "reason": "off: no print service; the client only resolves the name when FEATURE_PRINTING is reported, and ACOS reports it absent",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "system.search",
+          "profile": "off",
+          "reason": "off: no search service and no searchable index; an empty SearchableInfo list would look like an installed search provider",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "system.usage",
+          "profile": "off",
+          "reason": "off: nothing records app usage; an empty ParceledListSlice<UsageStats> would be indistinguishable from 'not used'",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "system.dpm",
+          "profile": "off",
+          "reason": "off: no managed device or profile; every device-policy answer would be invented policy state",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "system.role",
+          "profile": "off",
+          "reason": "off: IRoleManager lives in the Permission APEX; its transaction table is not in the framework dex this build reads, so a stub would guess codes",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "geo.country",
+          "profile": "off",
+          "reason": "off: a detected country is a location claim ACOS cannot back",
+          "state": "off"
+        }
+      ],
+      "ok": true,
+      "package": "dev.acos.fixtures.webview",
+      "probe_seq": 1,
+      "stream_socket": "/run/user/1000/acos-view-181201-1/view.sock",
+      "width": 1080
+    },
+    {
+      "cmd": "logs",
+      "dropped": 0,
+      "kept": 115,
+      "ok": true,
+      "total": 115
+    },
+    {
+      "buffer_generation": 4,
+      "cmd": "tree",
+      "frame_number": 4,
+      "frame_seq": 1,
+      "ok": true,
+      "png": "results/handoff/WVTAP/evidence/fair10b/run2/art-frames/live-frames/acos-c1-layer3-frame-4-g4-c1.png",
+      "probe_seq": 4
+    },
+    {
+      "cmd": "logs",
+      "dropped": 0,
+      "kept": 141,
+      "ok": true,
+      "total": 141
+    },
+    {
+      "buffer_generation": 4,
+      "cmd": "tree",
+      "frame_number": 4,
+      "frame_seq": 2,
+      "ok": true,
+      "png_pruned": true,
+      "probe_seq": 5
+    },
+    {
+      "cmd": "logs",
+      "dropped": 0,
+      "kept": 141,
+      "ok": true,
+      "total": 141
+    },
+    {
+      "cmd": "logs",
+      "dropped": 0,
+      "kept": 141,
+      "ok": true,
+      "total": 141
+    },
+    {
+      "cmd": "logs",
+      "dropped": 0,
+      "kept": 141,
+      "ok": true,
+      "total": 141
+    },
+    {
+      "buffer_generation": 5,
+      "cmd": "tap",
+      "frame_number": 5,
+      "frame_seq": 3,
+      "handled": [
+        true,
+        true
+      ],
+      "ok": true,
+      "png_pruned": true,
+      "probe_seq": 6,
+      "x": 540.0,
+      "y": 1845.0
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 4,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 6
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 5,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 7
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 6,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 8
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 7,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 9
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 8,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 10
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 9,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 11
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 10,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 12
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 11,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 13
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 12,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 14
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 13,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 15
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 14,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 16
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 15,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 17
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 16,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 18
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 17,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 19
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 18,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 20
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 19,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 21
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 20,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 22
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 21,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 23
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 22,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 24
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 23,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 25
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 24,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 26
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 25,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 27
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 26,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 28
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 27,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 29
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 28,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 30
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 29,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 31
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 30,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 32
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 31,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 33
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 32,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 34
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 33,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 35
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 34,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 36
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 35,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 37
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 36,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 38
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 37,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 39
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 38,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 40
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 39,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 41
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 40,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 42
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 41,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 43
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 42,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 44
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 43,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 45
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 44,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 46
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 45,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 47
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 46,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 48
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 47,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 49
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 48,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 50
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 49,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 51
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 50,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 52
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 51,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 53
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 52,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 54
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 53,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 55
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 54,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 56
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 55,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 57
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 56,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 58
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 57,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 59
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 58,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 60
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 59,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 61
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 60,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 62
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 61,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 63
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 62,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 64
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 63,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 65
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 64,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 66
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 65,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 67
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 66,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 68
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 67,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 69
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 68,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 70
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 69,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 71
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 70,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 72
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 71,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 73
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 72,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 74
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 73,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 75
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 74,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 76
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 75,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 77
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 76,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 78
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 77,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 79
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 78,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 80
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 79,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 81
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 80,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 82
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 81,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 83
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 82,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 84
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 83,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 85
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 84,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 86
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 85,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 87
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 86,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 88
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 87,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 89
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 88,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 90
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 89,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 91
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 90,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 92
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 91,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 93
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 92,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 94
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 93,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 95
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 94,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 96
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 95,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 97
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 96,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 98
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 97,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 99
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 98,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 100
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 99,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 101
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 100,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 102
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 101,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 103
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 102,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 104
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 103,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 105
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 104,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 106
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 105,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 107
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 106,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 108
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 107,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 109
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 108,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 110
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 109,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 111
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 110,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 112
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 111,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 113
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 112,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 114
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 113,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 115
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 114,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 116
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 115,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 117
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 116,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 118
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 117,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 119
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 118,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 120
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 119,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 121
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 120,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 122
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 121,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 123
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 122,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 124
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 123,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 125
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 124,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 126
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 125,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 127
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 126,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 128
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 127,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 129
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 128,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 130
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 129,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 131
+    },
+    {
+      "buffer_generation": 6,
+      "cmd": "tree",
+      "frame_number": 6,
+      "frame_seq": 130,
+      "ok": true,
+      "png_pruned": true,
+      "probe_seq": 132
+    },
+    {
+      "cmd": "logs",
+      "dropped": 0,
+      "kept": 154,
+      "ok": true,
+      "total": 154
+    },
+    {
+      "buffer_generation": 6,
+      "cmd": "tree",
+      "frame_number": 6,
+      "frame_seq": 131,
+      "ok": true,
+      "png_pruned": true,
+      "probe_seq": 133
+    },
+    {
+      "cmd": "logs",
+      "dropped": 0,
+      "kept": 154,
+      "ok": true,
+      "total": 154
+    },
+    {
+      "cmd": "logs",
+      "dropped": 0,
+      "kept": 154,
+      "ok": true,
+      "total": 154
+    },
+    {
+      "buffer_generation": 8,
+      "cmd": "tap",
+      "frame_number": 8,
+      "frame_seq": 132,
+      "handled": [
+        true,
+        true
+      ],
+      "ok": true,
+      "png_pruned": true,
+      "probe_seq": 137,
+      "x": 119.0,
+      "y": 846.0
+    },
+    {
+      "cmd": "logs",
+      "dropped": 0,
+      "kept": 162,
+      "ok": true,
+      "total": 162
+    },
+    {
+      "cmd": "logs",
+      "dropped": 0,
+      "kept": 162,
+      "ok": true,
+      "total": 162
+    },
+    {
+      "cmd": "logs",
+      "dropped": 0,
+      "kept": 162,
+      "ok": true,
+      "total": 162
+    },
+    {
+      "cmd": "logs",
+      "dropped": 0,
+      "kept": 162,
+      "ok": true,
+      "total": 162
+    },
+    {
+      "cmd": "logs",
+      "dropped": 0,
+      "kept": 162,
+      "ok": true,
+      "total": 162
+    },
+    {
+      "buffer_generation": 9,
+      "cmd": "tree",
+      "frame_number": 9,
+      "frame_seq": 133,
+      "ok": true,
+      "png": "results/handoff/WVTAP/evidence/fair10b/run2/art-frames/live-frames/acos-c1-layer3-frame-9-g9-c133.png",
+      "probe_seq": 142
+    },
+    {
+      "attached": [
+        {
+          "id": "core",
+          "profile": "real"
+        },
+        {
+          "id": "webview",
+          "profile": "real"
+        }
+      ],
+      "cmd": "services",
+      "modules": [
+        {
+          "attach": "at-launch",
+          "details": null,
+          "fidelity": "real",
+          "id": "core",
+          "profile": "real",
+          "reason": null,
+          "state": "attached"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "accessibility",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"accessibility\", \"profile\": \"real\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "system.permissions",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.permissions\", \"profile\": \"real\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "system.notifications",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.notifications\", \"profile\": \"real\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "sensors",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"sensors\", \"profile\": \"scripted\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "feedback.vibrator",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"feedback.vibrator\", \"profile\": \"scripted\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "location",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"location\", \"profile\": \"scripted\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "at-launch",
+          "details": null,
+          "fidelity": "off",
+          "id": "net.telephony",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"net.telephony\", \"profile\": \"scripted\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "hw.bluetooth",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.bluetooth\", \"profile\": \"scripted\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "hw.biometric",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.biometric\", \"profile\": \"scripted\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "at-launch",
+          "details": null,
+          "fidelity": "off",
+          "id": "network",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"network\", \"profile\": \"real\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "at-launch",
+          "details": {
+            "fixed_host_ram_mib": 140,
+            "frame_resolution": "engine CSS pixels",
+            "provider_apk": "/home/Qui/Projects/acos/.cache/wt-wvtap/fixtures/build/apps/webview-provider.apk",
+            "provider_package": "com.android.webview"
+          },
+          "fidelity": "real",
+          "id": "webview",
+          "profile": "real",
+          "reason": "real WebView: provider package com.android.webview installed from /home/Qui/Projects/acos/.cache/wt-wvtap/fixtures/build/apps/webview-provider.apk, one shared host Chromium behind the session's gate socket (started on the first connect)",
+          "state": "attached"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "hw.usb",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.usb\", \"profile\": \"stub\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "system.dropbox",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.dropbox\", \"profile\": \"stub\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "hw.nfc",
+          "profile": "off",
+          "reason": "off: no NFC hardware: NfcAdapter throws UnsupportedOperationException before any binder (FEATURE_NFC is absent)",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "system.wallpaper",
+          "profile": "off",
+          "reason": "off: no wallpaper service; AOSP's own DisabledWallpaperManager is the working missing path (config_enableWallpaperService is false)",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "system.print",
+          "profile": "off",
+          "reason": "off: no print service; the client only resolves the name when FEATURE_PRINTING is reported, and ACOS reports it absent",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "system.search",
+          "profile": "off",
+          "reason": "off: no search service and no searchable index; an empty SearchableInfo list would look like an installed search provider",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "system.usage",
+          "profile": "off",
+          "reason": "off: nothing records app usage; an empty ParceledListSlice<UsageStats> would be indistinguishable from 'not used'",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "system.dpm",
+          "profile": "off",
+          "reason": "off: no managed device or profile; every device-policy answer would be invented policy state",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "system.role",
+          "profile": "off",
+          "reason": "off: IRoleManager lives in the Permission APEX; its transaction table is not in the framework dex this build reads, so a stub would guess codes",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "geo.country",
+          "profile": "off",
+          "reason": "off: a detected country is a location claim ACOS cannot back",
+          "state": "off"
+        }
+      ],
+      "ok": true,
+      "op": "list"
+    },
+    {
+      "capture_source": "acos-c1-buffer",
+      "cmd": "close",
+      "frame_seq": 133,
+      "ok": true
+    }
+  ]
+}

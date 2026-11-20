@@ -1,0 +1,115 @@
+# MODSENS: the `sensors` service module's real-app proof (docs/PLAN_2026-11-16.md §3.4).
+#
+# The fixture is a plain framework app (no ACOS API, no debug hook) that lists
+# `SensorManager.getSensorList(TYPE_ALL)` and registers an accelerometer + light
+# listener, so every line asserted here was produced by the real Android sensor
+# stack: `system_server`-less `SystemSensorManager` -> `libsensor` ->
+# `android.gui.ISensorServer` -> a `BitTube` of `ASensorEvent` records.
+#
+# The scenario drives the module mid-run (`service_ctl`): set a value, assert the
+# view, play a shake timeline, assert the app's shake counter, then detach and
+# relaunch so the app is asked again — and answers with the honest empty list.
+version: 1
+name: sensors-scripted
+description: >-
+  sensor-probe on ART with `sensors:scripted`: the framework sensor table (7
+  sensors), a scripted accelerometer and light value arriving as real sensor
+  events, a scripted shake moving the app's shake counter, and — after detach and
+  a relaunch — the honest empty sensor list.
+app: fixtures/build/apps/sensor-probe.apk
+api_level: 34
+isolation: process
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+capabilities:
+  - ui.offscreen
+  - ui.text
+services:
+  - id: sensors
+    profile: scripted
+expectation: pass
+budgets:
+  memory_mib: 640
+  wall_ms: 180000
+steps:
+  - launch:
+      activity: dev.acos.fixtures.sensorprobe/.MainActivity
+      clear_state: true
+
+  # 1. The framework-exact sensor table, served from the module's config.
+  - wait_for:
+      selector: {id: sensor_count}
+      timeout_ms: 20000
+  - assert_text:
+      selector: {id: sensor_count}
+      text: {exact: "sensors: 7"}
+      timeout_ms: 10000
+  - assert_text:
+      selector: {id: sensor_names}
+      text: {exact: "accelerometer magnetometer gyroscope light proximity rotation_vector step_counter"}
+
+  # 2. A scripted accelerometer value reaches the app as a sensor event.
+  #
+  # `wait_for` is the event-driven wait: the app makes `accel_seen` visible from
+  # the sensor callback that set the value, so once it is visible the value is in
+  # the tree too (`assert_text` reads one tree, it does not poll).
+  - service_ctl:
+      module: sensors
+      op: set_value
+      args: {sensor: accelerometer, values: [1.5, -2.0, 9.81]}
+  - wait_for:
+      selector: {id: accel_seen}
+      timeout_ms: 15000
+  - assert_text:
+      selector: {id: accel}
+      text: {exact: "accel: 1.5 -2.0 9.8"}
+
+  # 3. ... and so does an on-change sensor (light: reported on change only).
+  - service_ctl:
+      module: sensors
+      op: set_value
+      args: {sensor: light, values: [1234]}
+  - wait_for:
+      selector: {id: light_seen}
+      timeout_ms: 15000
+  - assert_text:
+      selector: {id: light}
+      text: {exact: "light: 1234"}
+
+  # 4. A scripted shake timeline: 12 alternating samples, 11 sign flips. The app
+  #    shows `shake_state` once the flips stop for 500 ms, so the count asserted
+  #    is final rather than whatever had arrived a moment before.
+  - service_ctl:
+      module: sensors
+      op: shake
+      args: {amplitude: 12.0, count: 12, period_ms: 40}
+  - wait_for:
+      selector: {id: shake_state}
+      timeout_ms: 20000
+  - assert_text:
+      selector: {id: shake}
+      text: {exact: "shake: 11"}
+  - assert_text:
+      selector: {id: shake_state}
+      text: {exact: "shake ended: 11"}
+
+  # 5. The delivered events the module recorded, cited into the verdict.
+  - service_ctl:
+      module: sensors
+      op: events
+      args: {limit: 4}
+
+  # 6. Detach: the module is gone, so the same node answers the stock
+  #    device-without-sensors reply. The `status` reply is the verdict's citation
+  #    (`attached: false`); `scenarios/sensors-off.yaml` is the same session with
+  #    the module off from the start, which is the app-visible half of the proof
+  #    (`sensors: 0`) — a `reset` re-applies the launch `services:`, by design, so
+  #    the empty answer is asserted in a session that never attached the module.
+  #    The detach reply itself is the citation: `attached` holds only `core` and
+  #    the `sensors` row is `state: off`, `fidelity: off`.
+  - service_ctl:
+      module: sensors
+      op: detach

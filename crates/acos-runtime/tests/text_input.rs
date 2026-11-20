@@ -14,11 +14,11 @@
 
 mod common;
 
-use common::{compile_case, new_runtime};
 use acos_dex::DexFile;
 use acos_runtime::text_java::{self, TextError, TextPath};
 use acos_vm::heap::NULL;
 use acos_vm::javabridge::JavaValue;
+use common::{compile_case, new_runtime};
 
 fn static_string(rt: &mut acos_runtime::Runtime, class: &str, name: &str) -> Option<String> {
     let vm = rt.vm_mut();
@@ -38,7 +38,7 @@ fn static_int(rt: &mut acos_runtime::Runtime, class: &str, name: &str) -> Option
 #[test]
 fn commit_text_calls_the_real_input_connection() {
     let Some(dex) = compile_case(&["TextInputMain"]) else {
-        eprintln!("SKIP commit_text_calls_the_real_input_connection: javac/d8/android.jar unavailable");
+        acos_test_support::require_prereq(false, "commit_text_calls_the_real_input_connection", "commit_text_calls_the_real_input_connection: javac/d8/android.jar unavailable");
         return;
     };
     let mut rt = new_runtime().expect("real-corelib runtime");
@@ -65,7 +65,10 @@ fn commit_text_calls_the_real_input_connection() {
     let report = text_java::commit_text_to(rt.vm_mut(), connection, "hello").expect("commitText");
     assert_eq!(report.path, TextPath::InputConnection);
     assert_eq!(report.characters, 5);
-    assert!(report.ack_seqs.is_empty(), "commitText writes no input frames");
+    assert!(
+        report.ack_seqs.is_empty(),
+        "commitText writes no input frames"
+    );
     assert_eq!(
         static_string(&mut rt, "TextInputMain", "committed").as_deref(),
         Some("hello"),

@@ -87,7 +87,10 @@ fn a_full_frame_is_inlined_as_a_bounded_preview() {
     );
     let meta = preview.meta();
     assert_eq!(meta["preview"]["scaled"], serde_json::json!(true));
-    assert_eq!(meta["preview"]["bytes"], serde_json::json!(preview.data.len()));
+    assert_eq!(
+        meta["preview"]["bytes"],
+        serde_json::json!(preview.data.len())
+    );
 }
 
 /// High-entropy pixels (the worst case: a full 4 bytes per pixel) still inline as
@@ -95,7 +98,11 @@ fn a_full_frame_is_inlined_as_a_bounded_preview() {
 #[test]
 fn a_noisy_frame_is_bounded_by_the_byte_cap() {
     let png = big_png(1080, 2400);
-    assert!(png.len() > 1_000_000, "the fixture must be big: {}", png.len());
+    assert!(
+        png.len() > 1_000_000,
+        "the fixture must be big: {}",
+        png.len()
+    );
     let max_bytes = 512 * 1024;
     let preview = preview_of_png(&png, DEFAULT_MAX_SIDE, max_bytes).expect("a bounded preview");
     assert!(preview.scaled);

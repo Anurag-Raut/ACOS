@@ -97,10 +97,7 @@ pub fn validate_path(raw: &str, roots: &[PathBuf]) -> Result<PathBuf, String> {
         return Err("path must not contain NUL".to_string());
     }
     let path = Path::new(raw);
-    if path
-        .components()
-        .any(|c| matches!(c, Component::ParentDir))
-    {
+    if path.components().any(|c| matches!(c, Component::ParentDir)) {
         return Err(format!("path `{raw}` contains a `..` component"));
     }
 
@@ -112,8 +109,8 @@ pub fn validate_path(raw: &str, roots: &[PathBuf]) -> Result<PathBuf, String> {
             .join(path)
     };
 
-    let canonical = canonicalize_lenient(&absolute)
-        .map_err(|e| format!("cannot resolve path `{raw}`: {e}"))?;
+    let canonical =
+        canonicalize_lenient(&absolute).map_err(|e| format!("cannot resolve path `{raw}`: {e}"))?;
 
     if roots.is_empty() {
         return Err("no allowed roots are configured".to_string());
@@ -183,9 +180,7 @@ fn check_arg_limits_at(
     match value {
         serde_json::Value::String(s) => {
             if s.chars().count() > max_chars {
-                return Err(format!(
-                    "a string argument exceeds {max_chars} characters"
-                ));
+                return Err(format!("a string argument exceeds {max_chars} characters"));
             }
             Ok(())
         }
@@ -201,9 +196,7 @@ fn check_arg_limits_at(
         serde_json::Value::Object(map) => {
             for (key, item) in map {
                 if key.chars().count() > max_chars {
-                    return Err(format!(
-                        "an object key exceeds {max_chars} characters"
-                    ));
+                    return Err(format!("an object key exceeds {max_chars} characters"));
                 }
                 check_arg_limits_at(item, max_chars, depth + 1, nodes)?;
             }

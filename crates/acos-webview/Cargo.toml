@@ -1,0 +1,27 @@
+[package]
+name = "acos-webview"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Host side of the ACOS WebView engine (ADR-0031): the pinned chrome-headless-shell installer, its bwrap sandbox, one shared engine per host, one browser context per session and one target per View, and the framed guest wire protocol the provider speaks. No guest code lives here."
+
+[lib]
+name = "acos_webview"
+path = "src/lib.rs"
+
+[[bin]]
+name = "acos-webview"
+path = "src/main.rs"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+sha2 = "0.10"
+hex = "0.4"
+libc = "0.2"
+
+[dev-dependencies]
+acos-test-support = { path = "../acos-test-support" }
+serde_json = { workspace = true }

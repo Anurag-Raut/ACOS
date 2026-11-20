@@ -298,10 +298,14 @@ pub unsafe extern "C" fn alooper_addfd(
         l.id,
         callback.is_some()
     ));
-    l.sources
-        .lock()
-        .unwrap_or_else(|e| e.into_inner())
-        .insert(fd, Source { ident, callback, data });
+    l.sources.lock().unwrap_or_else(|e| e.into_inner()).insert(
+        fd,
+        Source {
+            ident,
+            callback,
+            data,
+        },
+    );
     1
 }
 
@@ -648,7 +652,9 @@ pub unsafe extern "C" fn alooper_acquire(looper: *mut c_void) {
 /// # Safety
 /// `looper` must be a live `ALooper`; the last release frees it.
 pub unsafe extern "C" fn alooper_release(looper: *mut c_void) {
-    let Some(id) = super::handle_id(looper) else { return };
+    let Some(id) = super::handle_id(looper) else {
+        return;
+    };
     let Some(l) = lookup(looper) else { return };
     if l.refs.fetch_sub(1, Ordering::SeqCst) != 1 {
         return;
@@ -725,7 +731,10 @@ mod tests {
             let start = Instant::now();
             let (r, _, _, _) = poll1(l, 2000);
             waker.join().unwrap();
-            assert_eq!(r, ALOOPER_POLL_WAKE, "ALooper_wake must not look like a timeout");
+            assert_eq!(
+                r, ALOOPER_POLL_WAKE,
+                "ALooper_wake must not look like a timeout"
+            );
             assert!(start.elapsed() < Duration::from_millis(1500));
         }
     }
@@ -742,7 +751,10 @@ mod tests {
             let l = alooper_prepare(0);
             let mut fds = [0i32; 2];
             assert_eq!(libc::pipe(fds.as_mut_ptr()), 0);
-            assert_eq!(alooper_addfd(l, fds[0], 0, 1, Some(cb), std::ptr::null_mut()), 1);
+            assert_eq!(
+                alooper_addfd(l, fds[0], 0, 1, Some(cb), std::ptr::null_mut()),
+                1
+            );
             let b = b"x";
             libc::write(fds[1], b.as_ptr() as *const c_void, 1);
             let (r, fd, events, _) = poll1(l, 1000);
@@ -767,7 +779,11 @@ mod tests {
         // SAFETY: the callback outlives the poll below.
         unsafe {
             assert!(!alooper_prepare(0).is_null());
-            assert!(post_frame_callback(16_666_667, frame_cb, std::ptr::null_mut()));
+            assert!(post_frame_callback(
+                16_666_667,
+                frame_cb,
+                std::ptr::null_mut()
+            ));
             let looper = alooper_forthread();
             let (r, _, _, _) = poll1(looper, 0);
             assert_eq!(r, ALOOPER_POLL_CALLBACK);

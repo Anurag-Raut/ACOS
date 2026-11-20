@@ -1,0 +1,25 @@
+=== gate acos-art 2026-11-20T06:11:28Z ===
+gate acos-art rc=101 | SKIP COUNT: 0 (SKIP SUMMARY lines: 0; log: /home/Qui/.t3/worktrees/acos/t3-f4bcc4d4-5c49b0ef4f83b639/results/release/v0.4.0-gate/relgate4/02-hygiene/gate-acos-art.log)
+=== gate acos-cli 2026-11-20T06:12:38Z ===
+gate acos-cli rc=0 | SKIP COUNT: 0 (SKIP SUMMARY lines: 0; log: /home/Qui/.t3/worktrees/acos/t3-f4bcc4d4-5c49b0ef4f83b639/results/release/v0.4.0-gate/relgate4/02-hygiene/gate-acos-cli.log)
+=== gate acos-dex 2026-11-20T06:13:38Z ===
+gate acos-dex rc=0 | SKIP COUNT: 0 (SKIP SUMMARY lines: 0; log: /home/Qui/.t3/worktrees/acos/t3-f4bcc4d4-5c49b0ef4f83b639/results/release/v0.4.0-gate/relgate4/02-hygiene/gate-acos-dex.log)
+=== gate acos-framework-natives 2026-11-20T06:13:46Z ===
+gate acos-framework-natives rc=0 | SKIP COUNT: 0 (SKIP SUMMARY lines: 0; log: /home/Qui/.t3/worktrees/acos/t3-f4bcc4d4-5c49b0ef4f83b639/results/release/v0.4.0-gate/relgate4/02-hygiene/gate-acos-framework-natives.log)
+=== gate acos-jni 2026-11-20T06:13:51Z ===
+gate acos-jni rc=0 | SKIP COUNT: 0 (SKIP SUMMARY lines: 0; log: /home/Qui/.t3/worktrees/acos/t3-f4bcc4d4-5c49b0ef4f83b639/results/release/v0.4.0-gate/relgate4/02-hygiene/gate-acos-jni.log)
+=== gate acos-mcp 2026-11-20T06:14:03Z ===
+gate acos-mcp rc=0 | SKIP COUNT: 0 (SKIP SUMMARY lines: 0; log: /home/Qui/.t3/worktrees/acos/t3-f4bcc4d4-5c49b0ef4f83b639/results/release/v0.4.0-gate/relgate4/02-hygiene/gate-acos-mcp.log)
+=== gate acos-protocol 2026-11-20T06:14:22Z ===
+gate acos-protocol rc=0 | SKIP COUNT: 0 (SKIP SUMMARY lines: 0; log: /home/Qui/.t3/worktrees/acos/t3-f4bcc4d4-5c49b0ef4f83b639/results/release/v0.4.0-gate/relgate4/02-hygiene/gate-acos-protocol.log)
+=== gate acos-render 2026-11-20T06:14:40Z ===
+gate acos-render rc=0 | SKIP COUNT: 0 (SKIP SUMMARY lines: 0; log: /home/Qui/.t3/worktrees/acos/t3-f4bcc4d4-5c49b0ef4f83b639/results/release/v0.4.0-gate/relgate4/02-hygiene/gate-acos-render.log)
+=== gate acos-runtime 2026-11-20T06:14:51Z ===
+gate acos-runtime rc=0 | SKIP COUNT: 0 (SKIP SUMMARY lines: 0; log: /home/Qui/.t3/worktrees/acos/t3-f4bcc4d4-5c49b0ef4f83b639/results/release/v0.4.0-gate/relgate4/02-hygiene/gate-acos-runtime.log)
+=== gate acos-services 2026-11-20T06:15:30Z ===
+gate acos-services rc=0 | SKIP COUNT: 0 (SKIP SUMMARY lines: 0; log: /home/Qui/.t3/worktrees/acos/t3-f4bcc4d4-5c49b0ef4f83b639/results/release/v0.4.0-gate/relgate4/02-hygiene/gate-acos-services.log)
+=== gate acos-vm 2026-11-20T06:15:41Z ===
+gate acos-vm rc=0 | SKIP COUNT: 0 (SKIP SUMMARY lines: 0; log: /home/Qui/.t3/worktrees/acos/t3-f4bcc4d4-5c49b0ef4f83b639/results/release/v0.4.0-gate/relgate4/02-hygiene/gate-acos-vm.log)
+=== gate acos-webview 2026-11-20T06:16:20Z ===
+gate acos-webview rc=0 | SKIP COUNT: 0 (SKIP SUMMARY lines: 0; log: /home/Qui/.t3/worktrees/acos/t3-f4bcc4d4-5c49b0ef4f83b639/results/release/v0.4.0-gate/relgate4/02-hygiene/gate-acos-webview.log)
+/dev/nvme0n1p6  945G  736G  162G  83% /

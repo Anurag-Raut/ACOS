@@ -10,6 +10,9 @@ description = "ACOS in-process Android system services: Binder dispatch, mini PM
 acos-aidl = { path = "../acos-aidl" }
 acos-apk = { path = "../acos-apk" }
 acos-dex = { path = "../acos-dex" }
+# NET5: the relay's control surface (the `network` module's control ops and
+# `acos_net` share one action table).
+acos-netd-ctl = { path = "../acos-netd-ctl" }
 acos-parcel = { path = "../acos-parcel" }
 acos-protocol = { path = "../acos-protocol" }
 acos-sfgeom = { path = "../acos-sfgeom" }
@@ -21,6 +24,9 @@ thiserror = { workspace = true }
 
 [dev-dependencies]
 proptest = "1"
+# HYG2: the one rule for a missing test prerequisite (fail loudly, counted skip
+# only under ACOS_ALLOW_ART_SKIP=1).
+acos-test-support = { path = "../acos-test-support" }
 
 [[example]]
 name = "scan-parcelables"

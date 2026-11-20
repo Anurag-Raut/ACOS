@@ -122,7 +122,12 @@ impl Region {
         self.set_path_in(path, area, path.fill_type())
     }
 
-    fn set_path_in(&mut self, path: &Path, bb: Rect, fill_type: FillType) -> Result<(), RenderError> {
+    fn set_path_in(
+        &mut self,
+        path: &Path,
+        bb: Rect,
+        fill_type: FillType,
+    ) -> Result<(), RenderError> {
         if bb.is_empty() {
             self.set_rects(vec![]);
             return Ok(());
@@ -151,7 +156,12 @@ impl Region {
                 -(bb.top as f32),
             ))
             .unwrap_or(skpath);
-        mask.fill_path(&local, fill_type.fill_rule(), false, tiny_skia::Transform::identity());
+        mask.fill_path(
+            &local,
+            fill_type.fill_rule(),
+            false,
+            tiny_skia::Transform::identity(),
+        );
         if fill_type.is_inverse() {
             mask.invert();
         }
@@ -168,7 +178,9 @@ impl Region {
     pub fn quick_reject(&self, r: Rect) -> bool {
         match self.bounds {
             None => true,
-            Some(b) => r.right <= b.left || r.left >= b.right || r.bottom <= b.top || r.top >= b.bottom,
+            Some(b) => {
+                r.right <= b.left || r.left >= b.right || r.bottom <= b.top || r.top >= b.bottom
+            }
         }
     }
 

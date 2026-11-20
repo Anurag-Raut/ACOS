@@ -1,0 +1,1937 @@
+//! One View = one DevTools target in the session's browser context.
+//!
+//! Everything the guest provider needs from a page lives here: viewport and
+//! device metrics, navigation + the callbacks derived from DevTools events,
+//! JavaScript both ways, deterministic frames, input, request-interception
+//! pauses and the accessibility tree exported in **display coordinates**.
+
+use std::collections::HashMap;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::{Arc, Condvar, Mutex};
+use std::time::{Duration, Instant};
+
+use serde_json::{json, Value};
+
+use crate::ax::{self, AxNode};
+use crate::broker::Browser;
+use crate::error::{Error, Result};
+use crate::cdp::{CdpError, PendingReply};
+use crate::fair::{Attempt, AttemptCtx, FramePriority};
+use crate::wire::{code, FMT_PNG};
+
+/// The page's size in device pixels and the Android density it maps to.
+#[derive(Debug, Clone, Copy, PartialEq, serde::Serialize)]
+pub struct Viewport {
+    pub width: u32,
+    pub height: u32,
+    pub density: f64,
+}
+
+impl Viewport {
+    pub fn new(width: u32, height: u32, density: f64) -> Result<Self> {
+        if width == 0 || height == 0 || width > 20_000 || height > 20_000 {
+            return Err(Error::proto(
+                code::INVALID_VIEWPORT,
+                format!("viewport {width}x{height} is out of range"),
+            ));
+        }
+        if !(density.is_finite() && density > 0.0 && density <= 16.0) {
+            return Err(Error::proto(
+                code::INVALID_VIEWPORT,
+                format!("density {density} is out of range"),
+            ));
+        }
+        Ok(Self {
+            width,
+            height,
+            density,
+        })
+    }
+}
+
+/// The two `WebSettings` viewport switches the wire (`view.settings`,
+/// WIRE.md §4.2) can carry, and what each one means in the engine.
+///
+/// Android's contract (WV8 decision, recorded in `DECISIONS.md`):
+///
+/// * `useWideViewPort = false` (the **default**, exactly what Chromium's
+///   `WebView` does) — the layout viewport is the View's width in CSS px
+///   (`device px / density`) and `<meta name="viewport">` is ignored.
+/// * `useWideViewPort = true` — the page's `<meta viewport>` is honoured and,
+///   without one, Chromium's Android default layout viewport of 980 CSS px is
+///   used (`Emulation.setDeviceMetricsOverride` with `mobile: true`).
+/// * `loadWithOverviewMode = true` — after the page lays out, the page is
+///   scaled down so its whole width fits the View
+///   (`Emulation.setPageScaleFactor(cssWidth / layoutWidth)`), which is what
+///   `WebView.setLoadWithOverviewMode` does; the layout width does not change.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct ViewportOptions {
+    /// `WebSettings.setUseWideViewPort`.
+    pub wide: bool,
+    /// `WebSettings.setLoadWithOverviewMode`.
+    pub overview: bool,
+}
+
+/// The newest frame the engine handed over, kept so a `render` for an
+/// unchanged page answers with the surface's own pixels instead of asking the
+/// compositor for a frame it will not produce.
+///
+/// Why not a device-resolution capture: this pinned `chrome-headless-shell`
+/// cannot produce one under `--enable-begin-frame-control`.
+/// `HeadlessExperimental.beginFrame`'s own `screenshot` captures at the **CSS**
+/// size and ignores `deviceScaleFactor` (measured: a 900x560 device-pixel View
+/// came back 343x213 = /density); `Page.captureScreenshot` never answers (every
+/// variant times out); and `Page.startScreencast` also carries CSS pixels. The
+/// guest therefore scales the frame into the View (letterbox, `FILTER_BITMAP`),
+/// and the wire reports the frame's real pixel size (WIRE.md §4.2).
+#[derive(Default)]
+pub struct Frames {
+    last: Mutex<Option<(Vec<u8>, u32, u32)>>,
+}
+
+impl Frames {
+    fn store(&self, png: Vec<u8>, width: u32, height: u32) {
+        *self.last.lock().expect("frames") = Some((png, width, height));
+    }
+
+    fn latest(&self) -> Option<(Vec<u8>, u32, u32)> {
+        self.last.lock().expect("frames").clone()
+    }
+}
+
+/// How long one input event is given for its ack before the broker produces the
+/// frame the engine acknowledges input on ([`View::wait_input_ack`]).
+const ACK_WAIT: Duration = Duration::from_millis(150);
+
+/// How many follow-up frames an input event may cost. Measured: one is the
+/// number the engine needs (the ack rides the frame **after** the event's own);
+/// two leaves room for the `Another frame is pending` a preempted attempt leaves
+/// behind, and still bounds an unacknowledged event at a few hundred ms instead
+/// of the 2 s it used to cost.
+const ACK_FRAMES: usize = 2;
+
+/// An ack that took longer than this is worth a line in the broker's log even
+/// when it arrived (the normal case is 1-2 ms).
+const ACK_SLOW: Duration = Duration::from_millis(250);
+
+/// What the engine confirmed for the input events a call dispatched.
+///
+/// `events` is what was sent and `acked` how many the engine acknowledged; the
+/// guest's reply carries both (`delivered` = the events were dispatched and a
+/// compositor frame produced for them, `acked` = the engine confirmed them).
+///
+/// `frame_ms` and `ack_ms` split the time the guest spent inside its touch
+/// dispatch: the compositor frames the gesture needed, and the wait for the
+/// engine's acknowledgement. They are what a slow `input.touch` is diagnosed
+/// from (`slow input` in the broker's log), instead of guessing.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct InputAcks {
+    pub events: u32,
+    pub acked: u32,
+    pub frame_ms: u64,
+    pub ack_ms: u64,
+}
+
+impl InputAcks {
+    #[must_use]
+    pub fn all_acked(self) -> bool {
+        self.acked == self.events
+    }
+
+    /// The whole time the call spent inside the engine, in milliseconds.
+    #[must_use]
+    pub fn total_ms(self) -> u64 {
+        self.frame_ms + self.ack_ms
+    }
+}
+
+/// How one `beginFrame` reply wait ended ([`View::await_reply`]).
+enum Reply {
+    /// A queued input frame needs the engine: the attempt is abandoned (the reply
+    /// is kept as [`View::pending_frame`] and drained by the next attempt).
+    Preempted,
+    /// The attempt's budget is gone, the engine has not answered yet.
+    Late,
+    /// The request failed (the engine said no, or the pipe is gone).
+    Failed(String),
+}
+
+/// Navigation bookkeeping shared with the pump thread. `load_url` waits on it,
+/// the pump advances it; there is exactly one event consumer per view.
+#[derive(Default)]
+pub struct NavState {
+    inner: Mutex<NavInner>,
+    cv: Condvar,
+}
+
+#[derive(Default)]
+struct NavInner {
+    started: u64,
+    finished: u64,
+    last_url: String,
+    last_title: String,
+    can_go_back: bool,
+    can_go_forward: bool,
+    failure: Option<(String, String)>,
+    load_error: Option<(String, String)>,
+}
+
+impl NavState {
+    fn bump_started(&self, url: &str) {
+        let mut g = self.inner.lock().expect("nav");
+        g.started += 1;
+        g.last_url = url.to_string();
+        g.failure = None;
+        self.cv.notify_all();
+    }
+
+    fn bump_finished(&self, url: &str, title: &str, back: bool, forward: bool) {
+        let mut g = self.inner.lock().expect("nav");
+        g.finished += 1;
+        g.last_url = url.to_string();
+        g.last_title = title.to_string();
+        g.can_go_back = back;
+        g.can_go_forward = forward;
+        self.cv.notify_all();
+    }
+
+    fn fail(&self, code: &str, message: &str) {
+        let mut g = self.inner.lock().expect("nav");
+        g.failure = Some((code.to_string(), message.to_string()));
+        self.cv.notify_all();
+    }
+
+    /// Wait until a load that started after `after_started` finishes (or fails).
+    fn wait_load(&self, after_started: u64, timeout: Duration) -> Result<(String, String)> {
+        let deadline = Instant::now() + timeout;
+        let mut g = self.inner.lock().expect("nav");
+        loop {
+            if let Some((code, message)) = &g.failure {
+                return Err(Error::proto(
+                    code::NAVIGATION_FAILED,
+                    format!("{code}: {message}"),
+                ));
+            }
+            if g.finished > after_started {
+                return Ok((g.last_url.clone(), g.last_title.clone()));
+            }
+            let left = deadline.saturating_duration_since(Instant::now());
+            if left.is_zero() {
+                return Err(Error::proto(
+                    code::TIMEOUT,
+                    format!("navigation to a page that started at {after_started} never finished"),
+                ));
+            }
+            let (next, _) = self.cv.wait_timeout(g, left).expect("nav wait");
+            g = next;
+        }
+    }
+
+    pub fn snapshot(&self) -> Value {
+        let g = self.inner.lock().expect("nav");
+        json!({
+            "url": g.last_url,
+            "title": g.last_title,
+            "canGoBack": g.can_go_back,
+            "canGoForward": g.can_go_forward,
+            "started": g.started,
+            "finished": g.finished,
+            "error": g.load_error.as_ref().map(|(c, m)| json!({"code": c, "message": m})),
+        })
+    }
+}
+
+/// One derived event, produced by [`View::pump_once`] and sent to the guest by
+/// the connection that owns the view.
+#[derive(Debug, Clone, PartialEq)]
+pub enum ViewEvent {
+    NavigationStarted {
+        url: String,
+        is_new: bool,
+        is_redirect: bool,
+    },
+    NavigationRequested {
+        url: String,
+        is_redirect: bool,
+    },
+    NavigationCommitted {
+        url: String,
+    },
+    NavigationFinished {
+        url: String,
+        title: String,
+        can_go_back: bool,
+        can_go_forward: bool,
+    },
+    NavigationFailed {
+        url: String,
+        code: String,
+        message: String,
+    },
+    RenderInvalidated {
+        reason: String,
+    },
+    RequestPaused {
+        request_id: String,
+        url: String,
+        method: String,
+        resource_type: String,
+        headers: Value,
+        is_asset: bool,
+    },
+    BindingCalled {
+        name: String,
+        payload: String,
+    },
+}
+
+/// A rendered frame (`render`).
+#[derive(Debug, Clone)]
+pub struct FrameData {
+    pub seq: u64,
+    pub width: u32,
+    pub height: u32,
+    pub density: f64,
+    pub format: u8,
+    /// Byte length of the encoded frame (`png`: the PNG's size).
+    pub stride: u32,
+    pub bytes: Vec<u8>,
+    /// Device-pixel damage rectangle; the whole viewport when Chromium reports
+    /// damage without a rect (`beginFrame` reports a boolean, not a region).
+    pub damage: (u32, u32, u32, u32),
+    pub has_damage: bool,
+    pub engine_ms: f64,
+}
+
+/// Process-wide view ids (the fair gate's key, see [`View::uid`]).
+static NEXT_UID: AtomicU64 = AtomicU64::new(1);
+
+/// The JavaScript bridge shim: one binding, one pending table, one installer.
+const JSI_SHIM: &str = r#"
+(() => {
+  if (window.__acos_jsi_installed) return 'already';
+  window.__acos_jsi_installed = true;
+  window.__acos_jsi_pending = new Map();
+  window.__acos_jsi_seq = 0;
+  window.__acos_jsi_resolve = (callId, resultJson, error) => {
+    const p = window.__acos_jsi_pending.get(String(callId));
+    if (!p) return false;
+    window.__acos_jsi_pending.delete(String(callId));
+    if (error) { p.reject(new Error(String(error))); }
+    else { try { p.resolve(JSON.parse(resultJson)); } catch (e) { p.resolve(resultJson); } }
+    return true;
+  };
+  window.__acos_jsi_install = (name, methods) => {
+    const iface = {};
+    for (const m of methods) {
+      iface[m] = (...args) => new Promise((resolve, reject) => {
+        const callId = String(++window.__acos_jsi_seq);
+        window.__acos_jsi_pending.set(callId, { resolve, reject });
+        window.__acos_jsi(JSON.stringify({ name, method: m, args, callId }));
+      });
+    }
+    window[name] = iface;
+    return methods.length;
+  };
+  return 'installed';
+})()
+"#;
+
+/// One target = one WebView instance.
+pub struct View {
+    /// The guest's id for this view (`render {view}`); unique per session only.
+    pub id: i64,
+    /// A process-wide id, unique across sessions: the fair frame gate's key.
+    /// Two sessions may both call their first view `0`, and a gate keyed by the
+    /// guest id would coalesce *their* frames into one pull.
+    pub uid: u64,
+    pub browser: Arc<Browser>,
+    pub context_id: String,
+    pub target_id: String,
+    pub cdp_session: String,
+    pub events: Arc<crate::cdp::EventQueue>,
+    pub viewport: Mutex<Viewport>,
+    /// The `WebSettings` viewport switches (`useWideViewPort`,
+    /// `loadWithOverviewMode`); both default to Android's `false`.
+    pub viewport_options: Mutex<ViewportOptions>,
+    pub nav: Arc<NavState>,
+    pub seq: AtomicU64,
+    pub bindings: Mutex<Vec<String>>,
+    /// Registered JS interfaces, re-installed on every navigation: the page
+    /// shim lives in the document, and a new document (a `view.loadUrl` after
+    /// `addJavascriptInterface`) drops it. Android's interfaces survive
+    /// navigation; this keeps that contract (measured: the page's button ran
+    /// its JS but `window.acosBridge.report(...)` was gone after the load).
+    pub interfaces: Mutex<HashMap<String, Vec<String>>>,
+    pub main_frame: Mutex<Option<String>>,
+    /// The newest painted frame (see [`Frames`]).
+    pub frames: Frames,
+    /// A `beginFrame` this view issued whose reply nobody waits on any more (the
+    /// fair gate abandoned the attempt at its budget, or an input frame took the
+    /// engine). DevTools has no cancel: the engine still finishes that frame, and
+    /// a **second** `beginFrame` for the same page while this one is outstanding
+    /// is what makes the pinned engine's compositor receive an overlapping
+    /// `IssueExternalBeginFrame` — measured as a GPU-process crash
+    /// (`exit_code=133`), a browser death, and therefore an engine restart that
+    /// empties every session's view map (`results/handoff/WVTAIL/evidence/`). The
+    /// next attempt therefore drains it first and keeps its pixels.
+    pending_frame: Mutex<Option<PendingReply>>,
+    pub closed: AtomicBool,
+    pub created: Instant,
+}
+
+impl View {
+    /// Create the target in `context_id`, attach a flattened CDP session and
+    /// enable the domains the broker uses.
+    pub fn create(
+        browser: Arc<Browser>,
+        context_id: &str,
+        id: i64,
+        viewport: Viewport,
+        url: &str,
+    ) -> Result<Arc<Self>> {
+        let cdp = &browser.cdp;
+        let target = cdp.call(
+            "Target.createTarget",
+            json!({"url": url, "browserContextId": context_id}),
+            None,
+            browser.call_timeout,
+        )?;
+        let target_id = target["targetId"]
+            .as_str()
+            .ok_or_else(|| Error::proto(code::INTERNAL, "Target.createTarget: no targetId"))?
+            .to_string();
+        let attached = cdp.call(
+            "Target.attachToTarget",
+            json!({"targetId": target_id, "flatten": true}),
+            None,
+            browser.call_timeout,
+        )?;
+        let session = attached["sessionId"]
+            .as_str()
+            .ok_or_else(|| Error::proto(code::INTERNAL, "attachToTarget: no sessionId"))?
+            .to_string();
+        let events = cdp.queue(&session);
+        let view = Arc::new(Self {
+            id,
+            uid: NEXT_UID.fetch_add(1, Ordering::SeqCst),
+            browser: Arc::clone(&browser),
+            context_id: context_id.to_string(),
+            target_id,
+            cdp_session: session,
+            events,
+            viewport: Mutex::new(viewport),
+            viewport_options: Mutex::new(ViewportOptions::default()),
+            nav: Arc::new(NavState::default()),
+            seq: AtomicU64::new(0),
+            bindings: Mutex::new(Vec::new()),
+            interfaces: Mutex::new(HashMap::new()),
+            main_frame: Mutex::new(None),
+            frames: Frames::default(),
+            pending_frame: Mutex::new(None),
+            closed: AtomicBool::new(false),
+            created: Instant::now(),
+        });
+        for (method, params) in [
+            ("Page.enable", json!({})),
+            ("Runtime.enable", json!({})),
+            ("DOM.enable", json!({})),
+            ("Accessibility.enable", json!({})),
+            ("Log.enable", json!({})),
+        ] {
+            // A page that refuses a domain (a crashed target) is a real error,
+            // not something to paper over.
+            view.call(method, params, browser.call_timeout)?;
+        }
+        // Pause asset/content schemes only: `file:///android_asset` and
+        // `content://` are served by the guest over the wire (WIRE.md §4.3).
+        // `http(s)` interception is opt-in per view (`set_intercept_all`).
+        view.call(
+            "Fetch.enable",
+            json!({"patterns": [
+                {"urlPattern": "file:///*", "requestStage": "Request"},
+                {"urlPattern": "content://*", "requestStage": "Request"}
+            ]}),
+            browser.call_timeout,
+        )?;
+        view.set_viewport(viewport)?;
+        Ok(view)
+    }
+
+    /// One CDP call in this view's session.
+    pub fn call(&self, method: &str, params: Value, timeout: Duration) -> Result<Value> {
+        Ok(self
+            .browser
+            .cdp
+            .call(method, params, Some(&self.cdp_session), timeout)?)
+    }
+
+    fn send(&self, method: &str, params: Value) -> Result<crate::cdp::PendingReply> {
+        Ok(self
+            .browser
+            .cdp
+            .send(method, params, Some(&self.cdp_session))?)
+    }
+
+    pub fn viewport(&self) -> Viewport {
+        *self.viewport.lock().expect("viewport")
+    }
+
+    /// The `WebSettings` viewport switches in force.
+    pub fn viewport_options(&self) -> ViewportOptions {
+        *self.viewport_options.lock().expect("viewport options")
+    }
+
+    /// Opt in to pausing every request (`shouldInterceptRequest` fidelity).
+    pub fn set_intercept_all(&self, enabled: bool) -> Result<()> {
+        let patterns = if enabled {
+            json!([{"urlPattern": "*", "requestStage": "Request"}])
+        } else {
+            json!([
+                {"urlPattern": "file:///*", "requestStage": "Request"},
+                {"urlPattern": "content://*", "requestStage": "Request"}
+            ])
+        };
+        self.call(
+            "Fetch.enable",
+            json!({"patterns": patterns}),
+            self.browser.call_timeout,
+        )?;
+        Ok(())
+    }
+
+    pub fn set_viewport(&self, vp: Viewport) -> Result<()> {
+        *self.viewport.lock().expect("viewport") = vp;
+        // WIRE.md §4: the wire carries **device** pixels; DevTools
+        // `setDeviceMetricsOverride` takes CSS pixels and applies
+        // `deviceScaleFactor`. Passing device pixels straight through made the
+        // page 2.625x too large: a full-width heading's AX box was 2530 device
+        // px in a 900 px View (measured), so page text landed outside the View
+        // and a tap by its bounds missed. Divide here, once.
+        let css_width = (vp.width as f64 / vp.density).round().max(1.0) as u32;
+        let css_height = (vp.height as f64 / vp.density).round().max(1.0) as u32;
+        self.call(
+            "Emulation.setDeviceMetricsOverride",
+            json!({
+                "width": css_width,
+                "height": css_height,
+                "deviceScaleFactor": vp.density,
+                // `mobile: true` selects Chromium's wide (980 CSS px) mobile
+                // layout viewport when a page has no `<meta viewport>`, and
+                // honours a `<meta viewport>` that is present. That is exactly
+                // `WebSettings.setUseWideViewPort(true)` (measured: with the
+                // default `false`, a full-width heading's AX box was 2530 device
+                // px in a 900 px View because `mobile: true` was on
+                // unconditionally). The default arm keeps `mobile: false`, i.e.
+                // CSS px = device px / density and `<meta viewport>` ignored.
+                "mobile": self.viewport_options().wide,
+                "screenWidth": css_width,
+                "screenHeight": css_height,
+            }),
+            self.browser.call_timeout,
+        )?;
+        self.call(
+            "Emulation.setTouchEmulationEnabled",
+            json!({"enabled": true, "maxTouchPoints": 5}),
+            self.browser.call_timeout,
+        )?;
+        // Subscribe the target to the compositor's frame stream. The frames
+        // themselves are not used (they are CSS-sized like every other capture
+        // — see [`Frames`]); the subscription is what makes Chromium *produce*
+        // a frame for this target while another View is the browser's visible
+        // one (measured: without it only one of two Views ever painted).
+        let _ = self.call("Page.stopScreencast", json!({}), self.browser.call_timeout);
+        self.call(
+            "Page.startScreencast",
+            json!({
+                "format": "png",
+                "maxWidth": vp.width,
+                "maxHeight": vp.height,
+                "everyNthFrame": 1,
+            }),
+            self.browser.call_timeout,
+        )?;
+        // `loadWithOverviewMode` is a *visual* scale on top of the layout, and it
+        // depends on the layout width the call above just set.
+        self.apply_overview_scale()?;
+        Ok(())
+    }
+
+    /// `WebSettings.setLoadWithOverviewMode`: zoom the page out so its whole
+    /// width fits the View, or back to 100 % when the switch is off.
+    ///
+    /// The engine's own numbers decide the scale (`Page.getLayoutMetrics`'
+    /// `contentSize.width` in CSS px, which is the layout viewport width), never
+    /// the requested View width: with `useWideViewPort` the two differ by design
+    /// (411 vs 980 CSS px for a page without `<meta viewport>`).
+    pub fn apply_overview_scale(&self) -> Result<f64> {
+        let vp = self.viewport();
+        let css_width = (vp.width as f64 / vp.density).round().max(1.0);
+        let scale = if self.viewport_options().overview {
+            let m = self.call(
+                "Page.getLayoutMetrics",
+                json!({}),
+                self.browser.call_timeout,
+            )?;
+            let layout = m["contentSize"]["width"]
+                .as_f64()
+                .filter(|w| w.is_finite() && *w > 0.0)
+                .unwrap_or(css_width);
+            if layout > css_width {
+                css_width / layout
+            } else {
+                1.0
+            }
+        } else {
+            1.0
+        };
+        self.call(
+            "Emulation.setPageScaleFactor",
+            json!({"pageScaleFactor": scale}),
+            self.browser.call_timeout,
+        )?;
+        Ok(scale)
+    }
+
+    // --- navigation --------------------------------------------------------
+
+    pub fn load_url(&self, url: &str) -> Result<Value> {
+        // A page scale left over from the previous document would be the *initial*
+        // scale of the next one, and with `mobile: true` Chromium then lays the new
+        // document out at `viewport / scale` instead of at the page's own layout
+        // width (measured: the wide arm's 980 CSS px page came out at 343 with a
+        // 0.35 overview scale still in force). Reset to 100 % before the
+        // navigation; `apply_overview_scale` re-fits the new document afterwards.
+        if self.viewport_options().overview {
+            self.call(
+                "Emulation.setPageScaleFactor",
+                json!({"pageScaleFactor": 1.0}),
+                self.browser.call_timeout,
+            )?;
+        }
+        let started_before = self.nav.inner.lock().expect("nav").started;
+        let res = self.call(
+            "Page.navigate",
+            json!({"url": url}),
+            self.browser.nav_timeout,
+        )?;
+        if let Some(err) = res.get("errorText").and_then(Value::as_str) {
+            self.nav.fail("NAVIGATION_FAILED", err);
+            return Err(Error::proto(
+                code::NAVIGATION_FAILED,
+                format!("{url}: {err}"),
+            ));
+        }
+        let t0 = Instant::now();
+        let (final_url, title) = self
+            .nav
+            .wait_load(started_before, self.browser.nav_timeout)?;
+        // A new document lays out at its own width, so `loadWithOverviewMode`
+        // re-fits it (Chromium's own `WebView` does the same on `onPageFinished`).
+        if self.viewport_options().overview {
+            self.apply_overview_scale()?;
+        }
+        Ok(json!({
+            "url": final_url,
+            "title": title,
+            "loadMs": round1(t0.elapsed().as_secs_f64() * 1000.0),
+        }))
+    }
+
+    pub fn load_data(
+        &self,
+        data: &str,
+        mime: &str,
+        encoding: &str,
+        base_url: Option<&str>,
+    ) -> Result<Value> {
+        let url = match encoding {
+            "base64" => format!("data:{mime};base64,{data}"),
+            "utf8" | "utf-8" => {
+                let b64 = base64_encode(data.as_bytes());
+                format!("data:{mime};base64,{b64}")
+            }
+            other => {
+                return Err(Error::proto(
+                    code::BAD_REQUEST,
+                    format!("encoding {other:?} (use utf8 or base64)"),
+                ))
+            }
+        };
+        let _ = base_url; // data URLs have no base; kept for wire compatibility
+        self.load_url(&url)
+    }
+
+    pub fn reload(&self) -> Result<()> {
+        self.call("Page.reload", json!({}), self.browser.call_timeout)?;
+        Ok(())
+    }
+
+    pub fn stop(&self) -> Result<()> {
+        self.call("Page.stopLoading", json!({}), self.browser.call_timeout)?;
+        Ok(())
+    }
+
+    pub fn set_user_agent(&self, ua: &str) -> Result<()> {
+        self.call(
+            "Emulation.setUserAgentOverride",
+            json!({"userAgent": ua}),
+            self.browser.call_timeout,
+        )?;
+        Ok(())
+    }
+
+    // --- v1.1: visibility, settings, engine scroll -------------------------
+
+    /// `view.setVisibility`: a hidden View stops the renderer. DevTools has no
+    /// visibility message; `Page.setWebLifecycleState` is the closest real
+    /// engine action (the page is frozen while hidden, active again when shown,
+    /// and `document.visibilityState` reports hidden). The broker never claims
+    /// more than that.
+    pub fn set_visibility(&self, visible: bool, window_visible: bool) -> Result<()> {
+        let show = visible && window_visible;
+        self.call(
+            "Page.setWebLifecycleState",
+            json!({"state": if show { "active" } else { "frozen" }}),
+            self.browser.call_timeout,
+        )?;
+        Ok(())
+    }
+
+    /// `view.settings`: apply the fields the pinned engine can honour and name
+    /// every field it cannot. A field is never silently dropped.
+    pub fn apply_settings(&self, settings: &Value) -> Result<(Vec<String>, Vec<String>)> {
+        let Some(map) = settings.as_object() else {
+            return Err(Error::proto(
+                code::BAD_REQUEST,
+                "settings must be an object",
+            ));
+        };
+        let needs_network = map.contains_key("cacheMode")
+            || map.contains_key("loadsImagesAutomatically")
+            || map.contains_key("blockNetworkImage");
+        if needs_network {
+            // `Network.setCacheDisabled` / `setBlockedURLs` need the domain;
+            // enabling is idempotent.
+            self.call("Network.enable", json!({}), self.browser.call_timeout)?;
+        }
+        let vp = self.viewport();
+        let mut applied: Vec<String> = Vec::new();
+        let mut rejected: Vec<String> = Vec::new();
+        for (key, value) in map {
+            match key.as_str() {
+                "javascriptEnabled" => {
+                    let enabled = value.as_bool().ok_or_else(|| {
+                        Error::proto(code::BAD_REQUEST, "javascriptEnabled must be a boolean")
+                    })?;
+                    self.call(
+                        "Emulation.setScriptExecutionDisabled",
+                        json!({"value": !enabled}),
+                        self.browser.call_timeout,
+                    )?;
+                    applied.push(key.clone());
+                }
+                "userAgent" => {
+                    let ua = value.as_str().ok_or_else(|| {
+                        Error::proto(code::BAD_REQUEST, "userAgent must be a string")
+                    })?;
+                    self.set_user_agent(ua)?;
+                    applied.push(key.clone());
+                }
+                "cacheMode" => {
+                    // Android: LOAD_DEFAULT=-1, LOAD_CACHE_ELSE_NETWORK=1,
+                    // LOAD_NO_CACHE=2, LOAD_CACHE_ONLY=3. Only the
+                    // "no cache" case maps to a DevTools switch; the others
+                    // have no honest equivalent and are refused.
+                    let mode = value.as_i64().unwrap_or(-1);
+                    if mode == 2 {
+                        applied.push(key.clone());
+                    } else {
+                        rejected.push(key.clone());
+                    }
+                }
+                // WV8 viewport decisions (see [`ViewportOptions`]).
+                "useWideViewPort" => {
+                    let on = value.as_bool().ok_or_else(|| {
+                        Error::proto(code::BAD_REQUEST, "useWideViewPort must be a boolean")
+                    })?;
+                    self.viewport_options.lock().expect("viewport options").wide = on;
+                    // Re-send the device metrics: `mobile` is what makes the
+                    // engine honour `<meta viewport>` (and the 980 px default).
+                    self.set_viewport(vp)?;
+                    applied.push(key.clone());
+                }
+                "loadWithOverviewMode" => {
+                    let on = value.as_bool().ok_or_else(|| {
+                        Error::proto(code::BAD_REQUEST, "loadWithOverviewMode must be a boolean")
+                    })?;
+                    self.viewport_options
+                        .lock()
+                        .expect("viewport options")
+                        .overview = on;
+                    let scale = self.apply_overview_scale()?;
+                    let _ = scale;
+                    applied.push(key.clone());
+                }
+                "loadsImagesAutomatically" | "blockNetworkImage" => {
+                    let on = value.as_bool().ok_or_else(|| {
+                        Error::proto(code::BAD_REQUEST, "blockNetworkImage must be a boolean")
+                    })?;
+                    // Both map to blocking image URLs. `loadsImagesAutomatically:
+                    // false` is "do not load images"; `blockNetworkImage: true`
+                    // is the same engine action.
+                    let block = if key == "loadsImagesAutomatically" {
+                        !on
+                    } else {
+                        on
+                    };
+                    let patterns = if block {
+                        json!(["*.png", "*.jpg", "*.jpeg", "*.gif", "*.webp", "*.svg", "*.avif"])
+                    } else {
+                        json!([])
+                    };
+                    self.call(
+                        "Network.setBlockedURLs",
+                        json!({"urls": patterns}),
+                        self.browser.call_timeout,
+                    )?;
+                    applied.push(key.clone());
+                }
+                _ => rejected.push(key.clone()),
+            }
+        }
+        if map
+            .get("cacheMode")
+            .and_then(Value::as_i64)
+            .map(|mode| mode == 2)
+            .unwrap_or(false)
+        {
+            self.call(
+                "Network.setCacheDisabled",
+                json!({"cacheDisabled": true}),
+                self.browser.call_timeout,
+            )?;
+        }
+        Ok((applied, rejected))
+    }
+
+    /// `view.scrollTo`: move the page, in device pixels, and answer with the
+    /// engine's own content/scroll metrics so the guest never invents one.
+    pub fn scroll_to(&self, x: f64, y: f64) -> Result<Value> {
+        let d = self.viewport().density;
+        let _ = self.evaluate(
+            &format!("window.scrollTo({}, {})", x / d, y / d),
+            self.browser.call_timeout,
+            false,
+        )?;
+        self.layout_metrics()
+    }
+
+    /// Content size and scroll offset from the engine, in display pixels.
+    pub fn layout_metrics(&self) -> Result<Value> {
+        let m = self.call(
+            "Page.getLayoutMetrics",
+            json!({}),
+            self.browser.call_timeout,
+        )?;
+        let d = self.viewport().density;
+        let content = &m["contentSize"];
+        let vv = &m["visualViewport"];
+        let f = |v: &Value, key: &str| v[key].as_f64().unwrap_or(0.0);
+        Ok(json!({
+            "contentWidth": round1(f(content, "width") * d),
+            "contentHeight": round1(f(content, "height") * d),
+            "scrollX": round1(f(vv, "pageX") * d),
+            "scrollY": round1(f(vv, "pageY") * d),
+        }))
+    }
+
+    /// `view.focusChanged` (v1.1): whether the page has a focused editable
+    /// field, so the guest can answer `onCheckIsTextEditor` and open a real IME
+    /// connection. The report is the page's own `document.activeElement`.
+    pub fn focus_report(&self) -> Result<Value> {
+        let script = r#"(() => {
+            const a = document.activeElement;
+            if (!a || a === document.body || a === document.documentElement) {
+                return {focused: false, editable: false, type: '', tag: ''};
+            }
+            const tag = (a.tagName || '').toLowerCase();
+            const type = (a.getAttribute && a.getAttribute('type')) || '';
+            const nonText = ['button','submit','reset','checkbox','radio','range','file','color','image','hidden'];
+            const editable = !!(a.isContentEditable || tag === 'textarea'
+                || (tag === 'input' && nonText.indexOf(type.toLowerCase()) < 0));
+            return {focused: true, editable: editable, type: type, tag: tag};
+        })()"#;
+        let res = self.call(
+            "Runtime.evaluate",
+            json!({"expression": script, "returnByValue": true}),
+            self.browser.call_timeout,
+        )?;
+        Ok(res["result"]["value"].clone())
+    }
+
+    pub fn history(&self, action: &str) -> Result<Value> {
+        let delta = match action {
+            "back" => -1i64,
+            "forward" => 1,
+            "clear" => {
+                return Err(Error::proto(
+                    code::UNSUPPORTED,
+                    "history.clear is not reachable through DevTools; the provider must \
+                     replace the target (destroy + create) to clear history",
+                ))
+            }
+            other => {
+                return Err(Error::proto(
+                    code::BAD_REQUEST,
+                    format!("history action {other:?} (back|forward)"),
+                ))
+            }
+        };
+        let hist = self.call(
+            "Page.getNavigationHistory",
+            json!({}),
+            self.browser.call_timeout,
+        )?;
+        let current = hist["currentIndex"].as_i64().unwrap_or(0);
+        let target = current + delta;
+        let entries = hist["entries"].as_array().cloned().unwrap_or_default();
+        if target < 0 || target as usize >= entries.len() {
+            return Err(Error::proto(
+                code::NAVIGATION_FAILED,
+                "no history entry in that direction",
+            ));
+        }
+        let entry_id = entries[target as usize]["id"].as_i64().unwrap_or(target);
+        self.call(
+            "Page.navigateToHistoryEntry",
+            json!({"entryId": entry_id}),
+            self.browser.call_timeout,
+        )?;
+        Ok(self.nav.snapshot())
+    }
+
+    // --- javascript -------------------------------------------------------
+
+    pub fn evaluate(&self, script: &str, timeout: Duration, user_gesture: bool) -> Result<Value> {
+        let res = self.call(
+            "Runtime.evaluate",
+            json!({
+                "expression": script,
+                "returnByValue": true,
+                "awaitPromise": true,
+                "userGesture": user_gesture,
+                "timeout": timeout.as_millis() as u64,
+            }),
+            timeout + Duration::from_secs(1),
+        )?;
+        if let Some(exc) = res.get("exceptionDetails") {
+            let text = exc["exception"]["description"]
+                .as_str()
+                .or_else(|| exc["text"].as_str())
+                .unwrap_or("javascript exception");
+            return Err(Error::proto(code::JS_EXCEPTION, truncate(text, 2000)));
+        }
+        let result = &res["result"];
+        let value_json = match result.get("value") {
+            Some(v) => {
+                serde_json::to_string(v).map_err(|e| Error::proto(code::INTERNAL, e.to_string()))?
+            }
+            None => "null".to_string(),
+        };
+        Ok(json!({
+            "valueJson": value_json,
+            "type": result.get("type").and_then(Value::as_str).unwrap_or("undefined"),
+        }))
+    }
+
+    /// Register a JS interface: binding + shim. The shim exposes only the
+    /// methods the guest listed, so an unlisted method is a page `TypeError`
+    /// (the `@JavascriptInterface` rule, enforced here rather than in the page).
+    pub fn add_javascript_interface(&self, name: &str, methods: &[String]) -> Result<()> {
+        if name.is_empty() || !name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
+            return Err(Error::proto(
+                code::BAD_REQUEST,
+                format!("interface name {name:?} must be [A-Za-z0-9_]+"),
+            ));
+        }
+        self.interfaces
+            .lock()
+            .expect("interfaces")
+            .insert(name.to_string(), methods.to_vec());
+        self.install_javascript_interface(name, methods)
+    }
+
+    /// Install (or re-install after a navigation) one interface's binding+shim.
+    fn install_javascript_interface(&self, name: &str, methods: &[String]) -> Result<()> {
+        let needs_binding = !self
+            .bindings
+            .lock()
+            .expect("bindings")
+            .iter()
+            .any(|b| b == "__acos_jsi");
+        if needs_binding {
+            self.call(
+                "Runtime.addBinding",
+                json!({"name": "__acos_jsi"}),
+                self.browser.call_timeout,
+            )?;
+            let mut bindings = self.bindings.lock().expect("bindings");
+            if !bindings.iter().any(|b| b == "__acos_jsi") {
+                bindings.push("__acos_jsi".to_string());
+            }
+        }
+        // The shim helper itself is document state too; re-evaluate it before
+        // installing the interface on a new document.
+        self.evaluate(JSI_SHIM, self.browser.call_timeout, false)?;
+        let methods_json = serde_json::to_string(methods)
+            .map_err(|e| Error::proto(code::INTERNAL, e.to_string()))?;
+        let script = format!(
+            "window.__acos_jsi_install({}, {})",
+            serde_json::to_string(name).map_err(|e| Error::proto(code::INTERNAL, e.to_string()))?,
+            methods_json
+        );
+        self.evaluate(&script, self.browser.call_timeout, false)?;
+        let mut bindings = self.bindings.lock().expect("bindings");
+        if !bindings.iter().any(|b| b == name) {
+            bindings.push(name.to_string());
+        }
+        Ok(())
+    }
+
+    /// A document loaded: every registered interface must exist in it again.
+    fn reinstall_javascript_interfaces(&self) {
+        let interfaces = self.interfaces.lock().expect("interfaces").clone();
+        for (name, methods) in interfaces {
+            if let Err(e) = self.install_javascript_interface(&name, &methods) {
+                eprintln!("wv-jsi: reinstall {name} failed: {e}");
+            }
+        }
+    }
+
+    pub fn remove_javascript_interface(&self, name: &str) -> Result<()> {
+        let script = format!(
+            "delete window[{}]",
+            serde_json::to_string(name).map_err(|e| Error::proto(code::INTERNAL, e.to_string()))?
+        );
+        let _ = self.evaluate(&script, self.browser.call_timeout, false);
+        self.bindings
+            .lock()
+            .expect("bindings")
+            .retain(|b| b != name);
+        self.interfaces.lock().expect("interfaces").remove(name);
+        Ok(())
+    }
+
+    /// Resolve (or reject) a page-side pending call created by the shim.
+    pub fn resolve_js_call(
+        &self,
+        call_id: &str,
+        result_json: Option<&str>,
+        error: Option<&str>,
+    ) -> Result<()> {
+        let cid = serde_json::to_string(call_id)
+            .map_err(|e| Error::proto(code::INTERNAL, e.to_string()))?;
+        let script = match (result_json, error) {
+            (_, Some(err)) => format!(
+                "window.__acos_jsi_resolve({cid}, null, {})",
+                serde_json::to_string(err)
+                    .map_err(|e| Error::proto(code::INTERNAL, e.to_string()))?
+            ),
+            (Some(r), None) => {
+                let parsed: Value = serde_json::from_str(r).unwrap_or(Value::String(r.to_string()));
+                format!(
+                    "window.__acos_jsi_resolve({cid}, {}, null)",
+                    serde_json::to_string(
+                        &serde_json::to_string(&parsed).unwrap_or_else(|_| "null".into())
+                    )
+                    .map_err(|e| Error::proto(code::INTERNAL, e.to_string()))?
+                )
+            }
+            (None, None) => format!("window.__acos_jsi_resolve({cid}, 'null', null)"),
+        };
+        self.evaluate(&script, self.browser.call_timeout, false)?;
+        Ok(())
+    }
+
+    // --- frames ------------------------------------------------------------
+
+    /// Deterministic frame: `HeadlessExperimental.beginFrame` renders exactly one
+    /// compositor frame. PNG only (`WIRE.md` §4.2).
+    ///
+    /// Frame production is **serialised per engine** (`beginFrame` is a
+    /// browser-global command: two targets asking at once crashed the pinned
+    /// engine), and the serialisation is a *fair* queue with one attempted
+    /// frame in flight per view — see [`crate::fair`]. A guest `render` is a
+    /// pull-priority pull; the frames the input path needs use
+    /// [`Self::render_input`].
+    pub fn render(&self, format: &str, timeout: Duration) -> Result<Arc<FrameData>> {
+        self.render_with(format, timeout, FramePriority::Pull)
+    }
+
+    /// A frame the input path needs (tap/touch/key/setFocus): granted ahead of
+    /// guest pull frames, still behind at most the attempt already running.
+    pub fn render_input(&self, timeout: Duration) -> Result<Arc<FrameData>> {
+        self.render_with("png", timeout, FramePriority::Input)
+    }
+
+    pub fn render_with(
+        &self,
+        format: &str,
+        timeout: Duration,
+        priority: FramePriority,
+    ) -> Result<Arc<FrameData>> {
+        if format != "png" {
+            return Err(Error::proto(
+                code::UNSUPPORTED,
+                format!(
+                    "frame format {format:?}: v1 emits png (the guest decodes it into the View)"
+                ),
+            ));
+        }
+        self.browser
+            .frames
+            .pull(self.uid, priority, timeout, |ctx| self.begin_frame(ctx))
+    }
+
+    /// Exactly one `beginFrame` attempt (the gate bounds it and serialises it).
+    ///
+    /// The reply is awaited **in slices** ([`AttemptCtx::wait_slice`]) so a
+    /// queued input frame takes the engine without waiting for this attempt's
+    /// whole budget: when [`AttemptCtx::preempted`] turns true the attempt is
+    /// abandoned with [`Attempt::Yield`], the frame it would have produced is
+    /// finished by the engine anyway and its reply is dropped, and the pull
+    /// re-enters the fair queue behind the gesture.
+    ///
+    /// `beginFrame` can answer "not attached to an active page" while a
+    /// navigation is committing, `Another frame is pending` while an abandoned
+    /// attempt is still finishing in the engine, and it omits `screenshotData`
+    /// when the compositor produced no new frame. All three are transient: the
+    /// gate re-queues a bounded number of retries (behind every other waiting
+    /// view) rather than hand the guest the previous frame as if it were this
+    /// one, or block it for the whole call timeout.
+    fn begin_frame(&self, ctx: AttemptCtx<'_>) -> Attempt {
+        let t0 = Instant::now();
+        // One `beginFrame` per view at a time, always: the request a previous
+        // attempt left behind is drained (and its pixels kept) before a new one
+        // is issued, because two outstanding frames for one page make the
+        // engine's compositor fail. See [`View::pending_frame`].
+        if let Some(outstanding) = self.pending_frame.lock().expect("pending frame").take() {
+            match self.await_reply(&outstanding, &ctx, t0) {
+                Ok(res) => {
+                    // A guest pull may keep the pixels of the frame an abandoned
+                    // attempt produced — they are real, and newer than the
+                    // surface's last one. A gesture may not: the frame has to be
+                    // the one produced *after* its event was dispatched, or the
+                    // engine routes nothing and the click is lost.
+                    if ctx.prio != FramePriority::Input {
+                        let frame = self.frame_from_begin_frame(&res, t0, ctx.final_attempt);
+                        if let Attempt::Frame(_) = frame {
+                            return frame;
+                        }
+                    }
+                }
+                Err(Reply::Preempted) => {
+                    *self.pending_frame.lock().expect("pending frame") = Some(outstanding);
+                    return Attempt::Yield(format!(
+                        "view {}: frame abandoned after {}ms for a queued input frame",
+                        self.uid,
+                        t0.elapsed().as_millis()
+                    ));
+                }
+                Err(Reply::Late) => {
+                    // Still outstanding: keep it, and do **not** issue a second
+                    // one for this page. The pull retries behind the other views
+                    // and picks the frame up when the engine answers.
+                    *self.pending_frame.lock().expect("pending frame") = Some(outstanding);
+                    return Attempt::Retry(format!(
+                        "view {}: the engine is still finishing the frame this view abandoned",
+                        self.uid
+                    ));
+                }
+                Err(Reply::Failed(message)) => {
+                    return self.engine_error(message, t0, ctx.final_attempt);
+                }
+            }
+        }
+        // `beginFrame` renders exactly one compositor frame and captures it.
+        // Its screenshot is CSS-sized (the engine has no device-resolution
+        // capture path — see [`Frames`]), so the frame's real size is reported.
+        let reply = match self.send(
+            "HeadlessExperimental.beginFrame",
+            json!({"screenshot": {"format": "png", "optimizeForSpeed": true}}),
+        ) {
+            Ok(reply) => reply,
+            Err(e) => {
+                return self.engine_error(e.to_string(), t0, ctx.final_attempt);
+            }
+        };
+        match self.await_reply(&reply, &ctx, t0) {
+            Ok(res) => self.frame_from_begin_frame(&res, t0, ctx.final_attempt),
+            Err(Reply::Preempted) => {
+                // The engine keeps finishing this frame; keep the request so the
+                // next attempt for this view can drain it instead of overlaying
+                // a second `beginFrame` on it.
+                *self.pending_frame.lock().expect("pending frame") = Some(reply);
+                Attempt::Yield(format!(
+                    "view {}: frame abandoned after {}ms for a queued input frame",
+                    self.uid,
+                    t0.elapsed().as_millis()
+                ))
+            }
+            Err(Reply::Late) => {
+                *self.pending_frame.lock().expect("pending frame") = Some(reply);
+                self.last_frame_or_retry(
+                    format!(
+                        "view {}: beginFrame did not answer within {:?}",
+                        self.uid, ctx.timeout
+                    ),
+                    t0.elapsed().as_secs_f64() * 1000.0,
+                )
+            }
+            Err(Reply::Failed(message)) => self.engine_error(message, t0, ctx.final_attempt),
+        }
+    }
+
+    /// One `beginFrame` result, turned into an attempt outcome.
+    fn frame_from_begin_frame(&self, res: &Value, t0: Instant, final_attempt: bool) -> Attempt {
+        let engine_ms = t0.elapsed().as_secs_f64() * 1000.0;
+        let has_damage = res["hasDamage"].as_bool().unwrap_or(true);
+        if let Some(png) = res["screenshotData"].as_str().and_then(base64_decode) {
+            return Attempt::Frame(Arc::new(self.store_frame(png, has_damage, engine_ms)));
+        }
+        let message = format!("beginFrame returned no screenshotData (hasDamage={has_damage})");
+        if has_damage && !final_attempt {
+            return Attempt::Retry(message);
+        }
+        self.last_frame_or_retry(message, engine_ms)
+    }
+
+    /// Await one `beginFrame` reply in slices, so a queued input frame takes the
+    /// engine ([`AttemptCtx::preempted`]) and so the attempt's budget is honoured
+    /// (DevTools has no cancel: giving up means the reply arrives later, which is
+    /// why it is handed back to [`View::pending_frame`] and drained, never
+    /// overlapped).
+    fn await_reply(
+        &self,
+        reply: &PendingReply,
+        ctx: &AttemptCtx<'_>,
+        _t0: Instant,
+    ) -> std::result::Result<Value, Reply> {
+        let mut left = ctx.timeout;
+        loop {
+            let slice = ctx.wait_slice(left);
+            match reply.wait_shared(slice) {
+                Ok(res) => return Ok(res),
+                Err(CdpError::Timeout(..)) => {
+                    left = left.saturating_sub(slice);
+                    if ctx.preempted() {
+                        return Err(Reply::Preempted);
+                    }
+                    if left.is_zero() {
+                        return Err(Reply::Late);
+                    }
+                }
+                Err(e) => return Err(Reply::Failed(e.to_string())),
+            }
+        }
+    }
+
+    /// Classify a failed `beginFrame` attempt.
+    ///
+    /// A *transient* engine answer is retried (the gate re-queues behind the
+    /// other views) so the pull gets a frame the engine really produced for it:
+    /// `Not attached to an active page` (a navigation is committing) and
+    /// `Another frame is pending` (an abandoned attempt — this view's, or one an
+    /// input frame preempted — is still finishing inside the engine). On the
+    /// pull's last attempt, or for a permanent error, the surface's last frame is
+    /// the honest answer before the first paint nothing exists and the pull
+    /// fails with the engine's own words.
+    fn engine_error(&self, message: String, t0: Instant, final_attempt: bool) -> Attempt {
+        let engine_ms = t0.elapsed().as_secs_f64() * 1000.0;
+        if !final_attempt && Self::is_transient_engine_error(&message) {
+            return Attempt::Retry(message);
+        }
+        self.last_frame_or_retry(message, engine_ms)
+    }
+
+    fn is_transient_engine_error(message: &str) -> bool {
+        message.contains("Not attached to an active page") || message.contains("Another frame is pending")
+    }
+
+    /// No new frame this attempt: the surface still holds the last one, which
+    /// is real pixels and therefore honest to return. Before the first paint
+    /// there is nothing to return and the pull retries.
+    fn last_frame_or_retry(&self, message: String, engine_ms: f64) -> Attempt {
+        match self.frames.latest() {
+            Some((png, w, h)) => {
+                let _ = (w, h);
+                Attempt::Frame(Arc::new(self.frame_data(png, false, engine_ms)))
+            }
+            None => Attempt::Retry(if message.is_empty() {
+                "no compositor frame yet (the page has not painted once)".to_string()
+            } else {
+                message
+            }),
+        }
+    }
+
+    fn store_frame(&self, png: Vec<u8>, has_damage: bool, engine_ms: f64) -> FrameData {
+        let (w, h) = png_dimensions(&png).unwrap_or((0, 0));
+        self.frames.store(png.clone(), w, h);
+        self.frame_data(png, has_damage, engine_ms)
+    }
+
+    fn frame_data(&self, bytes: Vec<u8>, has_damage: bool, engine_ms: f64) -> FrameData {
+        let (png_w, png_h) = png_dimensions(&bytes).unwrap_or((0, 0));
+        let vp = self.viewport();
+        let seq = self.seq.fetch_add(1, Ordering::SeqCst) + 1;
+        FrameData {
+            seq,
+            // The frame's real pixel size: the engine rounds the scaled size
+            // down (900x559 for a 900x560 View), so the wire never claims more
+            // pixels than the PNG has.
+            width: png_w.min(vp.width).max(1),
+            height: png_h.min(vp.height).max(1),
+            density: vp.density,
+            format: FMT_PNG,
+            stride: bytes.len() as u32,
+            damage: if has_damage {
+                (0, 0, vp.width, vp.height)
+            } else {
+                (0, 0, 0, 0)
+            },
+            has_damage,
+            engine_ms,
+            bytes,
+        }
+    }
+
+    // --- accessibility -----------------------------------------------------
+
+    pub fn ax(&self, max_nodes: Option<usize>, include_ignored: bool) -> Result<Value> {
+        ax::export(self, max_nodes, include_ignored)
+    }
+
+    // --- input ------------------------------------------------------------
+
+    /// Display pixels (what the wire uses, and what the AX export reports) to
+    /// the CSS pixels DevTools input expects. Getting this wrong taps a point
+    /// `density` times too far right and down — measured in the first gate run.
+    fn to_css(&self, x: f64, y: f64) -> (f64, f64) {
+        let d = self.viewport().density;
+        (x / d, y / d)
+    }
+
+    fn touch_event(&self, kind: &str, points: Value) -> Result<crate::cdp::PendingReply> {
+        self.send(
+            "Input.dispatchTouchEvent",
+            json!({"type": kind, "touchPoints": points}),
+        )
+    }
+
+    /// Down → frame → up → frame, then the engine's acks.
+    ///
+    /// Under `--enable-begin-frame-control` DevTools only routes touch into the
+    /// page when a compositor frame is produced, and the ack for an event is
+    /// delivered **on the frame that follows** the event's own frame
+    /// ([`Self::wait_input_ack`]). A tap's `up` frame is exactly that frame for
+    /// the `down`, so the acks are collected at the end, as before; what changed
+    /// in WVTAIL is that a missing ack now costs one follow-up frame instead of
+    /// the whole 2 s wait.
+    pub fn tap(&self, x: f64, y: f64, hold: Duration) -> Result<InputAcks> {
+        let (cx, cy) = self.to_css(x, y);
+        let down = self.touch_event(
+            "touchStart",
+            json!([{"x": cx, "y": cy, "radiusX": 4, "radiusY": 4, "force": 1, "id": 1}]),
+        )?;
+        let t0 = Instant::now();
+        let first = self.render_input(self.browser.frame_timeout)?;
+        std::thread::sleep(hold);
+        let up = self.touch_event("touchEnd", json!([]))?;
+        let _second = self.render_input(self.browser.frame_timeout)?;
+        let _ = first;
+        let frame_ms = t0.elapsed().as_millis() as u64;
+        let ack_started = Instant::now();
+        let down_acked = self.wait_input_ack(&down, "tap touchStart");
+        let up_acked = self.wait_input_ack(&up, "tap touchEnd");
+        Ok(InputAcks {
+            events: 2,
+            acked: u32::from(down_acked) + u32::from(up_acked),
+            frame_ms,
+            ack_ms: ack_started.elapsed().as_millis() as u64,
+        })
+    }
+
+    /// Wait for one dispatched input event's engine ack — producing the
+    /// compositor frame the engine acknowledges input on when it did not arrive
+    /// with the event's own frame.
+    ///
+    /// Measured in `results/handoff/WVTAIL/`: under `--enable-begin-frame-control`
+    /// the renderer routes a dispatched touch event *in* a compositor frame and
+    /// acks it at the end of the frame that **follows** that one. The old code
+    /// waited a flat 2 s for the ack of every event; with a second, expensive
+    /// WebView on the engine the follow-up frame was the guest's own next draw —
+    /// and the guest cannot draw it while it sits inside the touch dispatch, so
+    /// every `input.touch` that did not get its ack inline blocked for 2000 ms:
+    /// a tap measured 2004-2604 ms end to end (`evidence/base/`, `evidence/ops3/`).
+    /// The broker therefore produces that following frame itself (input
+    /// priority, so it is granted ahead of every guest pull) and asks again.
+    ///
+    /// `false` is information, not a failure: the event's own frame is what
+    /// routes a gesture in this engine, so a missing ack is reported to the guest
+    /// (`acked`) and logged instead of being turned into a lost tap.
+    fn wait_input_ack(&self, reply: &PendingReply, what: &str) -> bool {
+        let t0 = Instant::now();
+        let acked = self.wait_input_ack_inner(reply, what);
+        if !acked || t0.elapsed() >= ACK_SLOW {
+            eprintln!(
+                "acos-webview: input {what} on view {} {} after {}ms",
+                self.uid,
+                if acked { "acked" } else { "NOT acked" },
+                t0.elapsed().as_millis()
+            );
+        }
+        acked
+    }
+
+    fn wait_input_ack_inner(&self, reply: &PendingReply, what: &str) -> bool {
+        for attempt in 0..=ACK_FRAMES {
+            match reply.wait_shared(ACK_WAIT) {
+                Ok(_) => return true,
+                Err(CdpError::Timeout(..)) => {}
+                Err(e) => {
+                    eprintln!(
+                        "acos-webview: {what} on view {}: the ack failed: {e}",
+                        self.uid
+                    );
+                    return false;
+                }
+            }
+            if attempt < ACK_FRAMES {
+                // The frame that follows the event's own frame carries the ack.
+                let _ = self.render_input(self.browser.frame_timeout);
+            }
+        }
+        false
+    }
+
+    pub fn touch(&self, action: &str, mut points: Value) -> Result<InputAcks> {
+        let kind = match action {
+            "down" => "touchStart",
+            "move" => "touchMove",
+            "up" => "touchEnd",
+            "cancel" => "touchCancel",
+            other => {
+                return Err(Error::proto(
+                    code::BAD_REQUEST,
+                    format!("touch action {other:?} (down|move|up|cancel)"),
+                ))
+            }
+        };
+        if kind == "touchEnd" || kind == "touchCancel" {
+            points = json!([]);
+        } else if let Some(list) = points.as_array_mut() {
+            let d = self.viewport().density;
+            for p in list.iter_mut() {
+                for key in ["x", "y", "radiusX", "radiusY"] {
+                    if let Some(v) = p.get(key).and_then(Value::as_f64) {
+                        p[key] = json!(v / d);
+                    }
+                }
+            }
+        }
+        let reply = self.touch_event(kind, points)?;
+        // The event's own frame is what routes the touch into the page.
+        let frame_started = Instant::now();
+        let _ = self.render_input(self.browser.frame_timeout)?;
+        let frame_ms = frame_started.elapsed().as_millis() as u64;
+        let ack_started = Instant::now();
+        let acked = self.wait_input_ack(&reply, &format!("touch {kind}"));
+        Ok(InputAcks {
+            events: 1,
+            acked: u32::from(acked),
+            frame_ms,
+            ack_ms: ack_started.elapsed().as_millis() as u64,
+        })
+    }
+
+    pub fn scroll(&self, x: f64, y: f64, dx: f64, dy: f64) -> Result<()> {
+        // Wheel deltas are CSS pixels too; the wire passes display pixels.
+        let d = self.viewport().density;
+        self.call(
+            "Input.dispatchMouseEvent",
+            json!({"type": "mouseWheel", "x": x / d, "y": y / d, "deltaX": dx / d, "deltaY": dy / d}),
+            self.browser.call_timeout,
+        )?;
+        Ok(())
+    }
+
+    pub fn key(
+        &self,
+        action: &str,
+        key: &str,
+        code_name: &str,
+        modifiers: &[String],
+    ) -> Result<()> {
+        let mut mask = 0i64;
+        for m in modifiers {
+            mask |= match m.as_str() {
+                "alt" => 1,
+                "ctrl" | "control" => 2,
+                "meta" | "cmd" => 4,
+                "shift" => 8,
+                other => {
+                    return Err(Error::proto(
+                        code::BAD_REQUEST,
+                        format!("modifier {other:?} (alt|ctrl|meta|shift)"),
+                    ))
+                }
+            };
+        }
+        let (vk, text) = key_info(key);
+        let mut ev = json!({
+            "key": key,
+            "code": code_name,
+            "windowsVirtualKeyCode": vk,
+            "nativeVirtualKeyCode": vk,
+            "modifiers": mask,
+        });
+        match action {
+            "down" | "press" => {
+                if let Some(t) = text {
+                    ev["text"] = json!(t);
+                    ev["unmodifiedText"] = json!(t);
+                    ev["type"] = json!("keyDown");
+                } else {
+                    ev["type"] = json!("rawKeyDown");
+                }
+                self.call(
+                    "Input.dispatchKeyEvent",
+                    ev.clone(),
+                    self.browser.call_timeout,
+                )?;
+                if action == "press" {
+                    ev["type"] = json!("keyUp");
+                    ev["text"] = json!("");
+                    self.call("Input.dispatchKeyEvent", ev, self.browser.call_timeout)?;
+                }
+            }
+            "up" => {
+                ev["type"] = json!("keyUp");
+                self.call("Input.dispatchKeyEvent", ev, self.browser.call_timeout)?;
+            }
+            other => {
+                return Err(Error::proto(
+                    code::BAD_REQUEST,
+                    format!("key action {other:?} (down|up|press)"),
+                ))
+            }
+        }
+        Ok(())
+    }
+
+    pub fn insert_text(&self, text: &str) -> Result<()> {
+        self.call(
+            "Input.insertText",
+            json!({"text": text}),
+            self.browser.call_timeout,
+        )?;
+        Ok(())
+    }
+
+    pub fn set_focus(&self, focused: bool) -> Result<()> {
+        if !focused {
+            self.evaluate(
+                "document.activeElement && document.activeElement.blur()",
+                self.browser.call_timeout,
+                false,
+            )?;
+        } else {
+            self.call(
+                "Emulation.setFocusEmulationEnabled",
+                json!({"enabled": true}),
+                self.browser.call_timeout,
+            )?;
+        }
+        Ok(())
+    }
+
+    // --- Fetch interception ------------------------------------------------
+
+    pub fn fulfill(
+        &self,
+        request_id: &str,
+        body: &[u8],
+        status: u16,
+        mime: &str,
+        headers: Value,
+    ) -> Result<()> {
+        let mut hdrs = vec![json!({"name": "content-type", "value": mime})];
+        if let Some(obj) = headers.as_object() {
+            for (k, v) in obj {
+                if let Some(v) = v.as_str() {
+                    hdrs.push(json!({"name": k, "value": v}));
+                }
+            }
+        }
+        self.call(
+            "Fetch.fulfillRequest",
+            json!({
+                "requestId": request_id,
+                "responseCode": status,
+                "responseHeaders": hdrs,
+                "body": base64_encode(body),
+            }),
+            self.browser.call_timeout,
+        )?;
+        Ok(())
+    }
+
+    pub fn continue_request(&self, request_id: &str) -> Result<()> {
+        self.call(
+            "Fetch.continueRequest",
+            json!({"requestId": request_id}),
+            self.browser.call_timeout,
+        )?;
+        Ok(())
+    }
+
+    pub fn fail_request(&self, request_id: &str, reason: &str) -> Result<()> {
+        let reason = if reason.starts_with("Failed") || reason.starts_with("Aborted") {
+            reason.to_string()
+        } else {
+            format!("Failed: {reason}")
+        };
+        self.call(
+            "Fetch.failRequest",
+            json!({"requestId": request_id, "errorReason": reason.replace("net::", "")}),
+            self.browser.call_timeout,
+        )?;
+        Ok(())
+    }
+
+    // --- event pump --------------------------------------------------------
+
+    /// Drain the view's DevTools event queue once (blocking up to `wait`).
+    /// Returns the derived events; navigation state is advanced here because
+    /// this is the only consumer of the queue.
+    pub fn pump_once(&self, wait: Duration) -> Vec<ViewEvent> {
+        let mut out = Vec::new();
+        let first = match self.events.wait_for(|_| true, wait) {
+            Some(ev) => ev,
+            None => return out,
+        };
+        let mut batch = vec![first];
+        // Coalesce everything already queued so a burst of asset pauses does
+        // not cost a thread wake-up each.
+        batch.extend(self.events.drain_matching(|_| true));
+        for ev in batch {
+            if let Some(derived) = self.handle_event(ev) {
+                out.push(derived);
+            }
+        }
+        out
+    }
+
+    fn handle_event(&self, ev: Value) -> Option<ViewEvent> {
+        let method = ev.get("method")?.as_str()?;
+        let p = ev.get("params").cloned().unwrap_or(Value::Null);
+        match method {
+            "__pipe_closed__" => None,
+            "Page.frameRequestedNavigation" => {
+                let url = p["url"].as_str().unwrap_or("").to_string();
+                let is_redirect = p["reason"].as_str() == Some("redirect");
+                self.nav.bump_started(&url);
+                Some(ViewEvent::NavigationRequested {
+                    url: url.clone(),
+                    is_redirect,
+                })
+            }
+            "Page.frameNavigated" => {
+                let frame = &p["frame"];
+                let url = frame["url"].as_str().unwrap_or("").to_string();
+                let parent = frame.get("parentId").and_then(Value::as_str);
+                let mut main = self.main_frame.lock().expect("main frame");
+                if parent.is_none() {
+                    *main = frame["id"].as_str().map(str::to_string);
+                    drop(main);
+                    if url.starts_with("about:") && url != "about:blank" {
+                        return None;
+                    }
+                    return Some(ViewEvent::NavigationCommitted { url });
+                }
+                None
+            }
+            "Page.loadEventFired" => {
+                let (url, title, back, forward) = match self.call(
+                    "Runtime.evaluate",
+                    json!({
+                        "expression": "({u: location.href, t: document.title})",
+                        "returnByValue": true,
+                    }),
+                    self.browser.call_timeout,
+                ) {
+                    Ok(res) => (
+                        res["result"]["value"]["u"]
+                            .as_str()
+                            .unwrap_or("")
+                            .to_string(),
+                        res["result"]["value"]["t"]
+                            .as_str()
+                            .unwrap_or("")
+                            .to_string(),
+                        false,
+                        false,
+                    ),
+                    Err(_) => (String::new(), String::new(), false, false),
+                };
+                self.nav.bump_finished(&url, &title, back, forward);
+                // A new document dropped the JS-interface shim; re-install it
+                // before the guest hears `navigation.finished`.
+                self.reinstall_javascript_interfaces();
+                Some(ViewEvent::NavigationFinished {
+                    url,
+                    title,
+                    can_go_back: back,
+                    can_go_forward: forward,
+                })
+            }
+            "Page.loadingFailed" => {
+                let failed = p["errorText"].as_str().unwrap_or("load failed").to_string();
+                let url = self
+                    .nav
+                    .inner
+                    .lock()
+                    .map(|g| g.last_url.clone())
+                    .unwrap_or_default();
+                self.nav.fail("NAVIGATION_FAILED", &failed);
+                Some(ViewEvent::NavigationFailed {
+                    url,
+                    code: failed,
+                    message: "Page.loadingFailed".to_string(),
+                })
+            }
+            "Page.frameStoppedLoading" => None,
+            "Page.screencastFrame" => {
+                // See `set_viewport`: the stream exists to keep this target
+                // producing frames, and an unacked frame stops it. The payload
+                // is not used (frames come from `render`'s own `beginFrame`).
+                if let Some(sid) = p["sessionId"].as_i64() {
+                    let _ = self.call(
+                        "Page.screencastFrameAck",
+                        json!({"sessionId": sid}),
+                        Duration::from_secs(5),
+                    );
+                }
+                None
+            }
+            "Page.javascriptDialogOpening" => {
+                // A modal dialog would wedge a headless page with no UI to show
+                // it; auto-accept and record it as an invalidated render.
+                let _ = self.call(
+                    "Page.handleJavaScriptDialog",
+                    json!({"accept": true, "promptText": ""}),
+                    Duration::from_secs(5),
+                );
+                Some(ViewEvent::RenderInvalidated {
+                    reason: "load".to_string(),
+                })
+            }
+            "Runtime.bindingCalled" => {
+                let name = p["name"].as_str().unwrap_or("").to_string();
+                let payload = p["payload"].as_str().unwrap_or("").to_string();
+                Some(ViewEvent::BindingCalled { name, payload })
+            }
+            "Fetch.requestPaused" => {
+                let url = p["request"]["url"].as_str().unwrap_or("").to_string();
+                Some(ViewEvent::RequestPaused {
+                    request_id: p["requestId"].as_str().unwrap_or("").to_string(),
+                    is_asset: url.starts_with("file:///android_asset/")
+                        || url.starts_with("content://"),
+                    url,
+                    method: p["request"]["method"].as_str().unwrap_or("GET").to_string(),
+                    resource_type: p["resourceType"].as_str().unwrap_or("Other").to_string(),
+                    headers: p["request"]["headers"].clone(),
+                })
+            }
+            _ => None,
+        }
+    }
+
+    pub fn close(&self) {
+        if self.closed.swap(true, Ordering::SeqCst) {
+            return;
+        }
+        let cdp = &self.browser.cdp;
+        let _ = cdp.call(
+            "Target.closeTarget",
+            json!({"targetId": self.target_id}),
+            None,
+            Duration::from_secs(10),
+        );
+    }
+}
+
+/// DOM key name → (windows virtual key code, printable text).
+fn key_info(key: &str) -> (i64, Option<&'static str>) {
+    match key {
+        "Enter" => (13, Some("\r")),
+        "Tab" => (9, Some("\t")),
+        "Backspace" => (8, None),
+        "Delete" => (46, None),
+        "Escape" => (27, None),
+        " " => (32, Some(" ")),
+        "ArrowLeft" => (37, None),
+        "ArrowUp" => (38, None),
+        "ArrowRight" => (39, None),
+        "ArrowDown" => (40, None),
+        "Home" => (36, None),
+        "End" => (35, None),
+        "PageUp" => (33, None),
+        "PageDown" => (34, None),
+        k if k.chars().count() == 1 => {
+            let c = k.chars().next().unwrap_or(' ');
+            (c.to_ascii_uppercase() as i64, None)
+        }
+        _ => (0, None),
+    }
+}
+
+pub(crate) fn round1(v: f64) -> f64 {
+    (v * 10.0).round() / 10.0
+}
+
+pub(crate) fn truncate(s: &str, max: usize) -> String {
+    if s.chars().count() <= max {
+        return s.to_string();
+    }
+    s.chars().take(max).collect::<String>() + "…"
+}
+
+// --- base64 (no dependency: the wire uses it for asset bodies and frames) ----
+
+const B64: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+pub fn base64_encode(input: &[u8]) -> String {
+    let mut out = String::with_capacity((input.len() + 2) / 3 * 4);
+    for chunk in input.chunks(3) {
+        let b = [
+            chunk[0],
+            *chunk.get(1).unwrap_or(&0),
+            *chunk.get(2).unwrap_or(&0),
+        ];
+        let n = ((b[0] as u32) << 16) | ((b[1] as u32) << 8) | b[2] as u32;
+        out.push(B64[(n >> 18) as usize & 63] as char);
+        out.push(B64[(n >> 12) as usize & 63] as char);
+        out.push(if chunk.len() > 1 {
+            B64[(n >> 6) as usize & 63] as char
+        } else {
+            '='
+        });
+        out.push(if chunk.len() > 2 {
+            B64[n as usize & 63] as char
+        } else {
+            '='
+        });
+    }
+    out
+}
+
+/// The pixel size of a PNG, from its IHDR (bytes 16..24). A capture that is not
+/// a PNG is `None`, never a guess.
+fn png_dimensions(png: &[u8]) -> Option<(u32, u32)> {
+    if png.len() < 24 || &png[..8] != b"\x89PNG\r\n\x1a\n" {
+        return None;
+    }
+    let w = u32::from_be_bytes([png[16], png[17], png[18], png[19]]);
+    let h = u32::from_be_bytes([png[20], png[21], png[22], png[23]]);
+    Some((w, h))
+}
+
+pub(crate) fn base64_decode(input: &str) -> Option<Vec<u8>> {
+    let mut rev = [255u8; 256];
+    for (i, c) in B64.iter().enumerate() {
+        rev[*c as usize] = i as u8;
+    }
+    let bytes: Vec<u8> = input.bytes().filter(|b| !b.is_ascii_whitespace()).collect();
+    if bytes.len() % 4 != 0 {
+        return None;
+    }
+    let mut out = Vec::with_capacity(bytes.len() / 4 * 3);
+    for quad in bytes.chunks(4) {
+        let mut n = 0u32;
+        let mut pad = 0;
+        for (i, b) in quad.iter().enumerate() {
+            let v = if *b == b'=' {
+                pad += 1;
+                0
+            } else {
+                let v = rev[*b as usize];
+                if v == 255 {
+                    return None;
+                }
+                v as u32
+            };
+            n |= v << (18 - 6 * i);
+        }
+        out.push((n >> 16) as u8);
+        if pad < 2 {
+            out.push((n >> 8) as u8);
+        }
+        if pad < 1 {
+            out.push(n as u8);
+        }
+    }
+    Some(out)
+}
+
+/// A synthetic AX-facing helper used by the tests and by `ax::export`.
+pub fn status_of(view: &View) -> Value {
+    json!({
+        "view": view.id,
+        "targetId": view.target_id,
+        "viewport": view.viewport(),
+        "seq": view.seq.load(Ordering::SeqCst),
+        "aliveMs": view.created.elapsed().as_millis() as u64,
+    })
+}
+
+/// Accessibility export type re-exported so callers need one import.
+pub type AxExport = (Vec<AxNode>, bool);
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn viewport_validation_is_structured() {
+        assert!(Viewport::new(1080, 2400, 2.625).is_ok());
+        assert_eq!(
+            Viewport::new(0, 10, 1.0).unwrap_err().code(),
+            code::INVALID_VIEWPORT
+        );
+        assert_eq!(
+            Viewport::new(10, 10, f64::NAN).unwrap_err().code(),
+            code::INVALID_VIEWPORT
+        );
+    }
+
+    #[test]
+    fn base64_round_trips_binary() {
+        for n in 0..64usize {
+            let data: Vec<u8> = (0..n).map(|i| (i * 37 + 11) as u8).collect();
+            let enc = base64_encode(&data);
+            assert_eq!(base64_decode(&enc).as_deref(), Some(&data[..]), "n={n}");
+        }
+        assert!(base64_decode("!!!!").is_none());
+        assert!(base64_decode("abc").is_none());
+    }
+
+    #[test]
+    fn key_info_covers_text_and_named_keys() {
+        assert_eq!(key_info("Enter"), (13, Some("\r")));
+        assert_eq!(key_info("a").0, 'A' as i64);
+        assert_eq!(key_info("F13").1, None);
+    }
+}

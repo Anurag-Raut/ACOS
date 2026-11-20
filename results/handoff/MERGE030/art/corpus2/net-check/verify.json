@@ -1,0 +1,99 @@
+{
+  "backend": "acos-native",
+  "capabilities_used": [
+    "lifecycle",
+    "static-manifest",
+    "ui.tree"
+  ],
+  "error": {
+    "class": "assertion",
+    "code": "ASSERTION_FAILED",
+    "details": {
+      "attempts": 62,
+      "timeout_ms": 60000,
+      "waited_ms": 60054
+    },
+    "hint": "Compare expected vs actual in the assertion diff, inspect the linked frame/tree, then fix the app or the expectation. Rerun the scenario.",
+    "message": "expected text exactly \"HTTP 200\", got text \"java.lang.SecurityException\" / hint \"\"",
+    "retryable": false
+  },
+  "evidence": {
+    "events": "events.jsonl",
+    "log": "logs/logcat.txt",
+    "verdict": "verdict.json"
+  },
+  "fidelity": "art-reference",
+  "isolation": "process",
+  "metrics": {
+    "peak_rss_bytes": 17195008,
+    "wall_ms": 60275
+  },
+  "ok": false,
+  "request_id": "req_6a18c_18e8df4221f2376f",
+  "result": {
+    "artifacts_dir": "out/net-check",
+    "cap_bytes": 20480,
+    "evidence_provenance": {
+      "binder_transactions": "host-observed",
+      "crash_reports": "guest-asserted",
+      "frames": "host-observed",
+      "host_input": "host-observed",
+      "input_acks": "guest-asserted",
+      "launch_markers": "guest-asserted",
+      "lifecycle_markers": "guest-asserted",
+      "logs": "guest-asserted",
+      "static_manifest": "host-observed",
+      "tree": "guest-asserted"
+    },
+    "failed_step": {
+      "failure_index": 3,
+      "index": 3,
+      "kind": "assert_text",
+      "message": "expected text exactly \"HTTP 200\", got text \"java.lang.SecurityException\" / hint \"\"",
+      "status": "fail"
+    },
+    "failure": {
+      "code": "ASSERTION_FAILED",
+      "error": {
+        "class": "assertion",
+        "code": "ASSERTION_FAILED",
+        "details": {
+          "attempts": 62,
+          "timeout_ms": 60000,
+          "waited_ms": 60054
+        },
+        "hint": "Compare expected vs actual in the assertion diff, inspect the linked frame/tree, then fix the app or the expectation. Rerun the scenario.",
+        "message": "expected text exactly \"HTTP 200\", got text \"java.lang.SecurityException\" / hint \"\"",
+        "retryable": false
+      },
+      "step_index": 3,
+      "summary": "step 3 (assert_text) fail"
+    },
+    "note": "this result was larger than the reply cap; only the bulk (tree, steps, logs) was dropped and the full evidence is in the artifacts paths named here",
+    "provenance": {
+      "apk": {
+        "mtime_ns": 1794929183695364065,
+        "path": "/home/Qui/.t3/worktrees/acos/t3-f542bcec-f3354b9a0075e3ab/fixtures/build/apps/net-check.apk",
+        "sha256": "219ff71bc04ba8c416de52f8ca932f9d71775152f606212c2e6b34e7f4d9d47e",
+        "sha256_12": "219ff71bc04b",
+        "size_bytes": 16852
+      },
+      "engine": "art",
+      "fidelity": "art-reference",
+      "scenario": {
+        "mtime_ns": 1794927413484187622,
+        "path": "/home/Qui/.t3/worktrees/acos/t3-f542bcec-f3354b9a0075e3ab/scenarios/net-check.yaml",
+        "sha256": "e9dd8f227916ef442b884aa4bafe51dcb87ea3dea08162d3feb21a428204dada",
+        "sha256_12": "e9dd8f227916",
+        "size_bytes": 2692
+      },
+      "scenario_engine": "art",
+      "warnings": []
+    },
+    "reply_capped": true,
+    "verdict_path": "out/net-check/verdict.json",
+    "verdict_status": "fail"
+  },
+  "session_id": "s_art_net-check",
+  "status": "fail"
+}

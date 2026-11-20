@@ -19,8 +19,8 @@ use acos_services::parcelable::{
     INTENT_ORIGINAL, INTENT_PACKAGE, INTENT_SELECTOR, INTENT_TYPE, MAX_INTENT_CATEGORIES,
     MAX_INTENT_DEPTH,
 };
-use acos_services::{Bundle, Parcelable, Value};
 use acos_services::ServiceError;
+use acos_services::{Bundle, Parcelable, Value};
 
 const COMPONENT: &str = "android.content.ComponentName";
 const RECT: &str = "android.graphics.Rect";
@@ -38,12 +38,7 @@ fn component(package: &str, class: &str) -> Parcelable {
 fn rect(l: i32, t: i32, r: i32, b: i32) -> Parcelable {
     Parcelable::ordered(
         RECT,
-        vec![
-            Value::Int(l),
-            Value::Int(t),
-            Value::Int(r),
-            Value::Int(b),
-        ],
+        vec![Value::Int(l), Value::Int(t), Value::Int(r), Value::Int(b)],
     )
 }
 
@@ -165,15 +160,21 @@ fn the_intent_wire_is_string8_for_its_own_fields_and_string16_for_the_component(
     parcel.set_data_position(0);
     assert_eq!(parcel.read_string8().expect("action"), Some("ab".into()));
     assert_eq!(parcel.read_int32().expect("data"), 0);
-    assert_eq!(
-        parcel.read_string8().expect("type"),
-        Some("text/x".into())
-    );
+    assert_eq!(parcel.read_string8().expect("type"), Some("text/x".into()));
     assert_eq!(parcel.read_string8().expect("identifier"), None);
     assert_eq!(parcel.read_int32().expect("flags"), 0x10);
-    assert_eq!(parcel.read_string8().expect("package"), Some("pkg.n".into()));
-    assert_eq!(parcel.read_string16().expect("component pkg"), Some("p".into()));
-    assert_eq!(parcel.read_string16().expect("component class"), Some("c".into()));
+    assert_eq!(
+        parcel.read_string8().expect("package"),
+        Some("pkg.n".into())
+    );
+    assert_eq!(
+        parcel.read_string16().expect("component pkg"),
+        Some("p".into())
+    );
+    assert_eq!(
+        parcel.read_string16().expect("component class"),
+        Some("c".into())
+    );
     assert_eq!(parcel.read_int32().expect("sourceBounds"), 0);
     assert_eq!(parcel.read_int32().expect("categories"), 0);
     assert_eq!(parcel.read_int32().expect("selector"), 0);
@@ -234,29 +235,43 @@ fn a_null_component_is_one_null_string16_with_no_presence_word() {
 }
 
 #[test]
-fn a_non_null_data_uri_is_refused_structured_not_guessed() {
-    // The image declares only `Uri.writeToParcel(Parcel, Uri)` (static); its body
-    // is not pinned, so a data Uri is `UNSUPPORTED_PARCELABLE(android.net.Uri)`.
+fn a_non_null_data_uri_is_written_as_the_images_string_uri() {
+    // LAUNCHEXTRAS: this image's `Uri.parse` always builds a `StringUri`, whose
+    // `writeToParcel` writes the type tag 1 and `writeString8(uriString)`; the
+    // static `Uri.writeToParcel` writes `writeInt(0)` only for null. Both halves
+    // are pinned from the framework dex (and the byte-level proof is the
+    // real-Java differential in `acos-runtime/tests/client_transaction_java.rs`).
     let mut with_uri = minimal(Some("android.intent.action.VIEW"), None);
     if let Parcelable::Ordered { values, .. } = &mut with_uri {
         values[INTENT_DATA] = Value::Str(Some("content://acos/x".into()));
     }
     let mut parcel = Parcel::new();
-    let err = write_payload(&mut parcel, &with_uri).expect_err("a data Uri must be refused");
-    match err {
-        ServiceError::UnsupportedParcelable { class } => assert_eq!(class, "android.net.Uri"),
-        other => panic!("expected UnsupportedParcelable, got {other:?}"),
-    }
+    write_payload(&mut parcel, &with_uri).expect("a data Uri is written");
+    parcel.set_data_position(0);
+    // mAction (String8), then the Uri type tag and its String8.
+    assert_eq!(parcel.read_string8().expect("action").as_deref(), Some("android.intent.action.VIEW"));
+    assert_eq!(parcel.read_int32().expect("Uri type"), 1, "StringUri");
+    assert_eq!(
+        parcel.read_string8().expect("Uri string").as_deref(),
+        Some("content://acos/x")
+    );
 
-    // Reading one is refused too (the reader would otherwise misalign): build a
-    // payload with the data presence word set and nothing after it.
+    parcel.set_data_position(0);
+    let decoded = read_payload(INTENT_CLASS, &mut parcel).expect("reads");
+    assert_eq!(decoded, with_uri, "the data Uri round-trips");
+
+    // A Uri type this image does not define is a structural error, never a
+    // guessed string read that would misalign every field after it.
     let mut wire = Parcel::new();
     wire.write_string8_opt(Some("android.intent.action.VIEW"))
         .expect("action");
-    wire.write_int32(1); // non-null data
+    wire.write_int32(99); // unknown Uri type
     wire.set_data_position(0);
-    let err = read_payload(INTENT_CLASS, &mut wire).expect_err("a data Uri must be refused");
-    assert!(matches!(err, ServiceError::UnsupportedParcelable { .. }), "{err:?}");
+    let err = read_payload(INTENT_CLASS, &mut wire).expect_err("an unknown Uri type is refused");
+    assert!(
+        matches!(err, ServiceError::BadRequest { .. }),
+        "an unknown Uri type is malformed: {err:?}"
+    );
 }
 
 #[test]

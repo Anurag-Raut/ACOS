@@ -152,7 +152,10 @@ fn insets_state_round_trips_with_reference_sources() {
     assert_eq!(ime.visible_frame, Some(RectI::new(0, 2274, 1080, 2400)));
     // Status/nav insets are the measured 128/63.
     assert_eq!(state.visible_insets_for(inset_type::STATUS_BAR).top, 128);
-    assert_eq!(state.visible_insets_for(inset_type::NAVIGATION_BAR).bottom, 63);
+    assert_eq!(
+        state.visible_insets_for(inset_type::NAVIGATION_BAR).bottom,
+        63
+    );
     roundtrip(empty_insets_state(&dc));
 }
 

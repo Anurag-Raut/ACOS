@@ -27,23 +27,27 @@ fn counter_apk() -> Option<std::path::PathBuf> {
 
 #[test]
 fn path_class_loader_loads_app_class_from_counter_apk_dex() {
-    let Some(apk) = counter_apk() else {
-        eprintln!("SKIP dex_loader: fixtures/build/apps/counter.apk is absent");
+    let Some(apk) = acos_test_support::require_some(counter_apk(), "path_class_loader_loads_app_class_from_counter_apk_dex", "fixtures/build/apps/counter.apk is absent") else {
         return;
     };
-    let Some(java_dex) = compile_case(&["DexLoaderMain"]) else {
-        eprintln!("SKIP dex_loader: javac/d8/android.jar unavailable");
+    let Some(java_dex) = acos_test_support::require_some(compile_case(&["DexLoaderMain"]), "path_class_loader_loads_app_class_from_counter_apk_dex", "javac/d8/android.jar unavailable") else {
         return;
     };
     let Some(mut rt) = new_runtime() else {
         return;
     };
 
-    let manifest = Apk::open(&apk).expect("open counter apk").manifest().expect("manifest");
+    let manifest = Apk::open(&apk)
+        .expect("open counter apk")
+        .manifest()
+        .expect("manifest");
     let mut app = AppInfo::from_manifest(&manifest, &apk, FIXTURE_UID);
     let staged = apk_loader::stage(rt.vm(), &apk, &mut app).expect("stage counter apk");
     assert_eq!(staged.guest_path, app.source_dir);
-    assert_eq!(staged.guest_path, "/data/user/0/dev.acos.fixtures.counter/base.apk");
+    assert_eq!(
+        staged.guest_path,
+        "/data/user/0/dev.acos.fixtures.counter/base.apk"
+    );
 
     // Honesty: the app class must not be resolvable through the VM's providers
     // yet, otherwise the test could pass without the class loader doing work.
@@ -67,7 +71,10 @@ fn path_class_loader_loads_app_class_from_counter_apk_dex() {
     );
     assert_eq!(outcome.exit_code, 0, "stderr:\n{}", outcome.stderr);
     let out = outcome.stdout;
-    assert!(out.contains("loaded=dev.acos.fixtures.counter.MainActivity"), "stdout:\n{out}");
+    assert!(
+        out.contains("loaded=dev.acos.fixtures.counter.MainActivity"),
+        "stdout:\n{out}"
+    );
     assert!(out.contains("probe=4242"), "stdout:\n{out}");
     assert!(
         rt.vm().class_by_desc.contains_key(descriptor),

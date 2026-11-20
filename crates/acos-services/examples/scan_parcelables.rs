@@ -57,7 +57,14 @@ fn dump(dex: &DexFile, def: &ClassDef, desc: &str) {
         let Ok(r) = dex.method_ref(m.method_idx) else {
             continue;
         };
-        if r.name != "writeToParcel" && r.name != "readFromParcel" && !r.name.contains("Squash") && r.name != "isSquashingAllowed" && r.name != "allowSquashing" && r.name != "writeException" && r.name != "readException" {
+        if r.name != "writeToParcel"
+            && r.name != "readFromParcel"
+            && !r.name.contains("Squash")
+            && r.name != "isSquashingAllowed"
+            && r.name != "allowSquashing"
+            && r.name != "writeException"
+            && r.name != "readException"
+        {
             continue;
         }
         if m.code_off == 0 {
@@ -66,7 +73,13 @@ fn dump(dex: &DexFile, def: &ClassDef, desc: &str) {
         let Ok(code) = dex.code_item(m.code_off) else {
             continue;
         };
-        println!("--- {desc}->{}({}){} regs={}", r.name, r.parameters.concat(), r.return_type, code.registers_size);
+        println!(
+            "--- {desc}->{}({}){} regs={}",
+            r.name,
+            r.parameters.concat(),
+            r.return_type,
+            code.registers_size
+        );
         walk(dex, &code);
     }
 }

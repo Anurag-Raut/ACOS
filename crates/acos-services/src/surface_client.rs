@@ -112,7 +112,7 @@ pub mod listener_codes {
 }
 
 /// How many layer-handle binders are pre-allocated at install time.
-pub const LAYER_HANDLE_POOL: usize = 16;
+pub const LAYER_HANDLE_POOL: usize = 128;
 
 // ---------------------------------------------------------------------------
 // Bounds on guest-controlled sizes (S7 sandbox certification)
@@ -759,6 +759,20 @@ impl SurfaceState {
             // Dropping `layer.latest` closes this process's memfd dup.
             self.stats.remove(&handle);
             self.destroyed.insert(handle);
+            // Give the handle binder back. The pool is pre-allocated (a
+            // `createSurface` has no `&mut ServiceHost` to mint a node), so a
+            // destroyed layer that kept its handle leaked one of the
+            // `LAYER_HANDLE_POOL` entries for the life of the session: every
+            // window/popup/dialog consumed two (the window surface and its
+            // BLAST child) and the Nth one failed `createSurface` with
+            // `layer-handle pool exhausted` -> `BLASTBufferQueue: mSurfaceControl
+            // must not be NULL` -> SIGABRT (a React Native dev loop hit it on
+            // the 4th reload: each reload shows and dismisses a loading popup).
+            // Reuse is FIFO (`take_handle` pops the tail, this inserts at the
+            // head) so a handle is the last one handed out again, and the
+            // `destroyed` tombstone above stays until `create_layer` reissues
+            // it, so a late transaction naming the dead layer is still refused.
+            self.handle_pool.insert(0, BinderId(handle));
         }
         self.destroyed_layers += dropped as u64;
         self.released_buffers += released;
@@ -855,7 +869,7 @@ impl SurfaceState {
             current = next;
         }
         (layer.geometry.z, 0.0)
-        }
+    }
 
     /// Build the kernel's geometry input for every layer in the registry.
     ///
@@ -939,16 +953,17 @@ impl SurfaceState {
     /// metadata read under the caller's compositor lock.
     #[must_use]
     pub fn latest_frame_metadata(&self) -> Option<FrameMetadata> {
-        self.newest_frame_layer().map(|(layer, buffer)| FrameMetadata {
-            layer_id: layer.layer_id,
-            layer_name: layer.name.clone(),
-            width: buffer.width,
-            height: buffer.height,
-            frame_number: buffer.frame_number,
-            buffer_id: buffer.buffer_id,
-            producer_id: buffer.producer_id,
-            generation: layer.latest_generation,
-        })
+        self.newest_frame_layer()
+            .map(|(layer, buffer)| FrameMetadata {
+                layer_id: layer.layer_id,
+                layer_name: layer.name.clone(),
+                width: buffer.width,
+                height: buffer.height,
+                frame_number: buffer.frame_number,
+                buffer_id: buffer.buffer_id,
+                producer_id: buffer.producer_id,
+                generation: layer.latest_generation,
+            })
     }
 
     /// The layer whose newest stored buffer is the newest across all layers.
@@ -1049,7 +1064,7 @@ impl SurfaceState {
             // hidden, or an ancestor's invalid transform.
             if snapshot.hidden_by_policy || snapshot.alpha <= 0.0 {
                 continue;
-                }
+            }
             if snapshot.invalid_transform {
                 // No old-path fallback: a singular transform is not drawn and the
                 // reason is a structured trace line (stock resets it and hides
@@ -1101,10 +1116,10 @@ impl SurfaceState {
                 p.row.buffer.expect("placed has a buffer").height,
                 p.row.buffer.expect("placed has a buffer").stride,
             )
-                .ok_or(CompositeError::CanvasTooLarge {
+            .ok_or(CompositeError::CanvasTooLarge {
                 width: i64::from(p.row.buffer.expect("placed has a buffer").width),
                 height: i64::from(p.row.buffer.expect("placed has a buffer").height),
-                })?;
+            })?;
             input_bytes = input_bytes.saturating_add(bytes);
         }
         if min_x == i64::MAX {
@@ -1329,9 +1344,9 @@ impl SurfaceState {
     /// pixels ([`FLAG_SECURE`]).
     #[must_use]
     pub fn has_secure_window(&self) -> bool {
-        self.layers.values().any(|layer| {
-            layer.placement.is_some_and(|placement| placement.secure) && !layer.hidden
-        })
+        self.layers
+            .values()
+            .any(|layer| layer.placement.is_some_and(|placement| placement.secure) && !layer.hidden)
     }
 
     /// Every layer (callers should key by handle; the map order is not a
@@ -2684,7 +2699,7 @@ fn on_transaction_completed_delivery(
     }
     data.write_int64(latch_time);
     data.write_bool(false); // no present fence
-    // ParcelableVector<SurfaceStats>: one stat for this layer.
+                            // ParcelableVector<SurfaceStats>: one stat for this layer.
     data.write_int32(1);
     data.write_int32(1);
     data.write_strong_binder(handle);
@@ -2703,7 +2718,7 @@ fn on_transaction_completed_delivery(
         data.write_int64(0);
     }
     data.write_int32(0); // no jank data
-    // Parcelable ReleaseCallbackId (previous buffer).
+                         // Parcelable ReleaseCallbackId (previous buffer).
     data.write_int32(1);
     data.write_uint64(previous.buffer_id);
     data.write_uint64(previous.frame_number);

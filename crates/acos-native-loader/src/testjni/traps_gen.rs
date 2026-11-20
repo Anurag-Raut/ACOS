@@ -9,190 +9,2247 @@ fn report_and_abort(name: &str) -> ! {
     std::process::abort();
 }
 
-pub unsafe extern "C" fn trap_DefineClass(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("DefineClass") }
-pub unsafe extern "C" fn trap_FromReflectedMethod(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("FromReflectedMethod") }
-pub unsafe extern "C" fn trap_FromReflectedField(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("FromReflectedField") }
-pub unsafe extern "C" fn trap_ToReflectedMethod(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("ToReflectedMethod") }
-pub unsafe extern "C" fn trap_GetSuperclass(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("GetSuperclass") }
-pub unsafe extern "C" fn trap_IsAssignableFrom(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("IsAssignableFrom") }
-pub unsafe extern "C" fn trap_ToReflectedField(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("ToReflectedField") }
-pub unsafe extern "C" fn trap_Throw(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("Throw") }
-pub unsafe extern "C" fn trap_ExceptionDescribe(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("ExceptionDescribe") }
-pub unsafe extern "C" fn trap_FatalError(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("FatalError") }
-pub unsafe extern "C" fn trap_PushLocalFrame(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("PushLocalFrame") }
-pub unsafe extern "C" fn trap_PopLocalFrame(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("PopLocalFrame") }
-pub unsafe extern "C" fn trap_NewGlobalRef(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("NewGlobalRef") }
-pub unsafe extern "C" fn trap_DeleteGlobalRef(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("DeleteGlobalRef") }
-pub unsafe extern "C" fn trap_IsSameObject(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("IsSameObject") }
-pub unsafe extern "C" fn trap_NewLocalRef(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("NewLocalRef") }
-pub unsafe extern "C" fn trap_EnsureLocalCapacity(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("EnsureLocalCapacity") }
-pub unsafe extern "C" fn trap_AllocObject(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("AllocObject") }
-pub unsafe extern "C" fn trap_NewObject(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("NewObject") }
-pub unsafe extern "C" fn trap_NewObjectV(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("NewObjectV") }
-pub unsafe extern "C" fn trap_NewObjectA(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("NewObjectA") }
-pub unsafe extern "C" fn trap_IsInstanceOf(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("IsInstanceOf") }
-pub unsafe extern "C" fn trap_CallBooleanMethodA(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("CallBooleanMethodA") }
-pub unsafe extern "C" fn trap_CallByteMethod(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("CallByteMethod") }
-pub unsafe extern "C" fn trap_CallByteMethodV(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("CallByteMethodV") }
-pub unsafe extern "C" fn trap_CallByteMethodA(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("CallByteMethodA") }
-pub unsafe extern "C" fn trap_CallCharMethod(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("CallCharMethod") }
-pub unsafe extern "C" fn trap_CallCharMethodV(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("CallCharMethodV") }
-pub unsafe extern "C" fn trap_CallCharMethodA(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("CallCharMethodA") }
-pub unsafe extern "C" fn trap_CallShortMethod(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("CallShortMethod") }
-pub unsafe extern "C" fn trap_CallShortMethodV(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("CallShortMethodV") }
-pub unsafe extern "C" fn trap_CallShortMethodA(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("CallShortMethodA") }
-pub unsafe extern "C" fn trap_CallLongMethod(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("CallLongMethod") }
-pub unsafe extern "C" fn trap_CallLongMethodV(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("CallLongMethodV") }
-pub unsafe extern "C" fn trap_CallLongMethodA(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("CallLongMethodA") }
-pub unsafe extern "C" fn trap_CallFloatMethod(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("CallFloatMethod") }
-pub unsafe extern "C" fn trap_CallFloatMethodV(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("CallFloatMethodV") }
-pub unsafe extern "C" fn trap_CallFloatMethodA(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("CallFloatMethodA") }
-pub unsafe extern "C" fn trap_CallDoubleMethod(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("CallDoubleMethod") }
-pub unsafe extern "C" fn trap_CallDoubleMethodV(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("CallDoubleMethodV") }
-pub unsafe extern "C" fn trap_CallDoubleMethodA(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("CallDoubleMethodA") }
-pub unsafe extern "C" fn trap_CallNonvirtualObjectMethod(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("CallNonvirtualObjectMethod") }
-pub unsafe extern "C" fn trap_CallNonvirtualObjectMethodV(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("CallNonvirtualObjectMethodV") }
-pub unsafe extern "C" fn trap_CallNonvirtualObjectMethodA(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("CallNonvirtualObjectMethodA") }
-pub unsafe extern "C" fn trap_CallNonvirtualBooleanMethod(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("CallNonvirtualBooleanMethod") }
-pub unsafe extern "C" fn trap_CallNonvirtualBooleanMethodV(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("CallNonvirtualBooleanMethodV") }
-pub unsafe extern "C" fn trap_CallNonvirtualBooleanMethodA(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("CallNonvirtualBooleanMethodA") }
-pub unsafe extern "C" fn trap_CallNonvirtualByteMethod(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("CallNonvirtualByteMethod") }
-pub unsafe extern "C" fn trap_CallNonvirtualByteMethodV(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("CallNonvirtualByteMethodV") }
-pub unsafe extern "C" fn trap_CallNonvirtualByteMethodA(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("CallNonvirtualByteMethodA") }
-pub unsafe extern "C" fn trap_CallNonvirtualCharMethod(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("CallNonvirtualCharMethod") }
-pub unsafe extern "C" fn trap_CallNonvirtualCharMethodV(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("CallNonvirtualCharMethodV") }
-pub unsafe extern "C" fn trap_CallNonvirtualCharMethodA(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("CallNonvirtualCharMethodA") }
-pub unsafe extern "C" fn trap_CallNonvirtualShortMethod(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("CallNonvirtualShortMethod") }
-pub unsafe extern "C" fn trap_CallNonvirtualShortMethodV(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("CallNonvirtualShortMethodV") }
-pub unsafe extern "C" fn trap_CallNonvirtualShortMethodA(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("CallNonvirtualShortMethodA") }
-pub unsafe extern "C" fn trap_CallNonvirtualIntMethod(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("CallNonvirtualIntMethod") }
-pub unsafe extern "C" fn trap_CallNonvirtualIntMethodV(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("CallNonvirtualIntMethodV") }
-pub unsafe extern "C" fn trap_CallNonvirtualIntMethodA(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("CallNonvirtualIntMethodA") }
-pub unsafe extern "C" fn trap_CallNonvirtualLongMethod(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("CallNonvirtualLongMethod") }
-pub unsafe extern "C" fn trap_CallNonvirtualLongMethodV(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("CallNonvirtualLongMethodV") }
-pub unsafe extern "C" fn trap_CallNonvirtualLongMethodA(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("CallNonvirtualLongMethodA") }
-pub unsafe extern "C" fn trap_CallNonvirtualFloatMethod(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("CallNonvirtualFloatMethod") }
-pub unsafe extern "C" fn trap_CallNonvirtualFloatMethodV(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("CallNonvirtualFloatMethodV") }
-pub unsafe extern "C" fn trap_CallNonvirtualFloatMethodA(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("CallNonvirtualFloatMethodA") }
-pub unsafe extern "C" fn trap_CallNonvirtualDoubleMethod(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("CallNonvirtualDoubleMethod") }
-pub unsafe extern "C" fn trap_CallNonvirtualDoubleMethodV(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("CallNonvirtualDoubleMethodV") }
-pub unsafe extern "C" fn trap_CallNonvirtualDoubleMethodA(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("CallNonvirtualDoubleMethodA") }
-pub unsafe extern "C" fn trap_CallNonvirtualVoidMethod(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("CallNonvirtualVoidMethod") }
-pub unsafe extern "C" fn trap_CallNonvirtualVoidMethodV(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("CallNonvirtualVoidMethodV") }
-pub unsafe extern "C" fn trap_CallNonvirtualVoidMethodA(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("CallNonvirtualVoidMethodA") }
-pub unsafe extern "C" fn trap_GetFieldID(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("GetFieldID") }
-pub unsafe extern "C" fn trap_GetObjectField(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("GetObjectField") }
-pub unsafe extern "C" fn trap_GetBooleanField(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("GetBooleanField") }
-pub unsafe extern "C" fn trap_GetByteField(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("GetByteField") }
-pub unsafe extern "C" fn trap_GetCharField(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("GetCharField") }
-pub unsafe extern "C" fn trap_GetShortField(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("GetShortField") }
-pub unsafe extern "C" fn trap_GetIntField(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("GetIntField") }
-pub unsafe extern "C" fn trap_GetLongField(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("GetLongField") }
-pub unsafe extern "C" fn trap_GetFloatField(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("GetFloatField") }
-pub unsafe extern "C" fn trap_GetDoubleField(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("GetDoubleField") }
-pub unsafe extern "C" fn trap_SetObjectField(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("SetObjectField") }
-pub unsafe extern "C" fn trap_SetBooleanField(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("SetBooleanField") }
-pub unsafe extern "C" fn trap_SetByteField(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("SetByteField") }
-pub unsafe extern "C" fn trap_SetCharField(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("SetCharField") }
-pub unsafe extern "C" fn trap_SetShortField(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("SetShortField") }
-pub unsafe extern "C" fn trap_SetIntField(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("SetIntField") }
-pub unsafe extern "C" fn trap_SetLongField(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("SetLongField") }
-pub unsafe extern "C" fn trap_SetFloatField(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("SetFloatField") }
-pub unsafe extern "C" fn trap_SetDoubleField(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("SetDoubleField") }
-pub unsafe extern "C" fn trap_CallStaticBooleanMethodA(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("CallStaticBooleanMethodA") }
-pub unsafe extern "C" fn trap_CallStaticByteMethod(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("CallStaticByteMethod") }
-pub unsafe extern "C" fn trap_CallStaticByteMethodV(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("CallStaticByteMethodV") }
-pub unsafe extern "C" fn trap_CallStaticByteMethodA(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("CallStaticByteMethodA") }
-pub unsafe extern "C" fn trap_CallStaticCharMethod(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("CallStaticCharMethod") }
-pub unsafe extern "C" fn trap_CallStaticCharMethodV(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("CallStaticCharMethodV") }
-pub unsafe extern "C" fn trap_CallStaticCharMethodA(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("CallStaticCharMethodA") }
-pub unsafe extern "C" fn trap_CallStaticShortMethod(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("CallStaticShortMethod") }
-pub unsafe extern "C" fn trap_CallStaticShortMethodV(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("CallStaticShortMethodV") }
-pub unsafe extern "C" fn trap_CallStaticShortMethodA(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("CallStaticShortMethodA") }
-pub unsafe extern "C" fn trap_CallStaticLongMethod(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("CallStaticLongMethod") }
-pub unsafe extern "C" fn trap_CallStaticLongMethodV(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("CallStaticLongMethodV") }
-pub unsafe extern "C" fn trap_CallStaticLongMethodA(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("CallStaticLongMethodA") }
-pub unsafe extern "C" fn trap_CallStaticFloatMethod(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("CallStaticFloatMethod") }
-pub unsafe extern "C" fn trap_CallStaticFloatMethodV(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("CallStaticFloatMethodV") }
-pub unsafe extern "C" fn trap_CallStaticFloatMethodA(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("CallStaticFloatMethodA") }
-pub unsafe extern "C" fn trap_CallStaticDoubleMethod(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("CallStaticDoubleMethod") }
-pub unsafe extern "C" fn trap_CallStaticDoubleMethodV(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("CallStaticDoubleMethodV") }
-pub unsafe extern "C" fn trap_CallStaticDoubleMethodA(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("CallStaticDoubleMethodA") }
-pub unsafe extern "C" fn trap_GetStaticFieldID(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("GetStaticFieldID") }
-pub unsafe extern "C" fn trap_GetStaticObjectField(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("GetStaticObjectField") }
-pub unsafe extern "C" fn trap_GetStaticBooleanField(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("GetStaticBooleanField") }
-pub unsafe extern "C" fn trap_GetStaticByteField(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("GetStaticByteField") }
-pub unsafe extern "C" fn trap_GetStaticCharField(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("GetStaticCharField") }
-pub unsafe extern "C" fn trap_GetStaticShortField(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("GetStaticShortField") }
-pub unsafe extern "C" fn trap_GetStaticIntField(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("GetStaticIntField") }
-pub unsafe extern "C" fn trap_GetStaticLongField(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("GetStaticLongField") }
-pub unsafe extern "C" fn trap_GetStaticFloatField(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("GetStaticFloatField") }
-pub unsafe extern "C" fn trap_GetStaticDoubleField(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("GetStaticDoubleField") }
-pub unsafe extern "C" fn trap_SetStaticObjectField(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("SetStaticObjectField") }
-pub unsafe extern "C" fn trap_SetStaticBooleanField(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("SetStaticBooleanField") }
-pub unsafe extern "C" fn trap_SetStaticByteField(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("SetStaticByteField") }
-pub unsafe extern "C" fn trap_SetStaticCharField(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("SetStaticCharField") }
-pub unsafe extern "C" fn trap_SetStaticShortField(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("SetStaticShortField") }
-pub unsafe extern "C" fn trap_SetStaticIntField(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("SetStaticIntField") }
-pub unsafe extern "C" fn trap_SetStaticLongField(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("SetStaticLongField") }
-pub unsafe extern "C" fn trap_SetStaticFloatField(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("SetStaticFloatField") }
-pub unsafe extern "C" fn trap_SetStaticDoubleField(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("SetStaticDoubleField") }
-pub unsafe extern "C" fn trap_NewString(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("NewString") }
-pub unsafe extern "C" fn trap_GetStringLength(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("GetStringLength") }
-pub unsafe extern "C" fn trap_GetStringChars(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("GetStringChars") }
-pub unsafe extern "C" fn trap_ReleaseStringChars(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("ReleaseStringChars") }
-pub unsafe extern "C" fn trap_GetStringUTFLength(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("GetStringUTFLength") }
-pub unsafe extern "C" fn trap_NewObjectArray(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("NewObjectArray") }
-pub unsafe extern "C" fn trap_GetObjectArrayElement(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("GetObjectArrayElement") }
-pub unsafe extern "C" fn trap_SetObjectArrayElement(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("SetObjectArrayElement") }
-pub unsafe extern "C" fn trap_NewBooleanArray(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("NewBooleanArray") }
-pub unsafe extern "C" fn trap_NewByteArray(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("NewByteArray") }
-pub unsafe extern "C" fn trap_NewCharArray(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("NewCharArray") }
-pub unsafe extern "C" fn trap_NewShortArray(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("NewShortArray") }
-pub unsafe extern "C" fn trap_NewIntArray(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("NewIntArray") }
-pub unsafe extern "C" fn trap_NewLongArray(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("NewLongArray") }
-pub unsafe extern "C" fn trap_NewFloatArray(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("NewFloatArray") }
-pub unsafe extern "C" fn trap_NewDoubleArray(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("NewDoubleArray") }
-pub unsafe extern "C" fn trap_GetBooleanArrayElements(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("GetBooleanArrayElements") }
-pub unsafe extern "C" fn trap_GetByteArrayElements(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("GetByteArrayElements") }
-pub unsafe extern "C" fn trap_GetCharArrayElements(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("GetCharArrayElements") }
-pub unsafe extern "C" fn trap_GetShortArrayElements(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("GetShortArrayElements") }
-pub unsafe extern "C" fn trap_GetLongArrayElements(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("GetLongArrayElements") }
-pub unsafe extern "C" fn trap_GetFloatArrayElements(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("GetFloatArrayElements") }
-pub unsafe extern "C" fn trap_GetDoubleArrayElements(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("GetDoubleArrayElements") }
-pub unsafe extern "C" fn trap_ReleaseBooleanArrayElements(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("ReleaseBooleanArrayElements") }
-pub unsafe extern "C" fn trap_ReleaseByteArrayElements(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("ReleaseByteArrayElements") }
-pub unsafe extern "C" fn trap_ReleaseCharArrayElements(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("ReleaseCharArrayElements") }
-pub unsafe extern "C" fn trap_ReleaseShortArrayElements(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("ReleaseShortArrayElements") }
-pub unsafe extern "C" fn trap_ReleaseLongArrayElements(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("ReleaseLongArrayElements") }
-pub unsafe extern "C" fn trap_ReleaseFloatArrayElements(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("ReleaseFloatArrayElements") }
-pub unsafe extern "C" fn trap_ReleaseDoubleArrayElements(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("ReleaseDoubleArrayElements") }
-pub unsafe extern "C" fn trap_GetBooleanArrayRegion(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("GetBooleanArrayRegion") }
-pub unsafe extern "C" fn trap_GetByteArrayRegion(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("GetByteArrayRegion") }
-pub unsafe extern "C" fn trap_GetCharArrayRegion(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("GetCharArrayRegion") }
-pub unsafe extern "C" fn trap_GetShortArrayRegion(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("GetShortArrayRegion") }
-pub unsafe extern "C" fn trap_GetLongArrayRegion(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("GetLongArrayRegion") }
-pub unsafe extern "C" fn trap_GetFloatArrayRegion(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("GetFloatArrayRegion") }
-pub unsafe extern "C" fn trap_GetDoubleArrayRegion(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("GetDoubleArrayRegion") }
-pub unsafe extern "C" fn trap_SetBooleanArrayRegion(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("SetBooleanArrayRegion") }
-pub unsafe extern "C" fn trap_SetByteArrayRegion(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("SetByteArrayRegion") }
-pub unsafe extern "C" fn trap_SetCharArrayRegion(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("SetCharArrayRegion") }
-pub unsafe extern "C" fn trap_SetShortArrayRegion(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("SetShortArrayRegion") }
-pub unsafe extern "C" fn trap_SetLongArrayRegion(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("SetLongArrayRegion") }
-pub unsafe extern "C" fn trap_SetFloatArrayRegion(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("SetFloatArrayRegion") }
-pub unsafe extern "C" fn trap_SetDoubleArrayRegion(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("SetDoubleArrayRegion") }
-pub unsafe extern "C" fn trap_UnregisterNatives(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("UnregisterNatives") }
-pub unsafe extern "C" fn trap_MonitorEnter(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("MonitorEnter") }
-pub unsafe extern "C" fn trap_MonitorExit(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("MonitorExit") }
-pub unsafe extern "C" fn trap_GetStringRegion(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("GetStringRegion") }
-pub unsafe extern "C" fn trap_GetStringUTFRegion(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("GetStringUTFRegion") }
-pub unsafe extern "C" fn trap_GetPrimitiveArrayCritical(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("GetPrimitiveArrayCritical") }
-pub unsafe extern "C" fn trap_ReleasePrimitiveArrayCritical(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("ReleasePrimitiveArrayCritical") }
-pub unsafe extern "C" fn trap_GetStringCritical(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("GetStringCritical") }
-pub unsafe extern "C" fn trap_ReleaseStringCritical(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("ReleaseStringCritical") }
-pub unsafe extern "C" fn trap_NewWeakGlobalRef(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("NewWeakGlobalRef") }
-pub unsafe extern "C" fn trap_DeleteWeakGlobalRef(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("DeleteWeakGlobalRef") }
-pub unsafe extern "C" fn trap_NewDirectByteBuffer(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("NewDirectByteBuffer") }
-pub unsafe extern "C" fn trap_GetDirectBufferAddress(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("GetDirectBufferAddress") }
-pub unsafe extern "C" fn trap_GetDirectBufferCapacity(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("GetDirectBufferCapacity") }
-pub unsafe extern "C" fn trap_GetObjectRefType(_a: usize, _b: usize, _c: usize, _d: usize, _e: usize, _f: usize, _g: usize, _h: usize) -> usize { report_and_abort("GetObjectRefType") }
+pub unsafe extern "C" fn trap_DefineClass(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("DefineClass")
+}
+pub unsafe extern "C" fn trap_FromReflectedMethod(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("FromReflectedMethod")
+}
+pub unsafe extern "C" fn trap_FromReflectedField(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("FromReflectedField")
+}
+pub unsafe extern "C" fn trap_ToReflectedMethod(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("ToReflectedMethod")
+}
+pub unsafe extern "C" fn trap_GetSuperclass(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("GetSuperclass")
+}
+pub unsafe extern "C" fn trap_IsAssignableFrom(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("IsAssignableFrom")
+}
+pub unsafe extern "C" fn trap_ToReflectedField(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("ToReflectedField")
+}
+pub unsafe extern "C" fn trap_Throw(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("Throw")
+}
+pub unsafe extern "C" fn trap_ExceptionDescribe(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("ExceptionDescribe")
+}
+pub unsafe extern "C" fn trap_FatalError(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("FatalError")
+}
+pub unsafe extern "C" fn trap_PushLocalFrame(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("PushLocalFrame")
+}
+pub unsafe extern "C" fn trap_PopLocalFrame(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("PopLocalFrame")
+}
+pub unsafe extern "C" fn trap_NewGlobalRef(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("NewGlobalRef")
+}
+pub unsafe extern "C" fn trap_DeleteGlobalRef(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("DeleteGlobalRef")
+}
+pub unsafe extern "C" fn trap_IsSameObject(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("IsSameObject")
+}
+pub unsafe extern "C" fn trap_NewLocalRef(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("NewLocalRef")
+}
+pub unsafe extern "C" fn trap_EnsureLocalCapacity(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("EnsureLocalCapacity")
+}
+pub unsafe extern "C" fn trap_AllocObject(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("AllocObject")
+}
+pub unsafe extern "C" fn trap_NewObject(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("NewObject")
+}
+pub unsafe extern "C" fn trap_NewObjectV(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("NewObjectV")
+}
+pub unsafe extern "C" fn trap_NewObjectA(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("NewObjectA")
+}
+pub unsafe extern "C" fn trap_IsInstanceOf(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("IsInstanceOf")
+}
+pub unsafe extern "C" fn trap_CallBooleanMethodA(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("CallBooleanMethodA")
+}
+pub unsafe extern "C" fn trap_CallByteMethod(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("CallByteMethod")
+}
+pub unsafe extern "C" fn trap_CallByteMethodV(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("CallByteMethodV")
+}
+pub unsafe extern "C" fn trap_CallByteMethodA(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("CallByteMethodA")
+}
+pub unsafe extern "C" fn trap_CallCharMethod(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("CallCharMethod")
+}
+pub unsafe extern "C" fn trap_CallCharMethodV(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("CallCharMethodV")
+}
+pub unsafe extern "C" fn trap_CallCharMethodA(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("CallCharMethodA")
+}
+pub unsafe extern "C" fn trap_CallShortMethod(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("CallShortMethod")
+}
+pub unsafe extern "C" fn trap_CallShortMethodV(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("CallShortMethodV")
+}
+pub unsafe extern "C" fn trap_CallShortMethodA(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("CallShortMethodA")
+}
+pub unsafe extern "C" fn trap_CallLongMethod(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("CallLongMethod")
+}
+pub unsafe extern "C" fn trap_CallLongMethodV(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("CallLongMethodV")
+}
+pub unsafe extern "C" fn trap_CallLongMethodA(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("CallLongMethodA")
+}
+pub unsafe extern "C" fn trap_CallFloatMethod(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("CallFloatMethod")
+}
+pub unsafe extern "C" fn trap_CallFloatMethodV(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("CallFloatMethodV")
+}
+pub unsafe extern "C" fn trap_CallFloatMethodA(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("CallFloatMethodA")
+}
+pub unsafe extern "C" fn trap_CallDoubleMethod(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("CallDoubleMethod")
+}
+pub unsafe extern "C" fn trap_CallDoubleMethodV(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("CallDoubleMethodV")
+}
+pub unsafe extern "C" fn trap_CallDoubleMethodA(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("CallDoubleMethodA")
+}
+pub unsafe extern "C" fn trap_CallNonvirtualObjectMethod(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("CallNonvirtualObjectMethod")
+}
+pub unsafe extern "C" fn trap_CallNonvirtualObjectMethodV(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("CallNonvirtualObjectMethodV")
+}
+pub unsafe extern "C" fn trap_CallNonvirtualObjectMethodA(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("CallNonvirtualObjectMethodA")
+}
+pub unsafe extern "C" fn trap_CallNonvirtualBooleanMethod(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("CallNonvirtualBooleanMethod")
+}
+pub unsafe extern "C" fn trap_CallNonvirtualBooleanMethodV(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("CallNonvirtualBooleanMethodV")
+}
+pub unsafe extern "C" fn trap_CallNonvirtualBooleanMethodA(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("CallNonvirtualBooleanMethodA")
+}
+pub unsafe extern "C" fn trap_CallNonvirtualByteMethod(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("CallNonvirtualByteMethod")
+}
+pub unsafe extern "C" fn trap_CallNonvirtualByteMethodV(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("CallNonvirtualByteMethodV")
+}
+pub unsafe extern "C" fn trap_CallNonvirtualByteMethodA(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("CallNonvirtualByteMethodA")
+}
+pub unsafe extern "C" fn trap_CallNonvirtualCharMethod(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("CallNonvirtualCharMethod")
+}
+pub unsafe extern "C" fn trap_CallNonvirtualCharMethodV(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("CallNonvirtualCharMethodV")
+}
+pub unsafe extern "C" fn trap_CallNonvirtualCharMethodA(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("CallNonvirtualCharMethodA")
+}
+pub unsafe extern "C" fn trap_CallNonvirtualShortMethod(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("CallNonvirtualShortMethod")
+}
+pub unsafe extern "C" fn trap_CallNonvirtualShortMethodV(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("CallNonvirtualShortMethodV")
+}
+pub unsafe extern "C" fn trap_CallNonvirtualShortMethodA(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("CallNonvirtualShortMethodA")
+}
+pub unsafe extern "C" fn trap_CallNonvirtualIntMethod(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("CallNonvirtualIntMethod")
+}
+pub unsafe extern "C" fn trap_CallNonvirtualIntMethodV(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("CallNonvirtualIntMethodV")
+}
+pub unsafe extern "C" fn trap_CallNonvirtualIntMethodA(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("CallNonvirtualIntMethodA")
+}
+pub unsafe extern "C" fn trap_CallNonvirtualLongMethod(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("CallNonvirtualLongMethod")
+}
+pub unsafe extern "C" fn trap_CallNonvirtualLongMethodV(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("CallNonvirtualLongMethodV")
+}
+pub unsafe extern "C" fn trap_CallNonvirtualLongMethodA(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("CallNonvirtualLongMethodA")
+}
+pub unsafe extern "C" fn trap_CallNonvirtualFloatMethod(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("CallNonvirtualFloatMethod")
+}
+pub unsafe extern "C" fn trap_CallNonvirtualFloatMethodV(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("CallNonvirtualFloatMethodV")
+}
+pub unsafe extern "C" fn trap_CallNonvirtualFloatMethodA(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("CallNonvirtualFloatMethodA")
+}
+pub unsafe extern "C" fn trap_CallNonvirtualDoubleMethod(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("CallNonvirtualDoubleMethod")
+}
+pub unsafe extern "C" fn trap_CallNonvirtualDoubleMethodV(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("CallNonvirtualDoubleMethodV")
+}
+pub unsafe extern "C" fn trap_CallNonvirtualDoubleMethodA(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("CallNonvirtualDoubleMethodA")
+}
+pub unsafe extern "C" fn trap_CallNonvirtualVoidMethod(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("CallNonvirtualVoidMethod")
+}
+pub unsafe extern "C" fn trap_CallNonvirtualVoidMethodV(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("CallNonvirtualVoidMethodV")
+}
+pub unsafe extern "C" fn trap_CallNonvirtualVoidMethodA(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("CallNonvirtualVoidMethodA")
+}
+pub unsafe extern "C" fn trap_GetFieldID(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("GetFieldID")
+}
+pub unsafe extern "C" fn trap_GetObjectField(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("GetObjectField")
+}
+pub unsafe extern "C" fn trap_GetBooleanField(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("GetBooleanField")
+}
+pub unsafe extern "C" fn trap_GetByteField(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("GetByteField")
+}
+pub unsafe extern "C" fn trap_GetCharField(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("GetCharField")
+}
+pub unsafe extern "C" fn trap_GetShortField(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("GetShortField")
+}
+pub unsafe extern "C" fn trap_GetIntField(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("GetIntField")
+}
+pub unsafe extern "C" fn trap_GetLongField(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("GetLongField")
+}
+pub unsafe extern "C" fn trap_GetFloatField(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("GetFloatField")
+}
+pub unsafe extern "C" fn trap_GetDoubleField(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("GetDoubleField")
+}
+pub unsafe extern "C" fn trap_SetObjectField(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("SetObjectField")
+}
+pub unsafe extern "C" fn trap_SetBooleanField(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("SetBooleanField")
+}
+pub unsafe extern "C" fn trap_SetByteField(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("SetByteField")
+}
+pub unsafe extern "C" fn trap_SetCharField(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("SetCharField")
+}
+pub unsafe extern "C" fn trap_SetShortField(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("SetShortField")
+}
+pub unsafe extern "C" fn trap_SetIntField(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("SetIntField")
+}
+pub unsafe extern "C" fn trap_SetLongField(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("SetLongField")
+}
+pub unsafe extern "C" fn trap_SetFloatField(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("SetFloatField")
+}
+pub unsafe extern "C" fn trap_SetDoubleField(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("SetDoubleField")
+}
+pub unsafe extern "C" fn trap_CallStaticBooleanMethodA(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("CallStaticBooleanMethodA")
+}
+pub unsafe extern "C" fn trap_CallStaticByteMethod(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("CallStaticByteMethod")
+}
+pub unsafe extern "C" fn trap_CallStaticByteMethodV(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("CallStaticByteMethodV")
+}
+pub unsafe extern "C" fn trap_CallStaticByteMethodA(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("CallStaticByteMethodA")
+}
+pub unsafe extern "C" fn trap_CallStaticCharMethod(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("CallStaticCharMethod")
+}
+pub unsafe extern "C" fn trap_CallStaticCharMethodV(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("CallStaticCharMethodV")
+}
+pub unsafe extern "C" fn trap_CallStaticCharMethodA(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("CallStaticCharMethodA")
+}
+pub unsafe extern "C" fn trap_CallStaticShortMethod(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("CallStaticShortMethod")
+}
+pub unsafe extern "C" fn trap_CallStaticShortMethodV(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("CallStaticShortMethodV")
+}
+pub unsafe extern "C" fn trap_CallStaticShortMethodA(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("CallStaticShortMethodA")
+}
+pub unsafe extern "C" fn trap_CallStaticLongMethod(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("CallStaticLongMethod")
+}
+pub unsafe extern "C" fn trap_CallStaticLongMethodV(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("CallStaticLongMethodV")
+}
+pub unsafe extern "C" fn trap_CallStaticLongMethodA(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("CallStaticLongMethodA")
+}
+pub unsafe extern "C" fn trap_CallStaticFloatMethod(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("CallStaticFloatMethod")
+}
+pub unsafe extern "C" fn trap_CallStaticFloatMethodV(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("CallStaticFloatMethodV")
+}
+pub unsafe extern "C" fn trap_CallStaticFloatMethodA(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("CallStaticFloatMethodA")
+}
+pub unsafe extern "C" fn trap_CallStaticDoubleMethod(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("CallStaticDoubleMethod")
+}
+pub unsafe extern "C" fn trap_CallStaticDoubleMethodV(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("CallStaticDoubleMethodV")
+}
+pub unsafe extern "C" fn trap_CallStaticDoubleMethodA(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("CallStaticDoubleMethodA")
+}
+pub unsafe extern "C" fn trap_GetStaticFieldID(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("GetStaticFieldID")
+}
+pub unsafe extern "C" fn trap_GetStaticObjectField(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("GetStaticObjectField")
+}
+pub unsafe extern "C" fn trap_GetStaticBooleanField(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("GetStaticBooleanField")
+}
+pub unsafe extern "C" fn trap_GetStaticByteField(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("GetStaticByteField")
+}
+pub unsafe extern "C" fn trap_GetStaticCharField(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("GetStaticCharField")
+}
+pub unsafe extern "C" fn trap_GetStaticShortField(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("GetStaticShortField")
+}
+pub unsafe extern "C" fn trap_GetStaticIntField(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("GetStaticIntField")
+}
+pub unsafe extern "C" fn trap_GetStaticLongField(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("GetStaticLongField")
+}
+pub unsafe extern "C" fn trap_GetStaticFloatField(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("GetStaticFloatField")
+}
+pub unsafe extern "C" fn trap_GetStaticDoubleField(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("GetStaticDoubleField")
+}
+pub unsafe extern "C" fn trap_SetStaticObjectField(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("SetStaticObjectField")
+}
+pub unsafe extern "C" fn trap_SetStaticBooleanField(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("SetStaticBooleanField")
+}
+pub unsafe extern "C" fn trap_SetStaticByteField(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("SetStaticByteField")
+}
+pub unsafe extern "C" fn trap_SetStaticCharField(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("SetStaticCharField")
+}
+pub unsafe extern "C" fn trap_SetStaticShortField(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("SetStaticShortField")
+}
+pub unsafe extern "C" fn trap_SetStaticIntField(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("SetStaticIntField")
+}
+pub unsafe extern "C" fn trap_SetStaticLongField(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("SetStaticLongField")
+}
+pub unsafe extern "C" fn trap_SetStaticFloatField(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("SetStaticFloatField")
+}
+pub unsafe extern "C" fn trap_SetStaticDoubleField(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("SetStaticDoubleField")
+}
+pub unsafe extern "C" fn trap_NewString(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("NewString")
+}
+pub unsafe extern "C" fn trap_GetStringLength(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("GetStringLength")
+}
+pub unsafe extern "C" fn trap_GetStringChars(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("GetStringChars")
+}
+pub unsafe extern "C" fn trap_ReleaseStringChars(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("ReleaseStringChars")
+}
+pub unsafe extern "C" fn trap_GetStringUTFLength(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("GetStringUTFLength")
+}
+pub unsafe extern "C" fn trap_NewObjectArray(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("NewObjectArray")
+}
+pub unsafe extern "C" fn trap_GetObjectArrayElement(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("GetObjectArrayElement")
+}
+pub unsafe extern "C" fn trap_SetObjectArrayElement(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("SetObjectArrayElement")
+}
+pub unsafe extern "C" fn trap_NewBooleanArray(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("NewBooleanArray")
+}
+pub unsafe extern "C" fn trap_NewByteArray(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("NewByteArray")
+}
+pub unsafe extern "C" fn trap_NewCharArray(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("NewCharArray")
+}
+pub unsafe extern "C" fn trap_NewShortArray(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("NewShortArray")
+}
+pub unsafe extern "C" fn trap_NewIntArray(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("NewIntArray")
+}
+pub unsafe extern "C" fn trap_NewLongArray(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("NewLongArray")
+}
+pub unsafe extern "C" fn trap_NewFloatArray(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("NewFloatArray")
+}
+pub unsafe extern "C" fn trap_NewDoubleArray(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("NewDoubleArray")
+}
+pub unsafe extern "C" fn trap_GetBooleanArrayElements(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("GetBooleanArrayElements")
+}
+pub unsafe extern "C" fn trap_GetByteArrayElements(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("GetByteArrayElements")
+}
+pub unsafe extern "C" fn trap_GetCharArrayElements(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("GetCharArrayElements")
+}
+pub unsafe extern "C" fn trap_GetShortArrayElements(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("GetShortArrayElements")
+}
+pub unsafe extern "C" fn trap_GetLongArrayElements(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("GetLongArrayElements")
+}
+pub unsafe extern "C" fn trap_GetFloatArrayElements(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("GetFloatArrayElements")
+}
+pub unsafe extern "C" fn trap_GetDoubleArrayElements(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("GetDoubleArrayElements")
+}
+pub unsafe extern "C" fn trap_ReleaseBooleanArrayElements(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("ReleaseBooleanArrayElements")
+}
+pub unsafe extern "C" fn trap_ReleaseByteArrayElements(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("ReleaseByteArrayElements")
+}
+pub unsafe extern "C" fn trap_ReleaseCharArrayElements(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("ReleaseCharArrayElements")
+}
+pub unsafe extern "C" fn trap_ReleaseShortArrayElements(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("ReleaseShortArrayElements")
+}
+pub unsafe extern "C" fn trap_ReleaseLongArrayElements(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("ReleaseLongArrayElements")
+}
+pub unsafe extern "C" fn trap_ReleaseFloatArrayElements(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("ReleaseFloatArrayElements")
+}
+pub unsafe extern "C" fn trap_ReleaseDoubleArrayElements(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("ReleaseDoubleArrayElements")
+}
+pub unsafe extern "C" fn trap_GetBooleanArrayRegion(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("GetBooleanArrayRegion")
+}
+pub unsafe extern "C" fn trap_GetByteArrayRegion(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("GetByteArrayRegion")
+}
+pub unsafe extern "C" fn trap_GetCharArrayRegion(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("GetCharArrayRegion")
+}
+pub unsafe extern "C" fn trap_GetShortArrayRegion(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("GetShortArrayRegion")
+}
+pub unsafe extern "C" fn trap_GetLongArrayRegion(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("GetLongArrayRegion")
+}
+pub unsafe extern "C" fn trap_GetFloatArrayRegion(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("GetFloatArrayRegion")
+}
+pub unsafe extern "C" fn trap_GetDoubleArrayRegion(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("GetDoubleArrayRegion")
+}
+pub unsafe extern "C" fn trap_SetBooleanArrayRegion(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("SetBooleanArrayRegion")
+}
+pub unsafe extern "C" fn trap_SetByteArrayRegion(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("SetByteArrayRegion")
+}
+pub unsafe extern "C" fn trap_SetCharArrayRegion(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("SetCharArrayRegion")
+}
+pub unsafe extern "C" fn trap_SetShortArrayRegion(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("SetShortArrayRegion")
+}
+pub unsafe extern "C" fn trap_SetLongArrayRegion(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("SetLongArrayRegion")
+}
+pub unsafe extern "C" fn trap_SetFloatArrayRegion(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("SetFloatArrayRegion")
+}
+pub unsafe extern "C" fn trap_SetDoubleArrayRegion(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("SetDoubleArrayRegion")
+}
+pub unsafe extern "C" fn trap_UnregisterNatives(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("UnregisterNatives")
+}
+pub unsafe extern "C" fn trap_MonitorEnter(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("MonitorEnter")
+}
+pub unsafe extern "C" fn trap_MonitorExit(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("MonitorExit")
+}
+pub unsafe extern "C" fn trap_GetStringRegion(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("GetStringRegion")
+}
+pub unsafe extern "C" fn trap_GetStringUTFRegion(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("GetStringUTFRegion")
+}
+pub unsafe extern "C" fn trap_GetPrimitiveArrayCritical(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("GetPrimitiveArrayCritical")
+}
+pub unsafe extern "C" fn trap_ReleasePrimitiveArrayCritical(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("ReleasePrimitiveArrayCritical")
+}
+pub unsafe extern "C" fn trap_GetStringCritical(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("GetStringCritical")
+}
+pub unsafe extern "C" fn trap_ReleaseStringCritical(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("ReleaseStringCritical")
+}
+pub unsafe extern "C" fn trap_NewWeakGlobalRef(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("NewWeakGlobalRef")
+}
+pub unsafe extern "C" fn trap_DeleteWeakGlobalRef(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("DeleteWeakGlobalRef")
+}
+pub unsafe extern "C" fn trap_NewDirectByteBuffer(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("NewDirectByteBuffer")
+}
+pub unsafe extern "C" fn trap_GetDirectBufferAddress(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("GetDirectBufferAddress")
+}
+pub unsafe extern "C" fn trap_GetDirectBufferCapacity(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("GetDirectBufferCapacity")
+}
+pub unsafe extern "C" fn trap_GetObjectRefType(
+    _a: usize,
+    _b: usize,
+    _c: usize,
+    _d: usize,
+    _e: usize,
+    _f: usize,
+    _g: usize,
+    _h: usize,
+) -> usize {
+    report_and_abort("GetObjectRefType")
+}

@@ -4,11 +4,11 @@
 //! stack. Frames live in per-thread VM stacks and the scheduler picks a
 //! runnable thread for each step.
 
-use crate::class::{ClassId, FieldSign, Insn, MethodCode, MethodImpl, MethodId, NativeCtx};
+use crate::class::{ClassId, FieldSign, Insn, MethodCode, MethodId, MethodImpl, NativeCtx};
 use crate::error::{VmError, VmResult};
 use crate::frame::Frame;
 use crate::heap::{ArrayData, Handle, Object, NULL};
-use crate::vm::{InvokeKind, ThreadStatus, Vm, VirtualCache};
+use crate::vm::{InvokeKind, ThreadStatus, VirtualCache, Vm};
 
 thread_local! {
     /// Innermost synchronous Rust→Java call base (`call_method`,
@@ -122,7 +122,10 @@ pub fn run(vm: &mut Vm) -> VmResult<()> {
             }
             continue;
         }
-        if !matches!(vm.threads[t].status, ThreadStatus::Runnable | ThreadStatus::Running) {
+        if !matches!(
+            vm.threads[t].status,
+            ThreadStatus::Runnable | ThreadStatus::Running
+        ) {
             if !pick_runnable(vm) {
                 break;
             }
@@ -209,8 +212,9 @@ fn run_batch(vm: &mut Vm, t: usize, stop_depth: usize, yield_on_block: bool) -> 
                 if !vm.threads[t].frames[fi].ir_checked {
                     vm.threads[t].frames[fi].ir_checked = true;
                     let method = vm.threads[t].frames[fi].method;
-                    if let MethodImpl::Dex { code: Some(code), .. } =
-                        &vm.methods[method as usize].imp
+                    if let MethodImpl::Dex {
+                        code: Some(code), ..
+                    } = &vm.methods[method as usize].imp
                     {
                         let code = code.clone();
                         if crate::exec::is_loop_body(&code) {
@@ -297,9 +301,9 @@ fn run_batch(vm: &mut Vm, t: usize, stop_depth: usize, yield_on_block: bool) -> 
             let insn = {
                 let method = vm.threads[t].frames[fi].method;
                 match &vm.methods[method as usize].imp {
-                    MethodImpl::Dex { code: Some(code), .. } => {
-                        code.insns.get(vm.threads[t].frames[fi].insn_index).copied()
-                    }
+                    MethodImpl::Dex {
+                        code: Some(code), ..
+                    } => code.insns.get(vm.threads[t].frames[fi].insn_index).copied(),
                     _ => None,
                 }
             };
@@ -447,7 +451,10 @@ fn exec_one(vm: &mut Vm, t: usize) -> VmResult<()> {
         vm.metrics.invokes += 1;
         crate::bridge::record_native(vm, method);
         let __prof = crate::profile::native_begin(vm, method);
-        let ctx = NativeCtx { thread: t, frame: fi };
+        let ctx = NativeCtx {
+            thread: t,
+            frame: fi,
+        };
         let __r = match f(vm, ctx) {
             Ok(()) => {
                 pop_frame(vm, t);
@@ -470,7 +477,11 @@ fn exec_one(vm: &mut Vm, t: usize) -> VmResult<()> {
         // A native method declared without a registered implementation is an
         // unbound platform API, not an abstract method.
         if vm.methods[method as usize].is_native() {
-            let at = format!("{} pc={}", vm.frames_label(t, fi), vm.threads[t].frames[fi].pc);
+            let at = format!(
+                "{} pc={}",
+                vm.frames_label(t, fi),
+                vm.threads[t].frames[fi].pc
+            );
             return Err(crate::bridge::unbound_native_error(vm, method, at));
         }
         let desc = vm.class_desc(vm.methods[method as usize].class).to_string();
@@ -675,7 +686,13 @@ fn branch_to(vm: &mut Vm, t: usize, fi: usize, target_pc: u32) -> VmResult<()> {
         let f = &vm.threads[t].frames[fi];
         code_of(vm, f.method).and_then(|c| c.pc_to_idx.get(target_pc as usize).copied())
     };
-    let idx = idx.and_then(|i| if i == u32::MAX { None } else { Some(i as usize) });
+    let idx = idx.and_then(|i| {
+        if i == u32::MAX {
+            None
+        } else {
+            Some(i as usize)
+        }
+    });
     let idx = match idx {
         Some(i) => i,
         None => {
@@ -687,7 +704,7 @@ fn branch_to(vm: &mut Vm, t: usize, fi: usize, target_pc: u32) -> VmResult<()> {
             };
             return Err(VmError::Internal(format!(
                 "branch to non-instruction pc {target_pc} in {src}"
-            )))
+            )));
         }
     };
     let f = &mut vm.threads[t].frames[fi];
@@ -781,15 +798,12 @@ pub(crate) fn exec_new_array(
 /// Invoke the `invoke-*` at `insn_index` on the current frame. Shared by the
 /// general path and the typed-IR slow-op trampoline; the caller must have the
 /// frame positioned at the instruction.
-pub(crate) fn exec_invoke_at(
-    vm: &mut Vm,
-    t: usize,
-    fi: usize,
-    insn_index: usize,
-) -> VmResult<()> {
+pub(crate) fn exec_invoke_at(vm: &mut Vm, t: usize, fi: usize, insn_index: usize) -> VmResult<()> {
     let method = vm.threads[t].frames[fi].method;
     let insn = match &vm.methods[method as usize].imp {
-        MethodImpl::Dex { code: Some(code), .. } => match code.insns.get(insn_index) {
+        MethodImpl::Dex {
+            code: Some(code), ..
+        } => match code.insns.get(insn_index) {
             Some(i) => *i,
             None => {
                 return Err(VmError::Internal(format!(
@@ -988,7 +1002,11 @@ fn execute(vm: &mut Vm, t: usize, fi: usize, insn: &Insn) -> VmResult<()> {
                         .type_descriptor(insn.index)?
                         .to_string();
                     let name = crate::vm::descriptor_to_dotted(&desc);
-                    let msg = format!("class {} cannot be cast to class {}", vm.class_desc_of_id(from), name);
+                    let msg = format!(
+                        "class {} cannot be cast to class {}",
+                        vm.class_desc_of_id(from),
+                        name
+                    );
                     return Err(vm.throw_new("Ljava/lang/ClassCastException;", Some(&msg)));
                 }
             }
@@ -1224,7 +1242,8 @@ fn execute(vm: &mut Vm, t: usize, fi: usize, insn: &Insn) -> VmResult<()> {
             // descriptor `String`s and probes them, so only reach it when the
             // declaring class is one of the three bridged classes: for ordinary
             // user fields this skips two allocations and the whole probe.
-            let internal = f.class == vm.c_object || f.class == vm.c_class || f.class == vm.c_string;
+            let internal =
+                f.class == vm.c_object || f.class == vm.c_class || f.class == vm.c_string;
             let handled = if internal {
                 crate::bridge::internal_field_get(vm, obj, dex, insn.index)
             } else {
@@ -1265,7 +1284,8 @@ fn execute(vm: &mut Vm, t: usize, fi: usize, insn: &Insn) -> VmResult<()> {
             let dex = frame_dex(vm, t, fi);
             let f = vm.resolve_field(dex, insn.index)?;
             let off = f.offset as usize;
-            let internal = f.class == vm.c_object || f.class == vm.c_class || f.class == vm.c_string;
+            let internal =
+                f.class == vm.c_object || f.class == vm.c_class || f.class == vm.c_string;
             if internal && crate::bridge::internal_field_put(vm, obj, dex, insn.index) {
                 // Shadow String fields (`hash`) are cached in a side table.
             } else if f.width == 2 {
@@ -1463,7 +1483,10 @@ fn cached_class(vm: &mut Vm, dex: u32, type_idx: u32) -> VmResult<ClassId> {
     {
         return Ok(cid);
     }
-    let desc = vm.dexs[dex as usize].file.type_descriptor(type_idx)?.to_string();
+    let desc = vm.dexs[dex as usize]
+        .file
+        .type_descriptor(type_idx)?
+        .to_string();
     let cid = vm.load_class(&desc)?;
     if let Some(slot) = vm.dexs[dex as usize].class_cache.get_mut(type_idx as usize) {
         *slot = Some(cid);
@@ -1475,7 +1498,15 @@ fn cached_class(vm: &mut Vm, dex: u32, type_idx: u32) -> VmResult<ClassId> {
 // Arrays
 // ---------------------------------------------------------------------------
 
-fn array_get(vm: &mut Vm, t: usize, fi: usize, dst: u16, arr: Handle, idx: i32, op: u8) -> VmResult<()> {
+fn array_get(
+    vm: &mut Vm,
+    t: usize,
+    fi: usize,
+    dst: u16,
+    arr: Handle,
+    idx: i32,
+    op: u8,
+) -> VmResult<()> {
     let len = match vm.heap.get(arr) {
         Some(Object::Array(a)) => a.len(),
         None => return Err(vm.throw_new("Ljava/lang/NullPointerException;", None)),
@@ -1508,7 +1539,15 @@ fn array_get(vm: &mut Vm, t: usize, fi: usize, dst: u16, arr: Handle, idx: i32, 
     Ok(())
 }
 
-fn array_put(vm: &mut Vm, t: usize, fi: usize, src: u16, arr: Handle, idx: i32, op: u8) -> VmResult<()> {
+fn array_put(
+    vm: &mut Vm,
+    t: usize,
+    fi: usize,
+    src: u16,
+    arr: Handle,
+    idx: i32,
+    op: u8,
+) -> VmResult<()> {
     let (len, elem_desc) = match vm.heap.get(arr) {
         Some(Object::Array(a)) => (a.len(), a.elem_desc.clone()),
         None => return Err(vm.throw_new("Ljava/lang/NullPointerException;", None)),
@@ -1561,7 +1600,10 @@ fn array_put(vm: &mut Vm, t: usize, fi: usize, src: u16, arr: Handle, idx: i32, 
 
 fn filled_new_array(vm: &mut Vm, t: usize, fi: usize, insn: &Insn) -> VmResult<Handle> {
     let dex = frame_dex(vm, t, fi);
-    let arr_desc = vm.dexs[dex as usize].file.type_descriptor(insn.index)?.to_string();
+    let arr_desc = vm.dexs[dex as usize]
+        .file
+        .type_descriptor(insn.index)?
+        .to_string();
     let elem = arr_desc.strip_prefix('[').unwrap_or(&arr_desc).to_string();
     let count = insn.reg_count as usize;
     // Non-range: regs[0..count] are the argument registers.
@@ -1810,14 +1852,18 @@ fn arith3(vm: &mut Vm, t: usize, fi: usize, insn: &Insn) -> VmResult<()> {
             let (a, b) = (reg(vm, t, fi, r1) as i32, reg(vm, t, fi, r2) as i32);
             match div_int(a, b) {
                 Ok(v) => set_reg(vm, t, fi, r0, v as u32),
-                Err(()) => return Err(vm.throw_new("Ljava/lang/ArithmeticException;", Some("/ by zero"))),
+                Err(()) => {
+                    return Err(vm.throw_new("Ljava/lang/ArithmeticException;", Some("/ by zero")))
+                }
             }
         }
         0x94 => {
             let (a, b) = (reg(vm, t, fi, r1) as i32, reg(vm, t, fi, r2) as i32);
             match rem_int(a, b) {
                 Ok(v) => set_reg(vm, t, fi, r0, v as u32),
-                Err(()) => return Err(vm.throw_new("Ljava/lang/ArithmeticException;", Some("/ by zero"))),
+                Err(()) => {
+                    return Err(vm.throw_new("Ljava/lang/ArithmeticException;", Some("/ by zero")))
+                }
             }
         }
         0x95 => {
@@ -1863,11 +1909,19 @@ fn arith3(vm: &mut Vm, t: usize, fi: usize, insn: &Insn) -> VmResult<()> {
                     0x9d => a.wrapping_mul(b),
                     0x9e => match div_long(a, b) {
                         Ok(v) => v,
-                        Err(()) => return Err(vm.throw_new("Ljava/lang/ArithmeticException;", Some("/ by zero"))),
+                        Err(()) => {
+                            return Err(
+                                vm.throw_new("Ljava/lang/ArithmeticException;", Some("/ by zero"))
+                            )
+                        }
                     },
                     0x9f => match rem_long(a, b) {
                         Ok(v) => v,
-                        Err(()) => return Err(vm.throw_new("Ljava/lang/ArithmeticException;", Some("/ by zero"))),
+                        Err(()) => {
+                            return Err(
+                                vm.throw_new("Ljava/lang/ArithmeticException;", Some("/ by zero"))
+                            )
+                        }
                     },
                     0xa0 => a & b,
                     0xa1 => a | b,
@@ -1920,11 +1974,19 @@ fn arith2addr(vm: &mut Vm, t: usize, fi: usize, insn: &Insn) -> VmResult<()> {
                 0xb2 => a.wrapping_mul(b as i32),
                 0xb3 => match div_int(a, b as i32) {
                     Ok(v) => v,
-                    Err(()) => return Err(vm.throw_new("Ljava/lang/ArithmeticException;", Some("/ by zero"))),
+                    Err(()) => {
+                        return Err(
+                            vm.throw_new("Ljava/lang/ArithmeticException;", Some("/ by zero"))
+                        )
+                    }
                 },
                 0xb4 => match rem_int(a, b as i32) {
                     Ok(v) => v,
-                    Err(()) => return Err(vm.throw_new("Ljava/lang/ArithmeticException;", Some("/ by zero"))),
+                    Err(()) => {
+                        return Err(
+                            vm.throw_new("Ljava/lang/ArithmeticException;", Some("/ by zero"))
+                        )
+                    }
                 },
                 0xb5 => a & b as i32,
                 0xb6 => a | b as i32,
@@ -1953,11 +2015,19 @@ fn arith2addr(vm: &mut Vm, t: usize, fi: usize, insn: &Insn) -> VmResult<()> {
                     0xbd => a.wrapping_mul(b),
                     0xbe => match div_long(a, b) {
                         Ok(v) => v,
-                        Err(()) => return Err(vm.throw_new("Ljava/lang/ArithmeticException;", Some("/ by zero"))),
+                        Err(()) => {
+                            return Err(
+                                vm.throw_new("Ljava/lang/ArithmeticException;", Some("/ by zero"))
+                            )
+                        }
                     },
                     0xbf => match rem_long(a, b) {
                         Ok(v) => v,
-                        Err(()) => return Err(vm.throw_new("Ljava/lang/ArithmeticException;", Some("/ by zero"))),
+                        Err(()) => {
+                            return Err(
+                                vm.throw_new("Ljava/lang/ArithmeticException;", Some("/ by zero"))
+                            )
+                        }
                     },
                     0xc0 => a & b,
                     0xc1 => a | b,
@@ -2007,11 +2077,15 @@ fn arith_lit16(vm: &mut Vm, t: usize, fi: usize, insn: &Insn) -> VmResult<()> {
         0xd2 => a.wrapping_mul(lit),
         0xd3 => match div_int(a, lit) {
             Ok(v) => v,
-            Err(()) => return Err(vm.throw_new("Ljava/lang/ArithmeticException;", Some("/ by zero"))),
+            Err(()) => {
+                return Err(vm.throw_new("Ljava/lang/ArithmeticException;", Some("/ by zero")))
+            }
         },
         0xd4 => match rem_int(a, lit) {
             Ok(v) => v,
-            Err(()) => return Err(vm.throw_new("Ljava/lang/ArithmeticException;", Some("/ by zero"))),
+            Err(()) => {
+                return Err(vm.throw_new("Ljava/lang/ArithmeticException;", Some("/ by zero")))
+            }
         },
         0xd5 => a & lit,
         0xd6 => a | lit,
@@ -2032,11 +2106,15 @@ fn arith_lit8(vm: &mut Vm, t: usize, fi: usize, insn: &Insn) -> VmResult<()> {
         0xda => a.wrapping_mul(lit),
         0xdb => match div_int(a, lit) {
             Ok(v) => v,
-            Err(()) => return Err(vm.throw_new("Ljava/lang/ArithmeticException;", Some("/ by zero"))),
+            Err(()) => {
+                return Err(vm.throw_new("Ljava/lang/ArithmeticException;", Some("/ by zero")))
+            }
         },
         0xdc => match rem_int(a, lit) {
             Ok(v) => v,
-            Err(()) => return Err(vm.throw_new("Ljava/lang/ArithmeticException;", Some("/ by zero"))),
+            Err(()) => {
+                return Err(vm.throw_new("Ljava/lang/ArithmeticException;", Some("/ by zero")))
+            }
         },
         0xdd => a & lit,
         0xde => a | lit,
@@ -2111,8 +2189,9 @@ fn invoke(vm: &mut Vm, t: usize, fi: usize, insn: &Insn) -> VmResult<()> {
                                     m
                                 }
                             };
-                            if let Some(slot) =
-                                vm.dexs[dex as usize].virtual_cache.get_mut(insn.index as usize)
+                            if let Some(slot) = vm.dexs[dex as usize]
+                                .virtual_cache
+                                .get_mut(insn.index as usize)
                             {
                                 match slot {
                                     Some(vc) => vc.put(rc, m),
@@ -2155,21 +2234,28 @@ fn invoke(vm: &mut Vm, t: usize, fi: usize, insn: &Insn) -> VmResult<()> {
     };
     // Class initialization for static calls; the inlined `Init` check avoids
     // a function call on every static invoke after the class is initialised.
-    if is_static && !matches!(vm.classes[mclass as usize].init, crate::class::InitState::Init) {
+    if is_static
+        && !matches!(
+            vm.classes[mclass as usize].init,
+            crate::class::InitState::Init
+        )
+    {
         vm.initialize_class(mclass)?;
         // A static initializer may throw and an outer frame may catch the
         // exception, unwinding this call site's frame (or resuming it at a
         // handler). In that case the invoke must be abandoned: `fi` is stale
         // and building a callee frame would read a different method's
         // registers.
-        if vm.threads[t].frames.len() <= fi
-            || vm.threads[t].frames[fi].pending_exception != NULL
-        {
+        if vm.threads[t].frames.len() <= fi || vm.threads[t].frames[fi].pending_exception != NULL {
             return Ok(());
         }
     }
 
-    let list = if range { &insn.regs[..0] } else { &insn.regs[..count] };
+    let list = if range {
+        &insn.regs[..0]
+    } else {
+        &insn.regs[..count]
+    };
     let mut frame = build_frame(vm, method, range, base, list, count)?;
     // Synchronized method: acquire the monitor, blocking if another thread
     // holds it. On block we leave the pc at the invoke so it is retried.
@@ -2364,7 +2450,11 @@ fn unsupported_call_site(vm: &mut Vm, dex: u32, method_idx: u32, t: usize, fi: u
         ),
         Err(e) => return e,
     };
-    let at = format!("{} pc={}", vm.frames_label(t, fi), vm.threads[t].frames[fi].pc);
+    let at = format!(
+        "{} pc={}",
+        vm.frames_label(t, fi),
+        vm.threads[t].frames[fi].pc
+    );
     VmError::unsupported_api(format!("{ref_class}->{name}{sig}"), at)
 }
 
@@ -2528,12 +2618,7 @@ fn run_current_until_body(vm: &mut Vm, t: usize, base_depth: usize) -> VmResult<
 }
 
 /// Call a Java method synchronously and return its raw 64-bit result.
-pub fn call_method(
-    vm: &mut Vm,
-    method: MethodId,
-    this: Handle,
-    args: &[u64],
-) -> VmResult<u64> {
+pub fn call_method(vm: &mut Vm, method: MethodId, this: Handle, args: &[u64]) -> VmResult<u64> {
     let t = vm.current_thread;
     let base = vm.threads[t].frames.len();
     push_frame_values(vm, method, this, args)?;
@@ -2713,4 +2798,3 @@ mod tests {
         assert_eq!(b.wrapping_shl(65 & 0x3f), 2);
     }
 }
-

@@ -1,0 +1,17 @@
+{
+  "acos_version": "0.3.0",
+  "apk_path": "/home/Qui/.t3/worktrees/acos/t3-121d3058-b4fc4c69978d9127/fixtures/build/apps/tail-probe.apk",
+  "apk_sha256": "fffc7596a86e5fc060417e4b0c02289d169030f8f685d05ba9ded32c8709726e",
+  "scenario_path": "/home/Qui/.t3/worktrees/acos/t3-121d3058-b4fc4c69978d9127/results/handoff/MODTAIL/tail-telephony.yaml",
+  "scenario_sha256": "c9afed5179ccd6732788d2f1afc15dbc5e3ff530e5c83fd702832eaef303ad20",
+  "flags": [],
+  "isolation": "process",
+  "display": {
+    "mode": "offscreen",
+    "width": 1080,
+    "height": 2400,
+    "density_dpi": 420
+  },
+  "fidelity": "art-reference",
+  "backend": "acos-native"
+}

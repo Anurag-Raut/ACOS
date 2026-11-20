@@ -75,7 +75,10 @@ impl std::fmt::Debug for Parcel {
             .field("pos", &self.pos)
             .field("data_size", &self.data.len())
             .field("objects", &self.objects)
-            .field("fds", &self.fds.iter().map(ParcelFd::as_raw_fd).collect::<Vec<_>>())
+            .field(
+                "fds",
+                &self.fds.iter().map(ParcelFd::as_raw_fd).collect::<Vec<_>>(),
+            )
             .field("allow_fds", &self.allow_fds)
             .finish()
     }
@@ -245,6 +248,27 @@ impl Parcel {
         self.write_int32(i32::from(v));
     }
 
+    /// Append `bytes` verbatim, **without** a length word and without padding.
+    ///
+    /// This is what a native `Flattenable` payload needs: `Parcel::write(const
+    /// Flattenable&)` is `writeInt32(flattenedSize)` followed by exactly
+    /// `flattenedSize` bytes, and the native `unflatten` walks those bytes field
+    /// by field — so the size must be exact (padding would desynchronise the
+    /// next object in the parcel). The sensor `Sensor` flatten is the case that
+    /// forced this: `libs/sensor/Sensor.cpp:534-559` mixes `String8` (4-byte
+    /// aligned) fields with a one-byte `bool`, so its payload only happens to be
+    /// 4-aligned.
+    ///
+    /// The bytes must not contain flat objects (no binder, no descriptor). It is
+    /// the caller's job to write the leading size when its own wire format needs
+    /// one.
+    pub fn write_raw_bytes(&mut self, bytes: &[u8]) {
+        let end = self.pos + bytes.len();
+        self.reserve(end);
+        self.data[self.pos..end].copy_from_slice(bytes);
+        self.pos = end;
+    }
+
     // ------------------------------------------------------------------
     // scalar readers
     // ------------------------------------------------------------------
@@ -352,6 +376,14 @@ impl Parcel {
     /// Strict `readChar` (UTF-16 code unit).
     pub fn read_char(&mut self) -> Result<u16> {
         Ok(self.read_int32()? as u16)
+    }
+
+    /// Read `len` bytes verbatim (the counterpart of [`Self::write_raw_bytes`]).
+    pub fn read_raw_bytes(&mut self, len: usize) -> Result<Vec<u8>> {
+        self.check(len)?;
+        let bytes = self.data[self.pos..self.pos + len].to_vec();
+        self.pos += len;
+        Ok(bytes)
     }
 
     // ------------------------------------------------------------------
@@ -1137,6 +1169,31 @@ impl Parcel {
         self.objects.len()
     }
 
+    /// The binder ids this parcel carries, in object-table order (MPROC2 3a).
+    ///
+    /// A `system_server`-side caller that receives a request has to know *which
+    /// binders the caller handed over* — those belong to the caller's process,
+    /// and a delivery to one of them must be routed back there. File-descriptor
+    /// objects are skipped (their `id` is a descriptor, not a binder id), and an
+    /// object whose offset is out of range is ignored rather than read past the
+    /// buffer.
+    #[must_use]
+    pub fn binder_ids(&self) -> Vec<BinderId> {
+        let mut out = Vec::new();
+        for &o in &self.objects {
+            if o + FLAT_OBJECT_SIZE > self.data.len() {
+                continue;
+            }
+            let mut bytes = [0u8; FLAT_OBJECT_SIZE];
+            bytes.copy_from_slice(&self.data[o..o + FLAT_OBJECT_SIZE]);
+            let obj = FlatObject::from_bytes(&bytes);
+            if obj.is_binder() && obj.id != 0 {
+                out.push(BinderId(obj.id));
+            }
+        }
+        out
+    }
+
     // ------------------------------------------------------------------
     // append / marshal / recycle
     // ------------------------------------------------------------------
@@ -1223,6 +1280,46 @@ impl Parcel {
         self.data.extend_from_slice(bytes);
     }
 
+    /// Record `offset` as an object-table entry of an **imported** parcel.
+    ///
+    /// [`Parcel::unmarshall`] copies bytes only, because a parcel that came from
+    /// the binder driver keeps its object table out of band (the driver's
+    /// `offsets` array, not part of `data`). The importer
+    /// (`acos_binder_peer::import_parcel`) walks those offsets, rewrites each
+    /// `flat_binder_object` into the in-process form and registers its position
+    /// here, so [`Parcel::objects`] answers what the sender wrote. Without it
+    /// every incoming request looks object-free, and a handler that must find a
+    /// client binder in the request — an `ISynchronousResultReceiver`, an
+    /// `IIntentReceiver` — never sees it.
+    ///
+    /// `unmarshall` copies bytes without rebuilding the object table, so a
+    /// caller that imports a wire parcel (and rewrites its binder objects)
+    /// records them here. The table is what `marshall`/`frame_from_parcel` walk
+    /// to re-emit the wire stability records, and what `acos-services`'
+    /// `writeValue` length check uses to account for the stripped records.
+    pub fn register_object(&mut self, offset: usize) {
+        match self.objects.binary_search(&offset) {
+            // Offsets arrive in ascending order; keep the table sorted so the
+            // marshaller can walk it with a single cursor.
+            Ok(_) => {}
+            Err(index) => self.objects.insert(index, offset),
+        }
+    }
+
+    /// Replace the parcel contents with `bytes` plus the object table the wire
+    /// carried (the binder driver's `offsets` array), in one step.
+    ///
+    /// [`Parcel::unmarshall`] copies bytes only; the importer installs each
+    /// rewritten object position through [`Parcel::register_object`].
+    pub fn unmarshall_with_objects(&mut self, bytes: &[u8], offsets: &[usize]) {
+        self.unmarshall(bytes);
+        for offset in offsets {
+            if offset.saturating_add(FLAT_OBJECT_SIZE) <= self.data.len() {
+                self.register_object(*offset);
+            }
+        }
+    }
+
     /// `nativeFreeBuffer` / `Parcel.recycle`: drop data, objects and fds.
     pub fn recycle(&mut self) {
         self.reset();
@@ -1244,10 +1341,7 @@ impl Parcel {
     pub fn enforce_no_data_avail(&self) -> Result<()> {
         let n = self.data_avail();
         if n > 0 {
-            Err(ParcelError::BadLength {
-                len: n,
-                max: 0,
-            })
+            Err(ParcelError::BadLength { len: n, max: 0 })
         } else {
             Ok(())
         }
@@ -1386,7 +1480,10 @@ impl ParcelTable {
     /// Number of live parcels.
     #[must_use]
     pub fn len(&self) -> usize {
-        lock(&self.slots).iter().filter(|s| s.parcel.is_some()).count()
+        lock(&self.slots)
+            .iter()
+            .filter(|s| s.parcel.is_some())
+            .count()
     }
 
     /// `true` when no parcels are live.

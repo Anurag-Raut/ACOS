@@ -113,7 +113,9 @@ impl RectF {
 }
 
 /// An integer rectangle, mirroring `android.graphics.Rect`.
-#[derive(Copy, Clone, PartialEq, Eq, Debug, Default, Hash, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Copy, Clone, PartialEq, Eq, Debug, Default, Hash, serde::Serialize, serde::Deserialize,
+)]
 pub struct Rect {
     pub left: i32,
     pub top: i32,
@@ -210,7 +212,11 @@ impl NinePatchChunk {
             u32::from_le_bytes([bytes[o], bytes[o + 1], bytes[o + 2], bytes[o + 3]]) as usize
         };
         let (xo, yo, co) = (u32_le(4), u32_le(8), u32_le(28));
-        let fits = |o: usize, n: usize| o.checked_add(n * 4).map(|e| e <= bytes.len()).unwrap_or(false);
+        let fits = |o: usize, n: usize| {
+            o.checked_add(n * 4)
+                .map(|e| e <= bytes.len())
+                .unwrap_or(false)
+        };
         if !fits(xo, nx) || !fits(yo, ny) || !fits(co, nc) {
             return None;
         }
@@ -230,9 +236,8 @@ impl NinePatchChunk {
                 })
                 .collect()
         };
-        let be_i32 = |o: usize| {
-            i32::from_be_bytes([bytes[o], bytes[o + 1], bytes[o + 2], bytes[o + 3]])
-        };
+        let be_i32 =
+            |o: usize| i32::from_be_bytes([bytes[o], bytes[o + 1], bytes[o + 2], bytes[o + 3]]);
         Some(NinePatchChunk {
             x_divs: read_i32(xo, nx),
             y_divs: read_i32(yo, ny),
@@ -335,9 +340,11 @@ impl Outline {
     pub fn as_path(&self) -> Option<Path> {
         match self {
             Outline::Rect(r) => Some(Path::from_rect(*r)),
-            Outline::RoundRect { rect, radius_x, radius_y } => {
-                Some(Path::from_round_rect(*rect, *radius_x, *radius_y))
-            }
+            Outline::RoundRect {
+                rect,
+                radius_x,
+                radius_y,
+            } => Some(Path::from_round_rect(*rect, *radius_x, *radius_y)),
             Outline::Path { path, .. } => Some(path.clone()),
             _ => None,
         }

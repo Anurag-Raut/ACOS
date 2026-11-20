@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  MPROC4 step 3b/3c: the app that starts the SECOND process.
+
+  `dev.acos.fixtures.proca` is the launched APK; `dev.acos.fixtures.procb` is
+  installed beside it (`extra-apk`). Nothing of B runs until proc-a asks for
+  one of B's components, which is the lazy-spawn trigger: the host resolves the
+  component, records the need for a process and the launcher spawns B's guest.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="dev.acos.fixtures.proca"
+    android:versionCode="1"
+    android:versionName="1.0">
+
+    <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="34" />
+
+    <application
+        android:label="@string/app_name"
+        android:allowBackup="false"
+        android:debuggable="true">
+        <activity
+            android:name=".ProcAActivity"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>

@@ -13,7 +13,12 @@ use crate::vm::{InvokeKind, Vm};
 
 pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
     let c = "Lcom/android/icu/charset/NativeConverter;";
-    vm.register_native(c, "charsetForName", "(Ljava/lang/String;)Ljava/nio/charset/Charset;", charset_for_name);
+    vm.register_native(
+        c,
+        "charsetForName",
+        "(Ljava/lang/String;)Ljava/nio/charset/Charset;",
+        charset_for_name,
+    );
     vm.register_native(c, "openConverter", "(Ljava/lang/String;)J", open_converter);
     vm.register_native(c, "closeConverter", "(J)V", close_converter);
     vm.register_native(c, "getMaxBytesPerChar", "(J)I", get_max_bytes);
@@ -21,20 +26,40 @@ pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
     vm.register_native(c, "getAveCharsPerByte", "(J)F", get_ave_chars);
     vm.register_native(c, "getNativeFinalizer", "()J", native_finalizer);
     vm.register_native(c, "setCallbackEncode", "(JII[B)V", set_callback_encode);
-    vm.register_native(c, "setCallbackDecode", "(JIILjava/lang/String;)V", set_callback_decode);
+    vm.register_native(
+        c,
+        "setCallbackDecode",
+        "(JIILjava/lang/String;)V",
+        set_callback_decode,
+    );
     vm.register_native(c, "resetCharToByte", "(J)V", reset_converter);
     vm.register_native(c, "resetByteToChar", "(J)V", reset_converter);
     vm.register_native(c, "encode", "(J[CI[BI[IZ)I", encode);
     vm.register_native(c, "decode", "(J[BI[CI[IZ)I", decode);
-    vm.register_native(c, "contains", "(Ljava/lang/String;Ljava/lang/String;)Z", contains);
-    vm.register_native(c, "getAvailableCharsetNames", "()[Ljava/lang/String;", available_names);
+    vm.register_native(
+        c,
+        "contains",
+        "(Ljava/lang/String;Ljava/lang/String;)Z",
+        contains,
+    );
+    vm.register_native(
+        c,
+        "getAvailableCharsetNames",
+        "()[Ljava/lang/String;",
+        available_names,
+    );
     vm.register_native(c, "getSubstitutionBytes", "(J)[B", substitution_bytes);
     // ICU default-locale state. ACOS's ICU is a Rust shim with no ICU data, so
     // the identity is recorded rather than handed to a native ICU library. The
     // Java side still owns every observable decision (`Locale.getDefault`);
     // this only mirrors it into the shim.
     let l = "Lcom/android/icu/util/LocaleNative;";
-    vm.register_native(l, "setDefaultNative", "(Ljava/lang/String;)V", locale_set_default);
+    vm.register_native(
+        l,
+        "setDefaultNative",
+        "(Ljava/lang/String;)V",
+        locale_set_default,
+    );
     // `com.android.icu.util.regex.PatternNative` builds a `NativeAllocationRegistry`
     // in `<clinit>`. ACOS has no native ICU regex objects, so there is no free
     // function to return (`0` = no finalizer). Actual compilation/matching stays
@@ -60,7 +85,9 @@ fn default_locale_slot() -> &'static Mutex<String> {
 
 fn locale_set_default(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let tag = vm.string_to_rust(vm.arg_ref(ctx, 0)).unwrap_or_default();
-    *default_locale_slot().lock().unwrap_or_else(|p| p.into_inner()) = tag;
+    *default_locale_slot()
+        .lock()
+        .unwrap_or_else(|p| p.into_inner()) = tag;
     Ok(())
 }
 
@@ -153,7 +180,10 @@ fn reset_converter(_vm: &mut Vm, _ctx: NativeCtx) -> VmResult<()> {
 }
 
 fn converter_name(vm: &Vm, id: u64) -> String {
-    vm.converters.get(&id).cloned().unwrap_or_else(|| "UTF-8".to_string())
+    vm.converters
+        .get(&id)
+        .cloned()
+        .unwrap_or_else(|| "UTF-8".to_string())
 }
 
 fn get_max_bytes(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
@@ -269,7 +299,11 @@ fn encode(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
         }
     }
     // Copy produced bytes into the output array.
-    if let Some(Object::Array(ArrayObj { data: ArrayData::Byte(v), .. })) = vm.heap.get_mut(output) {
+    if let Some(Object::Array(ArrayObj {
+        data: ArrayData::Byte(v),
+        ..
+    })) = vm.heap.get_mut(output)
+    {
         for (k, b) in out.iter().enumerate() {
             if bo + k < v.len() {
                 v[bo + k] = *b as i8;
@@ -290,8 +324,8 @@ fn encode_char(ch: u16, chars: &[u16], ci: &mut usize, charset: &str) -> Option<
             // Combine a surrogate pair into a scalar.
             if (0xD800..=0xDBFF).contains(&ch) {
                 if *ci + 1 < chars.len() && (0xDC00..=0xDFFF).contains(&chars[*ci + 1]) {
-                    let scalar = 0x10000
-                        + (((ch as u32 - 0xD800) << 10) | (chars[*ci + 1] as u32 - 0xDC00));
+                    let scalar =
+                        0x10000 + (((ch as u32 - 0xD800) << 10) | (chars[*ci + 1] as u32 - 0xDC00));
                     *ci += 2;
                     let c = char::from_u32(scalar).unwrap_or('\u{FFFD}');
                     let mut buf = [0u8; 4];
@@ -372,7 +406,11 @@ fn decode(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
             _ => out.push(ch as u16),
         }
     }
-    if let Some(Object::Array(ArrayObj { data: ArrayData::Char(v), .. })) = vm.heap.get_mut(output) {
+    if let Some(Object::Array(ArrayObj {
+        data: ArrayData::Char(v),
+        ..
+    })) = vm.heap.get_mut(output)
+    {
         for (k, c) in out.iter().enumerate() {
             if co + k < v.len() {
                 v[co + k] = *c;
@@ -389,7 +427,10 @@ fn decode(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
 
 fn read_offsets(vm: &Vm, data: crate::heap::Handle) -> (usize, usize) {
     match vm.heap.get(data) {
-        Some(Object::Array(ArrayObj { data: ArrayData::Int(v), .. })) => (
+        Some(Object::Array(ArrayObj {
+            data: ArrayData::Int(v),
+            ..
+        })) => (
             v.first().copied().unwrap_or(0).max(0) as usize,
             v.get(1).copied().unwrap_or(0).max(0) as usize,
         ),
@@ -398,7 +439,11 @@ fn read_offsets(vm: &Vm, data: crate::heap::Handle) -> (usize, usize) {
 }
 
 fn write_offsets(vm: &mut Vm, data: crate::heap::Handle, a: usize, b: usize) {
-    if let Some(Object::Array(ArrayObj { data: ArrayData::Int(v), .. })) = vm.heap.get_mut(data) {
+    if let Some(Object::Array(ArrayObj {
+        data: ArrayData::Int(v),
+        ..
+    })) = vm.heap.get_mut(data)
+    {
         if !v.is_empty() {
             v[0] = a as i32;
         }
@@ -410,14 +455,20 @@ fn write_offsets(vm: &mut Vm, data: crate::heap::Handle, a: usize, b: usize) {
 
 fn char_array(vm: &Vm, h: crate::heap::Handle) -> Option<Vec<u16>> {
     match vm.heap.get(h) {
-        Some(Object::Array(ArrayObj { data: ArrayData::Char(v), .. })) => Some(v.clone()),
+        Some(Object::Array(ArrayObj {
+            data: ArrayData::Char(v),
+            ..
+        })) => Some(v.clone()),
         _ => None,
     }
 }
 
 fn byte_array(vm: &Vm, h: crate::heap::Handle) -> Option<Vec<i8>> {
     match vm.heap.get(h) {
-        Some(Object::Array(ArrayObj { data: ArrayData::Byte(v), .. })) => Some(v.clone()),
+        Some(Object::Array(ArrayObj {
+            data: ArrayData::Byte(v),
+            ..
+        })) => Some(v.clone()),
         _ => None,
     }
 }

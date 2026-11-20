@@ -176,7 +176,7 @@ fn repo_root() -> PathBuf {
 }
 
 fn out_dir() -> PathBuf {
-    let d = repo_root().join("results/render/corpus");
+    let d = acos_test_support::test_artifacts_dir("render/corpus");
     let _ = std::fs::create_dir_all(&d);
     d
 }
@@ -191,16 +191,21 @@ fn fixture_scenes_match_art_reference() {
         let ref_path = repo_root().join(case.reference);
         // HONESTY_AUDIT #11 / W94-A #1: under `ACOS_REQUIRE_FIXTURES` a missing
         // reference is a hard failure, never a silent coverage drop.
-        if !acos_test_support::have_fixture(case.reference) {
-            eprintln!(
-                "SKIP {}: missing reference {} (capture with tools/oracle/)",
+        if acos_test_support::require_prereq(
+            acos_test_support::have_fixture(case.reference),
+            "fixture_scenes_match_art_reference",
+            &format!(
+                "{}: missing reference {} (capture with tools/oracle/)",
                 case.app,
                 ref_path.display()
-            );
+            ),
+        )
+        .is_none()
+        {
             continue;
         }
-        let scene_path =
-            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(format!("tests/scenes/{}.json", case.app));
+        let scene_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join(format!("tests/scenes/{}.json", case.app));
         assert!(
             scene_path.exists(),
             "missing corpus scene {}",
@@ -311,7 +316,11 @@ fn fixture_scenes_match_art_reference() {
             report.differing_fraction * 100.0,
             case.max_differing
         );
-        assert!(!report.identical, "{} frame was pixel-identical to reference", case.app);
+        assert!(
+            !report.identical,
+            "{} frame was pixel-identical to reference",
+            case.app
+        );
     }
 
     assert!(!rows.is_empty(), "no corpus references were available");
@@ -323,10 +332,17 @@ fn fixture_scenes_match_art_reference() {
         "scenes": rows,
     });
     let out = out_dir().join("corpus-metrics.json");
-    std::fs::write(&out, serde_json::to_vec_pretty(&aggregate).expect("serialize")).expect("write");
+    std::fs::write(
+        &out,
+        serde_json::to_vec_pretty(&aggregate).expect("serialize"),
+    )
+    .expect("write");
     eprintln!("wrote {}", rel(&out));
 }
 
 fn rel(p: &Path) -> String {
-    p.strip_prefix(repo_root()).unwrap_or(p).display().to_string()
+    p.strip_prefix(repo_root())
+        .unwrap_or(p)
+        .display()
+        .to_string()
 }

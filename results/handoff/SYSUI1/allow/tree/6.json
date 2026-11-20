@@ -1,0 +1,667 @@
+{
+  "frame": {
+    "frame_seq": 6,
+    "produced_at": "2026-11-17T15:26:54.969Z",
+    "cause_id": "art",
+    "width": 1080,
+    "height": 2400,
+    "density": 420,
+    "content_hash": "4f90fceee28d19eed0d2f15dc4836114",
+    "meaningful": true,
+    "display_origin": [
+      0,
+      0
+    ],
+    "display_size": [
+      1080,
+      2400
+    ]
+  },
+  "package": "dev.acos.fixtures.permprobe",
+  "nodes": [
+    {
+      "id": "n0_",
+      "class": "com.android.internal.policy.DecorView",
+      "resource_id": "",
+      "text": "",
+      "hint": "",
+      "content_desc": "",
+      "bounds": [
+        0,
+        0,
+        1080,
+        2400
+      ],
+      "visible_bounds": [
+        0,
+        0,
+        1080,
+        2400
+      ],
+      "visible": true,
+      "enabled": true,
+      "focused": false,
+      "clickable": false,
+      "scrollable": false,
+      "checked": false,
+      "selected": false,
+      "password": false,
+      "children": [
+        {
+          "id": "n1_android:id/decor_content_parent",
+          "class": "com.android.internal.widget.ActionBarOverlayLayout",
+          "resource_id": "android:id/decor_content_parent",
+          "text": "",
+          "hint": "",
+          "content_desc": "",
+          "bounds": [
+            0,
+            0,
+            1080,
+            2337
+          ],
+          "visible_bounds": [
+            0,
+            0,
+            1080,
+            2337
+          ],
+          "visible": true,
+          "enabled": true,
+          "focused": false,
+          "clickable": false,
+          "scrollable": false,
+          "checked": false,
+          "selected": false,
+          "password": false,
+          "children": [
+            {
+              "id": "n2_android:id/content",
+              "class": "android.widget.FrameLayout",
+              "resource_id": "android:id/content",
+              "text": "",
+              "hint": "",
+              "content_desc": "",
+              "bounds": [
+                0,
+                275,
+                1080,
+                2337
+              ],
+              "visible_bounds": [
+                0,
+                275,
+                1080,
+                2337
+              ],
+              "visible": true,
+              "enabled": true,
+              "focused": false,
+              "clickable": false,
+              "scrollable": false,
+              "checked": false,
+              "selected": false,
+              "password": false,
+              "children": [
+                {
+                  "id": "n3_",
+                  "class": "android.widget.LinearLayout",
+                  "resource_id": "",
+                  "text": "",
+                  "hint": "",
+                  "content_desc": "",
+                  "bounds": [
+                    0,
+                    275,
+                    1080,
+                    938
+                  ],
+                  "visible_bounds": [
+                    0,
+                    275,
+                    1080,
+                    938
+                  ],
+                  "visible": true,
+                  "enabled": true,
+                  "focused": false,
+                  "clickable": false,
+                  "scrollable": false,
+                  "checked": false,
+                  "selected": false,
+                  "password": false,
+                  "children": [
+                    {
+                      "id": "n4_com.android.permissioncontroller:id/title",
+                      "class": "android.widget.TextView",
+                      "resource_id": "com.android.permissioncontroller:id/title",
+                      "text": "Allow dev.acos.fixtures.permprobe to access?",
+                      "hint": "",
+                      "content_desc": "",
+                      "bounds": [
+                        63,
+                        338,
+                        1017,
+                        456
+                      ],
+                      "visible_bounds": [
+                        63,
+                        338,
+                        1017,
+                        456
+                      ],
+                      "visible": true,
+                      "enabled": true,
+                      "focused": false,
+                      "clickable": false,
+                      "scrollable": false,
+                      "checked": false,
+                      "selected": false,
+                      "password": false,
+                      "children": [],
+                      "package": "",
+                      "window": "main",
+                      "window_id": "b0f3461",
+                      "window_type": "TYPE_BASE_APPLICATION",
+                      "window_kind": "application",
+                      "window_z": 0
+                    },
+                    {
+                      "id": "n4_com.android.permissioncontroller:id/permission_0",
+                      "class": "android.widget.TextView",
+                      "resource_id": "com.android.permissioncontroller:id/permission_0",
+                      "text": "CAMERA",
+                      "hint": "",
+                      "content_desc": "",
+                      "bounds": [
+                        63,
+                        456,
+                        1017,
+                        545
+                      ],
+                      "visible_bounds": [
+                        63,
+                        456,
+                        1017,
+                        545
+                      ],
+                      "visible": true,
+                      "enabled": true,
+                      "focused": false,
+                      "clickable": false,
+                      "scrollable": false,
+                      "checked": false,
+                      "selected": false,
+                      "password": false,
+                      "children": [],
+                      "package": "",
+                      "window": "main",
+                      "window_id": "b0f3461",
+                      "window_type": "TYPE_BASE_APPLICATION",
+                      "window_kind": "application",
+                      "window_z": 0
+                    },
+                    {
+                      "id": "n4_com.android.permissioncontroller:id/permission_1",
+                      "class": "android.widget.TextView",
+                      "resource_id": "com.android.permissioncontroller:id/permission_1",
+                      "text": "ACCESS_FINE_LOCATION",
+                      "hint": "",
+                      "content_desc": "",
+                      "bounds": [
+                        63,
+                        545,
+                        1017,
+                        623
+                      ],
+                      "visible_bounds": [
+                        63,
+                        545,
+                        1017,
+                        623
+                      ],
+                      "visible": true,
+                      "enabled": true,
+                      "focused": false,
+                      "clickable": false,
+                      "scrollable": false,
+                      "checked": false,
+                      "selected": false,
+                      "password": false,
+                      "children": [],
+                      "package": "",
+                      "window": "main",
+                      "window_id": "b0f3461",
+                      "window_type": "TYPE_BASE_APPLICATION",
+                      "window_kind": "application",
+                      "window_z": 0
+                    },
+                    {
+                      "id": "n4_com.android.permissioncontroller:id/dont_ask_again",
+                      "class": "android.widget.CheckBox",
+                      "resource_id": "com.android.permissioncontroller:id/dont_ask_again",
+                      "text": "Don't ask again",
+                      "hint": "",
+                      "content_desc": "",
+                      "bounds": [
+                        63,
+                        623,
+                        1017,
+                        707
+                      ],
+                      "visible_bounds": [
+                        63,
+                        623,
+                        1017,
+                        707
+                      ],
+                      "visible": true,
+                      "enabled": true,
+                      "focused": false,
+                      "clickable": true,
+                      "scrollable": false,
+                      "checked": false,
+                      "selected": false,
+                      "password": false,
+                      "children": [],
+                      "package": "",
+                      "window": "main",
+                      "window_id": "b0f3461",
+                      "window_type": "TYPE_BASE_APPLICATION",
+                      "window_kind": "application",
+                      "window_z": 0
+                    },
+                    {
+                      "id": "n4_",
+                      "class": "android.widget.LinearLayout",
+                      "resource_id": "",
+                      "text": "",
+                      "hint": "",
+                      "content_desc": "",
+                      "bounds": [
+                        63,
+                        707,
+                        1017,
+                        875
+                      ],
+                      "visible_bounds": [
+                        63,
+                        707,
+                        1017,
+                        875
+                      ],
+                      "visible": true,
+                      "enabled": true,
+                      "focused": false,
+                      "clickable": false,
+                      "scrollable": false,
+                      "checked": false,
+                      "selected": false,
+                      "password": false,
+                      "children": [
+                        {
+                          "id": "n5_com.android.permissioncontroller:id/deny_button",
+                          "class": "android.widget.Button",
+                          "resource_id": "com.android.permissioncontroller:id/deny_button",
+                          "text": "Deny",
+                          "hint": "",
+                          "content_desc": "",
+                          "bounds": [
+                            63,
+                            749,
+                            540,
+                            875
+                          ],
+                          "visible_bounds": [
+                            63,
+                            749,
+                            540,
+                            875
+                          ],
+                          "visible": true,
+                          "enabled": true,
+                          "focused": false,
+                          "clickable": true,
+                          "scrollable": false,
+                          "checked": false,
+                          "selected": false,
+                          "password": false,
+                          "children": [],
+                          "package": "",
+                          "window": "main",
+                          "window_id": "b0f3461",
+                          "window_type": "TYPE_BASE_APPLICATION",
+                          "window_kind": "application",
+                          "window_z": 0
+                        },
+                        {
+                          "id": "n5_com.android.permissioncontroller:id/allow_button",
+                          "class": "android.widget.Button",
+                          "resource_id": "com.android.permissioncontroller:id/allow_button",
+                          "text": "Allow",
+                          "hint": "",
+                          "content_desc": "",
+                          "bounds": [
+                            540,
+                            749,
+                            1017,
+                            875
+                          ],
+                          "visible_bounds": [
+                            540,
+                            749,
+                            1017,
+                            875
+                          ],
+                          "visible": true,
+                          "enabled": true,
+                          "focused": false,
+                          "clickable": true,
+                          "scrollable": false,
+                          "checked": false,
+                          "selected": false,
+                          "password": false,
+                          "children": [],
+                          "package": "",
+                          "window": "main",
+                          "window_id": "b0f3461",
+                          "window_type": "TYPE_BASE_APPLICATION",
+                          "window_kind": "application",
+                          "window_z": 0
+                        }
+                      ],
+                      "package": "",
+                      "window": "main",
+                      "window_id": "b0f3461",
+                      "window_type": "TYPE_BASE_APPLICATION",
+                      "window_kind": "application",
+                      "window_z": 0
+                    }
+                  ],
+                  "package": "",
+                  "window": "main",
+                  "window_id": "b0f3461",
+                  "window_type": "TYPE_BASE_APPLICATION",
+                  "window_kind": "application",
+                  "window_z": 0
+                }
+              ],
+              "package": "",
+              "window": "main",
+              "window_id": "b0f3461",
+              "window_type": "TYPE_BASE_APPLICATION",
+              "window_kind": "application",
+              "window_z": 0
+            },
+            {
+              "id": "n2_android:id/action_bar_container",
+              "class": "com.android.internal.widget.ActionBarContainer",
+              "resource_id": "android:id/action_bar_container",
+              "text": "",
+              "hint": "",
+              "content_desc": "",
+              "bounds": [
+                0,
+                128,
+                1080,
+                275
+              ],
+              "visible_bounds": [
+                0,
+                128,
+                1080,
+                275
+              ],
+              "visible": true,
+              "enabled": true,
+              "focused": false,
+              "clickable": false,
+              "scrollable": false,
+              "checked": false,
+              "selected": false,
+              "password": false,
+              "children": [
+                {
+                  "id": "n3_android:id/action_bar",
+                  "class": "android.widget.Toolbar",
+                  "resource_id": "android:id/action_bar",
+                  "text": "",
+                  "hint": "",
+                  "content_desc": "",
+                  "bounds": [
+                    0,
+                    128,
+                    1080,
+                    275
+                  ],
+                  "visible_bounds": [
+                    0,
+                    128,
+                    1080,
+                    275
+                  ],
+                  "visible": true,
+                  "enabled": true,
+                  "focused": false,
+                  "clickable": false,
+                  "scrollable": false,
+                  "checked": false,
+                  "selected": false,
+                  "password": false,
+                  "children": [
+                    {
+                      "id": "n4_",
+                      "class": "android.widget.TextView",
+                      "resource_id": "",
+                      "text": "Permission controller",
+                      "hint": "",
+                      "content_desc": "",
+                      "bounds": [
+                        42,
+                        166,
+                        553,
+                        237
+                      ],
+                      "visible_bounds": [
+                        42,
+                        166,
+                        553,
+                        237
+                      ],
+                      "visible": true,
+                      "enabled": true,
+                      "focused": false,
+                      "clickable": false,
+                      "scrollable": false,
+                      "checked": false,
+                      "selected": false,
+                      "password": false,
+                      "children": [],
+                      "package": "",
+                      "window": "main",
+                      "window_id": "b0f3461",
+                      "window_type": "TYPE_BASE_APPLICATION",
+                      "window_kind": "application",
+                      "window_z": 0
+                    },
+                    {
+                      "id": "n4_",
+                      "class": "android.widget.ActionMenuView",
+                      "resource_id": "",
+                      "text": "",
+                      "hint": "",
+                      "content_desc": "",
+                      "bounds": [
+                        1080,
+                        128,
+                        1080,
+                        275
+                      ],
+                      "visible": false,
+                      "enabled": true,
+                      "focused": false,
+                      "clickable": false,
+                      "scrollable": false,
+                      "checked": false,
+                      "selected": false,
+                      "password": false,
+                      "children": [],
+                      "package": "",
+                      "window": "main",
+                      "window_id": "b0f3461",
+                      "window_type": "TYPE_BASE_APPLICATION",
+                      "window_kind": "application",
+                      "window_z": 0
+                    }
+                  ],
+                  "package": "",
+                  "window": "main",
+                  "window_id": "b0f3461",
+                  "window_type": "TYPE_BASE_APPLICATION",
+                  "window_kind": "application",
+                  "window_z": 0
+                },
+                {
+                  "id": "n3_android:id/action_context_bar",
+                  "class": "com.android.internal.widget.ActionBarContextView",
+                  "resource_id": "android:id/action_context_bar",
+                  "text": "",
+                  "hint": "",
+                  "content_desc": "",
+                  "bounds": [
+                    0,
+                    128,
+                    0,
+                    128
+                  ],
+                  "visible": false,
+                  "enabled": true,
+                  "focused": false,
+                  "clickable": false,
+                  "scrollable": false,
+                  "checked": false,
+                  "selected": false,
+                  "password": false,
+                  "children": [],
+                  "package": "",
+                  "window": "main",
+                  "window_id": "b0f3461",
+                  "window_type": "TYPE_BASE_APPLICATION",
+                  "window_kind": "application",
+                  "window_z": 0
+                }
+              ],
+              "package": "",
+              "window": "main",
+              "window_id": "b0f3461",
+              "window_type": "TYPE_BASE_APPLICATION",
+              "window_kind": "application",
+              "window_z": 0
+            }
+          ],
+          "package": "",
+          "window": "main",
+          "window_id": "b0f3461",
+          "window_type": "TYPE_BASE_APPLICATION",
+          "window_kind": "application",
+          "window_z": 0
+        },
+        {
+          "id": "n1_android:id/navigationBarBackground",
+          "class": "android.view.View",
+          "resource_id": "android:id/navigationBarBackground",
+          "text": "",
+          "hint": "",
+          "content_desc": "",
+          "bounds": [
+            0,
+            2337,
+            1080,
+            2400
+          ],
+          "visible_bounds": [
+            0,
+            2337,
+            1080,
+            2400
+          ],
+          "visible": true,
+          "enabled": true,
+          "focused": false,
+          "clickable": false,
+          "scrollable": false,
+          "checked": false,
+          "selected": false,
+          "password": false,
+          "children": [],
+          "package": "",
+          "window": "main",
+          "window_id": "b0f3461",
+          "window_type": "TYPE_BASE_APPLICATION",
+          "window_kind": "application",
+          "window_z": 0
+        },
+        {
+          "id": "n1_android:id/statusBarBackground",
+          "class": "android.view.View",
+          "resource_id": "android:id/statusBarBackground",
+          "text": "",
+          "hint": "",
+          "content_desc": "",
+          "bounds": [
+            0,
+            0,
+            1080,
+            128
+          ],
+          "visible_bounds": [
+            0,
+            0,
+            1080,
+            128
+          ],
+          "visible": true,
+          "enabled": true,
+          "focused": false,
+          "clickable": false,
+          "scrollable": false,
+          "checked": false,
+          "selected": false,
+          "password": false,
+          "children": [],
+          "package": "",
+          "window": "main",
+          "window_id": "b0f3461",
+          "window_type": "TYPE_BASE_APPLICATION",
+          "window_kind": "application",
+          "window_z": 0
+        }
+      ],
+      "package": "",
+      "window": "main",
+      "window_id": "b0f3461",
+      "window_type": "TYPE_BASE_APPLICATION",
+      "window_kind": "application",
+      "window_z": 0
+    }
+  ],
+  "truncated": false,
+  "text_available": true,
+  "windows": [
+    {
+      "id": "b0f3461",
+      "label": "main",
+      "type_name": "TYPE_BASE_APPLICATION",
+      "kind": "application",
+      "z": 0,
+      "bounds": [
+        0,
+        0,
+        1080,
+        2400
+      ],
+      "focus": true,
+      "touchable": true
+    }
+  ]
+}

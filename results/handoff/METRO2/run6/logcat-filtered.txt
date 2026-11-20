@@ -1,0 +1,361 @@
+--------- beginning of main
+1794995392659      1  E cutils-trace: Error opening trace file: Permission denied (13)
+1794995392659      2  I : Using CollectorTypeCC GC.
+1794995392659      3  D nativeloader: InitDefaultPublicLibraries for_preload=1: libandroid.so:libaaudio.so:libamidi.so:libbinder_ndk.so:libc.so:libcamera2ndk.so:libdl.so:libEGL.so:libGLESv1_CM.so:libGLESv2.so:libGLESv3.so:libicu.so:libicui18n.so:libicuuc.so:libjnigraphics.so:liblog.so:libmediandk.so
+1794995392659      4  D : I18n APEX ICU file found: /apex/com.android.i18n/etc/icu/icudt72l.dat
+1794995392659      5  E logdw: Found user/group name 'root' in '/etc/passwd' without required prefix 'system_'
+1794995392659      6  E logdw: Found user/group name 'bin' in '/etc/passwd' without required prefix 'system_'
+1794995392659      7  E logdw: Found user/group name 'daemon' in '/etc/passwd' without required prefix 'system_'
+1794995392659      8  E logdw: Found user/group name 'mail' in '/etc/passwd' without required prefix 'system_'
+1794995392659      9  E logdw: Found user/group name 'ftp' in '/etc/passwd' without required prefix 'system_'
+1794995392659     10  E logdw: Found user/group name 'http' in '/etc/passwd' without required prefix 'system_'
+1794995392659     11  E logdw: Found user/group name 'nobody' in '/etc/passwd' without required prefix 'system_'
+1794995392659     12  E logdw: Found user/group name 'dbus' in '/etc/passwd' without required prefix 'system_'
+1794995392659     13  E logdw: Found user/group name 'systemd-coredump' in '/etc/passwd' without required prefix 'system_'
+1794995392659     14  E logdw: Found user/group name 'systemd-network' in '/etc/passwd' without required prefix 'system_'
+1794995392659     15  E logdw: Found user/group name 'systemd-oom' in '/etc/passwd' without required prefix 'system_'
+1794995392659     16  E logdw: Found user/group name 'systemd-journal-remote' in '/etc/passwd' without required prefix 'system_'
+1794995392659     17  E logdw: Found user/group name 'systemd-resolve' in '/etc/passwd' without required prefix 'system_'
+1794995392659     18  E logdw: Found user/group name 'systemd-timesync' in '/etc/passwd' without required prefix 'system_'
+1794995392659     19  E logdw: Found user/group name 'tss' in '/etc/passwd' without required prefix 'system_'
+1794995392659     20  E logdw: Found user/group name 'uuidd' in '/etc/passwd' without required prefix 'system_'
+1794995392659     21  E logdw: Found user/group name 'alpm' in '/etc/passwd' without required prefix 'system_'
+1794995392659     22  E logdw: Found user/group name 'git' in '/etc/passwd' without required prefix 'system_'
+1794995392659     23  E logdw: Found user/group name 'polkitd' in '/etc/passwd' without required prefix 'system_'
+1794995392659     24  E logdw: Found user/group name 'Qui' in '/etc/passwd' without required prefix 'system_'
+1794995392659     25  E logdw: Found user/group name 'avahi' in '/etc/passwd' without required prefix 'system_'
+1794995392659     26  E logdw: Found user/group name 'brltty' in '/etc/passwd' without required prefix 'system_'
+1794995392659     27  E logdw: Found user/group name 'colord' in '/etc/passwd' without required prefix 'system_'
+1794995392659     28  E logdw: Found user/group name 'flatpak' in '/etc/passwd' without required prefix 'system_'
+1794995392659     29  E logdw: Found user/group name 'gdm' in '/etc/passwd' without required prefix 'system_'
+1794995392659     30  E logdw: Found user/group name 'geoclue' in '/etc/passwd' without required prefix 'system_'
+1794995392659     31  E logdw: Found user/group name 'gnome-remote-desktop' in '/etc/passwd' without required prefix 'system_'
+1794995392659     32  E logdw: Found user/group name 'libvirt-qemu' in '/etc/passwd' without required prefix 'system_'
+1794995392659     33  E logdw: Found user/group name 'qemu' in '/etc/passwd' without required prefix 'system_'
+1794995392659     34  E logdw: Found user/group name 'rtkit' in '/etc/passwd' without required prefix 'system_'
+1794995392659     35  E logdw: Found user/group name 'saned' in '/etc/passwd' without required prefix 'system_'
+1794995392659     36  E logdw: Found user/group name 'usbmux' in '/etc/passwd' without required prefix 'system_'
+1794995392659     37  E logdw: Found user/group name 'nvidia-persistenced' in '/etc/passwd' without required prefix 'system_'
+1794995392659     38  E logdw: Found user/group name 'ollama' in '/etc/passwd' without required prefix 'system_'
+1794995392659     39  E logdw: Found user/group name 'named' in '/etc/passwd' without required prefix 'system_'
+1794995392659     40  E logdw: Found user/group name 'pcscd' in '/etc/passwd' without required prefix 'system_'
+1794995392659     41  E logdw: Found user/group name 'mongodb' in '/etc/passwd' without required prefix 'system_'
+1794995392659     42  E logdw: Found user/group name 'malcontent-timer-ext-agent' in '/etc/passwd' without required prefix 'system_'
+1794995392659     43  E logdw: Found user/group name 'malcontent-timerd' in '/etc/passwd' without required prefix 'system_'
+1794995392659     44  E logdw: Found user/group name 'malcontent-webd' in '/etc/passwd' without required prefix 'system_'
+1794995392659     45  E logdw: Found user/group name 'systemd-imds' in '/etc/passwd' without required prefix 'system_'
+1794995392659     46  E logdw: Found user/group name 'clamav' in '/etc/passwd' without required prefix 'system_'
+1794995392659     47  E logdw: Found user/group name 'dnsmasq' in '/etc/passwd' without required prefix 'system_'
+1794995392659     48  W ziparchive: Unable to open '/data/app/launch-guest/classes.dm': No such file or directory
+1794995392659     49  W ziparchive: Unable to open '/data/app/launch-guest/classes.dm': No such file or directory
+1794995392659     50  D nativeloader: InitApexLibraries:
+  
+1794995392659     51  D nativeloader: InitDefaultPublicLibraries for_preload=0: libandroid.so:libaaudio.so:libamidi.so:libbinder_ndk.so:libc.so:libcamera2ndk.so:libclang_rt.hwasan-aarch64-android.so:libdl.so:libEGL.so:libGLESv1_CM.so:libGLESv2.so:libGLESv3.so:libicu.so:libicui18n.so:libicuuc.so:libj
+1794995392659     52  D nativeloader: Configuring clns-1 for other apk . target_sdk_version=0, uses_libraries=ALL, library_path=/system/lib64:/vendor/lib64, permitted_path=/data:/mnt/expand
+1794995392659     53  D nativeloader: InitExtendedPublicLibraries: 
+1794995392659     54  I nativeloader: InitVendorPublicLibraries skipped: No such file or directory
+1794995392659     55  D nativeloader: InitProductPublicLibraries: 
+1794995392659     56  E ProcessState: Binder driver /dev/binder is unavailable. Using /dev/binder instead.
+1794995392659     57  D CompatibilityChangeReporter: Compat change id reported: 171979766; UID 10192; state: ENABLED
+1794995392659     58  D CompatibilityChangeReporter: Compat change id reported: 242716250; UID 10192; state: ENABLED
+1794995392659     59  I Typeface: Preloading /system/fonts/Roboto-Regular.ttf
+1794995392659     60  I Typeface: Preloading /system/fonts/RobotoStatic-Regular.ttf
+1794995392659     61  D CompatibilityChangeReporter: Compat change id reported: 247079863; UID 10192; state: ENABLED
+1794995392659     62  W ziparchive: Unable to open '/data/app/rn-debug.dm': No such file or directory
+1794995392659     63  W ziparchive: Unable to open '/data/app/rn-debug.dm': No such file or directory
+1794995392659     64  D nativeloader: Configuring clns-2 for other apk /data/app/rn-debug.apk. target_sdk_version=34, uses_libraries=, library_path=/data/app-lib/x86_64, permitted_path=/data:/mnt/expand:/data/app-data/dev.acos.fixtures.rnhello
+1794995392659     65  W ContextImpl: Failed to ensure /data/app-data/dev.acos.fixtures.rnhello/cache: chown failed: EINVAL (Invalid argument)
+1794995392659     66  W ContextImpl: Failed to ensure /data/app-data/dev.acos.fixtures.rnhello/code_cache: chown failed: EINVAL (Invalid argument)
+1794995392659     67  V GraphicsEnvironment: Currently set values for:
+1794995392659     68  V GraphicsEnvironment:   angle_gl_driver_selection_pkgs=[]
+1794995392659     69  V GraphicsEnvironment:   angle_gl_driver_selection_values=[]
+1794995392659     70  V GraphicsEnvironment: ANGLE GameManagerService for dev.acos.fixtures.rnhello: false
+1794995392659     71  V GraphicsEnvironment: dev.acos.fixtures.rnhello is not listed in per-application setting
+1794995392659     72  V GraphicsEnvironment: Neither updatable production driver nor prerelease driver is supported.
+1794995392659     73  W SystemServiceRegistry: No service published for: netstats
+1794995392659     74  E TrafficStats: TrafficStats not initialized, uid=10192
+1794995392659     75  I AcosRot6: ACOSLAUNCH MARK top-finish-watcher-started
+Previously recorded 0 base apk paths.
+1794995392659     84  D AppCompatDelegate: Checking for metadata for AppLocalesMetadataHolderService : Service not found
+1794995392659     85  D jni_lib_merge: Entering merged library JNI_OnLoad.
+
+1794995392659     86  D jni_lib_merge: Preparing 12 pre-merged libs (including stub)
+
+1794995392659     87  D jni_lib_merge: Preparing to register libfabricjni_so.  onload_func: 54eafba0
+
+1794995392659     88  D jni_lib_merge: Preparing to register libreact_devsupportjni_so.  onload_func: 54f8b530
+
+1794995392659     89  D jni_lib_merge: Preparing to register libreact_featureflagsjni_so.  onload_func: 54f9e0a0
+
+1794995392659     90  D jni_lib_merge: Preparing to register libreact_newarchdefaults_so.  onload_func: 54fc4fa0
+
+1794995392659     91  D jni_lib_merge: Preparing to register libreactnativeblob_so.  onload_func: 5506ca50
+
+1794995392659     92  D jni_lib_merge: Preparing to register libreactnativejni_so.  onload_func: 550878c0
+
+1794995392659     93  D jni_lib_merge: Preparing to register libreactnativejni_common_so.  onload_func: 5508e150
+
+1794995392659     94  D jni_lib_merge: Preparing to register librninstance_so.  onload_func: 550ac450
+
+1794995392659     95  D jni_lib_merge: Preparing to register libturbomodulejsijni_so.  onload_func: 55157b90
+
+1794995392659     96  D jni_lib_merge: Preparing to register libuimanagerjni_so.  onload_func: 5515fac0
+
+1794995392659     97  D jni_lib_merge: Preparing to register libyoga_so.  onload_func: 55167140
+
+1794995392659     98  D jni_lib_merge: About to register 11 actual methods.
+
+	existing SO sources: 
+		SoSource 0: BackupSoSource[root = /data/app-data/dev.acos.fixtures.rnhello/lib-main flags = 1 apks = [/data/app/rn-debug.apk]]
+		SoSource 1: ApplicationSoSource[DirectorySoSource[root = /data/app-lib/x86_64 flags = 0]]
+		SoSource 2: DirectorySoSource[root = /system/lib64 flags = 2]
+		SoSource 3: DirectorySoSource[root = /vendor/lib64 flags = 2]
+	Native lib dir: /data/app-lib/x86_64
+
+1794995392659    100  W soloader.recovery.CheckBaseApkExists: Base apk exists: /data/app/rn-debug.apk
+1794995392659    102  W SysUtil: error removing /data/app-data/dev.acos.fixtures.rnhello/lib-main write permission
+1794995392659    103  E fb-UnpackingSoSource: Encountered exception during wait for unpacking trying to acquire file lock for com.facebook.soloader.BackupSoSource (/data/app-data/dev.acos.fixtures.rnhello/lib-main): 
+java.io.FileNotFoundException: /data/app-data/dev.acos.fixtures.rnhello/lib-main/dso_lock: open failed: ENOENT (No such file or directory)
+	at libcore.io.IoBridge.open(IoBridge.java:574)
+	at java.io.FileOutputStream.<init>(FileOutputStream.java:236)
+	at java.io.FileOutputStream.<init>(FileOutputStream.java:186)
+	at com.facebook.soloader.FileLocker.<init>(FileLocker.java:36)
+	at com.facebook.soloader.FileLocker.lock(FileLocker.java:32)
+	at com.facebook.soloader.SysUtil.getFileLocker(SysUtil.java:462)
+	at com.facebook.soloader.SysUtil.getOrCreateLockOnDir(SysUtil.java:447)
+	at com.facebook.soloader.UnpackingSoSource.waitUntilInitCompleted(UnpackingSoSource.java:401)
+	at com.facebook.soloader.recovery.WaitForAsyncInit.recover(WaitForAsyncInit.java:31)
+	at com.facebook.soloader.recovery.CompositeRecoveryStrategy.recover(CompositeRecoveryStrategy.java:34)
+	at com.facebook.react.defaults.DefaultNewArchitectureEntryPoint.load(DefaultNewArchitectureEntryPoint.kt:108)
+	at dev.acos.fixtures.rnhello.MainActivity.onCreate(MainActivity.java:36)
+	at android.app.Activity.performCreate(Activity.java:8595)
+	at android.app.Activity.performCreate(Activity.java:8573)
+	at android.app.Instrumentation.callActivityOnCreate(Instrumentation.java:1456)
+	at android.app.ActivityThread.performLaunchActivity(ActivityThread.java:3764)
+	at android.app.ActivityThread.handleLaunchActivity(ActivityThread.java:3922)
+	at android.app.servertransaction.LaunchActivityItem.execute(LaunchActivityItem.java:103)
+	at android.app.servertransaction.TransactionExecutor.executeCallbacks(TransactionExecutor.java:139)
+	at android.app.servertransaction.TransactionExecutor.execute(TransactionExecutor.java:96)
+	at android.app.ActivityThread$H.handleMessage(ActivityThread.java:2443)
+	at android.os.Handler.dispatchMessage(Handler.java:106)
+	at android.os.Looper.loopOnce(Looper.java:205)
+	at a
+	existing SO sources: 
+		SoSource 0: BackupSoSource[root = /data/app-data/dev.acos.fixtures.rnhello/lib-main flags = 1 apks = [/data/app/rn-debug.apk]]
+		SoSource 1: ApplicationSoSource[DirectorySoSource[root = /data/app-lib/x86_64 flags = 0]]
+		SoSource 2: DirectorySoSource[root = /system/lib64 flags = 2]
+		SoSource 3: DirectorySoSource[root = /vendor/lib64 flags = 2]
+	Native lib dir: /data/app-lib/x86_64
+
+1794995392659    110  W SysUtil: error removing /data/app-data/dev.acos.fixtures.rnhello/lib-main write permission
+1794995392659    111  E fb-UnpackingSoSource: Encountered exception during wait for unpacking trying to acquire file lock for com.facebook.soloader.BackupSoSource (/data/app-data/dev.acos.fixtures.rnhello/lib-main): 
+java.io.FileNotFoundException: /data/app-data/dev.acos.fixtures.rnhello/lib-main/dso_lock: open failed: ENOENT (No such file or directory)
+	at libcore.io.IoBridge.open(IoBridge.java:574)
+	at java.io.FileOutputStream.<init>(FileOutputStream.java:236)
+	at java.io.FileOutputStream.<init>(FileOutputStream.java:186)
+	at com.facebook.soloader.FileLocker.<init>(FileLocker.java:36)
+	at com.facebook.soloader.FileLocker.lock(FileLocker.java:32)
+	at com.facebook.soloader.SysUtil.getFileLocker(SysUtil.java:462)
+	at com.facebook.soloader.SysUtil.getOrCreateLockOnDir(SysUtil.java:447)
+	at com.facebook.soloader.UnpackingSoSource.waitUntilInitCompleted(UnpackingSoSource.java:401)
+	at com.facebook.soloader.recovery.WaitForAsyncInit.recover(WaitForAsyncInit.java:31)
+	at com.facebook.soloader.recovery.CompositeRecoveryStrategy.recover(CompositeRecoveryStrategy.java:34)
+	at com.facebook.react.defaults.DefaultNewArchitectureEntryPoint.load(DefaultNewArchitectureEntryPoint.kt:108)
+	at dev.acos.fixtures.rnhello.MainActivity.onCreate(MainActivity.java:36)
+	at android.app.Activity.performCreate(Activity.java:8595)
+	at android.app.Activity.performCreate(Activity.java:8573)
+	at android.app.Instrumentation.callActivityOnCreate(Instrumentation.java:1456)
+	at android.app.ActivityThread.performLaunchActivity(ActivityThread.java:3764)
+	at android.app.ActivityThread.handleLaunchActivity(ActivityThread.java:3922)
+	at android.app.servertransaction.LaunchActivityItem.execute(LaunchActivityItem.java:103)
+	at android.app.servertransaction.TransactionExecutor.executeCallbacks(TransactionExecutor.java:139)
+	at android.app.servertransaction.TransactionExecutor.execute(TransactionExecutor.java:96)
+	at android.app.ActivityThread$H.handleMessage(ActivityThread.java:2443)
+	at android.os.Handler.dispatchMessage(Handler.java:106)
+	at android.os.Looper.loopOnce(Looper.java:205)
+	at a
+	existing SO sources: 
+		SoSource 0: BackupSoSource[root = /data/app-data/dev.acos.fixtures.rnhello/lib-main flags = 1 apks = [/data/app/rn-debug.apk]]
+		SoSource 1: ApplicationSoSource[DirectorySoSource[root = /data/app-lib/x86_64 flags = 0]]
+		SoSource 2: DirectorySoSource[root = /system/lib64 flags = 2]
+		SoSource 3: DirectorySoSource[root = /vendor/lib64 flags = 2]
+	Native lib dir: /data/app-lib/x86_64
+
+1794995392659    115  D jni_lib_merge: Entering merged library JNI_OnLoad.
+
+1794995392659    116  D jni_lib_merge: Preparing 4 pre-merged libs (including stub)
+
+1794995392659    117  D jni_lib_merge: Preparing to register libhermes_executor_so.  onload_func: 577e5730
+
+1794995392659    118  D jni_lib_merge: Preparing to register libhermesinstancejni_so.  onload_func: 577ecdb0
+
+1794995392659    119  D jni_lib_merge: Preparing to register libjsijniprofiler_so.  onload_func: 577ed540
+
+1794995392659    120  D jni_lib_merge: About to register 3 actual methods.
+
+1794995392659    121  D unknown:ReactInstanceManager: ReactInstanceManager.ctor()
+1794995392659    123  D unknown:ReactInstanceManager: ReactInstanceManager.createReactContextInBackground()
+1794995392659    124  D unknown:ReactInstanceManager: ReactInstanceManager.recreateReactContextInBackgroundInner()
+1794995392659    125  E logdw: dev.acos.fixtures.rnhello.MainActivity
+1794995392659    126  E logdw: dev.acos.fixtures.rnhello.MainActivity
+1794995392659    127  E logdw: dev.acos.fixtures.rnhello.MainActivity
+1794995392659    128  D CompatibilityChangeReporter: Compat change id reported: 237531167; UID 10192; state: ENABLED
+1794995392659    129  W unknown:ReactNative: Packager connection already open, nooping.
+1794995392659    130  D CompatibilityChangeReporter: Compat change id reported: 210923482; UID 10192; state: ENABLED
+1794995392659    132  D unknown:ReactNative: ReactInstanceManager.onJSBundleLoadedFromServer()
+1794995392659    133  D unknown:ReactNative: ReactInstanceManager.recreateReactContextInBackground()
+1794995392659    134  D unknown:ReactNative: ReactInstanceManager.runCreateReactContextOnNewThread()
+1794995392659    135  W AcosPriority: setpriority(-4) clamped to 0 (host RLIMIT_NICE is below stock init.rc's 40; guest-only adapter, W21)
+1794995392659    136  D unknown:ReactNative: ReactInstanceManager.createReactContext()
+1794995392659    137  D unknown:ReactNative: Initializing React Xplat Bridge.
+1794995392659    138  D unknown:ReactNative: Initializing React Xplat Bridge before initializeBridge
+1794995392659    139  D unknown:ReactNative: Initializing React Xplat Bridge after initializeBridge
+1794995392659    140  D unknown:ReactContext: initializeMessageQueueThreads() is called.
+1794995392659    141  D unknown:ReactNative: CatalystInstanceImpl.runJSBundle()
+1794995392659    142  D unknown:ReactNative: ReactInstanceManager.setupReactContext()
+1794995392659    143  D unknown:ReactNative: CatalystInstanceImpl.initialize()
+1794995392659    144  D unknown:ReactNative: ReactInstanceManager.attachRootViewToInstance()
+1794995392659    145  W unknown:ReactNative: Packager connection already open, nooping.
+1794995392659    173  D unknown:ReactContext: initializeMessageQueueThreads() is called.
+1794995392659    174  I ReactNativeJS: Running "rnhello" with {"rootTag":11}
+1794995392659    175  W ReactNativeJS: The app is running using the Legacy Architecture. The Legacy Architecture is deprecated and will be removed in a future version of React Native. Please consider migrating to the New Architecture. For more information, please see https://reactnative.dev/blog/202
+1794995392659    176  D CompatibilityChangeReporter: Compat change id reported: 289878283; UID 10192; state: ENABLED
+1794995392659    177  D unknown:DynamicDefaultDiskStorage: Created cache directory /data/app-data/dev.acos.fixtures.rnhello/cache/image_cache
+1794995392659    178  D CompatibilityChangeReporter: Compat change id reported: 263076149; UID 10192; state: ENABLED
+	existing SO sources: 
+		SoSource 0: BackupSoSource[root = /data/app-data/dev.acos.fixtures.rnhello/lib-main flags = 1 apks = [/data/app/rn-debug.apk]]
+		SoSource 1: ApplicationSoSource[DirectorySoSource[root = /data/app-lib/x86_64 flags = 0]]
+		SoSource 2: DirectorySoSource[root = /system/lib64 flags = 2]
+		SoSource 3: DirectorySoSource[root = /vendor/lib64 flags = 2]
+	Native lib dir: /data/app-lib/x86_64
+
+1794995392659    180  W soloader.recovery.CheckBaseApkExists: Base apk exists: /data/app/rn-debug.apk
+1794995392659    182  W SysUtil: error removing /data/app-data/dev.acos.fixtures.rnhello/lib-main write permission
+1794995392659    183  E fb-UnpackingSoSource: Encountered exception during wait for unpacking trying to acquire file lock for com.facebook.soloader.BackupSoSource (/data/app-data/dev.acos.fixtures.rnhello/lib-main): 
+java.io.FileNotFoundException: /data/app-data/dev.acos.fixtures.rnhello/lib-main/dso_lock: open failed: ENOENT (No such file or directory)
+	at libcore.io.IoBridge.open(IoBridge.java:574)
+	at java.io.FileOutputStream.<init>(FileOutputStream.java:236)
+	at java.io.FileOutputStream.<init>(FileOutputStream.java:186)
+	at com.facebook.soloader.FileLocker.<init>(FileLocker.java:36)
+	at com.facebook.soloader.FileLocker.lock(FileLocker.java:32)
+	at com.facebook.soloader.SysUtil.getFileLocker(SysUtil.java:462)
+	at com.facebook.soloader.SysUtil.getOrCreateLockOnDir(SysUtil.java:447)
+	at com.facebook.soloader.UnpackingSoSource.waitUntilInitCompleted(UnpackingSoSource.java:401)
+	at com.facebook.soloader.recovery.WaitForAsyncInit.recover(WaitForAsyncInit.java:31)
+	at com.facebook.soloader.recovery.CompositeRecoveryStrategy.recover(CompositeRecoveryStrategy.java:34)
+	at com.facebook.soloader.nativeloader.NativeLoader.loadLibrary(NativeLoader.java:52)
+	at com.facebook.soloader.nativeloader.NativeLoader.loadLibrary(NativeLoader.java:30)
+	at com.facebook.imagepipeline.memory.NativeMemoryChunk.<clinit>(NativeMemoryChunk.java:33)
+	at com.facebook.imagepipeline.memory.NativeMemoryChunkPool.alloc(NativeMemoryChunkPool.java:31)
+	at com.facebook.imagepipeline.memory.NativeMemoryChunkPool.alloc(NativeMemoryChunkPool.java:16)
+	at com.facebook.imagepipeline.memory.BasePool.get(BasePool.java:256)
+	at com.facebook.imagepipeline.memory.MemoryPooledByteBufferOutputStream.<init>(MemoryPooledByteBufferOutputStream.kt:39)
+	at com.facebook.imagepipeline.memory.MemoryPooledByteBufferFactory.newOutputStream(MemoryPooledByteBufferFactory.kt:98)
+	at com.facebook.imagepipeline.memory.MemoryPooledByteBufferFactory.newOutputStream(MemoryPooledByteBufferFactory.kt:23)
+	at com.facebook.imagepipeline.producers.NetworkFetchProducer.onResponse(NetworkFetchProducer.java:98)
+	at com.facebook.imagepipeline.producers.NetworkFetchProd
+	existing SO sources: 
+		SoSource 0: BackupSoSource[root = /data/app-data/dev.acos.fixtures.rnhello/lib-main flags = 1 apks = [/data/app/rn-debug.apk]]
+		SoSource 1: ApplicationSoSource[DirectorySoSource[root = /data/app-lib/x86_64 flags = 0]]
+		SoSource 2: DirectorySoSource[root = /system/lib64 flags = 2]
+		SoSource 3: DirectorySoSource[root = /vendor/lib64 flags = 2]
+	Native lib dir: /data/app-lib/x86_64
+
+1794995392659    190  W SysUtil: error removing /data/app-data/dev.acos.fixtures.rnhello/lib-main write permission
+1794995392659    191  E fb-UnpackingSoSource: Encountered exception during wait for unpacking trying to acquire file lock for com.facebook.soloader.BackupSoSource (/data/app-data/dev.acos.fixtures.rnhello/lib-main): 
+java.io.FileNotFoundException: /data/app-data/dev.acos.fixtures.rnhello/lib-main/dso_lock: open failed: ENOENT (No such file or directory)
+	at libcore.io.IoBridge.open(IoBridge.java:574)
+	at java.io.FileOutputStream.<init>(FileOutputStream.java:236)
+	at java.io.FileOutputStream.<init>(FileOutputStream.java:186)
+	at com.facebook.soloader.FileLocker.<init>(FileLocker.java:36)
+	at com.facebook.soloader.FileLocker.lock(FileLocker.java:32)
+	at com.facebook.soloader.SysUtil.getFileLocker(SysUtil.java:462)
+	at com.facebook.soloader.SysUtil.getOrCreateLockOnDir(SysUtil.java:447)
+	at com.facebook.soloader.UnpackingSoSource.waitUntilInitCompleted(UnpackingSoSource.java:401)
+	at com.facebook.soloader.recovery.WaitForAsyncInit.recover(WaitForAsyncInit.java:31)
+	at com.facebook.soloader.recovery.CompositeRecoveryStrategy.recover(CompositeRecoveryStrategy.java:34)
+	at com.facebook.soloader.nativeloader.NativeLoader.loadLibrary(NativeLoader.java:52)
+	at com.facebook.soloader.nativeloader.NativeLoader.loadLibrary(NativeLoader.java:30)
+	at com.facebook.imagepipeline.memory.NativeMemoryChunk.<clinit>(NativeMemoryChunk.java:33)
+	at com.facebook.imagepipeline.memory.NativeMemoryChunkPool.alloc(NativeMemoryChunkPool.java:31)
+	at com.facebook.imagepipeline.memory.NativeMemoryChunkPool.alloc(NativeMemoryChunkPool.java:16)
+	at com.facebook.imagepipeline.memory.BasePool.get(BasePool.java:256)
+	at com.facebook.imagepipeline.memory.MemoryPooledByteBufferOutputStream.<init>(MemoryPooledByteBufferOutputStream.kt:39)
+	at com.facebook.imagepipeline.memory.MemoryPooledByteBufferFactory.newOutputStream(MemoryPooledByteBufferFactory.kt:98)
+	at com.facebook.imagepipeline.memory.MemoryPooledByteBufferFactory.newOutputStream(MemoryPooledByteBufferFactory.kt:23)
+	at com.facebook.imagepipeline.producers.NetworkFetchProducer.onResponse(NetworkFetchProducer.java:98)
+	at com.facebook.imagepipeline.producers.NetworkFetchProd
+	existing SO sources: 
+		SoSource 0: BackupSoSource[root = /data/app-data/dev.acos.fixtures.rnhello/lib-main flags = 1 apks = [/data/app/rn-debug.apk]]
+		SoSource 1: ApplicationSoSource[DirectorySoSource[root = /data/app-lib/x86_64 flags = 0]]
+		SoSource 2: DirectorySoSource[root = /system/lib64 flags = 2]
+		SoSource 3: DirectorySoSource[root = /vendor/lib64 flags = 2]
+	Native lib dir: /data/app-lib/x86_64
+
+1794995392659    195  D unknown:ReactNative: ReactInstanceManager.onJSBundleLoadedFromServer()
+1794995392659    196  D unknown:ReactNative: ReactInstanceManager.recreateReactContextInBackground()
+1794995392659    197  D unknown:ReactNative: ReactInstanceManager.runCreateReactContextOnNewThread()
+1794995392659    198  D unknown:ReactNative: ReactInstanceManager.tearDownReactContext()
+1794995392659    199  D unknown:ReactNative: ReactInstanceManager.detachRootViewFromInstance()
+1794995392659    200  D unknown:ReactNative: CatalystInstanceImpl.destroy() start
+1794995392659    201  W unknown:ReactNative: Packager connection already open, nooping.
+1794995392659    202  D unknown:ReactNative: ReactInstanceManager.createReactContext()
+1794995392659    203  D unknown:ReactNative: Initializing React Xplat Bridge.
+1794995392659    204  D unknown:ReactNative: Initializing React Xplat Bridge before initializeBridge
+1794995392659    205  D unknown:ReactNative: Initializing React Xplat Bridge after initializeBridge
+1794995392659    206  D unknown:ReactContext: initializeMessageQueueThreads() is called.
+1794995392659    207  D unknown:ReactNative: CatalystInstanceImpl.runJSBundle()
+1794995392659    208  D unknown:ReactNative: ReactInstanceManager.setupReactContext()
+1794995392659    209  D unknown:ReactNative: CatalystInstanceImpl.initialize()
+1794995392659    210  D unknown:ReactNative: ReactInstanceManager.attachRootViewToInstance()
+1794995392659    211  W unknown:ReactNative: Packager connection already open, nooping.
+1794995392659    239  D unknown:ReactContext: initializeMessageQueueThreads() is called.
+1794995392659    240  E unknown:NativeViewHierarchyManager: Trying to add a root view with an explicit id (11) already set. React Native uses the id field to track react tags and will overwrite this field. If that is fine, explicitly overwrite the id field to View.NO_ID before calling addRootView.
+1794995392659    241  W unknown:ReactNative: CatalystInstanceImpl.destroy() end
+1794995392659    242  W unknown:ReactNative: Tried to enqueue runnable on already finished thread: 'js... dropping Runnable.
+1794995392659    243  I ReactNativeJS: Running "rnhello" with {"rootTag":21}
+1794995392659    244  W ReactNativeJS: The app is running using the Legacy Architecture. The Legacy Architecture is deprecated and will be removed in a future version of React Native. Please consider migrating to the New Architecture. For more information, please see https://reactnative.dev/blog/202
+1794995392659    246  D unknown:ReactNative: ReactInstanceManager.onJSBundleLoadedFromServer()
+1794995392659    247  D unknown:ReactNative: ReactInstanceManager.recreateReactContextInBackground()
+1794995392659    248  D unknown:ReactNative: ReactInstanceManager.runCreateReactContextOnNewThread()
+1794995392659    249  D unknown:ReactNative: ReactInstanceManager.tearDownReactContext()
+1794995392659    250  D unknown:ReactNative: ReactInstanceManager.detachRootViewFromInstance()
+1794995392659    251  D unknown:ReactNative: CatalystInstanceImpl.destroy() start
+1794995392659    252  W unknown:ReactNative: Packager connection already open, nooping.
+1794995392659    253  D unknown:ReactNative: ReactInstanceManager.createReactContext()
+1794995392659    254  D unknown:ReactNative: Initializing React Xplat Bridge.
+1794995392659    255  D unknown:ReactNative: Initializing React Xplat Bridge before initializeBridge
+1794995392659    256  D unknown:ReactNative: Initializing React Xplat Bridge after initializeBridge
+1794995392659    257  D unknown:ReactContext: initializeMessageQueueThreads() is called.
+1794995392659    258  D unknown:ReactNative: CatalystInstanceImpl.runJSBundle()
+1794995392659    259  D unknown:ReactNative: ReactInstanceManager.setupReactContext()
+1794995392659    260  D unknown:ReactNative: CatalystInstanceImpl.initialize()
+1794995392659    261  D unknown:ReactNative: ReactInstanceManager.attachRootViewToInstance()
+1794995392659    262  W unknown:ReactNative: Packager connection already open, nooping.
+1794995392659    290  D unknown:ReactContext: initializeMessageQueueThreads() is called.
+1794995392659    291  W unknown:ReactNative: Tried to enqueue runnable on already finished thread: 'js... dropping Runnable.
+1794995392659    292  W unknown:ReactNative: CatalystInstanceImpl.destroy() end
+1794995392659    293  I ReactNativeJS: Running "rnhello" with {"rootTag":31}
+1794995392659    294  W ReactNativeJS: The app is running using the Legacy Architecture. The Legacy Architecture is deprecated and will be removed in a future version of React Native. Please consider migrating to the New Architecture. For more information, please see https://reactnative.dev/blog/202
+1794995392659    296  D unknown:ReactNative: ReactInstanceManager.onJSBundleLoadedFromServer()
+1794995392659    297  D unknown:ReactNative: ReactInstanceManager.recreateReactContextInBackground()
+1794995392659    298  D unknown:ReactNative: ReactInstanceManager.runCreateReactContextOnNewThread()
+1794995392659    299  D unknown:ReactNative: ReactInstanceManager.tearDownReactContext()
+1794995392659    300  D unknown:ReactNative: ReactInstanceManager.detachRootViewFromInstance()
+1794995392659    301  D unknown:ReactNative: CatalystInstanceImpl.destroy() start
+1794995392659    302  W unknown:ReactNative: Packager connection already open, nooping.
+1794995392659    303  D unknown:ReactNative: ReactInstanceManager.createReactContext()
+1794995392659    304  D unknown:ReactNative: Initializing React Xplat Bridge.
+1794995392659    305  D unknown:ReactNative: Initializing React Xplat Bridge before initializeBridge
+1794995392659    306  D unknown:ReactNative: Initializing React Xplat Bridge after initializeBridge
+1794995392659    307  D unknown:ReactContext: initializeMessageQueueThreads() is called.
+1794995392659    308  D unknown:ReactNative: CatalystInstanceImpl.runJSBundle()
+1794995392659    309  D unknown:ReactNative: ReactInstanceManager.setupReactContext()
+1794995392659    310  D unknown:ReactNative: CatalystInstanceImpl.initialize()
+1794995392659    311  D unknown:ReactNative: ReactInstanceManager.attachRootViewToInstance()
+1794995392659    312  W unknown:ReactNative: Packager connection already open, nooping.
+1794995392659    340  D unknown:ReactContext: initializeMessageQueueThreads() is called.
+1794995392659    341  W unknown:ReactNative: CatalystInstanceImpl.destroy() end
+1794995392659    342  W unknown:ReactNative: Tried to enqueue runnable on already finished thread: 'js... dropping Runnable.
+1794995392659    343  I ReactNativeJS: Running "rnhello" with {"rootTag":41}
+1794995392659    344  W ReactNativeJS: The app is running using the Legacy Architecture. The Legacy Architecture is deprecated and will be removed in a future version of React Native. Please consider migrating to the New Architecture. For more information, please see https://reactnative.dev/blog/202

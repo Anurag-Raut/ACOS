@@ -39,10 +39,7 @@ fn real_vm(gc_stress: bool) -> Vm {
 macro_rules! require_boot {
     () => {
         if !boot_available() {
-            eprintln!(
-                "SKIP javabridge test: .cache/boot/android-34 is absent \
-                 (run tools/extract-bootclasspath.sh)"
-            );
+            acos_test_support::require_prereq(false, "real_vm", "javabridge test: .cache/boot/android-34 is absent (run tools/extract-bootclasspath.sh)");
             return;
         }
     };
@@ -105,7 +102,9 @@ fn rect_scenarios(vm: &mut Vm) {
     assert_eq!(string_value(vm, &s), "Rect(1, 2 - 3, 4)");
 
     // No-constructor allocation + field writes (the explicit "no ctor" path).
-    let rect2 = vm.new_instance("android.graphics.Rect").expect("alloc Rect");
+    let rect2 = vm
+        .new_instance("android.graphics.Rect")
+        .expect("alloc Rect");
     vm.set_field(rect2, "left", JavaValue::Int(10)).unwrap();
     vm.set_field(rect2, "top", JavaValue::Int(20)).unwrap();
     vm.set_field(rect2, "right", JavaValue::Int(40)).unwrap();
@@ -236,9 +235,7 @@ fn application_info_scenarios(vm: &mut Vm) {
         .new_string_rooted("/data/app/com.example.acos/lib/x86_64")
         .unwrap();
     let process_name = vm.new_string_rooted("com.example.acos").unwrap();
-    let permission = vm
-        .new_string_rooted("android.permission.INTERNET")
-        .unwrap();
+    let permission = vm.new_string_rooted("android.permission.INTERNET").unwrap();
     let task_affinity = vm.new_string_rooted("com.example.acos").unwrap();
 
     let string_fields: [(&str, u32); 8] = [
@@ -276,7 +273,8 @@ fn application_info_scenarios(vm: &mut Vm) {
     for (name, v) in int_fields {
         vm.set_field(ai, name, JavaValue::Int(v)).unwrap();
     }
-    vm.set_field(ai, "enabled", JavaValue::Boolean(true)).unwrap();
+    vm.set_field(ai, "enabled", JavaValue::Boolean(true))
+        .unwrap();
 
     // Read every field back.
     for (name, h) in string_fields {
@@ -302,7 +300,10 @@ fn application_info_scenarios(vm: &mut Vm) {
     let base = vm
         .call_method(ai, "getBaseCodePath", "()Ljava/lang/String;", &[])
         .unwrap();
-    assert_eq!(string_value(vm, &base), "/data/app/com.example.acos/base.apk");
+    assert_eq!(
+        string_value(vm, &base),
+        "/data/app/com.example.acos/base.apk"
+    );
     assert_eq!(
         vm.call_method(ai, "hasCode", "()Z", &[]).unwrap(),
         JavaValue::Boolean(true)
@@ -338,12 +339,10 @@ fn array_and_string_scenarios(vm: &mut Vm) {
         vm.get_array_element(longs, 0).unwrap(),
         JavaValue::Long(1 << 40)
     );
-    assert_eq!(
-        vm.get_array_element(longs, 1).unwrap(),
-        JavaValue::Long(-5)
-    );
+    assert_eq!(vm.get_array_element(longs, 1).unwrap(), JavaValue::Long(-5));
     // Wide element writes must preserve the high word.
-    vm.set_array_element(longs, 1, JavaValue::Long(1 << 40)).unwrap();
+    vm.set_array_element(longs, 1, JavaValue::Long(1 << 40))
+        .unwrap();
     assert_eq!(
         vm.get_array_element(longs, 1).unwrap(),
         JavaValue::Long(1 << 40)
@@ -398,7 +397,8 @@ fn array_and_string_scenarios(vm: &mut Vm) {
 fn static_scenarios(vm: &mut Vm) {
     // Static field read (encoded static value applied at class load).
     assert_eq!(
-        vm.get_static_field("java.lang.Integer", "MAX_VALUE").unwrap(),
+        vm.get_static_field("java.lang.Integer", "MAX_VALUE")
+            .unwrap(),
         JavaValue::Int(i32::MAX)
     );
 
@@ -427,7 +427,12 @@ fn static_scenarios(vm: &mut Vm) {
 
     // Static method call through the bridge.
     let v = vm
-        .call_static("java.lang.String", "valueOf", "(I)Ljava/lang/String;", &[JavaValue::Int(42)])
+        .call_static(
+            "java.lang.String",
+            "valueOf",
+            "(I)Ljava/lang/String;",
+            &[JavaValue::Int(42)],
+        )
         .unwrap();
     assert_eq!(string_value(vm, &v), "42");
     let abs = vm
@@ -476,7 +481,9 @@ fn error_scenarios(vm: &mut Vm) {
     ));
     // Known class/field mismatch on a reference field: put an int into the
     // String-valued ApplicationInfo.packageName.
-    let ai = vm.new_instance("android.content.pm.ApplicationInfo").unwrap();
+    let ai = vm
+        .new_instance("android.content.pm.ApplicationInfo")
+        .unwrap();
     assert!(matches!(
         vm.set_field(ai, "packageName", JavaValue::Int(1))
             .expect_err("int into String"),
@@ -498,7 +505,8 @@ fn error_scenarios(vm: &mut Vm) {
 
     // Missing class / method.
     assert!(matches!(
-        vm.new_instance("does.not.Exist").expect_err("missing class"),
+        vm.new_instance("does.not.Exist")
+            .expect_err("missing class"),
         BridgeError::ClassNotFound(_)
     ));
     assert!(matches!(

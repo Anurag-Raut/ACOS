@@ -27,7 +27,11 @@ capabilities:
   - ui.text
   - input
 animations: on
+# SCENHYG: the reason, in one line, for the non-pass declaration below.
 expectation: non_pass
+expectation_reason: >-
+  An indeterminate ProgressBar animates forever, so strict settle cannot bind a
+  frame: the designed outcome is a structured TIMEOUT, never a pass.
 budgets:
   memory_mib: 512
   wall_ms: 120000

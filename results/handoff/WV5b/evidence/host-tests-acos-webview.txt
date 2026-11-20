@@ -1,0 +1,119 @@
+  --> crates/acos-webview/tests/common/mod.rs:24:5
+...
+
+   --> crates/acos-webview/tests/common/mod.rs:171:12
+    |
+    | -------------- method in this implementation
+...
+    |            ^^^^
+
+  --> crates/acos-webview/tests/common/mod.rs:18:12
+
+   --> crates/acos-webview/tests/common/mod.rs:31:12
+    |
+    | -------------- associated items in this implementation
+    |            ^^^^^^^
+...
+    |        ^^^^
+...
+    |        ^^^^^^^^^^^
+...
+    |            ^^^^
+...
+    |            ^^^^^
+...
+    |            ^^^^^^
+...
+    |            ^^^^^
+...
+    |            ^^^^
+
+   --> crates/acos-webview/tests/common/mod.rs:177:8
+    |
+    |        ^^^^^^^^^^
+
+  --> crates/acos-webview/tests/common/mod.rs:21:5
+...
+...
+
+   --> crates/acos-webview/tests/common/mod.rs:138:12
+    |
+    | -------------- methods in this implementation
+...
+    |            ^^^^^^
+...
+    |            ^^^^
+
+    Finished `test` profile [unoptimized] target(s) in 0.02s
+     Running unittests src/lib.rs (.cache/wv5b-target/debug/deps/acos_webview-82079c13e5c51a66)
+
+running 17 tests
+test engine::tests::cache_root_follows_the_acos_rule ... ok
+test engine::tests::paths_are_pinned_to_the_version ... ok
+test view::tests::key_info_covers_text_and_named_keys ... ok
+test engine::tests::a_marker_with_the_wrong_pin_is_rejected ... ok
+test wire::tests::blob_and_json_stay_ordered_on_one_stream ... ok
+test wire::tests::blob_frame_round_trips ... ok
+test sandbox::tests::profile_is_throwaway_and_unique ... ok
+test wire::tests::oversized_frame_is_rejected_before_allocating ... ok
+test wire::tests::responses_and_events_have_the_documented_shape ... ok
+test sandbox::tests::argv_isolates_home_and_keeps_the_pipe ... ok
+test wire::tests::json_frame_round_trips ... ok
+test wire::tests::truncated_body_is_bad_frame_not_eof ... ok
+test view::tests::viewport_validation_is_structured ... ok
+test wire::tests::unknown_kind_and_non_object_json_are_rejected ... ok
+test engine::tests::an_empty_dir_is_not_a_trusted_install ... ok
+test wire::tests::zero_length_frame_is_rejected ... ok
+test view::tests::base64_round_trips_binary ... ok
+
+test result: ok. 17 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/main.rs (.cache/wv5b-target/debug/deps/acos_webview-c269721a79f58bdd)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/engine_bare.rs (.cache/wv5b-target/debug/deps/engine_bare-07cea2616f5c8add)
+
+running 1 test
+test engine_handshake_over_the_devtools_pipe ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/engine_gate.rs (.cache/wv5b-target/debug/deps/engine_gate-f132687340a2baa6)
+
+running 1 test
+test engine_gate ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/gate_cost.rs (.cache/wv5b-target/debug/deps/gate_cost-72939053be0528d6)
+
+running 1 test
+test a_session_that_never_connects_pays_a_socket_and_a_thread ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.08s
+
+     Running tests/gate_engine.rs (.cache/wv5b-target/debug/deps/gate_engine-fd08bf1809d87c8a)
+
+running 1 test
+test two_sessions_get_their_own_context_and_a_real_png_frame_through_the_gate ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/gate_lazy.rs (.cache/wv5b-target/debug/deps/gate_lazy-62e4ceac52b0af25)
+
+running 3 tests
+test gate_proxies_a_session_to_the_shared_daemon_byte_for_byte ... ok
+test gate_keeps_one_connection_per_session_and_reattaches_after_it_closes ... ok
+test gate_is_lazy_and_reports_engine_unavailable_on_the_wire ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.31s
+
+   Doc-tests acos_webview
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

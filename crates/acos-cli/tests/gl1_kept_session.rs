@@ -105,6 +105,10 @@ impl Daemon {
             .arg("300")
             .env("ACOS_RUNTIME_DIR", scratch.dir.join("runtime"))
             .env("ACOS_CACHE_DIR", scratch.dir.join("cache"))
+            // FB2c confines an observe screenshot to the session's artifacts
+            // directory; name that root explicitly so the test knows it (the
+            // default is the daemon's runtime directory).
+            .env("ACOS_SERVE_ARTIFACTS", scratch.dir.join("artifacts"))
             .env("ACOS_SESSION_SOCKET", scratch.socket())
             .envs(env.iter().copied())
             .stdout(Stdio::from(
@@ -249,8 +253,7 @@ fn counter_apk() -> Option<PathBuf> {
 #[test]
 #[ignore = "boots a real ART guest; run under tools/guarded.sh"]
 fn a_kept_session_survives_the_launching_client() {
-    let Some(apk) = counter_apk() else {
-        eprintln!("SKIP: fixtures/build/apps/counter.apk is missing");
+    let Some(apk) = acos_test_support::require_some(counter_apk(), "a_kept_session_survives_the_launching_client", "fixtures/build/apps/counter.apk is missing") else {
         return;
     };
     let daemon = Daemon::start("kept");
@@ -260,7 +263,10 @@ fn a_kept_session_survives_the_launching_client() {
     // connection that created the session. Before GL1 the guest died here.
     let launch = daemon.call(&["launch", &apk_arg, "--keep", "--json"]);
     let launched = ok_calls(&launch);
-    assert_eq!(launched["engine"], Value::Bool(false).as_bool().map(|_| "art").unwrap());
+    assert_eq!(
+        launched["engine"],
+        Value::Bool(false).as_bool().map(|_| "art").unwrap()
+    );
     assert_eq!(launched["engine"], "art", "{launch:#?}");
 
     // The guest must be alive right now, i.e. the launch's connection thread is
@@ -306,26 +312,33 @@ fn a_kept_session_survives_the_launching_client() {
         "the tap from a second process must increment the counter: {after:#?}"
     );
 
-    let shot = daemon.scratch.log("kept.png");
-    let shot_arg = shot.display().to_string();
-    let observe = daemon.call(&[
-        "session",
-        "observe",
-        "--screenshot",
-        &shot_arg,
-        "--json",
-    ]);
-    ok_calls(&observe);
+    // The destination is caller input and FB2c confines it to the session's
+    // artifacts directory: a *relative* name resolves against that directory's
+    // `screenshots/` dir, and the reply reports the absolute path. The test
+    // reads the path the daemon chose instead of writing outside the sandbox
+    // (the pre-FB2c form passed `<scratch>/kept.png` and became INVALID_ARGUMENT).
+    let observe = daemon.call(&["session", "observe", "--screenshot", "kept.png", "--json"]);
+    let observed = ok_calls(&observe);
+    let shot = PathBuf::from(
+        observed["screenshot"]["path"]
+            .as_str()
+            .expect("the observe reply names the screenshot path"),
+    );
+    assert!(shot.is_file(), "the screenshot exists: {}", shot.display());
     let mut head = [0u8; 8];
     let mut file = std::fs::File::open(&shot).expect("the screenshot exists");
-    file.read_exact(&mut head).expect("the screenshot is readable");
+    file.read_exact(&mut head)
+        .expect("the screenshot is readable");
     assert_eq!(&head[..4], &[0x89, b'P', b'N', b'G'], "not a PNG: {head:?}");
     let bytes = std::fs::metadata(&shot).unwrap().len();
     assert!(bytes > 1000, "PNG too small: {bytes} bytes");
 
     // Teardown: the guest is gone, and provably so (no leftover acos-art).
     let before = guest_processes(&daemon.scratch.dir);
-    assert!(!before.is_empty(), "the guest should still be running: {before:?}");
+    assert!(
+        !before.is_empty(),
+        "the guest should still be running: {before:?}"
+    );
     let destroy = daemon.call(&["session", "destroy", "--json"]);
     let destroyed = ok_calls(&destroy);
     assert_eq!(destroyed["destroyed"], Value::Bool(true), "{destroy:#?}");
@@ -344,8 +357,7 @@ fn a_kept_session_survives_the_launching_client() {
 #[test]
 #[ignore = "boots a real ART guest; run under tools/guarded.sh"]
 fn a_sigkilled_daemon_takes_its_guests_with_it() {
-    let Some(apk) = counter_apk() else {
-        eprintln!("SKIP: fixtures/build/apps/counter.apk is missing");
+    let Some(apk) = acos_test_support::require_some(counter_apk(), "a_sigkilled_daemon_takes_its_guests_with_it", "fixtures/build/apps/counter.apk is missing") else {
         return;
     };
     let mut daemon = Daemon::start("sigkill");
@@ -377,19 +389,39 @@ fn a_sigkilled_daemon_takes_its_guests_with_it() {
         started.elapsed().as_millis()
     );
     let _ = daemon.child.wait();
-    // Every guest pid the test saw must be gone (or a reaped zombie).
+    // Every guest pid the test saw must be gone (or a reaped zombie). The scan
+    // above can be satisfied by a guest whose `/proc/<pid>/cmdline` is already
+    // empty while it is still in its exit path, so the pids captured *before*
+    // the kill are the authoritative set: wait for them, bounded, and name the
+    // state/cmdline of one that outlives the daemon (a real leak).
     for guest in guests {
-        let alive = std::fs::read_to_string(format!("/proc/{guest}/status"))
-            .ok()
-            .and_then(|status| {
-                status
+        let gone = wait_until(Duration::from_secs(2), || {
+            let state = std::fs::read_to_string(format!("/proc/{guest}/status"))
+                .ok()
+                .and_then(|status| {
+                    status
+                        .lines()
+                        .find(|line| line.starts_with("State:"))
+                        .and_then(|line| line.split_whitespace().nth(1).map(str::to_string))
+                });
+            // Gone or a reaped zombie: both mean it is not executing code.
+            state.is_none() || state.as_deref() == Some("Z")
+        });
+        assert!(
+            gone,
+            "guest {guest} is still running after the daemon died: {}",
+            std::fs::read_to_string(format!("/proc/{guest}/status"))
+                .map(|status| status
                     .lines()
                     .find(|line| line.starts_with("State:"))
-                    .and_then(|line| line.split_whitespace().nth(1).map(str::to_string))
-            })
-            .map(|state| state != "Z")
-            .unwrap_or(false);
-        assert!(!alive, "guest {guest} is still running after the daemon died");
+                    .unwrap_or("State: <missing>")
+                    .to_string()
+                    + " cmdline="
+                    + &std::fs::read(format!("/proc/{guest}/cmdline"))
+                        .map(|raw| String::from_utf8_lossy(&raw).replace('\0', " "))
+                        .unwrap_or_else(|error| format!("<{error}>")))
+                .unwrap_or_else(|error| format!("<{error}>"))
+        );
     }
 }
 
@@ -432,12 +464,10 @@ fn launch_and_destroy(daemon: &Daemon, apk: &Path) -> (Value, Duration) {
 #[test]
 #[ignore = "boots a real ART guest; run under tools/guarded.sh"]
 fn explicit_destruction_is_bounded_and_leaves_nothing_behind() {
-    let Some(counter) = counter_apk() else {
-        eprintln!("SKIP: fixtures/build/apps/counter.apk is missing");
+    let Some(counter) = acos_test_support::require_some(counter_apk(), "explicit_destruction_is_bounded_and_leaves_nothing_behind", "fixtures/build/apps/counter.apk is missing") else {
         return;
     };
-    let Some(thread_heavy) = thread_heavy_apk() else {
-        eprintln!("SKIP: fixtures/build/apps/thread-heavy.apk is missing (tools/build-apps.sh)");
+    let Some(thread_heavy) = acos_test_support::require_some(thread_heavy_apk(), "explicit_destruction_is_bounded_and_leaves_nothing_behind", "fixtures/build/apps/thread-heavy.apk is missing (tools/build-apps.sh)") else {
         return;
     };
     let daemon = Daemon::start("destroy");
@@ -460,7 +490,10 @@ fn explicit_destruction_is_bounded_and_leaves_nothing_behind() {
             "the engine's own teardown timer says {teardown:#?}"
         );
         assert!(
-            matches!(teardown["lifecycle"].as_str(), Some("lifecycle") | Some("killed")),
+            matches!(
+                teardown["lifecycle"].as_str(),
+                Some("lifecycle") | Some("killed")
+            ),
             "the destroy reply must name the path: {teardown:#?}"
         );
         // No process of that session may survive, and the id must be gone.
@@ -486,8 +519,7 @@ fn explicit_destruction_is_bounded_and_leaves_nothing_behind() {
 #[test]
 #[ignore = "boots a real ART guest; run under tools/guarded.sh"]
 fn a_guest_that_never_ends_is_killed_after_the_bounded_grace() {
-    let Some(thread_heavy) = thread_heavy_apk() else {
-        eprintln!("SKIP: fixtures/build/apps/thread-heavy.apk is missing");
+    let Some(thread_heavy) = acos_test_support::require_some(thread_heavy_apk(), "a_guest_that_never_ends_is_killed_after_the_bounded_grace", "fixtures/build/apps/thread-heavy.apk is missing") else {
         return;
     };
     // A zero grace forces the kill path: no waiting on the app's threads.

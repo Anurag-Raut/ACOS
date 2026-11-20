@@ -1,0 +1,232 @@
+# ADR-0029 accessibility module: the launch config enables the probe's own
+# service (the equivalent of the user switching it on in Settings), the app's
+# real AccessibilityManager reports enabled + the installed/enabled lists, and
+# a real button click is sent through IAccessibilityManager.sendAccessibilityEvent.
+version: 1
+name: a11y-probe
+description: accessibility module enables a service; isEnabled/list/event path on ART
+app: fixtures/build/apps/a11y-probe.apk
+api_level: 34
+isolation: process
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+capabilities:
+  - ui.offscreen
+  - ui.text
+  - input
+expectation: pass
+budgets:
+  memory_mib: 512
+  wall_ms: 120000
+services:
+  - id: accessibility
+    profile: real
+    config:
+      enable:
+        - dev.acos.fixtures.a11yprobe/.A11yProbeService
+steps:
+  - launch:
+      activity: dev.acos.fixtures.a11yprobe/.MainActivity
+      clear_state: true
+  - assert_text:
+      selector: {id: status}
+      text: {contains: "a11y enabled=true installed=1 enabled_list=1"}
+  - tap:
+      selector: {id: send}
+  - assert_text:
+      selector: {id: status}
+      text: {contains: "sent=1"}
+  - assert_log:
+      tag: AcosA11yProbe
+      patterns:
+        - "event_sent"
+  # MODA11Y2: the module binds the enabled service (scheduleCreateService +
+  # scheduleBindService -> publishService -> IAccessibilityServiceClient.init),
+  # so the app's own AccessibilityService.onServiceConnected runs with the
+  # AccessibilityServiceInfo the system connected it with.
+  # MODA11Y6 step 2: the capabilities the app's own `AccessibilityServiceInfo`
+  # reports come from the `<accessibility-service>` meta-data block the module
+  # resolved out of the APK (@xml/accessibility_service_config -> resource table
+  # -> zip entry -> binary XML): canRetrieveWindowContent (1) +
+  # canPerformGestures (32) + canTakeScreenshot (128) = 161. The same values
+  # gate `getWindows`/`getRootInActiveWindow`/`find*`, so this line and the
+  # window list below cannot disagree.
+  - assert_log:
+      tag: AcosA11yProbe
+      patterns:
+        # One line, because an ordered log assertion advances past each match.
+        - "service_connected id=dev.acos.fixtures.a11yprobe/.A11yProbeService capabilities=161"
+  # MODA11Y4 step 2: the bound service's own interaction surface. `getWindows()`
+  # answers from the LAYER1 stack (one application window, layer 0, active and
+  # focused), `getRootInActiveWindow()` is the app's active window root, a
+  # by-view-id query finds the real button, and ACTION_CLICK runs the app's own
+  # OnClickListener — the status text below proves the click landed in the app.
+  - assert_log:
+      tag: AcosA11yProbe
+      patterns:
+        # MODA11YNATIVE2: the display facts `dispatchGesture` is sampled against.
+        # `AccessibilityService.calculateGestureSampleTimeMs` is 1000/refreshRate,
+        # so a `0 Hz` display collapses a swipe to its press/release key points
+        # and no MOVE ever reaches the app (the list cannot scroll).
+        # `button_text` is logged by the activity itself (before the service
+        # binds), so it is the first line this ordered assertion can match.
+        - "button_text a11y=Click target drawn="
+        - "display id=0 refresh_rate=60.000004 mode_id=1 mode_rate=60.000004 modes=1"
+        - "windows count=1"
+        - "type=1 layer=0 active=true focused=true"
+        - "root class=android.widget.FrameLayout"
+        - "by_view_id count=1"
+        # MODA11YNATIVE2: the label is the ORIGINAL string, in its own case.
+        # `AccessibilityNodeInfo.getText()` is `TextView.getTextForAccessibility`
+        # -> `getText()`, never the drawn (transformed) label; the probe logs
+        # both side by side (`button_text a11y=… drawn=…`) so the two APIs can
+        # never be confused for one another again.
+        - "node class=android.widget.Button text=Click target view_id=null clickable=true"
+        - "click handled=true"
+  - assert_text:
+      selector: {id: status}
+      text: {contains: "a11y_click=1"}
+  # MODA11Y5 step 4: the bound service adds a TYPE_ACCESSIBILITY_OVERLAY window
+  # through the WindowManager the framework gave it. The WMS accepts the add
+  # only on the overlay window token `IAccessibilityServiceClient.init` handed
+  # the service (AOSP WindowManagerService.java:1630-1640 / sanitizeWindowType
+  # 9914-9928), so this step fails if the host lets any window claim the
+  # accessibility overlay layer.
+  - assert_log:
+      tag: AcosA11yProbe
+      ordered: false
+      patterns:
+        - "overlay_added type=2032 token=set"
+        - "overlay_probe_done"
+  # MODA11Y6 step 1: the guest re-query is back, and it is the assertion the
+  # service itself can make. `getWindows()` after the add is answered by the
+  # guest's `AccessibilityCache` until a `TYPE_WINDOWS_CHANGED` event clears it
+  # (AccessibilityInteractionClient.java:489-532,
+  # AccessibilityCache.java:276-288), and the module now delivers that event
+  # when a window enters or leaves the stack, the way
+  # `AccessibilityWindowManager` does. So the first query may still be the
+  # cache; the retry inside the probe (25 x 200 ms) must come back with two
+  # windows, the overlay topmost as `TYPE_ACCESSIBILITY_OVERLAY` (type 4) above
+  # the application window (type 1).
+  - assert_log:
+      tag: AcosA11yProbe
+      patterns:
+        - "onAccessibilityEvent type=4194304"
+        - "windows2 count=2 attempts=\\d+"
+        - "window2\\[0\\] id=2 type=4 layer=1"
+        - "window2\\[1\\] id=1 type=1 layer=0 active=true focused=true"
+        - "windows2 overlay=true"
+  # The observe tree (the host's own layer policy, not the guest's claim): the
+  # overlay is a real window in the LAYER1 stack, tagged with its kind.
+  - assert_windows:
+      order: [application, accessibility_overlay]
+      types: [TYPE_BASE_APPLICATION, TYPE_ACCESSIBILITY_OVERLAY]
+      focus: application
+      focus_type: TYPE_BASE_APPLICATION
+  # MODA11Y4 step 3: performGlobalAction(GLOBAL_ACTION_BACK) from the bound
+  # service. The module routes it to the session's Back path — a real
+  # KEYCODE_BACK down/up pair on the focused window's InputChannel, the same
+  # publish the control plane's `back` uses — so the app's own window decides.
+  # MODA11Y5: the published pair is a plain, untracked press. `FLAG_TRACKING` is
+  # not on the wire — the app sets it itself: `Activity.onKeyDown(BACK)` calls
+  # `event.startTracking()` and `KeyEvent.dispatch`'s up branch runs
+  # `DispatcherState.handleUpEvent` before `onKeyUp`, so `key_up tracking=true`
+  # below is the app's own dispatcher state, not the host's claim (and
+  # `key_down repeat=0` is what lets it start tracking). "Dialog first, then
+  # activity" is the same rule: the key goes to the focused window, so a dialog
+  # dismisses before the activity sees it.
+  #
+  # What is asserted: the app's own key handlers ran and its Back handler ran
+  # (back_pressed). NOT asserted: the activity's destroy transaction after
+  # finish() — the host's activity manager does not deliver it yet (see
+  # results/handoff/MODA11Y4/README.md, "What is not proven").
+  # MODA11YNATIVE step 1: `dispatchGesture`. The framework's own
+  # `AccessibilityService.dispatchGesture` sampled the strokes into
+  # `MotionEvent`s (`GestureDescription$MotionEventGenerator`) and the module
+  # published them on the session's input channel, so the app's own listeners
+  # ran: the `gesture_target` button's OnClickListener counted a tap, and the
+  # `ScrollView` the service swiped actually scrolled. `onPerformGestureResult`
+  # (code 11) is what the framework's `GestureResultCallback` receives.
+  - assert_log:
+      tag: AcosA11yProbe
+      ordered: false
+      patterns:
+        - "gesture_sent kind=tap accepted=true"
+        - "gesture_result kind=tap completed=true"
+        - "gesture_target_pressed count=1"
+        - "gesture_sent kind=swipe accepted=true"
+        - "gesture_result kind=swipe completed=true"
+        # A11YPACE: the stroke is paced over its declared timeline (the
+        # `GestureStep` durations), exactly as AOSP's `MotionEventInjector`
+        # posts each event at its `eventTime`. The guest therefore sees every
+        # MOVE in its own frame and the `ScrollView` scrolls the commanded
+        # distance (plus the fling its own physics adds) instead of the
+        # slop-crossing delta only (measured: `y=578`, then a fling to 662, for
+        # a 400 px stroke; before the pacing it was `y=11`).
+        - "list_scrolled y=\\d+"
+        # A11YPACE: a slow 300 px drag with no fling. The app's own
+        # `onTouch` on the drag target reports the delta it saw; the stroke's
+        # end point is the commanded one, so this is the app's proof that the
+        # paced stream travelled the distance the gesture declared.
+        - "gesture_sent kind=drag accepted=true"
+        - "gesture_result kind=drag completed=true"
+        - "drag_end dx=-300 dy=0 steps=[1-9]\\d*"
+  # MODA11YNATIVE step 2: `takeScreenshot`. The success payload really is the
+  # composited frame: the framework's own `TakeScreenshotCallback.onSuccess`
+  # runs with a `HardwareBuffer` that reports the display's size, RGBA_8888 and
+  # the read-often/sampled usage the wrapper needs (the buffer is the guest's
+  # own gralloc `GraphicBuffer` over a memfd copy of the frame), and the three
+  # reachable failure codes come back through `onFailure`.
+  #
+  # MODA11YNATIVE2: reading one PIXEL out of that buffer needs
+  # `Bitmap.wrapHardwareBuffer` — a hardware bitmap, i.e. an EGL/GLES
+  # implementation the image does not have (see the probe's
+  # `screenshot_pixel unavailable=…` line and results/handoff/A11YNATIVE2). The
+  # app-side assertion is therefore the buffer's description; the frame's own
+  # pixels are asserted host-side from the same compositor capture.
+  - assert_log:
+      tag: AcosA11yProbe
+      ordered: false
+      patterns:
+        - "screenshot_result kind=capture status=0 width=1080 height=2400 format=1"
+        - "screenshot_result kind=capture status=0 .* usage=257"
+        - "screenshot_result kind=interval status=3"
+        - "screenshot_result kind=display status=4"
+        - "screenshot_result kind=secure status=6"
+        - "screenshot_pixel unavailable=hardware_bitmap_needs_egl"
+  # A11YPACE: this tap's effect is *asynchronous* — the button's listener hands
+  # `performGlobalAction` to the probe's own worker thread (`a11y-back`), the
+  # host publishes the BACK key when that call arrives, and the guest's main
+  # looper processes it afterwards. The tap therefore makes no tree/pixel claim
+  # (`expect_change: false`, the transient-effect spelling) and does not wait
+  # for a settle it cannot produce (`settle: fast`); the log assertion below
+  # owns the effect and waits for it. Without the explicit `false`, the tap's
+  # own state-change rule would sample the tree before the effect and race it.
+  - tap:
+      selector: {id: a11y_back}
+      settle: fast
+      expect_change: false
+  - assert_log:
+      tag: AcosA11yProbe
+      # The key is published before `performGlobalAction` returns, so the app's
+      # `key_down` may be logged before or after `global_action back=true`: the
+      # claim is that all of these happened, not their interleaving.
+      #
+      # MERGE040A: `timeout_ms` is required, not a convenience. The button's
+      # listener hands `performGlobalAction` to the probe's own worker thread and
+      # the app reads the published key on a **later** looper iteration than the
+      # one that ran its click handler (MERGEFIX), so the app-side lines are
+      # logged after the tap step's settle (A11YPACE measured ~1 s of guest
+      # log-pipeline lag on this screen). The wait is the effect semantic; a
+      # missing line still fails at the deadline.
+      timeout_ms: 30000
+      ordered: false
+      patterns:
+        - "back_requested"
+        - "global_action back=true"
+        - "key_down code=4 tracking=false repeat=0 flags=0"
+        - "key_up code=4 tracking=true"
+        - "back_pressed"

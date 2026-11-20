@@ -64,7 +64,8 @@ fn facts_from_bytes(vm: &mut Vm, bytes: &[u8]) -> acos_services::ams::IntentFact
     let mut tmp = Parcel::new();
     tmp.unmarshall(bytes);
     let len = tmp.data_size();
-    data.append_from(&tmp, 0, len).expect("append intent payload");
+    data.append_from(&tmp, 0, len)
+        .expect("append intent payload");
     data.set_data_position(0);
     ams_java::read_intent_facts(vm, &mut data)
         .expect("read intent facts")
@@ -133,7 +134,10 @@ fn intent_facts_round_trip_through_the_real_creators() {
     let bytes = intent_bytes(vm, intent);
     let facts = facts_from_bytes(vm, &bytes);
     assert_eq!(
-        facts.component.as_ref().map(|(p, c)| (p.as_str(), c.as_str())),
+        facts
+            .component
+            .as_ref()
+            .map(|(p, c)| (p.as_str(), c.as_str())),
         Some((
             "dev.acos.fixtures.twoactivity",
             "dev.acos.fixtures.twoactivity.DetailActivity"
@@ -160,8 +164,12 @@ fn component_name_reply_is_a_real_component_name() {
         return;
     };
     let vm = rt.vm_mut();
-    let cn = ams_java::component_name(vm, "dev.acos.fixtures.svcprovider", "dev.acos.fixtures.svcprovider.EchoService")
-        .expect("component name");
+    let cn = ams_java::component_name(
+        vm,
+        "dev.acos.fixtures.svcprovider",
+        "dev.acos.fixtures.svcprovider.EchoService",
+    )
+    .expect("component name");
     let package = match vm
         .call_method(cn, "getPackageName", "()Ljava/lang/String;", &[])
         .expect("getPackageName")
@@ -218,7 +226,8 @@ fn content_provider_request(calling_package: &str, authority: &str) -> Parcel {
     data.write_interface_token("android.app.IActivityManager")
         .expect("token");
     data.write_strong_binder_opt(None);
-    data.write_string16(calling_package).expect("callingPackage");
+    data.write_string16(calling_package)
+        .expect("callingPackage");
     data.write_string16(authority).expect("authority");
     data.write_int32(0);
     data.write_int32(0);
@@ -247,7 +256,11 @@ fn get_content_provider_reads_the_authority_and_carries_the_provider() {
     )
     .expect("getContentProvider transact");
     reply.set_data_position(0);
-    assert_eq!(reply.read_int32().expect("read status"), 0, "reply must not carry an exception");
+    assert_eq!(
+        reply.read_int32().expect("read status"),
+        0,
+        "reply must not carry an exception"
+    );
     let holder = acos_runtime::parcel_java::read_typed_object(
         vm,
         &mut reply,
@@ -283,14 +296,21 @@ fn get_content_provider_does_not_treat_the_calling_package_as_the_authority() {
     )
     .expect("getContentProvider transact");
     reply.set_data_position(0);
-    assert_eq!(reply.read_int32().expect("read status"), 0, "reply must not carry an exception");
+    assert_eq!(
+        reply.read_int32().expect("read status"),
+        0,
+        "reply must not carry an exception"
+    );
     let holder = acos_runtime::parcel_java::read_typed_object(
         vm,
         &mut reply,
         "android.app.ContentProviderHolder",
     )
     .expect("read ContentProviderHolder");
-    assert!(holder.is_none(), "unknown authority must yield a null holder");
+    assert!(
+        holder.is_none(),
+        "unknown authority must yield a null holder"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -347,7 +367,8 @@ fn uri_payload(parcel: &mut Parcel, text: &str) {
 /// `ContentProviderProxy.call(attributionSource, authority, method, arg, extras)`.
 fn call_request(method: &str, arg: &str, extras: Option<&Bundle>) -> Parcel {
     let mut data = Parcel::new();
-    data.write_interface_token(ICONTENT_PROVIDER).expect("token");
+    data.write_interface_token(ICONTENT_PROVIDER)
+        .expect("token");
     attribution(&mut data);
     data.write_string16("settings").expect("authority");
     data.write_string16(method).expect("method");
@@ -361,7 +382,8 @@ fn call_request(method: &str, arg: &str, extras: Option<&Bundle>) -> Parcel {
 /// cancellationSignal)`.
 fn query_request(uri_text: &str, projection: &[&str], selection: Option<(&str, &str)>) -> Parcel {
     let mut data = Parcel::new();
-    data.write_interface_token(ICONTENT_PROVIDER).expect("token");
+    data.write_interface_token(ICONTENT_PROVIDER)
+        .expect("token");
     attribution(&mut data);
     uri_payload(&mut data, uri_text);
     data.write_int32(i32::try_from(projection.len()).expect("projection len"));
@@ -461,7 +483,11 @@ fn content_provider_holder_comes_from_the_services_registry() {
         ("processName", "android.process.settings"),
         ("readPermission", "android.permission.READ_SETTINGS"),
     ] {
-        assert_eq!(field_string(vm, info, field).as_deref(), Some(expected), "{field}");
+        assert_eq!(
+            field_string(vm, info, field).as_deref(),
+            Some(expected),
+            "{field}"
+        );
     }
 
     // `provider` is the binder the host dispatches `IContentProvider` to.
@@ -478,11 +504,15 @@ fn content_provider_holder_comes_from_the_services_registry() {
 
     // The connection token is a registered binder (the framework writes it back
     // to removeContentProvider/refContentProvider), and the holder is local.
-    let connection = as_obj(vm.get_field(holder, "connection").expect("connection field"));
+    let connection = as_obj(
+        vm.get_field(holder, "connection")
+            .expect("connection field"),
+    );
     let connection_id = BinderId(field_long(vm, connection, "mNativeData"));
     assert_ne!(connection_id.0, 0, "a real ContentProviderConnection token");
     assert_eq!(
-        vm.get_field(holder, "noReleaseNeeded").expect("noReleaseNeeded"),
+        vm.get_field(holder, "noReleaseNeeded")
+            .expect("noReleaseNeeded"),
         JavaValue::Boolean(false),
         "the framework's own refcounting runs"
     );
@@ -541,7 +571,10 @@ fn content_provider_call_and_query_return_registry_data_through_ams_java() {
         CALL,
         call_request("GET_config", "ime/enabled_input_methods", None),
     );
-    assert_eq!(bytes, peer_bytes, "one implementation: identical reply bytes");
+    assert_eq!(
+        bytes, peer_bytes,
+        "one implementation: identical reply bytes"
+    );
 
     // --- LIST_config (the P2a §4 blocker) --------------------------------
     let mut extras = Bundle::new();
@@ -584,7 +617,10 @@ fn content_provider_call_and_query_return_registry_data_through_ams_java() {
         CALL,
         call_request("LIST_config", "", Some(&extras)),
     );
-    assert_eq!(bytes, peer_bytes, "one implementation: identical reply bytes");
+    assert_eq!(
+        bytes, peer_bytes,
+        "one implementation: identical reply bytes"
+    );
 
     // --- query (the `ContentResolver` fallback) --------------------------
     let (mut reply, _) = provider_transact_via_ams_java(

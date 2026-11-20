@@ -1,0 +1,406 @@
+{"message":"Error opening trace file: Permission denied (13)","prio":6,"seq":1,"tag":"cutils-trace"}
+{"message":"Using CollectorTypeCC GC.","prio":4,"seq":2,"tag":""}
+{"message":"InitDefaultPublicLibraries for_preload=1: libandroid.so:libaaudio.so:libamidi.so:libbinder_ndk.so:libc.so:libcamera2ndk.so:libdl.so:libEGL.so:libGLESv1_CM.so:libGLESv2.so:libGLESv3.so:libicu.so:libicui18n.so:libicuuc.so:libjnigraphics.so:liblog.so:libmediandk.so:libm.so:libnativehelper.so:libnativewindow.so:libOpenMAXAL.so:libOpenSLES.so:libRS.so:libstdc++.so:libsync.so:libvulkan.so:libwebviewchromium_plat_support.so:libz.so","prio":3,"seq":3,"tag":"nativeloader"}
+{"message":"I18n APEX ICU file found: /apex/com.android.i18n/etc/icu/icudt72l.dat","prio":3,"seq":4,"tag":""}
+{"message":"Found user/group name 'root' in '/etc/passwd' without required prefix 'system_'","prio":6,"seq":5,"tag":"logdw"}
+{"message":"Found user/group name 'bin' in '/etc/passwd' without required prefix 'system_'","prio":6,"seq":6,"tag":"logdw"}
+{"message":"Found user/group name 'daemon' in '/etc/passwd' without required prefix 'system_'","prio":6,"seq":7,"tag":"logdw"}
+{"message":"Found user/group name 'mail' in '/etc/passwd' without required prefix 'system_'","prio":6,"seq":8,"tag":"logdw"}
+{"message":"Found user/group name 'ftp' in '/etc/passwd' without required prefix 'system_'","prio":6,"seq":9,"tag":"logdw"}
+{"message":"Found user/group name 'http' in '/etc/passwd' without required prefix 'system_'","prio":6,"seq":10,"tag":"logdw"}
+{"message":"Found user/group name 'nobody' in '/etc/passwd' without required prefix 'system_'","prio":6,"seq":11,"tag":"logdw"}
+{"message":"Found user/group name 'dbus' in '/etc/passwd' without required prefix 'system_'","prio":6,"seq":12,"tag":"logdw"}
+{"message":"Found user/group name 'systemd-coredump' in '/etc/passwd' without required prefix 'system_'","prio":6,"seq":13,"tag":"logdw"}
+{"message":"Found user/group name 'systemd-network' in '/etc/passwd' without required prefix 'system_'","prio":6,"seq":14,"tag":"logdw"}
+{"message":"Found user/group name 'systemd-oom' in '/etc/passwd' without required prefix 'system_'","prio":6,"seq":15,"tag":"logdw"}
+{"message":"Found user/group name 'systemd-journal-remote' in '/etc/passwd' without required prefix 'system_'","prio":6,"seq":16,"tag":"logdw"}
+{"message":"Found user/group name 'systemd-resolve' in '/etc/passwd' without required prefix 'system_'","prio":6,"seq":17,"tag":"logdw"}
+{"message":"Found user/group name 'systemd-timesync' in '/etc/passwd' without required prefix 'system_'","prio":6,"seq":18,"tag":"logdw"}
+{"message":"Found user/group name 'tss' in '/etc/passwd' without required prefix 'system_'","prio":6,"seq":19,"tag":"logdw"}
+{"message":"Found user/group name 'uuidd' in '/etc/passwd' without required prefix 'system_'","prio":6,"seq":20,"tag":"logdw"}
+{"message":"Found user/group name 'alpm' in '/etc/passwd' without required prefix 'system_'","prio":6,"seq":21,"tag":"logdw"}
+{"message":"Found user/group name 'git' in '/etc/passwd' without required prefix 'system_'","prio":6,"seq":22,"tag":"logdw"}
+{"message":"Found user/group name 'polkitd' in '/etc/passwd' without required prefix 'system_'","prio":6,"seq":23,"tag":"logdw"}
+{"message":"Found user/group name 'Qui' in '/etc/passwd' without required prefix 'system_'","prio":6,"seq":24,"tag":"logdw"}
+{"message":"Found user/group name 'avahi' in '/etc/passwd' without required prefix 'system_'","prio":6,"seq":25,"tag":"logdw"}
+{"message":"Found user/group name 'brltty' in '/etc/passwd' without required prefix 'system_'","prio":6,"seq":26,"tag":"logdw"}
+{"message":"Found user/group name 'colord' in '/etc/passwd' without required prefix 'system_'","prio":6,"seq":27,"tag":"logdw"}
+{"message":"Found user/group name 'flatpak' in '/etc/passwd' without required prefix 'system_'","prio":6,"seq":28,"tag":"logdw"}
+{"message":"Found user/group name 'gdm' in '/etc/passwd' without required prefix 'system_'","prio":6,"seq":29,"tag":"logdw"}
+{"message":"Found user/group name 'geoclue' in '/etc/passwd' without required prefix 'system_'","prio":6,"seq":30,"tag":"logdw"}
+{"message":"Found user/group name 'gnome-remote-desktop' in '/etc/passwd' without required prefix 'system_'","prio":6,"seq":31,"tag":"logdw"}
+{"message":"Found user/group name 'libvirt-qemu' in '/etc/passwd' without required prefix 'system_'","prio":6,"seq":32,"tag":"logdw"}
+{"message":"Found user/group name 'qemu' in '/etc/passwd' without required prefix 'system_'","prio":6,"seq":33,"tag":"logdw"}
+{"message":"Found user/group name 'rtkit' in '/etc/passwd' without required prefix 'system_'","prio":6,"seq":34,"tag":"logdw"}
+{"message":"Found user/group name 'saned' in '/etc/passwd' without required prefix 'system_'","prio":6,"seq":35,"tag":"logdw"}
+{"message":"Found user/group name 'usbmux' in '/etc/passwd' without required prefix 'system_'","prio":6,"seq":36,"tag":"logdw"}
+{"message":"Found user/group name 'nvidia-persistenced' in '/etc/passwd' without required prefix 'system_'","prio":6,"seq":37,"tag":"logdw"}
+{"message":"Found user/group name 'ollama' in '/etc/passwd' without required prefix 'system_'","prio":6,"seq":38,"tag":"logdw"}
+{"message":"Found user/group name 'named' in '/etc/passwd' without required prefix 'system_'","prio":6,"seq":39,"tag":"logdw"}
+{"message":"Found user/group name 'pcscd' in '/etc/passwd' without required prefix 'system_'","prio":6,"seq":40,"tag":"logdw"}
+{"message":"Found user/group name 'mongodb' in '/etc/passwd' without required prefix 'system_'","prio":6,"seq":41,"tag":"logdw"}
+{"message":"Found user/group name 'malcontent-timer-ext-agent' in '/etc/passwd' without required prefix 'system_'","prio":6,"seq":42,"tag":"logdw"}
+{"message":"Found user/group name 'malcontent-timerd' in '/etc/passwd' without required prefix 'system_'","prio":6,"seq":43,"tag":"logdw"}
+{"message":"Found user/group name 'malcontent-webd' in '/etc/passwd' without required prefix 'system_'","prio":6,"seq":44,"tag":"logdw"}
+{"message":"Found user/group name 'systemd-imds' in '/etc/passwd' without required prefix 'system_'","prio":6,"seq":45,"tag":"logdw"}
+{"message":"Found user/group name 'clamav' in '/etc/passwd' without required prefix 'system_'","prio":6,"seq":46,"tag":"logdw"}
+{"message":"Found user/group name 'dnsmasq' in '/etc/passwd' without required prefix 'system_'","prio":6,"seq":47,"tag":"logdw"}
+{"message":"Unable to open '/data/app/launch-guest/classes.dm': No such file or directory","prio":5,"seq":48,"tag":"ziparchive"}
+{"message":"Unable to open '/data/app/launch-guest/classes.dm': No such file or directory","prio":5,"seq":49,"tag":"ziparchive"}
+{"message":"InitApexLibraries skipped: No such file or directory","prio":4,"seq":50,"tag":"nativeloader"}
+{"message":"InitDefaultPublicLibraries for_preload=0: libandroid.so:libaaudio.so:libamidi.so:libbinder_ndk.so:libc.so:libcamera2ndk.so:libclang_rt.hwasan-aarch64-android.so:libdl.so:libEGL.so:libGLESv1_CM.so:libGLESv2.so:libGLESv3.so:libicu.so:libicui18n.so:libicuuc.so:libjnigraphics.so:liblog.so:libmediandk.so:libm.so:libnativehelper.so:libnativewindow.so:libneuralnetworks.so:libOpenMAXAL.so:libOpenSLES.so:libRS.so:libstdc++.so:libsync.so:libvulkan.so:libwebviewchromium_plat_support.so:libz.so","prio":3,"seq":51,"tag":"nativeloader"}
+{"message":"Configuring clns-1 for other apk . target_sdk_version=0, uses_libraries=ALL, library_path=/system/lib64:/vendor/lib64, permitted_path=/data:/mnt/expand","prio":3,"seq":52,"tag":"nativeloader"}
+{"message":"InitExtendedPublicLibraries: ","prio":3,"seq":53,"tag":"nativeloader"}
+{"message":"InitVendorPublicLibraries skipped: No such file or directory","prio":4,"seq":54,"tag":"nativeloader"}
+{"message":"InitProductPublicLibraries: ","prio":3,"seq":55,"tag":"nativeloader"}
+{"message":"Binder driver /dev/binder is unavailable. Using /dev/binder instead.","prio":6,"seq":56,"tag":"ProcessState"}
+{"message":"Compat change id reported: 171979766; UID 10192; state: ENABLED","prio":3,"seq":57,"tag":"CompatibilityChangeReporter"}
+{"message":"Compat change id reported: 242716250; UID 10192; state: ENABLED","prio":3,"seq":58,"tag":"CompatibilityChangeReporter"}
+{"message":"Preloading /system/fonts/Roboto-Regular.ttf","prio":4,"seq":59,"tag":"Typeface"}
+{"message":"Preloading /system/fonts/RobotoStatic-Regular.ttf","prio":4,"seq":60,"tag":"Typeface"}
+{"message":"Compat change id reported: 247079863; UID 10192; state: ENABLED","prio":3,"seq":61,"tag":"CompatibilityChangeReporter"}
+{"message":"Unable to open '/data/app/gaten-dev-f344272-x86_64-release-unsigned.dm': No such file or directory","prio":5,"seq":62,"tag":"ziparchive"}
+{"message":"Unable to open '/data/app/gaten-dev-f344272-x86_64-release-unsigned.dm': No such file or directory","prio":5,"seq":63,"tag":"ziparchive"}
+{"message":"Configuring clns-2 for other apk /data/app/gaten-dev-f344272-x86_64-release-unsigned.apk. target_sdk_version=34, uses_libraries=, library_path=/data/app-lib/x86_64, permitted_path=/data:/mnt/expand:/data/app-data/com.gaten","prio":3,"seq":64,"tag":"nativeloader"}
+{"message":"Failed to ensure /data/app-data/com.gaten/cache: chown failed: EINVAL (Invalid argument)","prio":5,"seq":65,"tag":"ContextImpl"}
+{"message":"Failed to ensure /data/app-data/com.gaten/code_cache: chown failed: EINVAL (Invalid argument)","prio":5,"seq":66,"tag":"ContextImpl"}
+{"message":"Currently set values for:","prio":2,"seq":67,"tag":"GraphicsEnvironment"}
+{"message":"  angle_gl_driver_selection_pkgs=[]","prio":2,"seq":68,"tag":"GraphicsEnvironment"}
+{"message":"  angle_gl_driver_selection_values=[]","prio":2,"seq":69,"tag":"GraphicsEnvironment"}
+{"message":"ANGLE GameManagerService for com.gaten: false","prio":2,"seq":70,"tag":"GraphicsEnvironment"}
+{"message":"com.gaten is not listed in per-application setting","prio":2,"seq":71,"tag":"GraphicsEnvironment"}
+{"message":"Neither updatable production driver nor prerelease driver is supported.","prio":2,"seq":72,"tag":"GraphicsEnvironment"}
+{"message":"No service published for: netstats","prio":5,"seq":73,"tag":"SystemServiceRegistry"}
+{"message":"TrafficStats not initialized, uid=10192","prio":6,"seq":74,"tag":"TrafficStats"}
+{"message":"ACOSLAUNCH MARK top-finish-watcher-started","prio":4,"seq":75,"tag":"AcosRot6"}
+{"message":"No implementation found for boolean ai.onnxruntime.telemetry.HttpClient.isDeviceIdCollectionEnabled() (tried Java_ai_onnxruntime_telemetry_HttpClient_isDeviceIdCollectionEnabled and Java_ai_onnxruntime_telemetry_HttpClient_isDeviceIdCollectionEnabled__) - is the library loaded, e.g. System.loadLibrary?","prio":6,"seq":76,"tag":""}
+{"message":"Unable to initialize telemetry\njava.lang.UnsatisfiedLinkError: No implementation found for boolean ai.onnxruntime.telemetry.HttpClient.isDeviceIdCollectionEnabled() (tried Java_ai_onnxruntime_telemetry_HttpClient_isDeviceIdCollectionEnabled and Java_ai_onnxruntime_telemetry_HttpClient_isDeviceIdCollectionEnabled__) - is the library loaded, e.g. System.loadLibrary?\n\tat ai.onnxruntime.telemetry.HttpClient.isDeviceIdCollectionEnabled(Native Method)\n\tat ai.onnxruntime.telemetry.HttpClient.<init>(SourceFile:9)\n\tat ai.onnxruntime.telemetry.HttpClient.<init>(SourceFile:1)\n\tat ai.onnxruntime.TelemetryInitializer.onCreate(Unknown Source:26)\n\tat android.content.ContentProvider.attachInfo(ContentProvider.java:2619)\n\tat android.content.ContentProvider.attachInfo(ContentProvider.java:2589)\n\tat android.app.ActivityThread.installProvider(ActivityThread.java:7765)\n\tat android.app.ActivityThread.installContentProviders(ActivityThread.java:7276)\n\tat android.app.ActivityThread.handleBindApplication(ActivityThread.java:6983)\n\tat android.app.ActivityThread.-$$Nest$mhandleBindApplication(Unknown Source:0)\n\tat android.app.ActivityThread$H.handleMessage(ActivityThread.java:2236)\n\tat android.os.Handler.dispatchMessage(Handler.java:106)\n\tat android.os.Looper.loopOnce(Looper.java:205)\n\tat android.os.Looper.loop(Looper.java:294)\n\tat dev.acos.art.LaunchMain.run(LaunchMain.java:534)\n\tat dev.acos.art.LaunchMain.main(LaunchMain.java:226)\n","prio":5,"seq":77,"tag":"ORTTelemetry"}
+{"message":"Uncaught exception thrown by finalizer","prio":6,"seq":78,"tag":"System"}
+{"message":"java.lang.IllegalArgumentException: Receiver not registered: null\n\tat android.app.LoadedApk.forgetReceiverDispatcher(LoadedApk.java:1662)\n\tat android.app.ContextImpl.unregisterReceiver(ContextImpl.java:1872)\n\tat android.content.ContextWrapper.unregisterReceiver(ContextWrapper.java:820)\n\tat ai.onnxruntime.telemetry.HttpClient.finalize(Unknown Source:16)\n\tat java.lang.Daemons$FinalizerDaemon.doFinalize(Daemons.java:339)\n\tat java.lang.Daemons$FinalizerDaemon.processReference(Daemons.java:324)\n\tat java.lang.Daemons$FinalizerDaemon.runInternal(Daemons.java:300)\n\tat java.lang.Daemons$Daemon.run(Daemons.java:145)\n\tat java.lang.Thread.run(Thread.java:1012)\n","prio":6,"seq":79,"tag":"System"}
+{"message":"Compat change id reported: 160794467; UID 10192; state: ENABLED","prio":3,"seq":80,"tag":"CompatibilityChangeReporter"}
+{"message":"Initializing SoLoader: 0","prio":5,"seq":81,"tag":"SoLoader"}
+{"message":"Recording new base apk path: /data/app/gaten-dev-f344272-x86_64-release-unsigned.apk\nPreviously recorded 0 base apk paths.","prio":5,"seq":82,"tag":"SoLoader"}
+{"message":"SoLoader initialized: 0","prio":5,"seq":83,"tag":"SoLoader"}
+{"message":"Entering merged library JNI_OnLoad.\n","prio":3,"seq":84,"tag":"jni_lib_merge"}
+{"message":"Preparing 13 pre-merged libs (including stub)\n","prio":3,"seq":85,"tag":"jni_lib_merge"}
+{"message":"Preparing to register libfabricjni_so.  onload_func: 61fae010\n","prio":3,"seq":86,"tag":"jni_lib_merge"}
+{"message":"Preparing to register libreact_devsupportjni_so.  onload_func: 62093b70\n","prio":3,"seq":87,"tag":"jni_lib_merge"}
+{"message":"Preparing to register libreact_featureflagsjni_so.  onload_func: 620a66a0\n","prio":3,"seq":88,"tag":"jni_lib_merge"}
+{"message":"Preparing to register libreact_newarchdefaults_so.  onload_func: 620e2680\n","prio":3,"seq":89,"tag":"jni_lib_merge"}
+{"message":"Preparing to register libreact_tracingjni_so.  onload_func: 621eb170\n","prio":3,"seq":90,"tag":"jni_lib_merge"}
+{"message":"Preparing to register libreactnativeblob_so.  onload_func: 621f04d0\n","prio":3,"seq":91,"tag":"jni_lib_merge"}
+{"message":"Preparing to register libreactnativejni_so.  onload_func: 621fc9d0\n","prio":3,"seq":92,"tag":"jni_lib_merge"}
+{"message":"Preparing to register libreactnativejni_common_so.  onload_func: 621ff840\n","prio":3,"seq":93,"tag":"jni_lib_merge"}
+{"message":"Preparing to register librninstance_so.  onload_func: 62227960\n","prio":3,"seq":94,"tag":"jni_lib_merge"}
+{"message":"Preparing to register libturbomodulejsijni_so.  onload_func: 622d64c0\n","prio":3,"seq":95,"tag":"jni_lib_merge"}
+{"message":"Preparing to register libuimanagerjni_so.  onload_func: 622dd420\n","prio":3,"seq":96,"tag":"jni_lib_merge"}
+{"message":"Preparing to register libyoga_so.  onload_func: 622e4b20\n","prio":3,"seq":97,"tag":"jni_lib_merge"}
+{"message":"About to register 12 actual methods.\n","prio":3,"seq":98,"tag":"jni_lib_merge"}
+{"message":"com.gaten.app.LauncherIconLight","prio":6,"seq":99,"tag":"logdw"}
+{"message":"ACOSLAUNCH MARK activity-destroyed-after-finish token=binder:209ae32 order=Pause(finished)->Stop->Destroy","prio":4,"seq":100,"tag":"AcosRot6"}
+{"message":"Entering merged library JNI_OnLoad.\n","prio":3,"seq":101,"tag":"jni_lib_merge"}
+{"message":"Preparing 4 pre-merged libs (including stub)\n","prio":3,"seq":102,"tag":"jni_lib_merge"}
+{"message":"Preparing to register libhermes_executor_so.  onload_func: 6c59f1d0\n","prio":3,"seq":103,"tag":"jni_lib_merge"}
+{"message":"Preparing to register libhermesinstancejni_so.  onload_func: 6c5a6b10\n","prio":3,"seq":104,"tag":"jni_lib_merge"}
+{"message":"Preparing to register libjsijniprofiler_so.  onload_func: 6c5a7350\n","prio":3,"seq":105,"tag":"jni_lib_merge"}
+{"message":"About to register 3 actual methods.\n","prio":3,"seq":106,"tag":"jni_lib_merge"}
+{"message":"ReactHost{0}.startSurface(surfaceId = 0): Schedule","prio":5,"seq":107,"tag":"unknown:BridgelessReact"}
+{"message":"ReactHost{0}.attachSurface(surfaceId = 0)","prio":5,"seq":108,"tag":"unknown:BridgelessReact"}
+{"message":"ReactHost{0}.getOrCreateReactInstanceTask()","prio":5,"seq":109,"tag":"unknown:BridgelessReact"}
+{"message":"ReactHost{0}.getOrCreateReactInstanceTask(): Start","prio":5,"seq":110,"tag":"unknown:BridgelessReact"}
+{"message":"ReactHost{0}.getJSBundleLoader()","prio":5,"seq":111,"tag":"unknown:BridgelessReact"}
+{"message":"ReactHost{0}.getOrCreateReactInstanceTask(): Creating BridgelessReactContext","prio":5,"seq":112,"tag":"unknown:BridgelessReact"}
+{"message":"ReactHost{0}.getOrCreateReactInstanceTask(): Creating ReactInstance","prio":5,"seq":113,"tag":"unknown:BridgelessReact"}
+{"message":"com.gaten.app.MainActivity","prio":6,"seq":114,"tag":"logdw"}
+{"message":"setpriority(-4) clamped to 0 (host RLIMIT_NICE is below stock init.rc's 40; guest-only adapter, W21)","prio":5,"seq":115,"tag":"AcosPriority"}
+{"message":"com.gaten.app.MainActivity","prio":6,"seq":116,"tag":"logdw"}
+{"message":"ReactHost{0}.onHostResume(activity)","prio":5,"seq":117,"tag":"unknown:BridgelessReact"}
+{"message":"ReactHost{0}.ReactContext.onHostResume()","prio":5,"seq":118,"tag":"unknown:BridgelessReact"}
+{"message":"Could not switch the launcher icon; the entry keeps the one it has.\njava.lang.IllegalArgumentException: bad request for android.content.pm.IPackageManager::setComponentEnabledSettings: arg 0 (TypedList(java.util.List)): no parcelable codec for java.util.List\n\tat android.os.Parcel.createExceptionOrNull(Parcel.java:3061)\n\tat android.os.Parcel.createException(Parcel.java:3041)\n\tat android.os.Parcel.readException(Parcel.java:3024)\n\tat android.os.Parcel.readException(Parcel.java:2966)\n\tat android.content.pm.IPackageManager$Stub$Proxy.setComponentEnabledSettings(IPackageManager.java:6016)\n\tat android.app.ApplicationPackageManager.setComponentEnabledSettings(ApplicationPackageManager.java:3088)\n\tat x5.b.c(Unknown Source:0)\n\tat y5.f.a(Unknown Source:241)\n\tat W1.g.run(Unknown Source:13)\n\tat java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1145)\n\tat java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:644)\n\tat java.lang.Thread.run(Thread.java:1012)\n","prio":6,"seq":119,"tag":"LauncherIcon"}
+{"message":"com.gaten.app.MainActivity","prio":6,"seq":120,"tag":"logdw"}
+{"message":"UID: [10192]  PID: [2] PhoneskyVerificationUtils : Play Store package is not found.","prio":5,"seq":121,"tag":"PlayCore"}
+{"message":"UID: [10192]  PID: [2] AssetPackServiceImpl : onError(-11)","prio":6,"seq":122,"tag":"PlayCore"}
+{"message":"UID: [10192]  PID: [2] AssetPackServiceImpl : onError(-11)","prio":6,"seq":123,"tag":"PlayCore"}
+{"message":"UID: [10192]  PID: [2] AssetPackServiceImpl : onError(-11)","prio":6,"seq":124,"tag":"PlayCore"}
+{"message":"Compat change id reported: 237531167; UID 10192; state: ENABLED","prio":3,"seq":125,"tag":"CompatibilityChangeReporter"}
+{"message":"com.gaten.app.LauncherIconLight","prio":6,"seq":126,"tag":"logdw"}
+{"message":"UID: [10192]  PID: [2] AssetPackManager : Could not sync active asset packs. Q5.k: -11: Asset Pack Download Error(-11): The Play Store app is either not installed or not the official version. (https://developer.android.com/reference/com/google/android/play/core/assetpacks/model/AssetPackErrorCode.html#PLAY_STORE_NOT_FOUND)","prio":5,"seq":127,"tag":"PlayCore"}
+{"message":"Could not read the recognition pack's state\nQ5.k: -11: Asset Pack Download Error(-11): The Play Store app is either not installed or not the official version. (https://developer.android.com/reference/com/google/android/play/core/assetpacks/model/AssetPackErrorCode.html#PLAY_STORE_NOT_FOUND)\n\tat Q6.p.j(Unknown Source:19)\n\tat Q6.p.b(Unknown Source:4)\n\tat P0.m.j(Unknown Source:337)\n\tat P0.m.invoke(Unknown Source:95)\n\tat L8.y.v(Unknown Source:43)\n\tat L8.y.A(Unknown Source:77)\n\tat q5.S.f(Unknown Source:73)\n\tat com.gaten.app.rn.GatenRecognitionModule.observePack(Unknown Source:79)\n\tat com.gaten.app.rn.GatenRecognitionModule.access$observePack(Unknown Source:0)\n\tat P0.m.j(Unknown Source:274)\n\tat s8.a.b(Unknown Source:7)\n\tat L8.F.run(Unknown Source:111)\n\tat A2.b.run(Unknown Source:827)\n\tat S8.j.run(Unknown Source:2)\n\tat S8.a.run(Unknown Source:86)\n","prio":5,"seq":128,"tag":"GatenOcr"}
+{"message":"Could not read the recognition pack's state\nQ5.k: -11: Asset Pack Download Error(-11): The Play Store app is either not installed or not the official version. (https://developer.android.com/reference/com/google/android/play/core/assetpacks/model/AssetPackErrorCode.html#PLAY_STORE_NOT_FOUND)\n\tat Q6.p.j(Unknown Source:19)\n\tat Q6.p.b(Unknown Source:4)\n\tat P0.m.j(Unknown Source:337)\n\tat P0.m.invoke(Unknown Source:95)\n\tat L8.y.v(Unknown Source:43)\n\tat L8.y.A(Unknown Source:77)\n\tat q5.S.f(Unknown Source:73)\n\tat P0.m.j(Unknown Source:385)\n\tat s8.a.b(Unknown Source:7)\n\tat L8.F.run(Unknown Source:111)\n\tat A2.b.run(Unknown Source:827)\n\tat S8.j.run(Unknown Source:2)\n\tat S8.a.run(Unknown Source:86)\n","prio":5,"seq":129,"tag":"GatenOcr"}
+{"message":"ReactHost{0}.getOrCreateReactInstanceTask(): Loading JS Bundle","prio":5,"seq":130,"tag":"unknown:BridgelessReact"}
+{"message":"ReactHost{0}.getOrCreateReactInstanceTask(): DevSupportManager.onNewReactContextCreated()","prio":5,"seq":131,"tag":"unknown:BridgelessReact"}
+{"message":"ReactHost{0}.startSurface(surfaceId = 0): Execute","prio":5,"seq":132,"tag":"unknown:BridgelessReact"}
+{"message":"Running \"Gaten\"","prio":4,"seq":133,"tag":"ReactNativeJS"}
+{"message":"Entering merged library JNI_OnLoad.\n","prio":3,"seq":134,"tag":"jni_lib_merge"}
+{"message":"Preparing 13 pre-merged libs (including stub)\n","prio":3,"seq":135,"tag":"jni_lib_merge"}
+{"message":"Preparing to register libfabricjni_so.  onload_func: 61fae010\n","prio":3,"seq":136,"tag":"jni_lib_merge"}
+{"message":"Preparing to register libreact_devsupportjni_so.  onload_func: 62093b70\n","prio":3,"seq":137,"tag":"jni_lib_merge"}
+{"message":"Preparing to register libreact_featureflagsjni_so.  onload_func: 620a66a0\n","prio":3,"seq":138,"tag":"jni_lib_merge"}
+{"message":"Preparing to register libreact_newarchdefaults_so.  onload_func: 620e2680\n","prio":3,"seq":139,"tag":"jni_lib_merge"}
+{"message":"Preparing to register libreact_tracingjni_so.  onload_func: 621eb170\n","prio":3,"seq":140,"tag":"jni_lib_merge"}
+{"message":"Preparing to register libreactnativeblob_so.  onload_func: 621f04d0\n","prio":3,"seq":141,"tag":"jni_lib_merge"}
+{"message":"Preparing to register libreactnativejni_so.  onload_func: 621fc9d0\n","prio":3,"seq":142,"tag":"jni_lib_merge"}
+{"message":"Preparing to register libreactnativejni_common_so.  onload_func: 621ff840\n","prio":3,"seq":143,"tag":"jni_lib_merge"}
+{"message":"Preparing to register librninstance_so.  onload_func: 62227960\n","prio":3,"seq":144,"tag":"jni_lib_merge"}
+{"message":"Preparing to register libturbomodulejsijni_so.  onload_func: 622d64c0\n","prio":3,"seq":145,"tag":"jni_lib_merge"}
+{"message":"Preparing to register libuimanagerjni_so.  onload_func: 622dd420\n","prio":3,"seq":146,"tag":"jni_lib_merge"}
+{"message":"Preparing to register libyoga_so.  onload_func: 622e4b20\n","prio":3,"seq":147,"tag":"jni_lib_merge"}
+{"message":"About to register 12 actual methods.\n","prio":3,"seq":148,"tag":"jni_lib_merge"}
+{"message":"ReactHost{0}.ReactContext.onHostResume()","prio":5,"seq":149,"tag":"unknown:BridgelessReact"}
+{"message":"ReactHost{0}.getOrCreateReactInstanceTask(): Executing ReactInstanceEventListeners","prio":5,"seq":150,"tag":"unknown:BridgelessReact"}
+{"message":"Compat change id reported: 210923482; UID 10192; state: ENABLED","prio":3,"seq":151,"tag":"CompatibilityChangeReporter"}
+{"message":"Could not find generated setter for class com.reactnativekeyboardcontroller.OverKeyboardViewManager","prio":5,"seq":152,"tag":"unknown:ViewManagerPropertyUpdater"}
+{"message":"Could not find generated setter for class t7.a","prio":5,"seq":153,"tag":"unknown:ViewManagerPropertyUpdater"}
+{"message":"Could not find generated setter for class com.reactnativekeyboardcontroller.KeyboardToolbarGroupViewManager","prio":5,"seq":154,"tag":"unknown:ViewManagerPropertyUpdater"}
+{"message":"Could not find generated setter for class com.facebook.react.uimanager.i","prio":5,"seq":155,"tag":"unknown:ViewManagerPropertyUpdater"}
+{"message":"Could not find generated setter for class com.swmansion.rnscreens.ScreenFooterManager","prio":5,"seq":156,"tag":"unknown:ViewManagerPropertyUpdater"}
+{"message":"Could not find generated setter for class com.swmansion.rnscreens.ScreenContainerViewManager","prio":5,"seq":157,"tag":"unknown:ViewManagerPropertyUpdater"}
+{"message":"Could not find generated setter for class com.swmansion.rnscreens.ModalScreenViewManager","prio":5,"seq":158,"tag":"unknown:ViewManagerPropertyUpdater"}
+{"message":"Could not find generated setter for class com.reactnativekeyboardcontroller.KeyboardGestureAreaViewManager","prio":5,"seq":159,"tag":"unknown:ViewManagerPropertyUpdater"}
+{"message":"Could not find generated setter for class com.th3rdwave.safeareacontext.SafeAreaViewManager","prio":5,"seq":160,"tag":"unknown:ViewManagerPropertyUpdater"}
+{"message":"Could not find generated setter for class j8.n","prio":5,"seq":161,"tag":"unknown:ViewManagerPropertyUpdater"}
+{"message":"Could not find generated setter for class com.swmansion.rnscreens.safearea.SafeAreaViewManager","prio":5,"seq":162,"tag":"unknown:ViewManagerPropertyUpdater"}
+{"message":"Could not find generated setter for class com.swmansion.rnscreens.ScreenViewManager","prio":5,"seq":163,"tag":"unknown:ViewManagerPropertyUpdater"}
+{"message":"Could not find generated setter for class com.swmansion.reanimated.view.REASharedTransitionBoundaryManager","prio":5,"seq":164,"tag":"unknown:ViewManagerPropertyUpdater"}
+{"message":"Could not find generated setter for class com.swmansion.rnscreens.ScreenStackViewManager","prio":5,"seq":165,"tag":"unknown:ViewManagerPropertyUpdater"}
+{"message":"Could not find generated setter for class com.swmansion.rnscreens.gamma.stack.header.config.StackHeaderConfigViewManager","prio":5,"seq":166,"tag":"unknown:ViewManagerPropertyUpdater"}
+{"message":"Could not find generated setter for class com.th3rdwave.safeareacontext.SafeAreaProviderManager","prio":5,"seq":167,"tag":"unknown:ViewManagerPropertyUpdater"}
+{"message":"Could not find generated setter for class com.swmansion.rnscreens.SearchBarManager","prio":5,"seq":168,"tag":"unknown:ViewManagerPropertyUpdater"}
+{"message":"Could not find generated setter for class com.reactnativekeyboardcontroller.ClippingScrollViewDecoratorViewManager","prio":5,"seq":169,"tag":"unknown:ViewManagerPropertyUpdater"}
+{"message":"Could not find generated setter for class com.swmansion.rnscreens.gamma.tabs.host.TabsHostViewManager","prio":5,"seq":170,"tag":"unknown:ViewManagerPropertyUpdater"}
+{"message":"Could not find generated setter for class com.swmansion.rnscreens.gamma.stack.header.subview.StackHeaderSubviewViewManager","prio":5,"seq":171,"tag":"unknown:ViewManagerPropertyUpdater"}
+{"message":"Could not find generated setter for class com.gaten.app.rn.GatenCardWebViewManager","prio":5,"seq":172,"tag":"unknown:ViewManagerPropertyUpdater"}
+{"message":"Could not find generated setter for class com.gaten.app.rn.GatenThemeTransitionManager","prio":5,"seq":173,"tag":"unknown:ViewManagerPropertyUpdater"}
+{"message":"Could not find generated setter for class com.reactnativekeyboardcontroller.KeyboardControllerViewManager","prio":5,"seq":174,"tag":"unknown:ViewManagerPropertyUpdater"}
+{"message":"Could not find generated setter for class com.swmansion.rnscreens.gamma.scrollviewmarker.ScrollViewMarkerViewManager","prio":5,"seq":175,"tag":"unknown:ViewManagerPropertyUpdater"}
+{"message":"Could not find generated setter for class com.swmansion.rnscreens.ScreenStackHeaderConfigViewManager","prio":5,"seq":176,"tag":"unknown:ViewManagerPropertyUpdater"}
+{"message":"Could not find generated setter for class com.swmansion.rnscreens.gamma.modals.formsheet.FormSheetContentWrapperViewManager","prio":5,"seq":177,"tag":"unknown:ViewManagerPropertyUpdater"}
+{"message":"Could not find generated setter for class com.swmansion.rnscreens.ScreenContentWrapperManager","prio":5,"seq":178,"tag":"unknown:ViewManagerPropertyUpdater"}
+{"message":"Could not find generated setter for class com.reactnativepagerview.PagerViewViewManager","prio":5,"seq":179,"tag":"unknown:ViewManagerPropertyUpdater"}
+{"message":"Could not find generated setter for class com.swmansion.rnscreens.gamma.stack.host.StackHostViewManager","prio":5,"seq":180,"tag":"unknown:ViewManagerPropertyUpdater"}
+{"message":"Could not find generated setter for class com.swmansion.rnscreens.ScreenStackHeaderSubviewManager","prio":5,"seq":181,"tag":"unknown:ViewManagerPropertyUpdater"}
+{"message":"Could not find generated setter for class com.swmansion.rnscreens.gamma.stack.screen.StackScreenViewManager","prio":5,"seq":182,"tag":"unknown:ViewManagerPropertyUpdater"}
+{"message":"Could not find generated setter for class com.swmansion.rnscreens.gamma.modals.formsheet.FormSheetHostViewManager","prio":5,"seq":183,"tag":"unknown:ViewManagerPropertyUpdater"}
+{"message":"Could not find generated setter for class com.reactnativekeyboardcontroller.KeyboardBackgroundViewManager","prio":5,"seq":184,"tag":"unknown:ViewManagerPropertyUpdater"}
+{"message":"Could not find generated setter for class com.swmansion.rnscreens.gamma.tabs.screen.TabsScreenViewManager","prio":5,"seq":185,"tag":"unknown:ViewManagerPropertyUpdater"}
+{"message":"Could not find generated setter for class com.horcrux.svg.RenderableViewManager$DefsViewManager","prio":5,"seq":186,"tag":"unknown:ViewManagerPropertyUpdater"}
+{"message":"Could not find generated setter for class com.horcrux.svg.K0","prio":5,"seq":187,"tag":"unknown:ViewManagerPropertyUpdater"}
+{"message":"Could not find generated setter for class com.horcrux.svg.RenderableViewManager$FeMergeManager","prio":5,"seq":188,"tag":"unknown:ViewManagerPropertyUpdater"}
+{"message":"Could not find generated setter for class com.facebook.react.views.safeareaview.ReactSafeAreaViewManager","prio":5,"seq":189,"tag":"unknown:ViewManagerPropertyUpdater"}
+{"message":"Could not find generated setter for class com.swmansion.gesturehandler.react.RNGestureHandlerDetectorViewManager","prio":5,"seq":190,"tag":"unknown:ViewManagerPropertyUpdater"}
+{"message":"Could not find generated setter for class com.horcrux.svg.RenderableViewManager$LinearGradientManager","prio":5,"seq":191,"tag":"unknown:ViewManagerPropertyUpdater"}
+{"message":"Could not find generated setter for class com.horcrux.svg.RenderableViewManager$FeGaussianBlurManager","prio":5,"seq":192,"tag":"unknown:ViewManagerPropertyUpdater"}
+{"message":"Could not find generated setter for class com.facebook.react.views.progressbar.ReactProgressBarViewManager","prio":5,"seq":193,"tag":"unknown:ViewManagerPropertyUpdater"}
+{"message":"Could not find generated setter for class com.facebook.react.views.scroll.ReactHorizontalScrollViewManager","prio":5,"seq":194,"tag":"unknown:ViewManagerPropertyUpdater"}
+{"message":"Could not find generated setter for class com.facebook.react.views.text.ReactTextViewManager","prio":5,"seq":195,"tag":"unknown:ViewManagerPropertyUpdater"}
+{"message":"Could not find generated setter for class com.horcrux.svg.RenderableViewManager$FeColorMatrixManager","prio":5,"seq":196,"tag":"unknown:ViewManagerPropertyUpdater"}
+{"message":"Could not find generated setter for class com.facebook.react.views.scroll.ReactHorizontalScrollContainerViewManager","prio":5,"seq":197,"tag":"unknown:ViewManagerPropertyUpdater"}
+{"message":"Could not find generated setter for class com.horcrux.svg.RenderableViewManager$ClipPathViewManager","prio":5,"seq":198,"tag":"unknown:ViewManagerPropertyUpdater"}
+{"message":"Could not find generated setter for class com.horcrux.svg.RenderableViewManager$SymbolManager","prio":5,"seq":199,"tag":"unknown:ViewManagerPropertyUpdater"}
+{"message":"Could not find generated setter for class com.horcrux.svg.RenderableViewManager$PatternManager","prio":5,"seq":200,"tag":"unknown:ViewManagerPropertyUpdater"}
+{"message":"Could not find generated setter for class com.horcrux.svg.RenderableViewManager$FeBlendManager","prio":5,"seq":201,"tag":"unknown:ViewManagerPropertyUpdater"}
+{"message":"Could not find generated setter for class com.facebook.react.views.view.ReactViewManager","prio":5,"seq":202,"tag":"unknown:ViewManagerPropertyUpdater"}
+{"message":"Could not find generated setter for class com.horcrux.svg.SvgViewManager","prio":5,"seq":203,"tag":"unknown:ViewManagerPropertyUpdater"}
+{"message":"Could not find generated setter for class com.facebook.react.views.switchview.ReactSwitchManager","prio":5,"seq":204,"tag":"unknown:ViewManagerPropertyUpdater"}
+{"message":"Could not find generated setter for class com.horcrux.svg.RenderableViewManager$UseViewManager","prio":5,"seq":205,"tag":"unknown:ViewManagerPropertyUpdater"}
+{"message":"Could not find generated setter for class com.horcrux.svg.RenderableViewManager$CircleViewManager","prio":5,"seq":206,"tag":"unknown:ViewManagerPropertyUpdater"}
+{"message":"Could not find generated setter for class com.horcrux.svg.RenderableViewManager$TSpanViewManager","prio":5,"seq":207,"tag":"unknown:ViewManagerPropertyUpdater"}
+{"message":"Could not find generated setter for class com.horcrux.svg.RenderableViewManager$FilterManager","prio":5,"seq":208,"tag":"unknown:ViewManagerPropertyUpdater"}
+{"message":"Could not find generated setter for class com.horcrux.svg.RenderableViewManager$MarkerManager","prio":5,"seq":209,"tag":"unknown:ViewManagerPropertyUpdater"}
+{"message":"Could not find generated setter for class com.swmansion.gesturehandler.react.RNGestureHandlerButtonViewManager","prio":5,"seq":210,"tag":"unknown:ViewManagerPropertyUpdater"}
+{"message":"Could not find generated setter for class com.facebook.react.views.modal.ReactModalHostManager","prio":5,"seq":211,"tag":"unknown:ViewManagerPropertyUpdater"}
+{"message":"Could not find generated setter for class com.horcrux.svg.RenderableViewManager$ForeignObjectManager","prio":5,"seq":212,"tag":"unknown:ViewManagerPropertyUpdater"}
+{"message":"Could not find generated setter for class com.horcrux.svg.RenderableViewManager$EllipseViewManager","prio":5,"seq":213,"tag":"unknown:ViewManagerPropertyUpdater"}
+{"message":"Could not find generated setter for class com.horcrux.svg.RenderableViewManager$LineViewManager","prio":5,"seq":214,"tag":"unknown:ViewManagerPropertyUpdater"}
+{"message":"Could not find generated setter for class com.horcrux.svg.RenderableViewManager$FeFloodManager","prio":5,"seq":215,"tag":"unknown:ViewManagerPropertyUpdater"}
+{"message":"Could not find generated setter for class com.horcrux.svg.RenderableViewManager$GroupViewManager","prio":5,"seq":216,"tag":"unknown:ViewManagerPropertyUpdater"}
+{"message":"Could not find generated setter for class com.horcrux.svg.RenderableViewManager$TextViewManager","prio":5,"seq":217,"tag":"unknown:ViewManagerPropertyUpdater"}
+{"message":"Could not find generated setter for class com.horcrux.svg.RenderableViewManager$ImageViewManager","prio":5,"seq":218,"tag":"unknown:ViewManagerPropertyUpdater"}
+{"message":"Could not find generated setter for class com.horcrux.svg.RenderableViewManager$FeCompositeManager","prio":5,"seq":219,"tag":"unknown:ViewManagerPropertyUpdater"}
+{"message":"Could not find generated setter for class com.facebook.react.views.image.ReactImageManager","prio":5,"seq":220,"tag":"unknown:ViewManagerPropertyUpdater"}
+{"message":"Could not find generated setter for class com.horcrux.svg.RenderableViewManager$RadialGradientManager","prio":5,"seq":221,"tag":"unknown:ViewManagerPropertyUpdater"}
+{"message":"Could not find generated setter for class com.horcrux.svg.RenderableViewManager$MaskManager","prio":5,"seq":222,"tag":"unknown:ViewManagerPropertyUpdater"}
+{"message":"Could not find generated setter for class com.facebook.react.views.unimplementedview.ReactUnimplementedViewManager","prio":5,"seq":223,"tag":"unknown:ViewManagerPropertyUpdater"}
+{"message":"Could not find generated setter for class com.horcrux.svg.RenderableViewManager$RectViewManager","prio":5,"seq":224,"tag":"unknown:ViewManagerPropertyUpdater"}
+{"message":"Could not find generated setter for class com.horcrux.svg.RenderableViewManager$TextPathViewManager","prio":5,"seq":225,"tag":"unknown:ViewManagerPropertyUpdater"}
+{"message":"Could not find generated setter for class com.facebook.react.views.scroll.ReactScrollViewManager","prio":5,"seq":226,"tag":"unknown:ViewManagerPropertyUpdater"}
+{"message":"Could not find generated setter for class com.horcrux.svg.RenderableViewManager$FeOffsetManager","prio":5,"seq":227,"tag":"unknown:ViewManagerPropertyUpdater"}
+{"message":"Could not find generated setter for class com.horcrux.svg.RenderableViewManager$PathViewManager","prio":5,"seq":228,"tag":"unknown:ViewManagerPropertyUpdater"}
+{"message":"Could not find generated setter for class com.facebook.react.views.drawer.ReactDrawerLayoutManager","prio":5,"seq":229,"tag":"unknown:ViewManagerPropertyUpdater"}
+{"message":"Could not find generated setter for class com.facebook.react.views.swiperefresh.SwipeRefreshLayoutManager","prio":5,"seq":230,"tag":"unknown:ViewManagerPropertyUpdater"}
+{"message":"Could not find generated setter for class com.facebook.react.views.textinput.ReactTextInputManager","prio":5,"seq":231,"tag":"unknown:ViewManagerPropertyUpdater"}
+{"message":"Could not find generated setter for class com.facebook.react.views.text.SelectableTextViewManager","prio":5,"seq":232,"tag":"unknown:ViewManagerPropertyUpdater"}
+{"message":"Could not find generated setter for class com.swmansion.gesturehandler.react.RNGestureHandlerRootViewManager","prio":5,"seq":233,"tag":"unknown:ViewManagerPropertyUpdater"}
+{"message":"Could not find generated setter for class com.facebook.react.views.virtual.view.ReactVirtualViewManager","prio":5,"seq":234,"tag":"unknown:ViewManagerPropertyUpdater"}
+{"message":"Compat change id reported: 289878283; UID 10192; state: ENABLED","prio":3,"seq":235,"tag":"CompatibilityChangeReporter"}
+{"message":"StatusBarModule: Ignored status bar change, current activity is edge-to-edge.","prio":5,"seq":236,"tag":"unknown:ReactNative"}
+{"message":"StatusBarModule: Ignored status bar change, current activity is edge-to-edge.","prio":5,"seq":237,"tag":"unknown:ReactNative"}
+{"message":"Compat change id reported: 171228096; UID 10192; state: ENABLED","prio":3,"seq":238,"tag":"CompatibilityChangeReporter"}
+{"message":"UID: [10192]  PID: [2] AssetPackServiceImpl : onError(-11)","prio":6,"seq":239,"tag":"PlayCore"}
+{"message":"Could not read the recognition pack's state\nQ5.k: -11: Asset Pack Download Error(-11): The Play Store app is either not installed or not the official version. (https://developer.android.com/reference/com/google/android/play/core/assetpacks/model/AssetPackErrorCode.html#PLAY_STORE_NOT_FOUND)\n\tat Q6.p.j(Unknown Source:19)\n\tat Q6.p.b(Unknown Source:4)\n\tat P0.m.j(Unknown Source:337)\n\tat P0.m.invoke(Unknown Source:95)\n\tat L8.y.v(Unknown Source:43)\n\tat L8.y.A(Unknown Source:77)\n\tat q5.S.f(Unknown Source:73)\n\tat com.gaten.app.rn.GatenRecognitionModule.settings(Unknown Source:58)\n\tat com.gaten.app.rn.GatenRecognitionModule.access$settings(Unknown Source:0)\n\tat D0.r0.j(Unknown Source:522)\n\tat s8.a.b(Unknown Source:7)\n\tat L8.F.run(Unknown Source:111)\n\tat A2.b.run(Unknown Source:827)\n\tat S8.j.run(Unknown Source:2)\n\tat S8.a.run(Unknown Source:86)\n","prio":5,"seq":240,"tag":"GatenOcr"}
+{"message":"autofill","prio":6,"seq":241,"tag":"logdw"}
+{"message":"JIT allocated 90KB for compiled code of void K4.K.e(android.view.View, java.lang.String, java.lang.Object)","prio":4,"seq":242,"tag":""}
+{"message":"Compiler allocated 5675KB to compile void K4.K.e(android.view.View, java.lang.String, java.lang.Object)","prio":4,"seq":243,"tag":""}
+{"message":"Compat change id reported: 193247900; UID 10192; state: ENABLED","prio":3,"seq":244,"tag":"CompatibilityChangeReporter"}
+{"message":"view not autofillable - not passing ime action check","prio":3,"seq":245,"tag":"AutofillManager"}
+{"message":"view not autofillable - not passing ime action check","prio":3,"seq":246,"tag":"AutofillManager"}
+{"message":"%.*s","prio":4,"seq":247,"tag":"ReactNativeJNI"}
+{"message":"view not autofillable - not passing ime action check","prio":3,"seq":248,"tag":"AutofillManager"}
+{"message":"view not autofillable - not passing ime action check","prio":3,"seq":249,"tag":"AutofillManager"}
+{"message":"view not autofillable - not passing ime action check","prio":3,"seq":250,"tag":"AutofillManager"}
+{"message":"view not autofillable - not passing ime action check","prio":3,"seq":251,"tag":"AutofillManager"}
+{"message":"UID: [10192]  PID: [2] AssetPackServiceImpl : onError(-11)","prio":6,"seq":252,"tag":"PlayCore"}
+{"message":"Could not read the recognition pack's state\nQ5.k: -11: Asset Pack Download Error(-11): The Play Store app is either not installed or not the official version. (https://developer.android.com/reference/com/google/android/play/core/assetpacks/model/AssetPackErrorCode.html#PLAY_STORE_NOT_FOUND)\n\tat Q6.p.j(Unknown Source:19)\n\tat Q6.p.b(Unknown Source:4)\n\tat P0.m.j(Unknown Source:337)\n\tat P0.m.invoke(Unknown Source:95)\n\tat L8.y.v(Unknown Source:43)\n\tat L8.y.A(Unknown Source:77)\n\tat q5.S.f(Unknown Source:73)\n\tat com.gaten.app.rn.GatenRecognitionModule.settings(Unknown Source:58)\n\tat com.gaten.app.rn.GatenRecognitionModule.access$settings(Unknown Source:0)\n\tat D0.r0.j(Unknown Source:522)\n\tat s8.a.b(Unknown Source:7)\n\tat L8.F.run(Unknown Source:111)\n\tat A2.b.run(Unknown Source:827)\n\tat S8.j.run(Unknown Source:2)\n\tat S8.a.run(Unknown Source:86)\n","prio":5,"seq":253,"tag":"GatenOcr"}
+{"message":"view not autofillable - not passing ime action check","prio":3,"seq":254,"tag":"AutofillManager"}
+{"message":"view not autofillable - not passing ime action check","prio":3,"seq":255,"tag":"AutofillManager"}
+{"message":"The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.","prio":6,"seq":256,"tag":"RippleDrawable"}
+{"message":"The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.","prio":6,"seq":257,"tag":"RippleDrawable"}
+{"message":"The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.","prio":6,"seq":258,"tag":"RippleDrawable"}
+{"message":"The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.","prio":6,"seq":259,"tag":"RippleDrawable"}
+{"message":"UID: [10192]  PID: [2] AssetPackServiceImpl : onError(-11)","prio":6,"seq":260,"tag":"PlayCore"}
+{"message":"Could not read the recognition pack's state\nQ5.k: -11: Asset Pack Download Error(-11): The Play Store app is either not installed or not the official version. (https://developer.android.com/reference/com/google/android/play/core/assetpacks/model/AssetPackErrorCode.html#PLAY_STORE_NOT_FOUND)\n\tat Q6.p.j(Unknown Source:19)\n\tat Q6.p.b(Unknown Source:4)\n\tat P0.m.j(Unknown Source:337)\n\tat P0.m.invoke(Unknown Source:95)\n\tat L8.y.v(Unknown Source:43)\n\tat L8.y.A(Unknown Source:77)\n\tat q5.S.f(Unknown Source:73)\n\tat com.gaten.app.rn.GatenRecognitionModule.settings(Unknown Source:58)\n\tat com.gaten.app.rn.GatenRecognitionModule.access$settings(Unknown Source:0)\n\tat D0.r0.j(Unknown Source:522)\n\tat s8.a.b(Unknown Source:7)\n\tat L8.F.run(Unknown Source:111)\n\tat A2.b.run(Unknown Source:827)\n\tat S8.j.run(Unknown Source:2)\n\tat S8.a.run(Unknown Source:86)\n","prio":5,"seq":261,"tag":"GatenOcr"}
+{"message":"view not autofillable - not passing ime action check","prio":3,"seq":262,"tag":"AutofillManager"}
+{"message":"view not autofillable - not passing ime action check","prio":3,"seq":263,"tag":"AutofillManager"}
+{"message":"view not autofillable - not passing ime action check","prio":3,"seq":264,"tag":"AutofillManager"}
+{"message":"Compat change id reported: 163400105; UID 10192; state: ENABLED","prio":3,"seq":265,"tag":"CompatibilityChangeReporter"}
+{"message":"com.gaten:181fdebd: onRequestShow at ORIGIN_CLIENT_SHOW_SOFT_INPUT reason SHOW_SOFT_INPUT","prio":4,"seq":266,"tag":"ImeTracker"}
+{"message":"showSoftInput() view=Z4.g{d54fdc6 VFED..CL. .F.P..ID 131,10-920,126 #3b0 aid=1073741826} flags=0 reason=SHOW_SOFT_INPUT","prio":3,"seq":267,"tag":"InputMethodManager"}
+{"message":"show(ime(), fromIme=true)","prio":3,"seq":268,"tag":"InsetsController"}
+{"message":"com.gaten:a55b672b: onRequestShow at ORIGIN_CLIENT_SHOW_SOFT_INPUT reason SHOW_SOFT_INPUT","prio":4,"seq":269,"tag":"ImeTracker"}
+{"message":"showSoftInput() view=Z4.g{d54fdc6 VFED..CL. .F.P.... 131,10-920,126 #3b0 aid=1073741826} flags=0 reason=SHOW_SOFT_INPUT","prio":3,"seq":270,"tag":"InputMethodManager"}
+{"message":"0@1@com.gaten","prio":6,"seq":271,"tag":"logdw"}
+{"message":"show(ime(), fromIme=true)","prio":3,"seq":272,"tag":"InsetsController"}
+{"message":"6-qW","prio":6,"seq":273,"tag":"logdw"}
+{"message":"sendCancelIfRunning: isInProgress=falsecallback=android.view.ViewRootImpl$$ExternalSyntheticLambda17@2eb4665","prio":5,"seq":274,"tag":"WindowOnBackDispatcher"}
+{"message":"sendCancelIfRunning: isInProgress=falsecallback=android.view.ViewRootImpl$$ExternalSyntheticLambda17@7610d73","prio":5,"seq":275,"tag":"WindowOnBackDispatcher"}
+{"message":"AChoreographer: No JVM provided!","prio":5,"seq":276,"tag":"AChoreographer"}
+{"message":"JNI environment is unavailable, skipping registration","prio":5,"seq":277,"tag":"AChoreographer"}
+{"message":"loaded /vendor/lib64/egl/libEGL_angle.so","prio":3,"seq":278,"tag":"libEGL"}
+{"message":"loaded /vendor/lib64/egl/libGLESv1_CM_angle.so","prio":3,"seq":279,"tag":"libEGL"}
+{"message":"loaded /vendor/lib64/egl/libGLESv2_angle.so","prio":3,"seq":280,"tag":"libEGL"}
+{"message":"Failed to get gpu service","prio":6,"seq":281,"tag":"GraphicsEnv"}
+{"message":"dlopen (libGLESv2_angle.so) success at b26e9e95","prio":3,"seq":282,"tag":"libEGL"}
+{"message":"Failed to get gpu service","prio":6,"seq":283,"tag":"GraphicsEnv"}
+{"message":"searching for layers in '/data/app-lib/x86_64'","prio":3,"seq":284,"tag":"vulkan"}
+{"message":"Failed to get gpu service","prio":6,"seq":285,"tag":"GraphicsEnv"}
+{"message":"Failed to get gpu service","prio":6,"seq":286,"tag":"GraphicsEnv"}
+{"message":"ANGLE Warn:vulkan_icd.cpp:341 (ChoosePhysicalDevice): Preferred device ICD not found. Using default physicalDevice instead.","prio":5,"seq":287,"tag":"libEGL"}
+{"message":"getService: defaultServiceManager() is null","prio":6,"seq":288,"tag":"HidlServiceManagement"}
+{"message":"external/swiftshader/src/Vulkan/VkPhysicalDevice.cpp:649 WARNING: UNSUPPORTED: curExtension->sType: 1000338000\n","prio":5,"seq":289,"tag":"SwiftShader"}
+{"message":"external/swiftshader/src/Vulkan/VkPhysicalDevice.cpp:649 WARNING: UNSUPPORTED: curExtension->sType: 1000437000\n","prio":5,"seq":290,"tag":"SwiftShader"}
+{"message":"external/swiftshader/src/Vulkan/VkPhysicalDevice.cpp:649 WARNING: UNSUPPORTED: curExtension->sType: 1000338000\n","prio":5,"seq":291,"tag":"SwiftShader"}
+{"message":"external/swiftshader/src/Vulkan/VkPhysicalDevice.cpp:649 WARNING: UNSUPPORTED: curExtension->sType: 1000437000\n","prio":5,"seq":292,"tag":"SwiftShader"}
+{"message":"external/swiftshader/src/Vulkan/VkPhysicalDevice.cpp:649 WARNING: UNSUPPORTED: curExtension->sType: 1000338000\n","prio":5,"seq":293,"tag":"SwiftShader"}
+{"message":"external/swiftshader/src/Vulkan/VkPhysicalDevice.cpp:649 WARNING: UNSUPPORTED: curExtension->sType: 1000437000\n","prio":5,"seq":294,"tag":"SwiftShader"}
+{"message":"external/swiftshader/src/Vulkan/VkPhysicalDevice.cpp:649 WARNING: UNSUPPORTED: curExtension->sType: 1000338000\n","prio":5,"seq":295,"tag":"SwiftShader"}
+{"message":"external/swiftshader/src/Vulkan/VkPhysicalDevice.cpp:649 WARNING: UNSUPPORTED: curExtension->sType: 1000437000\n","prio":5,"seq":296,"tag":"SwiftShader"}
+{"message":"external/swiftshader/src/Vulkan/VkPhysicalDevice.cpp:649 WARNING: UNSUPPORTED: curExtension->sType: 1000338000\n","prio":5,"seq":297,"tag":"SwiftShader"}
+{"message":"external/swiftshader/src/Vulkan/VkPhysicalDevice.cpp:649 WARNING: UNSUPPORTED: curExtension->sType: 1000437000\n","prio":5,"seq":298,"tag":"SwiftShader"}
+{"message":"external/swiftshader/src/Vulkan/VkPhysicalDevice.cpp:649 WARNING: UNSUPPORTED: curExtension->sType: 1000338000\n","prio":5,"seq":299,"tag":"SwiftShader"}
+{"message":"external/swiftshader/src/Vulkan/VkPhysicalDevice.cpp:649 WARNING: UNSUPPORTED: curExtension->sType: 1000437000\n","prio":5,"seq":300,"tag":"SwiftShader"}
+{"message":"external/swiftshader/src/Vulkan/VkPhysicalDevice.cpp:649 WARNING: UNSUPPORTED: curExtension->sType: 1000338000\n","prio":5,"seq":301,"tag":"SwiftShader"}
+{"message":"external/swiftshader/src/Vulkan/VkPhysicalDevice.cpp:649 WARNING: UNSUPPORTED: curExtension->sType: 1000437000\n","prio":5,"seq":302,"tag":"SwiftShader"}
+{"message":"external/swiftshader/src/Vulkan/VkPhysicalDevice.cpp:649 WARNING: UNSUPPORTED: curExtension->sType: 1000338000\n","prio":5,"seq":303,"tag":"SwiftShader"}
+{"message":"external/swiftshader/src/Vulkan/VkPhysicalDevice.cpp:649 WARNING: UNSUPPORTED: curExtension->sType: 1000437000\n","prio":5,"seq":304,"tag":"SwiftShader"}
+{"message":"Failed to get gpu service","prio":6,"seq":305,"tag":"GraphicsEnv"}
+{"message":"Failed to get gpu service","prio":6,"seq":306,"tag":"GraphicsEnv"}
+{"message":"Failed to get gpu service","prio":6,"seq":307,"tag":"GraphicsEnv"}
+{"message":"Failed to get gpu service","prio":6,"seq":308,"tag":"GraphicsEnv"}
+{"message":"Version (2.1.24303 git hash: 54447ed6f702), Renderer (Vulkan 1.3.0 (SwiftShader Device (LLVM 10.0.0) (0x0000C0DE)))","prio":4,"seq":309,"tag":"ANGLE"}
+{"message":"Failed to get gpu service","prio":6,"seq":310,"tag":"GraphicsEnv"}
+{"message":"Google Play services is missing.","prio":5,"seq":311,"tag":"GooglePlayServicesUtil"}
+{"message":"OnBackInvokedCallback is not enabled for the application.\nSet 'android:enableOnBackInvokedCallback=\"true\"' in the application manifest.","prio":5,"seq":312,"tag":"WindowOnBackDispatcher"}
+{"message":"I0000 00:00:1794995383.161799     120 asset_manager_util.cc:61] Created global reference to asset manager.\n","prio":4,"seq":313,"tag":"native"}
+{"message":"E0000 00:00:1794995383.166977     120 cpu_affinity_thread_pool.cc:38] Failed to set name to thread. Error code 13\n","prio":6,"seq":314,"tag":"native"}
+{"message":"E0000 00:00:1794995383.167016     120 cpu_affinity_thread_pool.cc:38] Failed to set name to thread. Error code 13\n","prio":6,"seq":315,"tag":"native"}
+{"message":"Compat change id reported: 194532703; UID 10192; state: ENABLED","prio":3,"seq":316,"tag":"CompatibilityChangeReporter"}
+{"message":"Compat change id reported: 253665015; UID 10192; state: ENABLED","prio":3,"seq":317,"tag":"CompatibilityChangeReporter"}
+{"message":"I0000 00:00:1794995383.171456     121 text_classifier.cc:32] Creating classifier TfliteTextClassifier\n","prio":4,"seq":318,"tag":"native"}
+{"message":"I0000 00:00:1794995383.171493     122 text_detector_thread_pool_context.cc:38] Compute manager max in flight region detector overwrite: 1\n","prio":4,"seq":319,"tag":"native"}
+{"message":"I0000 00:00:1794995383.171567     121 common_util.h:41] Resizing Thread Pool: ocr_segm to 3\n","prio":4,"seq":320,"tag":"native"}
+{"message":"I0000 00:00:1794995383.171663     122 common_util.h:41] Resizing Thread Pool: ocr_det_0 to 3\n","prio":4,"seq":321,"tag":"native"}
+{"message":"Initialized TensorFlow Lite runtime.","prio":4,"seq":322,"tag":"tflite"}
+{"message":"Created TensorFlow Lite XNNPACK delegate for CPU.","prio":4,"seq":323,"tag":"tflite"}
+{"message":"I0000 00:00:1794995383.172448     121 tflite_lstm_client_base.cc:371] Resizing interpreter pool to 4\n","prio":4,"seq":324,"tag":"native"}
+{"message":"Replacing 44 out of 46 node(s) with delegate (TfLiteXNNPackDelegate) node, yielding 3 partitions for the whole graph.","prio":4,"seq":325,"tag":"tflite"}
+{"message":"I0000 00:00:1794995383.172951     122 tflite_detector_client_with_shape_cache.cc:105] Caching size: 10\n","prio":4,"seq":326,"tag":"native"}
+{"message":"I0000 00:00:1794995383.173182     122 tflite_model_pooled_runner.cc:625] Loading mlkit-google-ocr-models/gocr/layout/line_splitting_custom_ops/model.tflite\n","prio":4,"seq":327,"tag":"native"}
+{"message":"I0000 00:00:1794995383.173208     121 multi_pass_line_recognition_mutator.cc:342] Preloading recognizers.\n","prio":4,"seq":328,"tag":"native"}
+{"message":"I0000 00:00:1794995383.173279     122 tflite_model_pooled_runner.cc:836] Resizing interpreter pool to 1\n","prio":4,"seq":329,"tag":"native"}
+{"message":"I0000 00:00:1794995383.173377     132 tflite_model_pooled_runner.cc:625] Loading mlkit-google-ocr-models/gocr/gocr_models/line_recognition_legacy_mobile/Hani_ctc/optical/conv_model.fb\n","prio":4,"seq":330,"tag":"native"}
+{"message":"I0000 00:00:1794995383.173419     133 tflite_model_pooled_runner.cc:625] Loading mlkit-google-ocr-models/gocr/gocr_models/line_recognition_legacy_mobile/Jpan_ctc/optical/conv_model.fb\n","prio":4,"seq":331,"tag":"native"}
+{"message":"I0000 00:00:1794995383.173445     122 tflite_model_pooled_runner.cc:625] Loading mlkit-google-ocr-models/gocr/layout/line_clustering_custom_ops/model.tflite\n","prio":4,"seq":332,"tag":"native"}
+{"message":"I0000 00:00:1794995383.173482     134 tflite_model_pooled_runner.cc:625] Loading mlkit-google-ocr-models/gocr/gocr_models/line_recognition_legacy_mobile/Latn_ctc/optical/conv_model.fb\n","prio":4,"seq":333,"tag":"native"}
+{"message":"I0000 00:00:1794995383.173541     132 tflite_model_pooled_runner.cc:636] Loading mlkit-google-ocr-models/gocr/gocr_models/line_recognition_legacy_mobile/Hani_ctc/optical/lstm_model.fb\n","prio":4,"seq":334,"tag":"native"}
+{"message":"I0000 00:00:1794995383.173564     122 tflite_model_pooled_runner.cc:836] Resizing interpreter pool to 1\n","prio":4,"seq":335,"tag":"native"}
+{"message":"I0000 00:00:1794995383.173712     134 tflite_model_pooled_runner.cc:636] Loading mlkit-google-ocr-models/gocr/gocr_models/line_recognition_legacy_mobile/Latn_ctc/optical/lstm_model.fb\n","prio":4,"seq":336,"tag":"native"}
+{"message":"I0000 00:00:1794995383.173600     133 tflite_model_pooled_runner.cc:636] Loading mlkit-google-ocr-models/gocr/gocr_models/line_recognition_legacy_mobile/Jpan_ctc/optical/lstm_model.fb\n","prio":4,"seq":337,"tag":"native"}
+{"message":"I0000 00:00:1794995383.174942     134 tflite_model_pooled_runner.cc:836] Resizing interpreter pool to 4\n","prio":4,"seq":338,"tag":"native"}
+{"message":"I0000 00:00:1794995383.175612     134 mobile_langid_v2.cc:58] MobileLangID V2 initialized.\n","prio":4,"seq":339,"tag":"native"}
+{"message":"I0000 00:00:1794995383.175629     134 multi_pass_line_recognition_mutator.cc:364] Finished preloading a recognizer for \"Latn\"\n","prio":4,"seq":340,"tag":"native"}
+{"message":"I0000 00:00:1794995383.176727     132 tflite_model_pooled_runner.cc:836] Resizing interpreter pool to 4\n","prio":4,"seq":341,"tag":"native"}
+{"message":"I0000 00:00:1794995383.177125     133 tflite_model_pooled_runner.cc:836] Resizing interpreter pool to 4\n","prio":4,"seq":342,"tag":"native"}
+{"message":"I0000 00:00:1794995383.178970     133 mobile_langid_v2.cc:58] MobileLangID V2 initialized.\n","prio":4,"seq":343,"tag":"native"}
+{"message":"I0000 00:00:1794995383.178987     133 multi_pass_line_recognition_mutator.cc:364] Finished preloading a recognizer for \"Jpan\"\n","prio":4,"seq":344,"tag":"native"}
+{"message":"I0000 00:00:1794995383.179367     132 mobile_langid_v2.cc:58] MobileLangID V2 initialized.\n","prio":4,"seq":345,"tag":"native"}
+{"message":"I0000 00:00:1794995383.179382     132 multi_pass_line_recognition_mutator.cc:364] Finished preloading a recognizer for \"Hani\"\n","prio":4,"seq":346,"tag":"native"}
+{"message":"I0000 00:00:1794995383.179397     121 multi_pass_line_recognition_mutator.cc:398] Finished preloading recognizers.\n","prio":4,"seq":347,"tag":"native"}
+{"message":"I0000 00:00:1794995383.180415     120 scheduler.cc:693] ImageMetadata: 1080x2400\n","prio":4,"seq":348,"tag":"native"}
+{"message":"Replacing 44 out of 46 node(s) with delegate (TfLiteXNNPackDelegate) node, yielding 3 partitions for the whole graph.","prio":4,"seq":349,"tag":"tflite"}
+{"message":"Replacing 44 out of 46 node(s) with delegate (TfLiteXNNPackDelegate) node, yielding 3 partitions for the whole graph.","prio":4,"seq":350,"tag":"tflite"}
+{"message":"Replacing 44 out of 46 node(s) with delegate (TfLiteXNNPackDelegate) node, yielding 3 partitions for the whole graph.","prio":4,"seq":351,"tag":"tflite"}
+{"message":"Replacing 44 out of 46 node(s) with delegate (TfLiteXNNPackDelegate) node, yielding 3 partitions for the whole graph.","prio":4,"seq":352,"tag":"tflite"}
+{"message":"Replacing 44 out of 46 node(s) with delegate (TfLiteXNNPackDelegate) node, yielding 3 partitions for the whole graph.","prio":4,"seq":353,"tag":"tflite"}
+{"message":"Replacing 44 out of 46 node(s) with delegate (TfLiteXNNPackDelegate) node, yielding 3 partitions for the whole graph.","prio":4,"seq":354,"tag":"tflite"}
+{"message":"Replacing 44 out of 46 node(s) with delegate (TfLiteXNNPackDelegate) node, yielding 3 partitions for the whole graph.","prio":4,"seq":355,"tag":"tflite"}
+{"message":"Replacing 44 out of 46 node(s) with delegate (TfLiteXNNPackDelegate) node, yielding 3 partitions for the whole graph.","prio":4,"seq":356,"tag":"tflite"}
+{"message":"Replacing 44 out of 46 node(s) with delegate (TfLiteXNNPackDelegate) node, yielding 3 partitions for the whole graph.","prio":4,"seq":357,"tag":"tflite"}
+{"message":"Replacing 44 out of 46 node(s) with delegate (TfLiteXNNPackDelegate) node, yielding 3 partitions for the whole graph.","prio":4,"seq":358,"tag":"tflite"}
+{"message":"ReactHost{0}.startSurface(surfaceId = 0): Schedule","prio":5,"seq":359,"tag":"unknown:BridgelessReact"}
+{"message":"ReactHost{0}.attachSurface(surfaceId = 0)","prio":5,"seq":360,"tag":"unknown:BridgelessReact"}
+{"message":"ReactHost{0}.getOrCreateReactInstanceTask()","prio":5,"seq":361,"tag":"unknown:BridgelessReact"}
+{"message":"ReactHost{0}.startSurface(surfaceId = 0): Execute","prio":5,"seq":362,"tag":"unknown:BridgelessReact"}
+{"message":"Running \"GatenLookupSheet\"","prio":4,"seq":363,"tag":"ReactNativeJS"}
+{"message":"Could not find generated setter for class com.facebook.react.uimanager.RootViewManager","prio":5,"seq":364,"tag":"unknown:ViewManagerPropertyUpdater"}
+{"message":"View class X4.e is an AppCompat widget that can only be used with a Theme.AppCompat theme (or descendant).","prio":6,"seq":365,"tag":"ThemeUtils"}
+{"message":"View class X4.e is an AppCompat widget that can only be used with a Theme.AppCompat theme (or descendant).","prio":6,"seq":366,"tag":"ThemeUtils"}
+{"message":"View class X4.e is an AppCompat widget that can only be used with a Theme.AppCompat theme (or descendant).","prio":6,"seq":367,"tag":"ThemeUtils"}
+{"message":"View class X4.e is an AppCompat widget that can only be used with a Theme.AppCompat theme (or descendant).","prio":6,"seq":368,"tag":"ThemeUtils"}
+{"message":"View class X4.e is an AppCompat widget that can only be used with a Theme.AppCompat theme (or descendant).","prio":6,"seq":369,"tag":"ThemeUtils"}
+{"message":"View class X4.e is an AppCompat widget that can only be used with a Theme.AppCompat theme (or descendant).","prio":6,"seq":370,"tag":"ThemeUtils"}
+{"message":"View class X4.e is an AppCompat widget that can only be used with a Theme.AppCompat theme (or descendant).","prio":6,"seq":371,"tag":"ThemeUtils"}
+{"message":"View class X4.e is an AppCompat widget that can only be used with a Theme.AppCompat theme (or descendant).","prio":6,"seq":372,"tag":"ThemeUtils"}
+{"message":"View class X4.e is an AppCompat widget that can only be used with a Theme.AppCompat theme (or descendant).","prio":6,"seq":373,"tag":"ThemeUtils"}
+{"message":"View class X4.e is an AppCompat widget that can only be used with a Theme.AppCompat theme (or descendant).","prio":6,"seq":374,"tag":"ThemeUtils"}
+{"message":"View class X4.e is an AppCompat widget that can only be used with a Theme.AppCompat theme (or descendant).","prio":6,"seq":375,"tag":"ThemeUtils"}
+{"message":"View class X4.e is an AppCompat widget that can only be used with a Theme.AppCompat theme (or descendant).","prio":6,"seq":376,"tag":"ThemeUtils"}
+{"message":"View class X4.e is an AppCompat widget that can only be used with a Theme.AppCompat theme (or descendant).","prio":6,"seq":377,"tag":"ThemeUtils"}
+{"message":"View class X4.e is an AppCompat widget that can only be used with a Theme.AppCompat theme (or descendant).","prio":6,"seq":378,"tag":"ThemeUtils"}
+{"message":"View class X4.e is an AppCompat widget that can only be used with a Theme.AppCompat theme (or descendant).","prio":6,"seq":379,"tag":"ThemeUtils"}
+{"message":"View class X4.e is an AppCompat widget that can only be used with a Theme.AppCompat theme (or descendant).","prio":6,"seq":380,"tag":"ThemeUtils"}
+{"message":"View class X4.e is an AppCompat widget that can only be used with a Theme.AppCompat theme (or descendant).","prio":6,"seq":381,"tag":"ThemeUtils"}
+{"message":"View class X4.e is an AppCompat widget that can only be used with a Theme.AppCompat theme (or descendant).","prio":6,"seq":382,"tag":"ThemeUtils"}
+{"message":"View class X4.e is an AppCompat widget that can only be used with a Theme.AppCompat theme (or descendant).","prio":6,"seq":383,"tag":"ThemeUtils"}
+{"message":"View class Z4.g is an AppCompat widget that can only be used with a Theme.AppCompat theme (or descendant).","prio":6,"seq":384,"tag":"ThemeUtils"}
+{"message":"View class X4.e is an AppCompat widget that can only be used with a Theme.AppCompat theme (or descendant).","prio":6,"seq":385,"tag":"ThemeUtils"}
+{"message":"View class X4.e is an AppCompat widget that can only be used with a Theme.AppCompat theme (or descendant).","prio":6,"seq":386,"tag":"ThemeUtils"}
+{"message":"View class X4.e is an AppCompat widget that can only be used with a Theme.AppCompat theme (or descendant).","prio":6,"seq":387,"tag":"ThemeUtils"}
+{"message":"View class X4.e is an AppCompat widget that can only be used with a Theme.AppCompat theme (or descendant).","prio":6,"seq":388,"tag":"ThemeUtils"}
+{"message":"View class X4.e is an AppCompat widget that can only be used with a Theme.AppCompat theme (or descendant).","prio":6,"seq":389,"tag":"ThemeUtils"}
+{"message":"View class X4.e is an AppCompat widget that can only be used with a Theme.AppCompat theme (or descendant).","prio":6,"seq":390,"tag":"ThemeUtils"}
+{"message":"View class X4.e is an AppCompat widget that can only be used with a Theme.AppCompat theme (or descendant).","prio":6,"seq":391,"tag":"ThemeUtils"}
+{"message":"View class X4.e is an AppCompat widget that can only be used with a Theme.AppCompat theme (or descendant).","prio":6,"seq":392,"tag":"ThemeUtils"}
+{"message":"View class X4.e is an AppCompat widget that can only be used with a Theme.AppCompat theme (or descendant).","prio":6,"seq":393,"tag":"ThemeUtils"}
+{"message":"View class X4.e is an AppCompat widget that can only be used with a Theme.AppCompat theme (or descendant).","prio":6,"seq":394,"tag":"ThemeUtils"}
+{"message":"View class X4.e is an AppCompat widget that can only be used with a Theme.AppCompat theme (or descendant).","prio":6,"seq":395,"tag":"ThemeUtils"}
+{"message":"View class X4.e is an AppCompat widget that can only be used with a Theme.AppCompat theme (or descendant).","prio":6,"seq":396,"tag":"ThemeUtils"}
+{"message":"View class X4.e is an AppCompat widget that can only be used with a Theme.AppCompat theme (or descendant).","prio":6,"seq":397,"tag":"ThemeUtils"}
+{"message":"ReactHost{0}.stopSurface(surfaceId = 11): Schedule","prio":5,"seq":398,"tag":"unknown:BridgelessReact"}
+{"message":"ReactHost{0}.detachSurface(surfaceId = 11)","prio":5,"seq":399,"tag":"unknown:BridgelessReact"}
+{"message":"ReactHost{0}.stopSurface(surfaceId = 11): Execute","prio":5,"seq":400,"tag":"unknown:BridgelessReact"}
+{"message":"Stopping surface [11]","prio":6,"seq":401,"tag":"unknown:SurfaceMountingManager"}
+{"message":"%.*s","prio":6,"seq":402,"tag":"ReactNativeJNI"}
+{"message":"sendCancelIfRunning: isInProgress=falsecallback=android.view.ViewRootImpl$$ExternalSyntheticLambda17@38b98f8","prio":5,"seq":403,"tag":"WindowOnBackDispatcher"}
+{"message":"Surface [11] was stopped on SurfaceMountingManager.","prio":6,"seq":404,"tag":"unknown:SurfaceMountingManager"}
+{"message":"Skipping batch of MountItems; was stopped [11].","prio":6,"seq":405,"tag":"unknown:IntBufferBatchMountItem"}
+{"message":"%.*s","prio":6,"seq":406,"tag":"ReactNativeJNI"}

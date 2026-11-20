@@ -52,6 +52,9 @@ pub const HELP_TOOL: &str = "acos_help";
 /// but its report is a JSON object rather than an ACOS envelope, so it is
 /// handled in the same dispatch path.
 pub const SESSION_TOOL_NAMES: &[&str] = &[
+    // NET4: the network module's control verb, advertised with the schema
+    // `acos_netd::net_ctl` defines (the session API dispatches the same verb).
+    acos_netd::net_ctl::NET_CTL_TOOL,
     "acos_launch",
     "acos_observe_tree",
     "acos_tap",
@@ -61,6 +64,8 @@ pub const SESSION_TOOL_NAMES: &[&str] = &[
     "acos_logs",
     "acos_status",
     "acos_doctor",
+    "acos_services",
+    "acos_service_ctl",
 ];
 
 /// Identify a command from its wire name (`run-dex`).
@@ -498,6 +503,23 @@ fn session_tool_spec(name: &str) -> (&'static str, Value) {
     // session to address, so it does not publish `session_id`.
     let host_only = closed;
     match name {
+        // NET4: the network module's controls, on the session's own netns.
+        // The argument schema is *not* written here: it is
+        // `acos_netd::net_ctl::net_ctl_schema()`, the same value the session API
+        // parses with, so the CLI and MCP surfaces cannot drift (asserted by
+        // `tests/net_ctl_parity.rs`).
+        acos_netd::net_ctl::NET_CTL_TOOL => (
+            "Control the network of a session you hold: the relay state, this session's \
+             own connectivity (`offline`/`online`), latency/loss shaping (`delay`, on this \
+             session's veth only) and the explicit host-loopback opt-in (`hostport`, e.g. \
+             Metro's ws://localhost:8081). It is the MCP face of the CLI's `acos_net` verb: \
+             same name, same arguments, closed schema. Needs the session to have the network \
+             module on; a session without a relay netns answers `networked:false` (status) \
+             and a dead relay is `NETWORK_UNAVAILABLE`, never a silent offline. Common \
+             errors: SESSION_NOT_FOUND, NETWORK_UNAVAILABLE, INVALID_ARGUMENT (unknown \
+             argument, unknown action, port out of range).",
+            acos_netd::net_ctl::net_ctl_schema(),
+        ),
         "acos_launch" => (
             "Call this FIRST for an app you want to drive: it boots the APK in an in-process \
              session that persists across MCP calls (the CLI relaunches per invocation). Returns \
@@ -553,6 +575,68 @@ fn session_tool_spec(name: &str) -> (&'static str, Value) {
                                     carries the latest tree and frame identity with `settled:false` and \
                                     `bound:timeout`; a timeout is never assertion evidence."
                 },
+                "extra_apks": {
+                    "type": "array", "items": {"type": "string"},
+                    "description": "MPROC1: APK paths to install into this session beside `apk` \
+                                    (each at its own uid, with its own guest paths), so the app \
+                                    can query them through PackageManager/getPackageInfo/\
+                                    createPackageContext exactly as it would see a second \
+                                    installed app. Resolved under ACOS_ALLOWED_ROOTS like `apk`. \
+                                    ART only, and launch-time: a live session cannot change its \
+                                    installed packages (acos_destroy, then relaunch). The launch \
+                                    reply echoes the list and `result.extra_packages` names each \
+                                    package, uid and guest sourceDir/nativeLibraryDir."
+                },
+                "intent_action": {
+                    "type": "string",
+                    "description": "LAUNCHEXTRAS: the Intent action the launched Activity receives \
+                                    (`getIntent().getAction()`). The host builds the launch \
+                                    `LaunchActivityItem` Intent, so the app observes exactly this. \
+                                    Absent keeps the launcher's `android.intent.action.MAIN` (plus \
+                                    CATEGORY_LAUNCHER). ART only, launch-time: a live session cannot \
+                                    replace the Intent its first launch already delivered."
+                },
+                "data": {
+                    "type": "string",
+                    "description": "LAUNCHEXTRAS: the Intent data URI \
+                                    (`getIntent().getDataString()`), written as the image's own \
+                                    `Uri.parse` StringUri. ART only, launch-time."
+                },
+                "extras": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "oneOf": [
+                            {"type": "string", "description": "a string extra"},
+                            {"type": "integer", "description": "an int extra (a long when it does not fit an int)"},
+                            {"type": "number", "description": "a double extra (a plain JSON float)"},
+                            {"type": "boolean", "description": "a boolean extra"},
+                            {"type": "array", "items": {"type": "string"}, "description": "a String[] extra"},
+                            {"type": "object", "required": ["type", "value"],
+                             "properties": {
+                                 "type": {"type": "string", "enum": ["string", "int", "long", "float", "double", "boolean", "string_array", "parcelable"]},
+                                 "value": {}
+                             },
+                             "description": "explicit type: pins long vs int and float vs double; a \
+                                             `parcelable` extra is refused with UNSUPPORTED_ANDROID_API \
+                                             naming the key and class"}
+                        ]
+                    },
+                    "description": "LAUNCHEXTRAS: typed Intent extras (`getIntent().getExtras()`). \
+                                    Plain JSON scalars/arrays infer (string, int, long when it does \
+                                    not fit an int, boolean, double for a float, string array); the \
+                                    `{type, value}` form pins the type. A `parcelable` extra is a \
+                                    structured UNSUPPORTED_ANDROID_API (key + class named) before any \
+                                    guest starts, never a silent drop. ART only, launch-time."
+                },
+                "idle_kill_seconds": {
+                    "type": "integer", "minimum": 0, "maximum": 86400,
+                    "description": "MPROC7: how long a lazily spawned secondary ART process may sit \
+                                    idle (no started activity, no started/bound service, no visible \
+                                    window) before the launcher kills it; the next intent respawns it. \
+                                    `0` disables the idle kill (launcher default 30). Launch-time: a \
+                                    live session cannot change it (acos_destroy, then relaunch). ART \
+                                    only; the reply names the value the launcher used."
+                },
                 "animations": {
                     "type": "string", "enum": ["on", "off"],
                     "description": "P12: per-session framework animation scales. `on` (default) is real \
@@ -593,6 +677,25 @@ fn session_tool_spec(name: &str) -> (&'static str, Value) {
                                     `acos_status` (`sessions[].label`). Give each session you park a \
                                     label you can recognise — the server destroys its own idle \
                                     sessions, and the label is how you tell which one went."
+                },
+                "services": {
+                    "type": "array",
+                    "description": "ADR-0029 item 4: service modules to attach at launch, in order \
+                                    (`core` is always attached first at `real`). The reply's \
+                                    `modules` list reports what was actually attached and its \
+                                    fidelity; a module at `stub`/`scripted` is never a real \
+                                    implementation and a verdict that relies on it says so. \
+                                    Attach a module you need instead of assuming it is there.",
+                    "items": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": ["id"],
+                        "properties": {
+                            "id": {"type": "string", "minLength": 1, "description": "Module id, e.g. `feedback.vibrator` (see acos_capabilities.modules.modules)."},
+                            "profile": {"type": "string", "enum": ["off", "stub", "scripted", "real"], "description": "Requested profile; omit for the module's strongest implemented profile. `off` detaches and the reply says so."},
+                            "config": {"type": "object", "description": "Module configuration object (scripted state, launch config)."}
+                        }
+                    }
                 },
                 "idle_ttl_s": {
                     "type": "integer", "minimum": 0,
@@ -904,6 +1007,53 @@ fn session_tool_spec(name: &str) -> (&'static str, Value) {
              behind — the server also reclaims its own after the idle TTL.",
             with_base(json!({})),
         ),
+        "acos_services" => (
+            "ADR-0029 item 4: the service modules of a live session. `op: \"list\"` (default) \
+             returns `attached` and the honest per-module `modules` rows; `status` is the same \
+             set with the session's allow/refuse detail; `attach`/`detach` change the session \
+             and answer with the new set. Only `hot` modules can change on a live session: an \
+             `at-launch` module (e.g. `core`) is refused with the launch call in the message, \
+             never silently ignored. `ctl` drives a scripted module's control operation \
+             (`location`: `set_location`, `play_track`, ...) and answers the module's own result; \
+             `acos_capabilities` with `session_id` shows the same set.",
+            json!({
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["op"],
+                "properties": {
+                    "op": {
+                        "type": "string",
+                        "enum": ["list", "status", "attach", "detach", "ctl"],
+                        "description": "`list`/`status` are read-only. `attach`/`detach`/`ctl` need `id`; `attach`/`detach` are refused for an `at-launch` module."
+                    },
+                    "id": {"type": "string", "minLength": 1, "description": "Module id for attach/detach/ctl (`location`)."},
+                    "profile": {"type": "string", "enum": ["off", "stub", "scripted", "real"], "description": "attach: requested profile; omit for the module's default."},
+                    "config": {"type": "object", "description": "attach: module configuration object."},
+                    "ctl_op": {"type": "string", "minLength": 1, "description": "ctl: the module control operation (`set_location`). The module's `controls` in `acos_capabilities` lists them."},
+                    "args": {"type": "object", "description": "ctl: operation arguments (`{lat, lng}` for `set_location`)."},
+                    "base": base.clone()
+                }
+            }),
+        ),
+        "acos_service_ctl" => (
+            "ADR-0029 item 4: drive a scripted module's state on a live session (`acos_service_ctl`). \
+             `module` is the id (`net.telephony`), `op` is the module's own control operation \
+             (`calls`, `reset`, `sms`, `call_state`, `scan`, `auth`, ...) and `args` is that op's \
+             object. The module answers with the op's own value: a refused or unknown op is a \
+             structured error, never a silent success. Only an attached module answers; a detached \
+             one says so (`attach` it first with `acos_services`).",
+            json!({
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["module", "op"],
+                "properties": {
+                    "module": {"type": "string", "minLength": 1, "description": "Module id (`net.telephony`, `hw.biometric`, `hw.bluetooth`, `feedback.vibrator`)."},
+                    "op": {"type": "string", "minLength": 1, "description": "The module's control operation name (`calls`, `sms`, `auth`, `scan`, ...)."},
+                    "args": {"type": "object", "description": "Op arguments (op-specific; see `acos_capabilities` modules[].controls)."},
+                    "base": base.clone()
+                }
+            }),
+        ),
         "acos_doctor" => (
             "Run the host preflight (`acos doctor`) and return its JSON report. Call it FIRST when \
              a build or launch fails before the app runs: it checks the Android SDK/build-tools, \
@@ -977,7 +1127,9 @@ pub fn capabilities_tool() -> ToolInfo {
             "pass `refresh: true` to re-probe the backend after a rebuild."
         )
         .to_string(),
-        input_schema: json!({
+        // ADR-0029 item 4/6: a named session adds its attached modules to the
+        // answer (`docs/MCP.md`), so the closed schema must accept the name.
+        input_schema: with_session_id(json!({
             "type": "object",
             "properties": {
                 "refresh": {
@@ -986,7 +1138,7 @@ pub fn capabilities_tool() -> ToolInfo {
                 }
             },
             "additionalProperties": false
-        }),
+        })),
         available: true,
         fidelity: Fidelity::NotApplicable,
         reason: None,
@@ -1056,8 +1208,9 @@ mod tests {
     fn every_protocol_tool_is_mapped_to_a_command() {
         let caps = Capabilities::unprobed();
         let infos = tool_infos(&caps);
-        // 13 protocol tools + acos_capabilities + acos_help + 9 session tools.
-        assert_eq!(infos.len(), 24);
+        // 13 protocol tools + acos_capabilities + acos_help + the session tools
+        // (`SESSION_TOOL_NAMES`).
+        assert_eq!(infos.len(), 13 + 2 + SESSION_TOOL_NAMES.len());
         let names: BTreeSet<&str> = infos.iter().map(|t| t.tool_name.as_str()).collect();
         for descriptor in mcp_tools().tools {
             assert!(

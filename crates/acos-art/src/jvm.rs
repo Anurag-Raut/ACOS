@@ -82,7 +82,11 @@ mod tests {
         assert_eq!(args.len(), 2);
         assert!(args[0].starts_with("-J-XX:ErrorFile=/"), "{:?}", args[0]);
         assert!(args[0].ends_with("/hs_err_pid%p.log"), "{:?}", args[0]);
-        assert!(args[1].starts_with("-J-XX:ReplayDataFile=/"), "{:?}", args[1]);
+        assert!(
+            args[1].starts_with("-J-XX:ReplayDataFile=/"),
+            "{:?}",
+            args[1]
+        );
         assert!(args[1].ends_with("/replay_pid%p.log"), "{:?}", args[1]);
         // The dump directory is created so the JVM never has to fall back to the
         // working directory (a missing directory is a silent cwd dump).

@@ -832,8 +832,17 @@ _CLASS_BY_CODE = {
     "REQUIRES_GMS": "unsupported",
     "WRONG_ABI": "unsupported",
     "UNSUPPORTED_ASSERTION_KIND": "unsupported",
-    # timeouts / resources
-    "TIMEOUT": "infra_timeout",
+    # timeouts / resources.
+    #
+    # `TIMEOUT` is deliberately *not* in the static table: a deadline that a
+    # scenario's own step hit (a `wait_for`/settle deadline, reported by the
+    # engine while the run was still alive) is a real non-pass of that scenario,
+    # while the harness's own `--timeout-s` kill is an infrastructure timeout.
+    # `classify_error(..., deadline=...)` is the one place that decides, and the
+    # matrix runner passes `deadline="harness"` only for its own rc=124 kill
+    # (SCENHYG: three designed TIMEOUT negatives were counted `infra_timeout`,
+    # so `negative_all_correct` could never be true and the matrix carried a
+    # permanent infrastructure ambiguity).
     "RESOURCE_LIMIT": "infra_timeout",
     "RAM_GUARD": "host_guard",
     "RAM_ABORT": "host_guard",
@@ -861,19 +870,32 @@ _CLASS_BY_CODE = {
     "UNTRUSTED_APK_NOT_CERTIFIED": "harness",
 }
 
-_RETRYABLE = {"infra_timeout", "host_guard"}
+# A step deadline is retryable for the same reason an infrastructure timeout is:
+# one retry separates "the host was slow" from "the expectation is wrong". A
+# negative that *declares* the timeout is a correct negative, not a retry.
+_RETRYABLE = {"infra_timeout", "step_timeout", "host_guard"}
 
 
-def classify_error(code, message=None, retryable=None, hint=None):
+def classify_error(code, message=None, retryable=None, hint=None, deadline="step"):
     """Map an ``acos_protocol::ErrorCode`` string to the matrix failure taxonomy.
 
     Returns ``{code, class, retryable, hint}`` with ``class`` one of
     ``assertion | app_crash | unsupported | harness | infra_timeout |
-    host_guard`` and ``unknown`` when the code is not in the table (the matrix
-    gate requires ``unclassified == 0``).
+    step_timeout | host_guard`` and ``unknown`` when the code is not in the table
+    (the matrix gate requires ``unclassified == 0``).
+
+    ``deadline`` says whose deadline a ``TIMEOUT`` was:
+
+    * ``"step"`` (default) — the scenario's own step/wait/settle deadline, which
+      is a real non-pass of the run; class ``step_timeout``;
+    * ``"harness"`` — the runner killed the run at its own wall-clock limit;
+      class ``infra_timeout`` (never a verdict about the app).
     """
     c = (code or "UNKNOWN").strip().upper()
-    cls = _CLASS_BY_CODE.get(c, "unknown")
+    if c == "TIMEOUT":
+        cls = "infra_timeout" if deadline == "harness" else "step_timeout"
+    else:
+        cls = _CLASS_BY_CODE.get(c, "unknown")
     if retryable is None:
         retryable = cls in _RETRYABLE
     if hint is None:
@@ -892,8 +914,12 @@ def _default_hint(code, cls):
     if cls == "unsupported":
         return ("The engine lacks this capability; report it as unsupported, never as a "
                 "pass. Not retryable on this engine.")
+    if cls == "step_timeout":
+        return ("The scenario's own step deadline elapsed (a wait/settle the run declared). "
+                "That is a non-pass of the scenario, not a harness failure; retry once to "
+                "separate a slow host from a wrong expectation.")
     if cls == "infra_timeout":
-        return "A deadline/resource budget was hit; retry once and record the retry cost."
+        return "The harness wall clock or a resource budget killed the run; retry once and record the retry cost."
     if cls == "host_guard":
         return "The host guard fired (RAM/confinement); free memory and retry."
     if cls == "harness":
@@ -996,8 +1022,8 @@ def validate_matrix(obj):
                 if key not in err:
                     errors.append("%s.error.%s missing" % (where, key))
             if err.get("class") not in ("assertion", "app_crash", "unsupported",
-                                        "harness", "infra_timeout", "host_guard",
-                                        "unknown"):
+                                        "harness", "infra_timeout", "step_timeout",
+                                        "host_guard", "unknown"):
                 errors.append("%s.error.class invalid: %r" % (where, err.get("class")))
         # negative-scenario column must be present on every row
         if "negative" not in row:

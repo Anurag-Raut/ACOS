@@ -103,7 +103,10 @@ impl NdkHost for TestHost {
             .read_entry(filename)
             .ok_or_else(|| format!("asset not in APK: {filename}"))?;
         let id = self.id();
-        self.assets.lock().unwrap().insert(id, Asset { data, pos: 0 });
+        self.assets
+            .lock()
+            .unwrap()
+            .insert(id, Asset { data, pos: 0 });
         Ok(id)
     }
 
@@ -391,8 +394,9 @@ fn ndk_surface_is_backed_by_real_acos_state() {
 
     // Trusted checked-in test object in an unconfined test process; use the
     // explicit test-only confinement opt-out (ADR-0022).
-    let loader =
-        Loader::new(LoaderConfig::for_tests_without_confinement().with_search_path(common::data_dir()));
+    let loader = Loader::new(
+        LoaderConfig::for_tests_without_confinement().with_search_path(common::data_dir()),
+    );
     let h = loader.load_file(&common::data("libacosndk.so")).unwrap();
 
     // --- assets: bytes come from the APK entry ---------------------------
@@ -418,7 +422,11 @@ fn ndk_surface_is_backed_by_real_acos_state() {
         let g = host.bitmaps.lock().unwrap();
         let b = g.get(&BITMAP_KEY).unwrap();
         assert_eq!(b.get_pixel(0, 0), 0xFF11_2233, "native lock write visible");
-        assert_eq!(b.get_pixel(2, 1), 0xFFAA_BBCC, "second locked pixel visible");
+        assert_eq!(
+            b.get_pixel(2, 1),
+            0xFFAA_BBCC,
+            "second locked pixel visible"
+        );
         assert_eq!(b.get_pixel(3, 2), 0, "untouched pixel stays zero");
     }
 
@@ -458,7 +466,11 @@ fn ndk_surface_is_backed_by_real_acos_state() {
 
     let egl_test: extern "C" fn() -> c_int =
         unsafe { common::sym(h.symbol("acos_ndk_egl_test").unwrap()) };
-    assert_eq!(egl_test(), 0, "EGL/GLES report EGL_NO_DISPLAY, never success");
+    assert_eq!(
+        egl_test(),
+        0,
+        "EGL/GLES report EGL_NO_DISPLAY, never success"
+    );
 
     loader.unload(&h).unwrap();
     clear_ndk_host();

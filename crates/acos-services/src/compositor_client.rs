@@ -75,9 +75,7 @@ use std::sync::{Arc, Mutex};
 use acos_aidl::MethodInfo;
 use acos_parcel::{BinderId, Parcel};
 
-use crate::display_events::{
-    self, now_ns, ConnectionPool, PERIOD_NS_60HZ,
-};
+use crate::display_events::{self, now_ns, ConnectionPool, PERIOD_NS_60HZ};
 use crate::error::{Result as SResult, ServiceError};
 use crate::exception;
 use crate::host::ServiceObject;
@@ -299,8 +297,7 @@ impl ServiceObject for SurfaceComposerService {
                 let vsync_source = data.read_int32().map_err(perr)?;
                 let event_registration = data.read_int32().map_err(perr)?;
                 let layer = data.read_strong_binder().map_err(perr)?;
-                if vsync_source != VSYNC_SOURCE_APP
-                    && vsync_source != VSYNC_SOURCE_SURFACE_FLINGER
+                if vsync_source != VSYNC_SOURCE_APP && vsync_source != VSYNC_SOURCE_SURFACE_FLINGER
                 {
                     return Err(ServiceError::BadRequest {
                         interface: DESCRIPTOR.to_string(),
@@ -380,8 +377,7 @@ impl ServiceObject for SurfaceComposerService {
             _ => Err(ServiceError::UnsupportedAndroidApi {
                 interface: DESCRIPTOR.to_string(),
                 code,
-                method: method_name(code)
-                    .map_or_else(|| format!("code {code}"), str::to_string),
+                method: method_name(code).map_or_else(|| format!("code {code}"), str::to_string),
             }),
         }
     }

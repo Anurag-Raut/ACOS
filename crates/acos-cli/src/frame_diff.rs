@@ -197,23 +197,17 @@ pub fn run(args: FrameDiffArgs) -> ExitCode {
 
 /// Attach the result value, falling back to a structured internal error if it
 /// cannot be serialized (it always can, but never panic on the agent path).
-fn attach(
-    base: Envelope,
-    result: Value,
-    request_id: &str,
-    metrics: Metrics,
-) -> Envelope {
+fn attach(base: Envelope, result: Value, request_id: &str, metrics: Metrics) -> Envelope {
     match base.with_result(result) {
         Ok(envelope) => envelope,
         Err(_) => Envelope::failure(
             request_id.to_string(),
             ProtocolBackend::AcosNative,
             Fidelity::NativeRuntime,
-            ProtocolError::new(ErrorCode::Internal, "frame-diff result serialization")
-                .with_hint(
-                    "The frame-diff result failed to serialize (a harness type bug). Capture the \
+            ProtocolError::new(ErrorCode::Internal, "frame-diff result serialization").with_hint(
+                "The frame-diff result failed to serialize (a harness type bug). Capture the \
                      inputs and report it; do not treat it as an image verdict.",
-                ),
+            ),
             metrics,
         ),
     }
@@ -239,10 +233,18 @@ fn parse_mask(s: &str) -> Result<[u32; 4], String> {
 }
 
 fn load(path: &PathBuf) -> Result<image::DecodedImage, (ErrorCode, String)> {
-    let bytes = std::fs::read(path)
-        .map_err(|e| (ErrorCode::RenderIo, format!("reading {}: {e}", path.display())))?;
-    image::decode(&bytes)
-        .map_err(|e| (ErrorCode::RenderInvalidArgument, format!("{}: {e}", path.display())))
+    let bytes = std::fs::read(path).map_err(|e| {
+        (
+            ErrorCode::RenderIo,
+            format!("reading {}: {e}", path.display()),
+        )
+    })?;
+    image::decode(&bytes).map_err(|e| {
+        (
+            ErrorCode::RenderInvalidArgument,
+            format!("{}: {e}", path.display()),
+        )
+    })
 }
 
 fn fail(
@@ -283,7 +285,11 @@ fn print_text(r: &diff::DiffReport) {
         "frame-diff {}x{}: {}",
         r.width,
         r.height,
-        if r.identical { "IDENTICAL" } else { "DIFFERENT" }
+        if r.identical {
+            "IDENTICAL"
+        } else {
+            "DIFFERENT"
+        }
     );
     println!(
         "  per-pixel   mean={:.4} rmse={:.4} max={} psnr={}",

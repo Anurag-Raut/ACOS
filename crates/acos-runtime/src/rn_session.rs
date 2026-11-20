@@ -32,8 +32,8 @@ use std::path::{Path, PathBuf};
 use acos_dex::DexFile;
 use acos_jni::react_native::{build_tree_from_json, ReactNativeApk};
 use acos_vm::vm::ThreadStatus;
-use acos_vm::{JavaValue, VmOptions};
 pub use acos_vm::CoreLib;
+use acos_vm::{JavaValue, VmOptions};
 
 use acos_jni::{JniConfig, JniRuntime};
 
@@ -216,8 +216,10 @@ fn extract_asset(apk: &Path, entry: &str, dest: &Path) -> Result<usize, String> 
 impl RnSession {
     /// Detect a React Native APK (structural: RN/Hermes library + bundle).
     pub fn detect(apk: &Path) -> Result<Option<ReactNativeApk>, RnSessionError> {
-        acos_jni::react_native::detect(apk)
-            .map_err(|e| RnSessionError::Setup { stage: "detect", detail: e.to_string() })
+        acos_jni::react_native::detect(apk).map_err(|e| RnSessionError::Setup {
+            stage: "detect",
+            detail: e.to_string(),
+        })
     }
 
     /// Extract every `lib/<abi>/` entry from `apk` into `dest` (flat).
@@ -225,7 +227,11 @@ impl RnSession {
     /// The product path stages the RN runtime libraries from the APK into its
     /// writable session root instead of requiring a pre-extracted `.cache`
     /// directory. Returns the extracted file names.
-    pub fn extract_native_libs(apk: &Path, abi: &str, dest: &Path) -> Result<Vec<String>, RnSessionError> {
+    pub fn extract_native_libs(
+        apk: &Path,
+        abi: &str,
+        dest: &Path,
+    ) -> Result<Vec<String>, RnSessionError> {
         std::fs::create_dir_all(dest).map_err(|e| setup("stage-lib", e))?;
         let bytes = std::fs::read(apk).map_err(|e| setup("read-apk", e))?;
         let mut archive =
@@ -253,8 +259,9 @@ impl RnSession {
     /// the first UIManager batch as a tree.
     pub fn launch(apk: &Path, options: RnSessionOptions) -> Result<Self, RnSessionError> {
         let apk = std::fs::canonicalize(apk).unwrap_or_else(|_| apk.to_path_buf());
-        let detected = Self::detect(&apk)?
-            .ok_or_else(|| RnSessionError::NotReactNative { apk: apk.display().to_string() })?;
+        let detected = Self::detect(&apk)?.ok_or_else(|| RnSessionError::NotReactNative {
+            apk: apk.display().to_string(),
+        })?;
         if detected.native_abis.is_empty() {
             return Err(RnSessionError::UnsupportedAbi {
                 apk: apk.display().to_string(),
@@ -267,11 +274,8 @@ impl RnSession {
         let session_root = scratch.join("session");
         let guest_app_dir = session_root.join(format!("data/user/0/{}", options.package));
         let guest_lib_dir = guest_app_dir.join("lib");
-        std::fs::create_dir_all(&guest_lib_dir)
-            .map_err(|e| setup("scratch", e))?;
-        for entry in std::fs::read_dir(&options.lib_dir)
-            .map_err(|e| setup("lib-dir", e))?
-        {
+        std::fs::create_dir_all(&guest_lib_dir).map_err(|e| setup("scratch", e))?;
+        for entry in std::fs::read_dir(&options.lib_dir).map_err(|e| setup("lib-dir", e))? {
             let entry = entry.map_err(|e| setup("lib-dir", e))?;
             if entry.file_type().map(|t| t.is_file()).unwrap_or(false) {
                 std::fs::copy(entry.path(), guest_lib_dir.join(entry.file_name()))
@@ -294,7 +298,11 @@ impl RnSession {
         let mut rt = Box::new(
             Runtime::standard_with(VmOptions {
                 heap_max_bytes: options.heap_max_bytes as usize,
-                corelib: if boot_ok { CoreLib::Real } else { options.corelib },
+                corelib: if boot_ok {
+                    CoreLib::Real
+                } else {
+                    options.corelib
+                },
                 boot_dir: if boot_ok {
                     options.boot_dir.clone()
                 } else {
@@ -333,7 +341,8 @@ impl RnSession {
 
         let driver_bytes =
             std::fs::read(&options.driver_dex).map_err(|e| setup("driver-dex", e))?;
-        let driver = DexFile::parse(driver_bytes).map_err(|e| setup("driver-dex", e.to_string()))?;
+        let driver =
+            DexFile::parse(driver_bytes).map_err(|e| setup("driver-dex", e.to_string()))?;
         rt.vm_mut().add_dex(driver);
 
         let jni = JniRuntime::new(
@@ -341,7 +350,8 @@ impl RnSession {
                 .with_search_path(&options.lib_dir)
                 .with_apk(&apk),
         );
-        jni.attach(rt.vm_mut()).map_err(|e| setup("jni-attach", e))?;
+        jni.attach(rt.vm_mut())
+            .map_err(|e| setup("jni-attach", e))?;
         jni.bind(rt.vm_mut());
 
         let bundle = scratch.join("index.android.bundle");
@@ -421,10 +431,11 @@ impl RnSession {
                 })
             }
         };
-        vm.java_string_to_rust(handle).map_err(|e| RnSessionError::Driver {
-            stage: "ops",
-            detail: format!("{e:?}"),
-        })
+        vm.java_string_to_rust(handle)
+            .map_err(|e| RnSessionError::Driver {
+                stage: "ops",
+                detail: format!("{e:?}"),
+            })
     }
 
     fn refresh_tree(&mut self) -> Result<(), RnSessionError> {
@@ -483,7 +494,9 @@ impl RnSession {
         let tag = self
             .tree
             .tag_for_test_id(id)
-            .ok_or_else(|| RnSessionError::NoTarget { query: format!("testID={id}") })?;
+            .ok_or_else(|| RnSessionError::NoTarget {
+                query: format!("testID={id}"),
+            })?;
         self.tap_tag(tag)
     }
 
@@ -492,7 +505,9 @@ impl RnSession {
         let tag = self
             .tree
             .tag_for_text(text)
-            .ok_or_else(|| RnSessionError::NoTarget { query: format!("text={text}") })?;
+            .ok_or_else(|| RnSessionError::NoTarget {
+                query: format!("text={text}"),
+            })?;
         self.tap_tag(tag)
     }
 

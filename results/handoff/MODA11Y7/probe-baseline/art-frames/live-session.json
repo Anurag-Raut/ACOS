@@ -1,0 +1,719 @@
+{
+  "capture_label": "screenshots are ACOS C1 buffer captures (compositor-client stored buffers), not device captures",
+  "capture_source": "acos-c1-buffer",
+  "heap": {
+    "bytes": {
+      "heapgrowthlimit": 201326592,
+      "heapmaxfree": 8388608,
+      "heapminfree": 524288,
+      "heapsize": 536870912,
+      "heapstartsize": 8388608
+    },
+    "heaptargetutilization": 0.75,
+    "mib": {
+      "heapgrowthlimit": 192.0,
+      "heapmaxfree": 8.0,
+      "heapminfree": 0.5,
+      "heapsize": 512.0,
+      "heapstartsize": 8.0
+    },
+    "overridden": [],
+    "prop": {
+      "dalvik.vm.heapgrowthlimit": "192m",
+      "dalvik.vm.heapmaxfree": "8m",
+      "dalvik.vm.heapminfree": "512k",
+      "dalvik.vm.heapsize": "512m",
+      "dalvik.vm.heapstartsize": "8m",
+      "dalvik.vm.heaptargetutilization": "0.75"
+    },
+    "source": "ACOS_ART_HEAP* overrides on the stock API-34 dalvik.vm.* table"
+  },
+  "protocol": "acos-art launch --interactive (ACOSLAUNCH_INTERACTIVE=1)",
+  "retention": {
+    "note": "passing run: intermediate C1 captures were pruned; the frames a step declared are in frames/<seq>.png",
+    "policy": "referenced",
+    "pruned_captures": 1
+  },
+  "steps": [
+    {
+      "activity": "dev.acos.fixtures.a11yprobe.MainActivity",
+      "boot_image": {
+        "base": "0x70000000",
+        "cache": "built",
+        "dir": "/home/Qui/.cache/acos/art/boot-images/fixed-ac70b36918497655",
+        "input_hash": "ac70b36918497655",
+        "mode": "shared-fixed",
+        "prep_ms": 7978,
+        "reason": "no usable manifest at /home/Qui/.cache/acos/art/boot-images/fixed-ac70b36918497655/manifest.json: No such file or directory (os error 2)"
+      },
+      "buffer_generation": 1,
+      "capture_source": "acos-c1-buffer",
+      "cmd": "ready",
+      "density": 420,
+      "guest_process_group": 3111894,
+      "height": 2400,
+      "label": "live ART session: real counter.apk Activity, in-guest view tree probe, ACOS C1 buffer captures",
+      "modules": [
+        {
+          "attach": "at-launch",
+          "details": null,
+          "fidelity": "real",
+          "id": "core",
+          "profile": "real",
+          "reason": null,
+          "state": "attached"
+        },
+        {
+          "attach": "hot",
+          "details": {
+            "app_thread": null,
+            "bind_pending": null,
+            "binding": "no bind yet: it starts when the app's AccessibilityManager calls addClient and attachApplication named its IApplicationThread",
+            "bound_service": null,
+            "clients": 0,
+            "connections": [],
+            "enabled": true,
+            "enabled_services": [
+              "dev.acos.fixtures.a11yprobe/.A11yProbeService"
+            ],
+            "event_count": 0,
+            "event_types": [],
+            "installed_services": [],
+            "interactions": [],
+            "self_disabled": false,
+            "service_bound": false,
+            "service_config": null,
+            "unsupported": [],
+            "windows": []
+          },
+          "fidelity": "real",
+          "id": "accessibility",
+          "profile": "real",
+          "reason": "real: settings, client state, service lists, event and interaction records, system-initiated bind (scheduleCreateService + scheduleBindService -> publishService -> IAccessibilityServiceClient.init); the interaction surface (getWindows, node queries, gestures, screenshot) is not implemented yet",
+          "state": "attached"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "system.permissions",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.permissions\", \"profile\": \"real\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "system.notifications",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.notifications\", \"profile\": \"real\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "sensors",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"sensors\", \"profile\": \"scripted\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "feedback.vibrator",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"feedback.vibrator\", \"profile\": \"scripted\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "location",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"location\", \"profile\": \"scripted\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "at-launch",
+          "details": null,
+          "fidelity": "off",
+          "id": "net.telephony",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"net.telephony\", \"profile\": \"scripted\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "hw.bluetooth",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.bluetooth\", \"profile\": \"scripted\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "hw.biometric",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.biometric\", \"profile\": \"scripted\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "hw.usb",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.usb\", \"profile\": \"stub\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "system.dropbox",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.dropbox\", \"profile\": \"stub\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "hw.nfc",
+          "profile": "off",
+          "reason": "off: no NFC hardware: NfcAdapter throws UnsupportedOperationException before any binder (FEATURE_NFC is absent)",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "system.wallpaper",
+          "profile": "off",
+          "reason": "off: no wallpaper service; AOSP's own DisabledWallpaperManager is the working missing path (config_enableWallpaperService is false)",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "system.print",
+          "profile": "off",
+          "reason": "off: no print service; the client only resolves the name when FEATURE_PRINTING is reported, and ACOS reports it absent",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "system.search",
+          "profile": "off",
+          "reason": "off: no search service and no searchable index; an empty SearchableInfo list would look like an installed search provider",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "system.usage",
+          "profile": "off",
+          "reason": "off: nothing records app usage; an empty ParceledListSlice<UsageStats> would be indistinguishable from 'not used'",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "system.dpm",
+          "profile": "off",
+          "reason": "off: no managed device or profile; every device-policy answer would be invented policy state",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "system.role",
+          "profile": "off",
+          "reason": "off: IRoleManager lives in the Permission APEX; its transaction table is not in the framework dex this build reads, so a stub would guess codes",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "geo.country",
+          "profile": "off",
+          "reason": "off: a detected country is a location claim ACOS cannot back",
+          "state": "off"
+        }
+      ],
+      "ok": true,
+      "package": "dev.acos.fixtures.a11yprobe",
+      "probe_seq": 1,
+      "stream_socket": "/run/user/1000/acos-view-3109744-1/view.sock",
+      "width": 1080
+    },
+    {
+      "cmd": "logs",
+      "dropped": 0,
+      "kept": 86,
+      "ok": true,
+      "total": 86
+    },
+    {
+      "buffer_generation": 8,
+      "cmd": "tree",
+      "frame_number": 1,
+      "frame_seq": 1,
+      "ok": true,
+      "png": "results/handoff/MODA11Y7/probe-baseline/art-frames/live-frames/acos-c1-layer6-frame-1-g8-c1.png",
+      "probe_seq": 6
+    },
+    {
+      "cmd": "logs",
+      "dropped": 0,
+      "kept": 95,
+      "ok": true,
+      "total": 95
+    },
+    {
+      "cmd": "logs",
+      "dropped": 0,
+      "kept": 95,
+      "ok": true,
+      "total": 95
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 2,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 7
+    },
+    {
+      "buffer_generation": 60,
+      "cmd": "tap",
+      "frame_number": 1,
+      "frame_seq": 3,
+      "handled": [
+        true,
+        true
+      ],
+      "ok": true,
+      "png_pruned": true,
+      "probe_seq": 42,
+      "x": 540.0,
+      "y": 1308.0
+    },
+    {
+      "cmd": "logs",
+      "dropped": 0,
+      "kept": 153,
+      "ok": true,
+      "total": 153
+    },
+    {
+      "cmd": "logs",
+      "dropped": 0,
+      "kept": 153,
+      "ok": true,
+      "total": 153
+    },
+    {
+      "cmd": "logs",
+      "dropped": 0,
+      "kept": 153,
+      "ok": true,
+      "total": 153
+    },
+    {
+      "cmd": "logs",
+      "dropped": 0,
+      "kept": 153,
+      "ok": true,
+      "total": 153
+    },
+    {
+      "cmd": "logs",
+      "dropped": 0,
+      "kept": 153,
+      "ok": true,
+      "total": 153
+    },
+    {
+      "cmd": "logs",
+      "dropped": 0,
+      "kept": 153,
+      "ok": true,
+      "total": 153
+    },
+    {
+      "cmd": "logs",
+      "dropped": 0,
+      "kept": 153,
+      "ok": true,
+      "total": 153
+    },
+    {
+      "cmd": "logs",
+      "dropped": 0,
+      "kept": 153,
+      "ok": true,
+      "total": 153
+    },
+    {
+      "cmd": "logs",
+      "dropped": 0,
+      "kept": 153,
+      "ok": true,
+      "total": 153
+    },
+    {
+      "cmd": "tree",
+      "frame_seq": 4,
+      "ok": true,
+      "pixels": false,
+      "probe_seq": 43
+    },
+    {
+      "buffer_generation": 112,
+      "cmd": "tap",
+      "frame_number": 1,
+      "frame_seq": 5,
+      "handled": [
+        true,
+        true
+      ],
+      "ok": true,
+      "png": "results/handoff/MODA11Y7/probe-baseline/art-frames/live-frames/acos-c1-layer6-frame-1-g112-c5.png",
+      "probe_seq": 77,
+      "x": 539.0,
+      "y": 1560.0
+    },
+    {
+      "cmd": "logs",
+      "dropped": 0,
+      "kept": 209,
+      "ok": true,
+      "total": 209
+    },
+    {
+      "attached": [
+        {
+          "id": "core",
+          "profile": "real"
+        },
+        {
+          "id": "accessibility",
+          "profile": "real"
+        }
+      ],
+      "cmd": "services",
+      "modules": [
+        {
+          "attach": "at-launch",
+          "details": null,
+          "fidelity": "real",
+          "id": "core",
+          "profile": "real",
+          "reason": null,
+          "state": "attached"
+        },
+        {
+          "attach": "hot",
+          "details": {
+            "app_thread": "0x100000001",
+            "bind_pending": null,
+            "binding": "bound: the app published its IAccessibilityServiceClient and the system delivered init(IAccessibilityServiceConnection, connectionId, windowToken), so onServiceConnected ran",
+            "bound_service": {
+              "binder": "0x10000000e",
+              "component": "dev.acos.fixtures.a11yprobe/.A11yProbeService",
+              "connection": "0x74",
+              "connection_id": 1,
+              "service_info_set": false
+            },
+            "clients": 1,
+            "connections": [
+              {
+                "connection": "0x10000000d",
+                "package": "dev.acos.fixtures.a11yprobe",
+                "window": "0x100000009"
+              },
+              {
+                "connection": "0x100000018",
+                "package": "dev.acos.fixtures.a11yprobe",
+                "window": "0x100000016"
+              }
+            ],
+            "enabled": true,
+            "enabled_services": [
+              "dev.acos.fixtures.a11yprobe/.A11yProbeService"
+            ],
+            "event_count": 14,
+            "event_types": [
+              {
+                "count": 14,
+                "type": 0
+              }
+            ],
+            "installed_services": [
+              "dev.acos.fixtures.a11yprobe/.A11yProbeService",
+              "dev.acos.fixtures.a11yprobe/.A11yBareService"
+            ],
+            "interactions": [
+              {
+                "code": 3,
+                "interaction_id": 0,
+                "window": 1
+              },
+              {
+                "code": 5,
+                "interaction_id": 1,
+                "window": 1
+              },
+              {
+                "code": 8,
+                "interaction_id": 2,
+                "window": 1
+              }
+            ],
+            "self_disabled": false,
+            "service_bound": true,
+            "service_config": {
+              "can_perform_gestures": true,
+              "can_retrieve_window_content": true,
+              "can_retrieve_windows": true,
+              "can_take_screenshot": true,
+              "capabilities": 161,
+              "event_types": 4194337,
+              "feedback_type": 16,
+              "flags": 80,
+              "notification_timeout": 100
+            },
+            "unsupported": [
+              "setAccessibilityWindowAttributes",
+              "setAccessibilityWindowAttributes"
+            ],
+            "windows": [
+              {
+                "active": false,
+                "bounds": [
+                  40,
+                  368,
+                  280,
+                  488
+                ],
+                "connection": "0x100000018",
+                "focused": false,
+                "id": 2,
+                "layer": 1,
+                "package": "dev.acos.fixtures.a11yprobe",
+                "type": 4,
+                "window": "0x100000016"
+              },
+              {
+                "active": true,
+                "bounds": [
+                  0,
+                  0,
+                  1080,
+                  2400
+                ],
+                "connection": "0x10000000d",
+                "focused": true,
+                "id": 1,
+                "layer": 0,
+                "package": "dev.acos.fixtures.a11yprobe",
+                "type": 1,
+                "window": "0x100000009"
+              }
+            ]
+          },
+          "fidelity": "real",
+          "id": "accessibility",
+          "profile": "real",
+          "reason": "real: settings, client state, service lists, event and interaction records, system-initiated bind (scheduleCreateService + scheduleBindService -> publishService -> IAccessibilityServiceClient.init); the interaction surface (getWindows, node queries, gestures, screenshot) is not implemented yet",
+          "state": "attached"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "system.permissions",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.permissions\", \"profile\": \"real\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "system.notifications",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.notifications\", \"profile\": \"real\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "sensors",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"sensors\", \"profile\": \"scripted\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "feedback.vibrator",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"feedback.vibrator\", \"profile\": \"scripted\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "location",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"location\", \"profile\": \"scripted\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "at-launch",
+          "details": null,
+          "fidelity": "off",
+          "id": "net.telephony",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"net.telephony\", \"profile\": \"scripted\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "hw.bluetooth",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.bluetooth\", \"profile\": \"scripted\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "hw.biometric",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.biometric\", \"profile\": \"scripted\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "hw.usb",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.usb\", \"profile\": \"stub\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "system.dropbox",
+          "profile": "off",
+          "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.dropbox\", \"profile\": \"stub\"}]}",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "hw.nfc",
+          "profile": "off",
+          "reason": "off: no NFC hardware: NfcAdapter throws UnsupportedOperationException before any binder (FEATURE_NFC is absent)",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "system.wallpaper",
+          "profile": "off",
+          "reason": "off: no wallpaper service; AOSP's own DisabledWallpaperManager is the working missing path (config_enableWallpaperService is false)",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "system.print",
+          "profile": "off",
+          "reason": "off: no print service; the client only resolves the name when FEATURE_PRINTING is reported, and ACOS reports it absent",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "system.search",
+          "profile": "off",
+          "reason": "off: no search service and no searchable index; an empty SearchableInfo list would look like an installed search provider",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "system.usage",
+          "profile": "off",
+          "reason": "off: nothing records app usage; an empty ParceledListSlice<UsageStats> would be indistinguishable from 'not used'",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "system.dpm",
+          "profile": "off",
+          "reason": "off: no managed device or profile; every device-policy answer would be invented policy state",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "system.role",
+          "profile": "off",
+          "reason": "off: IRoleManager lives in the Permission APEX; its transaction table is not in the framework dex this build reads, so a stub would guess codes",
+          "state": "off"
+        },
+        {
+          "attach": "hot",
+          "details": null,
+          "fidelity": "off",
+          "id": "geo.country",
+          "profile": "off",
+          "reason": "off: a detected country is a location claim ACOS cannot back",
+          "state": "off"
+        }
+      ],
+      "ok": true,
+      "op": "list"
+    },
+    {
+      "capture_source": "acos-c1-buffer",
+      "cmd": "close",
+      "frame_seq": 5,
+      "ok": true
+    }
+  ]
+}

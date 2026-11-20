@@ -113,12 +113,7 @@ impl FrameMeta {
     /// The display-space rectangle this frame covers (`[left, top, right, bottom]`).
     pub fn display_rect(&self) -> Bounds {
         let [ox, oy] = self.display_origin_px();
-        Bounds::new(
-            ox,
-            oy,
-            ox + self.width as i32,
-            oy + self.height as i32,
-        )
+        Bounds::new(ox, oy, ox + self.width as i32, oy + self.height as i32)
     }
 
     /// Convert a **display-space** rectangle to this frame's pixel rectangle.
@@ -193,8 +188,17 @@ mod tests {
     /// The reference display: 1080x2400, the ART frame is the app area
     /// `[0,128][1080,2337]` = 1080x2209 pixels.
     fn art_frame() -> FrameMeta {
-        FrameMeta::new(34, "2026-11-12T05:55:27Z", "art", 1080, 2209, 420, "h", true)
-            .with_display_geometry([0, 128], [1080, 2400])
+        FrameMeta::new(
+            34,
+            "2026-11-12T05:55:27Z",
+            "art",
+            1080,
+            2209,
+            420,
+            "h",
+            true,
+        )
+        .with_display_geometry([0, 128], [1080, 2400])
     }
 
     #[test]
@@ -203,7 +207,8 @@ mod tests {
         assert_eq!(full.display_origin_px(), [0, 0]);
         assert_eq!(full.display_rect(), Bounds::new(0, 0, 1080, 2400));
         assert_eq!(
-            full.frame_rect_for_display(Bounds::new(10, 20, 30, 40)).unwrap(),
+            full.frame_rect_for_display(Bounds::new(10, 20, 30, 40))
+                .unwrap(),
             Bounds::new(10, 20, 30, 40)
         );
     }

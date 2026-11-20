@@ -1,0 +1,17 @@
+{
+  "acos_version": "0.3.0",
+  "apk_path": "/home/Qui/.t3/worktrees/acos/t3-2f630078-d1c2107b4b54fe17/fixtures/build/apps/tap-targets.apk",
+  "apk_sha256": "0b217b2736d16969202c4f60d1ae7d511fdeb79117fa986e55c1b2d1c140fd48",
+  "scenario_path": "/home/Qui/.t3/worktrees/acos/t3-2f630078-d1c2107b4b54fe17/scenarios/rel3h-unhandled-input.yaml",
+  "scenario_sha256": "0a5336b146232a4281246c2b4c4310386a577cbba06c56f219763176b64de721",
+  "flags": [],
+  "isolation": "process",
+  "display": {
+    "mode": "offscreen",
+    "width": 1080,
+    "height": 2400,
+    "density_dpi": 420
+  },
+  "fidelity": "art-reference",
+  "backend": "acos-native"
+}

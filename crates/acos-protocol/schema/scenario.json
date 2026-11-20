@@ -191,7 +191,7 @@
       ]
     },
     "Expectation": {
-      "description": "What the scenario expects. Used to make negative tests explicit.",
+      "description": "What the scenario expects. Used to make negative tests explicit.\n\nEvery scenario in the corpus declares one, and the declaration is enforced at run time: `pass` is the only value that may produce a pass, and a scenario that cannot (or should not) produce one says so here instead of leaving a red row looking like a regression. `expectation_reason` is the one-line why (`non_pass`/`unsupported`) and is required for those values.",
       "oneOf": [
         {
           "description": "The scenario must produce `status: pass`.",
@@ -211,6 +211,13 @@
           "description": "The scenario must produce any non-pass status (crash/unsupported/... count).",
           "enum": [
             "non_pass"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "The engine cannot provide what the scenario asks, by design or by a known gap. The run must report `unsupported` (or the code `expect_error` pins); a pass is a harness failure, never a successful test.",
+          "enum": [
+            "unsupported"
           ],
           "type": "string"
         }
@@ -235,6 +242,50 @@
         "code"
       ],
       "type": "object"
+    },
+    "ExtraValue": {
+      "anyOf": [
+        {
+          "description": "a string extra",
+          "type": "string"
+        },
+        {
+          "description": "an int extra (a long when it does not fit)",
+          "type": "integer"
+        },
+        {
+          "description": "a double extra (a plain YAML float)",
+          "type": "number"
+        },
+        {
+          "description": "a boolean extra",
+          "type": "boolean"
+        },
+        {
+          "description": "a string array extra (String[])",
+          "items": {
+            "description": "a string array extra (String[])",
+            "type": "string"
+          },
+          "type": "array"
+        },
+        {
+          "description": "explicit form: {type: <java type>, value: <value>}; pins long vs int, float vs double, and names a refused parcelable extra",
+          "properties": {
+            "type": {
+              "description": "the Java type: string, int, long, float, double, boolean, string_array, parcelable",
+              "type": "string"
+            },
+            "value": true
+          },
+          "required": [
+            "type",
+            "value"
+          ],
+          "type": "object"
+        }
+      ],
+      "description": "A launch extra: a plain scalar (string, int, long when it does not fit an int, boolean, double for a plain float) or string array, or the explicit {type, value} form."
     },
     "FallbackPolicy": {
       "description": "What to do when the preferred engine cannot run a step.",
@@ -477,10 +528,19 @@
         },
         "extras": {
           "additionalProperties": {
-            "type": "string"
+            "$ref": "#/definitions/ExtraValue"
           },
-          "description": "String extras.",
+          "description": "Typed extras (`String`, `int`, `long`, `float`, `double`, `boolean`, `String[]`; see [`ExtraValue`] for the YAML spelling). A `parcelable` extra is a legal declaration that the ART launcher refuses by name.",
           "type": "object"
+        },
+        "idle_kill_seconds": {
+          "description": "MPROC7: the launcher's idle kill, in seconds, for this session (`0` disables it). A lazily spawned secondary process that starts no activity and holds no started/bound service is killed after this long, and the next intent respawns it. Launch-time (the launcher owns the timer): a scenario that proves the idle kill sets this small, exactly as `acos-art launch --idle-kill-seconds` / `ACOSLAUNCH_IDLE_KILL_SECS`.",
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
         },
         "intent_action": {
           "description": "Intent action.",
@@ -1194,6 +1254,74 @@
       },
       "type": "object"
     },
+    "ServiceCtlStep": {
+      "additionalProperties": false,
+      "description": "`service_ctl`: one service-module operation between assertions (ADR-0029 item 4).\n\n`op` is `attach` (with `profile`/`config`), `detach`, or one of the module's own control ops (`sensors.set_value`, `net.telephony.sms`, `hw.bluetooth.scan`, ...). The step is the one scenario spelling of the agent API — `acos_services {op: attach|detach}` for the lifecycle words and `acos_service_ctl {module, op, args}` for a control op — so a scripted module can be driven mid-run: set a sensor value, assert the view, play a shake, detach and assert the honest empty answer. A control op reaches only a module that is attached in this run; a step naming a detached module is a structured step failure (never a silent no-op).",
+      "properties": {
+        "args": {
+          "description": "Control-op arguments (`{sensor: \"accelerometer\", values: [0,0,9.81]}`)."
+        },
+        "config": {
+          "description": "Module config for `attach`."
+        },
+        "expect": {
+          "description": "What the reply must contain, as a JSON **subset**.\n\nObjects match key by key (an expected key the reply lacks is a failure), arrays match element by element with the same length, and every other value must be equal. Absent = the reply is evidence only. This is what makes a control op an *assertion*: `list` can require the posted notification's title/channel/actions, `tap` the fired sender's `start_result`, `dismiss` an empty `posted`."
+        },
+        "module": {
+          "description": "Module id (`sensors`, `feedback.vibrator`).",
+          "type": "string"
+        },
+        "op": {
+          "description": "`attach`, `detach`, or a module control op (`set_value`, `play`, ...).",
+          "type": "string"
+        },
+        "profile": {
+          "description": "Profile for `attach` (`off`/`stub`/`scripted`/`real`).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "timeout_ms": {
+          "description": "Wait for `expect` instead of sampling it once (1..=120000 ms).\n\nFor a state the app reaches *asynchronously* (a screenshot the app requests from a worker thread after a tap, a service that binds a moment after the setting is written): the read-only op is re-issued until the reply contains `expect`, and the step fails with the **last** reply when the deadline passes. Only legal with `expect` and the read-only op `status`: a polled op must be idempotent, and a wait with no expectation would be a sleep (`wait` is that step).",
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "module",
+        "op"
+      ],
+      "type": "object"
+    },
+    "ServiceRequest": {
+      "additionalProperties": false,
+      "description": "One `services:` entry (`{id, profile, config}`), the scenario spelling of a launch request (ADR-0029 item 4).",
+      "properties": {
+        "config": {
+          "description": "Module configuration object (scripted state, launch config)."
+        },
+        "id": {
+          "description": "Module id (`feedback.vibrator`).",
+          "type": "string"
+        },
+        "profile": {
+          "description": "Requested profile; `None` means the module's default (strongest implemented) profile, exactly like the MCP/CLI form.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "type": "object"
+    },
     "StateAssertion": {
       "description": "Assert node state flags.",
       "properties": {
@@ -1371,6 +1499,17 @@
           ],
           "description": "Assert node visibility."
         },
+        "assert_windows": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/WindowOrderAssertion"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Assert the window stack order (bottom to top) and focus."
+        },
         "back": {
           "anyOf": [
             {
@@ -1426,6 +1565,13 @@
           ],
           "description": "Launch the app."
         },
+        "requires_services": {
+          "description": "ADR-0029 item 4/5: module ids this step needs attached (`feedback.vibrator`).\n\nA step whose module is `off` is `unsupported`, never `pass`: the executor refuses to run an assertion against behaviour the session does not have.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
         "reset": {
           "anyOf": [
             {
@@ -1458,6 +1604,17 @@
             }
           ],
           "description": "Swipe until a selector is visible (a bounded search)."
+        },
+        "service_ctl": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/ServiceCtlStep"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "ADR-0029 item 4: one service-module operation in the middle of a run.\n\n`op` is either the module-lifecycle word (`attach`/`detach`, with an optional `profile`/`config`) or a module's own control op (`sensors.set_value`, `net.telephony.sms`, `hw.bluetooth.scan`, ...) with `args`. This is the scenario spelling of the agent API (`acos_services` for attach/detach, `acos_service_ctl` for a control op), so a scripted module can be driven between assertions instead of only at launch."
         },
         "set_density": {
           "anyOf": [
@@ -1557,6 +1714,17 @@
             }
           ],
           "description": "Type text."
+        },
+        "wait": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/WaitStep"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Wait for a fixed number of milliseconds (a timeline step)."
         },
         "wait_for": {
           "anyOf": [
@@ -1727,8 +1895,11 @@
       "description": "`tap`.",
       "properties": {
         "expect_change": {
-          "description": "SE1: fail the step when the settled frame's pixels are unchanged.\n\nOpt-in and strict-only: `expect_change: true` with `settle: fast` is rejected at scenario-validation time, because a fast frame may be mid-animation and can never back a claim.",
-          "type": "boolean"
+          "description": "SE1: fail the step when the settled frame's pixels are unchanged; A11YPACE: `expect_change: false` says the tap's effect is transient (a hide/re-show, an asynchronous worker) and **no** change is claimed.\n\nThe tap's own `state_change` assertion (the UI tree + screenshot rule a tap runs even when the scenario says nothing) needs a tree that differs between the pre- and post-action frames. That is wrong for a control whose effect is transient: Gaten's bubble hides for its lookup and re-shows a moment later, so two probe samples can land on the same tree and a sampling race would fail the step. An explicit `false` turns the assertion into the \"input delivered, no change claimed\" form (the same `input_delivery` assertion a `handled: false` tap gets) and is recorded as `input.expect_change: false` in the step and verdict, so it can never read as a silent pass of a missing effect: only `true` or the default (\"auto\") still require the change.\n\n`true` is strict-only: with `settle: fast`/`content` the pixel claim has no evidence, so validation rejects it. `false` is not a claim and may combine with any settle rule.",
+          "type": [
+            "boolean",
+            "null"
+          ]
         },
         "expect_handled": {
           "description": "REL3H2: the scenario's own claim about the app's handling of this input.\n\n`true` fails the step with `INPUT_NOT_HANDLED` when the app window acknowledged every event `finishInputEvent(handled) = false` (the gesture was delivered and nothing consumed it). `false` says \"this press is expected to be a no-op\" and silences the `INPUT_UNHANDLED` warning that REL3H2 attaches to every unhandled input. Unset: the step passes as measured and carries the warning.",
@@ -2099,6 +2270,61 @@
         "selector"
       ],
       "type": "object"
+    },
+    "WaitStep": {
+      "description": "`wait`: a fixed timeline delay.\n\nIt asserts nothing; it exists so a scenario can prove **time-based** behaviour (the launcher's idle kill, a timeout) because that is what the test is about. It is **never** a synchronisation primitive: waiting a fixed number of milliseconds before an assertion races the app (too early on a fast host, flaky on a loaded one). Use `wait_for` or an assertion's own `timeout_ms` to wait for a state the app reaches. The step's observation records `waited_ms`, so the verdict shows the delay actually elapsed.",
+      "properties": {
+        "ms": {
+          "description": "Milliseconds to wait (1..=600000).",
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "ms"
+      ],
+      "type": "object"
+    },
+    "WindowOrderAssertion": {
+      "description": "`assert_windows`: the window stack in policy z order, bottom first.\n\nThis is the LAYER1 assertion: it reads the tree's `windows[]` block (the host's AOSP layer policy, not insertion order), so an application overlay that is drawn and tapped above an activity can only pass when the reported stack actually says so.",
+      "properties": {
+        "focus": {
+          "description": "Optional expected kind of the focused window.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "focus_type": {
+          "description": "Optional expected `LayoutParams.TYPE_*` name of the focused window. This is the precise form: the activity is `TYPE_BASE_APPLICATION`, a dialog is `TYPE_APPLICATION`, and both have kind `application`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "order": {
+          "description": "Expected window kinds, bottom to top (`application`, `application_overlay`, `sub_window`, …). The count must match exactly: a missing or extra window is a failure, never silently ignored.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "types": {
+          "description": "Optional expected `LayoutParams.TYPE_*` names, bottom to top. When present this must have the same length as `order`.",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "order"
+      ],
+      "type": "object"
     }
   },
   "description": "A complete scenario.",
@@ -2186,6 +2412,23 @@
       "default": "pass",
       "description": "Expected outcome."
     },
+    "expectation_reason": {
+      "description": "One line saying **why** the expectation is not `pass` (the known reason: an open defect, an engine gap, a security rule). Required for `non_pass`/`unsupported` and for `needs_env`; refused for `pass`, so an honest declaration and a green row cannot disagree silently.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "extra_apks": {
+      "description": "MPROC1: extra APKs installed into the session beside `app`, each at its own uid and reachable through `PackageManager`/`createPackageContext`.\n\nPaths are workspace-relative or absolute, resolved like `app`. A scenario that names packages here is self-contained: the run installs exactly this set, or fails with a structured error naming the APK.",
+      "items": {
+        "type": "string"
+      },
+      "type": [
+        "array",
+        "null"
+      ]
+    },
     "fallback": {
       "allOf": [
         {
@@ -2214,6 +2457,13 @@
       "description": "Human/agent-readable name (also used in the verdict).",
       "type": "string"
     },
+    "needs_env": {
+      "description": "Host capabilities the scenario needs before it can run (see [`KNOWN_NEEDS_ENV`]). A runner must skip the scenario when one is absent and say so, instead of running it into a failure that is not its own.",
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
     "output": {
       "allOf": [
         {
@@ -2228,6 +2478,13 @@
         "ui_tree": true
       },
       "description": "Artifact options."
+    },
+    "services": {
+      "description": "ADR-0029 item 4: the service modules this scenario attaches at launch, in order. Shape is the launch-request shape (`{id, profile, config}`); the profiles and ids are validated here so a typo is an invalid scenario, never a silently defaulted session.",
+      "items": {
+        "$ref": "#/definitions/ServiceRequest"
+      },
+      "type": "array"
     },
     "steps": {
       "description": "Ordered steps.",

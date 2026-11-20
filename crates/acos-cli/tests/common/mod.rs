@@ -90,11 +90,7 @@ mod tests {
         let dir = ShortSocketDir::new("a_deliberately_long_tag_name_that_would_never_fit");
         let path = dir.socket("serve.sock");
         let len = path.as_os_str().as_bytes().len();
-        assert!(
-            len <= SUN_PATH_MAX,
-            "{} is {len} bytes",
-            path.display()
-        );
+        assert!(len <= SUN_PATH_MAX, "{} is {len} bytes", path.display());
         assert!(path.parent().unwrap().is_dir(), "socket dir must exist");
         let parent = path.parent().unwrap().to_path_buf();
         drop(dir);

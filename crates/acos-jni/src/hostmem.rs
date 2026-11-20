@@ -33,10 +33,8 @@ pub fn range_is_readable(start: usize, end: usize) -> bool {
         let Some((lo, hi)) = range.split_once('-') else {
             return false;
         };
-        let (Ok(lo), Ok(hi)) = (
-            usize::from_str_radix(lo, 16),
-            usize::from_str_radix(hi, 16),
-        ) else {
+        let (Ok(lo), Ok(hi)) = (usize::from_str_radix(lo, 16), usize::from_str_radix(hi, 16))
+        else {
             return false;
         };
         perms.starts_with('r') && start >= lo && end <= hi

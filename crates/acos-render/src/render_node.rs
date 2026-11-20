@@ -353,9 +353,7 @@ impl RenderNode {
         let mut stack = vec![root];
         while let Some(h) = stack.pop() {
             if let Some(n) = nodes.get(h) {
-                acc = acc
-                    .wrapping_mul(1099511628211)
-                    .wrapping_add(n.version);
+                acc = acc.wrapping_mul(1099511628211).wrapping_add(n.version);
                 for c in &n.children {
                     stack.push(*c);
                 }
@@ -428,7 +426,9 @@ mod tests {
     fn local_matrix_translates_by_bounds() {
         let mut n = RenderNode::new("x");
         n.set_left_top_right_bottom(10, 20, 110, 220);
-        let p = n.local_matrix().map_point(crate::geom::PointF::new(0.0, 0.0));
+        let p = n
+            .local_matrix()
+            .map_point(crate::geom::PointF::new(0.0, 0.0));
         assert_eq!((p.x, p.y), (10.0, 20.0));
     }
 
@@ -471,8 +471,13 @@ mod tests {
         let mut n = RenderNode::new("x");
         n.set_left_top_right_bottom(10, 20, 110, 220);
         n.set_translation(5.0, 7.0);
-        assert!(!n.has_identity_matrix(), "a translated view is not identity");
-        let t = n.transform_matrix().map_point(crate::geom::PointF::new(1.0, 2.0));
+        assert!(
+            !n.has_identity_matrix(),
+            "a translated view is not identity"
+        );
+        let t = n
+            .transform_matrix()
+            .map_point(crate::geom::PointF::new(1.0, 2.0));
         assert_eq!((t.x, t.y), (6.0, 9.0));
     }
 }

@@ -1181,6 +1181,53 @@ multi-package PMS foundation lands; the parcel defect is fixed in v0.3.0 as its 
 (audit every ACOS parcelable writer against AOSP `writeToParcel`). The Android WebView APK fallback
 stays rejected.
 
+**ADR-0031 amendment (2026-11-17, WVFAIR).** Frame production stays serialised per engine — two
+targets calling `beginFrame` at once crashed the pinned engine — but the serialisation is now a
+*fair* queue (`crates/acos-webview/src/fair.rs`), not one mutex: one attempt in flight, bounded by
+750 ms while another view is waiting (2 s when the engine serves a single view, i.e. the budget it
+always had), one outstanding pull per view (coalesced), priority for the frames the input path needs,
+and structured timeouts instead of unbounded blocking. Frame pulls run on their own threads, so they
+never occupy the connection's worker pool behind which input and JavaScript-interface calls queue.
+Measured: a two-view host test (one deliberately slow page) puts the fast view's pulls at 1 ms median
+/ 927 ms worst case and a tap ack at 65 ms, where the pre-gate broker starved them (1943 ms pulls,
+1085 ms tap acks, 8 concurrent pulls of one view serialised at 17 s); the ART two-WebView scenario
+holds a 3 ms tap→page-click. The guest side follows the same rule: `evaluateJavascript` is async
+(Android's contract), and a post-input `ax` read is bounded at 250 ms, so one busy page cannot stall
+the guest's UI thread. The WebView provider APK is now **shipped by the image**
+(`tools/extract-bootclasspath.sh` builds it with `tools/build-webview-provider.sh` and stages
+`.cache/boot/android-34/system-apps/com.android.webview.apk`), so a fresh install needs no separate
+step; the installer carries it and the module resolves it from the image first.
+
+**ADR-0031 amendment (2026-11-16, WVSCOPE).** Two lifetime defects of the one-broker-per-host decision
+(item 3) were closed, both root-caused by WVTAIL §4.3/§3.
+
+1. **The broker no longer shares its spawner's cgroup.** `setsid` changes the session but not the
+   cgroup, so a run harness that tears its session scope down (a scope-wide SIGKILL, which
+   `guarded.sh` and every run script do) killed the host's engine for *every* session — the
+   MERGE040A `NO_VIEW: no view <id>` plus one `render` that never answered, in another agent's run.
+   `gate.rs::spawn_broker` now starts the daemon inside its **own transient scope**
+   (`systemd-run --user --scope --collect --unit=acos-webview-<endpoint tag>-<pid> …`), so the
+   daemon's cgroup is the unit's and nothing a session does can take it down. It keeps its
+   `--idle-shutdown-secs` lifetime rule, and `--collect` unloads the unit when it exits. Where
+   systemd --user is not usable the gate logs a warning and falls back to today's `setsid` (a
+   session teardown then kills the engine for everyone — documented, not silent);
+   `ACOS_WEBVIEW_SCOPE=0` selects that arm explicitly. Measured (host test,
+   `cargo test -p acos-webview --test broker_scope`, both arms with the real engine): with the
+   scope the broker survives its session scope's SIGKILL and a second session gets a real PNG frame
+   from the same engine (`broker_spawns == 0`); with the fallback the broker dies with the scope and
+   the second session has to start a new engine (`broker_spawns == 1`) — the bug, pinned.
+2. **A broker from another build can no longer answer this build's sessions.** A shared daemon
+   outlives the checkouts it was built from: WVTAIL §3 measured a leftover daemon built from an
+   earlier branch holding the host endpoint, so a run of the new code silently measured the old
+   code. The gate ⇄ daemon attach handshake is now `attach:2` and carries a **build id**
+   (`version + git sha + workspace source digest`, one shared implementation in
+   `build-support/fingerprint.rs`, the same identity REL3D uses for `acos serve`); the daemon must
+   report the same one. A daemon of another build with live sessions is left alone and the gate
+   uses its own endpoint (`<dir>/broker-<source8>.sock`); with no session it stops itself and the
+   gate takes `broker.sock` over. An `ok` without a build id is refused like a mismatch. The guest
+   wire is unchanged (`hello.broker.build` / `engineStatus.build` are additive). Normative copy:
+   `results/handoff/WVB/WIRE.md` §0.1; byte-level test: `gate::tests::the_attach_line_is_exactly_the_documented_bytes`.
+
 ## ADR-0032 — Settle is not a pixel rule: content stability for every wait and assertion (REL3A, 2026-11-17)
 
 **Context.** v0.3.0 agent feedback (two independent agents) showed the settle model still leaked into
@@ -1285,6 +1332,89 @@ stay: no default guest route to host localhost services (it also protects the MC
 `acos view`), explicit host-port opt-in (Metro), and fail-closed where it costs nothing. Any hardening
 that costs RAM or latency is out. Verdict honesty (0 false passes) is unaffected.
 
+**ADR-0029 note (MODNOTIF2, 2026-11-16): service-layer option C, built first.** The orchestrator chose
+option B (system UI from guest system apps); MODNOTIF2 built the option-C layer every option needs,
+without any window/dialog code. Three decisions were taken while building it:
+
+1. **A module may replace a `core` name.** `ModuleManifest::replaces` names the `ServiceManager` names
+   a module takes over (`permission` today; `notification`/`statusbar` when their modules land). The
+   module registers the same descriptor, so attaching *overwrites* core's factory and detaching must
+   put it back. `ServiceHost::end_scope` only deleted what a scope added, so a detached module kept
+   answering; `RegistrationScope` now records the overwritten descriptor's factory/binder and restores
+   them (and the host's notification/permission state slots). Core answers a replaced name only while
+   the module is `off`, so a session without the module behaves exactly as before.
+2. **One runtime-permission table, published on the host.** `crate::permissions::PermissionStore` is
+   created by `registry::install` and shared by `PmsState`, `AtmsState` and the `system.permissions`
+   module: `PackageManager.checkPermission` and `ActivityManager.checkPermission` cannot disagree, and
+   a grant changes both. A permission with no runtime entry still answers from the manifest, so
+   install-time grants keep working; a runtime (dangerous) permission now starts **not** granted, as on
+   a phone.
+3. **`requestPermissions` never resolves to a grant ACOS cannot complete.** The framework starts an
+   `Intent` at `com.android.permissioncontroller` and expects `onRequestPermissionsResult`; ACOS
+   installs no such app and has no activity-result delivery from the system side
+   (`IApplicationThread` + `ActivityResultItem`), so the ATMS answers the structured
+   `PERMISSION_UI_UNAVAILABLE` with the configured state (`granted` when everything is already granted
+   — what `GrantPermissionsActivity` would return without drawing — else `denied`), naming the
+   system-app work. A pre-granted request therefore *still* fails, because the result cannot be
+   delivered; that delivery path is the first thing the permission-controller system app needs, and it
+   belongs to the multi-process/`mproc` work, not to the service layer.
+
+**ADR-0029/0031 note (WV8, 2026-11-16): `webview` is a module, and the two decisions it carries.**
+The WebView track is finished as an ADR-0029 module (`crates/acos-services/src/modules/webview.rs`),
+so the last two open questions get a recorded answer instead of an implementer's choice:
+
+1. **Viewport contract (decision).** `WebSettings.setUseWideViewPort(false)` — Android's default and
+   what this provider always did — means the layout viewport is the `View`'s width in CSS px
+   (`device px / density`) and `<meta name="viewport">` is **ignored**; that is Chromium's
+   `mobile: false`. `setUseWideViewPort(true)` honours the page's meta viewport and, without one,
+   uses Chromium's Android default of 980 CSS px (`mobile: true`), which is what a phone does.
+   `setLoadWithOverviewMode(true)` is a *visual* scale on top (`Emulation.setPageScaleFactor`,
+   `cssWidth / layoutWidth`), so it never changes the layout width. Both arms are measured against the
+   pinned engine (`crates/acos-webview/tests/wv8_viewport.rs`) and through the guest provider in
+   `scenarios/webview-probe.yaml` (pages with and without a meta tag, layout width read from the page).
+2. **Frames stay at the engine's CSS resolution (decision, follows WV7's measurement).** The wire
+   reports the frame's real pixel size and the guest scales it into the `View`. This pinned
+   `chrome-headless-shell` cannot capture at `deviceScaleFactor` under `--enable-begin-frame-control`
+   (`results/handoff/WV7/evidence/engine-capture-facts.txt`), so a device-resolution PNG is not
+   something a setting can turn on — it needs an engine whose capture path honours
+   `deviceScaleFactor`. A frame that arrives while nothing else draws is still painted only on the
+   next draw; that defect belongs to the LOOPERWAKE track (guest invalidation → traversal → vsync)
+   and is *not* worked around here: the scenario tolerates it with a generous `timeout_ms` instead of
+   hiding it.
+3. **`off` is Android's own no-provider path, not a tombstone.** With the module unattached there is
+   no `com.android.webview` package, so `hasSystemFeature("android.software.webview")` is false and
+   `WebViewFactory` throws its own `UnsupportedOperationException`; `webviewupdate` stays `core`'s and
+   answers from the package table (a module that re-registered it would be a second source of truth).
+   `real` installs the provider APK as a system app (`system_apps`, resolved by
+   `module::system_apks`) **at launch** and binds the session's gate socket; the one host Chromium is
+   still started by the first guest connect. There is no `stub`/`scripted` profile: a scripted page
+   would be a fake success.
+**ADR-0029 note (LAUNCHEXTRAS, 2026-11-18): the launch `Intent` is host-built, like the launch
+transaction.** ADR-0029's decision 8 and its "the host builds launch transactions" amendment (MPROC6)
+left a seam: a scenario's `intent_action:`, `data:` and `extras:` were accepted and then dropped by the
+live launcher, which built its own `ACTION_MAIN`/`CATEGORY_LAUNCHER` Intent (SCENHYG's WVFAIR
+finding, refused by name until this track). The Intent is now part of the same host-built
+`LaunchActivityItem`:
+
+1. **The host encodes the real `Intent` bytes; the guest only unmarshals them.**
+   `acos_services::client_transaction::encode_launch_intent` writes `Intent.writeToParcel` exactly as
+   this image does (including a data URI as the image's `Uri.parse` StringUri: type tag 1 + String8),
+   and the guest's `LaunchMain` calls the framework's own `Intent.CREATOR` before building the
+   transaction. It is never rebuilt guest-side from loose fields, so `getIntent()` cannot differ from
+   what the caller declared. The bytes are proven by the real-Java differential
+   (`crates/acos-runtime/tests/client_transaction_java.rs`) and pinned as a golden
+   (`crates/acos-services/tests/fixtures/intent-launch-extras.bin`).
+2. **An extra's Java type is part of the value, and survives the JSON hop.** Every surface
+   (scenario → engine → `ACOSLAUNCH_INTENT`; `acos launch`/`acos_launch` → daemon) carries
+   `ExtraValue` over JSON, so the writer emits the explicit `{type, value}` form for `long` and
+   `float`: a plain JSON `7` is inferred an `int` (4-byte `VAL_INTEGER`) and a plain `1.5` a `double`
+   (`java.lang.Double`), which is a different `Bundle` entry than the caller asked for. Measured:
+   `getFloat` returned its default with a `ClassCastException` in logcat until the tag was carried.
+3. **Refused, by name, before any guest: a `Parcelable` extra.** It needs the app's own class loader
+   and a payload a scenario cannot express; dropping it would be the same WVFAIR bug. The one other
+   refusal is a launch step that asks for a different Intent than the live session already delivered
+   (`INVALID_ARGUMENT`; one guest has one first Intent).
+
 **ADR-0030 amendment 3 (owner, 2026-11-16, after NETSHARE).** Owner chose design **B2**: one relay
 netns per host served by one pasta (26 MiB once), each session keeps its own netns joined to it by a
 veth pair (~0 MiB per session, 2 ms attach floor); per-session online/offline and latency/loss are
@@ -1340,3 +1470,122 @@ ADR-0029 note (MODSENS, orchestrator): for a service whose framework client cach
 (sensorservice, location), `core` publishes the binder node and the module fills it
 (`core_module::FILLED_BY_MODULE` + `ServiceHost::dynamic_object_mut`); detach empties the node back to
 the honest off answer. This is the framework pattern for such names.
+
+**ADR-0029 amendment note (SYSUI1, 2026-11-17): the permission dialog is the guest system app, and
+the host routes it there.** The `permissions` module now declares
+`system_apps: ["com.android.permissioncontroller"]`; the launcher stages that APK through the one
+`modules::system_app_apk` resolver (the mechanism WV8 introduced for the WebView provider), installs
+it as a second package, and the ATMS resolves the framework's own
+`PackageManager.buildRequestPermissionsIntent` (`ACTION_REQUEST_PERMISSIONS` + package) to its
+`GrantPermissionsActivity`. The controller runs in its own ART process, spawned lazily the way a
+second app is (`request_process` → launcher); the host launches it with a host-built
+`ClientTransaction`, and the activity result comes back on the same MPROC7 path — with the AIDL
+`resultWho` the framework passed (`"@android:requestPermissions:"`), which is what makes
+`Activity.dispatchActivityResult` call `onRequestPermissionsResult` with the AOSP shape
+(`EXTRA_REQUEST_PERMISSIONS_NAMES` + `EXTRA_REQUEST_PERMISSIONS_RESULTS`). The host applies the
+answer to the one runtime-permission table the two `checkPermission` paths read.
+
+Three contract details, each documented where it lives:
+
+1. **The resolved component is written onto the launch intent.** AOSP's `ActivityStarter` does
+   `intent.setComponent(…)` before it schedules the launch; `ActivityThread.performLaunchActivity`
+   reads `r.intent.getComponent()` and crashes on null. An implicit start therefore records the
+   resolved component (SYSUI1 found this on the first ART run of the dialog).
+2. **The two facts the controller cannot query are passed in the launch.** A real controller calls
+   `IPermissionManager.getPermissionFlags`; the ACOS guest app cannot reach the hidden interface, so
+   the host puts `acos.permission.GRANTED` / `acos.permission.FIXED` (and the requesting package) in
+   the launch extras, and the app does what `GrantPermissionsActivity` does with them — skip
+   already-granted permissions, answer "don't ask again" ones denied, and return without drawing when
+   nothing is left to ask. The result Intent carries the AOSP extras plus
+   `…REQUEST_PERMISSIONS_NEVER_ASK_AGAIN` for the "Don't ask again" answer (AOSP's controller calls
+   `updatePermissionFlags(FLAG_PERMISSION_USER_FIXED)` itself; this is the same flag, one hop later).
+3. **`system_ui: dialogs|off`** (default `dialogs` for the `real` profile). `off`, an uninstalled
+   controller, or a detached module keeps MODNOTIF2's structured `PERMISSION_UI_UNAVAILABLE` — never
+   a silent grant.
+
+Open, not decided here: the controller's process launch is subject to the same lazy-spawn launch race
+`mproc3-two-process` exercises; the pre-granted arm of the SYSUI1 scenarios hits it
+(`host-transaction-timeout`, `results/handoff/SYSUI1/pregranted-finding/`), while the two dialog arms
+pass. The shade/system-UI app (item 2 of the track) is not built; the notification layer's control
+path is where `open_shade` belongs.
+
+**ADR-0029 settlement note (SYSUI3A, 2026-11-17): a tap that closes the tapped window is a pass,
+and the primary process is named by the launcher.**
+
+Two rules this track had to settle, both applied in one place each:
+
+1. **The settle contract for a dismissed window.** The guest's strict settle reports `detached`
+   (a root it still holds has no `ViewRootImpl`) or `no-draw-after-action` when the window the tap
+   landed on has gone away. That is a *completed interaction*, and reporting it as a `TIMEOUT` was a
+   harness bug (the notification shade's row tap). The backend now proves the removal against its own
+   window record — a tap, a host-observed delivery with a handled guest ack, the top-most touchable
+   pre-action window containing the point, that window absent afterwards, something still on screen —
+   and publishes `settle.bound: "window-removed", handled: "window-removed"`; `acos-verify`'s
+   `eval_tap_change` is the one place the tap contract accepts it. A window that vanishes with no
+   delivered input keeps its timeout (the guard, with tests).
+2. **The primary process's package is the launcher's fact.** `attachApplication` carries no package
+   and the primary never sends the peer handshake, so `ServiceHost::seed_primary_package` records it
+   where stock AMS's `startProcessLocked` would, and `Peer::package_of` never answers an empty name.
+   Without it a `startActivity` into the already-running primary (a notification's content sender) was
+   recorded and never encoded.
+
+**ADR-0029 amendment (MERGEFIX2, 2026-11-18): one launch, one delivering side — by origin and by
+process.**
+
+The SYSUI3A note above is right that the primary's package is the launcher's fact; it did not say
+what the host may *do* with it. Naming tag 0 enabled `Peer::take_host_transactions` to encode the
+**guest's own** `startActivity` as a host-built `ClientTransaction`, while the guest's start-activity
+guard (`LaunchMain.launchLocalActivity`) had already materialised the same launch with the token it
+minted. Two `MainActivity` instances ran (two `React` roots: `Gaten` logged `Running "Gaten"` twice),
+the app re-rendered every frame and `gaten-backstack`'s first tap could never settle
+(`frame_ms: null`, pending `queue`/`newer-store`).
+
+Both sides stay authoritative for their own launches; the record now says **who asked**:
+
+* `PendingLaunch.origin = Guest` — the guest's own `IActivityTaskManager.startActivity…`. The guest
+  materialises it and adopts its own token (`ActivityManagerAdopt`), exactly as `ActivityThread` does
+  after `scheduleTransaction`. The host must not mint a second token for it.
+* `PendingLaunch.origin = Host` — `system_server` as the client: a module firing an `IIntentSender`
+  (the shade's row tap), the permission dialog's start. No guest `startActivity` exists, so only the
+  host can deliver it.
+
+`AmsState::pending_launch_for_tag(tag, package)` is the one selector both delivery paths read:
+**tag 0 (the primary) is offered only `Host` launches**; every spawned tag is `ACOSLAUNCH_HOST_SCHEDULES`
+and is offered every origin (MPROC7's "the guest waits for the host's transaction"). The guest's adopt
+path (`AmsState::adopt_launch_token`) takes only `Guest` launches, so a shade launch stays queued for
+the peer instead of being bound to a token the guest invented.
+
+Consequence: `gaten-*` settle again (the primary's launches are the guest's, one instance each), the
+shade and the permission dialog keep their host-built delivery, and `tools/build-fixtures.sh` no longer
+deletes checked-in expectations on a failed `javac` (staged, published only after every program built).
+
+## ADR-0031 settlement note (WVTAIL, 2026-11-18): input latency is a *frame* rule, and a restart is a restart
+
+Three rules the WebView track had to settle, each measured first
+(`results/handoff/WVTAIL/`):
+
+1. **An input ack is not a deadline.** Under `--enable-begin-frame-control` the engine
+   acknowledges a dispatched touch event at the end of the compositor frame that
+   **follows** the event's own. The broker produces that frame itself (input
+   priority, so it is granted ahead of guest pulls) and then reads the ack;
+   waiting a fixed timeout instead was 2 s of blocked guest input per event
+   (2004-2604 ms per tap), because the guest cannot draw the frame it is waiting
+   for while it is inside its own touch dispatch. `ack: false` is reported and
+   logged, never turned into a lost tap or a fabricated `true`.
+2. **A queued input frame preempts a non-input attempt.** An attempt never holds
+   the engine for its whole fairness budget when an input pull is waiting: it
+   waits in slices and abandons (`Yield`, which spends no attempt of its pull's
+   budget). Input frames keep their own budget in full — cutting *that* is what
+   drops gestures (WVFAIR §7.1). An abandoned `beginFrame` is not overlapped by
+   the next one for the same view; its reply is drained and kept, because two
+   outstanding frames for one page is an engine-side fault
+   (`Got overlapping IssueExternalBeginFrame`).
+3. **A restart is a restart.** When the engine is replaced every target of every
+   session dies with it; the broker keeps saying so (`engine.restarted`) and
+   answers the old view ids `ENGINE_RESTARTED`, never `NO_VIEW` — a `NO_VIEW`
+   means the id was never the session's, and conflating the two made an engine
+   restart read as a broker bookkeeping bug (MERGE040A §5.2). The restart is
+   logged with the engine's exit status, its stderr tail and the number of views
+   dropped. The known cause of a *cross-session* restart is the WebView daemon
+   living in its spawner's cgroup (a session's scope ending kills the host's
+   engine); moving it out is a process-model decision for the owner.

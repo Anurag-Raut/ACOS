@@ -72,9 +72,17 @@ fn replay_lifecycle_summary_order() {
         .events
         .iter()
         .map(|e| e.state)
-        .filter(|s| !matches!(s, LifecycleState::AppCreated | LifecycleState::ProcessStarted))
+        .filter(|s| {
+            !matches!(
+                s,
+                LifecycleState::AppCreated | LifecycleState::ProcessStarted
+            )
+        })
         .collect();
-    assert_eq!(actual, expected, "lifecycle order must match the ART fixture");
+    assert_eq!(
+        actual, expected,
+        "lifecycle order must match the ART fixture"
+    );
     // `finishAttachApplication` counts as the first (synthesised) transaction.
     assert_eq!(atms.transactions.len(), 5);
 }
@@ -96,6 +104,47 @@ fn illegal_transitions_are_rejected() {
     atms.transition(1, Transition::Stop).unwrap();
     atms.transition(1, Transition::Destroy).unwrap();
     assert_eq!(atms.lifecycle_of(1), Some(ActivityLifecycle::Destroyed));
+}
+
+/// SYSUI2: a caller that was paused **and stopped** while a system-app dialog
+/// was the top resumes when the host delivers its `ActivityResultItem`
+/// (`AtmsState::deliver_result` sends `ActivityResultItem` + `ResumeActivityItem`,
+/// so the guest reports `activityResumed` on a stopped record). AOSP's
+/// `ActivityThread.handleResumeActivity` restarts such an Activity
+/// (`performRestartActivity` + `onStart` + `onResume`); before this the host
+/// refused `Stopped -> Resume`/`Stopped -> Start` and the caller's restart was
+/// dropped with `illegal transition Resume from Stopped` (measured on ART in the
+/// pre-granted permission arm).
+#[test]
+fn a_stopped_activity_can_be_started_and_resumed_again() {
+    let mut atms = AtmsState::new();
+    atms.ensure_activity(1, "A");
+    atms.transition(1, Transition::Create).unwrap();
+    atms.transition(1, Transition::Start).unwrap();
+    atms.transition(1, Transition::Resume).unwrap();
+    atms.transition(1, Transition::Pause).unwrap();
+    atms.transition(1, Transition::Stop).unwrap();
+    assert_eq!(atms.lifecycle_of(1), Some(ActivityLifecycle::Stopped));
+    atms.transition(1, Transition::Start)
+        .expect("a stopped Activity can be started again (onRestart -> onStart)");
+    assert_eq!(atms.lifecycle_of(1), Some(ActivityLifecycle::Started));
+    atms.transition(1, Transition::Resume)
+        .expect("a stopped Activity can be resumed (the result delivery path)");
+    assert_eq!(atms.lifecycle_of(1), Some(ActivityLifecycle::Resumed));
+
+    // The exact shape the host delivers: resume straight from `Stopped`, which
+    // is what `ActivityResultItem` + `ResumeActivityItem` makes the guest report.
+    let mut direct = AtmsState::new();
+    direct.ensure_activity(2, "B");
+    direct.transition(2, Transition::Create).unwrap();
+    direct.transition(2, Transition::Start).unwrap();
+    direct.transition(2, Transition::Resume).unwrap();
+    direct.transition(2, Transition::Pause).unwrap();
+    direct.transition(2, Transition::Stop).unwrap();
+    direct
+        .transition(2, Transition::Resume)
+        .expect("Stopped -> Resume is the caller's result-delivery resume");
+    assert_eq!(direct.lifecycle_of(2), Some(ActivityLifecycle::Resumed));
 }
 
 #[test]

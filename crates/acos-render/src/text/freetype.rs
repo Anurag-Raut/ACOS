@@ -531,7 +531,9 @@ pub fn rasterize_subpixel_coords(
         return None;
     }
     let subpixel = if subpixel_x.is_finite() {
-        ((subpixel_x.rem_euclid(1.0)) * 64.0).round().clamp(0.0, 63.0) as u8
+        ((subpixel_x.rem_euclid(1.0)) * 64.0)
+            .round()
+            .clamp(0.0, 63.0) as u8
     } else {
         0
     };
@@ -626,8 +628,7 @@ mod tests {
 
     #[test]
     fn freetype_initialises_and_rasterises_a_glyph() {
-        let Some(fonts) = crate::FontCollection::shared() else {
-            eprintln!("SKIP: no fonts available");
+        let Some(fonts) = acos_test_support::require_some(crate::FontCollection::shared(), "freetype_initialises_and_rasterises_a_glyph", "no fonts available") else {
             return;
         };
         assert!(available(), "bundled FreeType failed to initialise");
@@ -666,8 +667,7 @@ mod tests {
 
     #[test]
     fn variable_weight_masks_differ_and_are_monotonic() {
-        let Some(fonts) = crate::FontCollection::shared() else {
-            eprintln!("SKIP: no fonts available");
+        let Some(fonts) = acos_test_support::require_some(crate::FontCollection::shared(), "variable_weight_masks_differ_and_are_monotonic", "no fonts available") else {
             return;
         };
         assert!(available(), "bundled FreeType failed to initialise");
@@ -700,8 +700,7 @@ mod tests {
 
     #[test]
     fn variable_instance_cache_keys_do_not_collide() {
-        let Some(fonts) = crate::FontCollection::shared() else {
-            eprintln!("SKIP: no fonts available");
+        let Some(fonts) = acos_test_support::require_some(crate::FontCollection::shared(), "variable_instance_cache_keys_do_not_collide", "no fonts available") else {
             return;
         };
         let font = fonts.resolve_typeface(None, 400, false).unwrap();
@@ -733,8 +732,7 @@ mod tests {
 
     #[test]
     fn colour_emoji_rasterises_to_an_rgba_bitmap() {
-        let Some(fonts) = crate::FontCollection::shared() else {
-            eprintln!("SKIP: no fonts available");
+        let Some(fonts) = acos_test_support::require_some(crate::FontCollection::shared(), "colour_emoji_rasterises_to_an_rgba_bitmap", "no fonts available") else {
             return;
         };
         assert!(available(), "bundled FreeType failed to initialise");
@@ -749,7 +747,7 @@ mod tests {
             .flat_map(|f| &f.fonts)
             .find(|e| e.file.path.to_string_lossy().contains("Legacy"))
         else {
-            eprintln!("SKIP: no CBDT emoji font available");
+            acos_test_support::require_prereq(false, "colour_emoji_rasterises_to_an_rgba_bitmap", "no CBDT emoji font available");
             return;
         };
         let font = FontRef {

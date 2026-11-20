@@ -1,0 +1,4 @@
+verify: error (ok=false, backend=acos-native, fidelity=static-analysis)
+  error: APK_IO: APK not found: fixtures/build/apps/net-check.apk
+  artifacts: /home/Qui/.t3/worktrees/acos/t3-3b7682df-e7bdda06fd42e449/results/handoff/NET4/run/boot/off-rep3/1
+exit=1

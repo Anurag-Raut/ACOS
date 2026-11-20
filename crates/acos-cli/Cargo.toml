@@ -13,12 +13,19 @@ path = "src/main.rs"
 [dependencies]
 acos-apk = { path = "../acos-apk" }
 acos-art = { path = "../acos-art" }
+# GLSHIP: the doctor reports the guest GL provider from the shared contract
+# (`acos-gles-provider`), not from a second copy of the selection rule.
+acos-gles-provider = { path = "../acos-gles-provider" }
 acos-jni = { path = "../acos-jni" }
 acos-dex = { path = "../acos-dex" }
 acos-mcp = { path = "../acos-mcp" }
 acos-native-loader = { path = "../acos-native-loader" }
+# NET2: the session API's net controls (`acos_net` serve verb) speak the relay
+# supervisor's own control protocol.
+acos-netd = { path = "../acos-netd" }
 acos-protocol = { path = "../acos-protocol" }
 acos-render = { path = "../acos-render" }
+acos-wm = { path = "../acos-wm" }
 acos-runtime = { path = "../acos-runtime" }
 acos-sandbox = { path = "../acos-sandbox" }
 acos-services = { path = "../acos-services" }

@@ -106,7 +106,7 @@ fn pending_start_blocks_the_proof_even_with_every_record_destroyed() {
     atms.ams
         .start_activity(&IntentFacts::explicit(PACKAGE, SECOND), 0, 0, 0)
         .unwrap();
-    atms.finish_activity(main).unwrap();
+    atms.finish_activity(main, 0, None).unwrap();
     atms.activity_paused(main).unwrap();
     atms.activity_stopped(main, None).unwrap();
     atms.activity_destroyed(main).unwrap();
@@ -131,7 +131,7 @@ fn a_finished_record_ends_before_its_destroy_callback_arrives() {
         .unwrap();
     let main = GUEST_TAG | 1;
     resumed(&mut atms, main, MAIN);
-    atms.finish_activity(main).unwrap();
+    atms.finish_activity(main, 0, None).unwrap();
     assert!(
         atms.task_finished_proof(),
         "finish() ends the record; the destroy callback is bookkeeping"
@@ -146,7 +146,7 @@ fn all_records_destroyed_and_nothing_pending_is_finished() {
         .unwrap();
     let main = GUEST_TAG | 1;
     resumed(&mut atms, main, MAIN);
-    atms.finish_activity(main).unwrap();
+    atms.finish_activity(main, 0, None).unwrap();
     atms.activity_paused(main).unwrap();
     atms.activity_stopped(main, None).unwrap();
     atms.activity_destroyed(main).unwrap();

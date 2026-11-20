@@ -1,0 +1,57 @@
+{
+  "assertions": [
+    {
+      "actual": {
+        "matched_lines": 7,
+        "sample": [
+          "AcosFixture: onPause",
+          "AcosFixture: onStop",
+          "AcosFixture: onSaveInstanceState clicks=2",
+          "AcosFixture: onDestroy",
+          "AcosFixture: onCreate"
+        ]
+      },
+      "expected": {
+        "min_matches": 1,
+        "ordered": true,
+        "patterns": [
+          "^onPause$",
+          "^onStop$",
+          "^onSaveInstanceState clicks=2$",
+          "^onDestroy$",
+          "^onCreate$",
+          "^onStart$",
+          "^onResume$"
+        ],
+        "since_previous_step": true,
+        "tag": "AcosFixture"
+      },
+      "kind": "log",
+      "matched_node_ids": [],
+      "passed": true
+    }
+  ],
+  "certification": "certified-with-limits",
+  "certification_limits": {
+    "doc": "docs/SANDBOX_CERTIFICATION.md",
+    "section": "§8.7"
+  },
+  "duration_ms": 0,
+  "evidence": [
+    {
+      "kind": "log",
+      "path": "logs/logcat.txt"
+    },
+    {
+      "kind": "step",
+      "path": "steps/21-assert_log.json"
+    }
+  ],
+  "index": 21,
+  "provenance": {
+    "logs": "guest-asserted"
+  },
+  "status": "pass",
+  "step": "assert_log",
+  "trust": "trusted"
+}

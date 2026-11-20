@@ -1,0 +1,125 @@
+# PIFILLIN item 3: `requestLocationUpdates(provider, ..., PendingIntent)`
+# (ILocationManager transaction 5) delivers the fix as the **fill-in** intent of
+# `IIntentSender.send`.
+#
+# The image's own client is `LocationProviderManager$LocationPendingIntentTransport`
+# (`services/classes2.dex`, disassembled in
+# `results/handoff/MODLOC3/pending-intent-dex.txt`): `deliverOnLocationChanged`
+# builds `new Intent()`, `putExtra("location", result.getLastLocation())` and
+# hands it to `PendingIntent.send(context, 0, intent)`; the system side merges it
+# into the stored intent with `Intent.fillIn` and delivers the merged intent.
+#
+# The fixture registers a **mutable** `PendingIntent.getBroadcast` for
+# `dev.acos.fixtures.locationprobe.FIX`, receives it in a real
+# `BroadcastReceiver`, and renders the `Location` it read from the extra:
+#
+#   * `pi=none`                      before any fix
+#   * `pi=<lat>,<lng> provider=gps count=N`  after each fix that reached it
+#
+# A `PendingIntent` that looks delivered but carries nothing cannot pass: the
+# text comes from `intent.getParcelableExtra(LocationManager.KEY_LOCATION_CHANGED)`.
+version: 1
+name: location-pending-intent
+description: "location: the PendingIntent form fires the app's own sender with the fix as the fill-in intent (KEY_LOCATION_CHANGED), received by a real BroadcastReceiver."
+app: fixtures/build/apps/location-probe.apk
+api_level: 34
+isolation: process
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+capabilities:
+  - ui.offscreen
+  - ui.text
+  - input
+expectation: pass
+budgets:
+  memory_mib: 512
+  wall_ms: 240000
+steps:
+  - launch:
+      activity: dev.acos.fixtures.locationprobe/.MainActivity
+      clear_state: true
+  # Detached at launch: the app's first call shows the honest unavailable state,
+  # so no registration happened yet.
+  - wait_for:
+      selector: {id: state}
+      timeout_ms: 20000
+  - assert_text:
+      selector: {id: state}
+      text: {contains: "state=unavailable"}
+  - assert_text:
+      selector: {id: pending}
+      text: {exact: "pi=none"}
+  # The module attaches, then the app's own "Check again" handler registers both
+  # forms through the cached `LocationManager`: the listener and the
+  # `PendingIntent` broadcast (transaction 5).
+  - service_ctl:
+      module: location
+      op: attach
+      profile: scripted
+      config: {permissions: fine}
+  - tap: {selector: {id: check}}
+  - wait_for:
+      selector: {id: state, text: {contains: "state=ready providers=fused,gps,network,passive"}}
+      timeout_ms: 20000
+  # The registration itself reports the provider state to the transport
+  # (`deliverOnProviderEnabledChanged`), which is the `providerEnabled` fill-in.
+  # No fix has been scripted, so the receiver has no Location yet.
+  - assert_text:
+      selector: {id: pending}
+      text: {exact: "pi=none"}
+  # One fix: the module fires the app's sender once, with `"location"` in the
+  # fill-in's extras. The merged intent reaches the receiver, which paints it.
+  - service_ctl:
+      module: location
+      op: set_location
+      args: {lat: 37.4220, lng: -122.0841, accuracy: 4.0, provider: gps}
+      # The listener, the pending `getCurrentLocation` callback and the
+      # `PendingIntent` registration all receive this fix; the assertion is the
+      # fired sender, not a fixed delivery count.
+      expect:
+        value:
+          pending_intent_fires: 1
+  - wait_for:
+      selector: {id: pending, text: {contains: "pi=37.4220,-122.0841 provider=gps"}}
+      timeout_ms: 20000
+  - assert_text:
+      selector: {id: pending}
+      text: {contains: "count=1"}
+  # The listener form still receives the same fix (both registrations are live).
+  - assert_text:
+      selector: {id: fix}
+      text: {contains: "37.4220,-122.0841"}
+  # A provider toggle is the other fill-in payload: `providerEnabled`, no
+  # Location. It must not repaint `pi=` with a fix.
+  - service_ctl:
+      module: location
+      op: set_provider_enabled
+      args: {provider: gps, enabled: false}
+      expect:
+        value:
+          pending_intent_fires: 1
+  - assert_text:
+      selector: {id: pending}
+      text: {contains: "count=1"}
+  # A second fix (a different provider, mirroring to the gps registration) fires
+  # again: the registration is not one-shot.
+  - service_ctl:
+      module: location
+      op: set_provider_enabled
+      args: {provider: gps, enabled: true}
+  - service_ctl:
+      module: location
+      op: set_location
+      args: {lat: 37.5000, lng: -122.2000, accuracy: 5.0, provider: gps}
+      expect:
+        value:
+          pending_intent_fires: 1
+  - wait_for:
+      selector: {id: pending, text: {contains: "pi=37.5000,-122.2000 provider=gps"}}
+      timeout_ms: 20000
+  - assert_text:
+      selector: {id: pending}
+      text: {contains: "count=2"}

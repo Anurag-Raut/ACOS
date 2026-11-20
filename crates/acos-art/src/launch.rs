@@ -29,19 +29,17 @@ use crate::launcher::Outcome;
 use crate::logd::Logd;
 use crate::watchdog::{MemoryWatchdog, HOST_MEMORY_LIMIT};
 use crate::{ArtRoot, Error, Result};
-use acos_binder_peer::{
-    accept, close_frame_fds, listen, read_frame, wait_for_idle, write_frame, Frame, IdleWake, Peer,
-};
+use acos_binder_peer::{close_frame_fds, listen, write_frame, Frame, Peer};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::fs;
 use std::io::Write;
-use std::os::fd::RawFd;
+use std::os::unix::io::RawFd;
 use std::os::unix::process::{CommandExt, ExitStatusExt};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::mpsc;
-use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::{mpsc, Arc, Condvar, Mutex};
 use std::time::{Duration, Instant};
 
 /// The guest class that performs the framework startup.
@@ -118,6 +116,30 @@ pub struct LaunchOpts {
     pub insets: String,
     /// P12: per-session framework animation scales.
     pub animations: Animations,
+    /// ADR-0029 item 4: the `services:` specs this session attaches
+    /// (`[{id, profile, config}]`). Empty means `core` only (today's service
+    /// table plus tombstones).
+    pub services: Vec<serde_json::Value>,
+    /// MPROC1: extra APKs installed into this session beside the launched one
+    /// (repeatable `--extra-apk`). Each is staged into this run's private tree,
+    /// bound read-only at `/data/app/<name>`, installed into the session's
+    /// package manager at its own uid and seeded into the activity manager's
+    /// manifest table, exactly as the launched APK is. Empty (and then free)
+    /// for every single-package launch: nothing is staged, bound or installed.
+    pub extra_apks: Vec<PathBuf>,
+    /// LAUNCHEXTRAS: the launch `Intent` the caller declared (action, data URI
+    /// and typed extras). The host encodes it with the exact
+    /// `Intent.writeToParcel` bytes and the guest's first launch transaction
+    /// carries that Intent, so `Activity.getIntent()` observes it unchanged.
+    /// Empty (the default) keeps the guest-built `ACTION_MAIN` Intent.
+    pub intent: acos_protocol::LaunchIntent,
+    /// MPROC5c: idle kill. A **lazily spawned** secondary process that has held
+    /// nothing for this long — no started activity, no started/bound service,
+    /// no visible window — is killed (stock
+    /// `ActivityManagerConstants.MAX_CACHED_PROCESSES` / `CachedAppOptimizer`),
+    /// its `ProcessRecord` and window sessions go, and the next intent spawns it
+    /// again. `0` disables it. `--idle-kill-seconds`, default 30.
+    pub idle_kill_secs: u64,
 }
 
 impl Default for LaunchOpts {
@@ -134,6 +156,10 @@ impl Default for LaunchOpts {
             nav_inset: 63,
             insets: acos_services::wms::DEFAULT_INSETS_MODE.as_str().to_string(),
             animations: Animations::On,
+            services: Vec::new(),
+            extra_apks: Vec::new(),
+            intent: acos_protocol::LaunchIntent::default(),
+            idle_kill_secs: 30,
         }
     }
 }
@@ -208,6 +234,19 @@ pub struct LaunchResult {
     /// the heap configuration that produced it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub heap: Option<serde_json::Value>,
+    /// MPROC1: every extra package this session installed beside the launched
+    /// one — `{package, uid, apk, native_library_dir}` with the **guest** paths
+    /// the package manager published. Empty for a single-package launch, so a
+    /// launch reply only carries the field when extras were asked for.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub extra_packages: Option<Vec<serde_json::Value>>,
+    /// MPROC4 step 3b: the session's app processes. The activity manager's own
+    /// records (one per process tag: `tag`, `package`, `uid`, `pid`,
+    /// `app_thread`, `attached`) plus the launcher's spawn evidence (which
+    /// component resolved, why, which pid answered). Absent when the session
+    /// never had more than the primary process.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub processes: Option<serde_json::Value>,
     /// H13b: `{mode, cache: hit|built|fallback|external|none, reason}` — which
     /// boot image this launch used and whether the shared-image cache hit, so a
     /// caller (and a benchmark row) can tell a warm serve from a cold one.
@@ -290,6 +329,11 @@ pub const ENV_ART_HEAP_TARGET_UTILIZATION: &str = "ACOS_ART_HEAP_TARGET_UTILIZAT
 pub const ENV_ART_EARLY_GC: &str = "ACOS_ART_EARLY_GC";
 pub const ENV_ART_GC_DELAY_MS: &str = "ACOS_ART_GC_DELAY_MS";
 
+/// MPROC1: the env spelling of [`LaunchOpts::extra_apks`] a frozen host-template
+/// child reads (see `host_zygote.rs`). The direct path uses the repeatable
+/// `--extra-apk` flags instead; both name the same list.
+pub const ENV_EXTRA_APKS: &str = "ACOSLAUNCH_EXTRA_APKS";
+
 fn valid_heap_size(text: &str) -> bool {
     let t = text.trim();
     if t.is_empty() || !t.as_bytes()[0].is_ascii_digit() {
@@ -347,6 +391,10 @@ pub struct SessionShims {
     pub substrate: PathBuf,
     pub art_shim: PathBuf,
     pub driver: PathBuf,
+    /// The software gralloc interposer this binary was built with
+    /// ([`crate::gralloc_shim`]): the sysroot's copy when it matches the
+    /// embedded source, else a cached build of it.
+    pub gralloc: PathBuf,
 }
 
 /// A service graph built before the fork (ZM2 prototype C).
@@ -456,10 +504,13 @@ pub fn launch(root: &ArtRoot, opts: &LaunchOpts) -> Result<LaunchResult> {
     crate::stage("art-shim");
     let driver = build_driver(root)?;
     crate::stage("binder-driver");
+    let gralloc = crate::gralloc_shim(root)?;
+    crate::stage("gralloc-shim");
     let shims = SessionShims {
         substrate,
         art_shim,
         driver,
+        gralloc,
     };
     // ZM2 prototype C (research seam, off by default): with a plan, this
     // process is the warm host template that forks one launcher per session.
@@ -470,8 +521,783 @@ pub fn launch(root: &ArtRoot, opts: &LaunchOpts) -> Result<LaunchResult> {
     launch_session(root, opts, None, &shims)
 }
 
-/// The per-session half of [`launch`].
+/// MPROC1: one extra APK staged and installed into a launch session beside the
+/// launched one.
 ///
+/// Built by [`launch_session`] before any guest exists: the staged copy is this
+/// run's own (H17), the guest paths are the ones the sandbox binds, and the uid
+/// is filled in when the host's package manager installs the package.
+#[derive(Debug, Clone)]
+struct ExtraApk {
+    /// This run's private copy of the APK.
+    staged: PathBuf,
+    /// Guest path the sandbox binds the copy at (`/data/app/<name>`).
+    guest_path: String,
+    /// Package name from the APK's manifest.
+    package: String,
+    /// Host root of this package's extracted native libraries.
+    lib_root: PathBuf,
+    /// Guest directory `lib_root` is bound at (`/data/app-lib-extra/<pkg>`).
+    guest_lib_root: String,
+    /// Guest `ApplicationInfo.nativeLibraryDir` for the package.
+    guest_lib_dir: String,
+    /// The uid the package manager assigned at install time.
+    uid: Option<i32>,
+}
+
+/// MPROC8: what a lazily spawned process was started for.
+///
+/// AOSP distinguishes an activity launch from a component that runs without an
+/// activity (`ActiveServices.realStartServiceLocked` for a started or bound
+/// service, a provider publish). The guest's stop point and its launch argv
+/// follow from it: an activity process marshals/wait for its launch transaction,
+/// a service process attaches, stays resident and waits for the host's
+/// `scheduleCreateService`/`scheduleBindService` deliveries.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SpawnKind {
+    /// `startActivity`: the process launches the requested activity.
+    Activity,
+    /// `bindService`/`startService`/`getContentProvider`: no activity.
+    Service,
+}
+
+impl SpawnKind {
+    /// The `until` stop point the guest runs to (`LaunchMain`'s 4th argument).
+    fn until(self) -> &'static str {
+        match self {
+            Self::Activity => "activity-resumed",
+            Self::Service => "service-resident",
+        }
+    }
+}
+
+/// MPROC4 step 3b: one secondary app process this session can start.
+///
+/// Built from the session's own recipe (`launch_session`): the extra APK is
+/// already staged in this run's tree and installed into the package manager, so
+/// a second guest is the **same** sandbox recipe with its own run root, its own
+/// tag and its own launch argv. Nothing is re-downloaded, re-installed or
+/// re-invented.
+#[derive(Debug, Clone)]
+struct SecondarySpec {
+    /// Process tag (`ACOS_PROCESS_TAG`); `0` is the primary process.
+    tag: u32,
+    /// Package this process runs.
+    package: String,
+    /// Host path of the staged APK (this run's private copy).
+    staged: PathBuf,
+    /// Guest path the APK is bound at (`/data/app/<name>`).
+    guest_apk: String,
+    /// Host root of the package's extracted native libraries.
+    lib_root: PathBuf,
+    /// Guest directory the library root is bound at.
+    guest_lib_root: String,
+    /// Guest `ApplicationInfo.nativeLibraryDir`.
+    guest_lib_dir: String,
+    /// `ApplicationInfo.uid` the package manager assigned.
+    uid: Option<i32>,
+    /// MPROC8: what this process was started for (activity vs service-only).
+    kind: SpawnKind,
+    /// The service class the spawn request named (empty when the request was an
+    /// activity launch). The host delivers the create/bind to the process; the
+    /// guest never launches it.
+    service: String,
+    /// The activity this process launches (the requested component, else the
+    /// APK's launcher activity).
+    activity: String,
+    /// Declared `<application android:name>` (empty = the framework default).
+    app_class: String,
+    /// Declared `<application android:theme>`.
+    theme: i32,
+    /// Manifest-derived `ApplicationInfo.flags` (`-1` = none).
+    app_flags: i64,
+    /// The `<activity android:configChanges>` bitmask.
+    config_changes: u32,
+    /// `ApplicationInfo.labelRes` / literal for the application.
+    app_label: (u32, String),
+    /// `ActivityInfo.labelRes` / literal for the launched activity.
+    activity_label: (u32, String),
+    /// The launcher alias's `targetActivity` (empty for a plain activity).
+    activity_target: String,
+    /// The process's own `out` directory (host path), copied into the session's
+    /// evidence at the end.
+    out_dir: PathBuf,
+    /// The process's own run root (host path).
+    run_root: PathBuf,
+}
+
+/// A running secondary process.
+struct SecondaryGuest {
+    spec: SecondarySpec,
+    child: std::process::Child,
+    cgroup: crate::cgroup::RunCgroup,
+    pid: i32,
+    /// Guest stderr tail (a dead process's reason is evidence).
+    stderr: Arc<std::sync::Mutex<TailBuffer>>,
+    /// `bwrap` argv, so the reply can state exactly how the process was started.
+    argv: Vec<String>,
+}
+
+/// Everything a secondary guest needs from the session that is not in its
+/// [`SecondarySpec`]: the shared, read-only sandbox inputs and the shared
+/// sockets.
+#[derive(Debug, Clone)]
+struct SecondaryShared {
+    root: ArtRoot,
+    /// Boot image directory (bound at `/data/img`), when the session has one.
+    image: Option<PathBuf>,
+    substrate: PathBuf,
+    art_shim: PathBuf,
+    driver: PathBuf,
+    /// The software gralloc interposer (see [`SessionShims::gralloc`]).
+    gralloc: PathBuf,
+    /// The session's extracted native-library root (`/data/app-lib`).
+    native_lib_root: PathBuf,
+    /// Session socket directory (bound at `/dev/socket`; both guests share it,
+    /// so both write to the same logd).
+    sockets: PathBuf,
+    /// The peer socket file (bound at `/data/acos-launch.sock`); every guest
+    /// connects to the **same** peer.
+    sock: PathBuf,
+    /// Static-RRO idmaps (guest paths, `,`-separated; empty = none).
+    overlays: String,
+    /// Resume budget forwarded to the guest (W27).
+    resume_ms: u64,
+    /// Display geometry the guest boots at.
+    geometry: [(String, u32); 5],
+    /// `ACOSLAUNCH_SCREEN_LAYOUT` (W47).
+    screen_layout: u32,
+    /// `ACOS_ANIMATIONS` (P12).
+    animations: &'static str,
+    /// Run this guest's live probe (interactive sessions only).
+    live_probe: bool,
+}
+
+impl SecondaryShared {
+    /// The guest argv after `-cp <dex> <class>`: exactly what `LaunchMain.main`
+    /// reads for the primary process, for this package.
+    fn guest_args(&self, spec: &SecondarySpec) -> Vec<String> {
+        vec![
+            spec.guest_apk.clone(),
+            spec.package.clone(),
+            "/data/out/launch".to_string(),
+            spec.kind.until().to_string(),
+            spec.activity.clone(),
+            spec.app_class.clone(),
+            spec.theme.to_string(),
+            self.overlays.clone(),
+            spec.app_label.0.to_string(),
+            spec.app_label.1.clone(),
+            spec.activity_label.0.to_string(),
+            spec.activity_label.1.clone(),
+            spec.activity_target.clone(),
+            spec.app_flags.to_string(),
+            "manifest".to_string(),
+        ]
+    }
+
+    /// Build one secondary guest's bwrap command + dalvik argv.
+    fn command(
+        &self,
+        spec: &SecondarySpec,
+        app_meta: &str,
+        providers: &str,
+    ) -> Result<std::process::Command> {
+        let mut sb = self.root.sandbox();
+        if let Some(image) = &self.image {
+            sb.with_image(Some(image.clone()));
+        }
+        sb.run_root(&spec.run_root);
+        // UID: this process carries **its package's** uid (AOSP allocates one
+        // per installed package), not the session's. A spawn whose package has
+        // no allocated uid is refused instead of running as another app's uid.
+        let Some(uid) = spec.uid else {
+            return Err(Error::Layout(format!(
+                "process tag {}: the package manager allocated no uid for {}",
+                spec.tag, spec.package
+            )));
+        };
+        sb.app_uid(uid as u32);
+        sb.seccomp_guest(true);
+        sb.with_shim(false);
+        sb.ro_bind(&self.art_shim, "/data/shim/libartshim.so");
+        sb.ro_bind(
+            &self.native_lib_root,
+            acos_services::native_libs::GUEST_NATIVE_LIB_ROOT,
+        );
+        sb.ro_bind(&self.substrate, "/data/app/libacosart.so");
+        sb.ro_bind(&spec.staged, &spec.guest_apk);
+        sb.ro_bind(&spec.lib_root, &spec.guest_lib_root);
+        sb.ro_bind(&self.gralloc, "/data/libacoshw.so");
+        sb.ro_bind(&self.driver, "/data/lib/libacos_binder_driver.so");
+        sb.ro_bind(&self.root.data.join("seccomp"), "/data/seccomp");
+        // The **same** sockets directory as the primary (both guests write to
+        // the session's logd) and the **same** peer socket file.
+        sb.rw_bind(&self.sockets, "/dev/socket");
+        sb.rw_bind(&self.sock, "/data/acos-launch.sock");
+        sb.env(
+            "LD_PRELOAD",
+            "/data/shim/libartshim.so:/data/app/libacosart.so:/data/libacoshw.so:/data/lib/libacos_binder_driver.so",
+        );
+        sb.env("ACOSART_LOAD", "libandroid_runtime.so");
+        sb.env("E3G_SOCK", "/data/acos-launch.sock");
+        // MPROC2/MPROC4: this process names itself in the driver's handshake, so
+        // the peer puts its tag on every binder it imports and can address a
+        // delivery to it (and only to it).
+        sb.env("ACOS_PROCESS_TAG", &spec.tag.to_string());
+        sb.env("ACOS_PROCESS_NAME", &spec.package);
+        sb.env("ACOSLAUNCH_RESUME_MS", &self.resume_ms.to_string());
+        // MPROC7 (ADR-0029 amendment): this process's first launch is a
+        // host-built `ClientTransaction` (system_server owns the activity
+        // token); the guest waits for it instead of marshalling its own.
+        sb.env("ACOSLAUNCH_HOST_SCHEDULES", "1");
+        for (var, value) in &self.geometry {
+            sb.env(var, &value.to_string());
+        }
+        sb.env("ACOSLAUNCH_SCREEN_LAYOUT", &self.screen_layout.to_string());
+        sb.env(
+            "ACOSLAUNCH_CONFIG_CHANGES",
+            &spec.config_changes.to_string(),
+        );
+        sb.env("ACOS_ANIMATIONS", self.animations);
+        if !app_meta.is_empty() {
+            sb.env("ACOSLAUNCH_APP_META", app_meta);
+        }
+        if !providers.is_empty() {
+            sb.env("ACOSLAUNCH_PROVIDERS", providers);
+        }
+        if self.live_probe {
+            sb.env("ACOSLAUNCH_LIVE_PROBE", "1");
+        }
+        let mut argv: Vec<String> = Vec::new();
+        if self.image.is_some() {
+            argv.push("-Ximage:/data/img/boot.art".into());
+            argv.push("-Xnorelocate".into());
+        }
+        argv.push("-cp".into());
+        argv.push("/data/app/launch-guest/classes.dex".into());
+        argv.push(GUEST_CLASS.into());
+        argv.extend(self.guest_args(spec));
+        sb.command("/system/apex/com.android.art/bin/dalvikvm64", &argv)
+    }
+}
+
+/// Start one secondary guest (MPROC4 step 3b).
+///
+/// The process is scoped like the primary (`cgroup` scope, its own process
+/// group, `PDEATHSIG`), its own `out`/`app-data`/`dalvik-cache` live in its own
+/// run root, and its stdout/stderr are drained so nothing can block it.
+fn spawn_secondary(
+    shared: &SecondaryShared,
+    spec: &SecondarySpec,
+    app_meta: &str,
+    providers: &str,
+    probe_state: &Arc<std::sync::Mutex<ProbeState>>,
+    compositor: Arc<std::sync::Mutex<acos_services::surface_client::SurfaceState>>,
+    stderr_sink: Arc<std::sync::Mutex<TailBuffer>>,
+) -> Result<SecondaryGuest> {
+    for sub in [
+        "out",
+        "out/launch",
+        "app-data",
+        "dalvik-cache",
+        "misc",
+        "tmp",
+    ] {
+        fs::create_dir_all(spec.run_root.join(sub))?;
+    }
+    fs::create_dir_all(spec.run_root.join("app-data").join(&spec.package))?;
+    let mut cmd = shared.command(spec, app_meta, providers)?;
+    let argv = format!("{cmd:?}");
+    let scope_info = std::fs::canonicalize(&spec.run_root)
+        .unwrap_or_else(|_| spec.run_root.clone())
+        .join("cgroup");
+    let (mut child, cgroup) = crate::cgroup::spawn_scoped(
+        crate::cgroup::MemoryLimits::from_env()?,
+        scope_info,
+        &cmd,
+        |c| {
+            unsafe {
+                c.pre_exec(move || {
+                    libc::prctl(
+                        libc::PR_SET_PDEATHSIG,
+                        libc::SIGKILL as libc::c_ulong,
+                        0,
+                        0,
+                        0,
+                    );
+                    let core = libc::rlimit {
+                        rlim_cur: 0,
+                        rlim_max: 0,
+                    };
+                    libc::setrlimit(libc::RLIMIT_CORE, &core);
+                    let nofile = libc::rlimit {
+                        rlim_cur: 4096,
+                        rlim_max: 4096,
+                    };
+                    libc::setrlimit(libc::RLIMIT_NOFILE, &nofile);
+                    crate::watchdog::relax_child_limits();
+                    crate::watchdog::apply_init_rlimit_nice();
+                    Ok(())
+                });
+            }
+            c.process_group(0);
+            c.stdin(Stdio::null())
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped());
+        },
+    )?;
+    let pid = child.id() as i32;
+    // Both streams are drained for the process's whole life: a guest that
+    // prints must never block on a full pipe, and its probe lines
+    // (`ACOSPROBE`) feed the same tree the session serves.
+    let cap = stream_cap_from_env();
+    if let Some(out) = child.stdout.take() {
+        // The second process's own probe lines feed the session's tree, so a
+        // `tree` reply describes the window that is actually on top.
+        let probe = Arc::clone(probe_state);
+        let comp = compositor;
+        let log = spec.out_dir.join("stdout.log");
+        let tag = spec.tag;
+        std::thread::spawn(move || {
+            let _ = drain_tee_lines(out, cap, &log, probe, Some(comp), tag);
+        });
+    }
+    if let Some(err) = child.stderr.take() {
+        let sink = Arc::clone(&stderr_sink);
+        let log = spec.out_dir.join("stderr.log");
+        std::thread::spawn(move || {
+            let buf = drain_tee(err, cap, &log);
+            if let Ok(mut sink) = sink.lock() {
+                *sink = buf;
+            }
+        });
+    }
+    eprintln!(
+        "acos-art: launch: started secondary process tag={} package={} activity={} pid={pid}",
+        spec.tag, spec.package, spec.activity
+    );
+    Ok(SecondaryGuest {
+        spec: spec.clone(),
+        child,
+        cgroup,
+        pid,
+        stderr: stderr_sink,
+        argv: vec![argv],
+    })
+}
+
+/// The session's secondary processes (MPROC4 step 3b).
+///
+/// One place that owns every process the launcher started lazily: it decides
+/// whether a package already runs (the launcher is the authority on tags and
+/// pids), starts the guest the first time a component of that package needs one,
+/// and kills every one of them when the session ends.
+struct SecondaryPool {
+    specs: Vec<SecondarySpec>,
+    shared: SecondaryShared,
+    guests: std::collections::BTreeMap<u32, SecondaryGuest>,
+    /// Spawn requests received (`package`, `component`, `reason`, `tag`,
+    /// `pid`, `started`) — evidence a reply reports.
+    records: Vec<serde_json::Value>,
+    /// Requests refused because the package has no installed secondary spec.
+    uninstalled: Vec<serde_json::Value>,
+    /// Spawns that failed (`package`, `error`), never a silent drop.
+    failures: Vec<serde_json::Value>,
+    /// MPROC5c: processes the idle kill took (`tag`, package, pid, idle_ms).
+    kills: Vec<serde_json::Value>,
+    /// MPROC7: the activity manager's state. The launcher owns every process it
+    /// started, so when **it** kills or reaps one (`idle_kill`'s
+    /// waitpid/cgroup kill, `reap`'s `try_wait`) it removes the `ProcessRecord`
+    /// itself; waiting for the peer to see the socket close made the process
+    /// table depend on a transport event that may never be observed (a peer
+    /// thread blocked in a service handler, a suppressed close, an immediate
+    /// respawn under the same tag).
+    atms: Arc<std::sync::Mutex<acos_services::atms::AtmsState>>,
+    /// SYSUI2: the session's **primary** package (tag 0). A spawn request for it
+    /// is a start into a process that already runs, not a package to start.
+    primary_package: String,
+    started: Instant,
+}
+
+impl SecondaryPool {
+    fn new(
+        specs: Vec<SecondarySpec>,
+        shared: SecondaryShared,
+        atms: Arc<std::sync::Mutex<acos_services::atms::AtmsState>>,
+        primary_package: String,
+    ) -> Self {
+        Self {
+            specs,
+            shared,
+            guests: std::collections::BTreeMap::new(),
+            records: Vec::new(),
+            uninstalled: Vec::new(),
+            failures: Vec::new(),
+            kills: Vec::new(),
+            atms,
+            primary_package,
+            started: Instant::now(),
+        }
+    }
+
+    /// The tag a package already runs under, if any.
+    fn running_tag(&self, package: &str) -> Option<u32> {
+        self.guests
+            .iter()
+            .find(|(_, g)| g.spec.package == package)
+            .map(|(tag, _)| *tag)
+    }
+
+    /// Handle one spawn request. Idempotent: a package that is already running
+    /// gets no second process (the request is the *need*, not the spawn).
+    fn spawn(
+        &mut self,
+        request: &acos_services::ams::ProcessSpawnRequest,
+        probe_state: &Arc<std::sync::Mutex<ProbeState>>,
+        compositor: Arc<std::sync::Mutex<acos_services::surface_client::SurfaceState>>,
+    ) {
+        // SYSUI2: the session's own app **is** a running process (`tag 0`). A
+        // start of one of its Activities (the notification's content sender, an
+        // app's own second Activity) records the launch and the peer delivers it
+        // to that process (`Peer::take_host_transactions`); the launcher must not
+        // try to start a package it never installed as a secondary.
+        if !self.primary_package.is_empty() && request.package == self.primary_package {
+            self.records.push(serde_json::json!({
+                "package": request.package,
+                "component": request.component,
+                "reason": request.reason,
+                "tag": 0,
+                "spawned": false,
+                "note": "the session's primary process (tag 0); the launch goes to it",
+            }));
+            return;
+        }
+        if let Some(tag) = self.running_tag(&request.package) {
+            self.records.push(serde_json::json!({
+                "package": request.package,
+                "component": request.component,
+                "reason": request.reason,
+                "tag": tag,
+                "spawned": false,
+                "note": "process already running",
+            }));
+            return;
+        }
+        let spec = self
+            .specs
+            .iter()
+            .find(|s| s.package == request.package)
+            .cloned();
+        let Some(mut spec) = spec else {
+            // A component of a package this session never installed cannot be
+            // run: say so (the resolution path recorded the need; the launcher
+            // is the one that cannot satisfy it).
+            self.uninstalled.push(serde_json::json!({
+                "package": request.package,
+                "component": request.component,
+                "reason": request.reason,
+                "error": "no such package was installed in this session",
+            }));
+            eprintln!(
+                "acos-art: launch: {} needs a process for {} but no such package is installed ",
+                request.package, request.component
+            );
+            return;
+        };
+        // MPROC8: what the process is being started *for* decides its stop
+        // point. AOSP's `ActivityManagerService` starts one process object for
+        // both cases and hands the work to the component's own path: an
+        // activity gets a launch transaction, a service gets
+        // `realStartServiceLocked` after `attachApplication`. A service
+        // component is never launched as an Activity, and the process does not
+        // wait for a launch transaction it will never receive.
+        let class = request
+            .component
+            .split_once('/')
+            .map(|(_, class)| class)
+            .unwrap_or_default();
+        let fqcn = if class.is_empty() {
+            String::new()
+        } else if class.starts_with('.') {
+            format!("{}{}", spec.package, class)
+        } else {
+            class.to_string()
+        };
+        spec.kind = match request.reason.as_str() {
+            "bindService" | "startService" | "getContentProvider" => SpawnKind::Service,
+            _ => SpawnKind::Activity,
+        };
+        match spec.kind {
+            SpawnKind::Activity => {
+                if !fqcn.is_empty() {
+                    spec.activity = fqcn;
+                }
+            }
+            SpawnKind::Service => {
+                spec.service = fqcn;
+                spec.activity = String::new();
+            }
+        }
+        // Per-process `ProviderInfoList` + application `<meta-data>`, from this
+        // package's own manifest (the same two facts the primary receives), with
+        // this package's own uid.
+        let (app_meta, providers) = spec
+            .uid
+            .and_then(|uid| acos_services::pms::PmsState::from_apk_with_uid(&spec.staged, uid).ok())
+            .map(|state| {
+                let app_meta = meta_spec(&state.app().meta_data);
+                let providers = provider_spec_of(&state);
+                (app_meta, providers)
+            })
+            .unwrap_or_default();
+        // MPROC7: a new process instance restarts its guest probe counter. Clear
+        // the dead instance's sample and give the new one a base above the
+        // session's current maximum, so `strict` settle still sees a *fresh*
+        // sample after an idle kill / respawn.
+        {
+            let mut state = probe_state.lock().unwrap_or_else(|e| e.into_inner());
+            let highest = state
+                .by_process
+                .values()
+                .map(|p| p.seq)
+                .chain(state.latest.as_ref().map(|p| p.seq))
+                .max()
+                .unwrap_or(0);
+            state.seq_offsets.insert(spec.tag, highest);
+            state.by_process.remove(&spec.tag);
+        }
+        let stderr = Arc::new(std::sync::Mutex::new(TailBuffer::with_cap(1 << 16)));
+        match spawn_secondary(
+            &self.shared,
+            &spec,
+            &app_meta,
+            &providers,
+            probe_state,
+            compositor,
+            Arc::clone(&stderr),
+        ) {
+            Ok(guest) => {
+                let pid = guest.pid;
+                self.records.push(serde_json::json!({
+                    "package": spec.package,
+                    "component": request.component,
+                    "reason": request.reason,
+                    "tag": spec.tag,
+                    "pid": pid,
+                    "uid": spec.uid,
+                    "kind": match spec.kind {
+                        SpawnKind::Activity => "activity",
+                        SpawnKind::Service => "service",
+                    },
+                    "service": spec.service,
+                    "activity": spec.activity,
+                    "spawned": true,
+                    "since_ms": self.started.elapsed().as_millis() as u64,
+                }));
+                self.guests.insert(spec.tag, guest);
+            }
+            Err(e) => {
+                eprintln!(
+                    "acos-art: launch: spawning process {} ({}) failed: {e}",
+                    spec.tag, spec.package
+                );
+                self.failures.push(serde_json::json!({
+                    "package": spec.package,
+                    "tag": spec.tag,
+                    "error": e.to_string(),
+                }));
+            }
+        }
+    }
+
+    /// MPROC5c: kill every lazily spawned process that has held nothing for
+    /// `idle`.
+    ///
+    /// The activity manager owns the rule (no started activity, no started or
+    /// bound service — [`acos_services::atms::AtmsState::idle_processes`]); the
+    /// window manager owns "no visible window" ([`WmsState::process_has_visible_window`]);
+    /// the launcher owns the process, so it is the one that kills it. The
+    /// process group goes (never one pid), the pool forgets it (so the next
+    /// intent's spawn is a real spawn again), and the guest's socket close makes
+    /// the peer drop its binder records, queue `F_DEATH` to its holders (MPROC5b's
+    /// death half) and close its window sessions.
+    fn idle_kill(
+        &mut self,
+        idle: Duration,
+        atms: &Arc<std::sync::Mutex<acos_services::atms::AtmsState>>,
+        wms: &Arc<std::sync::Mutex<acos_services::wms::WmsState>>,
+    ) -> Vec<serde_json::Value> {
+        if idle.is_zero() {
+            return Vec::new();
+        }
+        let candidates = atms
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .idle_processes(idle);
+        let mut killed = Vec::new();
+        for (tag, package, idle_ms) in candidates {
+            let visible = wms
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .process_has_visible_window(tag);
+            if visible {
+                continue;
+            }
+            let Some(mut guest) = self.guests.remove(&tag) else {
+                continue;
+            };
+            let sessions = wms
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .sessions_of_process(tag)
+                .len();
+            let pid = guest.pid;
+            guest.cgroup.kill();
+            let _ = guest.child.kill();
+            let _ = guest.child.wait();
+            // MPROC7: the launcher killed it, so the launcher removes the
+            // activity manager's `ProcessRecord` (the peer will also observe the
+            // socket close, but the table must not depend on that).
+            self.atms
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .process_died(tag);
+            let record = serde_json::json!({
+                "tag": tag,
+                "package": package,
+                "pid": pid,
+                "reason": "idle",
+                "idle_ms": idle_ms,
+                "idle_kill_secs": idle.as_secs(),
+                "window_sessions": sessions,
+            });
+            eprintln!(
+                "acos-art: launch: idle kill tag={tag} ({package}, pid {pid}) after {idle_ms}ms \
+                 idle ({} window session(s))",
+                record["window_sessions"]
+            );
+            self.records.push(record.clone());
+            self.kills.push(record.clone());
+            killed.push(record);
+        }
+        killed
+    }
+
+    /// Reap a process that ended by itself and record why (a secondary guest
+    /// that crashed must be visible, never mistaken for a running one).
+    fn reap(&mut self) -> Vec<serde_json::Value> {
+        let mut exited = Vec::new();
+        let mut gone = Vec::new();
+        for (tag, guest) in &mut self.guests {
+            match guest.child.try_wait() {
+                Ok(Some(status)) => {
+                    let stderr = guest.stderr.lock().map(|b| b.to_text()).unwrap_or_default();
+                    let record = serde_json::json!({
+                        "tag": tag,
+                        "package": guest.spec.package,
+                        "pid": guest.pid,
+                        "status": status.to_string(),
+                        "stderr_tail": tail(&stderr, 800),
+                    });
+                    eprintln!(
+                        "acos-art: launch: secondary process tag={tag} ({}) exited: {status}",
+                        guest.spec.package
+                    );
+                    exited.push(record);
+                    gone.push(*tag);
+                }
+                _ => {}
+            }
+        }
+        // MPROC7: a reaped guest is gone; the launcher (which waited for it)
+        // drops it and its `ProcessRecord`, so the next intent for its package
+        // is a real spawn even if the peer has not seen the socket close yet.
+        for tag in &gone {
+            self.guests.remove(tag);
+            self.atms
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .process_died(*tag);
+        }
+        exited
+    }
+
+    /// The `processes` control module's body.
+    fn to_json(&mut self) -> serde_json::Value {
+        let guests: Vec<serde_json::Value> = self
+            .guests
+            .iter_mut()
+            .map(|(tag, guest)| {
+                serde_json::json!({
+                    "tag": tag,
+                    "package": guest.spec.package,
+                    "pid": guest.pid,
+                    "uid": guest.spec.uid,
+                    "kind": match guest.spec.kind {
+                        SpawnKind::Activity => "activity",
+                        SpawnKind::Service => "service",
+                    },
+                    "activity": guest.spec.activity,
+                    "service": guest.spec.service,
+                    "alive": matches!(guest.child.try_wait(), Ok(None)),
+                })
+            })
+            .collect();
+        serde_json::json!({
+            "processes": guests,
+            "requests": self.records,
+            "uninstalled": self.uninstalled,
+            "failures": self.failures,
+            // MPROC5c: what the idle kill took, and the rule it applied.
+            "killed": self.kills,
+        })
+    }
+
+    /// Kill every secondary process (session end). The scope kill is what makes
+    /// this bounded: the guest's whole group goes, never one pid.
+    fn shutdown(&mut self) {
+        for (tag, mut guest) in std::mem::take(&mut self.guests) {
+            guest.cgroup.kill();
+            let _ = guest.child.kill();
+            let _ = guest.child.wait();
+            eprintln!("acos-art: launch: secondary process tag={tag} stopped (session end)");
+        }
+    }
+}
+
+/// The `ProviderInfoList` a bind request carries for one package (K3c), from
+/// that package's own parsed manifest.
+fn provider_spec_of(state: &acos_services::pms::PmsState) -> String {
+    let mut seen: Vec<(&str, Vec<&str>)> = Vec::new();
+    for p in state.providers() {
+        if p.process_name != state.app().process_name {
+            continue;
+        }
+        match seen.iter_mut().find(|(class, _)| *class == p.name) {
+            Some((_, authorities)) => authorities.push(&p.authority),
+            None => seen.push((&p.name, vec![&p.authority])),
+        }
+    }
+    seen.iter()
+        .map(|(class, authorities)| {
+            let declared = state.providers().iter().find(|p| p.name == *class);
+            let read = declared.map_or("", |p| p.read_permission.as_str());
+            let exported = declared.is_some_and(|p| p.exported);
+            let grant_uri = declared.is_some_and(|p| p.grant_uri_permissions);
+            let meta = declared.map_or_else(String::new, |p| meta_spec(&p.meta_data));
+            format!(
+                "{class}|{}|{read}|{}|{}|{meta}",
+                authorities.join(";"),
+                u8::from(exported),
+                u8::from(grant_uri)
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+/// The per-session half of [`launch`].///
 /// `prebuilt` is `Some` only in a child of the ZM2 host template: the child
 /// installs its own APK into its private CoW copy of that empty service graph.
 pub(crate) fn launch_session(
@@ -504,6 +1330,53 @@ pub(crate) fn launch_session(
         Some(d) => root.run_dir_at(&d.join("run"), "launch")?,
         None => root.new_run_dir("launch")?,
     };
+    // ADR-0029: the attached module set decides what this session installs and
+    // which host endpoints it owns, so the specs are parsed **before** anything
+    // is staged or bound. `opts.services` is the launch's `services:` block; a
+    // frozen host template passes the same set in `ACOS_ART_SERVICES`.
+    let mut module_specs: Vec<acos_services::module::ModuleSpec> =
+        acos_services::module::ModuleSpec::parse_list(&serde_json::Value::Array(
+            opts.services.clone(),
+        ))
+        .map_err(|error| Error::Layout(format!("services: {error}")))?;
+    if module_specs.is_empty() {
+        if let Ok(raw) = std::env::var("ACOS_ART_SERVICES") {
+            let value: serde_json::Value = serde_json::from_str(&raw).map_err(|error| {
+                Error::Layout(format!("ACOS_ART_SERVICES is not JSON: {error}"))
+            })?;
+            module_specs = acos_services::module::ModuleSpec::parse_list(&value)
+                .map_err(|error| Error::Layout(format!("ACOS_ART_SERVICES: {error}")))?;
+        }
+    }
+    // WV8: the `webview` module owns the session's WebView socket and the
+    // provider package. With it `off` (the default) neither exists, which is
+    // Android's own "no WebView provider" path: no `com.android.webview` in the
+    // package table, `hasSystemFeature("android.software.webview")` false, no
+    // socket a `WebView` could connect to. With it `real` the launcher stages
+    // the provider APK (below) and binds this session's gate socket; the shared
+    // broker still starts only on the guest's first connect.
+    let webview_real = acos_services::modules::webview::broker_requested(&module_specs);
+    // WV4: this session's WebView socket directory (`wv/`, mounted at
+    // `/run/acos` by the sandbox). Resolved and length-checked before the guest
+    // exists: a `sun_path` overflow must read as a launch error naming the
+    // session directory, not as an unattributable `connect()` failure in the
+    // WebView.
+    let webview_socket_dir = crate::webview_socket::host_dir(run.path())?;
+    crate::webview_socket::check_sun_path(&webview_socket_dir)?;
+    // WV5b: serve this session's socket **lazily**. `start_gate` binds
+    // `<dir>/webview.sock` and starts one sleeping accept thread; the shared
+    // broker (and Chromium itself) exists only after the guest connects, which
+    // the provider does when it creates a WebView. A session without a WebView
+    // pays a socket node and a thread — measured, not assumed
+    // (`results/handoff/WV5b/REPORT.md` §3). WV8: and a session without the
+    // module pays nothing at all: the gate is the module's.
+    let webview_gate = if webview_real {
+        crate::webview_socket::start_gate(&webview_socket_dir, run.path())?
+    } else {
+        None
+    };
+    let webview_broker_socket =
+        webview_real.then(|| crate::webview_socket::broker_socket(&webview_socket_dir));
     crate::stage("run-dir");
 
     // H17: the APK is an input every guest maps (ART mmaps the dex/resources), so
@@ -525,6 +1398,84 @@ pub(crate) fn launch_session(
     let package = crate::app::apk_package(&opts.apk)?;
     crate::stage("apk-stage");
 
+    // MPROC1: extra APKs (`--extra-apk`, repeatable) are installed into this
+    // session beside the launched one. Each gets the same treatment the primary
+    // gets: a private staged copy in this run's tree (H17: never the shared
+    // `/data/app` entry), a bind over its guest path, the native-library
+    // install and a structured ABI gate. The package manager and the activity
+    // manager learn about them below, before any guest exists.
+    let mut extras: Vec<ExtraApk> = Vec::new();
+    // WV8: a module's `real` profile may install a system app the session cannot
+    // work without (the `webview` provider package). The manifest names it
+    // (`system_apps`) and `module::system_apks` resolves the host file, so a
+    // scenario needs `services: [{id: webview, profile: real}]` and not a second
+    // `extra_apks:` line that could drift from the attached set.
+    let extra_apk_paths: Vec<PathBuf> = opts
+        .extra_apks
+        .iter()
+        .cloned()
+        .chain(acos_services::module::system_apks(&module_specs))
+        .collect();
+    for extra in &extra_apk_paths {
+        let name = extra
+            .file_name()
+            .map(|f| f.to_string_lossy().to_string())
+            .filter(|n| !n.is_empty())
+            .ok_or_else(|| {
+                Error::Layout(format!(
+                    "extra APK {}: the path has no file name",
+                    extra.display()
+                ))
+            })?;
+        if name == apk_name {
+            return Err(Error::Layout(format!(
+                "extra APK {}: the launched APK is already staged as {name}",
+                extra.display()
+            )));
+        }
+        if extras
+            .iter()
+            .any(|e| e.guest_path == format!("/data/app/{name}"))
+        {
+            return Err(Error::Layout(format!(
+                "extra APK {}: another APK is already staged as {name}",
+                extra.display()
+            )));
+        }
+        let extra_package = crate::app::apk_package(extra)?;
+        if extra_package == package {
+            return Err(Error::Layout(format!(
+                "extra APK {}: package {extra_package} is the launched package",
+                extra.display()
+            )));
+        }
+        if extras.iter().any(|e| e.package == extra_package) {
+            return Err(Error::Layout(format!(
+                "extra APK {}: package {extra_package} is already installed by another APK in this session",
+                extra.display()
+            )));
+        }
+        let staged = run.dir("app").join(&name);
+        crate::app::stage_apk(extra, &staged)?;
+        crate::app::ensure_apk_mountpoint(&root.data, &name, extra)?;
+        let guest_lib_root = format!("/data/app-lib-extra/{extra_package}");
+        // An APK without native code still needs its `nativeLibraryDir` to
+        // exist (the primary's tree is created by the native-lib install for
+        // the same reason); bwrap refuses a bind whose source is missing.
+        let lib_root = run.dir("app-lib-extra").join(&extra_package);
+        fs::create_dir_all(&lib_root)?;
+        extras.push(ExtraApk {
+            staged,
+            guest_path: format!("/data/app/{name}"),
+            guest_lib_dir: format!("{guest_lib_root}/{}", acos_services::native_libs::HOST_ABI),
+            guest_lib_root,
+            lib_root,
+            package: extra_package,
+            uid: None,
+        });
+    }
+    crate::stage("extra-apk-stage");
+
     // W17: installd's native-library step. Stock Android extracts the APK's
     // `lib/<abi>/*.so` into `ApplicationInfo.nativeLibraryDir` at install time
     // and `LoadedApk` puts that directory on the class loader's native search
@@ -538,9 +1489,8 @@ pub(crate) fn launch_session(
     // (`prime_from`) and the open is dropped at the end of this block, so only the
     // small facts outlive it.
     let (native_libs, installed) = {
-        let source = acos_services::apk_facts::open_shared(&opts.apk).map_err(|e| {
-            Error::Layout(format!("native libs: open {}: {e}", opts.apk.display()))
-        })?;
+        let source = acos_services::apk_facts::open_shared(&opts.apk)
+            .map_err(|e| Error::Layout(format!("native libs: open {}: {e}", opts.apk.display())))?;
         let native_libs =
             acos_services::native_libs::install_from(&source, &opts.apk, &native_lib_root)
                 .map_err(|e| Error::Layout(format!("native libs: {e}")))?;
@@ -572,7 +1522,10 @@ pub(crate) fn launch_session(
             // before the image, the props, logd or any guest process exists.
             eprintln!("acos-art: launch: UNSUPPORTED_ABI available={available:?}: {message}");
             let result = abi_gate_result(opts, &package, available, sample);
-            let out = opts.out.clone().unwrap_or_else(|| run.dir("out").join("launch"));
+            let out = opts
+                .out
+                .clone()
+                .unwrap_or_else(|| run.dir("out").join("launch"));
             write_session_exit(&out, &result, None, None, None, None);
             // An interactive caller waits for a *ready line*: refusing without
             // one would look like a dead session (`INTERNAL`) to it, and the
@@ -594,6 +1547,59 @@ pub(crate) fn launch_session(
         acos_services::native_libs::NativeLibInstall::None => {}
     }
     crate::stage("native-libs");
+    // MPROC1: the same installd step and ABI gate for every extra APK. The
+    // libraries land in a per-package tree (`/data/app-lib-extra/<package>`)
+    // so two packages that ship a library of the same name can never shadow
+    // each other, and the package's own `nativeLibraryDir` names it below.
+    for extra in &mut extras {
+        let install = acos_services::native_libs::install(&extra.staged, &extra.lib_root)
+            .map_err(|e| Error::Layout(format!("native libs for {}: {e}", extra.package)))?;
+        match install {
+            acos_services::native_libs::NativeLibInstall::Installed { libs, .. } => {
+                eprintln!(
+                    "acos-art: launch: extra {} native libs installed={} guest={}",
+                    extra.package,
+                    libs.len(),
+                    extra.guest_lib_dir
+                );
+            }
+            acos_services::native_libs::NativeLibInstall::UnsupportedAbi {
+                available,
+                sample,
+                message,
+            } => {
+                // AOSP refuses the *package* (`INSTALL_FAILED_NO_MATCHING_ABIS`);
+                // a session cannot install this one, so the launch is refused
+                // before any guest exists, naming the extra APK's inventory.
+                eprintln!(
+                    "acos-art: launch: UNSUPPORTED_ABI ({}): {message}",
+                    extra.package
+                );
+                let result = abi_gate_result(opts, &extra.package, &available, &sample);
+                let out = opts
+                    .out
+                    .clone()
+                    .unwrap_or_else(|| run.dir("out").join("launch"));
+                write_session_exit(&out, &result, None, None, None, None);
+                if std::env::var_os("ACOSLAUNCH_INTERACTIVE").is_some() {
+                    protocol_write(&serde_json::json!({
+                        "ok": false,
+                        "cmd": "ready",
+                        "code": "UNSUPPORTED_ABI",
+                        "retryable": false,
+                        "error": message,
+                        "extra_apk": extra.package,
+                        "apk_abis": available,
+                        "host_abi": acos_services::native_libs::HOST_ABI,
+                        "libs_sample": sample,
+                    }));
+                }
+                return Ok(result);
+            }
+            acos_services::native_libs::NativeLibInstall::None => {}
+        }
+    }
+    crate::stage("extra-native-libs");
     // The declared `<application android:name>` class and `android:theme`.
     // Without the class the real `LoadedApk.makeApplication` instantiates
     // `android.app.Application` instead of the APK's own (W15: RN's
@@ -605,9 +1611,9 @@ pub(crate) fn launch_session(
     // `installed` was read from the launch's one open (above).
     let application_class = installed
         .as_ref()
-        .map(|state| state.app.class_name.clone())
+        .map(|state| state.app().class_name.clone())
         .filter(|name| !name.is_empty());
-    let application_theme = installed.as_ref().map_or(0, |state| state.app.theme);
+    let application_theme = installed.as_ref().map_or(0, |state| state.app().theme);
 
     // W24: the image's **static RROs** for `framework-res`, applied through the
     // same stock path `render-app`/the session already use (P2c/W18 #2). The
@@ -638,6 +1644,11 @@ pub(crate) fn launch_session(
         let _ = fs::remove_file(staging.join(stale));
     }
     fs::create_dir_all(run.dir("app-data").join(&package))?;
+    // MPROC1: every extra package gets the same private data root the launched
+    // package gets, so its own `dataDir` exists before it runs.
+    for extra in &extras {
+        fs::create_dir_all(run.dir("app-data").join(&extra.package))?;
+    }
     let out = opts.out.clone().unwrap_or_else(|| staging.clone());
     fs::create_dir_all(&out)?;
     // W43: a full scratch disk is a host condition and a structured, retryable
@@ -712,24 +1723,88 @@ pub(crate) fn launch_session(
     let peer_wake_fd = delivery_wake.read_fd();
     let unsupported_log = staging.join("unsupported.jsonl");
     let (tx, rx) = mpsc::channel::<PeerSummary>();
+    // The peer sleeps in `poll(2)` until a guest frame or the earliest module
+    // deadline; this pipe is how the launcher's stop reaches that sleep.
+    let peer_wakeup = PeerWakeup::new().map_err(Error::Io)?;
+    let control_wake_fd = peer_wakeup.read;
     let peer_log = unsupported_log.clone();
     let apk_for_peer = opts.apk.clone();
     // W10: the live session drives the same `InputHost` the window session
     // uses and captures C1's stored buffer, so the standard install hands both
     // back. Building the host here (instead of inside the peer thread) keeps
     // those handles in the launcher without a second install.
+    let mut module_specs: Vec<acos_services::module::ModuleSpec> =
+        acos_services::module::ModuleSpec::parse_list(&serde_json::Value::Array(
+            opts.services.clone(),
+        ))
+        .map_err(|error| Error::Layout(format!("services: {error}")))?;
+    if module_specs.is_empty() {
+        if let Ok(raw) = std::env::var("ACOS_ART_SERVICES") {
+            let value: serde_json::Value = serde_json::from_str(&raw).map_err(|error| {
+                Error::Layout(format!("ACOS_ART_SERVICES is not JSON: {error}"))
+            })?;
+            module_specs = acos_services::module::ModuleSpec::parse_list(&value)
+                .map_err(|error| Error::Layout(format!("ACOS_ART_SERVICES: {error}")))?;
+        }
+    }
+    let mut session_modules = match prebuilt {
+        Some((host, handles)) => {
+            acos_services::module::SessionModules::from_installed(host, handles)
+        }
+        None => acos_services::module::SessionModules::new(),
+    };
+    session_modules
+        .attach(&module_specs)
+        .map_err(|error| Error::Layout(format!("services: {error}")))?;
+    // WV8: publish the endpoints the launcher bound for the `webview` module.
+    // The module's `status` control op answers from these instead of recomputing
+    // a path the launcher already decided, so the two cannot name different
+    // sockets.
+    session_modules
+        .host_mut()
+        .set_webview_gate(acos_services::host::WebviewGate {
+            socket: webview_real
+                .then(|| crate::webview_socket::host_socket_path(&webview_socket_dir)),
+            broker_socket: webview_broker_socket.clone(),
+        });
+    // NET5: the resolver proxy is served *after* the modules attach, because the
+    // `network` module is what decides whether this session has one (ADR-0030
+    // item 4). `sockets.0` is what the sandbox binds at `/dev/socket` (below), so
+    // it must be served here. With a session directory (ZPROD) this is exactly
+    // `<plan>/<tag>/sock`, the directory the zygote child mounts; without one it
+    // is this run's short socket dir. Serving any other directory leaves
+    // `/dev/socket/dnsproxyd` invisible to the app and `getaddrinfo` answers
+    // `EAI_NODATA` (measured).
+    let _dns = crate::spike_net::serve_dnsproxyd_if_enabled(&sockets.0).map_err(Error::Io)?;
+    // ADR-0029 item 4: the attached set is published on the ready line and in
+    // every `acos_services` reply, so the agent sees what the session actually
+    // attached (never what it asked for).
+    let session_module_rows = session_modules.verdict_modules();
+    // ADR-0029 item 1: what those attached modules need this guest *process* to
+    // install before any app code runs (collected before the host moves to the
+    // peer thread, which owns the registry).
+    let session_process_initializers = session_modules.process_initializers();
     let live_handles = {
         // ZM2 prototype C: a host-template child starts from the template's
         // empty (fully installed) service graph, which is CoW-shared until the
         // child writes it. The APK install below is per session either way.
-        let (mut host, handles) = match prebuilt {
-            Some(pair) => pair,
-            None => {
-                let mut host = acos_services::ServiceHost::new();
-                let handles = acos_services::registry::install_with_handles(&mut host);
-                (host, handles)
-            }
-        };
+        //
+        // ADR-0029 item 4: the modules were attached above, before the guest
+        // boots; the host and the registry now move to the peer thread, which
+        // is the only thread that mutates the service table (live attach/detach
+        // is a request to it, never a second mutation path).
+        let handles = session_modules
+            .take_session_handles()
+            .expect("core publishes the session handles at attach");
+        let (host, registry) = session_modules.into_parts();
+        let mut host = host;
+        // MPROC8: this session runs real app processes, so the host performs
+        // AOSP's `ActiveServices` work for a guest `bindService` (create/bind in
+        // the service's own process, answer the caller's `IServiceConnection`).
+        // The in-process runtime keeps its own bind path, so the flag is a
+        // property of what this session is, stated by the only component that
+        // knows.
+        host.set_host_side_services(true);
         // REL3I3: this session's delivery wake. The host hands it to the
         // producers it installs (the WMS's IME insets queue) and the peer's
         // idle wait polls the same pipe. A prebuilt (host-template) child
@@ -742,6 +1817,18 @@ pub(crate) fn launch_session(
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .attach_delivery_wake(Arc::clone(&delivery_wake));
+        // SYSUI3A: name the session's primary process (tag 0) the way stock AMS
+        // names it in `startProcessLocked`, before any attach. `attachApplication`
+        // carries no package and the primary never sends the peer's handshake,
+        // so without this `Peer::package_of(0)` had no package to ask
+        // `pending_launch_for` with: a `startActivity` into the already-running
+        // primary (a notification's content sender) was recorded and never
+        // delivered. The launcher is the component that knows what it started.
+        if !host.seed_primary_package(&package) {
+            eprintln!(
+                "acos-art: launch: the activity service did not take the primary package {package}"
+            );
+        }
         // K3d: the PMS publishes the APK path the **guest** can open
         // (`/data/app/<name>.apk`, read-only bound by the sandbox), not the host
         // file. `PackageManager.getResourcesForApplication` builds `Resources`
@@ -751,6 +1838,43 @@ pub(crate) fn launch_session(
         // which is how FileProvider's `FILE_PROVIDER_PATHS` XML lookup died.
         if let Err(e) = host.install_package_from_apk_as(&apk_for_peer, Some(&guest_apk)) {
             eprintln!("acos-art: launch: install_package_from_apk failed: {e}");
+        }
+        // MPROC1: each extra APK is installed into the same package manager
+        // (its own uid, its own `sourceDir`/`nativeLibraryDir`) and into the
+        // activity manager's manifest table under that same uid. A failure here
+        // fails the launch: a session that silently lacks a package the caller
+        // asked for is exactly the fake success the rules forbid.
+        for extra in &mut extras {
+            let uid = host
+                .install_extra_package_from_apk_as(
+                    &extra.staged,
+                    Some(&extra.guest_path),
+                    Some(&extra.guest_lib_dir),
+                )
+                .map_err(|e| {
+                    Error::Layout(format!(
+                        "extra APK {}: package manager install failed: {e}",
+                        extra.package
+                    ))
+                })?;
+            extra.uid = Some(uid);
+            if let Ok(object) = host.ensure("android.app.IActivityTaskManager") {
+                if let Some(atms) = object
+                    .as_any_mut()
+                    .and_then(|any| any.downcast_mut::<acos_services::atms::AtmsService>())
+                {
+                    if let Err(e) = atms.seed_manifest_from_apk_with_uid(&extra.staged, uid) {
+                        return Err(Error::Layout(format!(
+                            "extra APK {}: seed_manifest_from_apk: {e}",
+                            extra.package
+                        )));
+                    }
+                }
+            }
+            eprintln!(
+                "acos-art: launch: extra package installed {} uid={uid} apk={} native={}",
+                extra.package, extra.guest_path, extra.guest_lib_dir
+            );
         }
         // W38 (flagged, minimal): the guest's `startActivity` is resolved by the
         // host ATMS before it records a `PendingLaunch`; seed the same APK's
@@ -766,10 +1890,27 @@ pub(crate) fn launch_session(
                 }
             }
         }
-        (host, handles)
+        // UID: the uid the package manager allocated for the launched package.
+        // AOSP allocates one uid per installed package, and this process must
+        // run as **its** uid (a second package in the same session gets its
+        // own). `None` only when the package manager never registered the
+        // package (then the historical fixture uid stays the default, and a
+        // guest that asks for its own `ApplicationInfo` fails loudly on its
+        // own).
+        let primary_uid = host.package_uid(&package).map(|uid| uid as u32);
+        (host, handles, registry, primary_uid)
     };
-    let (peer_host, live) = live_handles;
+    let (peer_host, live, peer_registry, primary_uid) = live_handles;
+    let service_control = Arc::new(ServiceControl::default());
+    // A live module request wakes the peer's idle wait (see `ServiceControl`).
+    service_control.set_wake(peer_wakeup.write);
+    let peer_control = Arc::clone(&service_control);
     let interactive = std::env::var_os("ACOSLAUNCH_INTERACTIVE").is_some();
+    // MPROC4 step 3b: the peer thread owns the `ServiceHost`, so it is the one
+    // that learns a component needs a process it cannot start itself. The
+    // launcher (this thread) owns the processes, so the request crosses over as
+    // a plain message and nothing is started from the peer thread.
+    let (spawn_tx, spawn_rx) = mpsc::channel::<acos_services::ams::ProcessSpawnRequest>();
     crate::stage("peer-setup");
     // PERF4: the session's settle/observation wake exists before the peer thread
     // because applying a guest transaction is one of the facts a settle waits
@@ -780,55 +1921,106 @@ pub(crate) fn launch_session(
     let settle_change_for_peer = Arc::clone(&settle_change);
     let peer_thread = std::thread::spawn(move || {
         let summary = (|| -> std::io::Result<PeerSummary> {
-            let client = loop {
-                if peer_stop.load(Ordering::Acquire) {
-                    unsafe {
-                        libc::close(listener);
-                    }
-                    return Ok(PeerSummary::default());
-                }
-                match accept(listener) {
-                    Ok(fd) => break fd,
-                    Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
-                        std::thread::sleep(Duration::from_millis(2));
-                    }
-                    Err(e) => {
-                        unsafe {
-                            libc::close(listener);
-                        }
-                        return Err(e);
-                    }
-                }
-            };
-            unsafe {
-                libc::close(listener);
-                // REL3I3: this is no longer the idle cadence. The peer sleeps
-                // in `poll(2)` (see `serve`), and `stop` is a wake, so the
-                // bounds below only matter for a *mid-frame* stall: process
-                // exit closes this socket, a wedged partial frame would park
-                // `read_frame` forever, and 1 s is that bound.
-                let tv = libc::timeval {
-                    tv_sec: 1,
-                    tv_usec: 0,
-                };
-                libc::setsockopt(
-                    client,
-                    libc::SOL_SOCKET,
-                    libc::SO_RCVTIMEO,
-                    &tv as *const _ as *const libc::c_void,
-                    std::mem::size_of::<libc::timeval>() as libc::socklen_t,
-                );
-            }
             // The real ServiceHost, with its package manager pointed at the APK
             // being launched: `handleBindApplication` asks for its
             // `getApplicationInfo` and must get the real package, not the
             // hello-views fixture (and never a fabricated null).
             let mut peer = Peer::with_host(peer_host, Some(peer_log));
-            let rc = serve(&mut peer, client, &peer_stop, peer_wake_fd, &settle_change_for_peer);
-            unsafe {
-                libc::close(client);
-            }
+            let mut peer_registry = peer_registry;
+            // MPROC2 step 3a + ADR-0029 item 4 in one loop: the session serves N
+            // tagged driver connections (one per app process) and the launcher's
+            // live module-control channel, both on the thread that owns the
+            // service table. A spawn request crosses to the launcher, which owns
+            // the processes and their tags.
+            // SYSUI1: a control op can start an activity (the permission
+            // dialog, the shade). Its resolution may need a process the launcher
+            // owns, and no guest frame follows to drain the request, so the pump
+            // hands it over the same way the serve loop does.
+            let pump_spawns = spawn_tx.clone();
+            let mut sink = |request: acos_services::ams::ProcessSpawnRequest| {
+                let _ = spawn_tx.send(request);
+            };
+            let mut pump = |peer: &mut Peer| -> Vec<(u32, Frame)> {
+                let mut frames: Vec<(u32, Frame)> = Vec::new();
+                while let Some((id, request)) = peer_control.take() {
+                    let reply = service_request(peer, &mut peer_registry, &request);
+                    let debug_reply = reply.to_string();
+                    peer_control.reply(id, reply);
+                    for spawn in peer.take_spawn_requests() {
+                        eprintln!(
+                            "acos-binder-peer: control op: {} needs a process for {} ({})",
+                            spawn.package, spawn.component, spawn.reason
+                        );
+                        let _ = pump_spawns.send(spawn);
+                    }
+                    // A live `ctl` op can queue `system -> app` deliveries (an
+                    // SMS, a call-state event, a location fix, an auth result).
+                    // No binder transaction follows to flush them, so do it here
+                    // — with the **timed** drain, because a module parks its own
+                    // deliveries in its own object.
+                    let flushed = peer.tick();
+                    if let Ok(path) = std::env::var("ACOS_SERVICE_CTL_LOG") {
+                        use std::io::Write as _;
+                        if let Ok(mut file) = std::fs::OpenOptions::new()
+                            .create(true)
+                            .append(true)
+                            .open(&path)
+                        {
+                            let _ = writeln!(
+                                file,
+                                "ctl reply={debug_reply} flushed={} targets={:?}",
+                                flushed.len(),
+                                flushed
+                                    .iter()
+                                    .map(|(tag, f)| (tag, f.ty, f.code, f.target))
+                                    .collect::<Vec<_>>()
+                            );
+                        }
+                    }
+                    frames.extend(flushed);
+                }
+                frames
+            };
+            let notify_settle = || settle_change_for_peer.notify();
+            let served = acos_binder_peer::serve::serve_with_control(
+                &mut peer,
+                listener,
+                &peer_stop,
+                Some(&mut sink),
+                Some(control_wake_fd),
+                Some(&mut pump),
+                Some(peer_wake_fd),
+                Some(&notify_settle),
+            );
+            let outcome = served?;
+            eprintln!(
+                "acos-art: peer: processes={:?} peak_connections={} accepted={} refused={} \
+                 closed={} frames={}/{} unroutable={}",
+                peer.tags(),
+                outcome.peak_connections,
+                outcome.accepted,
+                outcome.refused,
+                outcome.closed,
+                outcome.frames_in,
+                outcome.frames_out,
+                outcome.unroutable
+            );
             let summary = PeerSummary {
+                processes: peer
+                    .process_list()
+                    .into_iter()
+                    .map(|(tag, package, uid, pid, app_thread, attached)| {
+                        serde_json::json!({
+                            "tag": tag,
+                            "package": package,
+                            "uid": uid,
+                            "pid": pid,
+                            "app_thread": app_thread,
+                            "attached": attached,
+                        })
+                    })
+                    .collect(),
+                spawn_requests: outcome.spawns_requested,
                 calls: peer
                     .service_calls()
                     .iter()
@@ -857,10 +2049,9 @@ pub(crate) fn launch_session(
                 reverse_failed: peer.reverse_failed,
                 resource_limits: peer.resource_limits(),
             };
-            let _ = rc;
             Ok(summary)
         })();
-        let _ = tx.send(summary.unwrap_or(PeerSummary::default()));
+        let _ = tx.send(summary.unwrap_or_default());
     });
 
     // --- guest -------------------------------------------------------------
@@ -914,6 +2105,40 @@ pub(crate) fn launch_session(
         .as_ref()
         .map(|l| l.label.clone())
         .unwrap_or_default();
+    // LAUNCHEXTRAS: the host builds the launch Intent (ADR-0029 amendment). The
+    // bytes come from `Intent.writeToParcel` as this image writes it (the
+    // parcelable codec, real-Java differential in acos-runtime); the guest
+    // unmarshals them with the framework's own `Intent.CREATOR` and hands the
+    // Intent to the real `LaunchActivityItem`. A `Parcelable` extra is refused
+    // by name before any guest exists.
+    let launch_intent_hex = if opts.intent.is_empty() {
+        None
+    } else {
+        if let Some(detail) = opts.intent.unsupported_detail() {
+            return Err(Error::Layout(format!("UNSUPPORTED_ANDROID_API: {detail}")));
+        }
+        let Some(activity_class) = activity.as_deref() else {
+            return Err(Error::Layout(
+                "intent_action/data/extras need `--until activity-resumed`: a launch that stops \
+                 before an Activity cannot carry an Intent"
+                    .to_string(),
+            ));
+        };
+        let bytes = acos_services::client_transaction::encode_launch_intent(
+            &package,
+            activity_class,
+            &opts.intent,
+        )
+        .map_err(|error| Error::Layout(format!("launch Intent: {error}")))?;
+        eprintln!(
+            "acos-art: launch: host-built launch Intent action={} data={} extras={} bytes={}",
+            opts.intent.action.as_deref().unwrap_or("android.intent.action.MAIN"),
+            opts.intent.data.as_deref().unwrap_or("none"),
+            opts.intent.extras.len(),
+            bytes.len()
+        );
+        Some(hex_bytes(&bytes))
+    };
     // W31: `ApplicationInfo.flags` from the parsed manifest. `PmsState::from_apk`
     // is the host's `PackageParser` equivalent (`acos-apk`'s typed manifest);
     // its `AppInfo.flags` is what a package manager hands the framework, and
@@ -925,7 +2150,7 @@ pub(crate) fn launch_session(
     const FLAG_HARDWARE_ACCELERATED: i32 = 1 << 29;
     let mut app_flags = installed
         .as_ref()
-        .map(|state| ((state.app.flags & !FLAG_HARDWARE_ACCELERATED) | FLAG_INSTALLED) as i64)
+        .map(|state| ((state.app().flags & !FLAG_HARDWARE_ACCELERATED) | FLAG_INSTALLED) as i64)
         .unwrap_or(-1);
     // Diagnostic seam (W31): `ACOSLAUNCH_APP_FLAGS=0x…` (or decimal) lets a run
     // prove a *future* manifest derivation end to end before the host PMS owns
@@ -1060,12 +2285,149 @@ pub(crate) fn launch_session(
             &guest_args,
         )?;
     }
+    // MPROC4 step 3b: one `SecondarySpec` per installed extra package. These
+    // are the *same* session inputs the primary got (this run's staged APK, the
+    // same package manager facts), so a secondary process is a second guest of
+    // this session, not a second launch.
+    let mut secondary_specs: Vec<SecondarySpec> = Vec::new();
+    for (index, extra) in extras.iter().enumerate() {
+        let tag = (index as u32) + 1;
+        // UID: this package's **own** uid (the package manager allocated it at
+        // install time), so every fact built from its APK carries the uid the
+        // process runs as — never the fixture uid of the launched package.
+        let facts = match extra.uid {
+            Some(uid) => acos_services::pms::PmsState::from_apk_with_uid(&extra.staged, uid).ok(),
+            None => acos_services::pms::PmsState::from_apk(&extra.staged).ok(),
+        };
+        let launcher = apk_launcher_activity(&extra.staged).ok();
+        let labels = acos_services::pms::manifest_labels(&extra.staged).ok();
+        let run_root = run.path().join("secondary").join(format!("tag-{tag}"));
+        let out_dir = out.join(format!("process-{tag}"));
+        let _ = fs::create_dir_all(&out_dir);
+        secondary_specs.push(SecondarySpec {
+            tag,
+            package: extra.package.clone(),
+            staged: extra.staged.clone(),
+            guest_apk: extra.guest_path.clone(),
+            lib_root: extra.lib_root.clone(),
+            guest_lib_root: extra.guest_lib_root.clone(),
+            guest_lib_dir: extra.guest_lib_dir.clone(),
+            uid: extra.uid,
+            // A spec starts as an activity process (MPROC4's lazy `startActivity`
+            // spawn); a request for a service component switches it to
+            // `SpawnKind::Service` at spawn time.
+            kind: SpawnKind::Activity,
+            service: String::new(),
+            activity: launcher
+                .as_ref()
+                .map(|l| l.component.clone())
+                .unwrap_or_default(),
+            app_class: facts
+                .as_ref()
+                .map(|state| state.app().class_name.clone())
+                .filter(|name| !name.is_empty())
+                .unwrap_or_default(),
+            theme: facts.as_ref().map_or(0, |state| state.app().theme),
+            app_flags: facts
+                .as_ref()
+                .map(|state| ((state.app().flags & !(1 << 29)) | (1 << 23)) as i64)
+                .unwrap_or(-1),
+            config_changes: launcher
+                .as_ref()
+                .map_or(0, |l| l.config_changes.max(0) as u32),
+            app_label: labels
+                .as_ref()
+                .map(|l| {
+                    (
+                        l.application.res.max(0) as u32,
+                        l.application.literal.clone().unwrap_or_default(),
+                    )
+                })
+                .unwrap_or((0, String::new())),
+            activity_label: launcher
+                .as_ref()
+                .map(|l| {
+                    (
+                        l.label.res.max(0) as u32,
+                        l.label.literal.clone().unwrap_or_default(),
+                    )
+                })
+                .unwrap_or((0, String::new())),
+            activity_target: launcher
+                .as_ref()
+                .and_then(|l| l.target.clone())
+                .unwrap_or_default(),
+            out_dir,
+            run_root,
+        });
+    }
+    let secondary_shared = SecondaryShared {
+        root: root.clone(),
+        image: boot_image.as_ref().map(|image| image.dir.clone()),
+        substrate: shims.substrate.clone(),
+        art_shim: shims.art_shim.clone(),
+        driver: shims.driver.clone(),
+        gralloc: shims.gralloc.clone(),
+        native_lib_root: native_lib_root.clone(),
+        sockets: sockets.0.clone(),
+        sock: sock.clone(),
+        overlays: overlays.guest_arg(),
+        resume_ms,
+        geometry: [
+            ("ACOSLAUNCH_WIDTH".to_string(), opts.width),
+            ("ACOSLAUNCH_PANEL_HEIGHT".to_string(), opts.panel_height),
+            ("ACOSLAUNCH_DENSITY".to_string(), opts.density_dpi),
+            ("ACOSLAUNCH_STATUS_INSET".to_string(), opts.status_inset),
+            ("ACOSLAUNCH_NAV_INSET".to_string(), opts.nav_inset),
+        ],
+        screen_layout: acos_services::wms::REFERENCE_SCREEN_LAYOUT.max(0) as u32,
+        animations: opts.animations.as_str(),
+        live_probe: interactive,
+    };
+    let mut secondary_pool =
+        SecondaryPool::new(
+            secondary_specs,
+            secondary_shared,
+            Arc::clone(&live.atms),
+            package.clone(),
+        );
+    if !interactive && !secondary_pool.specs.is_empty() {
+        eprintln!(
+            "acos-art: launch: {} secondary package(s) installed; a non-interactive session has \
+             no spawn loop, so no secondary process can be started in it",
+            secondary_pool.specs.len()
+        );
+    }
     crate::seccomp::enable(root)?;
     let mut sb = root.sandbox();
     if let Some(image) = &boot_image {
         sb.with_image(Some(image.dir.clone()));
     }
     sb.run_root(run.path());
+    // UID: this guest runs as the launched package's uid (AOSP: one uid per
+    // installed package, shared by that package's processes). The secondary
+    // processes below carry *their* package's uid the same way, so two processes
+    // of two packages in one session have two uids — `Process.myUid()`,
+    // `getPackageUid()`, `getNameForUid()` and the per-uid permission answer all
+    // agree on both sides of the socket.
+    match primary_uid {
+        Some(uid) => {
+            sb.app_uid(uid);
+        }
+        None => eprintln!(
+            "acos-art: launch: the package manager has no uid for {package}; the guest keeps the \
+             session default (per-package identity is unavailable)"
+        ),
+    }
+    // NET3/NET4: the relay session is named after the session id the engine
+    // published (`ACOS_ART_SESSION_ID`) — for an `acos serve` session and for a
+    // one-shot `verify` run alike — so the live session API's `acos_net` controls
+    // address the session by the id its own client holds.
+    if let Ok(id) = std::env::var(crate::spike_net::SESSION_ID_ENV) {
+        if !id.is_empty() {
+            sb.net_session(Some(&id));
+        }
+    }
     // Z4: a foreign-guest session does not spawn ART itself, so the guest
     // seccomp/Landlock guard is applied per forked child (the child loads the
     // same `libacos_seccomp_guest.so` after its bind mounts, exactly AOSP's
@@ -1087,10 +2449,13 @@ pub(crate) fn launch_session(
     sb.ro_bind(&shims.substrate, "/data/app/libacosart.so");
     // H17: this session's own APK shadows the shared `/data/app` entry.
     sb.ro_bind(&apk, &format!("/data/app/{apk_name}"));
-    sb.ro_bind(
-        &root.sysroot.join("shim/libacoshw.so"),
-        "/data/libacoshw.so",
-    );
+    // MPROC1: each extra package's APK and native-library tree, at the guest
+    // paths the package manager publishes for it.
+    for extra in &extras {
+        sb.ro_bind(&extra.staged, &extra.guest_path);
+        sb.ro_bind(&extra.lib_root, &extra.guest_lib_root);
+    }
+    sb.ro_bind(&shims.gralloc, "/data/libacoshw.so");
     sb.ro_bind(&shims.driver, "/data/lib/libacos_binder_driver.so");
     if let Some(dir) = &zygote_app {
         // Z3 research guest dex + the raw-syscall fork shim (Z1/Z2). bwrap
@@ -1151,7 +2516,32 @@ pub(crate) fn launch_session(
     );
     sb.env("ACOSART_LOAD", "libandroid_runtime.so");
     sb.env("E3G_SOCK", "/data/acos-launch.sock");
+    // MPROC2 step 3a: the primary app process names itself in the driver's
+    // connection handshake, so the peer can put its tag on every binder handle
+    // it imports. Secondary processes get their own tag from the spawn path
+    // (`spawn <tag>`), never from this env.
+    sb.env("ACOS_PROCESS_TAG", "0");
+    sb.env("ACOS_PROCESS_NAME", &package);
     sb.env("ACOSLAUNCH_RESUME_MS", &resume_ms.to_string());
+    // LAUNCHEXTRAS: the host-built Intent bytes, unmarshalled by the guest's
+    // first `LaunchActivityItem` (never rebuilt there from loose fields).
+    if let Some(hex) = &launch_intent_hex {
+        sb.env("ACOSLAUNCH_INTENT_BYTES", hex);
+    }
+    // ADR-0029 item 1: the framework initializers the attached modules declare
+    // (`ModuleManifest::process_initializers`). On a device the mainline
+    // module's own process installs them before any app starts; ACOS has no such
+    // process, so the guest runs the same call once, before the app boots. The
+    // list is the attached set's own promise (never a guess, never a per-module
+    // switch here): `class#method#manager`, ';'-separated.
+    if !session_process_initializers.is_empty() {
+        let wire = session_process_initializers
+            .iter()
+            .map(acos_services::module::ProcessInitializer::wire)
+            .collect::<Vec<_>>()
+            .join(";");
+        sb.env("ACOSLAUNCH_INITIALIZERS", &wire);
+    }
     // Display geometry the guest boots at. Forwarded only when the caller set
     // it (`acos-art launch --width …`, or the engine's `ACOS_ART_*`), so the
     // default guest is unchanged and the reference-device baselines keep
@@ -1237,8 +2627,8 @@ pub(crate) fn launch_session(
     // provider that reads it from `attachInfo`.
     let provider_spec = installed.as_ref().map_or_else(String::new, |state| {
         let mut seen: Vec<(&str, Vec<&str>)> = Vec::new();
-        for p in &state.providers {
-            if p.process_name != state.app.process_name {
+        for p in state.providers() {
+            if p.process_name != state.app().process_name {
                 continue;
             }
             match seen.iter_mut().find(|(class, _)| *class == p.name) {
@@ -1250,7 +2640,7 @@ pub(crate) fn launch_session(
         }
         seen.iter()
             .map(|(class, authorities)| {
-                let declared = state.providers.iter().find(|p| p.name == *class);
+                let declared = state.providers().iter().find(|p| p.name == *class);
                 let read = declared.map_or("", |p| p.read_permission.as_str());
                 let exported = declared.is_some_and(|p| p.exported);
                 let grant_uri = declared.is_some_and(|p| p.grant_uri_permissions);
@@ -1302,12 +2692,12 @@ pub(crate) fn launch_session(
     // request's `ApplicationInfo` (`LoadedApk.makeApplication` hands that object
     // to the app, and `context.getApplicationInfo().metaData` reads it).
     if let Some(state) = &installed {
-        if !state.app.meta_data.is_empty() {
+        if !state.app().meta_data.is_empty() {
             eprintln!(
                 "acos-art: launch: application meta-data {} (bind ApplicationInfo.metaData)",
-                state.app.meta_data.len()
+                state.app().meta_data.len()
             );
-            sb.env("ACOSLAUNCH_APP_META", &meta_spec(&state.app.meta_data));
+            sb.env("ACOSLAUNCH_APP_META", &meta_spec(&state.app().meta_data));
         }
     }
     if std::env::var_os("ACOSLAUNCH_PROBE").is_some() {
@@ -1509,7 +2899,16 @@ pub(crate) fn launch_session(
     // Bounded capture (R1): a guest that loops on printf costs at most the cap.
     let cap = stream_cap_from_env();
     let (otx, orx) = mpsc::channel::<(u8, TailBuffer)>();
-    let probe_state = Arc::new(std::sync::Mutex::new(ProbeState::default()));
+    // MERGEFIX: one construction, and it is wired to ATMS's `top_process`.
+    // The merge of main (PERF4's probe state + wake) into modules (MPROC5's
+    // per-process samples) kept **both** declarations: the wired one was
+    // immediately shadowed by `ProbeState::default()`, whose own
+    // `top_process` Arc nothing ever writes. Every session then served the
+    // primary process's sample, so a cross-process launch (`mproc3`) never saw
+    // the second process's window and its log/probe lines looked absent.
+    let probe_state = Arc::new(std::sync::Mutex::new(ProbeState::for_session(
+        Arc::clone(&live.top_process),
+    )));
     // PERF4: the probe state uses the wake the peer thread already signals, so
     // one condvar covers both fact sources (a parsed guest sample and an applied
     // transaction). Nothing has subscribed to `ProbeState::default()`'s own wake
@@ -1562,9 +2961,10 @@ pub(crate) fn launch_session(
                     &path,
                     probe_for_out,
                     Some(compositor_for_probe),
+                    0,
                 ),
                 None => {
-                    drain_stdout_lines(out_pipe, cap, probe_for_out, Some(compositor_for_probe))
+                    drain_stdout_lines(out_pipe, cap, probe_for_out, Some(compositor_for_probe), 0)
                 }
             }
         } else {
@@ -1625,6 +3025,14 @@ pub(crate) fn launch_session(
             // VIEW1a: where the live-view stream socket is bound (VIEW1c: its
             // own host-only directory, never mounted into the guest).
             &view_dir.0,
+            // ADR-0029 item 4: the attached set and the live-op channel.
+            &session_module_rows,
+            &service_control,
+            // MPROC4 step 3b: the session's secondary processes.
+            &mut secondary_pool,
+            spawn_rx,
+            // MPROC5c: the idle kill's timeout (`0` disables it).
+            Duration::from_secs(opts.idle_kill_secs),
         );
         match dead {
             Ok(end) => {
@@ -1672,6 +3080,12 @@ pub(crate) fn launch_session(
     // inside its scope. Both actions are idempotent and happen before any
     // capture/join, which is what bounds teardown after a guest death.
     stop.store(true, Ordering::Release);
+    // Wake the peer's idle wait: an idle session may be asleep until a deadline
+    // that will never come.
+    peer_wakeup.wake();
+    // MPROC4 step 3b: a secondary process never outlives the session (its whole
+    // cgroup scope goes, exactly like the primary's).
+    secondary_pool.shutdown();
     // The peer is asleep in `poll(2)`: an idle session has no timer to notice
     // `stop`, so wake it (the byte is the edge, the flag is the decision).
     delivery_wake.wake();
@@ -1897,6 +3311,36 @@ pub(crate) fn launch_session(
             summary.resource_limits
         ));
     }
+    // WV4/WV5b: publish where this session's WebView socket lives on the host,
+    // and whether the lazy gate is listening on it. The guest side is fixed
+    // (`/run/acos/webview.sock`, WIRE.md §0). With the gate up, the client's
+    // connect succeeds and the *first* connect wakes the shared broker
+    // (`acos-webview --shared`, one per host); with `ACOS_WEBVIEW_GATE=0` there
+    // is no listener and the connect fails with the kernel's real ENOENT.
+    match (&webview_gate, &webview_broker_socket) {
+        (Some(_), Some(broker)) => unsupported_notes.push(format!(
+            "webview socket: {} -> guest {} (module `webview` real: lazy gate listening; the \
+             first connect starts the shared broker at {})",
+            crate::webview_socket::host_socket_path(&webview_socket_dir).display(),
+            crate::webview_socket::GUEST_SOCKET_PATH,
+            broker.display()
+        )),
+        (None, _) => unsupported_notes.push(
+            "webview: module `webview` is off (no `com.android.webview` provider package, no \
+             gate socket): `WebView` takes Android's own no-provider path. Attach it with \
+             `services: [{id: webview, profile: real}]`."
+                .to_string(),
+        ),
+        (Some(_), None) => unsupported_notes.push(format!(
+            "webview socket: {} -> guest {} (lazy gate listening; no shared broker endpoint \
+             named for this session)",
+            crate::webview_socket::host_socket_path(&webview_socket_dir).display(),
+            crate::webview_socket::GUEST_SOCKET_PATH
+        )),
+    }
+    // The gate (its listener thread and the session directory) is dropped after
+    // `result` is built and before the run dir is removed.
+    let webview_gate = webview_gate;
     let mut result = LaunchResult {
         outcome,
         code,
@@ -1938,6 +3382,35 @@ pub(crate) fn launch_session(
         notes: unsupported_notes,
         marker,
         heap: Some(crate::props::effective_heap_json()),
+        extra_packages: Some(
+            extras
+                .iter()
+                .map(|extra| {
+                    serde_json::json!({
+                        "package": extra.package,
+                        "uid": extra.uid,
+                        "apk": extra.guest_path,
+                        "native_library_dir": extra.guest_lib_dir,
+                    })
+                })
+                .collect(),
+        ),
+        processes: {
+            // MPROC4 step 3b: the activity manager's per-tag `ProcessRecord`s
+            // and the launcher's spawn table. A single-process session keeps the
+            // field absent (nothing to report, nothing invented).
+            let mut launcher = secondary_pool.to_json();
+            launcher["requests"] = secondary_pool.records.clone().into();
+            let processes = serde_json::json!({
+                "activity_manager": summary.processes,
+                "launcher": launcher,
+            });
+            let multi = summary.processes.len() > 1
+                || !secondary_pool.records.is_empty()
+                || !secondary_pool.failures.is_empty()
+                || !secondary_pool.uninstalled.is_empty();
+            multi.then_some(processes)
+        },
     };
     eprintln!(
         "acos-art: launch wall={wall_ms}ms until={} application_created={} activity_resumed={} \
@@ -2193,6 +3666,26 @@ fn wait_for_change(wake: &ProbeWake, seen: &mut u64) {
 #[derive(Default)]
 struct ProbeState {
     latest: Option<ProbeSample>,
+    /// MPROC5: one sample per app process tag. A session can run several
+    /// guests, each printing its own probe lines with its own sequence counter,
+    /// so a single `latest` would serve whichever process printed last — a tree
+    /// from a window that is not on top. The served sample is the one from the
+    /// process ATMS publishes as foreground (`top_process`).
+    by_process: std::collections::BTreeMap<u32, ProbeSample>,
+    /// MPROC5: the foreground process tag (`LiveHandles::top_process`), written
+    /// by ATMS whenever the top-of-task moves.
+    ///
+    /// It is the **same** `Arc` ATMS publishes into, never a private copy: the
+    /// sample that is served must be the one of the process the activity
+    /// manager calls foreground (`ProbeState::for_session`).
+    top_process: Arc<std::sync::atomic::AtomicU32>,
+    /// MPROC7: per-process probe-sequence bases. A guest's probe counter starts
+    /// at 1 in every **process**, so a respawned process's samples (1, 2, ...)
+    /// are below the session's last served sequence and every later strict
+    /// settle waited forever on a "fresh" sample (`probe-floor`). When a process
+    /// is spawned, its entries are cleared and this base is set to the session's
+    /// current maximum, so its samples continue monotonically.
+    seq_offsets: std::collections::BTreeMap<u32, u64>,
     /// H15: the last `anim_callbacks` set traced, so the trace names each
     /// distinct animation callback once instead of once per sample.
     anim_traced: String,
@@ -2237,6 +3730,29 @@ struct ProbeState {
     wake_failures: u64,
     stale_samples: u64,
     stall_pending_ms: Option<u64>,
+}
+
+impl ProbeState {
+    /// The probe state a session serves its trees from.
+    ///
+    /// MERGEFIX: this constructor is the **only** way a session's probe state is
+    /// built, so the foreground tag it reads is by construction the one ATMS
+    /// writes. The merge of main into modules had two declarations (a wired one
+    /// and a default one) and the second shadowed the first, which silently
+    /// pinned `top_process` to 0: every tree reply described the primary
+    /// process, however far the foreground had moved (`mproc3-two-process`).
+    fn for_session(top_process: Arc<std::sync::atomic::AtomicU32>) -> Self {
+        Self {
+            top_process,
+            ..Self::default()
+        }
+    }
+
+    /// The tag this state treats as foreground (diagnostics/tests).
+    #[cfg(test)]
+    fn published_top(&self) -> u32 {
+        self.top_process.load(std::sync::atomic::Ordering::Relaxed)
+    }
 }
 
 /// W59 latency trace: `elapsed_us tag text` per line, written under one lock
@@ -2464,6 +3980,7 @@ fn write_session_exit(
         // `System.exit`, a kill) still has the framework's own logd trail and
         // its last stdout/stderr lines. Bounded, newest last.
         "logd_tail": logd_tail(&result.logs, 24),
+        "logd_final": FINAL_LOGD_FILE,
         "stdout_tail": stdout_tail(&result.stdout, 32),
         "stderr_tail": stdout_tail(&result.stderr, 16),
         "disk_free_bytes": disk_free_bytes(out),
@@ -2491,6 +4008,46 @@ fn write_session_exit(
         out.join("session-exit.json"),
         serde_json::to_vec_pretty(&doc).unwrap_or_default(),
     );
+    write_final_logd(out, &result.logs, logd_dropped(&result.notes));
+}
+
+/// Name of the full logd dump next to `session-exit.json` (JSON lines, one
+/// `{seq, prio, tag, message}` per entry, `seq` = 1-based ordinal in the guest's
+/// log sink). The verifier flushes the guest's log only *between steps*, so every
+/// entry written after the last flush -- and, for a guest that died, the entries
+/// that explain *why* (a native abort's assertion text) -- is otherwise lost
+/// from `logs/logcat.txt`. `acos verify` merges the entries it is missing.
+pub const FINAL_LOGD_FILE: &str = "logd-final.jsonl";
+
+/// Entries the sink dropped from the front (`logd: K entries kept of T (D
+/// dropped, ...)`), so a dump's `seq` stays the sink's absolute ordinal.
+fn logd_dropped(notes: &[String]) -> u64 {
+    notes
+        .iter()
+        .find(|n| n.starts_with("logd: "))
+        .and_then(|n| n.split('(').nth(1))
+        .and_then(|n| n.split_whitespace().next())
+        .and_then(|n| n.parse().ok())
+        .unwrap_or(0)
+}
+
+fn write_final_logd(out: &Path, logs: &[crate::LogEntry], dropped: u64) {
+    use std::io::Write as _;
+    let Ok(file) = fs::File::create(out.join(FINAL_LOGD_FILE)) else {
+        return;
+    };
+    let mut writer = std::io::BufWriter::new(file);
+    for (index, entry) in logs.iter().enumerate() {
+        let line = serde_json::json!({
+            "seq": dropped + index as u64 + 1,
+            "prio": entry.prio,
+            "tag": entry.tag,
+            "message": entry.message,
+            "ts_ms": entry.ts_ms,
+        });
+        let _ = writeln!(writer, "{line}");
+    }
+    let _ = writer.flush();
 }
 
 /// A panic inside the launcher is a harness bug and must leave a record with the
@@ -2751,6 +4308,8 @@ fn abi_gate_result(
         stderr: String::new(),
         logs: Vec::new(),
         heap: Some(crate::props::effective_heap_json()),
+        extra_packages: None,
+        processes: None,
         notes: vec![format!(
             "UNSUPPORTED_ABI: the APK ships native code only for [{}], and this engine is \
              {host_abi}-only; no guest was started (AOSP PackageManager refuses the same \
@@ -2798,6 +4357,8 @@ fn disk_full_result(opts: &LaunchOpts, package: &str, free: u64, min: u64) -> La
         stderr: String::new(),
         logs: Vec::new(),
         heap: Some(crate::props::effective_heap_json()),
+        extra_packages: None,
+        processes: None,
         notes: vec![format!(
             "HOST_DISK_FULL: {free} bytes free on the scratch filesystem, below \
              ACOS_ART_MIN_DISK_MB={} MiB; refusing to start a guest whose frames cannot be \
@@ -2810,11 +4371,15 @@ fn disk_full_result(opts: &LaunchOpts, package: &str, free: u64, min: u64) -> La
 }
 
 fn latest_probe(state: &Arc<std::sync::Mutex<ProbeState>>) -> Option<ProbeSample> {
+    let state = state.lock().unwrap_or_else(|e| e.into_inner());
+    let top = state.top_process.load(std::sync::atomic::Ordering::Relaxed);
     state
-        .lock()
-        .unwrap_or_else(|e| e.into_inner())
-        .latest
-        .clone()
+        .by_process
+        .get(&top)
+        .cloned()
+        // Before ATMS has a top (startup), the newest sample of any process is
+        // the only one there is; tag 0 is the launched app.
+        .or_else(|| state.latest.clone())
 }
 
 /// The newest guest `ACOSUNSUPPORTED` marker and its ordinal.
@@ -2865,8 +4430,9 @@ fn drain_stdout_lines<R: std::io::Read>(
     cap: usize,
     state: Arc<std::sync::Mutex<ProbeState>>,
     compositor: Option<Arc<std::sync::Mutex<acos_services::surface_client::SurfaceState>>>,
+    tag: u32,
 ) -> TailBuffer {
-    drain_tee_lines(reader, cap, &PathBuf::new(), state, compositor)
+    drain_tee_lines(reader, cap, &PathBuf::new(), state, compositor, tag)
 }
 
 /// Read one `\n`-terminated line, bounding the bytes held in memory.
@@ -2915,6 +4481,7 @@ fn drain_tee_lines<R: std::io::Read>(
     tee: &Path,
     state: Arc<std::sync::Mutex<ProbeState>>,
     compositor: Option<Arc<std::sync::Mutex<acos_services::surface_client::SurfaceState>>>,
+    tag: u32,
 ) -> TailBuffer {
     use std::io::Write;
     let mut tee_file = if tee.as_os_str().is_empty() {
@@ -3103,7 +4670,14 @@ fn drain_tee_lines<R: std::io::Read>(
                         set_animations_state(on);
                     }
                     let mut state = state.lock().unwrap_or_else(|e| e.into_inner());
-                    let newer = state.latest.as_ref().map(|p| p.seq < seq).unwrap_or(true);
+                    // MPROC7: rebase a (re)spawned process's own counter so the
+                    // session's probe sequence stays monotonic across a respawn.
+                    let seq = seq.saturating_add(state.seq_offsets.get(&tag).copied().unwrap_or(0));
+                    let newer = state
+                        .by_process
+                        .get(&tag)
+                        .map(|p| p.seq < seq)
+                        .unwrap_or(true);
                     if newer {
                         let at_ms = host_ms();
                         // SETTLE5 diagnostic: the host's own receipt time and
@@ -3129,7 +4703,7 @@ fn drain_tee_lines<R: std::io::Read>(
                                 ),
                             );
                         }
-                        state.latest = Some(ProbeSample {
+                        let sample = ProbeSample {
                             seq,
                             tree,
                             at_ms,
@@ -3140,8 +4714,18 @@ fn drain_tee_lines<R: std::io::Read>(
                             pending,
                             window_gone,
                             animations_on,
-                        });
+                        };
+                        state.by_process.insert(tag, sample.clone());
+                        // `latest` stays the newest sample of **any** process; it
+                        // is the pre-ATMS fallback and the startup loop's input.
+                        let newer_any = state.latest.as_ref().map(|p| p.seq < seq).unwrap_or(true);
+                        if newer_any {
+                            state.latest = Some(sample);
+                        }
                     } else {
+                        // SETTLE5: a sample the process itself has already
+                        // superseded is the evidence a `probe-floor` timeout
+                        // cites (the guest sent it, the wait ignored it).
                         state.stale_samples = state.stale_samples.saturating_add(1);
                         let latest = state
                             .latest
@@ -3539,6 +5123,181 @@ fn animations_state() -> Option<&'static str> {
     }
 }
 
+/// MPROC1: one session control op over a session service.
+///
+/// Only the `intents` module exists today (the capture target); any other
+/// `module`/`op` is a structured `UNSUPPORTED_ANDROID_API`, never a silent
+/// no-op. `op:"result"` also writes the scripted answer to
+/// `<staging>/activity-result.json`, which the guest's result watcher delivers
+/// as the framework's own `ActivityResultItem` transaction; the guest's ack is
+/// `<staging>/activity-result.ack`.
+fn session_ctl(
+    request: &serde_json::Value,
+    intents: &Arc<std::sync::Mutex<acos_services::intents::IntentState>>,
+    staging: &Path,
+    secondary: &mut SecondaryPool,
+) -> serde_json::Value {
+    let module = request.get("module").and_then(|v| v.as_str()).unwrap_or("");
+    let op = request.get("op").and_then(|v| v.as_str()).unwrap_or("");
+    // MPROC4 step 3b: the launcher's own view of the session's processes (tags,
+    // pids, packages, the spawn requests it served). The activity manager's
+    // `ProcessRecord` list is reported by the launch result.
+    if module == "processes" {
+        if op != "list" {
+            return serde_json::json!({
+                "ok": false, "cmd": "ctl", "module": module, "op": op,
+                "code": "BAD_REQUEST",
+                "error": format!("processes control op {op:?} does not exist (ops: list)"),
+            });
+        }
+        for record in secondary.reap() {
+            secondary.records.push(record);
+        }
+        let mut body = secondary.to_json();
+        body["ok"] = serde_json::json!(true);
+        body["cmd"] = serde_json::json!("ctl");
+        body["module"] = serde_json::json!(module);
+        body["op"] = serde_json::json!(op);
+        return body;
+    }
+    if module != "intents" {
+        return serde_json::json!({
+            "ok": false, "cmd": "ctl", "code": "UNSUPPORTED_ANDROID_API",
+            "module": module, "op": op,
+            "error": format!(
+                "no session service `{module}` is attached; the control modules this build \
+                 serves are `intents` (the intent capture target) and `processes` \
+                 (the launcher's process table)"
+            ),
+        });
+    }
+    let args = request
+        .get("args")
+        .cloned()
+        .unwrap_or(serde_json::Value::Null);
+    let mut state = intents.lock().unwrap_or_else(|e| e.into_inner());
+    match op {
+        "last" => serde_json::json!({
+            "ok": true, "cmd": "ctl", "module": module, "op": op,
+            "capture": state.last().map(|c| c.to_json()),
+        }),
+        "list" => serde_json::json!({
+            "ok": true, "cmd": "ctl", "module": module, "op": op,
+            "captures": state.list().iter().map(|c| c.to_json()).collect::<Vec<_>>(),
+        }),
+        "clear" => {
+            let cleared = state.clear();
+            serde_json::json!({
+                "ok": true, "cmd": "ctl", "module": module, "op": op, "cleared": cleared,
+            })
+        }
+        "result" => {
+            let str_arg = |key: &str| {
+                args.get(key)
+                    .and_then(serde_json::Value::as_str)
+                    .map(str::to_string)
+            };
+            let capture_seq = args.get("capture_seq").and_then(serde_json::Value::as_u64);
+            let result_code = args
+                .get("result_code")
+                .and_then(serde_json::Value::as_i64)
+                .and_then(|v| i32::try_from(v).ok());
+            let mut extras = std::collections::BTreeMap::new();
+            if let Some(map) = args.get("extras").and_then(serde_json::Value::as_object) {
+                for (key, value) in map {
+                    if let Some(text) = value.as_str() {
+                        extras.insert(key.clone(), text.to_string());
+                    } else {
+                        return serde_json::json!({
+                            "ok": false, "cmd": "ctl", "module": module, "op": op,
+                            "code": "BAD_REQUEST",
+                            "error": format!("extras.{key} must be a string"),
+                        });
+                    }
+                }
+            }
+            let scripted = match state.script_result(
+                capture_seq,
+                result_code,
+                str_arg("data"),
+                str_arg("mime_type"),
+                str_arg("action"),
+                extras,
+            ) {
+                Ok(scripted) => scripted,
+                Err(error) => {
+                    return serde_json::json!({
+                        "ok": false, "cmd": "ctl", "module": module, "op": op,
+                        "code": "BAD_REQUEST", "error": error.to_string(),
+                    })
+                }
+            };
+            // Hand it to the guest: the result file is the session's control
+            // channel (the guest reads only this run's own tree).
+            let path = staging.join("activity-result.json");
+            let doc = serde_json::json!({
+                "capture_seq": scripted.capture_seq,
+                "request_code": scripted.request_code,
+                "result_code": scripted.result_code,
+                "action": scripted.action,
+                "data": scripted.data,
+                "mime_type": scripted.mime_type,
+                "extras": scripted.extras,
+            });
+            let written = std::fs::write(&path, serde_json::to_vec(&doc).unwrap_or_default());
+            // Bound the wait for the guest's ack: a session whose guest is not
+            // running must say `delivered:false` instead of claiming a delivery.
+            let ack_path = staging.join("activity-result.ack");
+            let _ = std::fs::remove_file(&ack_path);
+            let deadline = std::time::Instant::now() + Duration::from_millis(2000);
+            let mut delivered = false;
+            if written.is_ok() {
+                while std::time::Instant::now() < deadline {
+                    if let Ok(text) = std::fs::read_to_string(&ack_path) {
+                        if serde_json::from_str::<serde_json::Value>(&text)
+                            .ok()
+                            .and_then(|v| v.get("capture_seq").and_then(serde_json::Value::as_u64))
+                            == Some(scripted.capture_seq)
+                        {
+                            delivered = true;
+                            break;
+                        }
+                    }
+                    std::thread::sleep(Duration::from_millis(20));
+                }
+            }
+            if delivered {
+                let _ = std::fs::remove_file(&path);
+                state.mark_delivered(scripted.capture_seq, acos_services::intents::now_ms());
+            }
+            // The reply names the record *after* the delivery mark, so a caller
+            // that only reads this reply sees the same `delivered`/`delivered_utc_ms`
+            // as a later `op:"last"`.
+            let mut result = state
+                .list()
+                .into_iter()
+                .find(|capture| capture.seq == scripted.capture_seq)
+                .and_then(|capture| capture.scripted_result.as_ref().map(|r| r.to_json()))
+                .unwrap_or_else(|| scripted.to_json());
+            result["delivered"] = serde_json::json!(delivered);
+            serde_json::json!({
+                "ok": true, "cmd": "ctl", "module": module, "op": op,
+                "result": result,
+                "delivered": delivered,
+                "control_file": path.display().to_string(),
+                "error": written.err().map(|e| e.to_string()),
+            })
+        }
+        other => serde_json::json!({
+            "ok": false, "cmd": "ctl", "module": module, "op": other,
+            "code": "BAD_REQUEST",
+            "error": format!(
+                "intents control op {other:?} does not exist (ops: last, list, clear, result)"
+            ),
+        }),
+    }
+}
+
 fn protocol_write(value: &serde_json::Value) {
     use std::io::Write;
     // P12: every reply for this session states the animation scales it ran
@@ -3654,6 +5413,10 @@ struct SettleTiming {
     pixels_changed: Option<bool>,
     /// ROT8: the step ended with the app's task finished (`window-gone`).
     task_finished: bool,
+    /// BACKSETTLE: `(window token, its stored frame number)` when the step bound
+    /// on a host-recorded window-forest change (the top window became an
+    /// existing window whose composited frame is complete) instead of a draw.
+    window_reshown: Option<(u64, u64)>,
 }
 
 /// REL3H: the settle `reason` of an input whose every published event the app
@@ -3787,6 +5550,218 @@ impl UnhandledSettleGate {
     }
 }
 
+/// BACKSETTLE: the LAYER1 window forest as the host observed it, plus the frame
+/// the compositor holds for the top window.
+///
+/// `order` is the `acos-wm` layer stack (bottom first, the same order
+/// composition, input and `assert_windows` read), `top_frame` is the newest
+/// buffer the C1 compositor stored for the top window's surface (the frame the
+/// host composites), and `generation` is C1's own store counter at that
+/// observation.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+struct WindowForest {
+    order: Vec<u64>,
+    top_frame: Option<u64>,
+    generation: u64,
+}
+
+impl WindowForest {
+    fn top(&self) -> Option<u64> {
+        self.order.last().copied()
+    }
+}
+
+/// Read the host's window forest: the LAYER1 stack plus the top window's stored
+/// frame.
+fn window_forest(live: &acos_services::registry::LiveHandles) -> WindowForest {
+    let order: Vec<u64> = {
+        let wms = live.wms.lock().unwrap_or_else(|e| e.into_inner());
+        wms.wm
+            .layer_stack()
+            .ordered()
+            .iter()
+            .map(|entry| entry.window)
+            .collect()
+    };
+    let (top_frame, generation) = {
+        let state = live.compositor.lock().unwrap_or_else(|e| e.into_inner());
+        let top_z = order.len().checked_sub(1).map(|index| index as i32);
+        let frame = top_z.and_then(|z| top_window_frame(&state, z));
+        (frame, state.latest_generation())
+    };
+    WindowForest {
+        order,
+        top_frame,
+        generation,
+    }
+}
+
+/// BACKSETTLE: the newest **complete** buffer stored for the top window's layer
+/// subtree - the frame the host composites on top of the display.
+///
+/// The window's own `SurfaceControl` layer carries the WMS placement
+/// (`placement.z` is the LAYER1 stack index) but the pixels arrive on its BLAST
+/// child layers, so the frame is looked up in the subtree rather than on the
+/// root record alone. A hidden layer is not composited and a layer without a
+/// stored buffer has no frame, so `None` here means "no frame the host could
+/// have composited" - the placeholder this rule must never bind.
+fn top_window_frame(state: &acos_services::surface_client::SurfaceState, top_z: i32) -> Option<u64> {
+    let root = state
+        .layers()
+        .find(|layer| !layer.hidden && layer.placement.map(|placement| placement.z) == Some(top_z))?;
+    let mut subtree = vec![root.handle.0];
+    // Walk the parent links until no new child appears (BLAST children are
+    // direct, a deeper buffer chain is followed too).
+    loop {
+        let mut grew = false;
+        for layer in state.layers() {
+            let handle = layer.handle.0;
+            if subtree.contains(&handle) {
+                continue;
+            }
+            if layer.parent.is_some_and(|parent| subtree.contains(&parent.0)) {
+                subtree.push(handle);
+                grew = true;
+            }
+        }
+        if !grew {
+            break;
+        }
+    }
+    state
+        .layers()
+        .filter(|layer| !layer.hidden && subtree.contains(&layer.handle.0))
+        .filter_map(|layer| {
+            layer.latest.as_ref().and_then(|buffer| {
+                (buffer.frame_number > 0 && buffer.width > 0 && buffer.height > 0)
+                    .then_some((layer.latest_generation, buffer.frame_number))
+            })
+        })
+        .max_by_key(|(generation, _)| *generation)
+        .map(|(_, frame)| frame)
+}
+
+/// BACKSETTLE: settle on a host-recorded window-forest change.
+///
+/// Back can end in a screen transition the app does not draw: the framework
+/// finishes the top Activity and the window below - which is still alive, its
+/// surface still holding its last drawn frame - becomes the top window again.
+/// Nothing in the guest traverses or draws, so the strict rule's
+/// "a draw after the action" requirement could only time out
+/// (`no-draw-after-action`) on an honest, fully composited screen.
+///
+/// The observable effect of that action **is** the window-forest change, and it
+/// is a host fact the settle can require:
+///
+/// * the top window changed to a window that **already existed** when the
+///   gesture's acks had all arrived (the baseline is taken at the ack, so a
+///   change that landed before it can never bind: it is not this action's),
+/// * that window's frame is the one the host composites - its surface stored a
+///   complete buffer and the layer is visible (no placeholder binds; the
+///   ADR-0032 amendment 1 rule still applies unchanged, the guest tree of the
+///   now-top window is part of the bind),
+/// * the change stays the newest fact for one confirmation window
+///   (`ACOS_STRICT_SETTLE_CONFIRM_MS`, the strict rule's own window) **and no
+///   newer C1 store landed**: if the app does draw afterwards within the
+///   settle window, that newer frame wins and the normal rule binds it,
+/// * the guest sample that supplies the tree is newer than the change and is
+///   not the empty `window_gone` forest.
+///
+/// A window this action *created* becoming top is not a re-show: it has no
+/// frame yet, and its draw is what the normal strict rule waits for.
+#[derive(Debug)]
+struct WindowReshownGate {
+    baseline: WindowForest,
+    confirm: Duration,
+    /// `(top window, its frame, when it was first seen)` of the candidate.
+    candidate: Option<(u64, u64, Instant)>,
+    /// The first host time the changed top window was observed.
+    changed_at_ms: Option<u64>,
+}
+
+/// What [`WindowReshownGate`] decided about one observation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ReshownOutcome {
+    /// Bind `(window token, its stored frame number)`.
+    Bind(u64, u64),
+    /// Keep waiting; the string is the settle trace's `last_reason`.
+    Wait(&'static str),
+}
+
+impl WindowReshownGate {
+    fn new(baseline: WindowForest, confirm: Duration) -> Self {
+        WindowReshownGate {
+            baseline,
+            confirm,
+            candidate: None,
+            changed_at_ms: None,
+        }
+    }
+
+    /// Judge the forest now. `None` means the caller must not bind on this
+    /// observation and should let the shipped rule decide.
+    fn observe(&mut self, forest: &WindowForest, now: Instant, now_ms: u64) -> ReshownOutcome {
+        let Some(top) = forest.top() else {
+            self.candidate = None;
+            return ReshownOutcome::Wait(WINDOW_GONE_REASON);
+        };
+        if forest == &self.baseline {
+            self.candidate = None;
+            return ReshownOutcome::Wait(WINDOW_UNCHANGED_REASON);
+        }
+        if Some(top) == self.baseline.top() {
+            // The forest changed below the top (a window was added below, or a
+            // sibling went away): the top window did not change, so this is not
+            // a re-show.
+            self.candidate = None;
+            return ReshownOutcome::Wait(WINDOW_SAME_TOP_REASON);
+        }
+        if !self.baseline.order.contains(&top) {
+            // A window that did not exist at the ack became top: a new window,
+            // whose draw the normal rule waits for.
+            self.candidate = None;
+            return ReshownOutcome::Wait(WINDOW_NEW_TOP_REASON);
+        }
+        let Some(frame) = forest.top_frame else {
+            // The re-shown window has no complete stored frame: binding its
+            // "frame" would be a placeholder claim.
+            self.candidate = None;
+            return ReshownOutcome::Wait(WINDOW_NO_FRAME_REASON);
+        };
+        if forest.generation != self.baseline.generation {
+            // The app drew after the action: that newer frame is the settle's
+            // frame (the shipped rule binds it), never the re-shown one.
+            self.candidate = None;
+            return ReshownOutcome::Wait(WINDOW_SUPERSEDED_REASON);
+        }
+        match self.candidate {
+            Some((window, seen_frame, since)) if window == top && seen_frame == frame => {
+                if now.saturating_duration_since(since) >= self.confirm {
+                    ReshownOutcome::Bind(top, frame)
+                } else {
+                    ReshownOutcome::Wait(WINDOW_CONFIRM_REASON)
+                }
+            }
+            _ => {
+                self.candidate = Some((top, frame, now));
+                if self.changed_at_ms.is_none() {
+                    self.changed_at_ms = Some(now_ms);
+                }
+                ReshownOutcome::Wait(WINDOW_CONFIRM_REASON)
+            }
+        }
+    }
+}
+
+/// BACKSETTLE: settle trace reasons (never user-visible on their own).
+const WINDOW_UNCHANGED_REASON: &str = "window-unchanged";
+const WINDOW_SAME_TOP_REASON: &str = "window-same-top";
+const WINDOW_NEW_TOP_REASON: &str = "window-new-top";
+const WINDOW_NO_FRAME_REASON: &str = "window-frame-missing";
+const WINDOW_SUPERSEDED_REASON: &str = "window-reshown-superseded";
+const WINDOW_CONFIRM_REASON: &str = "window-reshown-confirm";
+const WINDOW_GONE_REASON: &str = "window-forest-empty";
+
 /// REL3H2: settle trace reason - the sample predates the gesture's last ack.
 const UNHANDLED_ACK_FLOOR_REASON: &str = "unhandled-ack-floor";
 /// REL3H2: settle trace reason - the confirmation window has not elapsed.
@@ -3809,6 +5784,17 @@ impl SettleTiming {
             if let Some(map) = value.as_object_mut() {
                 map.insert("task_finished".into(), serde_json::json!(true));
                 map.insert("window_gone".into(), serde_json::json!(true));
+            }
+        }
+        if let Some((token, frame)) = self.window_reshown {
+            if let Some(map) = value.as_object_mut() {
+                // The token names the window that is on top now; the frame is
+                // the one C1 holds for it (the frame the host composites).
+                map.insert("window_reshown".into(), serde_json::json!(format!("{token:#x}")));
+                map.insert(
+                    "window_reshown_frame".into(),
+                    serde_json::json!(frame),
+                );
             }
         }
         if let Some(rule) = self.rule {
@@ -3933,6 +5919,11 @@ fn wait_for_event_settled(
     // ack of the same gesture said `finishInputEvent(handled) = false`; the
     // window it acted on is gone, so it is never reported `INPUT_UNHANDLED`.
     window_removal: Option<(acos_parcel::BinderId, u64)>,
+    // BACKSETTLE: the host's window forest at the moment this gesture's acks had
+    // all arrived. `Some` only for a strict input action; a top-window change
+    // away from that baseline may settle the step as `window_reshown` (see
+    // [`WindowReshownGate`]). `None` keeps every other caller byte-identical.
+    window_reshown: Option<WindowForest>,
 ) -> SettleEnd {
     let confirm = Duration::from_millis(env_u64("ACOS_STRICT_SETTLE_CONFIRM_MS", 24));
     // Owner decision (2026-11-12): the pixel-unchanged guard is OFF by default.
@@ -4001,6 +5992,9 @@ fn wait_for_event_settled(
     // entry, so the ack floor is a fixed point: samples older than it are never
     // eligible, however long the wait runs.
     let mut unhandled_gate = unhandled_ack_floor.map(|floor| UnhandledSettleGate::new(floor, confirm));
+    // BACKSETTLE: the baseline is the forest at the ack, so a change that landed
+    // before the action's input ack can never bind (it is not this action's).
+    let mut reshown_gate = window_reshown.map(|baseline| WindowReshownGate::new(baseline, confirm));
     let mut first_change_ms: Option<u64> = None;
     let mut last_reason = String::from("no-probe");
     let mut last_pixels_changed: Option<bool> = None;
@@ -4010,6 +6004,10 @@ fn wait_for_event_settled(
     // a sample the host ignored. Trace-only (`ACOS_ART_INPUT_TRACE`); no reply
     // changes.
     let mut traced_reason = String::new();
+    // BACKSETTLE: the window-forest observation's own trace line follows the same
+    // rule (only when its decision changes), so a `window-reshown` bind and the
+    // draw that superseded it are both readable in the session trace.
+    let mut traced_forest_reason = String::new();
     trace_host(
         probe_state,
         &format!(
@@ -4053,6 +6051,53 @@ fn wait_for_event_settled(
         // not because the app drew.
         let removal_binds = window_removal
             .is_some_and(|(token, mark)| live.input.window_removed_since(token, mark));
+        // BACKSETTLE: judge the host's window forest once per observation. The
+        // gate is only built for an input action whose acks had all arrived
+        // before the wait began (`window_reshown`), so a tree/launch wait keeps
+        // its shipped semantics exactly.
+        let forest = match reshown_gate {
+            Some(_) => window_forest(live),
+            None => WindowForest::default(),
+        };
+        let reshown = reshown_gate
+            .as_mut()
+            .map(|gate| gate.observe(&forest, Instant::now(), host_ms()));
+        let reshown_changed_at = reshown_gate
+            .as_ref()
+            .and_then(|gate| gate.changed_at_ms)
+            .unwrap_or(u64::MAX);
+        if let Some(outcome) = reshown {
+            let reason = match outcome {
+                ReshownOutcome::Bind(token, frame) => format!("bind {token:#x}/{frame}"),
+                ReshownOutcome::Wait(reason) => reason.to_string(),
+            };
+            if reason != traced_forest_reason {
+                traced_forest_reason = reason.clone();
+                trace_host(
+                    probe_state,
+                    &format!(
+                        "settle forest reason={reason} top={} frame={:?} gen={} base_top={} \
+                         base_gen={} changed_at={}",
+                        forest
+                            .top()
+                            .map(|token| format!("{token:#x}"))
+                            .unwrap_or_else(|| "none".into()),
+                        forest.top_frame,
+                        forest.generation,
+                        reshown_gate
+                            .as_ref()
+                            .and_then(|gate| gate.baseline.top())
+                            .map(|token| format!("{token:#x}"))
+                            .unwrap_or_else(|| "none".into()),
+                        reshown_gate
+                            .as_ref()
+                            .map(|gate| gate.baseline.generation)
+                            .unwrap_or(0),
+                        reshown_changed_at,
+                    ),
+                );
+            }
+        }
         let mut valid: Option<ProbeSample> = None;
         match &probe {
             None => last_reason = "no-probe".to_string(),
@@ -4085,6 +6130,7 @@ fn wait_for_event_settled(
                         reason: None,
                         pixels_changed: Some(false),
                         task_finished: true,
+                        window_reshown: None,
                     };
                     trace_host(
                         probe_state,
@@ -4133,6 +6179,7 @@ fn wait_for_event_settled(
                             reason: None,
                             pixels_changed: None,
                             task_finished: false,
+                            window_reshown: None,
                         };
                         trace_host(
                             probe_state,
@@ -4155,6 +6202,57 @@ fn wait_for_event_settled(
                         .first()
                         .cloned()
                         .unwrap_or_else(|| "unsettled".to_string());
+                } else if let Some((token, frame)) =
+                    reshown_bind(reshown, sample, reshown_changed_at)
+                {
+                    // BACKSETTLE: this action's observable effect is the host's
+                    // own window-forest fact (the top window became an existing
+                    // window whose frame is complete), and the app has not drawn
+                    // since. Bind that state, with the guest tree of the now-top
+                    // window, instead of charging the action a draw it never
+                    // owed. When the gate does not bind, the shipped arms below
+                    // decide exactly as before.
+                    //
+                    // `pixels_changed` is measured against the caller's
+                    // pre-action capture exactly like the shipped rule measures
+                    // it, so `expect_change: true` still has to earn its pass on
+                    // this bind (`false` fails it).
+                    let pixels_changed = match previous_fnv {
+                        None => true,
+                        Some(previous) => {
+                            let current = {
+                                let state =
+                                    live.compositor.lock().unwrap_or_else(|e| e.into_inner());
+                                state.capture_latest().map(|c| c.fnv1a)
+                            };
+                            current != Some(previous) && current.is_some()
+                        }
+                    };
+                    let timing = SettleTiming {
+                        mode: SettleMode::Strict,
+                        first_change_ms: Some(sample.at_ms.saturating_sub(publish_epoch_ms)),
+                        frame_ms: None,
+                        state_changed: None,
+                        bound: "window-reshown",
+                        rule: Some("event"),
+                        reason: None,
+                        pixels_changed: Some(pixels_changed),
+                        task_finished: false,
+                        window_reshown: Some((token, frame)),
+                    };
+                    trace_host(
+                        probe_state,
+                        &format!(
+                            "settle window-reshown ready gen={generation} probe_seq={} \
+                             window={token:#x} frame={frame}",
+                            sample.seq
+                        ),
+                    );
+                    return SettleEnd::Settled(Settled {
+                        probe: sample.clone(),
+                        generation,
+                        timing,
+                    });
                 } else if publish_epoch_ms != 0
                     && sample.draw_ms < publish_epoch_ms
                     && !removal_binds
@@ -4218,6 +6316,7 @@ fn wait_for_event_settled(
                             reason: Some(SETTLE_UNHANDLED_INPUT.to_string()),
                             pixels_changed: Some(pixels_changed),
                             task_finished: false,
+                            window_reshown: None,
                         };
                         trace_host(
                             probe_state,
@@ -4310,6 +6409,7 @@ fn wait_for_event_settled(
                         reason: None,
                         pixels_changed: last_pixels_changed,
                         task_finished: false,
+                        window_reshown: None,
                     };
                     trace_host(
                         probe_state,
@@ -4424,6 +6524,7 @@ fn wait_for_event_settled(
                     reason: Some(last_reason),
                     pixels_changed: Some(pixels_changed),
                     task_finished: false,
+                    window_reshown: None,
                 },
             };
         }
@@ -4474,6 +6575,8 @@ fn wait_for_settled_observation(
     // it; `None` keeps the strict draw requirement for every other caller.
     // Precedence over the unhandled shortcut: see [`wait_for_event_settled`].
     window_removal: Option<(acos_parcel::BinderId, u64)>,
+    // BACKSETTLE: see [`wait_for_event_settled`].
+    window_reshown: Option<WindowForest>,
 ) -> SettleEnd {
     if mode == SettleMode::Strict {
         return wait_for_event_settled(
@@ -4491,6 +6594,7 @@ fn wait_for_settled_observation(
             unhandled_ack_floor,
             entry_fnv,
             window_removal,
+            window_reshown,
         );
     }
     // ---- fast (P1): first probe tree that differs from the pre-action baseline.
@@ -4617,6 +6721,7 @@ fn wait_for_settled_observation(
                 reason: None,
                 pixels_changed: None,
                 task_finished: false,
+                window_reshown: None,
             };
             trace_host(
                 probe_state,
@@ -4679,6 +6784,7 @@ fn wait_for_settled_observation(
                         reason: None,
                         pixels_changed: None,
                         task_finished: false,
+                        window_reshown: None,
                     };
                     trace_host(
                         probe_state,
@@ -4713,6 +6819,7 @@ fn wait_for_settled_observation(
                     reason: None,
                     pixels_changed: None,
                     task_finished: false,
+                    window_reshown: None,
                 },
             };
         }
@@ -4778,6 +6885,43 @@ fn sample_own_draw_is_stored(
 /// involved: that is the strict rule, unchanged.
 /// ROT8: a sample proves the task finished only when the guest says so AND it
 /// is internally consistent: settled, with an empty window forest.
+/// BACKSETTLE: `true` when the sample's tree has no node at all (an empty
+/// window forest). A `window_reshown` bind needs the tree of the now-top window,
+/// so an empty forest is never its evidence.
+fn tree_is_empty(tree: &serde_json::Value) -> bool {
+    tree.get("nodes")
+        .and_then(|nodes| nodes.as_array())
+        .map(|nodes| nodes.is_empty())
+        .unwrap_or(true)
+}
+
+/// BACKSETTLE: may this observation bind as `window-reshown`?
+///
+/// The gate decides the forest fact (a stable change to an existing top window
+/// with a complete composited frame); this adds the observation half: the sample
+/// must be **settled** (the guest has no pending traversal, so its tree is the
+/// state the screen is in), newer than the change, and its tree must be the one
+/// of the now-top window (non-empty, not a finished task). Anything less keeps
+/// the shipped rule in charge: an unsettled sample is a screen in motion, never
+/// evidence that this action's effect is complete.
+fn reshown_bind(
+    outcome: Option<ReshownOutcome>,
+    sample: &ProbeSample,
+    changed_at_ms: u64,
+) -> Option<(u64, u64)> {
+    match outcome {
+        Some(ReshownOutcome::Bind(token, frame))
+            if sample.settled
+                && sample.at_ms >= changed_at_ms
+                && !sample.window_gone
+                && !tree_is_empty(&sample.tree) =>
+        {
+            Some((token, frame))
+        }
+        _ => None,
+    }
+}
+
 fn window_gone_shape(sample: &ProbeSample) -> bool {
     sample.window_gone
         && sample.settled
@@ -5055,6 +7199,10 @@ enum ServeEvent {
     Line(Option<String>),
     /// The guest process has exited (it is still waitable: `WNOWAIT`).
     ChildExited,
+    /// MPROC4 step 3b: the peer resolved a component of a package that needs a
+    /// process. The launcher owns the processes, so the request is handled on
+    /// this thread like any other session event.
+    Spawn(acos_services::ams::ProcessSpawnRequest),
 }
 
 /// VIEW1a: the live-view frame source.
@@ -5156,6 +7304,17 @@ fn interactive_serve(
     // bind-mounted into the guest, unlike the session's `/dev/socket`
     // directory); the live-view stream socket `view.sock` is bound there.
     sockets: &Path,
+    // ADR-0029 item 4: the attached modules at launch (ready line), and the
+    // channel to the peer thread for live attach/detach.
+    modules: &[serde_json::Value],
+    control: &ServiceControl,
+    // MPROC4 step 3b: the session's secondary processes, and the spawn requests
+    // the peer thread hands over.
+    secondary: &mut SecondaryPool,
+    spawn_rx: mpsc::Receiver<acos_services::ams::ProcessSpawnRequest>,
+    // MPROC5c: how long a lazily spawned process may hold nothing before it is
+    // killed (stock cached-process policy); `0` disables the kill.
+    idle_kill: Duration,
 ) -> std::io::Result<SessionEnd> {
     let mut evidence: Vec<serde_json::Value> = Vec::new();
     let mut captures = 0u64;
@@ -5347,6 +7506,7 @@ fn interactive_serve(
     let ready = serde_json::json!({
         "ok": true,
         "cmd": "ready",
+        "modules": modules,
         "package": package,
         "activity": activity.unwrap_or(""),
         // VIEW1a: the live-view stream socket (`docs/LIVE_VIEW.md`), null when
@@ -5404,6 +7564,19 @@ fn interactive_serve(
             }
         }
     });
+    // MPROC4 step 3b: spawn requests arrive on their own channel; forwarding
+    // them into the session's event channel keeps one event loop (no second
+    // poll path, no ordering question between a spawn and the next command).
+    {
+        let spawn_ctx = ctx.clone();
+        std::thread::spawn(move || {
+            while let Ok(request) = spawn_rx.recv() {
+                if spawn_ctx.send(ServeEvent::Spawn(request)).is_err() {
+                    return;
+                }
+            }
+        });
+    }
     // H4: child exit is a blocking kernel event, not a 100 ms poll. `WNOWAIT`
     // leaves the child reapable, so the existing `child.try_wait()`/`wait()`
     // paths still own the status and no error is retried twice.
@@ -5438,7 +7611,33 @@ fn interactive_serve(
     let mut last_capture_fnv: Option<u64> = None;
     loop {
         let deadline_left = session_deadline.saturating_duration_since(Instant::now());
-        let line = match crx.recv_timeout(deadline_left) {
+        // A secondary guest that ended by itself is evidence, not a running
+        // process: reap it before the next event is served.
+        for record in secondary.reap() {
+            evidence.push(record);
+        }
+        // MPROC5c: the idle kill runs before every wait, and the wait itself is
+        // bounded by the next idle deadline, so an idle process is killed on
+        // time without a polling timer.
+        for record in secondary.idle_kill(idle_kill, &live.atms, &live.wms) {
+            evidence.push(record);
+        }
+        let mut wait = deadline_left;
+        if !idle_kill.is_zero() {
+            let next_idle = live
+                .atms
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .next_idle_deadline(idle_kill);
+            if let Some(deadline) = next_idle {
+                wait = wait.min(deadline.saturating_duration_since(Instant::now()));
+            }
+        }
+        let line = match crx.recv_timeout(wait) {
+            Ok(ServeEvent::Spawn(request)) => {
+                secondary.spawn(&request, probe_state, Arc::clone(&live.compositor));
+                continue;
+            }
             Ok(ServeEvent::Line(line)) => line,
             Ok(ServeEvent::ChildExited) => {
                 if let Some(d) = dog {
@@ -5475,6 +7674,11 @@ fn interactive_serve(
             }
             Err(mpsc::RecvTimeoutError::Disconnected) => None,
             Err(mpsc::RecvTimeoutError::Timeout) => {
+                // An idle-kill wake is not the session cap: sweep (the next
+                // iteration does that) and keep serving.
+                if Instant::now() < session_deadline {
+                    continue;
+                }
                 // The only periodic bound left is the 900 s session cap.
                 kill_guest(child, cgroup);
                 let reply = serde_json::json!({
@@ -5648,6 +7852,7 @@ fn interactive_serve(
                         // A tree request publishes no input, so no gesture's
                         // acks can make it an unhandled-input settle (REL3H)
                         // and no delivered token can have been removed (REL3I3).
+                        None,
                         None,
                         None,
                         None,
@@ -5990,9 +8195,16 @@ fn interactive_serve(
                     .get("rotation")
                     .and_then(|v| v.as_i64())
                     .or_else(|| {
-                        request.get("orientation").and_then(|v| v.as_str()).map(|o| {
-                            if o.eq_ignore_ascii_case("landscape") { 1 } else { 0 }
-                        })
+                        request
+                            .get("orientation")
+                            .and_then(|v| v.as_str())
+                            .map(|o| {
+                                if o.eq_ignore_ascii_case("landscape") {
+                                    1
+                                } else {
+                                    0
+                                }
+                            })
                     });
                 let Some(rotation) = rotation.filter(|r| (0..=3).contains(r)) else {
                     let reply = serde_json::json!({
@@ -6069,6 +8281,21 @@ fn interactive_serve(
                         }
                     }
                 }
+            }
+            "services" => {
+                // ADR-0029 item 4: list/status/attach/detach on the live
+                // session. The peer thread owns the host, so the request is
+                // handed to it and its answer is forwarded verbatim (a refusal
+                // for an `at-launch` module is the peer's structured error).
+                let reply = match control.submit(request.clone(), Duration::from_secs(10)) {
+                    Some(reply) => reply,
+                    None => serde_json::json!({
+                        "ok": false, "cmd": "services", "code": "SERVICE_CONTROL_TIMEOUT",
+                        "error": "the peer thread did not answer the module request within 10 s",
+                    }),
+                };
+                protocol_write(&reply);
+                evidence.push(reply);
             }
             "tap" | "key" | "type_text" | "swipe" => {
                 let text_arg = request
@@ -6216,6 +8443,19 @@ fn interactive_serve(
                 // v0.3.0 M8 regression. See `unhandled_entry_fnv` below for where
                 // the value is taken now and why moving it changes nothing.
                 let injected = match (cmd, key_code) {
+                    // WVTAP: one input routing rule, owned by `InputHost`:
+                    //   * touch (tap, swipe) goes to the window **under the
+                    //     point** (`InputDispatcher::findTouchedWindowAt`: the
+                    //     topmost touchable window containing it), and the
+                    //     point is converted into that window's space;
+                    //   * keys/text go to the **focused** window
+                    //     (`dispatchKeyLocked`).
+                    // The request carries **display** coordinates (the same
+                    // space the UI tree reports). Choosing the target here as
+                    // well would be a second implementation of the rule; this
+                    // arm used to be a dead duplicate of the `hit_test` one
+                    // below it, and `swipe` went to the focused window (a
+                    // touch routed by focus).
                     ("tap", _) => live.input.tap(x, y, ack_wait),
                     ("swipe", _) => live
                         .input
@@ -6308,6 +8548,12 @@ fn interactive_serve(
                     }
                     _ => None,
                 };
+                // BACKSETTLE: the window forest as it is **now** - every ack of
+                // this gesture has arrived (the collect above returned), so a
+                // top-window change observed later is this gesture's, and one
+                // that already happened is not. Strict inputs only: `fast` is a
+                // navigation rule that never binds a frame.
+                let window_reshown = (mode == SettleMode::Strict).then(|| window_forest(live));
                 let settled = wait_for_settled_observation(
                     child,
                     cgroup,
@@ -6325,6 +8571,7 @@ fn interactive_serve(
                     unhandled_ack_floor,
                     entry_fnv,
                     Some((injected.token, removal_mark)),
+                    window_reshown,
                 );
                 let (settled_probe, g1, p1, settle_timing) = match settled {
                     SettleEnd::Settled(settled) => (
@@ -6658,6 +8905,16 @@ fn interactive_serve(
                     "total": stats.total, "kept": entries.len(), "dropped": stats.dropped,
                 }));
             }
+            // MPROC1: the session control op (`acos_service_ctl`). The capture
+            // target is a session service, so the agent reads and scripts it
+            // through here: `{cmd:"ctl", module:"intents", op:"last"|"list"|
+            // "clear"|"result"}`. It never fabricates a handler: a capture says
+            // `handled_by:"captured"`.
+            "ctl" => {
+                let reply = session_ctl(&request, &live.intents, &staging, secondary);
+                protocol_write(&reply);
+                evidence.push(reply);
+            }
             "reset" => {
                 let reply = serde_json::json!({
                     "ok": false, "cmd": "reset", "code": "UNSUPPORTED_ANDROID_API",
@@ -6861,7 +9118,11 @@ fn encode_png_rgba_into(
         "art.encode_idat_chunk",
         t_deflate,
         m5_now_us(),
-        &format!("chunks={} body_bytes={}", zlib.len().div_ceil(IDAT_CHUNK), zlib.len()),
+        &format!(
+            "chunks={} body_bytes={}",
+            zlib.len().div_ceil(IDAT_CHUNK),
+            zlib.len()
+        ),
     );
     png_chunk(sink, b"IEND", &[], crc32);
     m5_trace(
@@ -6904,9 +9165,7 @@ fn zlib_stored_rows(out: &mut Vec<u8>, width: u32, height: u32, stride: u32, rgb
             let byte = if within == 0 {
                 0
             } else {
-                let at = y
-                    .saturating_mul(stride_bytes)
-                    .saturating_add(within - 1);
+                let at = y.saturating_mul(stride_bytes).saturating_add(within - 1);
                 if y < height as usize && within - 1 < row && at < rgba.len() {
                     rgba[at]
                 } else {
@@ -7224,8 +9483,89 @@ fn meta_spec(entries: &[acos_services::pms::MetaDataEntry]) -> String {
         .join(";")
 }
 
+/// ADR-0029 item 4: live module attach/detach crosses from the interactive
+/// command loop (the thread that answers the caller) to the peer thread (the
+/// only owner of the `ServiceHost`). One request/reply pair per call, bounded
+/// by a deadline; a peer that cannot answer in time is a structured error, never
+/// a silent success.
+#[derive(Default)]
+struct ServiceControl {
+    requests: Mutex<Vec<(u64, serde_json::Value)>>,
+    replies: Mutex<HashMap<u64, serde_json::Value>>,
+    next_id: AtomicU64,
+    reply_cv: Condvar,
+    /// The peer's wake-pipe write end (`-1` until the launcher installs it). A
+    /// request must wake the peer's idle `poll(2)`: with no timed module the peer
+    /// sleeps until the guest speaks, so a queued request would otherwise wait
+    /// for a frame that never comes.
+    wake: std::sync::atomic::AtomicI32,
+}
+
+impl ServiceControl {
+    fn set_wake(&self, fd: RawFd) {
+        self.wake.store(fd, Ordering::Release);
+    }
+}
+
+impl ServiceControl {
+    fn submit(&self, request: serde_json::Value, timeout: Duration) -> Option<serde_json::Value> {
+        let id = self.next_id.fetch_add(1, Ordering::Relaxed) + 1;
+        self.requests
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .push((id, request));
+        let wake = self.wake.load(Ordering::Acquire);
+        if wake >= 0 {
+            let byte = 1u8;
+            unsafe {
+                libc::write(wake, (&byte as *const u8).cast::<libc::c_void>(), 1);
+            }
+        }
+        let deadline = Instant::now() + timeout;
+        let mut replies = self.replies.lock().unwrap_or_else(|e| e.into_inner());
+        loop {
+            if let Some(reply) = replies.remove(&id) {
+                return Some(reply);
+            }
+            let now = Instant::now();
+            if now >= deadline {
+                return None;
+            }
+            let (guard, _) = self
+                .reply_cv
+                .wait_timeout(replies, deadline - now)
+                .unwrap_or_else(|e| e.into_inner());
+            replies = guard;
+        }
+    }
+
+    /// Peer-thread side: the oldest pending request, if any.
+    fn take(&self) -> Option<(u64, serde_json::Value)> {
+        let mut requests = self.requests.lock().unwrap_or_else(|e| e.into_inner());
+        if requests.is_empty() {
+            None
+        } else {
+            Some(requests.remove(0))
+        }
+    }
+
+    /// Peer-thread side: publish the answer and wake the caller.
+    fn reply(&self, id: u64, value: serde_json::Value) {
+        self.replies
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert(id, value);
+        self.reply_cv.notify_all();
+    }
+}
+
 #[derive(Default)]
 struct PeerSummary {
+    /// MPROC4 step 3b: the activity manager's process list at the end of the
+    /// session (`tag`, package, uid, pid, app thread, attached).
+    processes: Vec<serde_json::Value>,
+    /// Spawn requests the peer handed to the launcher.
+    spawn_requests: u64,
     calls: Vec<ServiceCall>,
     unsupported: Vec<UnsupportedCall>,
     bind_bytes: Option<usize>,
@@ -7238,173 +9578,209 @@ struct PeerSummary {
     resource_limits: u64,
 }
 
-fn serve(
+/// One `{"cmd":"services", ...}` operation against the peer thread's host.
+///
+/// `list`/`status` are read-only. `attach`/`detach` go through
+/// `attach_live`/`detach_live`, which refuse an `at-launch` module with the
+/// launch call in the message; a refusal is never turned into a success.
+fn service_request(
     peer: &mut Peer,
-    fd: RawFd,
-    stop: &AtomicBool,
-    wake: RawFd,
-    change: &ProbeWake,
-) -> std::io::Result<()> {
-    let dbg = std::env::var_os("ACOS_PEER_DEBUG").is_some();
-    loop {
-        // REL3I3: the idle turn waits for whichever comes first — a guest frame,
-        // a queued delivery's deadline, or the launcher's wake (stop, or a
-        // producer that queued a `system -> app` delivery no transaction will
-        // carry). With nothing queued and nothing to stop for, the wait is
-        // unbounded: an idle session has zero wakeups. The old shape blocked in
-        // `recvmsg` on a 1 s `SO_RCVTIMEO` and used that tick as its only drain,
-        // so an IME hide driven by a key reached the app up to a second late.
-        let deadline = peer
-            .next_timed_deadline()
-            .map(|due| due.saturating_duration_since(Instant::now()));
-        match wait_for_idle(fd, wake, deadline)? {
-            IdleWake::Wake => {
-                // Drain the wakeup bytes: the delivery queue is the state, the
-                // byte is only the edge (a byte left behind would spin this
-                // loop on a flush that finds nothing).
-                let mut buf = [0u8; 64];
-                loop {
-                    let read = unsafe {
-                        libc::read(wake, buf.as_mut_ptr().cast::<libc::c_void>(), buf.len())
-                    };
-                    if read <= 0 {
-                        break;
+    modules: &mut acos_services::module::ModuleRegistry,
+    request: &serde_json::Value,
+) -> serde_json::Value {
+    let op = request.get("op").and_then(|v| v.as_str()).unwrap_or("");
+    let result = match op {
+        "list" | "status" => Ok(serde_json::json!({
+            "attached": modules.attached().iter().map(|(id, profile)| serde_json::json!({
+                "id": id,
+                "profile": profile.as_str(),
+            })).collect::<Vec<_>>(),
+            "modules": modules.verdict_modules(),
+        })),
+        "attach" => {
+            let Some(id) = request.get("id").and_then(|v| v.as_str()) else {
+                return serde_json::json!({
+                    "ok": false, "cmd": "services", "code": "BAD_REQUEST",
+                    "error": "attach needs a string `id`",
+                });
+            };
+            let profile = match request.get("profile").and_then(|v| v.as_str()) {
+                None => acos_services::module::Profile::Real,
+                Some(name) => match acos_services::module::Profile::parse(name) {
+                    Some(profile) => profile,
+                    None => {
+                        return serde_json::json!({
+                            "ok": false, "cmd": "services", "code": "BAD_REQUEST",
+                            "error": format!("unknown profile {name:?}"),
+                        })
+                    }
+                },
+            };
+            let config = match request.get("config") {
+                None => acos_services::module::ModuleConfig::default(),
+                Some(value) => {
+                    match acos_services::module::ModuleConfig::from_json("<live>", value) {
+                        Ok(config) => config,
+                        Err(error) => {
+                            return serde_json::json!({
+                                "ok": false, "cmd": "services", "code": "BAD_REQUEST",
+                                "error": error.to_string(),
+                            })
+                        }
                     }
                 }
-                if stop.load(Ordering::Acquire) {
-                    return Ok(());
-                }
-                // A producer queued deliveries outside this turn: flush them
-                // now (the queue, not the byte, is the state).
-                for out in peer.flush_deliveries() {
-                    if let Err(e) = write_frame(fd, &out) {
-                        eprintln!("peer-trace: wake flush write_frame FAILED: {e}");
-                        close_frame_fds(&out);
-                        return Err(e);
+            };
+            modules
+                .attach_live(peer.host_mut(), id, profile, &config)
+                .map(|()| serde_json::json!({
+                    "attached": modules.attached().iter().map(|(id, profile)| serde_json::json!({
+                        "id": id,
+                        "profile": profile.as_str(),
+                    })).collect::<Vec<_>>(),
+                    "modules": modules.verdict_modules(),
+                }))
+        }
+        "detach" => {
+            let Some(id) = request.get("id").and_then(|v| v.as_str()) else {
+                return serde_json::json!({
+                    "ok": false, "cmd": "services", "code": "BAD_REQUEST",
+                    "error": "detach needs a string `id`",
+                });
+            };
+            modules.detach_live(peer.host_mut(), id).map(|()| {
+                serde_json::json!({
+                    "attached": modules.attached().iter().map(|(id, profile)| serde_json::json!({
+                        "id": id,
+                        "profile": profile.as_str(),
+                    })).collect::<Vec<_>>(),
+                    "modules": modules.verdict_modules(),
+                })
+            })
+        }
+        "ctl" => {
+            // `acos_service_ctl` (MCP) / a scenario `service_ctl` step: a
+            // module's own control op (`sensors.set_value`, `telephony.sms`, ...).
+            // The module gets the session's host ([`Module::control`]) so a
+            // control that changes what the app observes can deliver it through
+            // the same path the framework uses; the peer thread flushes those
+            // deliveries after the control returns. The registry refuses a
+            // detached module, so a control can never look applied when the
+            // module is off.
+            let Some(id) = request.get("id").and_then(|v| v.as_str()) else {
+                return serde_json::json!({
+                    "ok": false, "cmd": "services", "op": "ctl", "code": "BAD_REQUEST",
+                    "error": "ctl needs a string `id`",
+                });
+            };
+            let Some(ctl_op) = request.get("ctl_op").and_then(|v| v.as_str()) else {
+                return serde_json::json!({
+                    "ok": false, "cmd": "services", "op": "ctl", "code": "BAD_REQUEST",
+                    "error": "ctl needs a string `ctl_op` (the module's control op)",
+                });
+            };
+            let args = request
+                .get("args")
+                .cloned()
+                .unwrap_or(serde_json::Value::Null);
+            modules.control(peer.host_mut(), id, ctl_op, &args).map(|value| {
+                serde_json::json!({
+                    "id": id,
+                    "op": ctl_op,
+                    "value": value,
+                    "attached": modules.attached().iter().map(|(id, profile)| serde_json::json!({
+                        "id": id,
+                        "profile": profile.as_str(),
+                    })).collect::<Vec<_>>(),
+                    "modules": modules.verdict_modules(),
+                })
+            })
+        }
+        other => {
+            return serde_json::json!({
+                "ok": false, "cmd": "services", "code": "BAD_REQUEST",
+                "error": format!("unknown op {other:?}; use list, status, attach, detach or ctl"),
+            })
+        }
+    };
+    match result {
+        Ok(value) => {
+            let mut reply = serde_json::json!({"ok": true, "cmd": "services", "op": op});
+            if let (Some(target), Some(object)) = (reply.as_object_mut(), Some(())) {
+                let _ = object;
+                if let Some(source) = value.as_object() {
+                    for (key, item) in source {
+                        target.insert(key.clone(), item.clone());
                     }
-                    close_frame_fds(&out);
                 }
-                continue;
             }
-            IdleWake::Deadline => {
-                for out in peer.flush_deliveries() {
-                    if let Err(e) = write_frame(fd, &out) {
-                        eprintln!("peer-trace: deadline flush write_frame FAILED: {e}");
-                        close_frame_fds(&out);
-                        return Err(e);
-                    }
-                    close_frame_fds(&out);
-                }
-                continue;
-            }
-            IdleWake::Frame => {}
+            reply
         }
-        let frame: Frame = match read_frame(fd) {
-            Ok(f) => f,
-            Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => return Ok(()),
-            // `poll(2)` said readable but the frame is not (a short write from a
-            // dying guest): end the session, never spin.
-            Err(e)
-                if (e.kind() == std::io::ErrorKind::WouldBlock
-                    || e.kind() == std::io::ErrorKind::TimedOut)
-                    && stop.load(Ordering::Acquire) =>
-            {
-                return Ok(())
-            }
-            Err(e)
-                if e.kind() == std::io::ErrorKind::WouldBlock
-                    || e.kind() == std::io::ErrorKind::TimedOut =>
-            {
-                continue
-            }
-            Err(e) => return Err(e),
-        };
-        // `ACOS_PEER_DEBUG=1` prints every frame the peer reads and writes. The
-        // reply/`write_frame` failure line is *not* gated: a reply the peer
-        // cannot send is the difference between a structured guest error and a
-        // main thread blocked in `transact`, so it must always be visible.
-        if dbg {
-            eprintln!(
-                "peer-trace: in ty={} seq={} code={} flags={:#x} target={:#x} data={} offs={} fds={}",
-                frame.ty,
-                frame.seq,
-                frame.code,
-                frame.flags,
-                frame.target,
-                frame.data.len(),
-                frame.offs.len(),
-                frame.fds.len()
-            );
-        }
-        // SETTLE5: a single peer transaction is the guest's main thread
-        // blocked in `transact` — the one host-side path that can stop the
-        // in-guest probe from running while it is being waited on. A slow one
-        // is therefore always named (threshold `ACOS_PEER_SLOW_MS`, default
-        // 250 ms): the next strict-settle `probe-floor` can cite the call
-        // instead of guessing. Nothing about the reply changes.
-        let calls_before = peer.service_calls().len();
-        let frame_target = frame.target;
-        let frame_code = frame.code;
-        let started = std::time::Instant::now();
-        let outs = peer.handle(frame);
-        // PERF4: a guest transaction may have changed live state — a `Surface`
-        // transaction is the C1 store a settle binds, and a service call can move
-        // window/insets state. Signal the settle/observation waiters after every
-        // handled frame so they read the new state now rather than on their next
-        // poll. With no waiter this is one uncontended mutex and a futex wake with
-        // no waiters, inside a binder call that just parsed a parcel.
-        change.notify();
-        let elapsed = started.elapsed();
-        if elapsed >= Duration::from_millis(env_u64("ACOS_PEER_SLOW_MS", 250)) {
-            let calls = peer.service_calls();
-            let call = calls
-                .get(calls_before)
-                .or_else(|| calls.last())
-                .map(|c| format!("{}#{}", c.descriptor, c.method))
-                .unwrap_or_else(|| "unknown".to_string());
-            eprintln!(
-                "acos-art: peer transact slow elapsed_ms={} target={:#x} code={} call={} \
-                 (the guest main thread waits for this reply)",
-                elapsed.as_millis(),
-                frame_target,
-                frame_code,
-                call
-            );
-        }
-        if dbg {
-            eprintln!("peer-trace: handle -> {} frames", outs.len());
-        }
-        for out in outs {
-            if let Err(e) = write_frame(fd, &out) {
-                eprintln!(
-                    "peer-trace: write_frame FAILED: {e} (ty={} seq={} code={} data={} offs={} fds={})",
-                    out.ty,
-                    out.seq,
-                    out.code,
-                    out.data.len(),
-                    out.offs.len(),
-                    out.fds.len()
-                );
-                close_frame_fds(&out);
-                return Err(e);
-            }
-            if dbg {
-                eprintln!(
-                    "peer-trace: out ty={} seq={} code={} data={} offs={} fds={:?}",
-                    out.ty,
-                    out.seq,
-                    out.code,
-                    out.data.len(),
-                    out.offs.len(),
-                    out.fds
-                );
-            }
-            close_frame_fds(&out);
-        }
-        let _ = std::io::stderr().flush();
+        Err(error) => serde_json::json!({
+            "ok": false, "cmd": "services", "op": op,
+            "code": error.code(),
+            "error": error.to_string(),
+        }),
     }
 }
 
+/// The launcher's half of the peer's idle wait: a self-pipe it writes to when it
+/// stops the session, so the peer can sleep in `poll(2)` until a guest frame or
+/// the earliest module deadline instead of pollong a socket on a timer.
+struct PeerWakeup {
+    read: RawFd,
+    write: RawFd,
+}
+
+impl PeerWakeup {
+    fn new() -> std::io::Result<Self> {
+        let mut fds = [0 as RawFd; 2];
+        let rc = unsafe { libc::pipe2(fds.as_mut_ptr(), libc::O_CLOEXEC | libc::O_NONBLOCK) };
+        if rc < 0 {
+            return Err(std::io::Error::last_os_error());
+        }
+        Ok(Self {
+            read: fds[0],
+            write: fds[1],
+        })
+    }
+
+    /// Wake the peer's idle wait. Idempotent: the pipe is only a wakeup, the
+    /// `stop` flag carries the decision.
+    fn wake(&self) {
+        let byte = 1u8;
+        unsafe {
+            libc::write(self.write, (&byte as *const u8).cast::<libc::c_void>(), 1);
+        }
+    }
+}
+
+impl Drop for PeerWakeup {
+    fn drop(&mut self) {
+        unsafe {
+            libc::close(self.read);
+            libc::close(self.write);
+        }
+    }
+}
+
+/// Write `outs` to the guest and close their fds, reporting the first failure.
+fn write_out(fd: RawFd, outs: Vec<Frame>, context: &str) -> std::io::Result<()> {
+    for out in outs {
+        if let Err(error) = write_frame(fd, &out) {
+            eprintln!(
+                "peer-trace: write_frame FAILED {context}: {error} (ty={} seq={} code={} data={})",
+                out.ty,
+                out.seq,
+                out.code,
+                out.data.len()
+            );
+            close_frame_fds(&out);
+            return Err(error);
+        }
+        close_frame_fds(&out);
+    }
+    Ok(())
+}
 /// Compile the userspace binder driver (`crates/acos-binder-peer/native`) with
 /// the NDK's bionic clang into `<data>/lib/libacos_binder_driver.so`.
 ///
@@ -7543,9 +9919,17 @@ fn build_launch_guest(root: &ArtRoot) -> Result<PathBuf> {
     // under the shared cache lock; subsequent launches (and the other N-1
     // sessions of a cold cohort) install the verified `classes.dex` instead.
     let cache_key = {
-        let mut parts: Vec<Vec<u8>> = vec![b"acos-art/launch-guest/v2".to_vec()];
+        let mut parts: Vec<Vec<u8>> = vec![b"acos-art/launch-guest/v3".to_vec()];
         for p in &sources {
-            parts.push(p.to_string_lossy().as_bytes().to_vec());
+            // The source's place in the guest tree, never its absolute path: a
+            // worktree (or any other prefix) holding the same bytes is the same key.
+            parts.push(
+                p.strip_prefix(&src_dir)
+                    .unwrap_or(p)
+                    .to_string_lossy()
+                    .as_bytes()
+                    .to_vec(),
+            );
             parts.push(fs::read(p)?);
         }
         for tool in [&android_jar, &d8, &javac] {
@@ -7700,6 +10084,18 @@ fn apk_launcher_activity(apk: &Path) -> Result<acos_services::manifest_resolve::
     })
 }
 
+/// Lowercase hex of `bytes`: the `ACOSLAUNCH_INTENT_BYTES` spelling (the guest
+/// unmarshals the Intent payload from it, so an env value never carries a NUL
+/// byte or a quoting hazard).
+fn hex_bytes(bytes: &[u8]) -> String {
+    use std::fmt::Write as _;
+    let mut out = String::with_capacity(bytes.len() * 2);
+    for byte in bytes {
+        let _ = write!(out, "{byte:02x}");
+    }
+    out
+}
+
 /// Read one `key=value` field from a marker file's lines. The guest writes one
 /// field per line, so the value is the rest of that line.
 fn marker_field<'a>(marker: &'a str, key: &str) -> Option<&'a str> {
@@ -7748,6 +10144,7 @@ mod probe_line_tests {
             4096,
             Arc::clone(&state),
             None,
+            0,
         );
         let out = state.lock().unwrap().clone_for_test();
         out
@@ -7757,6 +10154,9 @@ mod probe_line_tests {
         fn clone_for_test(&self) -> ProbeState {
             ProbeState {
                 latest: self.latest.clone(),
+                by_process: self.by_process.clone(),
+                seq_offsets: self.seq_offsets.clone(),
+                top_process: Arc::clone(&self.top_process),
                 unsupported: self.unsupported.clone(),
                 unsupported_seq: self.unsupported_seq,
                 probe_error: self.probe_error.clone(),
@@ -7775,6 +10175,74 @@ mod probe_line_tests {
                 touch_traced: self.touch_traced,
             }
         }
+    }
+
+    /// MERGEFIX (mproc3): the served tree is the **foreground** process's
+    /// sample.
+    ///
+    /// The launcher builds its probe state with `ProbeState::for_session(top)`,
+    /// and that `Arc` is the one ATMS writes when the top-of-task moves. The
+    /// merge of main into modules kept *two* declarations — the wired one and
+    /// `ProbeState::default()` — and the second shadowed the first, so
+    /// `top_process` was a private 0 that nothing ever wrote: every tree reply
+    /// described the primary process however far the foreground had moved.
+    /// `mproc3-two-process` then timed out on `wait_for id=="finish"`, because
+    /// proc-b's window was never the served one.
+    ///
+    /// ATMS publishes through the same `Arc`; no other wiring step may be
+    /// needed for the served sample to follow it.
+    #[test]
+    fn the_served_sample_is_the_foreground_processes() {
+        let atms_top = Arc::new(std::sync::atomic::AtomicU32::new(0));
+        let state = Arc::new(std::sync::Mutex::new(ProbeState::for_session(Arc::clone(
+            &atms_top,
+        ))));
+        let sample = |window: &str| {
+            format!(
+                "ACOSPROBE {{\"seq\":1,\"tree\":{{\"nodes\":[],\"window\":\"{window}\"}}}}\n"
+            )
+        };
+        let a = sample("proca");
+        let b = sample("procb");
+        drain_stdout_lines(
+            std::io::Cursor::new(a.into_bytes()),
+            4096,
+            Arc::clone(&state),
+            None,
+            0,
+        );
+        drain_stdout_lines(
+            std::io::Cursor::new(b.into_bytes()),
+            4096,
+            Arc::clone(&state),
+            None,
+            1,
+        );
+        let served_window = |state: &Arc<std::sync::Mutex<ProbeState>>| {
+            latest_probe(state).expect("a sample").tree["window"]
+                .as_str()
+                .unwrap_or_default()
+                .to_string()
+        };
+        assert_eq!(
+            served_window(&state),
+            "proca",
+            "while the primary is the top, its sample is the served one"
+        );
+        // ATMS's `publish_top(1)`: one store into the `Arc` the session was
+        // built with. Nothing else may be needed — this is the wiring the merge
+        // lost.
+        atms_top.store(1, std::sync::atomic::Ordering::Relaxed);
+        assert_eq!(
+            served_window(&state),
+            "procb",
+            "a cross-process launch serves the new foreground process's tree"
+        );
+        assert_eq!(
+            state.lock().unwrap().published_top(),
+            1,
+            "the session's top is ATMS's Arc, not a private copy"
+        );
     }
 
     /// Teeth for the W32 misinterpretation: a two-window sample is larger than
@@ -7965,6 +10433,7 @@ mod probe_line_tests {
             reason: None,
             pixels_changed: Some(false),
             task_finished: true,
+            window_reshown: None,
         };
         let json = timing.to_json(true, 5);
         assert_eq!(json["bound"], "window-gone");
@@ -8186,8 +10655,14 @@ mod view_socket_dir_tests {
         // Separate directories: the guest mounts `guest.0` at /dev/socket, so a
         // `view.sock` there would be reachable by the app under test.
         assert_ne!(guest.0, view.0);
-        assert!(!view.0.starts_with(&guest.0), "view dir is inside the guest dir");
-        assert!(!guest.0.starts_with(&view.0), "guest dir is inside the view dir");
+        assert!(
+            !view.0.starts_with(&guest.0),
+            "view dir is inside the guest dir"
+        );
+        assert!(
+            !guest.0.starts_with(&view.0),
+            "guest dir is inside the view dir"
+        );
         assert!(view.0.to_string_lossy().contains("acos-view-"));
         assert!(guest.0.to_string_lossy().contains("acos-art-"));
         for dir in [&guest.0, &view.0] {
@@ -8201,7 +10676,10 @@ mod view_socket_dir_tests {
         // the sandbox (`sb.rw_bind(&sockets.0, "/dev/socket")` is the only socket
         // dir mount).
         let source = include_str!("launch.rs");
-        let source = source.split("mod view_socket_dir_tests").next().expect("source");
+        let source = source
+            .split("mod view_socket_dir_tests")
+            .next()
+            .expect("source");
         assert_eq!(
             source.matches("rw_bind(&sockets.0").count(),
             1,
@@ -8222,7 +10700,11 @@ mod view_socket_dir_tests {
         fs::set_permissions(&loose, fs::Permissions::from_mode(0o777)).expect("chmod");
         private_dir(&loose).expect("an owned loose directory is tightened");
         assert_eq!(
-            fs::symlink_metadata(&loose).expect("stat").permissions().mode() & 0o777,
+            fs::symlink_metadata(&loose)
+                .expect("stat")
+                .permissions()
+                .mode()
+                & 0o777,
             0o700
         );
         let file = base.0.join("file");
@@ -8230,7 +10712,10 @@ mod view_socket_dir_tests {
         assert!(private_dir(&file).is_err(), "a file is refused");
         let link = base.0.join("link");
         symlink(&loose, &link).expect("symlink");
-        assert!(private_dir(&link).is_err(), "a symlink is refused, not followed");
+        assert!(
+            private_dir(&link).is_err(),
+            "a symlink is refused, not followed"
+        );
     }
 }
 
@@ -8366,6 +10851,68 @@ mod skipped_traversal_tests {
         assert!(error.contains("c1_layers=1"), "{error}");
     }
 
+    /// ADR-0029 item 1: the guest's process initializers come from the attached
+    /// modules' manifests, never from a per-module branch.
+    ///
+    /// Before this, the launcher keyed `ACOSLAUNCH_TELEPHONY` /
+    /// `ACOSLAUNCH_BLUETOOTH` off two module ids and the guest had one
+    /// hand-written installer per id, so a new module could not declare what its
+    /// process needs and two of them could not share a manager. The guard keeps a
+    /// later edit from reintroducing the switch.
+    #[test]
+    fn the_process_initializer_install_is_driven_by_the_manifest() {
+        let guest = include_str!("../guest/java/dev/acos/art/LaunchMain.java");
+        for forbidden in [
+            "ACOSLAUNCH_TELEPHONY",
+            "ACOSLAUNCH_BLUETOOTH",
+            "TelephonyFrameworkInitializer\"",
+            "BluetoothFrameworkInitializer\"",
+        ] {
+            assert!(
+                !guest.contains(forbidden),
+                "the guest must not name a module's initializer (`{forbidden}`); it reads \
+                 ACOSLAUNCH_INITIALIZERS (ModuleManifest::process_initializers)"
+            );
+        }
+        assert!(
+            guest.contains("ACOSLAUNCH_INITIALIZERS"),
+            "the guest must read the launcher's initializer list"
+        );
+        assert!(
+            guest.contains("process-initializer installed"),
+            "the guest must log what it installed, so a verdict can cite it"
+        );
+        // GATENBOOT: AOSP installs the mainline managers in every app process
+        // from `ActivityThread.main` -> `initializeMainlineModules()`; the guest
+        // builds the ActivityThread itself and never runs `main`, so it must
+        // call the same framework method itself, once, before any app code.
+        // Telephony/Bluetooth are covered by that call, which is why the
+        // manifests no longer declare them (a second call throws).
+        assert!(
+            guest.contains("initializeMainlineModules"),
+            "the guest must run AOSP's per-process mainline bootstrap; without it every \
+             mainline ServiceManager holder is null in every guest process"
+        );
+        assert!(
+            guest.contains("mainline-modules initialized"),
+            "the guest must log that it ran the mainline bootstrap, so a verdict can cite it"
+        );
+
+        let launcher = include_str!("launch.rs");
+        assert!(
+            launcher.contains("ACOSLAUNCH_INITIALIZERS")
+                && launcher.contains("session_process_initializers"),
+            "the launcher must forward the attached manifests' initializers"
+        );
+        // The launcher half is checked by what it forwards, not by what it must
+        // not contain: this test lives in the same file it would grep, so its
+        // own forbidden-word list would match itself.
+        assert!(
+            !launcher.contains("attached(\"net.telephony\")"),
+            "the launcher must not key an initializer off a module id"
+        );
+    }
+
     /// The guest's ready path must stay main's: no forced traversal, no
     /// visibility replay, and the evidence the launcher reads must be present.
     /// A source guard is the cheapest way to keep a later edit from silently
@@ -8462,15 +11009,13 @@ mod abi_gate_tests {
         assert_eq!(abi["host_abi"], serde_json::json!("x86_64"));
         assert_eq!(
             abi["libs_sample"],
-            serde_json::json!([
-                "lib/arm64-v8a/libfoo.so",
-                "lib/armeabi-v7a/libfoo.so"
-            ])
+            serde_json::json!(["lib/arm64-v8a/libfoo.so", "lib/armeabi-v7a/libfoo.so"])
         );
         assert!(result
             .notes
             .iter()
-            .any(|n| n.starts_with("UNSUPPORTED_ABI:") && n.contains("INSTALL_FAILED_NO_MATCHING_ABIS")));
+            .any(|n| n.starts_with("UNSUPPORTED_ABI:")
+                && n.contains("INSTALL_FAILED_NO_MATCHING_ABIS")));
         // The serialized result carries the same block (a caller that only
         // keeps the JSON still has the evidence).
         let json = serde_json::to_value(&result).expect("serialize");
@@ -8653,6 +11198,7 @@ mod rel3h_unhandled_input_tests {
             reason: Some(SETTLE_UNHANDLED_INPUT.to_string()),
             pixels_changed: Some(false),
             task_finished: false,
+            window_reshown: None,
         };
         let json = timing.to_json(true, 7);
         assert_eq!(json["mode"], serde_json::json!("strict"));
@@ -8662,5 +11208,371 @@ mod rel3h_unhandled_input_tests {
         assert_eq!(json["strict_rule"], serde_json::json!("event"));
         assert_eq!(json["pixels_changed"], serde_json::json!(false));
         assert_eq!(json["ack_ms"], serde_json::json!(7));
+    }
+}
+
+/// BACKSETTLE: the `window_reshown` settle rule, on its own.
+///
+/// Every test states one of the guards the rule must not be able to skip, so a
+/// future change that widens it fails here instead of turning a timeout into a
+/// false pass:
+///
+/// * the change is measured against the forest at the gesture's **ack**, so a
+///   change that already happened before the action can never bind;
+/// * the re-shown window's frame must be a complete stored buffer (no
+///   placeholder), and the tree that is bound must be newer than the change and
+///   non-empty;
+/// * if the app draws after the action within the settle window, that newer
+///   frame wins and the re-show never binds;
+/// * a window the action *created* becoming top is not a re-show;
+/// * `bound: "window-reshown"` carries the token and the frame the host
+///   composites, and still reports the measured `pixels_changed`, so an
+///   `expect_change: true` claim fails on an unchanged screen.
+#[cfg(test)]
+mod backsettle_tests {
+    use super::*;
+
+    const CONFIRM_MS: u64 = 24;
+
+    /// The forest at the ack: two windows, the upper one (0x20) on top with
+    /// frame 7 stored, C1 at generation 5.
+    fn baseline_two_windows() -> WindowForest {
+        WindowForest {
+            order: vec![0x10, 0x20],
+            top_frame: Some(7),
+            generation: 5,
+        }
+    }
+
+    fn gate() -> WindowReshownGate {
+        WindowReshownGate::new(baseline_two_windows(), Duration::from_millis(CONFIRM_MS))
+    }
+
+    /// The upper window went away; the existing one below is the top window now
+    /// and its last drawn frame (3) is what the host composites.
+    fn after_removal_top_is_below() -> WindowForest {
+        WindowForest {
+            order: vec![0x10],
+            top_frame: Some(3),
+            generation: 5,
+        }
+    }
+
+    #[test]
+    fn a_host_window_change_binds_the_existing_top_window_and_its_frame() {
+        let mut gate = gate();
+        let now = Instant::now();
+        assert_eq!(
+            gate.observe(&after_removal_top_is_below(), now, 1_000),
+            ReshownOutcome::Wait(WINDOW_CONFIRM_REASON),
+            "the change must be the newest fact for one confirmation window"
+        );
+        assert_eq!(
+            gate.observe(
+                &after_removal_top_is_below(),
+                now + Duration::from_millis(CONFIRM_MS),
+                1_000 + CONFIRM_MS
+            ),
+            ReshownOutcome::Bind(0x10, 3),
+            "the token and the frame the host composites are the bind"
+        );
+        // The bound frame/token are reported as settle evidence, not inferred by
+        // the reader.
+        let timing = SettleTiming {
+            mode: SettleMode::Strict,
+            first_change_ms: Some(250),
+            frame_ms: None,
+            state_changed: None,
+            bound: "window-reshown",
+            rule: Some("event"),
+            reason: None,
+            pixels_changed: Some(false),
+            task_finished: false,
+            window_reshown: Some((0x10, 3)),
+        };
+        let json = timing.to_json(true, 9);
+        assert_eq!(json["bound"], serde_json::json!("window-reshown"));
+        assert_eq!(json["window_reshown"], serde_json::json!("0x10"));
+        assert_eq!(json["window_reshown_frame"], serde_json::json!(3));
+        assert_eq!(json["pixels_changed"], serde_json::json!(false));
+        assert!(
+            json.get("task_finished").is_none(),
+            "a re-show is not a finished task"
+        );
+    }
+
+    /// Guard: the baseline is the forest at the **ack**. A top window that is
+    /// already the top window then is not a change of this action, however the
+    /// forest changes elsewhere.
+    #[test]
+    fn a_top_window_that_was_already_top_at_the_ack_never_binds() {
+        let mut gate = gate();
+        let now = Instant::now();
+        // The same top window, a different window below it: the forest differs,
+        // but the top window did not change.
+        let below_changed = WindowForest {
+            order: vec![0x11, 0x20],
+            top_frame: Some(7),
+            generation: 5,
+        };
+        for step in 0..40u64 {
+            assert_eq!(
+                gate.observe(
+                    &below_changed,
+                    now + Duration::from_millis(step * 10),
+                    1_000 + step * 10
+                ),
+                ReshownOutcome::Wait(WINDOW_SAME_TOP_REASON)
+            );
+        }
+    }
+
+    /// Guard: the re-shown window's frame must be the one the host composites.
+    /// A window with no complete stored buffer (never drew, or the layer is
+    /// hidden) is a placeholder, never a bind - the ADR-0032 amendment 1 rule.
+    #[test]
+    fn a_re_shown_window_without_a_complete_frame_never_binds() {
+        let mut gate = gate();
+        let now = Instant::now();
+        let no_frame = WindowForest {
+            order: vec![0x10],
+            top_frame: None,
+            generation: 5,
+        };
+        for step in 0..40u64 {
+            assert_eq!(
+                gate.observe(
+                    &no_frame,
+                    now + Duration::from_millis(step * 10),
+                    1_000 + step * 10
+                ),
+                ReshownOutcome::Wait(WINDOW_NO_FRAME_REASON)
+            );
+        }
+    }
+
+    /// Guard: a window this action created is not a re-show. It was not in the
+    /// forest at the ack, and its first draw is what the normal rule waits for.
+    #[test]
+    fn a_window_created_by_the_action_never_binds_as_reshown() {
+        let mut gate = gate();
+        let now = Instant::now();
+        let new_top = WindowForest {
+            order: vec![0x10, 0x99],
+            top_frame: Some(1),
+            generation: 6,
+        };
+        for step in 0..40u64 {
+            assert_eq!(
+                gate.observe(
+                    &new_top,
+                    now + Duration::from_millis(step * 10),
+                    1_000 + step * 10
+                ),
+                ReshownOutcome::Wait(WINDOW_NEW_TOP_REASON)
+            );
+        }
+    }
+
+    /// Guard: if the app draws afterwards within the settle window, the newer
+    /// frame wins. A C1 store after the ack supersedes the re-show for good.
+    #[test]
+    fn a_draw_after_the_action_supersedes_the_re_shown_frame() {
+        let mut gate = gate();
+        let now = Instant::now();
+        assert_eq!(
+            gate.observe(&after_removal_top_is_below(), now, 1_000),
+            ReshownOutcome::Wait(WINDOW_CONFIRM_REASON)
+        );
+        let drawn = WindowForest {
+            order: vec![0x10],
+            top_frame: Some(9),
+            generation: 6,
+        };
+        assert_eq!(
+            gate.observe(
+                &drawn,
+                now + Duration::from_millis(CONFIRM_MS),
+                1_000 + CONFIRM_MS
+            ),
+            ReshownOutcome::Wait(WINDOW_SUPERSEDED_REASON),
+            "the re-shown frame is not the newest state once the app drew"
+        );
+        // Even after the newer store is no longer the newest one (a later store
+        // on the same draw keeps the generation above the baseline), the re-show
+        // never comes back.
+        for step in 1..10u64 {
+            assert_eq!(
+                gate.observe(
+                    &drawn,
+                    now + Duration::from_millis(CONFIRM_MS * 2 + step * 10),
+                    2_000 + step * 10
+                ),
+                ReshownOutcome::Wait(WINDOW_SUPERSEDED_REASON)
+            );
+        }
+    }
+
+    /// Negative: no window change at all keeps today's semantics - the rule
+    /// never binds, so Back's `INPUT_UNHANDLED` / `no-draw-after-action`
+    /// outcomes are unchanged.
+    #[test]
+    fn an_unchanged_window_forest_keeps_the_shipped_semantics() {
+        let mut gate = gate();
+        let now = Instant::now();
+        for step in 0..40u64 {
+            assert_eq!(
+                gate.observe(
+                    &baseline_two_windows(),
+                    now + Duration::from_millis(step * 10),
+                    1_000 + step * 10
+                ),
+                ReshownOutcome::Wait(WINDOW_UNCHANGED_REASON)
+            );
+        }
+    }
+
+    /// Negative: an empty forest is the `window-gone` shape, never a re-show.
+    #[test]
+    fn an_empty_forest_is_not_a_re_show() {
+        let mut gate = gate();
+        let now = Instant::now();
+        for step in 0..10u64 {
+            assert_eq!(
+                gate.observe(
+                    &WindowForest::default(),
+                    now + Duration::from_millis(step * 10),
+                    1_000 + step * 10
+                ),
+                ReshownOutcome::Wait(WINDOW_GONE_REASON)
+            );
+        }
+    }
+
+    /// A second change restarts the confirmation window: the rule binds the
+    /// state that is still there after the window, not the first one it saw.
+    #[test]
+    fn a_second_window_change_restarts_the_confirmation_window() {
+        // Three windows at the ack: 0x10 (bottom), 0x11, 0x20 (top). Both lower
+        // windows therefore already existed when the action's acks arrived.
+        let mut gate = WindowReshownGate::new(
+            WindowForest {
+                order: vec![0x10, 0x11, 0x20],
+                top_frame: Some(7),
+                generation: 5,
+            },
+            Duration::from_millis(CONFIRM_MS),
+        );
+        let now = Instant::now();
+        assert_eq!(
+            gate.observe(&after_removal_top_is_below(), now, 1_000),
+            ReshownOutcome::Wait(WINDOW_CONFIRM_REASON)
+        );
+        // 0x10 went away too; 0x11 (also present at the ack) is top now with a
+        // different frame.
+        let next = WindowForest {
+            order: vec![0x11],
+            top_frame: Some(2),
+            generation: 5,
+        };
+        assert_eq!(
+            gate.observe(&next, now + Duration::from_millis(10), 1_010),
+            ReshownOutcome::Wait(WINDOW_CONFIRM_REASON)
+        );
+        assert_eq!(
+            gate.observe(
+                &next,
+                now + Duration::from_millis(10 + CONFIRM_MS),
+                1_010 + CONFIRM_MS
+            ),
+            ReshownOutcome::Bind(0x11, 2)
+        );
+    }
+
+    /// The tree half of the contract: a re-show binds the tree of the now-top
+    /// window, so an empty forest or a sample taken before the change cannot
+    /// satisfy it.
+    #[test]
+    fn an_empty_tree_is_not_a_bindable_observation() {
+        assert!(tree_is_empty(&serde_json::json!({"nodes": []})));
+        assert!(tree_is_empty(&serde_json::json!({})));
+        assert!(!tree_is_empty(&serde_json::json!({"nodes": [{"id": "title"}]})));
+    }
+
+    /// The observation half, on a real sample: only a **settled** sample taken
+    /// after the change, with the now-top window's non-empty tree, converts the
+    /// gate's bind into a settle. An unsettled sample is a screen in motion and
+    /// must fall through to the shipped rule (which keeps waiting for it).
+    #[test]
+    fn only_a_settled_post_change_sample_binds_the_re_shown_window() {
+        fn probe(settled: bool, at_ms: u64, nodes: serde_json::Value) -> ProbeSample {
+            ProbeSample {
+                seq: 9,
+                tree: serde_json::json!({"nodes": nodes}),
+                at_ms,
+                generation: 5,
+                draw_ms: 0,
+                draw_seq: 0,
+                settled,
+                pending: if settled { Vec::new() } else { vec!["traversal".into()] },
+                window_gone: false,
+                animations_on: None,
+            }
+        }
+        let bind = Some(ReshownOutcome::Bind(0x10, 3));
+        let node = serde_json::json!([{"id": "title"}]);
+        assert_eq!(
+            reshown_bind(bind, &probe(true, 1_000, node.clone()), 1_000),
+            Some((0x10, 3)),
+            "a settled post-change sample with the now-top tree is the bind"
+        );
+        assert_eq!(
+            reshown_bind(bind, &probe(false, 1_000, node.clone()), 1_000),
+            None,
+            "an unsettled sample is a screen in motion, never a settle"
+        );
+        assert_eq!(
+            reshown_bind(bind, &probe(true, 999, node.clone()), 1_000),
+            None,
+            "a sample taken before the change cannot describe it"
+        );
+        assert_eq!(
+            reshown_bind(bind, &probe(true, 1_000, serde_json::json!([])), 1_000),
+            None,
+            "an empty forest is the window-gone shape, not a re-show"
+        );
+        assert_eq!(reshown_bind(None, &probe(true, 1_000, node), 1_000), None);
+    }
+}
+
+/// GATENE2E: the final logd dump keeps the sink's absolute ordinals.
+#[cfg(test)]
+mod final_logd_tests {
+    use super::*;
+
+    #[test]
+    fn dump_seq_follows_the_sinks_ordinal_even_after_drop_oldest() {
+        assert_eq!(logd_dropped(&["logd: 5 entries".to_string()]), 0);
+        assert_eq!(
+            logd_dropped(&[
+                "cgroup: x".to_string(),
+                "logd: 3 entries kept of 10 (7 dropped, cap 3 entries)".to_string()
+            ]),
+            7
+        );
+        let dir = std::env::temp_dir().join(format!("final-logd-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let logs = vec![
+            crate::LogEntry { prio: 6, tag: "a".into(), message: "first kept".into(), ts_ms: 0 },
+            crate::LogEntry { prio: 7, tag: "b".into(), message: "last".into(), ts_ms: 0 },
+        ];
+        write_final_logd(&dir, &logs, 7);
+        let text = std::fs::read_to_string(dir.join(FINAL_LOGD_FILE)).unwrap();
+        let seqs: Vec<u64> = text
+            .lines()
+            .map(|l| serde_json::from_str::<serde_json::Value>(l).unwrap()["seq"].as_u64().unwrap())
+            .collect();
+        assert_eq!(seqs, vec![8, 9]);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

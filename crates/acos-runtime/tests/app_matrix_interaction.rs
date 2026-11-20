@@ -131,12 +131,10 @@ fn boot(session: &AgentSession, apk: &Path) -> Option<ViewTree> {
 #[test]
 fn fragments_nav_replace_and_pop_change_the_container() {
     seed_boot_dir();
-    let Some(apk) = apk("fragments-nav") else {
-        eprintln!("SKIP fragments_nav_replace_and_pop_change_the_container: no apk");
+    let Some(apk) = acos_test_support::require_some(apk("fragments-nav"), "fragments_nav_replace_and_pop_change_the_container", "no apk") else {
         return;
     };
-    if !boot_available() {
-        eprintln!("SKIP fragments_nav_replace_and_pop_change_the_container: no boot dir");
+    if acos_test_support::require_prereq(boot_available(), "fragments_nav_replace_and_pop_change_the_container", "no boot dir").is_none() {
         return;
     }
     let session = AgentSession::start(SessionOptions::default());
@@ -188,12 +186,10 @@ fn fragments_nav_replace_and_pop_change_the_container() {
 #[ignore = "frozen legacy Rust VM: the bounded vsync frame budget added in f0c9fdb (W191-A) stops AbsListView.smoothScrollToPosition advancing inside the pump; the tap reports state_changed while the tree still holds the old rows — see results/handoff/TESTHYG2.md"]
 fn list_scroll_button_moves_the_recycled_window() {
     seed_boot_dir();
-    let Some(apk) = apk("list-adapter") else {
-        eprintln!("SKIP list_scroll_button_moves_the_recycled_window: no apk");
+    let Some(apk) = acos_test_support::require_some(apk("list-adapter"), "list_scroll_button_moves_the_recycled_window", "no apk") else {
         return;
     };
-    if !boot_available() {
-        eprintln!("SKIP list_scroll_button_moves_the_recycled_window: no boot dir");
+    if acos_test_support::require_prereq(boot_available(), "list_scroll_button_moves_the_recycled_window", "no boot dir").is_none() {
         return;
     }
     let session = AgentSession::start(SessionOptions::default());
@@ -209,7 +205,10 @@ fn list_scroll_button_moves_the_recycled_window() {
 
     let report = session.tap_text("Scroll to last").expect("tap accepted");
     assert!(report.accepted, "Scroll to last routed");
-    assert!(report.state_changed, "smoothScrollToPosition changed the tree");
+    assert!(
+        report.state_changed,
+        "smoothScrollToPosition changed the tree"
+    );
     let after = session
         .observe_tree(acos_runtime::view_tree::DEFAULT_MAX_NODES)
         .unwrap();
@@ -233,12 +232,10 @@ fn list_scroll_button_moves_the_recycled_window() {
 #[ignore = "frozen legacy Rust VM: AlertDialog's button-bar Button inflation throws Resources$NotFoundException Resource ID #0x0 from AnimatorInflater.loadStateListAnimator — the theme attr View_stateListAnimator is not resolved, a legacy-VM resource/theme gap (open since 7248e31, 2026-11-10) — see results/handoff/TESTHYG2.md"]
 fn dialogs_alert_opens_and_cancel_dismisses() {
     seed_boot_dir();
-    let Some(apk) = apk("dialogs-menus") else {
-        eprintln!("SKIP dialogs_alert_opens_and_cancel_dismisses: no apk");
+    let Some(apk) = acos_test_support::require_some(apk("dialogs-menus"), "dialogs_alert_opens_and_cancel_dismisses", "no apk") else {
         return;
     };
-    if !boot_available() {
-        eprintln!("SKIP dialogs_alert_opens_and_cancel_dismisses: no boot dir");
+    if acos_test_support::require_prereq(boot_available(), "dialogs_alert_opens_and_cancel_dismisses", "no boot dir").is_none() {
         return;
     }
     let session = AgentSession::start(SessionOptions::default());
@@ -273,12 +270,10 @@ fn dialogs_alert_opens_and_cancel_dismisses() {
 #[test]
 fn dialogs_popup_menu_opens_with_items() {
     seed_boot_dir();
-    let Some(apk) = apk("dialogs-menus") else {
-        eprintln!("SKIP dialogs_popup_menu_opens_with_items: no apk");
+    let Some(apk) = acos_test_support::require_some(apk("dialogs-menus"), "dialogs_popup_menu_opens_with_items", "no apk") else {
         return;
     };
-    if !boot_available() {
-        eprintln!("SKIP dialogs_popup_menu_opens_with_items: no boot dir");
+    if acos_test_support::require_prereq(boot_available(), "dialogs_popup_menu_opens_with_items", "no boot dir").is_none() {
         return;
     }
     let session = AgentSession::start(SessionOptions::default());
@@ -312,12 +307,10 @@ fn dialogs_popup_menu_opens_with_items() {
 #[test]
 fn dialogs_spinner_dropdown_opens() {
     seed_boot_dir();
-    let Some(apk) = apk("dialogs-menus") else {
-        eprintln!("SKIP dialogs_spinner_dropdown_opens: no apk");
+    let Some(apk) = acos_test_support::require_some(apk("dialogs-menus"), "dialogs_spinner_dropdown_opens", "no apk") else {
         return;
     };
-    if !boot_available() {
-        eprintln!("SKIP dialogs_spinner_dropdown_opens: no boot dir");
+    if acos_test_support::require_prereq(boot_available(), "dialogs_spinner_dropdown_opens", "no boot dir").is_none() {
         return;
     }
     let session = AgentSession::start(SessionOptions::default());
@@ -510,7 +503,12 @@ fn scroll_gesture_moves_the_list() {
         return;
     }
     let report = session
-        .swipe((540.0, 1600.0), (540.0, 600.0), Duration::from_millis(400), 10)
+        .swipe(
+            (540.0, 1600.0),
+            (540.0, 600.0),
+            Duration::from_millis(400),
+            10,
+        )
         .expect("swipe accepted");
     assert!(report.state_changed, "the swipe scrolled the list");
     let tree = session

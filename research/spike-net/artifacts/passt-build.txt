@@ -1,0 +1,22 @@
+# SPIKE-NET step 1: pasta build record
+# source: git https://passt.top/passt, tag 2026_10_02.cba3570
+commit: cba357068dc586e7540971eb40bb56c5e62c4de1 (2026-09-28)
+build: make clean && make static -j8 VERSION=2026_10_02.cba3570
+
+pasta 2026_10_02.cba3570
+Copyright Red Hat
+GNU General Public License, version 2 or later
+  <https://www.gnu.org/licenses/old-licenses/gpl-2.0.html>
+This is free software: you are free to change and redistribute it.
+There is NO WARRANTY, to the extent permitted by law.
+
+
+size_bytes: 1548232
+sha256: 314c37e878bd6ffe43200735800d5efd4859d81d46b0450358a103c36c0edf60
+file: ELF 64-bit LSB executable, x86-64, version 1 (GNU/Linux), statically linked, BuildID[sha1]=f782a0a0d59efcda1585561894f29fafdb588cd0, for GNU/Linux 4.4.0, not stripped
+
+# licences shipped in the source tree (LICENSES/)
+BSD-3-Clause.txt
+GPL-2.0-or-later.txt
+
+gcc: gcc (GCC) 16.2.1 20260810

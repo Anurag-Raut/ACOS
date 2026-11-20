@@ -383,6 +383,7 @@ mod tests {
             nodes,
             truncated: false,
             text_available: true,
+            windows: Vec::new(),
         }
     }
 

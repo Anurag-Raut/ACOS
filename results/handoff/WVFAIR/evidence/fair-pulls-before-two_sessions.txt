@@ -1,0 +1,51 @@
+   Compiling acos-webview v0.3.0 (/home/Qui/.t3/worktrees/acos/t3-245f674e-275e08623e7c2d18/crates/acos-webview)
+warning: fields `seen` and `closed` are never read
+  --> crates/acos-webview/tests/common/mod.rs:24:5
+   |
+18 | pub struct WireGuest {
+   |            --------- fields in this struct
+...
+24 |     seen: Arc<Mutex<Vec<(String, Value)>>>,
+   |     ^^^^
+25 |     next: AtomicU32,
+26 |     pub closed: Arc<AtomicBool>,
+   |         ^^^^^^
+   |
+   = note: `#[warn(dead_code)]` on by default
+
+warning: associated items `connect` and `seen` are never used
+   --> crates/acos-webview/tests/common/mod.rs:31:12
+    |
+ 29 | impl WireGuest {
+    | -------------- associated items in this implementation
+ 30 |     /// Connect to a session socket. The reader thread lives until EOF.
+ 31 |     pub fn connect(path: &Path) -> Self {
+    |            ^^^^^^^
+...
+215 |     pub fn seen(&self) -> Vec<(String, Value)> {
+    |            ^^^^
+
+warning: `acos-webview` (test "fair_pulls") generated 2 warnings
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.82s
+     Running tests/fair_pulls.rs (.cache/wvf-target/debug/deps/fair_pulls-736ef6dc05c89fa7)
+
+running 2 tests
+test frame_pulls_are_fair_between_two_views_one_of_them_slow ... FAILED
+test viewport_geometry_matches_the_probe ... ok
+
+failures:
+
+---- frame_pulls_are_fair_between_two_views_one_of_them_slow stdout ----
+broker socket: /home/Qui/.t3/worktrees/acos/t3-245f674e-275e08623e7c2d18/.cache/lv/fair-792238-two-views/run/webview.sock
+
+thread 'frame_pulls_are_fair_between_two_views_one_of_them_slow' panicked at crates/acos-webview/tests/fair_pulls.rs:494:5:
+two_sessions: fast view worst pull 1944 ms (budget 1500); the pre-gate broker measured 1943 ms here (one slow pull held the engine for 5.7 s)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    frame_pulls_are_fair_between_two_views_one_of_them_slow
+
+test result: FAILED. 1 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 6.00s
+
+error: test failed, to rerun pass `-p acos-webview --test fair_pulls`

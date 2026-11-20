@@ -1,0 +1,94 @@
+{
+  "abi": null,
+  "activity_resumed": true,
+  "application_created": true,
+  "cgroup": "cgroup: memory.max=2048MiB swap=0 pids.max=512 peak=70MiB oom_kills=0 (/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p1624864-i1651884.scope)",
+  "code": null,
+  "disk_free_bytes": 155076403200,
+  "guard": "seccomp: OK guard=active insns=83 / OK landlock=active abi=10 rules=15 skipped=0",
+  "guest_crash": null,
+  "guest_crash_detail": null,
+  "guest_exit": 0,
+  "guest_signal": null,
+  "heap": {
+    "bytes": {
+      "heapgrowthlimit": 201326592,
+      "heapmaxfree": 8388608,
+      "heapminfree": 524288,
+      "heapsize": 536870912,
+      "heapstartsize": 8388608
+    },
+    "heaptargetutilization": 0.75,
+    "mib": {
+      "heapgrowthlimit": 192.0,
+      "heapmaxfree": 8.0,
+      "heapminfree": 0.5,
+      "heapsize": 512.0,
+      "heapstartsize": 8.0
+    },
+    "overridden": [],
+    "prop": {
+      "dalvik.vm.heapgrowthlimit": "192m",
+      "dalvik.vm.heapmaxfree": "8m",
+      "dalvik.vm.heapminfree": "512k",
+      "dalvik.vm.heapsize": "512m",
+      "dalvik.vm.heapstartsize": "8m",
+      "dalvik.vm.heaptargetutilization": "0.75"
+    },
+    "source": "ACOS_ART_HEAP* overrides on the stock API-34 dalvik.vm.* table"
+  },
+  "kept_run_dir": null,
+  "logd": "logd: 237 entries",
+  "logd_tail": [
+    "E/RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.",
+    "E/RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.",
+    "E/RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.",
+    "E/RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.",
+    "E/RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.",
+    "E/RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.",
+    "E/RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.",
+    "E/RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.",
+    "E/RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.",
+    "E/RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.",
+    "E/RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.",
+    "E/RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.",
+    "E/RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.",
+    "E/RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.",
+    "E/RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.",
+    "E/RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.",
+    "E/RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.",
+    "E/RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.",
+    "E/RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.",
+    "E/RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.",
+    "E/RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.",
+    "E/RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.",
+    "E/RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.",
+    "E/RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation."
+  ],
+  "native_crash": null,
+  "native_crash_path": null,
+  "notes": [
+    "shared-boot-image: /home/Qui/.cache/acos/art/boot-images/fixed-87fe38d1ee5fe125 (ACOS_ART_BOOT_IMAGE=shared-fixed; -Ximage:/data/img/boot.art -Xnorelocate; fixed base 0x70000000, no image ASLR; cache hit)",
+    "boot_image: mode=shared-fixed cache=hit dir=/home/Qui/.cache/acos/art/boot-images/fixed-87fe38d1ee5fe125 input=87fe38d1ee5fe125 base=0x70000000",
+    "cgroup: memory.max=2048MiB swap=0 pids.max=512 peak=70MiB oom_kills=0 (/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p1624864-i1651884.scope)",
+    "seccomp: OK guard=active insns=83 / OK landlock=active abi=10 rules=15 skipped=0",
+    "logd: 237 entries"
+  ],
+  "outcome": "ok",
+  "retryable": false,
+  "route": "launch",
+  "stage": "teardown-evidence",
+  "stderr_tail": [
+    "ACOSART[render]: dlopen(libandroid_runtime.so) ok @0x7801a8ef67dcfcab (default namespace, RTLD_GLOBAL)",
+    "ACOSHWC[gralloc]: software gralloc shim loaded (1 fd / 9 ints)",
+    "ACOSLAUNCH MARK crash-handler installed sigchain=0x7fef6a72fd40"
+  ],
+  "stderr_tail_last": "ACOSLAUNCH MARK crash-handler installed sigchain=0x7fef6a72fd40",
+  "stdout_tail": [
+    "…int\":\"\",\"password\":false,\"content_description\":\"\",\"window\":\"main\",\"bounds\":\"[24,1252][1056,1378]\",\"bounds_on_screen\":\"[24,1252][1056,1378]\",\"visible_bounds\":\"[24,1252][1056,1378]\",\"visible\":true,\"visibility\":0,\"clickable\":true,\"enabled\":true,\"focused\":false,\"checked\":false,\"selected\":false},{\"class\":\"android.widget.TextView\",\"id\":\"dev.acos.fixtures.tailprobe:id/status\",\"text\":\"READY\\nTELEPHONY sim=READY phone=GSM network=LTE call=IDLE line1=+15551234567 operator=\\\"\\\"\\nCALL state=IDLE number=null\\nCALL state=IDLE number=null\\nCALL state=RINGING number=+15550002222\\nSMS from=+15550001111 body=ACOS SMS\\nSMS-SENT queued to=+15557654321\\nTELEPHONY sim=READY phone=GSM network=LTE call=RINGING line1=+15551234567 operator=\\\"\\\"\\n\",\"hint\":\"\",\"password\":false,\"content_description\":\"\",\"window\":\"main\",\"bounds\":\"[24,1378][1056,1859]\",\"bounds_on_screen\":\"[24,1378][1056,1859]\",\"visible_bounds\":\"[24,1378][1056,1859]\",\"visible\":true,\"visibility\":0,\"clickable\":true,\"enabled\":true,\"focused\":false,\"checked\":false,\"selected\":false}]}]},{\"class\":\"com.android.internal.widget.ActionBarContainer\",\"id\":\"android:id/action_bar_container\",\"text\":\"\",\"hint\":\"\",\"password\":false,\"content_description\":\"\",\"window\":\"main\",\"bounds\":\"[0,128][1080,275]\",\"bounds_on_screen\":\"[0,128][1080,275]\",\"visible_bounds\":\"[0,128][1080,275]\",\"visible\":true,\"visibility\":0,\"clickable\":false,\"enabled\":true,\"focused\":false,\"checked\":false,\"selected\":false,\"children\":[{\"class\":\"android.widget.Toolbar\",\"id\":\"android:id/action_bar\",\"text\":\"\",\"hint\":\"\",\"password\":false,\"content_description\":\"\",\"window\":\"main\",\"bounds\":\"[0,128][1080,275]\",\"bounds_on_screen\":\"[0,128][1080,275]\",\"visible_bounds\":\"[0,128][1080,275]\",\"visible\":true,\"visibility\":0,\"clickable\":false,\"enabled\":true,\"focused\":false,\"checked\":false,\"selected\":false,\"children\":[{\"class\":\"android.widget.TextView\",\"id\":\"\",\"text\":\"Tail Probe\",\"hint\":\"\",\"password\":false,\"content_description\":\"\",\"window\":\"main\",\"bounds\":\"[42,166][281,237]\",\"bounds_on_screen\":\"[42,166][281,237]\",\"visible_bounds\":\"[42,166][281,237]\",\"visible\":true,\"visibility\":0,\"clickable\":false,\"enabled\":true,\"focused\":false,\"checked\":false,\"selected\":false},{\"class\":\"android.widget.ActionMenuView\",\"id\":\"\",\"text\":\"\",\"hint\":\"\",\"password\":false,\"content_description\":\"\",\"window\":\"main\",\"bounds\":\"[1080,128][1080,275]\",\"bounds_on_screen\":\"[1080,128][1080,275]\",\"visible_bounds\":\"\",\"visible\":false,\"visibility\":0,\"clickable\":false,\"enabled\":true,\"focused\":false,\"checked\":false,\"selected\":false,\"children\":[]}]},{\"class\":\"com.android.internal.widget.ActionBarContextView\",\"id\":\"android:id/action_context_bar\",\"text\":\"\",\"hint\":\"\",\"password\":false,\"content_description\":\"\",\"window\":\"main\",\"bounds\":\"[0,128][0,128]\",\"bounds_on_screen\":\"[0,128][0,128]\",\"visible_bounds\":\"\",\"visible\":false,\"visibility\":8,\"clickable\":false,\"enabled\":true,\"focused\":false,\"checked\":false,\"selected\":false,\"children\":[]}]}]},{\"class\":\"android.view.View\",\"id\":\"android:id/navigationBarBackground\",\"text\":\"\",\"hint\":\"\",\"password\":false,\"content_description\":\"\",\"window\":\"main\",\"bounds\":\"[0,2337][1080,2400]\",\"bounds_on_screen\":\"[0,2337][1080,2400]\",\"visible_bounds\":\"[0,2337][1080,2400]\",\"visible\":true,\"visibility\":0,\"clickable\":false,\"enabled\":true,\"focused\":false,\"checked\":false,\"selected\":false},{\"class\":\"android.view.View\",\"id\":\"android:id/statusBarBackground\",\"text\":\"\",\"hint\":\"\",\"password\":false,\"content_description\":\"\",\"window\":\"main\",\"bounds\":\"[0,0][1080,128]\",\"bounds_on_screen\":\"[0,0][1080,128]\",\"visible_bounds\":\"[0,0][1080,128]\",\"visible\":true,\"visibility\":0,\"clickable\":false,\"enabled\":true,\"focused\":false,\"checked\":false,\"selected\":false}]}],\"window_count\":1,\"node_budget\":2000,\"truncated\":false,\"emit_us\":561},\"settle\":{\"settled\":true,\"pending\":[],\"frame_callbacks\":0,\"queue_due_ms\":-1,\"horizon_ms\":256,\"anim_callbacks\":[],\"draw_ms\":1794808465313,\"draw_seq\":165,\"window_stable_ms\":5385,\"in_touch_mode\":true,\"view_generation\":171},\"animations\":{\"on\":true,\"scale\":1.0,\"applied\":true,\"source\":\"env:on\"}}",
+    "ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {c91d1e8} dev.acos.art.LaunchMain$8$1@d3b7cb1"
+  ],
+  "stdout_tail_last": "ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {c91d1e8} dev.acos.art.LaunchMain$8$1@d3b7cb1",
+  "utc_ms": 1794808465627,
+  "wall_ms": 5729
+}

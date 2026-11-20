@@ -108,6 +108,9 @@ enum Injection {
 pub struct InputDispatch {
     registry: InputChannelRegistry,
     tokens: BTreeSet<u64>,
+    /// The window the dispatcher last sent `FOCUS(true)` to. Only a change
+    /// publishes, so a repeated `set_focus` is free.
+    focused: Option<u64>,
     relayouts: usize,
     events: Vec<InputEvent>,
     plan: Option<Injection>,
@@ -133,16 +136,16 @@ impl InputDispatch {
         Self::default()
     }
 
-    /// Create a pair for `token`, publish `TOUCH_MODE(true)` and
-    /// `FOCUS(true)` (the state the real dispatcher sends to a newly focused
-    /// window), and keep the server end. The client end is written into the add
-    /// reply by [`InputDispatch::write_and_forget`].
+    /// Create a pair for `token`, publish `TOUCH_MODE(true)`, and keep the
+    /// server end. The client end is written into the add reply by
+    /// [`InputDispatch::write_and_forget`].
     ///
-    /// W13: `FOCUS` is now delivered by default. The image's focus path runs
-    /// `IInputMethodManager.startInputOrWindowGainedFocus`, whose `EditorInfo`
-    /// request and `InputBindResult` reply are marshalled by
-    /// [`crate::ime_wire`], so focus no longer kills the guest's main looper.
-    /// Setting `ACOS_INPUT_NO_FOCUS=1` suppresses it for diagnostics only.
+    /// LAYER1: `FOCUS` is **not** published here any more. The window that gets
+    /// focus is the WMS layer stack's `focus_target()` (topmost focusable
+    /// window), so the session calls [`InputDispatch::set_focus`] after the add
+    /// and after every remove/relayout. Publishing `FOCUS(true)` to whatever
+    /// window happened to be registered made a `FLAG_NOT_FOCUSABLE` overlay
+    /// steal the activity's focus.
     pub fn register_window(&mut self, token: BinderId, name: &str) -> Result<()> {
         self.registry.register(token, name)?;
         self.tokens.insert(token.0);
@@ -156,10 +159,39 @@ impl InputDispatch {
             kind: "touch_mode",
             detail: "inTouchMode=true".into(),
         });
-        if std::env::var_os("ACOS_INPUT_NO_FOCUS").is_none() {
-            self.publish_focus(token, true)?;
+        Ok(())
+    }
+
+    /// Publish the policy focus state: `FOCUS(false)` to the window that loses
+    /// focus, `FOCUS(true)` to the one that gains it. No message when the
+    /// target did not change. `ACOS_INPUT_NO_FOCUS=1` suppresses the messages
+    /// for diagnostics only (the recorded focus state still moves).
+    pub fn set_focus(&mut self, focus: Option<BinderId>) -> Result<()> {
+        let next = focus.map(|t| t.0);
+        if self.focused == next {
+            return Ok(());
+        }
+        let previous = self.focused;
+        self.focused = next;
+        if std::env::var_os("ACOS_INPUT_NO_FOCUS").is_some() {
+            return Ok(());
+        }
+        if let Some(old) = previous {
+            let token = BinderId(old);
+            if self.tokens.contains(&old) {
+                self.publish_focus(token, false)?;
+            }
+        }
+        if let Some(new) = next {
+            self.publish_focus(BinderId(new), true)?;
         }
         Ok(())
+    }
+
+    /// The window the dispatcher currently believes has focus.
+    #[must_use]
+    pub fn focused(&self) -> Option<BinderId> {
+        self.focused.map(BinderId)
     }
 
     /// Publish the real `FOCUS(hasFocus)` message. This is what
@@ -404,6 +436,69 @@ impl InputDispatch {
         Ok(gesture)
     }
 
+    /// Publish one `MotionEvent` series (a voice/accessibility gesture) on
+    /// `token`'s channel, each event with its own time.
+    ///
+    /// This is the `dispatchGesture` path: the events are the guest's own
+    /// (`GestureDescription$MotionEventGenerator` sampled them on the device
+    /// clock), so the host publishes them verbatim instead of sleeping between
+    /// strokes. Every event is published before the first one can be acked, so
+    /// a failure half-way is still reported as a failure of the whole series.
+    pub fn inject_motion_series(
+        &mut self,
+        token: BinderId,
+        events: &[crate::input_channel::MotionEvent],
+    ) -> Result<Gesture> {
+        if events.is_empty() {
+            return Err(ChannelError::Malformed("empty gesture"));
+        }
+        let Some(_) = self.registry.publisher_mut(token) else {
+            let message = format!(
+                "inject_motion_series: no input channel for token {:#x}",
+                token.0
+            );
+            self.events.push(InputEvent::Error {
+                token,
+                message: message.clone(),
+            });
+            return Err(ChannelError::Io(message));
+        };
+        let mut dispatches = Vec::with_capacity(events.len());
+        for event in events {
+            let Some(publisher) = self.registry.publisher_mut(token) else {
+                return Err(ChannelError::Io("input channel vanished".into()));
+            };
+            // A stroke is many events: each one carries its own `eventId`, like
+            // the dispatcher's own allocation (`inject_tap` does the same), so
+            // the guest's `InputEventReceiver` never sees two `FINISHED` acks
+            // for one id.
+            let mut event = event.clone();
+            event.event_id = publisher.allocate_event_id();
+            match publisher.publish_motion(&event) {
+                Ok(dispatch) => {
+                    self.events.push(InputEvent::Published {
+                        token,
+                        seq: dispatch.seq,
+                        kind: "motion",
+                        detail: format!(
+                            "{:?} action={} t={}",
+                            dispatch.kind, event.action, event.event_time
+                        ),
+                    });
+                    dispatches.push(dispatch);
+                }
+                Err(error) => {
+                    self.events.push(InputEvent::Error {
+                        token,
+                        message: format!("inject_motion_series: {error}"),
+                    });
+                    return Err(error);
+                }
+            }
+        }
+        Ok(Gesture { dispatches })
+    }
+
     /// Publish a key press on `token`'s channel.
     pub fn inject_key(&mut self, token: BinderId, key_code: i32) -> Result<Gesture> {
         self.publish_key(token, key_code)
@@ -443,6 +538,36 @@ impl InputDispatch {
                 Err(e) => return Err(e),
             }
         }
+    }
+
+    /// Publish on the window that holds **input focus**, falling back to the
+    /// newest live one only when no focus is known (a bare host with no layer
+    /// stack).
+    ///
+    /// This is `InputDispatcher`'s own policy: a key goes to
+    /// `getFocusedWindowHandle`, never to "the window that registered last".
+    /// Measured before this existed: after a `TYPE_ACCESSIBILITY_OVERLAY`
+    /// (`FLAG_NOT_FOCUSABLE|FLAG_NOT_TOUCHABLE`) was added, the next `back`
+    /// landed on the overlay's `ViewRootImpl`, which logged `VRI[]: Dropping
+    /// event (no window focus)` and the app never saw the key.
+    pub fn publish_on_focused(
+        &mut self,
+        mut publish: impl FnMut(&mut InputDispatch, BinderId) -> Result<Gesture>,
+    ) -> Result<(BinderId, Gesture)> {
+        let focused = self.focused().filter(|token| self.tokens.contains(&token.0));
+        if let Some(token) = focused {
+            match publish(self, token) {
+                Ok(gesture) => return Ok((token, gesture)),
+                Err(ChannelError::PeerClosed) => {
+                    let message =
+                        format!("input channel {:#x} peer is closed; forgetting it", token.0);
+                    self.events.push(InputEvent::Error { token, message });
+                    self.remove(token);
+                }
+                Err(error) => return Err(error),
+            }
+        }
+        self.publish_on_live(publish)
     }
 
     fn publish_key(&mut self, token: BinderId, key_code: i32) -> Result<Gesture> {
@@ -530,10 +655,9 @@ impl InputDispatch {
             match publisher.receive_consumer_response() {
                 Ok(Some(response)) => {
                     match &response {
-                        ConsumerResponse::Finished(ack) => self.events.push(InputEvent::Acked {
-                            token,
-                            ack: *ack,
-                        }),
+                        ConsumerResponse::Finished(ack) => {
+                            self.events.push(InputEvent::Acked { token, ack: *ack })
+                        }
                         ConsumerResponse::Timeline(timeline) => {
                             self.events.push(InputEvent::Timeline {
                                 token,
@@ -573,6 +697,9 @@ impl InputDispatch {
     pub fn remove(&mut self, token: BinderId) -> bool {
         let was = self.registry.remove(token);
         self.tokens.remove(&token.0);
+        if self.focused == Some(token.0) {
+            self.focused = None;
+        }
         if was {
             self.events.push(InputEvent::Closed { token });
             self.removals += 1;
@@ -625,11 +752,29 @@ pub struct InjectedGesture {
     pub acks: Vec<InjectedAck>,
 }
 
+/// Where a touch at a display point lands: the window under the point
+/// (`InputDispatcher::findTouchedWindowAt`) and the point in **that window's**
+/// space (the `InputChannel` transform's space).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct TouchTarget {
+    /// The window's input token (its `IWindow` binder id).
+    pub token: BinderId,
+    /// The point in the window's own coordinates.
+    pub x: f32,
+    pub y: f32,
+    /// The window frame's display origin (diagnostics: the conversion back).
+    pub origin: (i32, i32),
+}
+
 /// The session-facing handle: shared producer state plus the injector thread.
 #[derive(Debug, Clone)]
 pub struct InputHost {
     state: Arc<Mutex<InputDispatch>>,
     relayout_tx: Option<Sender<BinderId>>,
+    /// The window stack the touch rule reads. `None` on a bare host (unit
+    /// tests, a session with no layer stack): the only target there is, is the
+    /// newest live window, and [`Self::touch_target`] says so.
+    stack: Option<Arc<Mutex<crate::wms::WmsState>>>,
 }
 
 impl InputHost {
@@ -658,7 +803,11 @@ impl InputHost {
                 .ok();
             tx
         });
-        Self { state, relayout_tx }
+        Self {
+            state,
+            relayout_tx,
+            stack: None,
+        }
     }
 
     /// An inert host (no channel, no thread); the session keeps its W2 path.
@@ -667,7 +816,82 @@ impl InputHost {
         Self {
             state: Arc::new(Mutex::new(InputDispatch::new())),
             relayout_tx: None,
+            stack: None,
         }
+    }
+
+    /// Give this host the session's window stack: the **one** owner of "which
+    /// window is under this point".
+    ///
+    /// `InputDispatcher` routes a touch by the layer stack
+    /// (`findTouchedWindowAt`: topmost touchable window containing the point)
+    /// and a key by focus (`getFocusedWindowHandle`). `acos-wm` already models
+    /// both ([`acos_wm::layers::WindowLayerStack::hit_test_candidates`] /
+    /// `focus_target`); attaching the stack here is what makes the same rule
+    /// hold for every input path (scenario steps, the session API, a bound
+    /// accessibility service) instead of per-call-site guesses.
+    #[must_use]
+    pub fn with_window_stack(mut self, stack: Arc<Mutex<crate::wms::WmsState>>) -> Self {
+        self.stack = Some(stack);
+        self
+    }
+
+    /// `true` when a layer stack is attached (the touch rule is by point).
+    #[must_use]
+    pub fn has_window_stack(&self) -> bool {
+        self.stack.is_some()
+    }
+
+    /// Where a touch at display point `(x, y)` lands.
+    ///
+    /// The topmost **touchable** window containing the point whose input
+    /// channel is live (`InputDispatcher`'s search order), with the point
+    /// converted into that window's space. `None` when no window is under the
+    /// point — a structured refusal, never "the newest window".
+    ///
+    /// This is the same rule the VM transport's dispatcher already implements
+    /// ([`crate::input::InputDispatcher::hit_test`] /
+    /// [`crate::input::InputDispatcher::half_inject_tap`]-style point routing),
+    /// and the same one `acos-wm` models for composition. There is exactly one
+    /// rule: touch by point, keys by focus.
+    #[must_use]
+    pub fn touch_target(&self, x: f32, y: f32) -> Option<TouchTarget> {
+        let stack = self.stack.as_ref()?;
+        let point = acos_wm::geom::PointI::new(x as i32, y as i32);
+        // The stack lock is released before the input state is taken: the two
+        // never nest (the window session delivers input while holding its own
+        // lock).
+        let candidates = {
+            let wms = stack
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            wms.wm
+                .hit_test_candidates(point)
+                .into_iter()
+                .map(|window| {
+                    let origin = wms
+                        .wm
+                        .windows
+                        .get(&window)
+                        .map(|record| (record.frame.left, record.frame.top))
+                        .unwrap_or((0, 0));
+                    (window, origin)
+                })
+                .collect::<Vec<_>>()
+        };
+        for (window, origin) in candidates {
+            let token = BinderId(window);
+            if !self.is_live(token) {
+                continue;
+            }
+            return Some(TouchTarget {
+                token,
+                x: x - origin.0 as f32,
+                y: y - origin.1 as f32,
+                origin,
+            });
+        }
+        None
     }
 
     /// The live window tokens (`{:#x}` strings), for diagnostics.
@@ -716,6 +940,12 @@ impl InputHost {
         }
     }
 
+    /// `true` when `token` still has a live input channel.
+    #[must_use]
+    pub fn is_live(&self, token: BinderId) -> bool {
+        lock(&self.state).is_registered(token)
+    }
+
     /// `true` when an environment-driven injection plan is configured.
     #[must_use]
     pub fn is_active(&self) -> bool {
@@ -729,20 +959,68 @@ impl InputHost {
         default_token(&lock(&self.state))
     }
 
-    /// Publish one tap on the newest live window and collect the guest's
+    /// The token of the window input focus is on.
+    ///
+    /// Keys go to the **focused** window (`InputDispatcher::dispatchKeyLocked`
+    /// only dispatches a key to `getFocusedWindowHandle`), not to the most
+    /// recently added one: a `FLAG_NOT_FOCUSABLE` accessibility overlay added
+    /// after the activity must not receive Back. `None` when no window holds
+    /// focus, which for a key is a refusal, not a guess.
+    #[must_use]
+    pub fn focused_token(&self) -> Option<BinderId> {
+        lock(&self.state).focused()
+    }
+
+    /// Publish one tap at display point `(x, y)` and collect the guest's
     /// `FINISHED` replies for a bounded window.
     ///
-    /// This is the interactive-session API (W10). It is the same
-    /// `InputDispatch::inject_tap` I2 already proved (window-transform-carried
-    /// coordinates on the real `InputChannel`), with the wait for the guest's
-    /// acks instead of a fire-and-forget log.
-    pub fn tap(&self, x: f32, y: f32, ack_wait: Duration) -> Result<InjectedGesture> {        let (token, gesture) = lock(&self.state)
+    /// The target is the **window under the point** (`InputDispatcher`'s
+    /// `findTouchedWindowAt`), and the published point is that window's own
+    /// space — never "the newest registered window" and never "the focused
+    /// one": an overlay above the activity takes a touch that lands on it, and
+    /// an activity takes one that lands on it even while another window holds
+    /// focus. A point with no touchable window under it is a structured
+    /// refusal (`ChannelError::Malformed`), because falling back to another
+    /// window would deliver a tap the user did not make.
+    ///
+    /// A host with no attached layer stack (unit tests, a bare host) has one
+    /// window and uses it; [`Self::has_window_stack`] reports which rule
+    /// applied.
+    pub fn tap(&self, x: f32, y: f32, ack_wait: Duration) -> Result<InjectedGesture> {
+        if self.stack.is_some() {
+            let Some(target) = self.touch_target(x, y) else {
+                return Err(no_touch_target(x, y));
+            };
+            return self.tap_window(target.token, target.x, target.y, ack_wait);
+        }
+        let (token, gesture) = lock(&self.state)
             .publish_on_live(|dispatch, token| dispatch.inject_tap(token, x, y))?;
         self.collect(&token, &gesture, ack_wait)
     }
 
-    /// Publish one swipe/scroll on the newest live window and collect the
-    /// guest's `FINISHED` replies for a bounded window.
+    /// Publish one tap on an explicit window token. The point is **window
+    /// local** (the `InputChannel` transform's space); the caller chooses the
+    /// token from the WMS layer stack's hit test (LAYER1), not from registration
+    /// order.
+    pub fn tap_window(
+        &self,
+        token: BinderId,
+        x: f32,
+        y: f32,
+        ack_wait: Duration,
+    ) -> Result<InjectedGesture> {
+        let gesture = lock(&self.state).inject_tap(token, x, y)?;
+        self.collect(&token, &gesture, ack_wait)
+    }
+
+    /// Publish one swipe/scroll and collect the guest's `FINISHED` replies for
+    /// a bounded window.
+    ///
+    /// A swipe is a **touch stream**, so its target is the window under its
+    /// start point (`InputDispatcher` finds the touched window on `DOWN` and
+    /// keeps the stream on it), both points converted into that window's
+    /// space. Routing it by focus was the A11YPACE slip this rule replaces: a
+    /// drag that starts on an overlay went to the activity that held focus.
     ///
     /// The stream is paced over `duration` (see
     /// [`InputDispatch::inject_swipe`]); the ack window starts after the `UP`
@@ -755,23 +1033,37 @@ impl InputHost {
         duration: Duration,
         ack_wait: Duration,
     ) -> Result<InjectedGesture> {
+        if self.stack.is_some() {
+            let Some(target) = self.touch_target(from.0, from.1) else {
+                return Err(no_touch_target(from.0, from.1));
+            };
+            let local_from = (target.x, target.y);
+            let local_to = (
+                to.0 - target.origin.0 as f32,
+                to.1 - target.origin.1 as f32,
+            );
+            let gesture = lock(&self.state)
+                .inject_swipe(target.token, local_from, local_to, duration)?;
+            return self.collect(&target.token, &gesture, ack_wait);
+        }
         let (token, gesture) = lock(&self.state).publish_on_live(|dispatch, token| {
             dispatch.inject_swipe(token, from, to, duration)
         })?;
         self.collect(&token, &gesture, ack_wait)
     }
 
-    /// Publish one key press on the newest live window (delivery only; window
+    /// Publish one key press on the focused window (delivery only; window
     /// focus still needs the IME `EditorInfo` codec, so the app may drop it —
     /// the ack's `handled` field reports exactly that).
     pub fn key(&self, code: i32, ack_wait: Duration) -> Result<InjectedGesture> {
         let (token, gesture) = lock(&self.state)
-            .publish_on_live(|dispatch, token| dispatch.inject_key(token, code))?;
+            .publish_on_focused(|dispatch, token| dispatch.inject_key(token, code))?;
         self.collect(&token, &gesture, ack_wait)
     }
 
-    /// Publish `text` as a real key stroke per character on the newest live
-    /// window and collect every `FINISHED` reply.
+    /// Publish `text` as a real key stroke per character on the focused window
+    /// (falling back to the newest live one) and collect every `FINISHED`
+    /// reply.
     ///
     /// This is the `type_text` session API. It is a **keyboard** path: the
     /// guest resolves each character through its `KeyCharacterMap`, exactly as
@@ -779,7 +1071,7 @@ impl InputHost {
     /// IME; see `crate::ime`).
     pub fn type_text(&self, text: &str, ack_wait: Duration) -> Result<InjectedGesture> {
         let (token, gesture) = lock(&self.state)
-            .publish_on_live(|dispatch, token| dispatch.inject_text(token, text))?;
+            .publish_on_focused(|dispatch, token| dispatch.inject_text(token, text))?;
         self.collect(&token, &gesture, ack_wait)
     }
 
@@ -790,6 +1082,15 @@ impl InputHost {
         ack_wait: Duration,
     ) -> Result<InjectedGesture> {
         let seqs: Vec<u32> = gesture.dispatches.iter().map(|d| d.seq).collect();
+        let traced = std::env::var_os("ACOS_TRACE_FILE").is_some()
+            || std::env::var_os("ACOS_INPUT_TRACE").is_some();
+        if traced {
+            crate::trace::line(format!(
+                "ACOSINPUT collect-wait token={:#x} seqs={seqs:?} budget_ms={}",
+                token.0,
+                ack_wait.as_millis()
+            ));
+        }
         let mut acks: Vec<InjectedAck> = Vec::new();
         let deadline = Instant::now() + ack_wait;
         while Instant::now() < deadline && acks.len() < seqs.len() {
@@ -1059,6 +1360,350 @@ pub fn default_token(d: &InputDispatch) -> Option<BinderId> {
     d.newest_token()
 }
 
+/// The structured refusal for a touch with no touchable window under it.
+///
+/// `InputDispatcher` drops such a gesture (there is nothing to deliver it to);
+/// ACOS names the point instead of publishing it to some other window.
+fn no_touch_target(x: f32, y: f32) -> ChannelError {
+    ChannelError::NoTouchTarget(format!(
+        "no touchable window at ({x},{y}) (the layer-stack hit test found none)"
+    ))
+}
+
+#[cfg(test)]
+mod focus_target_tests {
+    use super::*;
+
+    const FOCUSED: BinderId = BinderId(0x9a01);
+    const NEWEST: BinderId = BinderId(0x9a02);
+
+    /// A11YPACE: a key/gesture goes to the window that holds **input focus**,
+    /// not to the newest one.
+    ///
+    /// Measured before this existed: a `TYPE_ACCESSIBILITY_OVERLAY`
+    /// (`FLAG_NOT_FOCUSABLE|FLAG_NOT_TOUCHABLE`) was the newest window, so
+    /// `back` was published to the overlay's channel, whose `ViewRootImpl`
+    /// logged `VRI[]: Dropping event (no window focus)` — the app never saw the
+    /// key. Focus is the layer stack's answer, so the overlay can be above the
+    /// activity and still be skipped.
+    #[test]
+    fn keys_go_to_the_focused_window_not_the_newest() {
+        let mut dispatch = InputDispatch::new();
+        dispatch
+            .register_window(FOCUSED, "activity")
+            .expect("register activity");
+        dispatch
+            .register_window(NEWEST, "accessibility overlay")
+            .expect("register overlay");
+        dispatch.set_focus(Some(FOCUSED)).expect("publish focus");
+        assert_eq!(dispatch.newest_token(), Some(NEWEST));
+
+        let (token, gesture) = dispatch
+            .publish_on_focused(|d, token| d.inject_key(token, crate::input_channel::KEYCODE_BACK))
+            .expect("the focused channel accepts the key");
+        assert_eq!(token, FOCUSED);
+        assert_eq!(gesture.dispatches.len(), 2, "DOWN and UP");
+
+        // With no focus known the fallback is the newest live window, so a bare
+        // host still has a defined target.
+        dispatch.set_focus(None).expect("clear focus");
+        let (token, _) = dispatch
+            .publish_on_focused(|d, token| d.inject_key(token, crate::input_channel::KEYCODE_BACK))
+            .expect("the newest channel accepts the key");
+        assert_eq!(token, NEWEST);
+    }
+}
+
+#[cfg(test)]
+mod touch_target_tests {
+    use super::*;
+    use crate::input_channel::{InputMessage, LoopbackConsumer};
+    use std::sync::atomic::{AtomicUsize, Ordering as AtomicOrdering};
+    use acos_wm::display::DEFAULT_INSETS_MODE;
+    use acos_wm::layers::{FLAG_NOT_FOCUSABLE, FLAG_NOT_TOUCHABLE, TYPE_APPLICATION};
+
+    const ACTIVITY: u64 = 0x5a01;
+    const DIALOG: u64 = 0x5a02;
+    const OVERLAY: u64 = 0x5a03;
+
+    /// The three windows the rule has to tell apart: an activity on the whole
+    /// display, a dialog above it that holds focus, and a non-focusable,
+    /// non-touchable accessibility overlay that was registered **last** (so it
+    /// is "the newest window" for any rule that guesses by registration order).
+    fn host_with_stack() -> (InputHost, Arc<Mutex<crate::wms::WmsState>>) {
+        let state = crate::wms::WmsState::new_with_insets(DEFAULT_INSETS_MODE);
+        let stack = Arc::new(Mutex::new(state));
+        let session = {
+            let mut wms = stack.lock().expect("wms");
+            let session = wms.allocate_session();
+            let mut activity = acos_wm::codec::LayoutParams::application("t", "activity");
+            activity.type_ = TYPE_APPLICATION;
+            activity.width = -1;
+            activity.height = -1;
+            wms.wm
+                .add_to_display_as_user(session, BinderId(ACTIVITY), activity, 0)
+                .expect("add activity");
+            // A dialog in the top half: it takes focus, not the whole display.
+            let mut dialog = acos_wm::codec::LayoutParams::application("t", "dialog");
+            dialog.type_ = TYPE_APPLICATION;
+            dialog.width = 600;
+            dialog.height = 400;
+            wms.wm
+                .add_to_display_as_user(session, BinderId(DIALOG), dialog, 0)
+                .expect("add dialog");
+            // The overlay is added last (newest) and is neither focusable nor
+            // touchable: it must not take focus and must not take a touch.
+            let mut overlay = acos_wm::codec::LayoutParams::application("t", "overlay");
+            overlay.type_ = TYPE_APPLICATION;
+            overlay.width = 200;
+            overlay.height = 200;
+            overlay.flags = FLAG_NOT_TOUCHABLE | FLAG_NOT_FOCUSABLE;
+            wms.wm
+                .add_to_display_as_user(session, BinderId(OVERLAY), overlay, 0)
+                .expect("add overlay");
+            session
+        };
+        let _ = session;
+        let mut dispatch = InputDispatch::new();
+        for (token, name) in [
+            (BinderId(ACTIVITY), "activity"),
+            (BinderId(DIALOG), "dialog"),
+            (BinderId(OVERLAY), "accessibility overlay"),
+        ] {
+            dispatch.register_window(token, name).expect("register");
+        }
+        // Focus is on the dialog; the overlay is the newest registration.
+        dispatch
+            .set_focus(Some(BinderId(DIALOG)))
+            .expect("publish focus");
+        let host = InputHost {
+            state: Arc::new(Mutex::new(dispatch)),
+            relayout_tx: None,
+            stack: Some(Arc::clone(&stack)),
+        };
+        (host, stack)
+    }
+
+    /// WVTAP: a **touch** goes to the window under the point
+    /// (`InputDispatcher::findTouchedWindowAt`), not to the focused window and
+    /// not to the newest registration.
+    ///
+    /// Measured before this existed (A11YPACE): the scenario `tap` used
+    /// `publish_on_live` ("the newest live window") and `swipe` used
+    /// `publish_on_focused`, so with a dialog focused and an overlay registered
+    /// last, a tap on the activity's own content either went to the overlay's
+    /// channel or to the dialog — and the activity never saw the touch
+    /// (`webview-probe` lost its page click; `ELEMENT_NOT_FOUND`).
+    #[test]
+    fn touch_goes_to_the_window_under_the_point_not_the_focused_or_newest() {
+        let (host, stack) = host_with_stack();
+        let (dialog_frame, activity_frame, overlay_frame) = {
+            let wms = stack.lock().expect("wms");
+            (
+                wms.wm.windows[&DIALOG].frame,
+                wms.wm.windows[&ACTIVITY].frame,
+                wms.wm.windows[&OVERLAY].frame,
+            )
+        };
+        // Inside the dialog: the dialog is under the point (and has focus).
+        let target = host
+            .touch_target(
+                (dialog_frame.left + 10) as f32,
+                (dialog_frame.top + 10) as f32,
+            )
+            .expect("the dialog is under the point");
+        assert_eq!(target.token, BinderId(DIALOG));
+        assert_eq!(target.origin, (dialog_frame.left, dialog_frame.top));
+        assert_eq!(target.x, 10.0, "the point is the window's own space");
+        assert_eq!(target.y, 10.0);
+        // Outside the dialog and the overlay, inside the activity: the touch
+        // goes to the activity even though the dialog holds focus.
+        let bottom = (activity_frame.left + 40, activity_frame.bottom - 100);
+        let target = host
+            .touch_target(bottom.0 as f32, bottom.1 as f32)
+            .expect("the activity is under the point");
+        assert_eq!(target.token, BinderId(ACTIVITY));
+        // Both rules this replaces are demonstrably wrong here: the tap step
+        // used to publish on the newest live window, and `swipe` on the focused
+        // one. Either would have sent this touch somewhere else.
+        assert_eq!(
+            host.newest_token(),
+            Some(BinderId(OVERLAY)),
+            "the newest window is the overlay, not the window under the point"
+        );
+        assert_eq!(
+            host.focused_token(),
+            Some(BinderId(DIALOG)),
+            "the focused window is the dialog, not the window under the point"
+        );
+        assert_eq!(target.origin, (activity_frame.left, activity_frame.top));
+        // Under the overlay: the overlay is NOT touchable, so the touch passes
+        // through to whatever is below it (`LAYER1`'s pass-through rule). The
+        // expected window is the stack's own answer; the assertion that matters
+        // is that the routing *used* the stack and the overlay never took it.
+        let under = (overlay_frame.left + 5, overlay_frame.top + 5);
+        let expected = {
+            let wms = stack.lock().expect("wms");
+            wms.wm
+                .hit_test(acos_wm::geom::PointI::new(under.0, under.1))
+                .expect("something is under the overlay point")
+        };
+        let target = host
+            .touch_target(under.0 as f32, under.1 as f32)
+            .expect("a touchable window is still under the overlay");
+        assert_eq!(
+            target.token,
+            BinderId(expected),
+            "the touch follows the layer stack's own hit test"
+        );
+        assert_ne!(
+            target.token,
+            BinderId(OVERLAY),
+            "a FLAG_NOT_TOUCHABLE overlay never takes the touch"
+        );
+    }
+
+    /// The same host routes a **key** by focus: one rule per event class.
+    #[test]
+    fn keys_still_go_to_the_focused_window_on_the_same_host() {
+        let (host, _stack) = host_with_stack();
+        let mut state = lock(&host.state);
+        let (token, gesture) = state
+            .publish_on_focused(|d, token| d.inject_key(token, crate::input_channel::KEYCODE_BACK))
+            .expect("the focused channel accepts the key");
+        assert_eq!(token, BinderId(DIALOG), "the dialog holds focus");
+        assert_eq!(gesture.dispatches.len(), 2);
+        assert_eq!(
+            state.newest_token(),
+            Some(BinderId(OVERLAY)),
+            "the overlay is the newest registration: a key must not go there"
+        );
+    }
+
+    /// A point with no touchable window under it is a **structured refusal**,
+    /// never a delivery to some other window (`InputDispatcher` drops it).
+    #[test]
+    fn a_touch_with_no_window_under_the_point_is_refused() {
+        let (host, _stack) = host_with_stack();
+        let err = host
+            .tap(100_000.0, 100_000.0, Duration::from_millis(1))
+            .expect_err("nothing is under that point");
+        let message = err.to_string();
+        assert!(
+            message.contains("no touchable window at (100000,100000)"),
+            "the refusal names the point, got {message:?}"
+        );
+        assert!(
+            message.contains("layer-stack hit test"),
+            "the refusal says which rule found nothing, got {message:?}"
+        );
+    }
+
+    /// The **end-to-end** pin for the routing rule: the scenario `tap` (the
+    /// public API every input path uses) delivers through the *channel of the
+    /// window under the point*, and the other two windows' channels see
+    /// nothing.
+    ///
+    /// Before this rule the same tap published on the newest live window (the
+    /// overlay), so the activity's own channel saw no `Motion` at all — that is
+    /// the shape of the measured A11YPACE regression (`webview-probe` step 11,
+    /// `ELEMENT_NOT_FOUND`: the page's click never fired). The guests are real
+    /// `InputChannel` loopbacks, so "delivered" here means the event was written
+    /// to that window's channel and acknowledged, not that a target was picked.
+    #[test]
+    fn a_scenario_tap_delivers_through_the_channel_of_the_window_under_the_point() {
+        let (host, stack) = host_with_stack();
+        let activity_frame = {
+            let wms = stack.lock().expect("wms");
+            wms.wm.windows[&ACTIVITY].frame
+        };
+        // Three real client channels, one per window.
+        let mut guests = Vec::new();
+        for token in [ACTIVITY, DIALOG, OVERLAY] {
+            let fd = lock(&host.state)
+                .duplicate_client_fd(BinderId(token))
+                .expect("client fd");
+            guests.push(Arc::new(Mutex::new(LoopbackConsumer::new(fd))));
+        }
+        let counts = [
+            Arc::new(AtomicUsize::new(0)),
+            Arc::new(AtomicUsize::new(0)),
+            Arc::new(AtomicUsize::new(0)),
+        ];
+        let stop = Arc::new(AtomicUsize::new(0));
+        let mut ackers = Vec::new();
+        for (guest, count) in guests.iter().cloned().zip(counts.iter().cloned()) {
+            let stop = Arc::clone(&stop);
+            ackers.push(thread::spawn(move || {
+                loop {
+                    {
+                        let mut guest = guest.lock().expect("guest");
+                        // Registration publishes TOUCH_MODE/FOCUS on this
+                        // channel too; only Motion carries the gesture.
+                        while let Some(message) = guest.recv().expect("recv") {
+                            if let InputMessage::Motion { seq, .. } = message {
+                                count.fetch_add(1, AtomicOrdering::SeqCst);
+                                guest.send_finished(seq, true).expect("ack");
+                            }
+                        }
+                    }
+                    if stop.load(AtomicOrdering::SeqCst) == 1 {
+                        return;
+                    }
+                    thread::sleep(Duration::from_millis(2));
+                }
+            }));
+        }
+        // A point inside the activity and outside the dialog and the overlay.
+        let x = (activity_frame.left + 40) as f32;
+        let y = (activity_frame.bottom - 100) as f32;
+        let gesture = host.tap(x, y, Duration::from_secs(2)).expect("tap");
+        stop.store(1, AtomicOrdering::SeqCst);
+        for acker in ackers {
+            acker.join().expect("acker");
+        }
+        assert_eq!(gesture.token, BinderId(ACTIVITY));
+        assert_eq!(gesture.seqs.len(), 2, "DOWN and UP");
+        assert_eq!(
+            counts[0].load(AtomicOrdering::SeqCst),
+            2,
+            "the activity's channel carries the gesture (DOWN, UP)"
+        );
+        assert_eq!(
+            counts[1].load(AtomicOrdering::SeqCst),
+            0,
+            "the focused dialog never sees a tap that was not on it"
+        );
+        assert_eq!(
+            counts[2].load(AtomicOrdering::SeqCst),
+            0,
+            "the newest window (the overlay) never sees it either"
+        );
+    }
+
+    /// A swipe is a touch stream: its target is the window under its **start**
+    /// point, and both ends are published in that window's space.
+    #[test]
+    fn a_swipe_goes_to_the_window_under_its_start_point() {
+        let (host, stack) = host_with_stack();
+        let activity_frame = {
+            let wms = stack.lock().expect("wms");
+            wms.wm.windows[&ACTIVITY].frame
+        };
+        let from = (activity_frame.left as f32 + 40.0, activity_frame.bottom as f32 - 300.0);
+        let to = (from.0, from.1 - 200.0);
+        let injected = host
+            .swipe(from, to, Duration::from_millis(60), Duration::from_millis(1))
+            .expect("the activity takes the swipe");
+        assert_eq!(
+            injected.token,
+            BinderId(ACTIVITY),
+            "the swipe follows the point, not the dialog's focus"
+        );
+        assert!(injected.seqs.len() >= 3, "DOWN, MOVEs, UP");
+    }
+}
+
 #[cfg(test)]
 mod window_removal_tests {
     use super::*;
@@ -1139,12 +1784,58 @@ mod ack_accounting_tests {
     /// discarded, and the tap must report its *own* publish -> `FINISHED`
     /// latency; counting the stale pair made the first tap look instantaneous
     /// and the next gesture pay for it.
+    /// LAYER1: focus is published by policy, not by registration. A newly
+    /// added window only gets `FOCUS(true)` when it becomes the target; the
+    /// window it took focus from gets `FOCUS(false)` first.
+    #[test]
+    fn focus_messages_follow_the_policy_target_and_only_on_change() {
+        const OTHER: BinderId = BinderId(0x7702);
+        let mut dispatch = InputDispatch::new();
+        dispatch
+            .register_window(TOKEN, "activity")
+            .expect("register");
+        dispatch
+            .register_window(OTHER, "overlay")
+            .expect("register");
+        dispatch.set_focus(Some(TOKEN)).expect("focus activity");
+        assert_eq!(dispatch.focused(), Some(TOKEN));
+
+        let fd = dispatch.duplicate_client_fd(TOKEN).expect("client fd");
+        let mut guest = LoopbackConsumer::new(fd);
+        // Registration publishes TOUCH_MODE; focus is the next message.
+        match guest.recv().expect("recv").expect("message") {
+            InputMessage::TouchMode { .. } => {}
+            other => panic!("expected TOUCH_MODE, got {other:?}"),
+        }
+        match guest.recv().expect("recv").expect("message") {
+            InputMessage::Focus { has_focus, .. } => assert!(has_focus),
+            other => panic!("expected FOCUS(true), got {other:?}"),
+        }
+        // Same target again: nothing is published.
+        dispatch.set_focus(Some(TOKEN)).expect("same focus");
+        assert_eq!(
+            dispatch
+                .events()
+                .iter()
+                .filter(|e| matches!(e, InputEvent::Published { kind: "focus", .. }))
+                .count(),
+            1
+        );
+
+        // A not-focusable overlay never becomes the target; `set_focus` is only
+        // ever called with the WMS `focus_target()`, so the activity stays.
+        dispatch.remove(OTHER);
+        assert_eq!(dispatch.focused(), Some(TOKEN));
+    }
+
     #[test]
     fn stale_focus_and_touch_mode_acks_are_never_counted_as_the_taps() {
         let mut dispatch = InputDispatch::new();
         dispatch
             .register_window(TOKEN, "Surface(name=acos-fixture/counter)/@0x10")
             .expect("register");
+        // LAYER1: the window session publishes policy focus after the add.
+        dispatch.set_focus(Some(TOKEN)).expect("focus");
         let fd = dispatch.duplicate_client_fd(TOKEN).expect("client fd");
         let mut guest = LoopbackConsumer::new(fd);
 
@@ -1165,6 +1856,7 @@ mod ack_accounting_tests {
         let host = InputHost {
             state: Arc::clone(&state),
             relayout_tx: None,
+            stack: None,
         };
         let acker = thread::spawn(move || {
             let mut acked = 0;
@@ -1179,9 +1871,7 @@ mod ack_accounting_tests {
             }
         });
 
-        let gesture = host
-            .tap(10.0, 20.0, Duration::from_secs(2))
-            .expect("tap");
+        let gesture = host.tap(10.0, 20.0, Duration::from_secs(2)).expect("tap");
         acker.join().expect("acker");
 
         assert_eq!(gesture.seqs.len(), 2);
@@ -1260,10 +1950,9 @@ mod swipe_stream_tests {
             .expect("register");
         let fd = dispatch.duplicate_client_fd(TOKEN).expect("client fd");
         let mut guest = LoopbackConsumer::new(fd);
-        // Drain the registration messages (touch mode + focus).
-        for _ in 0..2 {
-            guest.recv().expect("recv").expect("registration message");
-        }
+        // Drain the registration message (touch mode). Focus is the policy's
+        // (`set_focus`, LAYER1), never registration order.
+        guest.recv().expect("recv").expect("registration message");
 
         let started = Instant::now();
         let gesture = dispatch
@@ -1330,13 +2019,13 @@ mod swipe_stream_tests {
             .expect("register");
         let fd = dispatch.duplicate_client_fd(TOKEN).expect("client fd");
         let mut guest = LoopbackConsumer::new(fd);
-        for _ in 0..2 {
-            guest.recv().expect("recv").expect("registration message");
-        }
+        // Registration publishes TOUCH_MODE; focus follows the layer stack.
+        guest.recv().expect("recv").expect("registration message");
         let state = Arc::new(Mutex::new(dispatch));
         let host = InputHost {
             state: Arc::clone(&state),
             relayout_tx: None,
+            stack: None,
         };
         let acker = thread::spawn(move || {
             let mut acked = 0;

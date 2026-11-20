@@ -20,6 +20,7 @@ use std::rc::Rc;
 use std::sync::Arc;
 use std::time::Duration;
 
+use acos_parcel::binder::BinderId;
 use acos_render::context::RenderContext;
 use acos_render::geom::RectF;
 use acos_render::paint::Paint;
@@ -31,7 +32,6 @@ use acos_runtime::wms_java::{self, WmSurfaceBackend};
 use acos_vm::natives::fwk_surface::SurfaceBackend;
 use acos_vm::natives::gfx_hwui::FrameSink;
 use acos_wm::codec::LayoutParams;
-use acos_parcel::binder::BinderId;
 
 /// Rasterise a 4x3 black rectangle and return the RGBA8888 pixels.
 fn record_black_rect() -> Vec<u8> {
@@ -123,7 +123,8 @@ fn finish_drawing_alone_publishes_nothing() {
             .add_to_display_as_user(BinderId(0x1000), params, 0)
             .expect("add window");
         s.finish_drawing(add.window, 0).expect("finishDrawing");
-        s.finish_drawing(add.window, 0).expect("finishDrawing twice");
+        s.finish_drawing(add.window, 0)
+            .expect("finishDrawing twice");
     });
     assert_eq!(
         store.published_count(),

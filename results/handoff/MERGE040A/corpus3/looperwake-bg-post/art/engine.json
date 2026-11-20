@@ -1,0 +1,355 @@
+{
+  "engine": {
+    "animations": "off",
+    "commands": {
+      "missing": [
+        "environment"
+      ],
+      "supported": [
+        "launch",
+        "tree",
+        "screenshot",
+        "tap",
+        "tap_text",
+        "swipe",
+        "type_text",
+        "key",
+        "rotate",
+        "reset",
+        "close",
+        "logs",
+        "service_ctl",
+        "crash_reports"
+      ]
+    },
+    "engine": "art",
+    "evidence": {
+      "artifacts": "/home/Qui/.t3/worktrees/acos/t3-121d3058-b4fc4c69978d9127/results/handoff/MERGE040A/corpus3/looperwake-bg-post/art",
+      "engine_report": "/home/Qui/.t3/worktrees/acos/t3-121d3058-b4fc4c69978d9127/results/handoff/MERGE040A/corpus3/looperwake-bg-post/art/engine.json",
+      "pruned_session_captures": 2,
+      "retention": "/home/Qui/.t3/worktrees/acos/t3-121d3058-b4fc4c69978d9127/results/handoff/MERGE040A/corpus3/looperwake-bg-post/art/retention.json",
+      "verdict": "/home/Qui/.t3/worktrees/acos/t3-121d3058-b4fc4c69978d9127/results/handoff/MERGE040A/corpus3/looperwake-bg-post/art/verdict.json"
+    },
+    "evidence_provenance": {
+      "binder_transactions": "host-observed",
+      "crash_reports": "guest-asserted",
+      "frames": "host-observed",
+      "host_input": "host-observed",
+      "input_acks": "guest-asserted",
+      "launch_markers": "guest-asserted",
+      "lifecycle_markers": "guest-asserted",
+      "logs": "guest-asserted",
+      "static_manifest": "host-observed",
+      "tree": "guest-asserted"
+    },
+    "explicit": true,
+    "extra_apks": [],
+    "insets": "report",
+    "mode": "live",
+    "modules": [
+      {
+        "attach": "at-launch",
+        "details": null,
+        "fidelity": "real",
+        "id": "core",
+        "profile": "real",
+        "reason": null,
+        "state": "attached"
+      },
+      {
+        "attach": "hot",
+        "details": null,
+        "fidelity": "off",
+        "id": "accessibility",
+        "profile": "off",
+        "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"accessibility\", \"profile\": \"real\"}]}",
+        "state": "off"
+      },
+      {
+        "attach": "hot",
+        "details": null,
+        "fidelity": "off",
+        "id": "system.permissions",
+        "profile": "off",
+        "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.permissions\", \"profile\": \"real\"}]}",
+        "state": "off"
+      },
+      {
+        "attach": "hot",
+        "details": null,
+        "fidelity": "off",
+        "id": "system.notifications",
+        "profile": "off",
+        "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.notifications\", \"profile\": \"real\"}]}",
+        "state": "off"
+      },
+      {
+        "attach": "hot",
+        "details": null,
+        "fidelity": "off",
+        "id": "sensors",
+        "profile": "off",
+        "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"sensors\", \"profile\": \"scripted\"}]}",
+        "state": "off"
+      },
+      {
+        "attach": "hot",
+        "details": null,
+        "fidelity": "off",
+        "id": "feedback.vibrator",
+        "profile": "off",
+        "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"feedback.vibrator\", \"profile\": \"scripted\"}]}",
+        "state": "off"
+      },
+      {
+        "attach": "hot",
+        "details": null,
+        "fidelity": "off",
+        "id": "location",
+        "profile": "off",
+        "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"location\", \"profile\": \"scripted\"}]}",
+        "state": "off"
+      },
+      {
+        "attach": "at-launch",
+        "details": null,
+        "fidelity": "off",
+        "id": "net.telephony",
+        "profile": "off",
+        "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"net.telephony\", \"profile\": \"scripted\"}]}",
+        "state": "off"
+      },
+      {
+        "attach": "hot",
+        "details": null,
+        "fidelity": "off",
+        "id": "hw.bluetooth",
+        "profile": "off",
+        "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.bluetooth\", \"profile\": \"scripted\"}]}",
+        "state": "off"
+      },
+      {
+        "attach": "hot",
+        "details": null,
+        "fidelity": "off",
+        "id": "hw.biometric",
+        "profile": "off",
+        "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.biometric\", \"profile\": \"scripted\"}]}",
+        "state": "off"
+      },
+      {
+        "attach": "at-launch",
+        "details": null,
+        "fidelity": "off",
+        "id": "network",
+        "profile": "off",
+        "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"network\", \"profile\": \"real\"}]}",
+        "state": "off"
+      },
+      {
+        "attach": "at-launch",
+        "details": null,
+        "fidelity": "off",
+        "id": "webview",
+        "profile": "off",
+        "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"webview\", \"profile\": \"real\"}]}",
+        "state": "off"
+      },
+      {
+        "attach": "hot",
+        "details": null,
+        "fidelity": "off",
+        "id": "hw.usb",
+        "profile": "off",
+        "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.usb\", \"profile\": \"stub\"}]}",
+        "state": "off"
+      },
+      {
+        "attach": "hot",
+        "details": null,
+        "fidelity": "off",
+        "id": "system.dropbox",
+        "profile": "off",
+        "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.dropbox\", \"profile\": \"stub\"}]}",
+        "state": "off"
+      },
+      {
+        "attach": "hot",
+        "details": null,
+        "fidelity": "off",
+        "id": "hw.nfc",
+        "profile": "off",
+        "reason": "off: no NFC hardware: NfcAdapter throws UnsupportedOperationException before any binder (FEATURE_NFC is absent)",
+        "state": "off"
+      },
+      {
+        "attach": "hot",
+        "details": null,
+        "fidelity": "off",
+        "id": "system.wallpaper",
+        "profile": "off",
+        "reason": "off: no wallpaper service; AOSP's own DisabledWallpaperManager is the working missing path (config_enableWallpaperService is false)",
+        "state": "off"
+      },
+      {
+        "attach": "hot",
+        "details": null,
+        "fidelity": "off",
+        "id": "system.print",
+        "profile": "off",
+        "reason": "off: no print service; the client only resolves the name when FEATURE_PRINTING is reported, and ACOS reports it absent",
+        "state": "off"
+      },
+      {
+        "attach": "hot",
+        "details": null,
+        "fidelity": "off",
+        "id": "system.search",
+        "profile": "off",
+        "reason": "off: no search service and no searchable index; an empty SearchableInfo list would look like an installed search provider",
+        "state": "off"
+      },
+      {
+        "attach": "hot",
+        "details": null,
+        "fidelity": "off",
+        "id": "system.usage",
+        "profile": "off",
+        "reason": "off: nothing records app usage; an empty ParceledListSlice<UsageStats> would be indistinguishable from 'not used'",
+        "state": "off"
+      },
+      {
+        "attach": "hot",
+        "details": null,
+        "fidelity": "off",
+        "id": "system.dpm",
+        "profile": "off",
+        "reason": "off: no managed device or profile; every device-policy answer would be invented policy state",
+        "state": "off"
+      },
+      {
+        "attach": "hot",
+        "details": null,
+        "fidelity": "off",
+        "id": "system.role",
+        "profile": "off",
+        "reason": "off: IRoleManager lives in the Permission APEX; its transaction table is not in the framework dex this build reads, so a stub would guess codes",
+        "state": "off"
+      },
+      {
+        "attach": "hot",
+        "details": null,
+        "fidelity": "off",
+        "id": "geo.country",
+        "profile": "off",
+        "reason": "off: a detected country is a location claim ACOS cannot back",
+        "state": "off"
+      }
+    ],
+    "session_exit": {
+      "abi": null,
+      "cgroup": "cgroup: memory.max=2048MiB swap=0 pids.max=512 peak=68MiB oom_kills=0 (/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p1245977-i1240718.scope)",
+      "code": null,
+      "disk_free_bytes": 160764137472,
+      "guest_crash": null,
+      "guest_exit": 0,
+      "guest_signal": null,
+      "native_crash": null,
+      "native_crash_path": null,
+      "outcome": "ok",
+      "panic": null,
+      "path": "/home/Qui/.t3/worktrees/acos/t3-121d3058-b4fc4c69978d9127/results/handoff/MERGE040A/corpus3/looperwake-bg-post/art/art-frames/session-exit.json",
+      "retryable": false,
+      "stage": "teardown-evidence"
+    },
+    "session_id": "verify-1245968",
+    "timing": {
+      "attributed_ms": 2386,
+      "boot_image": {
+        "base": "0x70000000",
+        "cache": "hit",
+        "dir": "/home/Qui/.cache/acos/art/boot-images/fixed-ff39b037f1d6b9ff",
+        "input_hash": "ff39b037f1d6b9ff",
+        "mode": "shared-fixed"
+      },
+      "note": "session_start_ms is the guest boot before the executor clock; unattributed_ms is verdict wall that no step timer covered (wait-for-log polling before a step starts, evidence writes)",
+      "session_start_ms": 170,
+      "steps": [
+        {
+          "index": 0,
+          "status": "pass",
+          "step": "launch",
+          "wall_ms": 114
+        },
+        {
+          "index": 1,
+          "status": "pass",
+          "step": "assert_text",
+          "wall_ms": 1
+        },
+        {
+          "index": 2,
+          "status": "pass",
+          "step": "assert_log",
+          "wall_ms": 1357
+        },
+        {
+          "index": 3,
+          "status": "pass",
+          "step": "assert_text",
+          "wall_ms": 73
+        },
+        {
+          "index": 4,
+          "status": "pass",
+          "step": "assert_log",
+          "wall_ms": 252
+        },
+        {
+          "index": 5,
+          "status": "pass",
+          "step": "tap",
+          "wall_ms": 168
+        },
+        {
+          "index": 6,
+          "status": "pass",
+          "step": "assert_text",
+          "wall_ms": 0
+        },
+        {
+          "index": 7,
+          "status": "pass",
+          "step": "assert_log",
+          "wall_ms": 1
+        },
+        {
+          "index": 8,
+          "status": "pass",
+          "step": "tap",
+          "wall_ms": 167
+        },
+        {
+          "index": 9,
+          "status": "pass",
+          "step": "assert_log",
+          "wall_ms": 253
+        },
+        {
+          "index": 10,
+          "status": "pass",
+          "step": "assert_no_crash",
+          "wall_ms": 0
+        }
+      ],
+      "unattributed_ms": 1,
+      "unit": "ms",
+      "verdict_wall_ms": 2387
+    },
+    "trust": "trusted",
+    "unsupported_steps": []
+  },
+  "provenance_rule": null,
+  "request_id": "req_130310_18e8e8c4d444a20d",
+  "verdict_status": "pass"
+}

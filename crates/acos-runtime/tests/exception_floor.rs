@@ -12,10 +12,7 @@ use common::{compile_case, run_ok};
 #[test]
 fn exception_floor_rethrows_native_init_failure() {
     let Some(dex) = compile_case(&["ExceptionFloorMain"]) else {
-        eprintln!(
-            "SKIP exception_floor_rethrows_native_init_failure: \
-             javac/d8/android.jar unavailable"
-        );
+        acos_test_support::require_prereq(false, "exception_floor_rethrows_native_init_failure", "exception_floor_rethrows_native_init_failure: javac/d8/android.jar unavailable");
         return;
     };
     let Some(stdout) = run_ok(&dex, "ExceptionFloorMain", "ExceptionFloorMain") else {

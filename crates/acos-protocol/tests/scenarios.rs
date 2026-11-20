@@ -111,7 +111,15 @@ fn every_checked_in_scenario_parses_and_validates() {
             path.display(),
             validation.errors
         );
-        if !workspace.join(&scenario.app).exists() {
+        // Match `acos-verify`'s `resolve_relative`: a relative `app:` resolves
+        // against the scenario file's own directory first (e.g.
+        // `../fixtures/build/apps/tail-probe.apk`), then against the workspace
+        // root.
+        let app_exists = path
+            .parent()
+            .is_some_and(|dir| dir.join(&scenario.app).exists())
+            || workspace.join(&scenario.app).exists();
+        if !app_exists {
             // Missing fixture, not a malformed scenario: skip loudly under the
             // repo's shared fixture policy (`ACOS_REQUIRE_FIXTURES` upgrades
             // this to a hard failure).
@@ -122,11 +130,7 @@ fn every_checked_in_scenario_parses_and_validates() {
                     scenario.app
                 );
             }
-            eprintln!(
-                "SKIP scenario {}: missing fixture {}",
-                path.display(),
-                scenario.app
-            );
+            acos_test_support::require_prereq(false, "every_checked_in_scenario_parses_and_validates", &format!("scenario {}: missing fixture {}", path.display(), scenario.app));
             continue;
         }
         // Negative scenarios live under `negative/`; the suite's deliberately
@@ -143,11 +147,16 @@ fn every_checked_in_scenario_parses_and_validates() {
             assert!(
                 matches!(
                     scenario.expectation,
-                    Expectation::Fail | Expectation::NonPass
+                    Expectation::Fail | Expectation::NonPass | Expectation::Unsupported
                 ),
                 "{} must not expect pass",
                 path.display()
             );
+            // A non-pass `expectation_reason` is enforced by
+            // `Scenario::validate`; `fail` twins are self-describing. What the
+            // corpus test adds is that the declaration is *not* what makes the
+            // file unparsable elsewhere (load() above) and that a needs_env
+            // scenario names a registered capability, also in validate().
         } else {
             positive += 1;
             assert_eq!(
@@ -214,6 +223,36 @@ fn fixture_scenarios_contain_the_art_reference_strings() {
     ] {
         assert!(jni.contains(needle), "hello-jni.yaml missing {needle:?}");
     }
+}
+
+/// LAUNCHEXTRAS: `activity` (the component) and `intent_action` (the Intent's
+/// action) are independent — a scenario declares both to assert what the app's
+/// `getIntent()` received — and every supported extra type parses.
+#[test]
+fn a_launch_with_an_action_data_and_typed_extras_is_valid() {
+    let yaml = VALID.replace(
+        "  - launch: {activity: dev.acos.fixtures.helloviews/.MainActivity, clear_state: true}",
+        "  - launch:\n      activity: .MainActivity\n      intent_action: dev.acos.test.ACTION\n      data: acos://x/y\n      extras:\n        s: hello\n        i: 42\n        l: 5000000000\n        b: true\n        d: 0.25\n        f: {type: float, value: 1.5}\n        a: [x, y]\n        p: {type: parcelable, value: android.os.Bundle}",
+    );
+    let scenario = Scenario::from_yaml_str(&yaml).expect("a launch with an Intent parses");
+    assert!(scenario.validate().is_ok(), "{:?}", scenario.validate().errors);
+    let launch = scenario.steps[0].launch.as_ref().expect("launch step");
+    assert_eq!(launch.intent_action.as_deref(), Some("dev.acos.test.ACTION"));
+    assert_eq!(launch.data.as_deref(), Some("acos://x/y"));
+    assert_eq!(
+        launch.extras.get("l"),
+        Some(&acos_protocol::ExtraValue::Long(5_000_000_000))
+    );
+    assert_eq!(
+        launch.extras.get("f"),
+        Some(&acos_protocol::ExtraValue::Float(1.5))
+    );
+    assert_eq!(
+        launch.extras.get("p"),
+        Some(&acos_protocol::ExtraValue::Parcelable(
+            "android.os.Bundle".to_string()
+        ))
+    );
 }
 
 #[test]
@@ -305,11 +344,11 @@ fn at_least_thirty_negative_validation_cases_are_rejected() {
         }),
     ));
     cases.push(step_error(
-        "launch-both",
+        "launch-idle-kill-range",
         one(Step {
             launch: Some(LaunchStep {
                 activity: Some(".A".to_string()),
-                intent_action: Some("android.intent.action.MAIN".to_string()),
+                idle_kill_seconds: Some(86_401),
                 ..LaunchStep::default()
             }),
             ..Step::default()
@@ -350,8 +389,8 @@ fn at_least_thirty_negative_validation_cases_are_rejected() {
                 y: None,
                 timeout_ms: None,
                 settle_timeout_ms: None,
-            settle: None,
-                expect_change: false,
+                settle: None,
+                expect_change: None,
                 expect_handled: None,
             }),
             ..Step::default()
@@ -366,8 +405,8 @@ fn at_least_thirty_negative_validation_cases_are_rejected() {
                 y: Some(2),
                 timeout_ms: None,
                 settle_timeout_ms: None,
-            settle: None,
-                expect_change: false,
+                settle: None,
+                expect_change: None,
                 expect_handled: None,
             }),
             ..Step::default()
@@ -382,8 +421,8 @@ fn at_least_thirty_negative_validation_cases_are_rejected() {
                 y: None,
                 timeout_ms: None,
                 settle_timeout_ms: None,
-            settle: None,
-                expect_change: false,
+                settle: None,
+                expect_change: None,
                 expect_handled: None,
             }),
             ..Step::default()
@@ -398,8 +437,8 @@ fn at_least_thirty_negative_validation_cases_are_rejected() {
                 y: None,
                 timeout_ms: Some(0),
                 settle_timeout_ms: None,
-            settle: None,
-                expect_change: false,
+                settle: None,
+                expect_change: None,
                 expect_handled: None,
             }),
             ..Step::default()
@@ -413,7 +452,7 @@ fn at_least_thirty_negative_validation_cases_are_rejected() {
                 text: String::new(),
                 clear: false,
                 settle_timeout_ms: None,
-            settle: None,
+                settle: None,
                 expect_change: false,
                 expect_handled: None,
             }),
@@ -428,7 +467,7 @@ fn at_least_thirty_negative_validation_cases_are_rejected() {
                 text: "x".to_string(),
                 clear: false,
                 settle_timeout_ms: None,
-            settle: None,
+                settle: None,
                 expect_change: false,
                 expect_handled: None,
             }),
@@ -781,7 +820,7 @@ fn at_least_thirty_negative_validation_cases_are_rejected() {
             key: Some(KeyStep {
                 key: KeyName::Back,
                 settle_timeout_ms: None,
-            settle: None,
+                settle: None,
                 expect_change: false,
                 expect_handled: None,
             }),

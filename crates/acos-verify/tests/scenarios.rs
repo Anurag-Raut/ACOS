@@ -75,6 +75,7 @@ fn run_with_reference(scenario_name: &str, app: &str, artifacts_name: &str) -> R
         request_id: format!("req_test_{scenario_name}"),
         flags: vec!["--reference".to_string()],
         acos_version: "0.1.0".to_string(),
+        services: Vec::new(),
         engine: "rust-vm".to_string(),
         warnings: Vec::new(),
     };
@@ -117,16 +118,70 @@ fn negative_scenarios_fail_and_never_pass() {
     }
 }
 
+/// SCENHYG: `scenarios/hello-views.yaml` now declares `non_pass` (it pins the
+/// Back-settle TIMEOUT it really produces on ART), so a *positive* partial has to
+/// come from an inline scenario with `expectation: pass`: the reference backend
+/// cannot react to input, so the tap is the unsupported step and every step
+/// before it is a real pass.
+fn run_positive_yaml_with_reference(yaml: &str, app: &str, artifacts_name: &str) -> RunOutcome {
+    let scenario = Scenario::from_yaml_str(yaml).expect("valid inline scenario");
+    let apk = workspace().join(&scenario.app);
+    let reference = reference_dir(app);
+    assert!(
+        reference.join("ui_initial.json").exists(),
+        "reference evidence missing at {}",
+        reference.display()
+    );
+    let artifacts = scratch(artifacts_name);
+    let mut backend = ReferenceBackend::new(&reference);
+    let options = RunOptions {
+        apk,
+        scenario_path: scenario_path("hello-views.yaml"),
+        artifacts_dir: artifacts.clone(),
+        required_fidelity: None,
+        request_id: "req_test_positive_views".to_string(),
+        flags: vec!["--reference".to_string()],
+        acos_version: "0.1.0".to_string(),
+        services: Vec::new(),
+        engine: "rust-vm".to_string(),
+        warnings: Vec::new(),
+    };
+    let clock = FixedClock::new(1_794_318_674_000);
+    let outcome =
+        run_scenario(&scenario, &options, &mut backend, &clock).expect("run_scenario succeeds");
+    let _ = std::fs::remove_dir_all(&options.artifacts_dir);
+    outcome
+}
+
 #[test]
 fn positive_hello_views_is_a_truthful_partial() {
-    let outcome = run_with_reference("hello-views.yaml", "hello-views", "positive-views");
+    let yaml = r#"
+version: 1
+name: positive-hello-views-partial
+app: fixtures/build/apps/hello-views.apk
+isolation: process
+display: {mode: offscreen, width: 1080, height: 2400, density_dpi: 420}
+expectation: pass
+steps:
+  - launch: {activity: dev.acos.fixtures.helloviews/.MainActivity}
+  - wait_for: {selector: {id: result}, timeout_ms: 5000}
+  - assert_text: {selector: {id: result}, text: {exact: "clicks: 0"}}
+  - tap: {selector: {id: btn}}
+"#;
+    let outcome = run_positive_yaml_with_reference(yaml, "hello-views", "positive-views");
     assert_eq!(outcome.verdict.verdict, Status::Unsupported);
     assert!(!outcome.verdict.verdict.is_pass());
     // Everything executed before the first input step passed.
     let (executed, unsupported) = (outcome.verdict.steps.len(), 1);
-    assert!(executed >= 6, "expected a prefix of steps, got {executed}");
+    // SCENHYG: the inline scenario above is the minimal prefix (launch,
+    // wait_for, assert_text → the tap); the rule is that *every* executed step
+    // before the unsupported input passed.
+    assert!(executed >= 3, "expected a prefix of steps, got {executed}");
     assert_eq!(outcome.verdict.steps[executed - 1].step, "tap");
-    assert_eq!(outcome.verdict.steps[executed - 1].status, Status::Unsupported);
+    assert_eq!(
+        outcome.verdict.steps[executed - 1].status,
+        Status::Unsupported
+    );
     assert_eq!(unsupported, 1);
     for step in &outcome.verdict.steps[..executed - 1] {
         assert_eq!(step.status, Status::Pass, "step {} should pass", step.step);
@@ -144,7 +199,15 @@ fn positive_hello_jni_is_a_truthful_partial() {
     assert_eq!(last.step, "capture");
     assert_eq!(last.status, Status::Unsupported);
     assert_eq!(
-        outcome.verdict.failure.as_ref().unwrap().error.details.as_ref().unwrap()["capability"],
+        outcome
+            .verdict
+            .failure
+            .as_ref()
+            .unwrap()
+            .error
+            .details
+            .as_ref()
+            .unwrap()["capability"],
         "screenshot"
     );
 }
@@ -163,6 +226,7 @@ app: fixtures/build/apps/hello-views.apk
 isolation: process
 display: {mode: offscreen, width: 1080, height: 2400, density_dpi: 420}
 expectation: non_pass
+expectation_reason: "test fixture: the slice backend below produces the non-pass under test"
 steps:
   - set_locale: {locale: en-US}
 "#;
@@ -177,6 +241,7 @@ steps:
         request_id: "req_unknown_step".to_string(),
         flags: Vec::new(),
         acos_version: "0.1.0".to_string(),
+        services: Vec::new(),
         engine: "rust-vm".to_string(),
         warnings: Vec::new(),
     };
@@ -265,6 +330,7 @@ steps:
         request_id: "req_fidelity".to_string(),
         flags: Vec::new(),
         acos_version: "0.1.0".to_string(),
+        services: Vec::new(),
         engine: "rust-vm".to_string(),
         warnings: Vec::new(),
     };
@@ -285,7 +351,9 @@ fn verify_envelope_satisfies_protocol_invariants() {
     let request = VerifyRequest {
         base: acos_protocol::RequestBase::new("req_envelope"),
         apk: Some(workspace().join(&scenario.app).display().to_string()),
-        scenario: scenario_path("negative/wrong-text.yaml").display().to_string(),
+        scenario: scenario_path("negative/wrong-text.yaml")
+            .display()
+            .to_string(),
         artifacts: scratch("envelope").display().to_string(),
         overwrite: false,
         reference: Some(reference_dir("hello-views").display().to_string()),
@@ -328,6 +396,10 @@ enum SliceMode {
     DriftingObserve,
     /// The frame is not meaningful.
     Placeholder,
+    /// NET4: the tree text only becomes `clicks: 1` on the *second* observation —
+    /// the shape of an app whose status line is filled in by a background task
+    /// (measured: `net-check`'s `HTTP 200`).
+    LateText,
 }
 
 struct SliceBackend {
@@ -341,6 +413,8 @@ struct SliceBackend {
     /// SE1: the strict settle's measured pixel fact. `None` = the backend
     /// reports no settle record at all (what a non-pixel backend does today).
     settle_pixels: Option<bool>,
+    /// `observe()` calls so far (`SliceMode::LateText`).
+    observations: u32,
 }
 
 impl SliceBackend {
@@ -354,6 +428,7 @@ impl SliceBackend {
             screenshot_initial: initial,
             screenshot_after: after,
             settle_pixels: None,
+            observations: 0,
         }
     }
 
@@ -376,9 +451,14 @@ impl SliceBackend {
     }
 
     fn current(&self) -> SessionObservation {
+        let tree_version = if self.mode == SliceMode::LateText && self.observations > 1 {
+            1
+        } else {
+            self.tree_version
+        };
         slice_observation(
             self.frame_seq,
-            self.tree_version,
+            tree_version,
             self.screenshot(),
             self.meaningful(),
         )
@@ -408,11 +488,7 @@ fn slice_observation(
     )
     .with_resource_id("dev.acos.fixtures.helloviews:id/result")
     .with_text(format!("clicks: {tree_version}"));
-    let tree = UiTree::new(
-        frame.clone(),
-        "dev.acos.fixtures.helloviews",
-        vec![node],
-    );
+    let tree = UiTree::new(frame.clone(), "dev.acos.fixtures.helloviews", vec![node]);
     SessionObservation {
         session_id: "s_slice".to_string(),
         package: "dev.acos.fixtures.helloviews".to_string(),
@@ -471,6 +547,7 @@ impl Backend for SliceBackend {
     }
 
     fn observe(&mut self) -> Result<SessionObservation, BackendError> {
+        self.observations += 1;
         if self.mode == SliceMode::DriftingObserve {
             self.frame_seq += 1;
         }
@@ -555,6 +632,7 @@ fn run_slice_with_settle(
         request_id: "req_advisor_rule".to_string(),
         flags: Vec::new(),
         acos_version: "0.1.0".to_string(),
+        services: Vec::new(),
         engine: "rust-vm".to_string(),
         warnings: Vec::new(),
     };
@@ -583,6 +661,7 @@ fn run_slice_keep(
         request_id: "req_slice_keep".to_string(),
         flags: Vec::new(),
         acos_version: "0.1.0".to_string(),
+        services: Vec::new(),
         engine: "rust-vm".to_string(),
         warnings: Vec::new(),
     };
@@ -636,7 +715,10 @@ steps:
     );
     // 3. The verdict maps the scenario's own name to the file, and declares it
     //    as evidence.
-    assert_eq!(outcome.verdict.captures.get("meanings collapsed"), Some(&named));
+    assert_eq!(
+        outcome.verdict.captures.get("meanings collapsed"),
+        Some(&named)
+    );
     assert!(
         step.evidence
             .iter()
@@ -654,7 +736,10 @@ steps:
     )
     .unwrap();
     assert_eq!(verdict_json["captures"]["meanings collapsed"], named);
-    assert_eq!(verdict_json["status"], "pass", "status mirrors the envelope");
+    assert_eq!(
+        verdict_json["status"], "pass",
+        "status mirrors the envelope"
+    );
     assert_eq!(verdict_json["verdict"], "pass");
     // 0 dangling references: the run's own validator accepts the directory.
     let validation = acos_protocol::artifacts::validate_artifacts_dir(&artifacts);
@@ -675,6 +760,73 @@ steps:
   - tap: {selector: {id: btn}}
 "#;
 
+/// NET4: `assert_text`'s `timeout_ms` is a real, event-driven wait.
+///
+/// The schema documents it ("the runtime waits for a matching frame/tree, never
+/// for a fixed sleep") and `scenarios/net-check.yaml` relies on it for a status
+/// line a background fetch fills in — but the executor evaluated a single
+/// observation and returned, so that step failed whenever the first sample was
+/// still `pending` (measured: 1 run in 18, `net-check` on the relay arm).
+///
+/// Before this change both halves of this test failed: the first scenario failed
+/// on its first sample (the text was not there yet), and the second one — with no
+/// timeout — failed too, because there was no second sample at all.
+#[test]
+fn an_assertion_timeout_waits_for_the_tree_and_a_bare_assertion_does_not() {
+    let waiting = r#"
+version: 1
+name: late-text-with-timeout
+app: fixtures/build/apps/hello-views.apk
+isolation: process
+display: {mode: offscreen, width: 1080, height: 2400, density_dpi: 420}
+expectation: pass
+steps:
+  - launch: {activity: dev.acos.fixtures.helloviews/.MainActivity}
+  - assert_text:
+      selector: {id: result}
+      text: {exact: "clicks: 1"}
+      timeout_ms: 5000
+"#;
+    let outcome = run_slice(
+        waiting,
+        SliceMode::LateText,
+        b"initial".to_vec(),
+        b"after".to_vec(),
+    );
+    assert_eq!(
+        outcome.verdict.verdict,
+        Status::Pass,
+        "a scenario that asks for 5 s must sample again instead of failing on the first tree: {:?}",
+        outcome.verdict.failure
+    );
+    let assert_step = outcome
+        .verdict
+        .steps
+        .iter()
+        .find(|step| step.step == "assert_text")
+        .expect("assert step");
+    assert_eq!(assert_step.status, Status::Pass);
+
+    // No `timeout_ms`: unchanged behaviour, one sample, an honest failure.
+    let one_shot = waiting.replace("      timeout_ms: 5000\n", "");
+    let outcome = run_slice(
+        &one_shot,
+        SliceMode::LateText,
+        b"initial".to_vec(),
+        b"after".to_vec(),
+    );
+    assert_eq!(
+        outcome.verdict.verdict,
+        Status::Fail,
+        "no timeout = no wait"
+    );
+    let failure = outcome.verdict.failure.as_ref().expect("a failure");
+    assert_eq!(
+        failure.error.code,
+        acos_protocol::ErrorCode::AssertionFailed
+    );
+}
+
 fn tap_step(outcome: &RunOutcome) -> &acos_protocol::verdict::StepResult {
     outcome
         .verdict
@@ -686,8 +838,18 @@ fn tap_step(outcome: &RunOutcome) -> &acos_protocol::verdict::StepResult {
 
 #[test]
 fn tap_changes_state_in_both_tree_and_screenshot() {
-    let outcome = run_slice(TAP_SCENARIO, SliceMode::Good, b"initial".to_vec(), b"after".to_vec());
-    assert_eq!(outcome.verdict.verdict, Status::Pass, "{:?}", outcome.verdict.failure);
+    let outcome = run_slice(
+        TAP_SCENARIO,
+        SliceMode::Good,
+        b"initial".to_vec(),
+        b"after".to_vec(),
+    );
+    assert_eq!(
+        outcome.verdict.verdict,
+        Status::Pass,
+        "{:?}",
+        outcome.verdict.failure
+    );
     assert!(
         outcome.artifact_validation.ok,
         "a claimed pass must pass artifact validation: {:?}",
@@ -696,24 +858,30 @@ fn tap_changes_state_in_both_tree_and_screenshot() {
     let tap = tap_step(&outcome);
     assert_eq!(tap.status, Status::Pass);
     assert!(
-        tap.assertions.iter().any(|a| a.kind == "state_change" && a.passed),
+        tap.assertions
+            .iter()
+            .any(|a| a.kind == "state_change" && a.passed),
         "tap must record a passing state_change assertion"
     );
 }
 
 #[test]
 fn tap_that_changes_only_the_tree_fails() {
-    let outcome =
-        run_slice(TAP_SCENARIO, SliceMode::TreeOnly, b"initial".to_vec(), b"after".to_vec());
+    let outcome = run_slice(
+        TAP_SCENARIO,
+        SliceMode::TreeOnly,
+        b"initial".to_vec(),
+        b"after".to_vec(),
+    );
     assert_eq!(outcome.verdict.verdict, Status::Fail);
     let tap = tap_step(&outcome);
     assert_eq!(tap.status, Status::Fail);
     let failure = outcome.verdict.failure.as_ref().unwrap();
-    assert_eq!(failure.error.code, acos_protocol::ErrorCode::AssertionFailed);
-    assert!(failure
-        .error
-        .message
-        .contains("both") || failure.error.message.contains("screenshot"));
+    assert_eq!(
+        failure.error.code,
+        acos_protocol::ErrorCode::AssertionFailed
+    );
+    assert!(failure.error.message.contains("both") || failure.error.message.contains("screenshot"));
 }
 
 #[test]
@@ -737,11 +905,17 @@ app: fixtures/build/apps/hello-views.apk
 isolation: process
 display: {mode: offscreen, width: 1080, height: 2400, density_dpi: 420}
 expectation: non_pass
+expectation_reason: "test fixture: the slice backend below produces the non-pass under test"
 steps:
   - launch: {activity: dev.acos.fixtures.helloviews/.MainActivity}
   - capture: {name: shot, format: png, fresh: true}
 "#;
-    let outcome = run_slice(yaml, SliceMode::StaleCapture, b"initial".to_vec(), b"after".to_vec());
+    let outcome = run_slice(
+        yaml,
+        SliceMode::StaleCapture,
+        b"initial".to_vec(),
+        b"after".to_vec(),
+    );
     assert!(!outcome.verdict.verdict.is_pass());
     let failure = outcome.verdict.failure.as_ref().unwrap();
     assert_eq!(failure.error.code, acos_protocol::ErrorCode::NoFreshFrame);
@@ -756,11 +930,17 @@ app: fixtures/build/apps/hello-views.apk
 isolation: process
 display: {mode: offscreen, width: 1080, height: 2400, density_dpi: 420}
 expectation: non_pass
+expectation_reason: "test fixture: the slice backend below produces the non-pass under test"
 steps:
   - launch: {activity: dev.acos.fixtures.helloviews/.MainActivity}
   - assert_text: {selector: {id: result}, text: {exact: "clicks: 0"}}
 "#;
-    let outcome = run_slice(yaml, SliceMode::UnboundTree, b"initial".to_vec(), b"after".to_vec());
+    let outcome = run_slice(
+        yaml,
+        SliceMode::UnboundTree,
+        b"initial".to_vec(),
+        b"after".to_vec(),
+    );
     assert!(!outcome.verdict.verdict.is_pass());
     let failure = outcome.verdict.failure.as_ref().unwrap();
     assert_eq!(failure.error.code, acos_protocol::ErrorCode::Internal);
@@ -775,16 +955,24 @@ app: fixtures/build/apps/hello-views.apk
 isolation: process
 display: {mode: offscreen, width: 1080, height: 2400, density_dpi: 420}
 expectation: non_pass
+expectation_reason: "test fixture: the slice backend below produces the non-pass under test"
 steps:
   - launch: {activity: dev.acos.fixtures.helloviews/.MainActivity}
   - wait_for: {selector: {id: result}, timeout_ms: 1000}
   - assert_text: {selector: {id: result}, text: {exact: "clicks: 0"}}
 "#;
-    let outcome =
-        run_slice(yaml, SliceMode::DriftingObserve, b"initial".to_vec(), b"after".to_vec());
+    let outcome = run_slice(
+        yaml,
+        SliceMode::DriftingObserve,
+        b"initial".to_vec(),
+        b"after".to_vec(),
+    );
     assert!(!outcome.verdict.verdict.is_pass());
     let failure = outcome.verdict.failure.as_ref().unwrap();
-    assert_eq!(failure.error.code, acos_protocol::ErrorCode::AssertionFailed);
+    assert_eq!(
+        failure.error.code,
+        acos_protocol::ErrorCode::AssertionFailed
+    );
     assert!(failure.error.message.contains("frame"));
 }
 
@@ -797,11 +985,17 @@ app: fixtures/build/apps/hello-views.apk
 isolation: process
 display: {mode: offscreen, width: 1080, height: 2400, density_dpi: 420}
 expectation: non_pass
+expectation_reason: "test fixture: the slice backend below produces the non-pass under test"
 steps:
   - launch: {activity: dev.acos.fixtures.helloviews/.MainActivity}
   - assert_text: {selector: {id: result}, text: {exact: "clicks: 0"}}
 "#;
-    let outcome = run_slice(yaml, SliceMode::Placeholder, b"initial".to_vec(), b"after".to_vec());
+    let outcome = run_slice(
+        yaml,
+        SliceMode::Placeholder,
+        b"initial".to_vec(),
+        b"after".to_vec(),
+    );
     assert!(!outcome.verdict.verdict.is_pass());
     let failure = outcome.verdict.failure.as_ref().unwrap();
     assert_eq!(failure.error.code, acos_protocol::ErrorCode::NoFreshFrame);
@@ -840,13 +1034,21 @@ fn screenshot_assertion_uses_the_same_completed_frame() {
         bytes.clone(),
         bytes,
     );
-    assert_eq!(outcome.verdict.verdict, Status::Pass, "{:?}", outcome.verdict.failure);
+    assert_eq!(
+        outcome.verdict.verdict,
+        Status::Pass,
+        "{:?}",
+        outcome.verdict.failure
+    );
     assert!(
         outcome.artifact_validation.ok,
         "a claimed pass must pass artifact validation: {:?}",
         outcome.artifact_validation.issues
     );
-    assert_eq!(outcome.verdict.steps.last().unwrap().step, "assert_screenshot");
+    assert_eq!(
+        outcome.verdict.steps.last().unwrap().step,
+        "assert_screenshot"
+    );
     assert_eq!(outcome.verdict.steps.last().unwrap().status, Status::Pass);
 }
 
@@ -861,10 +1063,12 @@ fn screenshot_assertion_fails_beyond_tolerance() {
         actual,
     );
     assert_eq!(outcome.verdict.verdict, Status::Fail);
-    assert_eq!(outcome.verdict.steps.last().unwrap().step, "assert_screenshot");
+    assert_eq!(
+        outcome.verdict.steps.last().unwrap().step,
+        "assert_screenshot"
+    );
     assert_eq!(outcome.verdict.steps.last().unwrap().status, Status::Fail);
 }
-
 
 // ---------------------------------------------------------------------------
 // wait_for must poll a fresh tree until the condition holds or the deadline
@@ -912,11 +1116,7 @@ impl WaitBackend {
         )
         .with_resource_id(format!("dev.acos.fixtures.helloviews:id/{id}"))
         .with_text(text);
-        let tree = UiTree::new(
-            frame.clone(),
-            "dev.acos.fixtures.helloviews",
-            vec![node],
-        );
+        let tree = UiTree::new(frame.clone(), "dev.acos.fixtures.helloviews", vec![node]);
         SessionObservation {
             session_id: "s_wait".to_string(),
             package: "dev.acos.fixtures.helloviews".to_string(),
@@ -1027,6 +1227,7 @@ steps:
         request_id: "req_wait_for_teeth".to_string(),
         flags: Vec::new(),
         acos_version: "0.1.0".to_string(),
+        services: Vec::new(),
         engine: "rust-vm".to_string(),
         warnings: Vec::new(),
     };
@@ -1051,7 +1252,10 @@ fn wait_for_condition_that_never_appears_is_a_structured_timeout() {
         details["elapsed_ms"].as_u64().unwrap_or(0) >= 120,
         "the wait must consume its timeout: {details}"
     );
-    assert!(polls >= 2, "the live tree must be polled repeatedly, got {polls}");
+    assert!(
+        polls >= 2,
+        "the live tree must be polled repeatedly, got {polls}"
+    );
     assert!(
         elapsed >= std::time::Duration::from_millis(120),
         "wait_for returned in {:?}, before its timeout",
@@ -1112,7 +1316,10 @@ fn wait_for_on_a_never_settling_screen_is_a_settle_timeout() {
     let (outcome, polls) = run_wait_for_unsettled(u64::MAX, 1, 150);
     assert_eq!(outcome.verdict.verdict, Status::Timeout);
     assert!(!outcome.verdict.verdict.is_pass());
-    assert!(polls >= 2, "must keep polling until the deadline, got {polls}");
+    assert!(
+        polls >= 2,
+        "must keep polling until the deadline, got {polls}"
+    );
     assert!(started.elapsed() >= std::time::Duration::from_millis(150));
     let failure = outcome.verdict.failure.as_ref().expect("timeout failure");
     assert_eq!(failure.error.code, acos_protocol::ErrorCode::Timeout);
@@ -1244,6 +1451,7 @@ fn run_log_scenario(
         request_id: "req_log_poll".to_string(),
         flags: Vec::new(),
         acos_version: "0.1.0".to_string(),
+        services: Vec::new(),
         engine: "rust-vm".to_string(),
         warnings: Vec::new(),
     };
@@ -1259,7 +1467,12 @@ fn assert_log_polls_until_the_line_appears_or_the_deadline_passes() {
     let (scenario, artifacts) = log_scenario(2000);
     let mut backend = LogBackend::new(3);
     let outcome = run_log_scenario(&scenario, &artifacts, &mut backend);
-    assert_eq!(outcome.verdict.verdict, Status::Pass, "{:?}", outcome.verdict.failure);
+    assert_eq!(
+        outcome.verdict.verdict,
+        Status::Pass,
+        "{:?}",
+        outcome.verdict.failure
+    );
     assert_eq!(outcome.verdict.steps[1].step, "assert_log");
     assert_eq!(outcome.verdict.steps[1].status, Status::Pass);
     assert!(
@@ -1277,11 +1490,7 @@ fn assert_log_polls_until_the_line_appears_or_the_deadline_passes() {
     assert_eq!(outcome.verdict.verdict, Status::Fail);
     assert!(!outcome.verdict.verdict.is_pass());
     assert_eq!(
-        outcome
-            .verdict
-            .failure
-            .as_ref()
-            .map(|failure| failure.code),
+        outcome.verdict.failure.as_ref().map(|failure| failure.code),
         Some(acos_protocol::ErrorCode::AssertionFailed)
     );
     assert!(backend.polls >= 2, "the wait must poll at least twice");
@@ -1317,6 +1526,212 @@ fn assert_log_wait_judges_the_same_scope_as_the_assertion() {
     let _ = std::fs::remove_dir_all(&artifacts);
 }
 
+/// A backend whose log stream is a script: call *n* of `logs_since` returns
+/// `script[n]`. Used to place lines at exact step boundaries.
+struct ScriptedLogs {
+    manifest: Option<ManifestInfo>,
+    script: Vec<Vec<(&'static str, &'static str)>>,
+    calls: usize,
+    next_seq: u64,
+}
+
+impl ScriptedLogs {
+    fn new(script: Vec<Vec<(&'static str, &'static str)>>) -> Self {
+        ScriptedLogs {
+            manifest: None,
+            script,
+            calls: 0,
+            next_seq: 1,
+        }
+    }
+}
+
+impl Backend for ScriptedLogs {
+    fn id(&self) -> &'static str {
+        "scripted-logs"
+    }
+
+    fn protocol_backend(&self) -> ProtocolBackend {
+        ProtocolBackend::AcosNative
+    }
+
+    fn fidelity(&self) -> Fidelity {
+        Fidelity::NativeRuntime
+    }
+
+    fn capabilities(&self) -> Capabilities {
+        Capabilities {
+            static_manifest: true,
+            launch: true,
+            logs: true,
+            ..Capabilities::default()
+        }
+    }
+
+    fn manifest(&mut self, apk: &Path) -> Result<ManifestInfo, BackendError> {
+        let info = acos_verify::manifest::load_manifest(apk)?;
+        self.manifest = Some(info.clone());
+        Ok(info)
+    }
+
+    fn launch(&mut self, _request: &LaunchRequest) -> Result<LaunchOutcome, BackendError> {
+        Ok(LaunchOutcome {
+            session_id: "s_scripted".to_string(),
+            package: self
+                .manifest
+                .as_ref()
+                .map(|m| m.package.clone())
+                .unwrap_or_default(),
+            frame: None,
+            screenshot_png: None,
+            crashed: None,
+            detail: serde_json::json!({}),
+        })
+    }
+
+    fn logs_since(&mut self, _since: u64) -> Result<Vec<LogRecord>, BackendError> {
+        let batch = self.script.get(self.calls).cloned().unwrap_or_default();
+        self.calls += 1;
+        Ok(batch
+            .into_iter()
+            .map(|(tag, message)| {
+                let seq = self.next_seq;
+                self.next_seq += 1;
+                LogRecord {
+                    seq,
+                    timestamp_ms: 1_794_318_674_000,
+                    level: LogLevel::Info,
+                    tag: tag.to_string(),
+                    message: message.to_string(),
+                }
+            })
+            .collect())
+    }
+}
+
+/// MERGEFIX: the ordered-`assert_log` cursor rule, pinned end to end.
+///
+/// One rule, `executor::log_scope_start`: by default (`since_previous_step:
+/// false`) an assertion judges the whole stream — one snapshot, so an ordered
+/// assertion advances one monotonic cursor over it — and with
+/// `since_previous_step: true` the slice starts where the stream stood when the
+/// **previous step** began. So
+///   * a line the previous step produced is visible to this step (the effect of
+///     an action is judged by the assertion that follows it),
+///   * with `since_previous_step: true`, a line from *before* that boundary is
+///     not visible: a later step cannot re-match history it did not opt into,
+///   * the default (`false`) reads one snapshot for the whole scenario, so an
+///     ordered assertion never depends on where a step boundary fell,
+///   * the wait judges exactly the same slice as the assertion that follows it.
+///
+/// The brief's failure mode (a11y-probe step 14) was the boundary being decided
+/// in two places / reset per step, which let a later ordered assertion match a
+/// line that the previous assertion had already consumed.
+#[test]
+fn the_ordered_log_cursor_starts_at_the_previous_steps_boundary() {
+    let yaml = r#"
+version: 1
+name: ordered-log-scope
+app: fixtures/build/apps/hello-views.apk
+isolation: process
+display: {mode: offscreen, width: 1080, height: 2400, density_dpi: 420}
+expectation: pass
+steps:
+  - launch: {activity: dev.acos.fixtures.helloviews/.MainActivity}
+  - assert_log:
+      tag: AcosFixture
+      ordered: true
+      since_previous_step: true
+      timeout_ms: 2000
+      patterns: ['^first$', '^second$']
+  - assert_log:
+      tag: AcosFixture
+      ordered: true
+      since_previous_step: true
+      patterns: ['^second$']
+  - assert_log:
+      tag: AcosFixture
+      since_previous_step: false
+      patterns: ['^boot$', '^first$', '^second$']
+"#;
+    let scenario = Scenario::from_yaml_str(yaml).expect("valid scenario");
+    // Call 1 is the launch step's flush, call 2 the first assert's flush, call 3
+    // its first wait poll: the lines land inside step 1's window.
+    let mut backend = ScriptedLogs::new(vec![
+        vec![("AcosFixture", "boot")],
+        vec![],
+        vec![("AcosFixture", "first"), ("AcosFixture", "second")],
+    ]);
+    let (outcome, artifacts) = run_ordered(&scenario, &mut backend);
+    assert_eq!(
+        outcome.verdict.verdict,
+        Status::Pass,
+        "{:?}",
+        outcome.verdict.failure
+    );
+    assert_eq!(outcome.verdict.steps[2].step, "assert_log");
+    assert_eq!(outcome.verdict.steps[2].status, Status::Pass);
+    assert_eq!(outcome.verdict.steps[3].status, Status::Pass);
+    let _ = std::fs::remove_dir_all(&artifacts);
+
+    // Negative: `boot` was produced before the previous step began, so an
+    // ordered assertion that starts with it must fail — the cursor never
+    // rewinds into history on its own.
+    let yaml = r#"
+version: 1
+name: ordered-log-no-rewind
+app: fixtures/build/apps/hello-views.apk
+isolation: process
+display: {mode: offscreen, width: 1080, height: 2400, density_dpi: 420}
+expectation: pass
+steps:
+  - launch: {activity: dev.acos.fixtures.helloviews/.MainActivity}
+  - assert_log:
+      tag: AcosFixture
+      ordered: true
+      timeout_ms: 2000
+      patterns: ['^first$']
+  - assert_log:
+      tag: AcosFixture
+      ordered: true
+      since_previous_step: true
+      patterns: ['^boot$', '^second$']
+"#;
+    let scenario = Scenario::from_yaml_str(yaml).expect("valid scenario");
+    let mut backend = ScriptedLogs::new(vec![
+        vec![("AcosFixture", "boot")],
+        vec![],
+        vec![("AcosFixture", "first"), ("AcosFixture", "second")],
+    ]);
+    let (outcome, artifacts) = run_ordered(&scenario, &mut backend);
+    assert_eq!(outcome.verdict.steps[2].step, "assert_log");
+    assert_eq!(
+        outcome.verdict.steps[2].status,
+        Status::Fail,
+        "a line from before the previous step's boundary must not satisfy a later ordered assertion"
+    );
+    let _ = std::fs::remove_dir_all(&artifacts);
+}
+
+fn run_ordered(scenario: &Scenario, backend: &mut dyn Backend) -> (RunOutcome, PathBuf) {
+    let artifacts = scratch("ordered-log");
+    let options = RunOptions {
+        apk: workspace().join("fixtures/build/apps/hello-views.apk"),
+        scenario_path: workspace().join("scenarios/v2-art-counter.yaml"),
+        artifacts_dir: artifacts.clone(),
+        required_fidelity: None,
+        request_id: "req_ordered_log".to_string(),
+        flags: Vec::new(),
+        acos_version: "0.1.0".to_string(),
+        services: Vec::new(),
+        engine: "rust-vm".to_string(),
+        warnings: Vec::new(),
+    };
+    let clock = FixedClock::new(1_794_318_674_000);
+    let outcome = run_scenario(scenario, &options, backend, &clock).expect("run_scenario succeeds");
+    (outcome, artifacts)
+}
+
 #[test]
 fn a_refused_log_channel_fails_closed_with_the_backend_code() {
     // This is the untrusted-run shape: the backend refuses guest-asserted logs.
@@ -1326,7 +1741,11 @@ fn a_refused_log_channel_fails_closed_with_the_backend_code() {
     backend.refuse = Some(acos_protocol::ErrorCode::InsufficientHostEvidence);
     let outcome = run_log_scenario(&scenario, &artifacts, &mut backend);
     assert_eq!(outcome.verdict.verdict, Status::Fail);
-    let failure = outcome.verdict.failure.as_ref().expect("a structured failure");
+    let failure = outcome
+        .verdict
+        .failure
+        .as_ref()
+        .expect("a structured failure");
     assert_eq!(
         failure.code,
         acos_protocol::ErrorCode::InsufficientHostEvidence
@@ -1352,12 +1771,28 @@ steps:
 fn assertion_on_a_fast_input_frame_fails_closed() {
     // GR3/G3a: `settle: fast` is navigation only. An assertion bound to that
     // frame must fail, even when the frame would satisfy it.
-    let outcome =
-        run_slice(FAST_TAP_ASSERT, SliceMode::Good, b"initial".to_vec(), b"after".to_vec());
-    assert_eq!(outcome.verdict.verdict, Status::Fail, "{:?}", outcome.verdict.failure);
+    let outcome = run_slice(
+        FAST_TAP_ASSERT,
+        SliceMode::Good,
+        b"initial".to_vec(),
+        b"after".to_vec(),
+    );
+    assert_eq!(
+        outcome.verdict.verdict,
+        Status::Fail,
+        "{:?}",
+        outcome.verdict.failure
+    );
     let failure = outcome.verdict.failure.as_ref().unwrap();
-    assert_eq!(failure.error.code, acos_protocol::ErrorCode::AssertionFailed);
-    assert!(failure.error.message.contains("settle: fast"), "{}", failure.error.message);
+    assert_eq!(
+        failure.error.code,
+        acos_protocol::ErrorCode::AssertionFailed
+    );
+    assert!(
+        failure.error.message.contains("settle: fast"),
+        "{}",
+        failure.error.message
+    );
 }
 
 #[test]
@@ -1366,8 +1801,18 @@ fn a_strict_wait_for_after_a_fast_input_rebinds_the_frame() {
         "  - assert_text:",
         "  - wait_for: {selector: {id: result}, timeout_ms: 1000}\n  - assert_text:",
     );
-    let outcome = run_slice(&yaml, SliceMode::Good, b"initial".to_vec(), b"after".to_vec());
-    assert_eq!(outcome.verdict.verdict, Status::Pass, "{:?}", outcome.verdict.failure);
+    let outcome = run_slice(
+        &yaml,
+        SliceMode::Good,
+        b"initial".to_vec(),
+        b"after".to_vec(),
+    );
+    assert_eq!(
+        outcome.verdict.verdict,
+        Status::Pass,
+        "{:?}",
+        outcome.verdict.failure
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -1450,10 +1895,7 @@ fn expect_change_fails_when_the_settled_frame_is_pixel_identical() {
     // Before/after frame refs: launch frame 1, the action's frame 2.
     assert_eq!(details["before"]["frame_seq"], serde_json::json!(1));
     assert_eq!(details["after"]["frame_seq"], serde_json::json!(2));
-    assert_eq!(
-        details["after"]["frame"],
-        serde_json::json!("frames/2.png")
-    );
+    assert_eq!(details["after"]["frame"], serde_json::json!("frames/2.png"));
     // The failing step is still evidence: its frame is a claimed artifact.
     assert_eq!(tap.frame_seq, Some(2));
 }
@@ -2164,6 +2606,7 @@ steps:
         request_id: "req_scroll_attempts".to_string(),
         flags: Vec::new(),
         acos_version: "0.1.0".to_string(),
+        services: Vec::new(),
         engine: "rust-vm".to_string(),
         warnings: Vec::new(),
     };
@@ -2259,4 +2702,140 @@ fn a_first_attempt_pass_records_no_attempts_array() {
         disk["steps"][1].get("attempts").is_none(),
         "a single attempt is the step's own outcome, not a history"
     );
+}
+
+// ---------------------------------------------------------------------------
+// GATENE2E: `service_ctl … timeout_ms` waits for an asynchronous module state
+// ---------------------------------------------------------------------------
+
+/// A module whose `status` reply holds the awaited record only from the
+/// `ready_at`-th read on (the app's worker thread requests it a moment after
+/// the tap that started it).
+struct CtlBackend {
+    manifest: Option<ManifestInfo>,
+    ready_at: u64,
+    reads: u64,
+}
+
+impl Backend for CtlBackend {
+    fn id(&self) -> &'static str {
+        "ctl-poll-mock"
+    }
+
+    fn protocol_backend(&self) -> ProtocolBackend {
+        ProtocolBackend::AcosNative
+    }
+
+    fn fidelity(&self) -> Fidelity {
+        Fidelity::NativeRuntime
+    }
+
+    fn capabilities(&self) -> Capabilities {
+        Capabilities {
+            static_manifest: true,
+            launch: true,
+            services: true,
+            ..Capabilities::default()
+        }
+    }
+
+    fn manifest(&mut self, apk: &Path) -> Result<ManifestInfo, BackendError> {
+        let info = acos_verify::manifest::load_manifest(apk)?;
+        self.manifest = Some(info.clone());
+        Ok(info)
+    }
+
+    fn launch(&mut self, _request: &LaunchRequest) -> Result<LaunchOutcome, BackendError> {
+        Ok(LaunchOutcome {
+            session_id: "s_ctl".to_string(),
+            package: String::new(),
+            frame: None,
+            screenshot_png: None,
+            crashed: None,
+            detail: serde_json::json!({}),
+        })
+    }
+
+    fn service_ctl(
+        &mut self,
+        _request: &acos_verify::backend::ServiceCtlRequest,
+    ) -> Result<serde_json::Value, BackendError> {
+        self.reads += 1;
+        let records = if self.reads >= self.ready_at {
+            serde_json::json!([{"display_id": 0, "status": 0}])
+        } else {
+            serde_json::json!([])
+        };
+        Ok(serde_json::json!({"screenshots": records}))
+    }
+}
+
+fn run_ctl_scenario(step: &str, ready_at: u64) -> (RunOutcome, u64) {
+    let yaml = format!(
+        r#"
+version: 1
+name: ctl-poll
+app: fixtures/build/apps/hello-views.apk
+isolation: process
+display: {{mode: offscreen, width: 1080, height: 2400, density_dpi: 420}}
+services:
+  - id: accessibility
+    profile: real
+steps:
+  - launch: {{activity: dev.acos.fixtures.helloviews/.MainActivity}}
+  - service_ctl: {{{step}}}
+"#
+    );
+    let scenario = Scenario::from_yaml_str(&yaml).expect("valid scenario");
+    let artifacts = scratch("ctl-poll");
+    let mut backend = CtlBackend {
+        manifest: None,
+        ready_at,
+        reads: 0,
+    };
+    let outcome = run_log_scenario(&scenario, &artifacts, &mut backend);
+    let reads = backend.reads;
+    let _ = std::fs::remove_dir_all(&artifacts);
+    (outcome, reads)
+}
+
+const CTL_EXPECT: &str =
+    "module: accessibility, op: status, expect: {screenshots: [{display_id: 0, status: 0}]}";
+
+#[test]
+fn service_ctl_without_timeout_samples_once_and_fails_on_a_not_yet_state() {
+    let (outcome, reads) = run_ctl_scenario(CTL_EXPECT, 3);
+    assert_eq!(outcome.verdict.verdict, Status::Fail);
+    assert_eq!(reads, 1, "no `timeout_ms`: exactly one sample");
+}
+
+#[test]
+fn service_ctl_timeout_waits_for_the_state_the_app_reaches_later() {
+    let (outcome, reads) = run_ctl_scenario(&format!("{CTL_EXPECT}, timeout_ms: 5000"), 3);
+    assert_eq!(
+        outcome.verdict.verdict,
+        Status::Pass,
+        "{:?}",
+        outcome.verdict.failure
+    );
+    assert_eq!(reads, 3, "re-read until the record is there, then stop");
+}
+
+#[test]
+fn service_ctl_timeout_never_turns_a_miss_into_a_pass() {
+    let started = std::time::Instant::now();
+    let (outcome, reads) = run_ctl_scenario(&format!("{CTL_EXPECT}, timeout_ms: 300"), 10_000);
+    assert_eq!(outcome.verdict.verdict, Status::Fail);
+    assert!(reads >= 2, "it polled: {reads}");
+    assert!(
+        started.elapsed() >= std::time::Duration::from_millis(300),
+        "it consumed its deadline"
+    );
+    let message = outcome
+        .verdict
+        .failure
+        .as_ref()
+        .map(|f| f.error.message.clone())
+        .unwrap_or_default();
+    assert!(message.contains("after waiting 300 ms"), "{message}");
 }

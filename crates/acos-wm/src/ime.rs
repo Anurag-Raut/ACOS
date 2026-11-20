@@ -447,12 +447,10 @@ impl ParcelCodec for InputBindResult {
             let mut v = Vec::with_capacity(n as usize);
             for _ in 0..n {
                 let key = p.read_int32()?;
-                let binder = p
-                    .read_strong_binder()?
-                    .ok_or_else(|| WmError::Codec {
-                        what: Self::NAME,
-                        reason: "null accessibility session binder".into(),
-                    })?;
+                let binder = p.read_strong_binder()?.ok_or_else(|| WmError::Codec {
+                    what: Self::NAME,
+                    reason: "null accessibility session binder".into(),
+                })?;
                 v.push((key, binder));
             }
             Some(v)
@@ -613,16 +611,13 @@ impl ImeManager {
         remote_connection: Option<BinderId>,
         sequence: i32,
     ) -> Result<InputBindResult> {
-        let entry = self
-            .clients
-            .entry(client)
-            .or_insert_with(|| ImeClient {
-                id: client,
-                remote_connection,
-                user_id: 0,
-                active: false,
-                session: None,
-            });
+        let entry = self.clients.entry(client).or_insert_with(|| ImeClient {
+            id: client,
+            remote_connection,
+            user_id: 0,
+            active: false,
+            session: None,
+        });
         if let Some(rc) = remote_connection {
             entry.remote_connection = Some(rc);
         }
@@ -641,11 +636,7 @@ impl ImeManager {
         self.next_session += 1;
         entry.active = true;
         entry.session = Some(session);
-        let result = InputBindResult::success(
-            session,
-            format!("acos-ime-{}", sequence),
-            sequence,
-        );
+        let result = InputBindResult::success(session, format!("acos-ime-{}", sequence), sequence);
         self.deliveries.push((
             client,
             ImeDelivery::SetActive {
@@ -694,32 +685,19 @@ impl ImeManager {
     }
 
     /// `IImeTracker.onRequestShow`.
-    pub fn tracker_on_request_show(
-        &mut self,
-        reason: &str,
-        _types: i32,
-        _flags: i32,
-    ) -> ImeToken {
+    pub fn tracker_on_request_show(&mut self, reason: &str, _types: i32, _flags: i32) -> ImeToken {
         let token = ImeToken {
             id: self.next_token,
             reason: reason.len() as i64,
         };
         self.next_token += 1;
         self.show_requests.push(token);
-        self.progress.push(ImeProgress {
-            token,
-            phase: 0,
-        });
+        self.progress.push(ImeProgress { token, phase: 0 });
         token
     }
 
     /// `IImeTracker.onRequestHide`.
-    pub fn tracker_on_request_hide(
-        &mut self,
-        reason: &str,
-        _types: i32,
-        _flags: i32,
-    ) -> ImeToken {
+    pub fn tracker_on_request_hide(&mut self, reason: &str, _types: i32, _flags: i32) -> ImeToken {
         let token = ImeToken {
             id: self.next_token,
             reason: reason.len() as i64,
@@ -772,9 +750,9 @@ impl ImeManager {
             .clients
             .get(&client)
             .ok_or_else(|| WmError::ImeNotBound(format!("client {}", client.0)))?;
-        let rc = c
-            .remote_connection
-            .ok_or_else(|| WmError::ImeNotBound(format!("client {} has no connection", client.0)))?;
+        let rc = c.remote_connection.ok_or_else(|| {
+            WmError::ImeNotBound(format!("client {} has no connection", client.0))
+        })?;
         self.connections
             .get(&rc)
             .cloned()
@@ -794,7 +772,8 @@ impl ImeManager {
         text: &str,
         new_cursor: i32,
     ) -> Result<()> {
-        self.connection(client)?.set_composing_text(text, new_cursor);
+        self.connection(client)?
+            .set_composing_text(text, new_cursor);
         Ok(())
     }
 
@@ -805,15 +784,27 @@ impl ImeManager {
     }
 
     /// `IRemoteInputConnection.deleteSurroundingText`.
-    pub fn delete_surrounding_text(&mut self, client: BinderId, before: i32, after: i32) -> Result<()> {
+    pub fn delete_surrounding_text(
+        &mut self,
+        client: BinderId,
+        before: i32,
+        after: i32,
+    ) -> Result<()> {
         self.connection(client)?
             .delete_surrounding_text(before, after);
         Ok(())
     }
 
     /// `IRemoteInputConnection.getTextBeforeCursor`.
-    pub fn get_text_before_cursor(&self, client: BinderId, length: i32, flags: i32) -> Result<String> {
-        Ok(self.connection(client)?.get_text_before_cursor(length, flags))
+    pub fn get_text_before_cursor(
+        &self,
+        client: BinderId,
+        length: i32,
+        flags: i32,
+    ) -> Result<String> {
+        Ok(self
+            .connection(client)?
+            .get_text_before_cursor(length, flags))
     }
 
     /// `IRemoteInputConnection.getSurroundingText`.
@@ -849,7 +840,9 @@ impl ImeManager {
 
     /// Decode a `startInputOrWindowGainedFocus` request parcel body (after the
     /// interface token) into the arguments the replay needs.
-    pub fn decode_start_input(p: &mut Parcel) -> Result<(i32, BinderId, EditorInfo, Option<BinderId>)> {
+    pub fn decode_start_input(
+        p: &mut Parcel,
+    ) -> Result<(i32, BinderId, EditorInfo, Option<BinderId>)> {
         let _kind = p.read_int32()?;
         let client = p
             .read_strong_binder()?

@@ -15,7 +15,7 @@ use std::collections::HashMap;
 
 use crate::res::bytes::{u16_at, u32_at, utf16_fixed};
 use crate::res::config::ResConfig;
-use crate::res::error::{ResError, Result, RES_ARSC, RES_NO_PACKAGE, RES_NOT_FOUND};
+use crate::res::error::{ResError, Result, RES_ARSC, RES_NOT_FOUND, RES_NO_PACKAGE};
 use crate::res::strpool::StringPool;
 use crate::res::value::ResValue;
 
@@ -616,7 +616,9 @@ fn parse_package(data: &[u8], start: usize) -> Result<PackageIndex> {
         let ct = u16_at(data, pos)?;
         let chunk_size = u32_at(data, pos + 4)? as usize;
         if chunk_size < 8 || pos.saturating_add(chunk_size) > end {
-            return Err(arsc(format!("bad resource chunk size {chunk_size} at {pos}")));
+            return Err(arsc(format!(
+                "bad resource chunk size {chunk_size} at {pos}"
+            )));
         }
         if ct == RES_TABLE_TYPE_TYPE {
             if let Ok(chunk) = parse_type_chunk(data, pos) {
@@ -661,7 +663,11 @@ pub fn parse_type_chunk(data: &[u8], pos: usize) -> Result<TypeChunk> {
     let config = ResConfig::parse(data, pos + 20)?;
     let offsets_at = pos.saturating_add(header_size.max(20));
     let entries_at = pos.saturating_add(entries_start);
-    let offset_width = if flags & TYPE_FLAG_OFFSET16 != 0 { 2 } else { 4 };
+    let offset_width = if flags & TYPE_FLAG_OFFSET16 != 0 {
+        2
+    } else {
+        4
+    };
     let offsets_end = offsets_at
         .checked_add(entry_count.saturating_mul(offset_width))
         .ok_or_else(|| arsc("offsets table overflow"))?;

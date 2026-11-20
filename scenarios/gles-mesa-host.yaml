@@ -1,0 +1,74 @@
+# gles-mesa-host (GPUSPIKE): the same arms as gles-software, on the HOST GPU
+# (ACOS_GUEST_GLES=mesa-host: Waydroid's Mesa 26 radeonsi via /dev/dri/renderD129).
+# Copy of scenarios/gles-software.yaml; only the provider tag (`mesa`) differs.
+#
+# --- original header (gles-software) ---
+# gles-software: the guest's own libEGL finds a staged software GLES driver.
+#
+# GLSPIKE. The image ships the framework's EGL *loader* but no driver, so the
+# first HARDWARE-bitmap draw aborts the process inside libEGL
+# (`couldn't find an OpenGL ES implementation`, A11YPACE §4). The loader's own
+# search path is the seam: `/vendor/lib64/egl/libEGL_<ro.hardware.egl>.so`
+# (`frameworks/native/opengl/libs/EGL/Loader.cpp`, android-14.0.0_r75).
+#
+# With `ACOS_GUEST_GLES=angle` the launcher binds a staged provider there and
+# sets `ro.hardware.egl=angle` + `acos.guest.gles=angle` in the per-run property
+# table (crates/acos-art/src/gles.rs). This scenario is the app-side proof:
+# the probe draws (i) the wrapped a11y screenshot HardwareBuffer, (ii) a PNG
+# decoded straight to `Bitmap.Config.HARDWARE`, and (iii) puts that bitmap in an
+# ImageView, and every draw reports a sampled pixel.
+#
+# Default OFF: without the flag this scenario's extra lines never appear (the
+# probe logs `gles_draw skipped=no_software_gles` instead, which
+# `scenarios/a11y-probe.yaml` asserts). A HARDWARE bitmap with no driver aborts
+# the process, so the *absence* of a driver is not something a `catch` can make
+# safe — the gap is a logged skip, never a silent pass.
+version: 1
+name: gles-mesa-host
+description: >-
+  With a software GLES provider staged (ACOS_GUEST_GLES=<tag>), libEGL finds a
+  driver by its normal path and the app can draw a wrapped HardwareBuffer and a
+  HARDWARE PNG: both draws land pixels and no process aborts.
+app: fixtures/build/apps/a11y-probe.apk
+api_level: 34
+isolation: process
+display: {mode: offscreen, width: 1080, height: 2400, density_dpi: 420}
+capabilities:
+  - ui.offscreen
+  - ui.text
+  - input
+expectation: pass
+budgets:
+  memory_mib: 1024
+  wall_ms: 180000
+services:
+  - id: accessibility
+    profile: real
+    config:
+      enable:
+        - dev.acos.fixtures.a11yprobe/.A11yProbeService
+steps:
+  - launch:
+      activity: dev.acos.fixtures.a11yprobe/.MainActivity
+      clear_state: true
+  - assert_log:
+      tag: AcosA11yProbe
+      ordered: false
+      timeout_ms: 60000
+      patterns:
+        # The provider was selected (the launcher's property), not defaulted.
+        - "gles_draw start=1 provider=mesa"
+        # (i) the wrapped a11y screenshot, drawn into a software bitmap.
+        - "gles_draw kind=hwbuffer_screenshot ok=true .*config=HARDWARE .*mean=[0-9]+ samples"
+        # (ii) a PNG decoded to HARDWARE, drawn the same way: the left/right
+        # halves are #FF0000 / #0000FF, so the sampled corners are the claim.
+        - "gles_png_hardware ok=true config=HARDWARE"
+        - "gles_draw kind=png_hardware ok=true .*config=HARDWARE .*mean=[0-9]+ samples"
+        # ... and the pixels themselves, read back through hwui's GPU path.
+        - "gles_draw kind=png_hardware ok=true .*16,16=#FFFF0000 48,16=#FF0000FF"
+        # (iii) the same bitmap inside a real View is a MEASURED WALL, not a GL
+        # one (GLSPIKE4): ACOS windows are drawn on a software Canvas, which the
+        # framework refuses to draw HARDWARE bitmaps on. The probe says so
+        # explicitly instead of crashing; `acos.probe.gles_view=1` runs it.
+        - "gles_view skipped=software_window_cannot_draw_hardware_bitmap"
+  - assert_no_crash: {}

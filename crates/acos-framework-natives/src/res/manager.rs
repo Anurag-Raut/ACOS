@@ -329,8 +329,7 @@ impl AssetManager {
             let Some(local_id) = ov.map.get(&id) else {
                 continue;
             };
-            let (Some(table), Some(bytes)) =
-                (ov.apk.resource_table(), ov.apk.resource_bytes())
+            let (Some(table), Some(bytes)) = (ov.apk.resource_table(), ov.apk.resource_bytes())
             else {
                 continue;
             };
@@ -775,7 +774,12 @@ impl AssetManager {
     // ---- asset handles -------------------------------------------------
 
     /// `nativeOpenNonAsset`.
-    pub fn open_non_asset(&mut self, cookie: i32, filename: &str, _access_mode: i32) -> Result<u64> {
+    pub fn open_non_asset(
+        &mut self,
+        cookie: i32,
+        filename: &str,
+        _access_mode: i32,
+    ) -> Result<u64> {
         let src = self
             .source_for_cookie(cookie)
             .ok_or_else(|| ResError::new(RES_BAD_HANDLE, format!("cookie {cookie}")))?;
@@ -988,7 +992,11 @@ impl AssetManager {
         resolve: bool,
     ) -> Option<(i32, TypedValueOut)> {
         let value = self.themes.get(&theme)?.get(attr_id)?;
-        let requested = self.themes.get(&theme).map(|t| &t.config).unwrap_or(&self.config);
+        let requested = self
+            .themes
+            .get(&theme)
+            .map(|t| &t.config)
+            .unwrap_or(&self.config);
         // With `resolve = true`, real ART resolves a `TYPE_REFERENCE` theme value
         // to the concrete resource (e.g. `colorBackground` -> ARGB8,
         // `textColorPrimary` -> the ColorStateList file path string). Only the

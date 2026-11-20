@@ -1,0 +1,5 @@
+listener: bound /home/Qui/.t3/worktrees/acos/t3-5b64adc7-88e66fd92dbe9e6c/.cache/wv4-run/wv/webview.sock
+listener: guest connected
+guest->host {"client": "acos-webview/0.4.0", "id": "g1", "op": "hello", "proto": 1}
+host->guest {"id": "g1", "ok": true, "result": {"engine": {"product": "acos-wv4-test-listener", "protocolVersion": "1.3", "revision": "none", "userAgent": "acos-wv4-test-listener/0", "version": "0"}, "limits": {"maxFrameBytes": 67108864, "maxViews": 1}, "proto": 1, "session": "wv4-test-listener"}}
+listener: guest closed

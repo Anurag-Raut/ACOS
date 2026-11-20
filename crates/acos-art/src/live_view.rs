@@ -556,7 +556,10 @@ impl Inner {
         if subscribers.is_empty() {
             // First viewer after none: whatever focus state was remembered
             // belongs to an earlier watch; masking is the default again.
-            *self.password_state.lock().unwrap_or_else(|e| e.into_inner()) = None;
+            *self
+                .password_state
+                .lock()
+                .unwrap_or_else(|e| e.into_inner()) = None;
         }
         subscribers.push(subscriber);
         self.subscriber_count.fetch_add(1, Ordering::AcqRel);
@@ -1179,7 +1182,10 @@ fn bind_private(path: &Path) -> io::Result<UnixListener> {
     use std::os::unix::ffi::OsStrExt;
     let listener = UnixListener::bind(path)?;
     let parent = path.parent().ok_or_else(|| {
-        io::Error::new(io::ErrorKind::InvalidInput, "the socket needs a parent directory")
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "the socket needs a parent directory",
+        )
     })?;
     let name = path
         .file_name()
@@ -1198,7 +1204,12 @@ fn bind_private(path: &Path) -> io::Result<UnixListener> {
         return Err(io::Error::last_os_error());
     }
     let code = unsafe {
-        libc::fchmodat(dirfd, name_c.as_ptr(), SOCKET_MODE, libc::AT_SYMLINK_NOFOLLOW)
+        libc::fchmodat(
+            dirfd,
+            name_c.as_ptr(),
+            SOCKET_MODE,
+            libc::AT_SYMLINK_NOFOLLOW,
+        )
     };
     let error = (code != 0).then(io::Error::last_os_error);
     unsafe { libc::close(dirfd) };
@@ -1210,7 +1221,10 @@ fn bind_private(path: &Path) -> io::Result<UnixListener> {
     if !metadata.file_type().is_socket() || mode & 0o077 != 0 {
         return Err(io::Error::new(
             io::ErrorKind::PermissionDenied,
-            format!("{} was bound with mode {mode:o} (expected 0600)", path.display()),
+            format!(
+                "{} was bound with mode {mode:o} (expected 0600)",
+                path.display()
+            ),
         ));
     }
     Ok(listener)
@@ -1656,7 +1670,9 @@ pub fn tree_proves_non_password_focus(tree: &serde_json::Value) -> bool {
     fn walk(node: &serde_json::Value, saw_focused: &mut bool, password: &mut bool) {
         match node {
             serde_json::Value::Array(items) => {
-                items.iter().for_each(|item| walk(item, saw_focused, password));
+                items
+                    .iter()
+                    .for_each(|item| walk(item, saw_focused, password));
             }
             serde_json::Value::Object(map) => {
                 if map
@@ -1677,7 +1693,8 @@ pub fn tree_proves_non_password_focus(tree: &serde_json::Value) -> bool {
                         *password = true;
                     }
                 }
-                map.values().for_each(|value| walk(value, saw_focused, password));
+                map.values()
+                    .for_each(|value| walk(value, saw_focused, password));
             }
             _ => {}
         }
@@ -2361,9 +2378,7 @@ mod tests {
 
     fn subscribe_line(client: &mut UnixStream, extra: &str) {
         client
-            .write_all(
-                format!("{{\"v\":1,\"subscribe\":{{{extra}\"events\":true}}}}\n").as_bytes(),
-            )
+            .write_all(format!("{{\"v\":1,\"subscribe\":{{{extra}\"events\":true}}}}\n").as_bytes())
             .expect("subscribe");
     }
 
@@ -2403,14 +2418,22 @@ mod tests {
         std::fs::set_permissions(&parent, std::fs::Permissions::from_mode(0o777)).expect("chmod");
         let source = HandSource::new(8, 8, false);
         let view = bound(&parent, "view.sock", &source);
-        let dir_mode = std::fs::metadata(&parent).expect("stat").permissions().mode() & 0o777;
+        let dir_mode = std::fs::metadata(&parent)
+            .expect("stat")
+            .permissions()
+            .mode()
+            & 0o777;
         assert_eq!(dir_mode, 0o700, "socket directory is 0700");
         let socket_mode = std::fs::symlink_metadata(&parent.join("view.sock"))
             .expect("stat")
             .permissions()
             .mode()
             & 0o777;
-        assert_eq!(socket_mode & 0o077, 0, "socket has no group/other access: {socket_mode:o}");
+        assert_eq!(
+            socket_mode & 0o077,
+            0,
+            "socket has no group/other access: {socket_mode:o}"
+        );
         view.shutdown();
         // A symlink at the socket path is refused, not followed (the old path
         // `chmod` would have changed the mode of whatever it pointed at).
@@ -2428,12 +2451,19 @@ mod tests {
         )
         .is_err());
         assert_eq!(
-            std::fs::metadata(&target).expect("stat").permissions().mode() & 0o777,
+            std::fs::metadata(&target)
+                .expect("stat")
+                .permissions()
+                .mode()
+                & 0o777,
             0o644,
             "the symlink target's mode is untouched"
         );
         // A directory that is not ours / not a directory is refused.
-        assert!(secure_dir(&target).is_err(), "a file is not a socket directory");
+        assert!(
+            secure_dir(&target).is_err(),
+            "a file is not a socket directory"
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -2484,7 +2514,11 @@ mod tests {
             peer.set_read_timeout(Some(SUBSCRIBE_DEADLINE + Duration::from_secs(4)))
                 .expect("timeout");
             let mut byte = [0u8; 1];
-            assert_eq!(peer.read(&mut byte).unwrap_or(0), 0, "closed by the producer");
+            assert_eq!(
+                peer.read(&mut byte).unwrap_or(0),
+                0,
+                "closed by the producer"
+            );
         }
         assert!(
             started.elapsed() < SUBSCRIBE_DEADLINE + Duration::from_secs(3),
@@ -2629,7 +2663,10 @@ mod tests {
             .map(|_| read_events(&mut client, 1).remove(0))
             .find(|event| event.get("cmd") == Some(&serde_json::json!("key")))
             .expect("the key event");
-        assert_eq!(event["key"], MASKED_TEXT, "a key code must not leak after a detach");
+        assert_eq!(
+            event["key"], MASKED_TEXT,
+            "a key code must not leak after a detach"
+        );
         view.shutdown();
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -2655,7 +2692,10 @@ mod tests {
         source.secure.store(true, Ordering::Relaxed);
         let view = bound(&dir, "v.sock", &source);
         let mut client = UnixStream::connect(view.socket_path()).expect("connect");
-        subscribe_line(&mut client, "\"frames\":true,\"format\":\"png\",\"scale\":1.0,\"max_fps\":30,");
+        subscribe_line(
+            &mut client,
+            "\"frames\":true,\"format\":\"png\",\"scale\":1.0,\"max_fps\":30,",
+        );
         client
             .set_read_timeout(Some(Duration::from_millis(300)))
             .expect("timeout");
@@ -2669,8 +2709,13 @@ mod tests {
                 let header: serde_json::Value =
                     serde_json::from_slice(&payload[..newline]).expect("header json");
                 assert_eq!(header["secure"], true);
-                let image = image::load_from_memory(&payload[newline + 1..]).expect("png").to_rgb8();
-                assert!(image.as_raw().iter().all(|byte| *byte == 0), "secure frame is blank");
+                let image = image::load_from_memory(&payload[newline + 1..])
+                    .expect("png")
+                    .to_rgb8();
+                assert!(
+                    image.as_raw().iter().all(|byte| *byte == 0),
+                    "secure frame is blank"
+                );
                 seen = true;
             }
         }
@@ -2686,8 +2731,9 @@ mod tests {
                 let header: serde_json::Value =
                     serde_json::from_slice(&payload[..newline]).expect("header json");
                 if header["secure"] == false {
-                    let image =
-                        image::load_from_memory(&payload[newline + 1..]).expect("png").to_rgb8();
+                    let image = image::load_from_memory(&payload[newline + 1..])
+                        .expect("png")
+                        .to_rgb8();
                     assert!(image.as_raw().iter().any(|byte| *byte != 0));
                     real = true;
                 }
@@ -2706,7 +2752,10 @@ mod tests {
         let source = HandSource::new(800, 1200, true);
         let view = bound(&dir, "v.sock", &source);
         let mut client = UnixStream::connect(view.socket_path()).expect("connect");
-        subscribe_line(&mut client, "\"frames\":true,\"format\":\"png\",\"scale\":1.0,\"max_fps\":2,");
+        subscribe_line(
+            &mut client,
+            "\"frames\":true,\"format\":\"png\",\"scale\":1.0,\"max_fps\":2,",
+        );
         client
             .set_read_timeout(Some(Duration::from_secs(10)))
             .expect("timeout");
@@ -2716,18 +2765,28 @@ mod tests {
         // The reader is slow: it does not read for a while.
         std::thread::sleep(Duration::from_millis(900));
         let (kind, payload) = loop {
-            let message = read_message(&mut client)
-                .unwrap_or_else(|error| panic!("a large frame arrives intact: {error} {:?}", view.stats()));
+            let message = read_message(&mut client).unwrap_or_else(|error| {
+                panic!("a large frame arrives intact: {error} {:?}", view.stats())
+            });
             if message.0 == TYPE_FRAME {
                 break message;
             }
         };
         assert_eq!(kind, TYPE_FRAME);
         let newline = payload.iter().position(|b| *b == b'\n').expect("header");
-        assert!(payload.len() > 1_000_000, "frame was {} bytes", payload.len());
-        let image = image::load_from_memory(&payload[newline + 1..]).expect("a whole, decodable PNG");
+        assert!(
+            payload.len() > 1_000_000,
+            "frame was {} bytes",
+            payload.len()
+        );
+        let image =
+            image::load_from_memory(&payload[newline + 1..]).expect("a whole, decodable PNG");
         assert_eq!((image.width(), image.height()), (800, 1200));
-        assert_eq!(view.stats().subscribers_dropped, 0, "the viewer was not dropped");
+        assert_eq!(
+            view.stats().subscribers_dropped,
+            0,
+            "the viewer was not dropped"
+        );
         assert!(view.has_subscribers());
         view.shutdown();
         let _ = std::fs::remove_dir_all(&dir);

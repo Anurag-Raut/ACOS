@@ -545,10 +545,7 @@ impl ServeEngine {
         // and loads its `lib/<abi>/` closure, so an explicit `engine: "art"`
         // wins and those hints are ignored rather than refused (G1 rank 5: a
         // Gaten `--engine art` launch used to die in the frozen VM).
-        let rust_loader = args
-            .get("native")
-            .and_then(Value::as_bool)
-            .unwrap_or(false);
+        let rust_loader = args.get("native").and_then(Value::as_bool).unwrap_or(false);
         if explicit == Some(Engine::Art) && rust_loader {
             return with_hint(
                 art_failure(
@@ -650,6 +647,95 @@ impl ServeEngine {
                 }
             },
         };
+        // MPROC1: `extra_apks` installs more packages in this session beside the
+        // launched APK (each at its own uid, with its own guest paths). Launch
+        // time only, like `animations`/`insets`: a live session cannot gain a
+        // package, so a differing list is refused by name.
+        let extra_apks: Vec<std::path::PathBuf> = match args.get("extra_apks") {
+            None => Vec::new(),
+            Some(Value::Array(items)) => {
+                let mut out = Vec::with_capacity(items.len());
+                for (index, item) in items.iter().enumerate() {
+                    let Some(raw) = item.as_str() else {
+                        return art_failure(
+                            request_id,
+                            Some(id),
+                            trust,
+                            ErrorCode::InvalidArgument,
+                            format!("extra_apks[{index}] must be a string APK path"),
+                            json!({"field": format!("extra_apks[{index}]")}),
+                        );
+                    };
+                    match acos_mcp::safety::validate_path(raw, &ctx.allowed_roots) {
+                        Ok(path) => out.push(path),
+                        Err(reason) => {
+                            return art_failure(
+                                request_id,
+                                Some(id),
+                                trust,
+                                ErrorCode::InvalidArgument,
+                                format!("refusing extra APK path `{raw}`: {reason}"),
+                                json!({"field": format!("extra_apks[{index}]"), "apk": raw}),
+                            )
+                        }
+                    }
+                }
+                out
+            }
+            Some(other) => {
+                return art_failure(
+                    request_id,
+                    Some(id),
+                    trust,
+                    ErrorCode::InvalidArgument,
+                    format!(
+                        "extra_apks must be an array of APK paths (got {})",
+                        json_kind(other)
+                    ),
+                    json!({"field": "extra_apks"}),
+                )
+            }
+        };
+        // MPROC7: the launcher's idle kill, launch-time like `extra_apks`.
+        // `0` disables it. The same value the scenario launch step carries and
+        // `acos-art launch --idle-kill-seconds` takes. An explicit JSON `null`
+        // means "not provided" (JSON has no absent-vs-None distinction for a
+        // client that serialises an `Option` naively), never 0 and never an
+        // invalid integer: the old reading rejected `null` and broke every
+        // `acos launch --keep` (GL1).
+        let idle_kill_seconds = match idle_kill_seconds_arg(args) {
+            Ok(seconds) => seconds,
+            Err(value) => {
+                return art_failure(
+                    request_id,
+                    Some(id),
+                    trust,
+                    ErrorCode::InvalidArgument,
+                    "idle_kill_seconds must be an integer in 0..=86400 (0 disables the idle                          kill)"
+                        .to_string(),
+                    json!({"field": "idle_kill_seconds", "value": value}),
+                )
+            }
+        };
+        let idle_kill_requested = idle_kill_seconds.is_some();
+        // LAUNCHEXTRAS: `intent_action`, `data` and typed `extras` are
+        // launch-time like `animations`/`extra_apks`. A `parcelable` extra is
+        // refused by name here, before a guest exists (the encoder cannot send
+        // it and silently dropping it would be the WVFAIR bug again).
+        let (launch_intent, intent_requested) = match launch_intent_arg(args) {
+            Ok(value) => value,
+            Err(error) => return art_error(request_id, Some(id), trust, &error),
+        };
+        if let Some(detail) = launch_intent.unsupported_detail() {
+            return art_failure(
+                request_id,
+                Some(id),
+                trust,
+                ErrorCode::UnsupportedAndroidApi,
+                detail,
+                json!({"field": "extras", "extra_type": "parcelable"}),
+            );
+        }
         let apk = match acos_mcp::safety::validate_path(apk_arg, &ctx.allowed_roots) {
             Ok(path) => path,
             Err(reason) => {
@@ -711,6 +797,69 @@ impl ServeEngine {
                         ),
                         "animations is launch-time: call acos_destroy for this session id, then \
                          acos_launch with the new choice.",
+                    );
+                }
+                if args.get("extra_apks").is_some() && session.extra_apks() != extra_apks {
+                    return with_hint(
+                        art_failure(
+                            request_id,
+                            Some(id),
+                            held.trust,
+                            ErrorCode::InvalidArgument,
+                            format!(
+                                "session `{id}` already runs with {} extra package(s) and a live \
+                                 session cannot change its installed packages",
+                                session.extra_apks().len()
+                            ),
+                            json!({
+                                "held_extra_apks": extra_apks_json(session.extra_apks()),
+                                "requested_extra_apks": extra_apks_json(&extra_apks),
+                            }),
+                        ),
+                        "extra_apks is launch-time: call acos_destroy for this session id, \
+                         then acos_launch with the package set you want.",
+                    );
+                }
+                if idle_kill_requested && session.idle_kill_seconds() != idle_kill_seconds {
+                    return with_hint(
+                        art_failure(
+                            request_id,
+                            Some(id),
+                            held.trust,
+                            ErrorCode::InvalidArgument,
+                            format!(
+                                "session `{id}` runs with idle_kill_seconds={} and a live session \
+                                 cannot change it",
+                                session
+                                    .idle_kill_seconds()
+                                    .map(|s| s.to_string())
+                                    .unwrap_or_else(|| "default".into())
+                            ),
+                            json!({
+                                "held_idle_kill_seconds": session.idle_kill_seconds(),
+                                "requested_idle_kill_seconds": idle_kill_seconds,
+                            }),
+                        ),
+                        "idle_kill_seconds is launch-time: call acos_destroy for this session id, \
+                         then acos_launch with the value you want.",
+                    );
+                }
+                if intent_requested && session.intent() != &launch_intent {
+                    return with_hint(
+                        art_failure(
+                            request_id,
+                            Some(id),
+                            held.trust,
+                            ErrorCode::InvalidArgument,
+                            format!(
+                                "session `{id}` was launched with a different Intent and a live                                  session cannot replace it (the activity already received it)"
+                            ),
+                            json!({
+                                "held_intent": session.intent(),
+                                "requested_intent": launch_intent,
+                            }),
+                        ),
+                        "intent_action/data/extras are launch-time: call acos_destroy for this                          session id, then acos_launch with the Intent you want.",
                     );
                 }
                 if args.get("insets").is_some() && session.insets() != insets {
@@ -807,12 +956,41 @@ impl ServeEngine {
             );
         }
         let artifacts = self.artifacts_root.join(sanitize_session_id(id));
-        match ArtSession::start_with_zygote(
+        // ADR-0029 item 4: `acos_launch {services: [...]}`. The shapes are
+        // validated here so a bad spec is INVALID_ARGUMENT before a guest
+        // exists, and the launcher refuses an unknown module/profile itself.
+        let services = match args.get("services") {
+            None => Vec::new(),
+            Some(value) => match acos_services::module::ModuleSpec::parse_list(value) {
+                Ok(specs) => specs
+                    .iter()
+                    .map(acos_services::module::ModuleSpec::to_json)
+                    .collect(),
+                Err(error) => {
+                    return art_failure(
+                        request_id,
+                        Some(id),
+                        trust,
+                        ErrorCode::InvalidArgument,
+                        error.to_string(),
+                        json!({"field": "services", "value": value}),
+                    )
+                }
+            },
+        };
+        match ArtSession::start_with_apks_and_session(
             &apk,
+            &extra_apks,
             &artifacts,
             animations,
             insets,
+            idle_kill_seconds,
             Some(Arc::clone(&self.zygote)),
+            // NET3: the relay session takes this session's id, so `acos_net`
+            // addresses the network of the session the caller holds.
+            Some(id),
+            &services,
+            &launch_intent,
         ) {
             Ok(mut session) => {
                 session.set_settle_timeout(settle_timeout_ms);
@@ -1066,9 +1244,23 @@ impl ServeEngine {
             "acos_assert" => assert(&mut session, args, trust),
             "acos_logs" => logs(&mut session, &held.artifacts, args),
             "acos_status" => Ok(status_value(&session)),
+            // ADR-0029 item 4: list/status/attach/detach on the live guest.
+            // The launcher's peer thread owns the service table, so this is a
+            // command; an `at-launch` module is refused by the launcher with
+            // the launch call in the message.
+            "acos_services" => service_control(&mut session, args),
+            // MPROC1: session control ops (`acos_service_ctl`). The module and
+            // op are the session's own vocabulary; nothing is translated here.
+            "acos_service_ctl" => service_ctl(&mut session, args),
             "acos_reset" => reset(&mut session, &held.artifacts, args),
             "acos_swipe" => swipe(&mut session, args),
             "acos_action" => action(&mut session, args),
+            // NET2/NET4: the session's own network controls (the module wraps
+            // this). Host-side only: the relay supervisor owns the rules, the
+            // guest is never asked and nothing in it participates. The arm is
+            // the module's own verb name, the same constant `acos-mcp`
+            // advertises, so the CLI and MCP surfaces cannot drift.
+            acos_netd::net_ctl::NET_CTL_TOOL => net_ctl(&mut session, args),
             other => {
                 return art_failure(
                     request_id,
@@ -1097,6 +1289,8 @@ impl ServeEngine {
                 if let Some(object) = result.as_object_mut() {
                     object.insert("animations".into(), json!(session.animations()));
                     object.insert("insets".into(), json!(session.insets()));
+                    object.insert("modules".into(), json!(session.modules()));
+                    object.insert("extra_apks".into(), extra_apks_json(session.extra_apks()));
                 }
                 label_frame(&mut result, &session);
                 label_timing(&mut result, &session, tool, started);
@@ -1450,6 +1644,75 @@ fn label_timing(result: &mut Value, session: &ArtSession, tool: &str, started: s
 
 // -- verb implementations --------------------------------------------------- //
 
+/// `acos_net`: the session's network controls, on the live session API.
+///
+/// **NET5: this verb is the module's control path, not a second implementation.**
+/// The `network` service module owns the relay and its five ops; `acos_net` is
+/// the documented convenience spelling of exactly those ops, so this function
+/// parses the arguments (the closed [`acos_netd::net_ctl::net_ctl_schema`] that
+/// `acos-mcp` also advertises) and forwards them as one module control request
+/// `{op: "ctl", id: "network", ctl_op: <action>}`. `acos_service_ctl {module:
+/// "network", op: <action>}` and `acos_net {action: <action>}` therefore run the
+/// same code in the launcher, and `crates/acos-mcp/tests/net_ctl_parity.rs`
+/// pins that neither surface can grow a private copy.
+///
+/// A session without the module answers `NETWORK_UNAVAILABLE` naming the attach
+/// call; a relay that is down does the same (fail closed), never a silent
+/// offline.
+fn net_ctl(session: &mut ArtSession, args: &Value) -> Result<Value, BackendError> {
+    use acos_netd::net_ctl::{action_keys, NetAction};
+    let action = NetAction::from_args(args).map_err(|e| BackendError::Error {
+        code: ErrorCode::InvalidArgument,
+        detail: e.message,
+    })?;
+    // The module's control op is the action name; its arguments are the keys that
+    // action owns (the parser above already refused every other key).
+    let mut ctl_args = serde_json::Map::new();
+    for key in action_keys(action.name()) {
+        if let Some(value) = args.get(*key) {
+            ctl_args.insert((*key).to_string(), value.clone());
+        }
+    }
+    let reply = session.service_op(json!({
+        "op": "ctl",
+        "id": acos_services::modules::network::MODULE_ID,
+        "ctl_op": action.name(),
+        "args": Value::Object(ctl_args),
+    }))?;
+    if reply.get("ok").and_then(Value::as_bool) == Some(false) {
+        // The module's structured refusal, mapped onto the transport's codes: a
+        // missing network is `NETWORK_UNAVAILABLE`, never a silent offline.
+        let code = match reply.get("code").and_then(Value::as_str) {
+            Some(acos_services::error::codes::NETWORK_UNAVAILABLE) => ErrorCode::NetworkUnavailable,
+            Some(acos_services::error::codes::NETWORK_NO_SUCH_SESSION) => {
+                ErrorCode::SessionNotFound
+            }
+            Some(acos_services::error::codes::SERVICE_MODULE_REJECTED) => {
+                ErrorCode::InvalidArgument
+            }
+            Some(acos_services::error::codes::SERVICE_MODULE_UNAVAILABLE) => {
+                ErrorCode::NetworkUnavailable
+            }
+            _ => ErrorCode::Internal,
+        };
+        return Err(BackendError::Error {
+            code,
+            detail: reply
+                .get("error")
+                .and_then(Value::as_str)
+                .unwrap_or("the network module refused the control")
+                .to_string(),
+        });
+    }
+    let mut value = reply.get("value").cloned().unwrap_or(Value::Null);
+    value["session_id"] = json!(args
+        .pointer("/base/session_id")
+        .or_else(|| args.get("session_id"))
+        .and_then(Value::as_str)
+        .unwrap_or(""));
+    Ok(value)
+}
+
 fn launch_reply(
     request_id: &str,
     id: &str,
@@ -1513,6 +1776,10 @@ fn launch_reply(
     merge_zygote_fields(&mut result, session);
     result["animations"] = json!(session.animations());
     result["insets"] = json!(session.insets());
+    // ADR-0029 item 4: the attached modules and their fidelity, as the
+    // launcher's ready line reported them.
+    result["modules"] = json!(session.modules());
+    result["extra_apks"] = extra_apks_json(session.extra_apks());
     // H13b: which boot image this session booted and whether its cache hit.
     result["boot_image"] = session
         .boot_image()
@@ -2024,8 +2291,8 @@ fn observe_tree(
     let t_begin = m5_now_us();
     // FB2c item 6: a screenshot is captured by the same traversal as the tree,
     // so the two cannot disagree about which frame is on screen.
-    let tree = session
-        .tree_with_settle_pixels(settle, !matches!(screenshot, ScreenshotRequest::None))?;
+    let tree =
+        session.tree_with_settle_pixels(settle, !matches!(screenshot, ScreenshotRequest::None))?;
     let t_tree = m5_now_us();
     let (tree_value, max_nodes, node_count, truncated, tree_path, next_cursor) =
         shaped_tree(artifacts, &tree, max_nodes, args);
@@ -2061,7 +2328,18 @@ fn observe_tree(
     });
     // FB2: the screenshot is of *this* bound frame, and its `display_origin`
     // says how a PNG pixel maps to a tree bound.
-    attach_screenshot(session, artifacts, screenshot, "acos_observe_tree", &mut result)?;
+    attach_screenshot(
+        session,
+        artifacts,
+        screenshot,
+        "acos_observe_tree",
+        &mut result,
+    )?;
+    // LAYER1: the screenshot names the same window stack as the tree it is
+    // bound to, so a frame and a tree from one reply cannot disagree.
+    if let (Some(shot), false) = (result.get_mut("screenshot"), tree.windows.is_empty()) {
+        shot["windows"] = json!(tree.windows.len());
+    }
     Ok(result)
 }
 
@@ -2116,6 +2394,9 @@ fn observe(
         // agent got a tree, no file, no error). It is honoured here on the same
         // bound frame.
         attach_screenshot(session, artifacts, screenshot, "acos_observe", &mut result)?;
+        if let (Some(shot), false) = (result.get_mut("screenshot"), tree.windows.is_empty()) {
+            shot["windows"] = json!(tree.windows.len());
+        }
         return Ok(result);
     }
     // A frame-only observe is a real, fresh host capture.
@@ -2624,7 +2905,9 @@ fn action(session: &mut ArtSession, args: &Value) -> Result<Value, BackendError>
     }
     // SE1: so does a top-level `expect_change`.
     if let (Some(flag), Some(object)) = (args.get("expect_change"), action.as_object_mut()) {
-        object.entry("expect_change").or_insert_with(|| flag.clone());
+        object
+            .entry("expect_change")
+            .or_insert_with(|| flag.clone());
     }
     let kind = action.get("kind").and_then(Value::as_str).unwrap_or("tap");
     match kind {
@@ -2800,6 +3083,31 @@ fn regex_lite_matches(pattern: &str, text: &str) -> Result<bool, String> {
 /// Nothing is lost: the guest buffer is untouched (and `logs/logcat.txt` in a
 /// verify run is still the full log), `"all": true` or `min_priority: "V"`
 /// returns every record, and an explicit `tag` narrows further.
+/// MPROC1: `acos_service_ctl {module, op, args}` — one session service control
+/// op on a **core** session service (not an ADR-0029 module). `intents` is the
+/// capture target: `op:"last"`/`"list"` read what the app
+/// shared/picked, `op:"result"` scripts the answer a picker returns (and the
+/// session delivers it as the framework's own `ActivityResultItem`), `op:"clear"`
+/// empties the record. Every capture says `handled_by:"captured"`.
+fn core_service_ctl(session: &mut ArtSession, args: &Value) -> Result<Value, BackendError> {
+    let module =
+        args.get("module")
+            .and_then(Value::as_str)
+            .ok_or_else(|| BackendError::Failed {
+                code: ErrorCode::InvalidArgument,
+                detail: "acos_service_ctl needs a string `module` (a session service name)".into(),
+            })?;
+    let op = args
+        .get("op")
+        .and_then(Value::as_str)
+        .ok_or_else(|| BackendError::Failed {
+            code: ErrorCode::InvalidArgument,
+            detail: "acos_service_ctl needs a string `op`".into(),
+        })?;
+    let inner = args.get("args").cloned().unwrap_or(Value::Null);
+    session.ctl(module, op, inner)
+}
+
 fn logs(session: &mut ArtSession, artifacts: &Path, args: &Value) -> Result<Value, BackendError> {
     let records = session.logs_since(0)?;
     let crash = session.last_crash();
@@ -2829,8 +3137,8 @@ fn logs(session: &mut ArtSession, artifacts: &Path, args: &Value) -> Result<Valu
                     return Err(BackendError::Error {
                         code: ErrorCode::InvalidArgument,
                         detail: format!(
-                            "min_priority `{text}` is not a logcat priority; use V/D/I/W/E/F or 2..7"
-                        ),
+                        "min_priority `{text}` is not a logcat priority; use V/D/I/W/E/F or 2..7"
+                    ),
                     })
                 }
             }
@@ -2931,6 +3239,107 @@ fn logs(session: &mut ArtSession, artifacts: &Path, args: &Value) -> Result<Valu
     }))
 }
 
+/// MPROC1: the session's extra APKs as reply data — the caller's spelling of
+/// each path, in launch order. An empty list is still `[]` (not absent), so a
+/// reply never leaves "which packages are installed?" to a default.
+fn extra_apks_json(extra_apks: &[std::path::PathBuf]) -> Value {
+    Value::Array(
+        extra_apks
+            .iter()
+            .map(|path| json!(path.display().to_string()))
+            .collect(),
+    )
+}
+
+/// MPROC7: read the launch-time `idle_kill_seconds` argument.
+///
+/// Absent and explicit `null` both mean "not provided" (`Ok(None)`); anything
+/// else must be an integer in `0..=86400`, where `0` disables the idle kill.
+/// `Err` carries the offending value so the caller's error can name it.
+fn idle_kill_seconds_arg(args: &Value) -> Result<Option<u64>, Value> {
+    match args.get("idle_kill_seconds") {
+        None => Ok(None),
+        Some(value) if value.is_null() => Ok(None),
+        Some(value) => match value.as_u64() {
+            Some(seconds) if seconds <= 86_400 => Ok(Some(seconds)),
+            _ => Err(value.clone()),
+        },
+    }
+}
+
+/// Parse one `--extra KEY=VALUE` (the CLI spelling).
+///
+/// Delegates to [`acos_protocol::ExtraValue::parse_key_value`], the one parser
+/// `acos-art launch` uses too: two spellings of the same value must not
+/// disagree (a `--extra x=true` that arrived as a string on one surface and a
+/// boolean on the other would be the WVFAIR silent-drop class again).
+pub fn parse_extra_argument(
+    raw: &str,
+) -> Result<(String, acos_protocol::ExtraValue), String> {
+    acos_protocol::ExtraValue::parse_key_value(raw)
+}
+
+/// LAUNCHEXTRAS: read the launch `Intent` arguments (`intent_action`, `data`,
+/// `extras`).
+///
+/// Returns the Intent and whether the caller named any of the three (a live
+/// session cannot replace an Intent it already delivered). An argument of the
+/// wrong JSON type is `INVALID_ARGUMENT` naming the field and the type that
+/// arrived; a malformed extra is the same error, never a silently dropped key.
+fn launch_intent_arg(
+    args: &Value,
+) -> Result<(acos_protocol::LaunchIntent, bool), BackendError> {
+    let field = |name: &str| -> Result<Option<&str>, BackendError> {
+        match args.get(name) {
+            None | Some(Value::Null) => Ok(None),
+            Some(Value::String(value)) => Ok(Some(value.as_str())),
+            Some(other) => Err(BackendError::Failed {
+                code: ErrorCode::InvalidArgument,
+                detail: format!("`{name}` must be a string (got {})", json_kind(other)),
+            }),
+        }
+    };
+    let action = field("intent_action")?;
+    let data = field("data")?;
+    let extras = match args.get("extras") {
+        None | Some(Value::Null) => std::collections::BTreeMap::new(),
+        Some(value) => match serde_json::from_value::<
+            std::collections::BTreeMap<String, acos_protocol::ExtraValue>,
+        >(value.clone())
+        {
+            Ok(extras) => extras,
+            Err(error) => {
+                return Err(BackendError::Failed {
+                    code: ErrorCode::InvalidArgument,
+                    detail: format!("`extras` is not a typed extra map: {error}"),
+                })
+            }
+        },
+    };
+    let requested = action.is_some() || data.is_some() || !extras.is_empty();
+    Ok((
+        acos_protocol::LaunchIntent {
+            action: action.map(str::to_string),
+            data: data.map(str::to_string),
+            extras,
+        },
+        requested,
+    ))
+}
+
+/// The JSON type of an argument, for an error that names what arrived instead of
+/// guessing (FB-series: a mistyped argument is never silently accepted).
+fn json_kind(value: &Value) -> &'static str {
+    match value {
+        Value::Null => "null",
+        Value::Bool(_) => "a boolean",
+        Value::Number(_) => "a number",
+        Value::String(_) => "a string",
+        Value::Array(_) => "an array",
+        Value::Object(_) => "an object",
+    }
+}
+
 /// ZPROD3: copy the zygote fields into a reply (flag-on sessions only). With the
 /// flag off the map is `None` and the reply object is untouched; with it on the
 /// fields replace the generic `isolation` string, because a reset/status reply
@@ -2997,6 +3406,7 @@ fn status_value(session: &ArtSession) -> Value {
         "mode": "live",
         "animations": session.animations(),
         "insets": session.insets(),
+        "extra_apks": extra_apks_json(session.extra_apks()),
         "capabilities": {
             "tree": true, "screenshot": true, "tap": true, "tap_text": true,
             "type_text": true, "key": true, "reset": true, "logs": true,
@@ -3006,6 +3416,125 @@ fn status_value(session: &ArtSession) -> Value {
     });
     merge_zygote_fields(&mut status, session);
     status
+}
+
+/// `acos_service_ctl {module, op, args?}` — the one control spelling, routed to
+/// the owner of `module`.
+///
+/// ADR-0029 gives the **module framework** the single control path, so an id the
+/// session's module registry knows (`network`, `notifications`, …) goes through
+/// [`module_service_ctl`]. MPROC1's intent capture target is a core session
+/// service, not a module, so its id (`intents`) goes to the session's own ctl
+/// path ([`core_service_ctl`]); an id neither side knows is answered by the core
+/// path's structured refusal, which names the module. The choice is made from
+/// the registry's own rows, never from a failed call (no fallback that would
+/// mask a typo as success).
+fn service_ctl(session: &mut ArtSession, args: &Value) -> Result<Value, BackendError> {
+    let module = args.get("module").and_then(Value::as_str).unwrap_or("");
+    let known = session
+        .modules()
+        .iter()
+        .any(|row| row.get("id").and_then(Value::as_str) == Some(module));
+    if known {
+        module_service_ctl(session, args)
+    } else {
+        core_service_ctl(session, args)
+    }
+}
+
+/// ADR-0029 item 4: `acos_service_ctl {module, op, args?}` on a live session.
+///
+/// This is the **only** agent spelling of a module control op; it becomes the
+/// one engine request `{op: "ctl", id, ctl_op, args}` (the module's own op name
+/// travels as `ctl_op` so it cannot collide with the `acos_services` action
+/// word). The module's answer is the peer's own value, never a fabricated
+/// success.
+fn module_service_ctl(session: &mut ArtSession, args: &Value) -> Result<Value, BackendError> {
+    let (Some(module), Some(ctl_op)) = (
+        args.get("module").and_then(Value::as_str),
+        args.get("op").and_then(Value::as_str),
+    ) else {
+        return Err(BackendError::Failed {
+            code: ErrorCode::InvalidArgument,
+            detail: "acos_service_ctl needs a string `module` and a string `op`".into(),
+        });
+    };
+    let mut request = json!({
+        "op": "ctl",
+        "id": module,
+        "ctl_op": ctl_op,
+    });
+    if let Some(module_args) = args.get("args") {
+        request["args"] = module_args.clone();
+    }
+    let mut reply = session.service_op(request)?;
+    reply["session_id"] = json!(args
+        .pointer("/base/session_id")
+        .or_else(|| args.get("session_id"))
+        .and_then(Value::as_str)
+        .unwrap_or(""));
+    Ok(reply)
+}
+
+/// ADR-0029 item 4: `acos_services {op, id?, profile?, config?}`.
+///
+/// `op` is closed (`list`, `status`, `attach`, `detach`); an unknown op, a
+/// missing id for attach/detach and a bad profile are `InvalidArgument`, never a
+/// silent no-op. The launcher performs the mutation and reports the attached
+/// set it actually has. A module's own control op is **not** spelled here: it is
+/// `acos_service_ctl {module, op, args}`, which both routes turn into the one
+/// engine request `{op: "ctl", id, ctl_op, args}`.
+fn service_control(session: &mut ArtSession, args: &Value) -> Result<Value, BackendError> {
+    let op = args.get("op").and_then(Value::as_str).unwrap_or("");
+    if !matches!(op, "list" | "status" | "attach" | "detach" | "ctl") {
+        return Err(BackendError::Failed {
+            code: ErrorCode::InvalidArgument,
+            detail: format!(
+                "unknown op {op:?}; use list, status, attach or detach (a module control op is \
+                 `acos_service_ctl {{module, op, args}}`)"
+            ),
+        });
+    }
+    let mut request = json!({"op": op});
+    if matches!(op, "attach" | "detach" | "ctl") {
+        let Some(id) = args.get("id").and_then(Value::as_str) else {
+            return Err(BackendError::Failed {
+                code: ErrorCode::InvalidArgument,
+                detail: format!("{op} needs a string `id` (the module id)"),
+            });
+        };
+        request["id"] = json!(id);
+    }
+    if op == "attach" {
+        if let Some(profile) = args.get("profile").and_then(Value::as_str) {
+            request["profile"] = json!(profile);
+        }
+        if let Some(config) = args.get("config") {
+            request["config"] = config.clone();
+        }
+    }
+    if op == "ctl" {
+        // The MCP/CLI spelling carries the module control op in `ctl_op` (a
+        // scenario `service_ctl` step). `op` is already taken by the outer
+        // operation, so the inner one is never inferred.
+        let Some(ctl_op) = args.get("ctl_op").and_then(Value::as_str) else {
+            return Err(BackendError::Failed {
+                code: ErrorCode::InvalidArgument,
+                detail: "ctl needs a string `ctl_op` (the module control operation)".into(),
+            });
+        };
+        request["ctl_op"] = json!(ctl_op);
+        if let Some(ctl_args) = args.get("args") {
+            request["args"] = ctl_args.clone();
+        }
+    }
+    let mut reply = session.service_op(request)?;
+    reply["session_id"] = json!(args
+        .pointer("/base/session_id")
+        .or_else(|| args.get("session_id"))
+        .and_then(Value::as_str)
+        .unwrap_or(""));
+    Ok(reply)
 }
 
 fn reset(session: &mut ArtSession, artifacts: &Path, args: &Value) -> Result<Value, BackendError> {
@@ -3189,9 +3718,7 @@ fn requested_settle(args: &Value) -> Result<&'static str, BackendError> {
         Some("content") => Ok("content"),
         Some(other) => Err(BackendError::Failed {
             code: ErrorCode::InvalidArgument,
-            detail: format!(
-                "settle must be \"strict\", \"fast\" or \"content\" (got {other:?})"
-            ),
+            detail: format!("settle must be \"strict\", \"fast\" or \"content\" (got {other:?})"),
         }),
     }
 }
@@ -3537,6 +4064,9 @@ fn tree_json(tree: &UiTree, max_nodes: usize) -> (usize, usize, bool, Value) {
         json!({
             "max_nodes": max_nodes,
             "truncated": truncated,
+            // LAYER1: the windows in policy z order (bottom first). Short
+            // per-window rows only; nodes carry the same z as `window_z`.
+            "windows": tree.windows,
             "nodes": roots,
         }),
     )
@@ -3579,12 +4109,23 @@ fn node_json(
         "selected": node.selected,
         "password": node.password,
         "window": node.window,
+        // LAYER1 window tag (short strings; omitted when the probe has none).
+        "window_id": node.window_id,
+        "window_type": node.window_type,
+        "window_kind": node.window_kind,
+        "window_z": node.window_z,
         "package": node.package,
         "children": children,
     }))
 }
 
 fn distinct_windows(tree: &UiTree) -> usize {
+    // LAYER1: the probe's window block is authoritative (it includes a window
+    // with no visible node). Fall back to the per-node labels for an older
+    // probe that has no block.
+    if !tree.windows.is_empty() {
+        return tree.windows.len();
+    }
     fn collect(node: &UiNode, seen: &mut Vec<String>) {
         if !node.window.is_empty() && !seen.contains(&node.window) {
             seen.push(node.window.clone());
@@ -4003,8 +4544,37 @@ fn sanitize_session_id(id: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{keep_log_record, log_level_rank};
+    use super::{
+        idle_kill_seconds_arg, keep_log_record, launch_intent_arg, log_level_rank,
+        parse_extra_argument,
+    };
     use acos_protocol::LogLevel;
+    use serde_json::json;
+
+    /// GL1/MPROC7: an absent key and an explicit JSON `null` both mean "not
+    /// provided". A client that serialises `Option<u64>` as `null` (the `acos
+    /// launch` CLI did) must not be rejected, and `null` must never be read as
+    /// `0` (which would disable the idle kill).
+    #[test]
+    fn idle_kill_seconds_treats_an_absent_or_null_field_as_not_provided() {
+        assert_eq!(idle_kill_seconds_arg(&json!({})), Ok(None));
+        assert_eq!(idle_kill_seconds_arg(&json!({"idle_kill_seconds": null})), Ok(None));
+        assert_eq!(idle_kill_seconds_arg(&json!({"idle_kill_seconds": 0})), Ok(Some(0)));
+        assert_eq!(
+            idle_kill_seconds_arg(&json!({"idle_kill_seconds": 30})),
+            Ok(Some(30))
+        );
+        assert_eq!(
+            idle_kill_seconds_arg(&json!({"idle_kill_seconds": 86_400})),
+            Ok(Some(86_400))
+        );
+        // Out of range, a string, a float and a negative all name the value.
+        for bad in [json!(86_401), json!("30"), json!(1.5), json!(-1)] {
+            let err = idle_kill_seconds_arg(&json!({"idle_kill_seconds": bad}))
+                .expect_err("must be rejected");
+            assert_eq!(err, bad);
+        }
+    }
 
     /// FB6 (5): the default log view is `W` + the app's own package.
     #[test]
@@ -4157,11 +4727,17 @@ mod tests {
             selector.content_desc.and_then(|t| t.exact).as_deref(),
             Some("Search Japanese dictionary")
         );
-        assert_eq!(describe, json!({"content_desc": "Search Japanese dictionary"}));
+        assert_eq!(
+            describe,
+            json!({"content_desc": "Search Japanese dictionary"})
+        );
 
-        let (selector, describe) = args_selector(&json!({"text": "kayou", "index": 1}))
-            .expect("a selector");
-        assert_eq!(selector.text.and_then(|t| t.exact).as_deref(), Some("kayou"));
+        let (selector, describe) =
+            args_selector(&json!({"text": "kayou", "index": 1})).expect("a selector");
+        assert_eq!(
+            selector.text.and_then(|t| t.exact).as_deref(),
+            Some("kayou")
+        );
         assert_eq!(selector.index, Some(1), "index is ANDed with the field");
         assert_eq!(describe, json!({"text": "kayou", "index": 1}));
 
@@ -4183,7 +4759,10 @@ mod tests {
             .expect_err("two matches must not resolve silently");
         match error {
             BackendError::Protocol {
-                code, details, hint, ..
+                code,
+                details,
+                hint,
+                ..
             } => {
                 assert_eq!(code, ErrorCode::AmbiguousSelector);
                 let details = details.expect("structured candidates");
@@ -4224,7 +4803,10 @@ mod tests {
         let token = typing_node("token", false, true);
         let screen = tree(vec![search, token]);
         let decision = echo_decision(&screen, false);
-        assert!(decision.mask_reason.is_none(), "a focused non-password field echoes");
+        assert!(
+            decision.mask_reason.is_none(),
+            "a focused non-password field echoes"
+        );
         let target = input_target("kayou", &decision);
         assert_eq!(target["text"], json!("kayou"));
         assert!(target.get("text_masked").is_none());
@@ -4243,7 +4825,11 @@ mod tests {
         assert_eq!(target["text_masked"], json!(true));
         assert_eq!(target["chars"], json!(6));
         assert_eq!(target["node"]["id"], json!("pw"));
-        assert_eq!(target["node"]["text"], Value::Null, "password text is withheld");
+        assert_eq!(
+            target["node"]["text"],
+            Value::Null,
+            "password text is withheld"
+        );
         assert!(!target.to_string().contains("s3cret"));
     }
 
@@ -4257,14 +4843,20 @@ mod tests {
         let decision = echo_decision(&tree_with_password, false);
         let target = input_target("kayou", &decision);
         assert_eq!(target["text_masked"], json!(true));
-        assert!(target["reason"].as_str().unwrap().starts_with("target unknown"));
+        assert!(target["reason"]
+            .as_str()
+            .unwrap()
+            .starts_with("target unknown"));
         assert_eq!(target["node"], Value::Null, "no node is claimed");
         assert!(!target.to_string().contains("kayou"));
 
         let plain_unfocused = typing_node("plain", false, false);
         let plain_tree = tree(vec![plain_unfocused]);
         let decision = echo_decision(&plain_tree, false);
-        assert!(decision.mask_reason.is_some(), "unknown target is masked by default");
+        assert!(
+            decision.mask_reason.is_some(),
+            "unknown target is masked by default"
+        );
     }
 
     #[test]
@@ -4586,7 +5178,10 @@ mod tests {
         .expect("the screenshot is written");
         let shot = &result["screenshot"];
         let path = std::path::Path::new(shot["path"].as_str().unwrap());
-        assert!(path.is_absolute(), "the reply names an absolute path: {shot}");
+        assert!(
+            path.is_absolute(),
+            "the reply names an absolute path: {shot}"
+        );
         assert_eq!(
             path.file_name().unwrap(),
             "observe_tree-7.png",
@@ -4648,7 +5243,10 @@ mod tests {
             result["screenshot"]["path"],
             json!(std::fs::canonicalize(&dest).unwrap().display().to_string())
         );
-        assert!(dest.is_file(), "a relative path lands under the artifacts dir");
+        assert!(
+            dest.is_file(),
+            "a relative path lands under the artifacts dir"
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -4678,7 +5276,12 @@ mod tests {
         for (why, dest) in [
             ("a `..` component", PathBuf::from("../../../escape.png")),
             ("an absolute path outside", dir.join("outside.png")),
-            ("a `..` even when it lands inside", PathBuf::from("screenshots/../x.png").join("..").join("y.png")),
+            (
+                "a `..` even when it lands inside",
+                PathBuf::from("screenshots/../x.png")
+                    .join("..")
+                    .join("y.png"),
+            ),
         ] {
             let error = attempt(Some(dest)).expect_err(why);
             match error {
@@ -4829,14 +5432,23 @@ mod tests {
             error.clone(),
             Metrics::wall_ms(0),
         );
-        assert!(!envelope.status().is_pass(), "a placeholder is never a pass");
+        assert!(
+            !envelope.status().is_pass(),
+            "a placeholder is never a pass"
+        );
         assert_eq!(envelope.status(), acos_protocol::Status::Blocked);
         assert_eq!(error.code, ErrorCode::PlaceholderContent);
         assert_eq!(error.code.as_str(), "PLACEHOLDER_CONTENT");
-        assert_eq!(error.details.as_ref().unwrap()["reason"], json!("placeholder-content"));
+        assert_eq!(
+            error.details.as_ref().unwrap()["reason"],
+            json!("placeholder-content")
+        );
         assert_eq!(error.details.as_ref().unwrap()["nodes"], json!(9));
         assert_eq!(error.details.as_ref().unwrap()["frame_number"], json!(1));
-        assert_eq!(error.details.as_ref().unwrap()["session_id"], json!("s_gaten"));
+        assert_eq!(
+            error.details.as_ref().unwrap()["session_id"],
+            json!("s_gaten")
+        );
         // The hint carries the log line that names the cause, so an agent does
         // not have to guess why the content never mounted.
         let hint = error.hint.clone();
@@ -5014,13 +5626,20 @@ mod tests {
         let err = reset_bind(&json!({"settle": "content"})).expect_err("content reset is refused");
         assert_eq!(err.code(), ErrorCode::InvalidArgument);
         assert!(
-            err.to_string().contains("does not bind a content-stable frame"),
+            err.to_string()
+                .contains("does not bind a content-stable frame"),
             "the refusal must say why: {err}"
         );
         // The accepted shapes are unchanged.
         assert_eq!(reset_bind(&json!({})).unwrap(), ("strict", false));
-        assert_eq!(reset_bind(&json!({"settle": "strict"})).unwrap(), ("strict", false));
-        assert_eq!(reset_bind(&json!({"settle": "fast"})).unwrap(), ("fast", false));
+        assert_eq!(
+            reset_bind(&json!({"settle": "strict"})).unwrap(),
+            ("strict", false)
+        );
+        assert_eq!(
+            reset_bind(&json!({"settle": "fast"})).unwrap(),
+            ("fast", false)
+        );
     }
 
     /// SE2b finding 7: `expect_change` is a pixel claim, so BOTH unmeasured
@@ -5046,10 +5665,93 @@ mod tests {
             &json!({"settle": "strict", "expect_change": true})
         )
         .is_ok());
-        assert!(reject_expect_change_without_pixel_evidence(
-            &json!({"settle": "content"})
-        )
-        .is_ok());
-        assert!(reject_expect_change_without_pixel_evidence(&json!({"expect_change": true})).is_ok());
+        assert!(reject_expect_change_without_pixel_evidence(&json!({"settle": "content"})).is_ok());
+        assert!(
+            reject_expect_change_without_pixel_evidence(&json!({"expect_change": true})).is_ok()
+        );
+    }
+
+    /// LAUNCHEXTRAS: the `acos_launch`/`acos launch --keep` arguments become the
+    /// `LaunchIntent` the session-start Intent carries, so each extra's Java
+    /// type must arrive unchanged. `float` and a small `long` are the two the
+    /// untyped JSON spelling loses, so they are asserted by type here (the
+    /// protocol write/read is `acos-protocol`'s test; this is the daemon's
+    /// argument reader).
+    #[test]
+    fn launch_intent_arguments_keep_each_extras_java_type() {
+        let (intent, requested) = launch_intent_arg(&json!({
+            "intent_action": "dev.acos.test.ACTION",
+            "data": "acos://x/y",
+            "extras": {
+                "s": "hello",
+                "i": 42,
+                "l": {"type": "long", "value": 7},
+                "b": true,
+                "f": {"type": "float", "value": 1.5},
+                "d": 0.25,
+                "a": ["x", "y"]
+            }
+        }))
+        .expect("a full Intent");
+        assert!(requested);
+        assert_eq!(intent.action.as_deref(), Some("dev.acos.test.ACTION"));
+        assert_eq!(intent.data.as_deref(), Some("acos://x/y"));
+        use acos_protocol::ExtraValue as E;
+        for (key, expected) in [
+            ("s", E::String("hello".to_string())),
+            ("i", E::Int(42)),
+            ("l", E::Long(7)),
+            ("b", E::Boolean(true)),
+            ("f", E::Float(1.5)),
+            ("d", E::Double(0.25)),
+            ("a", E::StringArray(vec!["x".to_string(), "y".to_string()])),
+        ] {
+            assert_eq!(intent.extras.get(key), Some(&expected), "extra `{key}`");
+        }
+        assert!(intent.unsupported_extra().is_none());
+    }
+
+    /// The one honest refusal: a `Parcelable` is named by key and class before
+    /// any guest exists, and a mistyped argument is `INVALID_ARGUMENT`, never
+    /// silently ignored (the WVFAIR silent-drop class).
+    #[test]
+    fn a_parcelable_extra_is_named_and_a_mistyped_argument_is_refused() {
+        let (intent, requested) = launch_intent_arg(&json!({
+            "extras": {"device": {"type": "parcelable", "value": "android.os.Bundle"}}
+        }))
+        .expect("a legal declaration");
+        assert!(requested);
+        assert_eq!(
+            intent.unsupported_extra(),
+            Some(("device", "android.os.Bundle"))
+        );
+        // Nothing declared is not a request (a live session may be re-addressed).
+        assert_eq!(
+            launch_intent_arg(&json!({})).expect("empty"),
+            (Default::default(), false)
+        );
+        assert_eq!(
+            launch_intent_arg(&json!({"intent_action": null})).expect("null"),
+            (Default::default(), false)
+        );
+        let error = launch_intent_arg(&json!({"intent_action": 5})).expect_err("not a string");
+        assert_eq!(error.code(), ErrorCode::InvalidArgument);
+        assert!(error.to_string().contains("intent_action"), "{error}");
+        let error = launch_intent_arg(&json!({"extras": [1, 2]})).expect_err("not a map");
+        assert_eq!(error.code(), ErrorCode::InvalidArgument);
+        let error = launch_intent_arg(&json!({"extras": {"x": {"type": "nope", "value": 1}}}))
+            .expect_err("unknown type");
+        assert_eq!(error.code(), ErrorCode::InvalidArgument);
+        assert!(error.to_string().contains("unknown extra type"), "{error}");
+    }
+
+    /// `--extra` is the same spelling on the CLI and in the launcher.
+    #[test]
+    fn the_cli_extra_argument_is_the_protocol_parser() {
+        assert_eq!(
+            parse_extra_argument("f={\"type\":\"float\",\"value\":1.5}").expect("float"),
+            ("f".to_string(), acos_protocol::ExtraValue::Float(1.5))
+        );
+        assert!(parse_extra_argument("novalue").is_err());
     }
 }

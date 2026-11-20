@@ -13,8 +13,8 @@ use std::sync::RwLock;
 use std::time::{Duration, Instant};
 
 use acos_protocol::{
-    Backend as ProtocolBackend, CommandName, Envelope, ErrorCode, Fidelity, Metrics,
-    ProtocolError, ResourceBudget,
+    Backend as ProtocolBackend, CommandName, Envelope, ErrorCode, Fidelity, Metrics, ProtocolError,
+    ResourceBudget,
 };
 use serde_json::{json, Value};
 
@@ -93,8 +93,27 @@ impl Capabilities {
             "probed": self.probed,
             "probe_error": self.probe_error,
             "commands": commands,
+            // ADR-0029 item 6: the module catalog and every gap name are
+            // generated from the service-module registry (the same source the
+            // `acos_help` limits section renders), never hand-written here.
+            "modules": acos_services::module::capabilities_json(),
+            // GLSHIP: the guest's software GL, `angle-swiftshader | none`, with
+            // the reason (not installed / `ACOS_GUEST_GLES=off` / override).
+            // One implementation: the launcher's own selection rule.
+            "gles": gles_json(),
         })
     }
+}
+
+/// GLSHIP: `{"provider": "angle-swiftshader" | "none", "detail": "..."}`.
+///
+/// One implementation: the provider contract the launcher itself binds
+/// (`acos-gles-provider`), asked with this server's own resolved guest sysroot.
+/// The MCP server does not link the ART launcher for this.
+fn gles_json() -> Value {
+    let sysroot = crate::paths::sysroot();
+    let (provider, detail) = acos_gles_provider::capability_for(sysroot.as_deref());
+    json!({ "provider": provider, "detail": detail })
 }
 
 /// Everything a backend needs for one call.
@@ -385,10 +404,7 @@ impl CliBackend {
     }
 
     fn resolved_binary(&self) -> Option<PathBuf> {
-        self.config
-            .binary
-            .clone()
-            .or_else(discover_binary)
+        self.config.binary.clone().or_else(discover_binary)
     }
 
     fn call_inspect(
@@ -456,7 +472,11 @@ impl CliBackend {
         let heap = args
             .get("heap_max_bytes")
             .and_then(Value::as_u64)
-            .or_else(|| ctx.budget.memory_mib.map(|mib| mib.saturating_mul(1024 * 1024)));
+            .or_else(|| {
+                ctx.budget
+                    .memory_mib
+                    .map(|mib| mib.saturating_mul(1024 * 1024))
+            });
         if let Some(heap) = heap {
             env.push(("ACOS_HEAP_MAX".to_string(), heap.to_string()));
         }
@@ -582,7 +602,11 @@ impl CliBackend {
         // rejects as "a value is required").
         if let Some(flags) = args.get("flags") {
             let Some(flags) = flags.as_array() else {
-                return invalid_argument(request_id, "flags", "`flags` must be an array of NAME=VALUE strings");
+                return invalid_argument(
+                    request_id,
+                    "flags",
+                    "`flags` must be an array of NAME=VALUE strings",
+                );
             };
             for (index, flag) in flags.iter().enumerate() {
                 let Some(flag) = flag.as_str() else {
@@ -769,10 +793,7 @@ impl Backend for CliBackend {
     }
 
     fn capabilities(&self) -> Capabilities {
-        self.caps
-            .read()
-            .unwrap_or_else(|e| e.into_inner())
-            .clone()
+        self.caps.read().unwrap_or_else(|e| e.into_inner()).clone()
     }
 
     fn refresh_capabilities(&self) -> Capabilities {
@@ -828,9 +849,7 @@ fn probe(config: &BackendConfig) -> Capabilities {
             version: None,
             probed: true,
             supported: HashSet::new(),
-            probe_error: Some(
-                "no `acos` binary found; set ACOS_BIN or build acos-cli".to_string(),
-            ),
+            probe_error: Some("no `acos` binary found; set ACOS_BIN or build acos-cli".to_string()),
         };
     };
 
@@ -1185,6 +1204,37 @@ fn truncate(text: &str, max: usize) -> String {
 
 #[cfg(test)]
 mod tests {
+    /// ADR-0029 item 6: `acos_capabilities` reports the module catalog and every
+    /// gap name, generated from the registry (not hand-written here).
+    #[test]
+    fn capabilities_are_generated_from_the_service_module_registry() {
+        let json = Capabilities::unprobed().to_json();
+        let modules = &json["modules"];
+        let catalog = modules["modules"].as_array().expect("module catalog");
+        assert!(
+            catalog.iter().any(|module| module["id"] == "core"),
+            "`core` must be in the catalog"
+        );
+        assert_eq!(modules["core_attached"], serde_json::json!(true));
+        assert_eq!(
+            modules["default_session"],
+            serde_json::json!([{"id": "core", "profile": "real"}])
+        );
+        let gaps = modules["gaps"].as_array().expect("gap list");
+        assert_eq!(gaps.len(), acos_services::module::TOMBSTONES.len());
+        let vibrator = gaps
+            .iter()
+            .find(|gap| gap["service"] == "vibrator_manager")
+            .expect("vibrator_manager is a known gap");
+        assert_eq!(vibrator["state"], "tombstone");
+        assert_eq!(vibrator["module"], "feedback.vibrator");
+        let wallpaper = gaps
+            .iter()
+            .find(|gap| gap["service"] == "wallpaper")
+            .expect("wallpaper is a known gap");
+        assert_eq!(wallpaper["state"], "off");
+    }
+
     use super::*;
 
     #[test]
@@ -1194,7 +1244,11 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         let exe = dir.join("acos-mcp");
         std::fs::write(&exe, b"").unwrap();
-        assert_eq!(installed_sibling(&exe, "acos"), None, "nothing beside it yet");
+        assert_eq!(
+            installed_sibling(&exe, "acos"),
+            None,
+            "nothing beside it yet"
+        );
         let sibling = dir.join("acos");
         std::fs::write(&sibling, b"").unwrap();
         assert_eq!(installed_sibling(&exe, "acos"), Some(sibling.clone()));
@@ -1231,8 +1285,16 @@ mod tests {
             Some(PathBuf::from("/x/acos")),
             "ACOS_BIN beats everything"
         );
-        assert_eq!(all(None, home.clone()), Some(home_acos), "explicit ACOS_HOME beats the sibling");
-        assert_eq!(all(None, None), Some(sibling.clone()), "the sibling beats PATH");
+        assert_eq!(
+            all(None, home.clone()),
+            Some(home_acos),
+            "explicit ACOS_HOME beats the sibling"
+        );
+        assert_eq!(
+            all(None, None),
+            Some(sibling.clone()),
+            "the sibling beats PATH"
+        );
         assert_eq!(
             all(Some("  ".into()), Some(dir.join("nohome").into_os_string())),
             Some(sibling),
@@ -1251,7 +1313,10 @@ mod tests {
     /// an unreadable answer is not reported as a mismatch.
     #[test]
     fn a_cli_version_mismatch_is_detected() {
-        assert_eq!(version_mismatch("acos 0.2.0\n", "0.2.1"), Some("0.2.0".to_string()));
+        assert_eq!(
+            version_mismatch("acos 0.2.0\n", "0.2.1"),
+            Some("0.2.0".to_string())
+        );
         assert_eq!(version_mismatch("acos 0.2.1\n", "0.2.1"), None);
         assert_eq!(version_mismatch("garbage", "0.2.1"), None);
     }
@@ -1357,7 +1422,10 @@ mod tests {
         });
         backend.call(CommandName::Verify, &args, &ctx);
         let argv = std::fs::read_to_string(&argv_file).expect("the fake binary ran");
-        assert!(argv.contains("--engine\nart"), "ART stays the MCP default: {argv}");
+        assert!(
+            argv.contains("--engine\nart"),
+            "ART stays the MCP default: {argv}"
+        );
         assert!(
             !argv.split('\n').any(|arg| arg == "--overwrite"),
             "overwrite is off by default: {argv}"
@@ -1381,6 +1449,9 @@ mod tests {
         assert!(!env.ok());
         assert_eq!(env.status(), acos_protocol::Status::Unsupported);
         assert_eq!(env.error().unwrap().code, ErrorCode::UnsupportedBackend);
-        assert_eq!(env.error().unwrap().details.as_ref().unwrap()["available"], false);
+        assert_eq!(
+            env.error().unwrap().details.as_ref().unwrap()["available"],
+            false
+        );
     }
 }

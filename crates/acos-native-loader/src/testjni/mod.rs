@@ -41,15 +41,9 @@ pub struct GObject(pub ObjKind);
 pub enum ObjKind {
     Class(String),
     Instance(String),
-    JString {
-        s: String,
-        c: Option<CString>,
-    },
+    JString { s: String, c: Option<CString> },
     IntArray(Vec<i32>),
-    Throwable {
-        class: String,
-        msg: String,
-    },
+    Throwable { class: String, msg: String },
 }
 
 /// Fake `jmethodID`.
@@ -324,7 +318,13 @@ impl TestJni {
 
 // --- helpers shared with jni_impl -----------------------------------------
 
-pub(crate) fn find_method(state: &State, class: &str, name: &str, sig: &str, is_static: bool) -> usize {
+pub(crate) fn find_method(
+    state: &State,
+    class: &str,
+    name: &str,
+    sig: &str,
+    is_static: bool,
+) -> usize {
     for m in &state.methods {
         if m.class == class && m.name == name && m.sig == sig && m.is_static == is_static {
             return m.as_ref() as *const Method as usize;
@@ -436,8 +436,7 @@ pub(crate) fn perform_call(_target: usize, mid: usize, is_static: bool, raw: &[u
 // --- Rust side of the android logging shims --------------------------------
 
 /// Log sink installed by the loader, if any.
-pub(crate) static LOG_SINK: Mutex<Option<std::sync::Arc<dyn crate::LogSink>>> =
-    Mutex::new(None);
+pub(crate) static LOG_SINK: Mutex<Option<std::sync::Arc<dyn crate::LogSink>>> = Mutex::new(None);
 
 /// Called by the C `__android_log_print` family.
 #[no_mangle]

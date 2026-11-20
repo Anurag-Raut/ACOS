@@ -1,0 +1,128 @@
+# NET6: the network a session can lose and regain mid-process.
+#
+# `network:real`, then the module's own `offline` control. A phone that loses its
+# network does three things an app can observe, and this scenario asserts all
+# three in ONE guest process (a relaunch would be a new netns and prove nothing):
+#
+#  1. `ConnectivityManager` loses its default network and every registered
+#     callback gets `NetworkCallback.onLost` (relay: the session's default route
+#     is removed and its live TCP sockets are destroyed inside its own netns;
+#     framework: `getActiveNetwork()` is `null`);
+#  2. the app's next fetch fails fast with an exception — never a silent hang
+#     (NET5's open finding: the second fetch reused the first fetch's keep-alive
+#     TLS socket and blocked in `read(2)` for the whole 60 s budget);
+#  3. `online` restores the route and the network, the app gets `onAvailable`,
+#     and the same fetch returns `HTTP 200` again.
+version: 1
+name: net-network-offline
+description: >-
+  `network:real` on ART: a real HTTPS GET returns HTTP 200, the module's
+  `offline` control makes the app see onLost and makes the next fetch in the same
+  process fail with an exception, and `online` brings both back.
+app: fixtures/build/apps/net-check.apk
+fallback: report-and-escalate
+api_level: 34
+isolation: process
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+capabilities:
+  - lifecycle
+  - ui.offscreen
+  - ui.text
+services:
+  - id: network
+    profile: real
+# SCENHYG: needs a host capability, declared instead of leaving a red row that
+# is not the scenario's fault. This arm attaches network:real and then controls it offline/online, which needs the pinned host pasta binary (ADR-0030).
+# Without pasta the runner skips the file and says so; with pasta the scenario
+# must pass.
+expectation: pass
+needs_env: [pasta]
+expectation_reason: >-
+  Needs the pinned host `pasta` binary for a real session netns; without it the
+  arm cannot be honest, so it is skipped rather than failed.
+budgets:
+  memory_mib: 512
+  wall_ms: 180000
+steps:
+  - launch:
+      activity: dev.acos.fixtures.netcheck/.MainActivity
+      clear_state: true
+
+  - wait_for:
+      selector: {id: status}
+      timeout_ms: 5000
+
+  # The online arm: the same real HTTPS GET the `net-network-real` scenario proves.
+  - assert_text:
+      selector: {id: status}
+      text: {exact: HTTP 200}
+      timeout_ms: 60000
+
+  # The app is listening; `registerDefaultNetworkCallback` delivered the network.
+  - assert_text:
+      selector: {id: netcb}
+      text: {contains: onAvailable}
+      timeout_ms: 5000
+
+  # The module's own control op, through the one module control path.
+  - service_ctl:
+      module: network
+      op: offline
+
+  # 1. The app observes the loss — the callback Android sends when the default
+  #    network goes away. Asserted on the app's own callback log: a
+  #    `runOnUiThread` update posted from a binder thread does not wake ACOS's
+  #    idle main looper promptly (measured), so the TextView lags the callback.
+  - assert_log:
+      tag: NetCheck
+      since_previous_step: true
+      ordered: true
+      timeout_ms: 10000
+      patterns:
+        - '^netcb onLost '
+
+  # 2. ...and its next fetch fails, bounded, with an exception. NET5 measured a
+  #    silent 60 s hang here; this is the failing step that fix makes pass.
+  - tap:
+      selector: {id: retry}
+  - assert_text:
+      selector: {id: status}
+      text: {contains: Exception}
+      timeout_ms: 30000
+
+  # ...and it is genuinely an Android-shaped failure, not a fake status line:
+  # `UnknownHostException` (resolver fails fast), `ConnectException: Failed to
+  # connect` (the route is gone, so `connect(2)` fails at once — Android's
+  # `SocketException: Network is unreachable` surfaces through OkHttp as this),
+  # `SocketException: Connection reset` (the lost network's sockets were
+  # destroyed) or `NoRouteToHostException`.
+  - assert_log:
+      tag: NetCheck
+      since_previous_step: false
+      ordered: true
+      patterns:
+        - '^fetch failed: (java\.net\.UnknownHostException|java\.net\.(ConnectException|SocketException|NoRouteToHostException))(:|$)'
+
+  # 3. The network comes back, the app hears about it, and the same fetch works.
+  - service_ctl:
+      module: network
+      op: online
+  - assert_log:
+      tag: NetCheck
+      since_previous_step: true
+      ordered: true
+      timeout_ms: 10000
+      patterns:
+        - '^netcb onAvailable '
+  - tap:
+      selector: {id: retry}
+  - assert_text:
+      selector: {id: status}
+      text: {exact: HTTP 200}
+      timeout_ms: 60000
+
+  - assert_no_crash: {}

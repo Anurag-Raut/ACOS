@@ -59,14 +59,16 @@ fn describe(vm: &mut acos_vm::Vm, h: acos_vm::heap::Handle) -> String {
 
 #[test]
 fn client_transaction_is_built_and_delivered_to_the_real_application_thread() {
-    let Some(apk) = counter_apk() else {
-        eprintln!("SKIP client_transaction: fixtures/build/apps/counter.apk is absent");
+    let Some(apk) = acos_test_support::require_some(counter_apk(), "client_transaction_is_built_and_delivered_to_the_real_application_thread", "fixtures/build/apps/counter.apk is absent") else {
         return;
     };
     let Some(mut rt) = new_runtime() else {
         return;
     };
-    let manifest = Apk::open(&apk).expect("open counter apk").manifest().expect("manifest");
+    let manifest = Apk::open(&apk)
+        .expect("open counter apk")
+        .manifest()
+        .expect("manifest");
     let mut app = AppInfo::from_manifest(&manifest, &apk, FIXTURE_UID);
     apk_loader::stage(rt.vm(), &apk, &mut app).expect("stage counter apk");
 
@@ -99,9 +101,7 @@ fn client_transaction_is_built_and_delivered_to_the_real_application_thread() {
             &[],
         ) {
             if looper != NULL {
-                let _ = rt
-                    .vm_mut()
-                    .call_method(looper, "quitSafely", "()V", &[]);
+                let _ = rt.vm_mut().call_method(looper, "quitSafely", "()V", &[]);
             }
         }
         let _ = acos_vm::interp::run(rt.vm_mut());

@@ -67,7 +67,9 @@ fn all_fixtures_parse_and_verify() {
             dex.header().version
         );
         assert!(dex.class_defs().len() >= 20, "{name}: classes");
-        let report = dex.verify().unwrap_or_else(|e| panic!("{name}: verify failed: {e}"));
+        let report = dex
+            .verify()
+            .unwrap_or_else(|e| panic!("{name}: verify failed: {e}"));
         assert!(report.methods_with_code > 50, "{name}: methods");
         assert!(report.instructions > 500, "{name}: instructions");
         assert_eq!(
@@ -142,7 +144,9 @@ fn static_values_decode() {
     assert!(
         values.iter().any(|v| matches!(
             v,
-            EncodedValue::Int(_) | EncodedValue::Long(_) | EncodedValue::Float(_)
+            EncodedValue::Int(_)
+                | EncodedValue::Long(_)
+                | EncodedValue::Float(_)
                 | EncodedValue::Double(_)
         )),
         "expected a numeric static value"
@@ -153,9 +157,7 @@ fn static_values_decode() {
 fn annotations_directory_parses() {
     let dex = load("fixtures.dex");
     let def = dex.find_class("LEnums;").unwrap();
-    let ann = dex
-        .annotations(def)
-        .expect("annotations parsed");
+    let ann = dex.annotations(def).expect("annotations parsed");
     assert!(
         !ann.class_annotations.is_empty()
             || !ann.field_annotations.is_empty()
@@ -303,7 +305,11 @@ fn disassembly_is_dexdump_like() {
     let code = dex.code_item(code_off).unwrap();
     let lines = acos_dex::disasm::disassemble(&dex, &code).unwrap();
     assert!(!lines.is_empty());
-    let text: String = lines.iter().map(|(_, t)| t.as_str()).collect::<Vec<_>>().join("\n");
+    let text: String = lines
+        .iter()
+        .map(|(_, t)| t.as_str())
+        .collect::<Vec<_>>()
+        .join("\n");
     assert!(text.contains("add-long"), "disassembly: {text}");
     assert!(text.contains("return-wide"), "disassembly: {text}");
 }

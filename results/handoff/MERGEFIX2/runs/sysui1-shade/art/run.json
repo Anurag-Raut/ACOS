@@ -1,0 +1,7 @@
+{
+  "request_id": "req_1d01c_18e9090ca3ee383a",
+  "started_at": "2026-11-18T04:24:36.378Z",
+  "scenario": "scenarios/sysui1-shade.yaml",
+  "apk": "",
+  "acos_version": "0.3.0"
+}

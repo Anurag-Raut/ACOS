@@ -1,0 +1,145 @@
+# WVFAIR: two WebViews, one of them deliberately slow — frame pulls are fair.
+#
+# The WV8 gate measured the defect this scenario is for: two engine targets
+# pulling frames at the same time serialised on the broker's engine-wide
+# `beginFrame` lock, the *other* WebView's input paid for it, and the tap's ack
+# arrived ~2.0 s late with the click lost (`Choreographer: Skipped 119 frames`,
+# results/handoff/WV8/REPORT.md §5).
+#
+# This scenario puts the two views in the arrangement that used to hurt: page A
+# is the cheap tappable page, page B runs a page that repaints a full-viewport
+# canvas every animation frame and keeps the engine's main thread busy in 1.9 s
+# slices (the probe's `mode: fair` arm, `fixtures/apps/webview-probe`). While B
+# is at its most expensive the scenario taps A's own button and asserts:
+#
+#   1. the click arrives in the page (the ACOS tree shows "tapped" and the
+#      page's JS reached the Java bridge — a lost click fails here);
+#   2. the probe's end-to-end input measurement, "fair: tap -> page click N ms",
+#      is a *bounded number* (`[0-9]{1,3}` = under 1 s; the pre-gate broker
+#      measured ~2000 ms and a lost click, and before WVTAIL the same path
+#      measured 2004-2604 ms because every input event waited out a 2 s ack
+#      timeout — see results/handoff/WVTAIL/);
+#   3. B really was pulling frames through the same broker (`frame decoded
+#      view=1` = the second WebView), so the tap was not measured against an idle
+#      engine;
+#   4. A's viewport arm still reports its layout width — the page kept running
+#      through the slow view's frames.
+#
+# The module contract is the probe's: `services: [{id: webview, profile: real}]`
+# installs the provider package and binds the session's gate socket.
+version: 1
+name: webview-fair
+description: >-
+  Two WebViews against one broker: page A stays tappable and its input is
+  acknowledged inside a bounded time while page B keeps the engine busy, page
+  B still produces real frames, and the page state proves the tap landed.
+app: fixtures/build/apps/webview-probe.apk
+engine: native-preferred
+fallback: report-and-escalate
+api_level: 34
+isolation: process
+services:
+  - id: webview
+    profile: real
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+capabilities:
+  - lifecycle
+  - ui.offscreen
+  - ui.text
+  - input.tap
+  - screenshot
+expectation: pass
+budgets:
+  memory_mib: 768
+  wall_ms: 180000
+steps:
+  - launch:
+      activity: dev.acos.fixtures.webview/.MainActivity
+      clear_state: true
+  - wait_for:
+      selector: {id: status}
+      timeout_ms: 8000
+  - assert_text:
+      selector: {id: status}
+      text: {contains: "WebView created:"}
+      timeout_ms: 12000
+  # Page A loaded (its asset page comes through req.intercept from this APK).
+  - assert_text:
+      selector: {id: status}
+      text: {contains: "A onPageFinished file:///android_asset/test.html"}
+      timeout_ms: 20000
+  # The probe's own button starts the deliberately slow page in B: from here the
+  # engine is kept busy by the second WebView and A must stay healthy.
+  # `settle: content` is deliberate: from the moment the slow page starts, the
+  # screen keeps animating, so a strict (pixel/event) settle can never complete;
+  # the UI tree itself does become content-stable.
+  - tap:
+      selector: {text: {exact: "start slow page in B"}}
+      settle: content
+      # The tap step also asks for a fresh tree sample; starting the slow page
+      # makes the next frames expensive, so give the settle room instead of
+      # turning "the sample was 750 ms late" into a harness failure. The
+      # assertion below is what has to hold.
+      settle_timeout_ms: 8000
+  - assert_text:
+      selector: {id: status}
+      text: {contains: "fair: slow page started in B"}
+      timeout_ms: 20000
+  # The slow view must actually be pulling: a real frame for the second WebView
+  # (the provider numbers views in creation order — A is view 1, B is view 2).
+  - assert_log:
+      tag: ACOSWvProvider
+      patterns:
+        - 'frame decoded view=2 [0-9]+x[0-9]+ seq=[0-9]+ bytes=[0-9]+'
+      timeout_ms: 30000
+  # Tap A's own button while B is expensive. The step's own latency is bounded
+  # by the tap ack, and the page's JS proves the click landed.
+  - tap:
+      selector: {text: {exact: "Tap me"}}
+      settle_timeout_ms: 12000
+  - assert_text:
+      selector: {text: {exact: "tapped"}}
+      text: {contains: "tapped"}
+      timeout_ms: 6000
+  - assert_text:
+      selector: {id: status}
+      text: {contains: "JS->Java: tapped"}
+      timeout_ms: 6000
+  # The number the brief asks for: the tap's whole path (down on the guest ->
+  # the engine's input -> the page's own click JS -> the Java bridge) while the
+  # slow view kept pulling frames. The bound is what the fair gate promises: the
+  # tap's own frames wait behind at most one bounded `beginFrame` attempt each,
+  # never behind a page's retry loop. Measured on this host/ART: 1530 ms; the
+  # host-level test (crates/acos-webview/tests/fair_pulls.rs) measures the same
+  # path at 65 ms with a 927 ms worst-case frame pull. Before the gate (WV8 §5):
+  # ~2 s and sometimes a lost click.
+  - assert_log:
+      tag: WVProbe
+      patterns:
+        - 'fair: tap -> page click ([0-9]{1,3}) ms'
+      timeout_ms: 8000
+  # WVTAIL: the *slow* page still gets frames through the tap. The probe touches
+  # B once after measuring (`fair: slow view touched for a frame`), which makes
+  # the guest dispatch input to B and the provider pull B's next frame; this step
+  # wants a `frame decoded view=2` line produced **after the previous step
+  # started** (`since_previous_step`), so a frame from B's load cannot satisfy it.
+  # A broker that starves the slow page for input frames fails here: it abandons a
+  # non-input frame attempt for a queued input frame, so production has to keep
+  # happening.
+  - assert_log:
+      tag: ACOSWvProvider
+      patterns:
+        - 'frame decoded view=2 [0-9]+x[0-9]+ seq=[2-9][0-9]* bytes=[0-9]+'
+      since_previous_step: true
+      timeout_ms: 30000
+  # A's page is still a live page: its viewport arm answers after the tap.
+  - assert_text:
+      selector: {id: status}
+      text: {contains: 'A viewport -> "343x1.00"'}
+      timeout_ms: 20000
+  - capture:
+      name: webview-fair-tapped

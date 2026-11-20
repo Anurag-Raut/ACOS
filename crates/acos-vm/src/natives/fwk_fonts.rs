@@ -304,7 +304,12 @@ pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
     let fb = "Landroid/graphics/fonts/Font$Builder;";
     vm.register_native(fb, "nInitBuilder", "()J", fb_init);
     vm.register_native(fb, "nAddAxis", "(JIF)V", fb_add_axis);
-    vm.register_native(fb, "nBuild", "(JLjava/nio/ByteBuffer;Ljava/lang/String;Ljava/lang/String;IZI)J", fb_build);
+    vm.register_native(
+        fb,
+        "nBuild",
+        "(JLjava/nio/ByteBuffer;Ljava/lang/String;Ljava/lang/String;IZI)J",
+        fb_build,
+    );
     vm.register_native(fb, "nClone", "(JJIZI)J", fb_clone);
 
     let f = "Landroid/graphics/fonts/Font;";
@@ -313,21 +318,46 @@ pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
     vm.register_native(f, "nGetAxisCount", "(J)I", font_axis_count);
     vm.register_native(f, "nGetAxisInfo", "(JI)J", font_axis_info);
     vm.register_native(f, "nGetBufferAddress", "(J)J", font_buffer_address);
-    vm.register_native(f, "nGetFontMetrics", "(JJLandroid/graphics/Paint$FontMetrics;)F", font_metrics);
+    vm.register_native(
+        f,
+        "nGetFontMetrics",
+        "(JJLandroid/graphics/Paint$FontMetrics;)F",
+        font_metrics,
+    );
     vm.register_native(f, "nGetFontPath", "(J)Ljava/lang/String;", font_path);
-    vm.register_native(f, "nGetGlyphBounds", "(JIJLandroid/graphics/RectF;)F", font_glyph_bounds);
+    vm.register_native(
+        f,
+        "nGetGlyphBounds",
+        "(JIJLandroid/graphics/RectF;)F",
+        font_glyph_bounds,
+    );
     vm.register_native(f, "nGetIndex", "(J)I", font_index);
-    vm.register_native(f, "nGetLocaleList", "(J)Ljava/lang/String;", font_locale_list);
+    vm.register_native(
+        f,
+        "nGetLocaleList",
+        "(J)Ljava/lang/String;",
+        font_locale_list,
+    );
     vm.register_native(f, "nGetMinikinFontPtr", "(J)J", font_minikin_ptr);
     vm.register_native(f, "nGetPackedStyle", "(J)I", font_packed_style);
     vm.register_native(f, "nGetReleaseNativeFont", "()J", release_func);
     vm.register_native(f, "nGetSourceId", "(J)I", font_source_id);
-    vm.register_native(f, "nNewByteBuffer", "(J)Ljava/nio/ByteBuffer;", font_new_byte_buffer);
+    vm.register_native(
+        f,
+        "nNewByteBuffer",
+        "(J)Ljava/nio/ByteBuffer;",
+        font_new_byte_buffer,
+    );
 
     let family = "Landroid/graphics/fonts/FontFamily;";
     vm.register_native(family, "nGetFont", "(JI)J", family_get_font);
     vm.register_native(family, "nGetFontSize", "(J)I", family_font_size);
-    vm.register_native(family, "nGetLangTags", "(J)Ljava/lang/String;", family_lang_tags);
+    vm.register_native(
+        family,
+        "nGetLangTags",
+        "(J)Ljava/lang/String;",
+        family_lang_tags,
+    );
     vm.register_native(family, "nGetVariant", "(J)I", family_variant);
 
     let fbb = "Landroid/graphics/fonts/FontFamily$Builder;";
@@ -339,10 +369,20 @@ pub(crate) fn install(vm: &mut Vm) -> VmResult<()> {
     let t = "Landroid/graphics/Typeface;";
     // Overrides the W19-B placeholder so the real variable-font axes are
     // reported for typefaces built from a concrete face.
-    vm.register_native(t, "nativeGetSupportedAxes", "(J)[I", typeface_supported_axes);
+    vm.register_native(
+        t,
+        "nativeGetSupportedAxes",
+        "(J)[I",
+        typeface_supported_axes,
+    );
     // The two remaining Typeface natives the font-config path needs; the rest
     // stay owned by `gfx_text`.
-    vm.register_native(t, "nativeCreateFromArray", "([JJII)J", typeface_create_from_array);
+    vm.register_native(
+        t,
+        "nativeCreateFromArray",
+        "([JJII)J",
+        typeface_create_from_array,
+    );
     vm.register_native(
         t,
         "nativeForceSetStaticFinalField",
@@ -533,9 +573,7 @@ fn font_minikin_ptr(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     // exactly one per mapped face.
     vm.ret_i64(
         ctx,
-        rec.resolved_font()
-            .map(|f| f.file.id as i64)
-            .unwrap_or(0),
+        rec.resolved_font().map(|f| f.file.id as i64).unwrap_or(0),
     );
     Ok(())
 }
@@ -596,7 +634,11 @@ fn family_variant(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
 // ---------------------------------------------------------------------------
 
 fn fbb_init(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
-    let h = with_fonts(|s| s.family_builders.insert(FamilyBuilderRec::default()).to_jlong());
+    let h = with_fonts(|s| {
+        s.family_builders
+            .insert(FamilyBuilderRec::default())
+            .to_jlong()
+    });
     vm.ret_i64(ctx, h);
     Ok(())
 }
@@ -649,9 +691,18 @@ fn fbb_build(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
 /// `FontFamily.getFont` picks the closest weight, with the requested style
 /// breaking ties. A style mismatch is charged roughly one 100-weight step so an
 /// exact-weight italic face still beats an upright near-match.
-fn face_score(candidate_weight: i32, candidate_italic: bool, want_weight: i32, want_italic: bool) -> i64 {
+fn face_score(
+    candidate_weight: i32,
+    candidate_italic: bool,
+    want_weight: i32,
+    want_italic: bool,
+) -> i64 {
     let weight_delta = (i64::from(candidate_weight) - i64::from(want_weight)).abs();
-    let style_penalty = if candidate_italic == want_italic { 0 } else { 100 };
+    let style_penalty = if candidate_italic == want_italic {
+        0
+    } else {
+        100
+    };
     weight_delta * 2 + style_penalty
 }
 
@@ -889,7 +940,9 @@ fn make_font_ref(
 
 fn family_name_of(font: &FontRef) -> Option<String> {
     let fc = FontCollection::shared()?;
-    fc.families.get(font.family_key).and_then(|f| f.name.clone())
+    fc.families
+        .get(font.family_key)
+        .and_then(|f| f.name.clone())
 }
 
 fn ttf_family_name(font: &FontRef) -> Option<String> {

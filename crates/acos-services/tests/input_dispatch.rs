@@ -16,7 +16,7 @@ use acos_parcel::{BinderId, Parcel};
 use acos_services::exception::NO_EXCEPTION;
 use acos_services::input_channel::{
     ChannelError, ConsumerResponse, InputMessage, LoopbackConsumer, ACTION_DOWN, ACTION_UP,
-    KEY_ACTION_DOWN, KEY_ACTION_UP, KEYCODE_ENTER,
+    KEYCODE_ENTER, KEY_ACTION_DOWN, KEY_ACTION_UP,
 };
 use acos_services::window_session::input_dispatch::{InputDispatch, InputEvent};
 use acos_services::ServiceHost;
@@ -34,6 +34,10 @@ fn registered_dispatch() -> (InputDispatch, LoopbackConsumer) {
     let mut d = InputDispatch::new();
     d.register_window(TOKEN, "Surface(name=acos-fixture/counter)/@0x10")
         .expect("register");
+    // LAYER1: focus is published by the window session from the WMS layer
+    // stack's `focus_target()` after the add (a FLAG_NOT_FOCUSABLE overlay must
+    // not take focus); registration only publishes TOUCH_MODE.
+    d.set_focus(Some(TOKEN)).expect("policy focus");
     let fd = d.duplicate_client_fd(TOKEN).expect("client fd");
     (d, LoopbackConsumer::new(fd))
 }
@@ -43,7 +47,7 @@ fn next(consumer: &mut LoopbackConsumer) -> InputMessage {
 }
 
 #[test]
-fn register_publishes_touch_mode_and_focus_is_delivered_by_default() {
+fn registration_publishes_touch_mode_and_the_policy_focus_follows() {
     let (mut d, mut guest) = registered_dispatch();
     match next(&mut guest) {
         InputMessage::TouchMode {
@@ -52,9 +56,10 @@ fn register_publishes_touch_mode_and_focus_is_delivered_by_default() {
         } => {}
         other => panic!("first message is TOUCH_MODE(true), got {other:?}"),
     }
-    // W13: focus is part of registration now. The IME focus reply
+    // W13: FOCUS is delivered for a newly focused window. The IME focus reply
     // (`startInputOrWindowGainedFocus`) is answered by `ime_wire`, so the
-    // guest's main looper survives the framework's stock focus path.
+    // guest's main looper survives the framework's stock focus path. LAYER1:
+    // the token is the WMS `focus_target()`, published after the add.
     match next(&mut guest) {
         InputMessage::Focus {
             has_focus: true, ..
@@ -82,8 +87,14 @@ fn inject_tap_publishes_down_then_up_and_records_the_acks_out_of_order() {
 
     let gesture = d.inject_tap(TOKEN, 120.5, 340.25).expect("tap");
     assert_eq!(gesture.dispatches.len(), 2);
-    assert_eq!(gesture.dispatches[0].kind, acos_services::input_channel::DispatchKind::MotionDown);
-    assert_eq!(gesture.dispatches[1].kind, acos_services::input_channel::DispatchKind::MotionUp);
+    assert_eq!(
+        gesture.dispatches[0].kind,
+        acos_services::input_channel::DispatchKind::MotionDown
+    );
+    assert_eq!(
+        gesture.dispatches[1].kind,
+        acos_services::input_channel::DispatchKind::MotionUp
+    );
 
     match next(&mut guest) {
         InputMessage::Motion { seq, event } => {
@@ -126,11 +137,16 @@ fn inject_tap_publishes_down_then_up_and_records_the_acks_out_of_order() {
             other => panic!("not FINISHED: {other:?}"),
         })
         .collect();
-    assert_eq!(acks, vec![(gesture.dispatches[1].seq, true), (gesture.dispatches[0].seq, false)]);
-    assert!(d
-        .events()
-        .iter()
-        .any(|e| matches!(e, InputEvent::Acked { ack, .. } if ack.seq == gesture.dispatches[0].seq)));
+    assert_eq!(
+        acks,
+        vec![
+            (gesture.dispatches[1].seq, true),
+            (gesture.dispatches[0].seq, false)
+        ]
+    );
+    assert!(d.events().iter().any(
+        |e| matches!(e, InputEvent::Acked { ack, .. } if ack.seq == gesture.dispatches[0].seq)
+    ));
 }
 
 #[test]
@@ -180,16 +196,16 @@ fn a_closed_channel_is_peer_closed_not_a_silent_success() {
     drop(guest); // the guest process is gone
     let err = d.inject_tap(TOKEN, 10.0, 20.0).expect_err("must fail");
     assert!(matches!(err, ChannelError::PeerClosed), "got {err:?}");
-    assert!(d
-        .events()
-        .iter()
-        .any(|e| matches!(e, InputEvent::Error { message, .. } if message.contains("peer is closed"))));
+    assert!(d.events().iter().any(
+        |e| matches!(e, InputEvent::Error { message, .. } if message.contains("peer is closed"))
+    ));
 }
 
 #[test]
 fn remove_closes_the_guest_end() {
     let mut d = InputDispatch::new();
     d.register_window(TOKEN, "removed").expect("register");
+    d.set_focus(Some(TOKEN)).expect("policy focus");
     let fd = d.duplicate_client_fd(TOKEN).expect("client fd");
     let mut guest = LoopbackConsumer::new(fd);
     let _ = next(&mut guest);
@@ -247,7 +263,10 @@ fn add_to_display_writes_the_producer_registry_fd_which_carries_focus() {
     assert_eq!(reply.read_int32().expect("result"), 0, "ADD_OKAY");
     assert_eq!(reply.read_int32().expect("channel presence"), 1);
     assert_eq!(reply.read_int32().expect("isInitialized"), 1);
-    let token = reply.read_strong_binder().expect("token").expect("non-null");
+    let token = reply
+        .read_strong_binder()
+        .expect("token")
+        .expect("non-null");
     assert_eq!(token, window, "the registry is keyed by the IWindow token");
     let name = reply.read_string16().expect("name").expect("name");
     assert!(name.contains("counter"), "name was {name}");
@@ -286,14 +305,17 @@ fn text_is_encoded_as_the_us_keys_the_guest_will_resolve() {
             (54, 0),
         ]
     );
-    assert_eq!(text_strokes("\n\t\\\"?/").expect("ascii"), vec![
-        (66, 0),
-        (61, 0),
-        (73, 0),
-        (75, META_SHIFT_ON),
-        (76, META_SHIFT_ON),
-        (76, 0),
-    ]);
+    assert_eq!(
+        text_strokes("\n\t\\\"?/").expect("ascii"),
+        vec![
+            (66, 0),
+            (61, 0),
+            (73, 0),
+            (75, META_SHIFT_ON),
+            (76, META_SHIFT_ON),
+            (76, 0),
+        ]
+    );
     let err = text_strokes("é").expect_err("non-ASCII has no US key");
     assert!(format!("{err}").contains("ASCII-only"), "got {err}");
 }
@@ -309,7 +331,10 @@ fn inject_text_publishes_one_key_stroke_per_character_on_the_virtual_keyboard() 
         for action in [KEY_ACTION_DOWN, KEY_ACTION_UP] {
             match next(&mut guest) {
                 InputMessage::Key { seq, event } => {
-                    assert_eq!(seq, gesture.dispatches[index * 2 + usize::from(action == KEY_ACTION_UP)].seq);
+                    assert_eq!(
+                        seq,
+                        gesture.dispatches[index * 2 + usize::from(action == KEY_ACTION_UP)].seq
+                    );
                     assert_eq!(event.action, action);
                     assert_eq!(event.key_code, code);
                     assert_eq!(event.meta_state, meta);

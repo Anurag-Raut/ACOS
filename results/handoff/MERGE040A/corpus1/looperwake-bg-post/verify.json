@@ -1,0 +1,66 @@
+{
+  "backend": "acos-native",
+  "capabilities_used": [
+    "crash-reports",
+    "input",
+    "lifecycle",
+    "logs",
+    "static-manifest",
+    "ui.tree"
+  ],
+  "evidence": {
+    "events": "events.jsonl",
+    "log": "logs/logcat.txt",
+    "verdict": "verdict.json"
+  },
+  "fidelity": "art-reference",
+  "isolation": "process",
+  "metrics": {
+    "peak_rss_bytes": 16596992,
+    "wall_ms": 2379
+  },
+  "ok": true,
+  "request_id": "req_10c453_18e8e75003368d98",
+  "result": {
+    "artifacts_dir": "out/looperwake-bg-post",
+    "cap_bytes": 20480,
+    "evidence_provenance": {
+      "binder_transactions": "host-observed",
+      "crash_reports": "guest-asserted",
+      "frames": "host-observed",
+      "host_input": "host-observed",
+      "input_acks": "guest-asserted",
+      "launch_markers": "guest-asserted",
+      "lifecycle_markers": "guest-asserted",
+      "logs": "guest-asserted",
+      "static_manifest": "host-observed",
+      "tree": "guest-asserted"
+    },
+    "note": "this result was larger than the reply cap; only the bulk (tree, steps, logs) was dropped and the full evidence is in the artifacts paths named here",
+    "provenance": {
+      "apk": {
+        "mtime_ns": 1794937475597914722,
+        "path": "/home/Qui/.t3/worktrees/acos/t3-121d3058-b4fc4c69978d9127/fixtures/build/apps/looper-wake.apk",
+        "sha256": "6b0ba08de75a8fa777ba72437e1b0703e22a726847149a303fa07413ff4a32c6",
+        "sha256_12": "6b0ba08de75a",
+        "size_bytes": 16852
+      },
+      "engine": "art",
+      "fidelity": "art-reference",
+      "scenario": {
+        "mtime_ns": 1794936678646784308,
+        "path": "/home/Qui/.t3/worktrees/acos/t3-121d3058-b4fc4c69978d9127/scenarios/looperwake-bg-post.yaml",
+        "sha256": "f248b127ae3a9f9294e798e0b810f47c703d144afbede65b90d43aac18fba0da",
+        "sha256_12": "f248b127ae3a",
+        "size_bytes": 4307
+      },
+      "scenario_engine": "art",
+      "warnings": []
+    },
+    "reply_capped": true,
+    "verdict_path": "out/looperwake-bg-post/verdict.json",
+    "verdict_status": "pass"
+  },
+  "session_id": "s_art_looper-wake",
+  "status": "pass"
+}

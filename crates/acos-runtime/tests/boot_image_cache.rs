@@ -77,8 +77,7 @@ fn real_options() -> Option<VmOptions> {
 #[test]
 fn cached_snapshot_restores_a_runnable_vm() {
     const DEX_FIXTURE: &str = "fixtures/build/dexprogs/01_hello/classes.dex";
-    if !acos_test_support::have_fixture(DEX_FIXTURE) {
-        eprintln!("SKIP cached_snapshot_restores_a_runnable_vm: fixture missing");
+    if acos_test_support::require_prereq(acos_test_support::have_fixture(DEX_FIXTURE), "cached_snapshot_restores_a_runnable_vm", "fixture missing").is_none() {
         return;
     }
     let dex_path = repo_root().join(DEX_FIXTURE);
@@ -118,8 +117,7 @@ fn cached_snapshot_restores_a_runnable_vm() {
 /// `ActivityThread` handle and class count match the booted template.
 #[test]
 fn template_cache_hit_skips_the_framework_boot() {
-    let Some(options) = real_options() else {
-        eprintln!("SKIP template_cache_hit_skips_the_framework_boot: no boot classpath");
+    let Some(options) = acos_test_support::require_some(real_options(), "template_cache_hit_skips_the_framework_boot", "no boot classpath") else {
         return;
     };
     let dir = TempDir::new("template");
@@ -131,8 +129,8 @@ fn template_cache_hit_skips_the_framework_boot() {
         !first.from_cache(),
         "the first boot must not be a cache hit"
     );
-    let second = RuntimeTemplate::boot_with_options(options, Some(&cache))
-        .expect("second template boot");
+    let second =
+        RuntimeTemplate::boot_with_options(options, Some(&cache)).expect("second template boot");
     assert!(second.from_cache(), "the second boot must hit the cache");
     assert_eq!(
         first.activity_thread(),
@@ -145,7 +143,9 @@ fn template_cache_hit_skips_the_framework_boot() {
         "the cached snapshot must preserve the class count"
     );
     // The restored framework VM must itself be consumable.
-    let _rt = second.restore_runtime().expect("restore from cached template");
+    let _rt = second
+        .restore_runtime()
+        .expect("restore from cached template");
 }
 
 /// The deterministic-class priming (W111-A) survives the snapshot: every class
@@ -154,8 +154,7 @@ fn template_cache_hit_skips_the_framework_boot() {
 /// the largest deterministic class on the launch path.
 #[test]
 fn restored_template_carries_deterministic_clinit() {
-    let Some(options) = real_options() else {
-        eprintln!("SKIP restored_template_carries_deterministic_clinit: no boot classpath");
+    let Some(options) = acos_test_support::require_some(real_options(), "restored_template_carries_deterministic_clinit", "no boot classpath") else {
         return;
     };
     let dir = TempDir::new("primed");
@@ -182,8 +181,7 @@ fn restored_template_carries_deterministic_clinit() {
 /// A corrupt entry is rejected, the real boot runs, and the entry is repaired.
 #[test]
 fn corrupt_template_entry_falls_back_and_reboots() {
-    let Some(options) = real_options() else {
-        eprintln!("SKIP corrupt_template_entry_falls_back_and_reboots: no boot classpath");
+    let Some(options) = acos_test_support::require_some(real_options(), "corrupt_template_entry_falls_back_and_reboots", "no boot classpath") else {
         return;
     };
     let dir = TempDir::new("corrupt");
@@ -207,8 +205,7 @@ fn corrupt_template_entry_falls_back_and_reboots() {
         "corrupt entry must be rejected on load"
     );
 
-    let second = RuntimeTemplate::boot_with_options(options, Some(&cache))
-        .expect("fallback boot");
+    let second = RuntimeTemplate::boot_with_options(options, Some(&cache)).expect("fallback boot");
     assert!(
         !second.from_cache(),
         "a corrupt entry must fall back to the real boot"
@@ -258,8 +255,7 @@ fn cold_restore_helper() {
         return;
     };
     let apk = repo_root().join("fixtures/build/apps/counter.apk");
-    let Some(options) = real_options() else {
-        println!("W102A skip=no-boot-classpath");
+    let Some(options) = acos_test_support::require_some(real_options(), "cold_restore_helper", "W102A skip=no-boot-classpath") else {
         return;
     };
     let cache = BootImageCache::with_dir(&dir).expect("cache");
@@ -269,7 +265,9 @@ fn cold_restore_helper() {
         "the cold child must be a cache hit, not a fresh boot"
     );
     let thread = template.activity_thread();
-    let mut rt = template.restore_runtime().expect("restore from cached template");
+    let mut rt = template
+        .restore_runtime()
+        .expect("restore from cached template");
     let report = rt.boot_and_run_lifecycle_from_boot(&apk, thread);
     println!(
         "W102A bind={} app={} tx={} txd={}",
@@ -287,13 +285,11 @@ fn cold_restore_matches_uncached_ladder() {
     use std::process::Command;
 
     const APK_FIXTURE: &str = "fixtures/build/apps/counter.apk";
-    if !acos_test_support::have_fixture(APK_FIXTURE) {
-        eprintln!("SKIP cold_restore_matches_uncached_ladder: counter.apk missing");
+    if acos_test_support::require_prereq(acos_test_support::have_fixture(APK_FIXTURE), "cold_restore_matches_uncached_ladder", "counter.apk missing").is_none() {
         return;
     }
     let apk = repo_root().join(APK_FIXTURE);
-    let Some(options) = real_options() else {
-        eprintln!("SKIP cold_restore_matches_uncached_ladder: no boot classpath");
+    let Some(options) = acos_test_support::require_some(real_options(), "cold_restore_matches_uncached_ladder", "no boot classpath") else {
         return;
     };
 
@@ -301,7 +297,10 @@ fn cold_restore_matches_uncached_ladder() {
     let mut rt = acos_runtime::Runtime::standard_with(options.clone()).expect("runtime");
     let uncached = rt.boot_and_run_lifecycle(&apk);
     assert!(uncached.bind_delivered, "uncached launch did not bind");
-    assert!(uncached.app_created, "uncached launch did not create the app");
+    assert!(
+        uncached.app_created,
+        "uncached launch did not create the app"
+    );
     assert!(
         uncached.transaction_scheduled,
         "uncached launch did not reach client_transaction"
@@ -330,8 +329,7 @@ fn cold_restore_matches_uncached_ladder() {
                 out.status
             )
         });
-    if line.contains("skip=") {
-        eprintln!("SKIP cold_restore_matches_uncached_ladder: child skipped ({line})");
+    if acos_test_support::require_prereq(!(line.contains("skip=")), "cold_restore_matches_uncached_ladder", &format!("child skipped ({line})")).is_none() {
         return;
     }
     let (bind, app, tx, txd) = parse_ladder(line).expect("parse child ladder");
@@ -346,5 +344,8 @@ fn cold_restore_matches_uncached_ladder() {
     );
     // `txd` is the same on both paths (the counter fixture blocks in
     // `Activity.onCreate` on an unimplemented VectorDrawable native).
-    assert_eq!(txd, uncached.transaction_delivered, "activity-on-create rung diverged");
+    assert_eq!(
+        txd, uncached.transaction_delivered,
+        "activity-on-create rung diverged"
+    );
 }

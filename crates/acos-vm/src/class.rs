@@ -146,11 +146,9 @@ pub enum MethodImpl {
 impl std::fmt::Debug for MethodImpl {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            MethodImpl::Dex { method_idx, code, .. } => write!(
-                f,
-                "Dex(method_idx={method_idx}, code={})",
-                code.is_some()
-            ),
+            MethodImpl::Dex {
+                method_idx, code, ..
+            } => write!(f, "Dex(method_idx={method_idx}, code={})", code.is_some()),
             MethodImpl::Native(_) => write!(f, "Native"),
             MethodImpl::Abstract => write!(f, "Abstract"),
         }
@@ -163,10 +161,7 @@ impl std::fmt::Debug for MethodImpl {
 /// `Vm::install_boot_image`/`rebind_serialized_natives`; if the registry has no
 /// entry (a build mismatch) the call fails structurally instead of running the
 /// wrong code.
-fn unbound_native(
-    _vm: &mut Vm,
-    _ctx: NativeCtx,
-) -> VmResult<()> {
+fn unbound_native(_vm: &mut Vm, _ctx: NativeCtx) -> VmResult<()> {
     Err(VmError::UnsupportedApi {
         api: "<serialized native>".to_string(),
         at: "restored boot image".to_string(),
@@ -179,7 +174,11 @@ fn unbound_native(
 impl BorshSerialize for MethodImpl {
     fn serialize<W: borsh::io::Write>(&self, w: &mut W) -> borsh::io::Result<()> {
         match self {
-            MethodImpl::Dex { dex, method_idx, code } => {
+            MethodImpl::Dex {
+                dex,
+                method_idx,
+                code,
+            } => {
                 0u8.serialize(w)?;
                 dex.serialize(w)?;
                 method_idx.serialize(w)?;
@@ -340,7 +339,8 @@ impl Method {
     }
 
     pub fn is_synchronized(&self) -> bool {
-        self.access & (acos_dex::access::SYNCHRONIZED | acos_dex::access::DECLARED_SYNCHRONIZED) != 0
+        self.access & (acos_dex::access::SYNCHRONIZED | acos_dex::access::DECLARED_SYNCHRONIZED)
+            != 0
     }
 
     /// Human-readable `Lclass;->name(sig)` for error reporting.

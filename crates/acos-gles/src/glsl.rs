@@ -402,7 +402,8 @@ fn lex(src: &str) -> Result<Vec<Tok>, String> {
             out.push(Tok::Ident(word));
             continue;
         }
-        if c.is_ascii_digit() || (c == '.' && i + 1 < bytes.len() && bytes[i + 1].is_ascii_digit()) {
+        if c.is_ascii_digit() || (c == '.' && i + 1 < bytes.len() && bytes[i + 1].is_ascii_digit())
+        {
             let start = i;
             let mut is_float = false;
             while i < bytes.len()
@@ -1114,7 +1115,9 @@ impl<'a> Interpreter<'a> {
                         _ => return err(format!("bad swizzle component {ch:?}")),
                     };
                     if idx >= n.max(1) {
-                        return err(format!("swizzle {field:?} reads past a {n}-component value"));
+                        return err(format!(
+                            "swizzle {field:?} reads past a {n}-component value"
+                        ));
                     }
                     out[i] = src[idx];
                 }
@@ -1202,7 +1205,9 @@ impl<'a> Interpreter<'a> {
                         _ => return err(format!("bad swizzle component {ch:?}")),
                     };
                     if idx >= n {
-                        return err(format!("swizzle {field:?} writes past a {n}-component value"));
+                        return err(format!(
+                            "swizzle {field:?} writes past a {n}-component value"
+                        ));
                     }
                     comps[idx] = rhs[i.min(3)];
                 }
@@ -1506,7 +1511,13 @@ fn binop(op: BinOp, a: &Value, b: &Value) -> EvalResult<Value> {
         BinOp::Sub => map2(a, b, |x, y| x - y),
         BinOp::Mul => map2(a, b, |x, y| x * y),
         BinOp::Div => map2(a, b, |x, y| if y == 0.0 { 0.0 } else { x / y }),
-        BinOp::Eq | BinOp::Ne | BinOp::Lt | BinOp::Le | BinOp::Gt | BinOp::Ge | BinOp::And
+        BinOp::Eq
+        | BinOp::Ne
+        | BinOp::Lt
+        | BinOp::Le
+        | BinOp::Gt
+        | BinOp::Ge
+        | BinOp::And
         | BinOp::Or => unreachable!("handled above"),
     })
 }
@@ -1633,7 +1644,13 @@ fn builtin(
         }
         "radians" => map1(&a(0), f32::to_radians),
         "degrees" => map1(&a(0), f32::to_degrees),
-        "mod" => map2(&a(0), &a(1), |x, y| if y == 0.0 { 0.0 } else { x - y * (x / y).floor() }),
+        "mod" => map2(&a(0), &a(1), |x, y| {
+            if y == 0.0 {
+                0.0
+            } else {
+                x - y * (x / y).floor()
+            }
+        }),
         "min" => map2(&a(0), &a(1), f32::min),
         "max" => map2(&a(0), &a(1), f32::max),
         "pow" => map2(&a(0), &a(1), |x, y| x.powf(y)),
@@ -1740,12 +1757,15 @@ pub fn run_vertex(
         env.declare(name, v.clone());
     }
     for name in varyings {
-        env.declare(name, zero_of(
-            unit.globals
-                .iter()
-                .find(|d| &d.name == name)
-                .map_or(Ty::Vec4, |d| d.ty),
-        ));
+        env.declare(
+            name,
+            zero_of(
+                unit.globals
+                    .iter()
+                    .find(|d| &d.name == name)
+                    .map_or(Ty::Vec4, |d| d.ty),
+            ),
+        );
     }
     env.declare("gl_Position", Value::vec4(0.0, 0.0, 0.0, 1.0));
     env.declare("gl_PointSize", Value::F(1.0));
@@ -1847,10 +1867,10 @@ pub fn run_fragment_lod(
         Flow::Discard => return Ok(None),
         Flow::Normal | Flow::Return(_) => {}
     }
-    Ok(Some(env.get("gl_FragColor").map_or(
-        [0.0, 0.0, 0.0, 1.0],
-        |v| v.to_vec4(),
-    )))
+    Ok(Some(
+        env.get("gl_FragColor")
+            .map_or([0.0, 0.0, 0.0, 1.0], |v| v.to_vec4()),
+    ))
 }
 
 #[cfg(test)]
@@ -1979,15 +1999,7 @@ mod tests {
 
         let discarding = "precision mediump float; void main() { if (gl_FragCoord.x > 1.0) discard; gl_FragColor = vec4(1.0); }";
         let unit = parse(discarding, Stage::Fragment).unwrap();
-        let out = run_fragment(
-            &unit,
-            &[],
-            &[],
-            &[],
-            [2.0, 0.0, 0.0, 1.0],
-            &NoTextures,
-        )
-        .unwrap();
+        let out = run_fragment(&unit, &[], &[], &[], [2.0, 0.0, 0.0, 1.0], &NoTextures).unwrap();
         assert!(out.is_none(), "the fragment must be discarded");
     }
 
@@ -2021,8 +2033,8 @@ mod tests {
     fn matrix_comp_mult_is_component_wise() {
         let a = Value::M(
             [
-                1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0,
-                15.0, 16.0,
+                1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0,
+                16.0,
             ],
             2,
         );
@@ -2035,8 +2047,13 @@ mod tests {
             other => panic!("expected a mat2, got {other:?}"),
         }
         // A non-matrix argument is rejected, never a silent placeholder.
-        let e = builtin("matrixCompMult", &[Value::F(1.0), Value::F(2.0)], &NoTextures, 0.0)
-            .expect_err("scalars must be rejected");
+        let e = builtin(
+            "matrixCompMult",
+            &[Value::F(1.0), Value::F(2.0)],
+            &NoTextures,
+            0.0,
+        )
+        .expect_err("scalars must be rejected");
         assert!(e.0.contains("matrixCompMult"), "{e}");
     }
 

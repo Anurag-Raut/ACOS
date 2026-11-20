@@ -55,7 +55,7 @@ fn back_from_the_second_activity_leaves_the_first_as_the_task_top() {
     // The framework's back path: press (callback), then the client's finish.
     atms.on_back_pressed(second, GUEST_TAG | 0xa3)
         .expect("back press on the top");
-    atms.finish_activity(second).expect("finish of the top");
+    atms.finish_activity(second, 0, None).expect("finish of the top");
 
     let top = atms
         .ams

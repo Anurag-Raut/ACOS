@@ -83,6 +83,50 @@
         }
       ]
     },
+    "ExtraValue": {
+      "anyOf": [
+        {
+          "description": "a string extra",
+          "type": "string"
+        },
+        {
+          "description": "an int extra (a long when it does not fit)",
+          "type": "integer"
+        },
+        {
+          "description": "a double extra (a plain YAML float)",
+          "type": "number"
+        },
+        {
+          "description": "a boolean extra",
+          "type": "boolean"
+        },
+        {
+          "description": "a string array extra (String[])",
+          "items": {
+            "description": "a string array extra (String[])",
+            "type": "string"
+          },
+          "type": "array"
+        },
+        {
+          "description": "explicit form: {type: <java type>, value: <value>}; pins long vs int, float vs double, and names a refused parcelable extra",
+          "properties": {
+            "type": {
+              "description": "the Java type: string, int, long, float, double, boolean, string_array, parcelable",
+              "type": "string"
+            },
+            "value": true
+          },
+          "required": [
+            "type",
+            "value"
+          ],
+          "type": "object"
+        }
+      ],
+      "description": "A launch extra: a plain scalar (string, int, long when it does not fit an int, boolean, double for a plain float) or string array, or the explicit {type, value} form."
+    },
     "IsolationLevel": {
       "description": "How independent a session is from other sessions.\n\nThe levels are ordered from cheapest/weakest to strongest. A claim of data independence is only allowed at `sandbox` and above, and only when the engine actually implements the guarantees (see `docs/AGENT_API.md`).",
       "oneOf": [
@@ -274,9 +318,9 @@
     },
     "extras": {
       "additionalProperties": {
-        "type": "string"
+        "$ref": "#/definitions/ExtraValue"
       },
-      "description": "String extras.",
+      "description": "Typed extras (see [`crate::launch::ExtraValue`]).",
       "type": "object"
     },
     "intent_action": {

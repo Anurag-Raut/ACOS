@@ -111,10 +111,8 @@ fn check_saved_tree(
 }
 
 fn read_json(path: &Path) -> Value {
-    let bytes = std::fs::read(path)
-        .unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
-    serde_json::from_slice(&bytes)
-        .unwrap_or_else(|e| panic!("parse {}: {e}", path.display()))
+    let bytes = std::fs::read(path).unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
+    serde_json::from_slice(&bytes).unwrap_or_else(|e| panic!("parse {}: {e}", path.display()))
 }
 
 /// The real run's artifacts, when this checkout has them.
@@ -126,11 +124,7 @@ fn artifacts_dir() -> Option<PathBuf> {
 #[test]
 fn saved_wait_for_and_assert_text_trees_contain_the_matched_node() {
     let Some(dir) = artifacts_dir() else {
-        eprintln!(
-            "W31 tree-evidence check skipped: no artifacts at \
-             results/art-runtime/evidence/W31-artifacts/gaten-release-evidence \
-             (the synthetic cases below still run)"
-        );
+        acos_test_support::require_prereq(false, "saved_wait_for_and_assert_text_trees_contain_the_matched_node", "W31 tree-evidence check skipped: no artifacts at results/art-runtime/evidence/W31-artifacts/gaten-release-evidence (the synthetic cases below still run)");
         return;
     };
     let text = "Recently looked up";
@@ -179,7 +173,9 @@ fn saved_wait_for_and_assert_text_trees_contain_the_matched_node() {
         );
         let tree = read_json(&tree_path);
         assert_eq!(
-            tree.get("frame").and_then(|f| f.get("frame_seq")).and_then(Value::as_u64),
+            tree.get("frame")
+                .and_then(|f| f.get("frame_seq"))
+                .and_then(Value::as_u64),
             Some(frame_seq),
             "{}: saved tree frame_seq differs from the step's",
             tree_path.display()
@@ -209,14 +205,21 @@ fn saved_wait_for_and_assert_text_trees_contain_the_matched_node() {
         );
         checked += 1;
     }
-    assert!(saw_wait_for, "no wait_for step found in {}", steps_dir.display());
+    assert!(
+        saw_wait_for,
+        "no wait_for step found in {}",
+        steps_dir.display()
+    );
     assert!(
         saw_assert_text,
         "no assert_text step found in {} (the bound-frame assertion is the second \
          evaluation of the same selector)",
         steps_dir.display()
     );
-    assert_eq!(checked, 2, "expected exactly the two selector steps, checked {checked}");
+    assert_eq!(
+        checked, 2,
+        "expected exactly the two selector steps, checked {checked}"
+    );
 }
 
 #[test]
@@ -233,7 +236,10 @@ fn a_decor_only_saved_tree_is_rejected() {
     });
     let error = check_saved_tree(&tree, "Recently looked up", &[])
         .expect_err("a DecorView-only tree must not satisfy the evidence check");
-    assert!(error.contains("no node whose text"), "unexpected error: {error}");
+    assert!(
+        error.contains("no node whose text"),
+        "unexpected error: {error}"
+    );
 }
 
 #[test]

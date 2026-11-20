@@ -86,13 +86,15 @@ fn add_to_display_as_user_request(window: BinderId) -> Parcel {
     data.write_interface_token(IWINDOW_SESSION).expect("token");
     data.write_strong_binder_opt(Some(window));
     data.write_int32(1); // writeTypedObject(LayoutParams) presence
-    app_params().write_to_parcel(&mut data).expect("LayoutParams");
+    app_params()
+        .write_to_parcel(&mut data)
+        .expect("LayoutParams");
     data.write_int32(0); // viewVisibility
     data.write_int32(-1); // layerStackId
     data.write_int32(0); // userId
     data.write_int32(0); // requestedVisibleTypes
-    // `out float[]`: the client preallocates the array and writes its length;
-    // the reply count must equal it (`Parcel.readFloatArray` compares them).
+                         // `out float[]`: the client preallocates the array and writes its length;
+                         // the reply count must equal it (`Parcel.readFloatArray` compares them).
     data.write_int32(2);
     data.set_data_position(0);
     data
@@ -165,14 +167,8 @@ fn open_session(host: &mut ServiceHost) -> BinderId {
     let window = host
         .binder_for_descriptor(IWINDOW_MANAGER)
         .expect("window service");
-    let reply = transact(
-        host,
-        window,
-        OPEN_SESSION,
-        0,
-        &mut open_session_request(),
-    )
-    .expect("openSession");
+    let reply =
+        transact(host, window, OPEN_SESSION, 0, &mut open_session_request()).expect("openSession");
     let mut reply = reply;
     no_exception(&mut reply);
     let session = reply
@@ -217,7 +213,9 @@ fn read_add_reply(reply: &mut Parcel) -> AddReply {
     assert_eq!(reply.read_int32().expect("InsetsState present"), 1);
     let insets = InsetsState::read_from_parcel(reply).expect("InsetsState");
     assert_eq!(
-        reply.read_int32().expect("InsetsSourceControl.Array present"),
+        reply
+            .read_int32()
+            .expect("InsetsSourceControl.Array present"),
         1
     );
     let controls = InsetsSourceControlArray::read_from_parcel(reply).expect("controls");
@@ -262,7 +260,9 @@ fn read_relayout_reply(reply: &mut Parcel) -> RelayoutReply {
     assert_eq!(reply.read_int32().expect("InsetsState present"), 1);
     let insets = InsetsState::read_from_parcel(reply).expect("InsetsState");
     assert_eq!(
-        reply.read_int32().expect("InsetsSourceControl.Array present"),
+        reply
+            .read_int32()
+            .expect("InsetsSourceControl.Array present"),
         1
     );
     let controls = InsetsSourceControlArray::read_from_parcel(reply).expect("controls");
@@ -282,14 +282,6 @@ fn read_relayout_reply(reply: &mut Parcel) -> RelayoutReply {
 fn open_session_answers_a_routable_iwindow_session_node() {
     let mut host = ServiceHost::standard_with_insets(acos_services::wms::InsetsMode::Carve);
     let session = open_session(&mut host);
-    let registered = host
-        .binder_for_descriptor(IWINDOW_SESSION)
-        .expect("IWindowSession node");
-    assert_eq!(
-        session, registered,
-        "openSession must answer the host's registered IWindowSession node, not an id the \
-         dispatcher does not know"
-    );
     // Routine check: the descriptor really is the session's (the dispatcher
     // would otherwise serve it from another table).
     assert_eq!(
@@ -297,9 +289,57 @@ fn open_session_answers_a_routable_iwindow_session_node() {
         Some(IWINDOW_SESSION),
         "the session binder must carry the framework descriptor"
     );
-    // A second openSession allocates a new session record but answers the same
-    // single-process node.
-    assert_eq!(open_session(&mut host), session);
+    // MPROC5c: `openSession` creates a **new** `IWindowSession` node per call
+    // (stock `WindowManagerService.openSession` → `new Session(this, callback)`),
+    // not one shared node. MPROC5b measured what the shared node did: the second
+    // process's session id replaced the first's and the first process's next
+    // `relayout` was refused.
+    let second = open_session(&mut host);
+    assert_ne!(
+        session, second,
+        "every openSession answers its own IWindowSession node"
+    );
+    assert_eq!(host.descriptor_of(second), Some(IWINDOW_SESSION));
+    assert!(
+        host.dynamic_objects() >= 2,
+        "both session nodes are live host objects"
+    );
+}
+
+/// MPROC5c: the second process's session cannot drive the first process's
+/// window, and its own window works — the whole point of one node per call.
+#[test]
+fn a_relayout_on_the_wrong_session_node_is_refused() {
+    let mut host = ServiceHost::standard_with_insets(acos_services::wms::InsetsMode::Carve);
+    let session_a = open_session(&mut host);
+    let session_b = open_session(&mut host);
+    let window_a = BinderId(0x6001);
+    let window_b = BinderId(0x6002);
+    let mut add_a = add_to_display_as_user_request(window_a);
+    let mut add_b = add_to_display_as_user_request(window_b);
+    let mut reply = transact(&mut host, session_a, ADD_TO_DISPLAY_AS_USER, 0, &mut add_a)
+        .expect("A addToDisplayAsUser");
+    no_exception(&mut reply);
+    let mut reply = transact(&mut host, session_b, ADD_TO_DISPLAY_AS_USER, 0, &mut add_b)
+        .expect("B addToDisplayAsUser");
+    no_exception(&mut reply);
+    // Each session relayouts its own window.
+    for (session, window) in [(session_a, window_a), (session_b, window_b)] {
+        let mut data = relayout_request(window, Some(&app_params()));
+        let mut reply = transact(&mut host, session, RELAYOUT, 0, &mut data)
+            .expect("relayout of its own window");
+        no_exception(&mut reply);
+    }
+    // A relayout of A's window that arrives on B's node is a structured failure
+    // (the image's `IllegalArgumentException: internal service error`), exactly
+    // as it is on a device where the window does not belong to that session.
+    let mut data = relayout_request(window_a, Some(&app_params()));
+    let err = transact(&mut host, session_b, RELAYOUT, 0, &mut data)
+        .expect_err("B must not relayout A's window");
+    assert!(
+        matches!(err, ServiceError::Internal(ref detail) if detail.contains("unknown session")),
+        "expected an unknown-session refusal, got {err:?}"
+    );
 }
 
 #[test]
@@ -344,7 +384,10 @@ fn add_to_display_as_user_reply_is_api_34_exact() {
         add.channel_fd.is_some(),
         "the InputChannel must carry a real descriptor"
     );
-    assert!(add.channel_token.is_some(), "the channel carries a binder token");
+    assert!(
+        add.channel_token.is_some(),
+        "the channel carries a binder token"
+    );
     // The reference device: 1080x2400, density 420, status bar 128, nav 63.
     assert_eq!(add.attached_frame, RectI::new(0, 128, 1080, 2337));
     assert_eq!(
@@ -377,7 +420,9 @@ fn add_to_display_as_user_reply_is_api_34_exact() {
     again.write_int32(1);
     add.controls.write_to_parcel(&mut again).expect("controls");
     again.write_int32(1);
-    add.attached_frame.write_to_parcel(&mut again).expect("rect");
+    add.attached_frame
+        .write_to_parcel(&mut again)
+        .expect("rect");
     again
         .write_float_array(Some(&add.size_compat_scale))
         .expect("scale");
@@ -412,7 +457,12 @@ fn relayout_reply_is_api_34_exact_and_routable() {
     assert_ne!(r.result & acos_wm::wms::RELAYOUT_RES_FIRST_TIME, 0);
     assert_eq!(r.frames.frame, added.attached_frame);
     assert_eq!(r.frames.frame, RectI::new(0, 128, 1080, 2337));
-    assert_eq!(r.insets.visible_insets_for(acos_wm::codec::inset_type::STATUS_BAR).top, 128);
+    assert_eq!(
+        r.insets
+            .visible_insets_for(acos_wm::codec::inset_type::STATUS_BAR)
+            .top,
+        128
+    );
     assert_eq!(
         r.insets
             .visible_insets_for(acos_wm::codec::inset_type::NAVIGATION_BAR)
@@ -475,8 +525,14 @@ fn the_traversal_calls_after_relayout_are_served_in_order() {
     let _ = read_add_reply(&mut reply);
 
     // `getWindowId` (26): a routable `IWindowId` binder, not a fabricated id.
-    let mut reply = transact(&mut host, session, GET_WINDOW_ID, 0, &mut ibinder_request(window))
-        .expect("getWindowId");
+    let mut reply = transact(
+        &mut host,
+        session,
+        GET_WINDOW_ID,
+        0,
+        &mut ibinder_request(window),
+    )
+    .expect("getWindowId");
     no_exception(&mut reply);
     let window_id = reply
         .read_strong_binder()
@@ -496,14 +552,19 @@ fn the_traversal_calls_after_relayout_are_served_in_order() {
     data.write_int32(0); // null postDrawTransaction
     data.write_int32(7); // seqId
     data.set_data_position(0);
-    let reply = transact(&mut host, session, FINISH_DRAWING, ONEWAY, &mut data)
-        .expect("finishDrawing");
+    let reply =
+        transact(&mut host, session, FINISH_DRAWING, ONEWAY, &mut data).expect("finishDrawing");
     assert_eq!(reply.data_avail(), 0, "a oneway reply carries no body");
 
     // `pokeDrawLock` (27) is synchronous and answers an exception header only.
-    let mut reply =
-        transact(&mut host, session, POKE_DRAW_LOCK, 0, &mut ibinder_request(window))
-            .expect("pokeDrawLock");
+    let mut reply = transact(
+        &mut host,
+        session,
+        POKE_DRAW_LOCK,
+        0,
+        &mut ibinder_request(window),
+    )
+    .expect("pokeDrawLock");
     no_exception(&mut reply);
     assert_eq!(reply.data_avail(), 0);
 
@@ -512,8 +573,14 @@ fn the_traversal_calls_after_relayout_are_served_in_order() {
     data.write_strong_binder_opt(Some(window));
     data.write_int32(0x7);
     data.set_data_position(0);
-    transact(&mut host, session, UPDATE_REQUESTED_VISIBLE_TYPES, ONEWAY, &mut data)
-        .expect("updateRequestedVisibleTypes");
+    transact(
+        &mut host,
+        session,
+        UPDATE_REQUESTED_VISIBLE_TYPES,
+        ONEWAY,
+        &mut data,
+    )
+    .expect("updateRequestedVisibleTypes");
 
     // `reportSystemGestureExclusionChanged` (33): typed list of Rects, oneway.
     let mut data = session_data();
@@ -567,15 +634,26 @@ fn the_traversal_calls_after_relayout_are_served_in_order() {
     .expect("onRectangleOnScreenRequested");
 
     // Boolean answers the framework reads.
-    let mut reply = transact(&mut host, session, CANCEL_DRAW, 0, &mut ibinder_request(window))
-        .expect("cancelDraw");
+    let mut reply = transact(
+        &mut host,
+        session,
+        CANCEL_DRAW,
+        0,
+        &mut ibinder_request(window),
+    )
+    .expect("cancelDraw");
     no_exception(&mut reply);
     assert!(!reply.read_bool().expect("cancelDraw result"));
     assert_eq!(reply.data_avail(), 0);
 
-    let mut reply =
-        transact(&mut host, session, OUT_OF_MEMORY, 0, &mut binder_only_request(window))
-            .expect("outOfMemory");
+    let mut reply = transact(
+        &mut host,
+        session,
+        OUT_OF_MEMORY,
+        0,
+        &mut binder_only_request(window),
+    )
+    .expect("outOfMemory");
     no_exception(&mut reply);
     assert!(!reply.read_bool().expect("outOfMemory result"));
     assert_eq!(reply.data_avail(), 0);
@@ -585,14 +663,8 @@ fn the_traversal_calls_after_relayout_are_served_in_order() {
     data.write_int32(0); // effectId
     data.write_bool(false); // always
     data.set_data_position(0);
-    let mut reply = transact(
-        &mut host,
-        session,
-        PERFORM_HAPTIC_FEEDBACK,
-        0,
-        &mut data,
-    )
-    .expect("performHapticFeedback");
+    let mut reply = transact(&mut host, session, PERFORM_HAPTIC_FEEDBACK, 0, &mut data)
+        .expect("performHapticFeedback");
     no_exception(&mut reply);
     assert!(!reply.read_bool().expect("haptic result"));
     assert_eq!(reply.data_avail(), 0);
@@ -615,8 +687,14 @@ fn the_traversal_calls_after_relayout_are_served_in_order() {
     // `remove` (4) drops the window; a later relayout for it is a structured
     // error rather than a silent success.
     drop(state);
-    let mut reply = transact(&mut host, session, REMOVE, 0, &mut binder_only_request(window))
-        .expect("remove");
+    let mut reply = transact(
+        &mut host,
+        session,
+        REMOVE,
+        0,
+        &mut binder_only_request(window),
+    )
+    .expect("remove");
     no_exception(&mut reply);
     assert_eq!(reply.data_avail(), 0);
     let mut data = relayout_request(window, Some(&app_params()));
@@ -653,7 +731,8 @@ fn unknown_methods_are_structured_unsupported_naming_the_descriptor() {
     // error names the method, and the reply is a real exception parcel (the
     // dispatcher never leaves the caller waiting for a reply).
     let mut data = ibinder_request(BinderId(0x42));
-    let err = transact(&mut host, session, 20, 0, &mut data).expect_err("setShouldZoomOutWallpaper");
+    let err =
+        transact(&mut host, session, 20, 0, &mut data).expect_err("setShouldZoomOutWallpaper");
     match &err {
         ServiceError::UnsupportedAndroidApi {
             interface, method, ..

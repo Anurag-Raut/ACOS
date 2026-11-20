@@ -57,18 +57,31 @@ pub enum WireOp {
     /// `writeRawFileDescriptor` / `readRawFileDescriptor` (a bare fd).
     RawFd,
     /// `writeTypedArray` / `createTypedArray` (element class from the CREATOR).
-    TypedArray { class: String },
+    TypedArray {
+        class: String,
+    },
     /// `writeTypedList` / `createTypedArrayList`.
-    TypedList { class: String },
+    TypedList {
+        class: String,
+    },
     /// `writeParcelable` / `readParcelable` with an explicit class loader.
-    Parcelable { class: String },
+    Parcelable {
+        class: String,
+    },
     /// `writeTypedObject` / `readTypedObject`. `nullable` marks the intrinsic
     /// presence marker the `Parcel` API writes (`0` = null, `1` = present).
-    TypedObject { class: String, nullable: bool },
+    TypedObject {
+        class: String,
+        nullable: bool,
+    },
     /// `writeList` / `readArrayList`.
-    List { elem: Box<WireOp> },
+    List {
+        elem: Box<WireOp>,
+    },
     /// `writeArray` / `readArray` (`Object[]`).
-    Array { elem: Box<WireOp> },
+    Array {
+        elem: Box<WireOp>,
+    },
     /// `writeMap` / `readHashMap`.
     Map {
         key: Box<WireOp>,
@@ -86,7 +99,9 @@ pub enum WireOp {
         ops: Vec<WireOp>,
     },
     /// Undecodable fragment. `note` records the method/PC and the reason.
-    Unknown { note: String },
+    Unknown {
+        note: String,
+    },
 }
 
 impl WireOp {

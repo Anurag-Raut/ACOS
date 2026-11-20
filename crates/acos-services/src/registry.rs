@@ -63,10 +63,7 @@ pub const NAMES: &[(&str, &str)] = &[
     ),
     ("audio", "android.media.IAudioService"),
     ("graphicsstats", "android.view.IGraphicsStats"),
-    (
-        "network_management",
-        "android.os.INetworkManagementService",
-    ),
+    ("network_management", "android.os.INetworkManagementService"),
     ("game", "android.app.IGameManagerService"),
     (
         "virtualdevice",
@@ -113,10 +110,7 @@ pub const NAMES: &[(&str, &str)] = &[
     ("permission", "android.permission.IPermissionManager"),
     ("appops", "com.android.internal.app.IAppOpsService"),
     ("connectivity", "android.net.IConnectivityManager"),
-    (
-        "androidfuture",
-        "com.android.internal.infra.IAndroidFuture",
-    ),
+    ("androidfuture", "com.android.internal.infra.IAndroidFuture"),
     // W-R T2: the compositor's client surface. `ComposerServiceAIDL` looks the
     // compositor up as `getService("SurfaceFlinger")`, so the name must resolve
     // to the `android.gui.ISurfaceComposer` node `compositor_client` installs.
@@ -160,6 +154,17 @@ pub const NAMES: &[(&str, &str)] = &[
     ("restrictions", "android.content.IRestrictionsManager"),
 ];
 
+/// Names in [`NAMES`] that are backed by an **aux** binder rather than a service
+/// object.
+///
+/// `netstats` is registered because `TrafficStats.init` asks for the binder on
+/// every process start; it has to *resolve*, it is never transacted on. The
+/// binder is created with [`ServiceHost::register_aux`], which deliberately has
+/// no `ServiceManager` name, so `checkService("netstats")` answers `null`
+/// (exactly as it did before the module framework) and the `core` module does
+/// not claim the name in its manifest.
+pub const AUX_BACKED_NAMES: &[&str] = &["netstats"];
+
 /// Descriptor for a `ServiceManager` name.
 #[must_use]
 pub fn descriptor_for(name: &str) -> Option<&'static str> {
@@ -169,7 +174,10 @@ pub fn descriptor_for(name: &str) -> Option<&'static str> {
 /// `ServiceManager` name for a descriptor.
 #[must_use]
 pub fn name_for(descriptor: &str) -> Option<&'static str> {
-    NAMES.iter().find(|(_, d)| *d == descriptor).map(|(n, _)| *n)
+    NAMES
+        .iter()
+        .find(|(_, d)| *d == descriptor)
+        .map(|(n, _)| *n)
 }
 
 /// Live host-side handles for one interactive session.
@@ -189,8 +197,18 @@ pub struct LiveHandles {
     /// is a WMS operation, so the interactive session drives the same state the
     /// `IWindowSession` relayout replies are computed from.
     pub wms: std::sync::Arc<std::sync::Mutex<crate::wms::WmsState>>,
-    /// ROT8b: the host ATMS state (activity records + pending starts). The
-    /// strict settle cross-checks the guest's `task_finished` claim against it.
+    /// MPROC1: the intent capture target (the broker's own state). The session
+    /// control op reads and scripts it; the activity manager writes to it when
+    /// an implicit intent has no installed target.
+    pub intents: std::sync::Arc<std::sync::Mutex<crate::intents::IntentState>>,
+    /// MPROC5: the foreground process tag ATMS publishes when the top-of-task
+    /// moves. The launcher serves the top process's probe sample (tree, and the
+    /// frame evidence a screenshot reply names) from it.
+    pub top_process: std::sync::Arc<std::sync::atomic::AtomicU32>,
+    /// MPROC5c: the activity manager's state. The launcher's idle kill reads the
+    /// process table from it (a process with no started activity and no
+    /// started/bound service is a candidate) and the peer removes the record
+    /// when the process dies.
     pub atms: std::sync::Arc<std::sync::Mutex<crate::atms::AtmsState>>,
 }
 
@@ -245,7 +263,8 @@ pub fn install_with_handles_and_insets(
     host.register_aux("android.content.pm.IPackageInstaller");
 
     // WMS state machine (T-29); the runtime transport owns the wire codecs.
-    let wms_state = crate::wms::install_with_insets(host, insets);
+    let wms_install = crate::wms::install_with_insets(host, insets);
+    let wms_state = Arc::clone(&wms_install.state);
 
     // W-R T2: the frame clock. `android.gui.ISurfaceComposer` is served under
     // the `ServiceManager` name `SurfaceFlinger` (that is how
@@ -262,46 +281,170 @@ pub fn install_with_handles_and_insets(
         crate::compositor_client::DisplayDescriptor::reference(),
     );
 
-    // W1: the `IWindowSession` node. `IWindowManager.openSession` answers this
-    // binder; every `ViewRootImpl` window call lands here, byte-exact (see
-    // `window_session.rs`). `IWindowId` is an aux binder so `getWindowId`
-    // returns a routable handle instead of a fabricated id.
+    // W1/MPROC5c: the `IWindowSession` node is created **per openSession call**
+    // (stock `WindowManagerService.openSession` → `new Session(this, callback)`),
+    // so every app process has its own session id and its own node; a caller
+    // that addresses another process's window arrives on the wrong node and is
+    // refused. `IWindowId` is an aux binder so `getWindowId` returns a routable
+    // handle instead of a fabricated id.
+    //
+    // The accessibility state is created before the sessions so each one can be
+    // given the window-stack sink: a bound service must learn about a window
+    // added after its first `getWindows()` (AOSP
+    // `AccessibilityWindowManager` -> `TYPE_WINDOWS_CHANGED`).
+    let settings = Arc::new(Mutex::new(crate::provider::SettingsState::new()));
+    let a11y = Arc::new(Mutex::new(crate::misc::A11yState::with_settings(
+        Arc::clone(&settings),
+    )));
     let window_id = host.register_aux("android.view.IWindowId");
     let session_state = Arc::clone(&wms_state);
-    let input_host = crate::window_session::input_dispatch::InputHost::from_env();
-    let atms = Arc::new(Mutex::new(crate::atms::AtmsState::new()));
+    // WVTAP: the input host owns the **one** input routing rule, so it needs the
+    // layer stack: a touch goes to the window under the point
+    // (`InputDispatcher::findTouchedWindowAt`), a key to the focused window.
+    // Passing the stack is what stops each caller from choosing a target by
+    // registration order or focus.
+    let input_host = crate::window_session::input_dispatch::InputHost::from_env()
+        .with_window_stack(Arc::clone(&wms_state));
+    // MODA11Y4: `performGlobalAction(GLOBAL_ACTION_BACK)` goes through the same
+    // InputChannel as a scenario `back`, so keep a handle before the session
+    // service takes the original.
+    let a11y_input = input_host.clone();
+    // MPROC1: the intent capture target. One state per session, shared by the
+    // activity manager (which captures an unresolvable share/pick/view) and
+    // the broker service (which the session control op reads and scripts).
+    let intents = Arc::new(Mutex::new(crate::intents::IntentState::new()));
+    // MPROC5: the **foreground process tag**. ATMS publishes it whenever the
+    // top-of-task moves; the launcher reads it so the tree/screenshot it serves
+    // come from the process whose window is actually on top, not from whichever
+    // guest printed the last probe sample.
+    let top_process = Arc::new(std::sync::atomic::AtomicU32::new(0));
+    // The per-call session factory: `openSession` asks it for a new session and
+    // gets that session's own host node (registered through the host's
+    // `NodeRegistrar`, which installs it before the reply reaches the guest).
+    let sessions = crate::window_session::SessionFactory::new(
+        Arc::clone(&session_state),
+        window_id,
+        host.node_registrar(),
+    )
+    .with_compositor(Arc::clone(&compositor))
+    // I2: the one authoritative InputChannel producer. It publishes real
+    // FOCUS/TOUCH_MODE messages on `addToDisplayAsUser` and, when
+    // `ACOS_INPUT_TAP`/`ACOS_INPUT_KEY` is set, injects after the first
+    // relayout and logs the FINISHED/TIMELINE replies.
+    .with_input(input_host.clone())
+    // MODA11Y6: the bound service hears about the stack the way AOSP's
+    // accessibility window manager reports it, so its own `getWindows()` sees a
+    // window added after its first query.
+    .with_window_changes(crate::registry::a11y_window_changes(Arc::clone(&a11y)));
+    *wms_install
+        .sessions
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(sessions);
+    // A session death destroys its windows' layers; give the state the
+    // compositor registry it needs for that (W42).
+    wms_state
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .set_compositor(Arc::clone(&compositor));
+
+    // Shared state. The PMS parses the APK lazily inside its factory so
+    // installing the host touches no package data.
+    // MODNOTIF2: one runtime-permission table for the whole session. The ATMS
+    // and the PMS both read it (so the two `checkPermission` paths cannot
+    // disagree), and it is published on the host so the `permissions` module
+    // writes to the same table instead of a second one.
+    let permissions = Arc::new(Mutex::new(crate::permissions::PermissionStore::new()));
+    let mut atms_state = crate::atms::AtmsState::new();
+    atms_state.runtime_permissions = Some(Arc::clone(&permissions));
+    atms_state.ams.runtime_permissions = Some(Arc::clone(&permissions));
+    // MPROC5: ATMS publishes the foreground process tag here (`top_process`).
+    atms_state.top_process = Some(Arc::clone(&top_process));
+    // MPROC1: the activity manager captures an unresolvable share/pick/view into
+    // the same state the broker service (and the session control op) reads.
+    atms_state.ams.intents = Some(Arc::clone(&intents));
+    let atms = Arc::new(Mutex::new(atms_state));
+    // The handles a live session drives: the same input producer the window
+    // sessions use, the compositor state, the window state, the intent capture
+    // target, the foreground process tag and the activity manager's state.
     let live = LiveHandles {
         input: input_host.clone(),
         compositor: Arc::clone(&compositor),
         wms: Arc::clone(&wms_state),
+        intents: Arc::clone(&intents),
+        top_process: Arc::clone(&top_process),
         atms: Arc::clone(&atms),
     };
-    let session_binder = host.register_dynamic(
-        "android.view.IWindowSession",
-        Box::new(
-            crate::window_session::WindowSessionService::new(session_state, window_id)
-                .with_compositor(Arc::clone(&compositor))
-                // I2: the one authoritative InputChannel producer. It publishes
-                // real FOCUS/TOUCH_MODE messages on `addToDisplayAsUser` and,
-                // when `ACOS_INPUT_TAP`/`ACOS_INPUT_KEY` is set, injects after
-                // the first relayout and logs the FINISHED/TIMELINE replies.
-                .with_input(input_host),
-        ),
-    );
-    wms_state
-        .lock()
+    // MODNOTIF4: the `IIntentSender` node pool. A `PendingIntent` is only a
+    // strong binder to one of these (`PendingIntent.writeToParcel`), so the
+    // binders exist before any app asks for one; `getIntentSender` fills a slot
+    // and answers its binder.
+    let mut sender_nodes = Vec::with_capacity(crate::pending_intent::SENDER_NODES);
+    for slot in 0..crate::pending_intent::SENDER_NODES {
+        let node = host.register_dynamic(
+            crate::pending_intent::DESCRIPTOR,
+            Box::new(crate::pending_intent::IntentSenderService::new(
+                Arc::clone(&atms),
+                slot,
+            )),
+        );
+        sender_nodes.push(node.0);
+    }
+    atms.lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner)
-        .host_session = session_binder;
-
-    // Shared state. The PMS parses the APK lazily inside its factory so
-    // installing the host touches no package data.
-    let settings = Arc::new(Mutex::new(crate::provider::SettingsState::new()));
-    let display = Arc::new(Mutex::new(crate::display::DisplayState::new(
-        crate::display::DisplayInfo::hello_views_with(insets.unwrap_or_else(|| {
-            crate::wms::InsetsMode::from_env(crate::wms::DEFAULT_INSETS_MODE)
-        })),
-    )));
-    let a11y = Arc::new(Mutex::new(crate::misc::A11yState::new()));
+        .ams
+        .intent_senders
+        .bind_nodes(sender_nodes);
+    // A `notifications` `tap` must really fire the sender, and the delivery is
+    // the AMS's (`send_pending_intent`), so the registry publishes it here.
+    let fire_atms = Arc::clone(&atms);
+    host.set_pending_intent_fire(Arc::new(
+        move |binder: u64, code: i32, fill_in: Option<crate::ams::IntentFacts>| {
+            fire_atms
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .ams
+                .send_pending_intent_with_fill_in(
+                    binder,
+                    code,
+                    fill_in.as_ref().map_or(
+                        crate::pending_intent::FillIn::None,
+                        crate::pending_intent::FillIn::Intent,
+                    ),
+                )
+        },
+    ));
+    host.set_permission_store(Arc::clone(&permissions));
+    // SYSUI2: the activity manager, so a module that owns a system app can start
+    // that app's activity and read the result it answered (the same state the
+    // peer thread serves).
+    host.set_atms(Arc::clone(&atms));
+    let display =
+        Arc::new(Mutex::new(crate::display::DisplayState::new(
+            crate::display::DisplayInfo::hello_views_with(insets.unwrap_or_else(|| {
+                crate::wms::InsetsMode::from_env(crate::wms::DEFAULT_INSETS_MODE)
+            })),
+        )));
+    // MODA11Y2: the accessibility module reads the **installed** service list
+    // from the package manager (lazily, after the APK is installed) instead of
+    // trusting the launch config, and the dispatcher needs the state for the
+    // system -> app bind (`attachApplication` / `publishService`).
+    let pms_shared = Arc::new(Mutex::new(crate::pms::PmsState::hello_views()));
+    {
+        let mut a11y_state = a11y
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        a11y_state.pms = Some(Arc::clone(&pms_shared));
+        // MODA11Y3: `getWindows`/`getWindow` answer from the LAYER1 window
+        // stack, which is also what composition, the UI tree and input read.
+        a11y_state.windows = Some(Arc::clone(&wms_state));
+        // MODA11Y4: the same input channels the session's Back uses.
+        a11y_state.input = Some(a11y_input);
+        // MODA11YNATIVE: `takeScreenshot` captures the composited frame and
+        // answers the `FLAG_SECURE` question from the same C1 state the
+        // session's captures read.
+        a11y_state.compositor = Some(Arc::clone(&compositor));
+    }
+    host.set_accessibility_state(Arc::clone(&a11y));
     let input = Arc::new(Mutex::new(crate::misc::InputState::new()));
     let textservices = Arc::new(Mutex::new(crate::misc::TextServicesState::new()));
     let autofill = Arc::new(Mutex::new(crate::misc::AutofillState::new()));
@@ -322,6 +465,7 @@ pub fn install_with_handles_and_insets(
     let notification = Arc::new(Mutex::new(crate::declared::NotificationState::new()));
     let statusbar = Arc::new(Mutex::new(crate::declared::StatusBarState::new()));
     let connectivity = Arc::new(Mutex::new(crate::connectivity::ConnectivityState::new()));
+    host.set_connectivity_state(Some(Arc::clone(&connectivity)));
     let shortcuts = Arc::new(Mutex::new(crate::extras::ShortcutState::new()));
     let jobs = Arc::new(Mutex::new(crate::extras::JobState::new()));
     let power = Arc::new(Mutex::new(crate::extras::PowerState::new()));
@@ -349,10 +493,75 @@ pub fn install_with_handles_and_insets(
             )) as Box<dyn ServiceObject>
         },
     );
-    host.register("package", "android.content.pm.IPackageManager", move |w| {
-        let pms = Arc::new(Mutex::new(crate::pms::PmsState::hello_views()));
-        Box::new(crate::pms::PmsService::new(pms, w)) as Box<dyn ServiceObject>
+    // MPROC1: the capture target itself. It has no process and no app-facing
+    // AIDL surface; it is a session service so the control op and
+    // `ServiceManager` can name it.
+    let intents_service = Arc::clone(&intents);
+    host.register("package", "android.content.pm.IPackageManager", {
+        // One PMS state for the session (MODA11Y2 reads the installed service
+        // list from it), wired to the one runtime-permission table (MODNOTIF2).
+        let pms_state = Arc::clone(&pms_shared);
+        let pms_permissions = Arc::clone(&permissions);
+        move |w| {
+            {
+                let mut state = pms_state
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner);
+                if state.runtime_permissions.is_none() {
+                    state.runtime_permissions = Some(Arc::clone(&pms_permissions));
+                }
+                // The manifest's grants are the install-time half of the table, so
+                // the `permissions` module can tell a declared permission from an
+                // undeclared one.
+                let mut store = pms_permissions
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner);
+                if store.package.is_empty() {
+                    store.set_install_time(
+                        &state.primary().package.package_name.clone(),
+                        &state.primary().granted_permissions.clone(),
+                    );
+                }
+                // SYSUI3B: the same moment publishes the package's own
+                // `<permission>` declarations, so `getPermissionInfo` for a
+                // custom permission and this table's package identity agree.
+                store.set_declared_permissions(
+                    &state.primary().package.package_name.clone(),
+                    &state.primary().declared_permissions.clone(),
+                );
+            }
+            let pms = Arc::clone(&pms_state);
+            Box::new(crate::pms::PmsService::new(pms, w)) as Box<dyn ServiceObject>
+        }
     });
+    host.register(
+        crate::intents::SERVICE_NAME,
+        crate::intents::DESCRIPTOR,
+        move |_w| {
+            Box::new(crate::intents::IntentBrokerService::new(Arc::clone(
+                &intents_service,
+            ))) as Box<dyn ServiceObject>
+        },
+    );
+    // ADR-0031: the `webviewupdate` peer is wall 3 of
+    // `WebViewFactory.getProvider()` — `getUpdateService()` ->
+    // `ServiceManager.getService("webviewupdate")` -> a null service NPEs inside
+    // `waitForAndGetProvider()` and surfaces as
+    // `MissingWebViewPackageException`. It answers from the **same** package
+    // state `PackageManager` serves (`pms_shared`, the one the accessibility
+    // module and the runtime-permission table are wired to), so the provider
+    // record cannot drift from the package's own record; with no provider
+    // package installed it answers "no provider" (null record, non-OK status),
+    // never a fake success. It is published here, after the single PMS
+    // registration above and never as a second `package` factory: a second
+    // factory would replace MODNOTIF2's one-store PMS with a table-less one.
+    host.register_dynamic_named(
+        "webviewupdate",
+        crate::webview::DESCRIPTOR,
+        Box::new(crate::webview::WebViewUpdateService::new(Arc::clone(
+            &pms_shared,
+        ))),
+    );
     host.register(
         "display",
         "android.hardware.display.IDisplayManager",
@@ -388,14 +597,9 @@ pub fn install_with_handles_and_insets(
     host.register("audio", "android.media.IAudioService", move |_w| {
         Box::new(crate::misc::AudioService::new(Arc::clone(&audio))) as Box<dyn ServiceObject>
     });
-    host.register(
-        "graphicsstats",
-        "android.view.IGraphicsStats",
-        move |_w| {
-            Box::new(crate::misc::GraphicsStatsService::new(Arc::clone(&gfx)))
-                as Box<dyn ServiceObject>
-        },
-    );
+    host.register("graphicsstats", "android.view.IGraphicsStats", move |_w| {
+        Box::new(crate::misc::GraphicsStatsService::new(Arc::clone(&gfx))) as Box<dyn ServiceObject>
+    });
     host.register(
         "network_management",
         "android.os.INetworkManagementService",
@@ -428,8 +632,7 @@ pub fn install_with_handles_and_insets(
         "voiceinteraction",
         "com.android.internal.app.IVoiceInteractionManagerService",
         move |_w| {
-            Box::new(crate::misc::VoiceService::new(Arc::clone(&voice)))
-                as Box<dyn ServiceObject>
+            Box::new(crate::misc::VoiceService::new(Arc::clone(&voice))) as Box<dyn ServiceObject>
         },
     );
     let future_service = Arc::clone(&future);
@@ -445,21 +648,26 @@ pub fn install_with_handles_and_insets(
     // It is a raw node (`android.gui.*` has no decoded table) published under
     // the `ServiceManager` name the framework asks for, so `checkService`
     // answers on the first try and `SensorManager` never enters its retry loop.
-    let sensors = Arc::new(Mutex::new(crate::misc::SensorState::default()));
-    host.register_dynamic_named(
-        "sensorservice",
-        crate::misc::SENSOR_SERVER_DESCRIPTOR,
-        Box::new(crate::misc::SensorServer::new(Arc::clone(&sensors))),
-    );
+    //
+    // MODSENS: the node is `core`'s, with **no feed** — the stock answer of a
+    // device without sensors (empty list). The `sensors` module installs a feed
+    // into this same node while attached, so a hot attach does not invalidate a
+    // binder the app already holds (an app keeps the `ISensorServer` proxy for
+    // its whole life). `core`'s manifest therefore does not claim the name; see
+    // `core_module::FILLED_BY_MODULE`.
+    let sensors = Arc::new(Mutex::new(crate::sensors::SensorHub::default()));
+    crate::sensors::install(host, Arc::clone(&sensors));
     // K5: the two raw nodes above. Neither interface has a decoded
     // `acos-aidl` table (their own `raw_transact` answers the exact wire
     // shape), so they are dynamic nodes registered under their real
     // `ServiceManager` names — `checkService` answers on the first try.
-    host.register_dynamic_named(
-        "location",
-        crate::extras::LOCATION_DESCRIPTOR,
-        Box::new(crate::extras::LocationService::new()),
-    );
+    //
+    // MODLOC3: `location` is `core`'s node as well
+    // (`core_module::FILLED_BY_MODULE`). What is published here is the
+    // disabled-device answer; the `location` module fills the same object while
+    // it is attached, so a guest's cached `ILocationManager` proxy survives a
+    // hot attach and a detach only empties the node again.
+    crate::modules::location::install(host);
     host.register_dynamic_named(
         "trust",
         crate::extras::TRUST_DESCRIPTOR,
@@ -471,15 +679,11 @@ pub fn install_with_handles_and_insets(
         Box::new(crate::extras::RestrictionsService::new()),
     );
     let contentservice = Arc::clone(&settings);
-    host.register(
-        "content",
-        "android.content.IContentService",
-        move |_w| {
-            Box::new(crate::provider::ContentServiceService::new(Arc::clone(
-                &contentservice,
-            ))) as Box<dyn ServiceObject>
-        },
-    );
+    host.register("content", "android.content.IContentService", move |_w| {
+        Box::new(crate::provider::ContentServiceService::new(Arc::clone(
+            &contentservice,
+        ))) as Box<dyn ServiceObject>
+    });
     host.register("input", "android.hardware.input.IInputManager", move |_w| {
         Box::new(crate::misc::InputService::new(Arc::clone(&input))) as Box<dyn ServiceObject>
     });
@@ -523,8 +727,9 @@ pub fn install_with_handles_and_insets(
 
     // T-39: clipboard + the declared service set.
     host.register("clipboard", "android.content.IClipboard", move |_w| {
-        Box::new(crate::clipboard::ClipboardService::new(Arc::clone(&clipboard)))
-            as Box<dyn ServiceObject>
+        Box::new(crate::clipboard::ClipboardService::new(Arc::clone(
+            &clipboard,
+        ))) as Box<dyn ServiceObject>
     });
     host.register(
         "appops",
@@ -537,19 +742,25 @@ pub fn install_with_handles_and_insets(
     host.register(
         "permission",
         "android.permission.IPermissionManager",
-        move |_w| {
-            Box::new(crate::declared::PermissionService::new(Arc::clone(
-                &permission,
-            ))) as Box<dyn ServiceObject>
+        {
+            // BINDERPID: core's `IPermissionManager` answers
+            // `checkUidPermission` (the `Context.checkCallingPermission` path)
+            // from the session's one permission table, so it cannot disagree with
+            // the `system.permissions` module that takes the name over.
+            let core_store = Arc::clone(&permissions);
+            move |_w| {
+                Box::new(crate::declared::PermissionService::with_store(
+                    Arc::clone(&permission),
+                    Arc::clone(&core_store),
+                )) as Box<dyn ServiceObject>
+            }
         },
     );
     host.register("user", "android.os.IUserManager", move |_w| {
-        Box::new(crate::declared::UserService::new(Arc::clone(&users)))
-            as Box<dyn ServiceObject>
+        Box::new(crate::declared::UserService::new(Arc::clone(&users))) as Box<dyn ServiceObject>
     });
     host.register("uimode", "android.app.IUiModeManager", move |_w| {
-        Box::new(crate::declared::UiModeService::new(Arc::clone(&uimode)))
-            as Box<dyn ServiceObject>
+        Box::new(crate::declared::UiModeService::new(Arc::clone(&uimode))) as Box<dyn ServiceObject>
     });
     // The runtime plays the system-UI role for toasts, so it needs the state.
     host.set_notification_state(Arc::clone(&notification));
@@ -580,11 +791,9 @@ pub fn install_with_handles_and_insets(
             ))) as Box<dyn ServiceObject>
         },
     );
-    host.register(
-        "mount",
-        "android.os.storage.IStorageManager",
-        move |_w| Box::new(crate::extras::StorageService::new()) as Box<dyn ServiceObject>,
-    );
+    host.register("mount", "android.os.storage.IStorageManager", move |_w| {
+        Box::new(crate::extras::StorageService::new()) as Box<dyn ServiceObject>
+    });
     host.register(
         "shortcut",
         "android.content.pm.IShortcutService",
@@ -593,27 +802,19 @@ pub fn install_with_handles_and_insets(
                 as Box<dyn ServiceObject>
         },
     );
-    host.register(
-        "jobscheduler",
-        "android.app.job.IJobScheduler",
-        move |_w| {
-            Box::new(crate::extras::JobSchedulerService::new(Arc::clone(&jobs)))
-                as Box<dyn ServiceObject>
-        },
-    );
+    host.register("jobscheduler", "android.app.job.IJobScheduler", move |_w| {
+        Box::new(crate::extras::JobSchedulerService::new(Arc::clone(&jobs)))
+            as Box<dyn ServiceObject>
+    });
     host.register("power", "android.os.IPowerManager", move |_w| {
         Box::new(crate::extras::PowerService::new(Arc::clone(&power))) as Box<dyn ServiceObject>
     });
-    host.register(
-        "account",
-        "android.accounts.IAccountManager",
-        move |_w| Box::new(crate::extras::AccountService::new()) as Box<dyn ServiceObject>,
-    );
-    host.register(
-        "thermalservice",
-        "android.os.IThermalService",
-        move |_w| Box::new(crate::extras::ThermalService::new()) as Box<dyn ServiceObject>,
-    );
+    host.register("account", "android.accounts.IAccountManager", move |_w| {
+        Box::new(crate::extras::AccountService::new()) as Box<dyn ServiceObject>
+    });
+    host.register("thermalservice", "android.os.IThermalService", move |_w| {
+        Box::new(crate::extras::ThermalService::new()) as Box<dyn ServiceObject>
+    });
     host.register("alarm", "android.app.IAlarmManager", move |_w| {
         Box::new(crate::extras::AlarmService::new(Arc::clone(&alarm))) as Box<dyn ServiceObject>
     });
@@ -640,15 +841,12 @@ pub fn install_with_handles_and_insets(
     // handle the dispatcher routes. Record the binder for the runtime AMS
     // bridge, which materialises the `ContentProviderHolder` reply.
     let settings_provider = Arc::clone(&settings);
-    let settings_binder = host.register(
-        "settings",
-        "android.content.IContentProvider",
-        move |_w| {
+    let settings_binder =
+        host.register("settings", "android.content.IContentProvider", move |_w| {
             Box::new(crate::provider::ProviderService::new(Arc::clone(
                 &settings_provider,
             ))) as Box<dyn ServiceObject>
-        },
-    );
+        });
     crate::provider::set_settings_provider_binder(settings_binder.0);
     // The `ContentProviderConnection` token a `getContentProvider` holder
     // carries; the framework writes it back to `removeContentProvider` /
@@ -708,7 +906,10 @@ mod t21_tests {
             descriptor_for("package"),
             Some("android.content.pm.IPackageManager")
         );
-        assert_eq!(descriptor_for("activity"), Some("android.app.IActivityManager"));
+        assert_eq!(
+            descriptor_for("activity"),
+            Some("android.app.IActivityManager")
+        );
         assert_eq!(name_for("android.app.IActivityManager"), Some("activity"));
         assert_eq!(descriptor_for("definitely.not.a.service"), None);
         assert_eq!(name_for("android.os.IBinder"), None);
@@ -762,4 +963,34 @@ mod t21_tests {
             crate::error::ServiceError::UnsupportedAndroidApi { .. }
         ));
     }
+}
+
+/// The window-stack sink the session calls after a window is added or removed:
+/// it queues one `TYPE_WINDOWS_CHANGED` per change and returns the
+/// `IAccessibilityServiceClient.onAccessibilityEvent` deliveries the bound
+/// service owes (AOSP `AccessibilityWindowManager` /
+/// `notifyAccessibilityEvent`, which delivers a cache-critical event even when
+/// the service did not subscribe to it).
+///
+/// The window session calls this with its own state lock released, so the two
+/// states are never held in both orders.
+#[must_use]
+pub fn a11y_window_changes(
+    a11y: std::sync::Arc<std::sync::Mutex<crate::misc::A11yState>>,
+) -> crate::window_session::WindowStackSink {
+    std::sync::Arc::new(move |change: crate::window_session::WindowStackChange| {
+        let changes = match change {
+            crate::window_session::WindowStackChange::Added(window) => {
+                (window, crate::a11y_bind::WINDOWS_CHANGE_ADDED)
+            }
+            crate::window_session::WindowStackChange::Removed(window) => {
+                (window, crate::a11y_bind::WINDOWS_CHANGE_REMOVED)
+            }
+        };
+        let mut state = a11y
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        state.record_window_change(changes.0, changes.1);
+        crate::a11y_bind::windows_changed_deliveries(&mut state)
+    })
 }

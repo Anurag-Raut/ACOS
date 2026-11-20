@@ -213,14 +213,22 @@ pub fn build_session_guest(root: &ArtRoot) -> Result<super::app::GuestDex> {
     let stamp = out_dir.join(".hash");
     let dex = out_dir.join("classes.dex");
     let cached = dex.is_file()
-        && fs::read_to_string(&stamp).map(|s| s.trim() == hash.to_string()).unwrap_or(false);
+        && fs::read_to_string(&stamp)
+            .map(|s| s.trim() == hash.to_string())
+            .unwrap_or(false);
     if cached {
-        return Ok(super::app::GuestDex { dex_dir: out_dir, cached: true });
+        return Ok(super::app::GuestDex {
+            dex_dir: out_dir,
+            cached: true,
+        });
     }
     let sdk = super::app::android_sdk()?;
     let android_jar = sdk.join("platforms/android-34/android.jar");
     if !android_jar.is_file() {
-        return Err(Error::Tool(format!("no android.jar at {}", android_jar.display())));
+        return Err(Error::Tool(format!(
+            "no android.jar at {}",
+            android_jar.display()
+        )));
     }
     let d8 = super::app::find_tool(&sdk, "d8")?;
     let classes = out_dir.join("classes");
@@ -275,7 +283,10 @@ pub fn build_session_guest(root: &ArtRoot) -> Result<super::app::GuestDex> {
     }
     fs::write(&stamp, format!("{hash}\n"))?;
     let _ = fs::remove_dir_all(&classes);
-    Ok(super::app::GuestDex { dex_dir: out_dir, cached: false })
+    Ok(super::app::GuestDex {
+        dex_dir: out_dir,
+        cached: false,
+    })
 }
 
 // ------------------------------------------------------------------- paths
@@ -332,7 +343,9 @@ pub fn guest_argv(
 
 /// `ACOSCMD {…}` → the JSON value, or `None` for any other line.
 pub fn parse_protocol_line(line: &str) -> Option<serde_json::Value> {
-    let body = line.trim_end_matches(['\r', '\n']).strip_prefix(CMD_PREFIX)?;
+    let body = line
+        .trim_end_matches(['\r', '\n'])
+        .strip_prefix(CMD_PREFIX)?;
     serde_json::from_str(body).ok()
 }
 
@@ -433,6 +446,11 @@ pub fn session(root: &ArtRoot, opts: &SessionOpts) -> Result<SessionReport> {
     let sock_dir = sdir.join("socket");
     fs::create_dir_all(&sock_dir)?;
     let logd = Logd::start(&sock_dir).map_err(Error::Io)?;
+    // SPIKE-NET: netd replacement for `/dev/socket/dnsproxyd` (gated). This is
+    // the *launcher's* socket dir; the production zygote gives the app process
+    // its own (`<plan>/<tag>/sock`, served by `zygote_prod::prepare_session`),
+    // and the exec path uses this one. Held until the session ends.
+    let _dns = crate::spike_net::serve_dnsproxyd_if_enabled(&sock_dir).map_err(Error::Io)?;
 
     let guest_apk = format!("/data/app/{apk_name}");
     let guest_out = format!("/data/session/{session_id}/out");
@@ -457,13 +475,22 @@ pub fn session(root: &ArtRoot, opts: &SessionOpts) -> Result<SessionReport> {
     crate::seccomp::enable(root)?;
     let mut sb = root.sandbox();
     sb.run_root(run.path());
+    // NET2: the relay session is addressed by this id (`acos-<id>`), which is
+    // what the live session API's net controls name.
+    sb.net_session(Some(&session_id));
     sb.seccomp_guest(true);
     sb.with_shim(false);
     sb.ro_bind(&art_shim, "/data/shim/libartshim.so");
     sb.ro_bind(&shim, "/data/app/libacosart.so");
     // H17: this session's own APK shadows the shared `/data/app` entry.
     sb.ro_bind(&apk, &format!("/data/app/{apk_name}"));
-    sb.ro_bind(&root.sysroot.join("shim/libacoshw.so"), "/data/libacoshw.so");
+    // The software gralloc shim this binary was built with. A sysroot whose
+    // prebuilt copy is stale (its stamp is an older shim source) is rebuilt from
+    // the embedded source instead of running a shim that is missing entry
+    // points (A11YPACE: `Bitmap.wrapHardwareBuffer` then SIGSEGVs in
+    // `GraphicBufferMapper::getAllocationSize`).
+    let gralloc_shim = crate::gralloc_shim(root)?;
+    sb.ro_bind(&gralloc_shim, "/data/libacoshw.so");
     // The session dir is writable to the guest, but only this session's:
     // `/data/session/<id>` is the run root, `/data/session` itself is a plain
     // temp dir with nothing in it.
@@ -501,20 +528,34 @@ pub fn session(root: &ArtRoot, opts: &SessionOpts) -> Result<SessionReport> {
         |c| {
             unsafe {
                 c.pre_exec(move || {
-            libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGKILL as libc::c_ulong, 0, 0, 0);
-            let core = libc::rlimit { rlim_cur: 0, rlim_max: 0 };
-            libc::setrlimit(libc::RLIMIT_CORE, &core);
-            let nofile = libc::rlimit { rlim_cur: 4096, rlim_max: 4096 };
-            libc::setrlimit(libc::RLIMIT_NOFILE, &nofile);
-            // The launcher's memory backstops bound acos-art, never ART.
-            crate::watchdog::relax_child_limits();
-            // init.rc: setrlimit nice 40 40 (host best-effort; see watchdog).
-            crate::watchdog::apply_init_rlimit_nice();
-            Ok(())
+                    libc::prctl(
+                        libc::PR_SET_PDEATHSIG,
+                        libc::SIGKILL as libc::c_ulong,
+                        0,
+                        0,
+                        0,
+                    );
+                    let core = libc::rlimit {
+                        rlim_cur: 0,
+                        rlim_max: 0,
+                    };
+                    libc::setrlimit(libc::RLIMIT_CORE, &core);
+                    let nofile = libc::rlimit {
+                        rlim_cur: 4096,
+                        rlim_max: 4096,
+                    };
+                    libc::setrlimit(libc::RLIMIT_NOFILE, &nofile);
+                    // The launcher's memory backstops bound acos-art, never ART.
+                    crate::watchdog::relax_child_limits();
+                    // init.rc: setrlimit nice 40 40 (host best-effort; see watchdog).
+                    crate::watchdog::apply_init_rlimit_nice();
+                    Ok(())
                 });
             }
             c.process_group(0);
-            c.stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped());
+            c.stdin(Stdio::piped())
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped());
         },
     )?;
     let pid = child.id() as i32;
@@ -624,8 +665,18 @@ pub fn session(root: &ArtRoot, opts: &SessionOpts) -> Result<SessionReport> {
                     ready = Some(serde_json::to_value(&reply).unwrap_or_default());
                 } else {
                     relay_error = Some((
-                        reply.rest.get("code").and_then(|c| c.as_str()).unwrap_or("STARTUP_FAILED").into(),
-                        reply.rest.get("error").and_then(|c| c.as_str()).unwrap_or("").into(),
+                        reply
+                            .rest
+                            .get("code")
+                            .and_then(|c| c.as_str())
+                            .unwrap_or("STARTUP_FAILED")
+                            .into(),
+                        reply
+                            .rest
+                            .get("error")
+                            .and_then(|c| c.as_str())
+                            .unwrap_or("")
+                            .into(),
                     ));
                 }
                 break;
@@ -633,7 +684,10 @@ pub fn session(root: &ArtRoot, opts: &SessionOpts) -> Result<SessionReport> {
             Ok(Line::Other) => {}
             Ok(Line::Eof(other)) => {
                 diagnostics.extend(
-                    other.to_text().lines().map(|l| format!("guest stdout: {l}")),
+                    other
+                        .to_text()
+                        .lines()
+                        .map(|l| format!("guest stdout: {l}")),
                 );
                 break;
             }
@@ -648,7 +702,11 @@ pub fn session(root: &ArtRoot, opts: &SessionOpts) -> Result<SessionReport> {
     if let Some(r) = &ready {
         let mut v = r.clone();
         add_derived(&mut v, &root.data);
-        writeln!(host_out, "{}", serde_json::to_string(&v).unwrap_or_default())?;
+        writeln!(
+            host_out,
+            "{}",
+            serde_json::to_string(&v).unwrap_or_default()
+        )?;
         host_out.flush()?;
     }
 
@@ -697,8 +755,7 @@ pub fn session(root: &ArtRoot, opts: &SessionOpts) -> Result<SessionReport> {
             Some(rx) => match rx.recv_timeout(opts.timeout) {
                 Ok(l) => l,
                 Err(mpsc::RecvTimeoutError::Timeout) => {
-                    diagnostics
-                        .push("no command on the session socket within the timeout".into());
+                    diagnostics.push("no command on the session socket within the timeout".into());
                     break;
                 }
                 Err(mpsc::RecvTimeoutError::Disconnected) => break,
@@ -739,8 +796,16 @@ pub fn session(root: &ArtRoot, opts: &SessionOpts) -> Result<SessionReport> {
         if !reply.ok {
             diagnostics.push(format!(
                 "{}: {}",
-                reply.rest.get("code").and_then(|c| c.as_str()).unwrap_or("ERROR"),
-                reply.rest.get("error").and_then(|c| c.as_str()).unwrap_or("")
+                reply
+                    .rest
+                    .get("code")
+                    .and_then(|c| c.as_str())
+                    .unwrap_or("ERROR"),
+                reply
+                    .rest
+                    .get("error")
+                    .and_then(|c| c.as_str())
+                    .unwrap_or("")
             ));
         }
         let mut v = serde_json::to_value(&reply).unwrap_or_default();
@@ -771,7 +836,9 @@ pub fn session(root: &ArtRoot, opts: &SessionOpts) -> Result<SessionReport> {
     let log_first_dropped = batch.first_dropped.clone();
     let _logs = batch.entries;
     let _ = proto.join();
-    let stderr_tail = err_thread.join().unwrap_or_else(|_| TailBuffer::with_cap(cap));
+    let stderr_tail = err_thread
+        .join()
+        .unwrap_or_else(|_| TailBuffer::with_cap(cap));
     let stderr = stderr_tail.to_text();
     let mut other = TailBuffer::with_cap(cap);
     while let Ok(l) = rx.try_recv() {
@@ -779,8 +846,7 @@ pub fn session(root: &ArtRoot, opts: &SessionOpts) -> Result<SessionReport> {
             other = tail;
         }
     }
-    let stdout_lines: Vec<String> =
-        other.to_text().lines().map(str::to_string).collect();
+    let stdout_lines: Vec<String> = other.to_text().lines().map(str::to_string).collect();
     let stdout = stdout_lines.join("\n");
     let wall_ms = started.elapsed().as_millis() as u64;
 
@@ -1120,8 +1186,14 @@ fn host_reply(v: serde_json::Value, data: &Path, host_ms: f64) -> SessionReply {
                 .unwrap_or("")
                 .to_string(),
             frame_seq: value.get("frame_seq").and_then(|s| s.as_u64()),
-            png: value.get("png").and_then(|s| s.as_str()).map(str::to_string),
-            md5: value.get("md5").and_then(|s| s.as_str()).map(str::to_string),
+            png: value
+                .get("png")
+                .and_then(|s| s.as_str())
+                .map(str::to_string),
+            md5: value
+                .get("md5")
+                .and_then(|s| s.as_str())
+                .map(str::to_string),
             host_ms: Some(host_ms),
             tree: value.get("tree").cloned(),
             rest: serde_json::Map::new(),
@@ -1220,10 +1292,26 @@ pub fn session_cli(root: &ArtRoot, opts: &SessionOpts) -> Result<i32> {
     if !report.succeeded() {
         // Nothing about a failed session may be swallowed: the guest's own
         // words are the diagnosis.
-        for l in report.stdout.lines().rev().take(12).collect::<Vec<_>>().into_iter().rev() {
+        for l in report
+            .stdout
+            .lines()
+            .rev()
+            .take(12)
+            .collect::<Vec<_>>()
+            .into_iter()
+            .rev()
+        {
             eprintln!("guest stdout: {l}");
         }
-        for l in report.stderr.lines().rev().take(24).collect::<Vec<_>>().into_iter().rev() {
+        for l in report
+            .stderr
+            .lines()
+            .rev()
+            .take(24)
+            .collect::<Vec<_>>()
+            .into_iter()
+            .rev()
+        {
             eprintln!("guest stderr: {l}");
         }
     }
@@ -1239,7 +1327,8 @@ mod tests {
         assert!(parse_protocol_line("ACOSCMD {\"ok\":true,\"cmd\":\"tree\"}").is_some());
         assert!(parse_protocol_line("ACOSAPP {\"outcome\":\"ok\"}").is_none());
         assert!(parse_protocol_line("\tat dev.acos.art.SessionMain.tap").is_none());
-        let v = parse_protocol_line("ACOSCMD {\"ok\":true,\"cmd\":\"tap\",\"frame_seq\":3}\r\n").unwrap();
+        let v = parse_protocol_line("ACOSCMD {\"ok\":true,\"cmd\":\"tap\",\"frame_seq\":3}\r\n")
+            .unwrap();
         assert_eq!(v["cmd"], "tap");
         assert_eq!(v["frame_seq"], 3);
     }
@@ -1252,15 +1341,30 @@ mod tests {
             data.join("session/s1234/out/frame_2.png")
         );
         // Anything not under /data is left alone (never silently rewritten).
-        assert_eq!(host_path(data, "/system/fonts/Roboto.ttf"), Path::new("/system/fonts/Roboto.ttf"));
+        assert_eq!(
+            host_path(data, "/system/fonts/Roboto.ttf"),
+            Path::new("/system/fonts/Roboto.ttf")
+        );
     }
 
     #[test]
     fn argv_order_is_the_guest_contract() {
         let a = guest_argv(
-            "/data/app/counter.apk", "dev.acos.fixtures.counter", "/data/session/s1/out",
-            1080, 2062, 420, "/data/session/s1/overlay/a.idmap", 2400, 128, 63,
-            "0", "Counter", 34, "dev.acos.fixtures.counter.MainActivity", "s1",
+            "/data/app/counter.apk",
+            "dev.acos.fixtures.counter",
+            "/data/session/s1/out",
+            1080,
+            2062,
+            420,
+            "/data/session/s1/overlay/a.idmap",
+            2400,
+            128,
+            63,
+            "0",
+            "Counter",
+            34,
+            "dev.acos.fixtures.counter.MainActivity",
+            "s1",
         );
         assert_eq!(a.len(), 15);
         assert_eq!(a[0], "/data/app/counter.apk");

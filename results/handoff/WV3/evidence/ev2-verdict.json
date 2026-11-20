@@ -1,0 +1,161 @@
+{
+  "animations": "on",
+  "app": {
+    "package": "dev.acos.fixtures.webview",
+    "path": "fixtures/build/apps/webview-probe.apk",
+    "sha256": "8733eb0e49dc3fff34ae36bed7837db76fd26c1d16e3c3890f98b42709e9b1b9"
+  },
+  "backend": "acos-native",
+  "certification": "certified-with-limits",
+  "certification_limits": {
+    "doc": "docs/SANDBOX_CERTIFICATION.md",
+    "section": "§8.7"
+  },
+  "certification_policy": {
+    "doc": "docs/SANDBOX_CERTIFICATION.md",
+    "policy": "opt-in untrusted: trusted is the default, an explicit --untrusted or `trust: untrusted` is allowed",
+    "section": "§8.8"
+  },
+  "engine": "art",
+  "evidence": {
+    "artifacts": ".cache/wv3-run/ev2",
+    "engine_report": ".cache/wv3-run/ev2/engine.json",
+    "retention": ".cache/wv3-run/ev2/retention.json",
+    "verdict": ".cache/wv3-run/ev2/verdict.json"
+  },
+  "evidence_provenance": {
+    "binder_transactions": "host-observed",
+    "crash_reports": "guest-asserted",
+    "frames": "host-observed",
+    "host_input": "host-observed",
+    "input_acks": "guest-asserted",
+    "launch_markers": "guest-asserted",
+    "lifecycle_markers": "guest-asserted",
+    "logs": "guest-asserted",
+    "static_manifest": "host-observed",
+    "tree": "guest-asserted"
+  },
+  "extra_apks": [
+    "fixtures/build/apps/webview-provider.apk"
+  ],
+  "fidelity": "art-reference",
+  "finished_at": "2026-11-16T06:40:32.034Z",
+  "insets": "report",
+  "isolation": "process",
+  "mode": "live",
+  "notes": [
+    "coordinates: UI-tree bounds, tap x/y, assert_region and assert_screenshot.region_masks are display pixels (display 1080x2400, origin [0,0]); frames/<seq>.png is the display area starting at display_origin [0,0], so png_y = display_y - 0 (frame 2 is display [0,0][1080,2400]). Do not compare a tree bound with a PNG pixel without that offset.",
+    "artifacts: referenced (prune-unreferenced): 13 file(s) / 1.4 MiB kept, 0 file(s) / 0.0 MiB pruned; see retention.json"
+  ],
+  "provenance_rule": "trusted fixture: guest-asserted evidence may corroborate a pass, and its provenance is still recorded",
+  "reproducer": {
+    "acos_version": "0.2.2",
+    "apk_path": "fixtures/build/apps/webview-probe.apk",
+    "apk_sha256": "8733eb0e49dc3fff34ae36bed7837db76fd26c1d16e3c3890f98b42709e9b1b9",
+    "backend": "acos-native",
+    "display": {
+      "density_dpi": 420,
+      "height": 2400,
+      "mode": "offscreen",
+      "width": 1080
+    },
+    "fidelity": "art-reference",
+    "flags": [],
+    "isolation": "process",
+    "scenario_path": ".cache/wv3-run/scenario.yaml",
+    "scenario_sha256": "b0be78a8981c46ebc1434943c4e133a413652b3f5d8d57e2012ef6410f037cf4"
+  },
+  "request_id": "req_1f51c5_18e8734d4c4a7cb5",
+  "resources": {
+    "events": 95,
+    "frames_captured": 2,
+    "memory_mib": 13,
+    "peak_rss_bytes": 14397440,
+    "sessions": 1,
+    "steps": 2,
+    "wall_ms": 133
+  },
+  "scenario": {
+    "name": "webview-probe-provider",
+    "path": ".cache/wv3-run/scenario.yaml",
+    "sha256": "b0be78a8981c46ebc1434943c4e133a413652b3f5d8d57e2012ef6410f037cf4"
+  },
+  "schema_version": 1,
+  "session_exit": {
+    "abi": null,
+    "cgroup": "cgroup: memory.max=2048MiB swap=0 pids.max=512 peak=65MiB oom_kills=0 (/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p2052999-i2049679.scope)",
+    "code": null,
+    "disk_free_bytes": 154773475328,
+    "guest_crash": null,
+    "guest_exit": 0,
+    "guest_signal": null,
+    "native_crash": null,
+    "native_crash_path": null,
+    "outcome": "ok",
+    "panic": null,
+    "path": ".cache/wv3-run/ev2/art-frames/session-exit.json",
+    "retryable": false,
+    "stage": "teardown-evidence"
+  },
+  "session_id": "s_art_webview-probe",
+  "started_at": "2026-11-16T06:40:31.901Z",
+  "status": "pass",
+  "steps": [
+    {
+      "assertions": [],
+      "duration_ms": 77,
+      "evidence": [
+        {
+          "kind": "step",
+          "path": "steps/00-launch.json"
+        }
+      ],
+      "index": 0,
+      "provenance": {
+        "frame": "host-observed",
+        "launch_markers": "guest-asserted",
+        "lifecycle_markers": "guest-asserted",
+        "tree": "guest-asserted"
+      },
+      "status": "pass",
+      "step": "launch"
+    },
+    {
+      "assertions": [],
+      "duration_ms": 55,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/2.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/2.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/01-wait_for.json"
+        }
+      ],
+      "frame_seq": 2,
+      "index": 1,
+      "provenance": {
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "bound": "strict-event",
+        "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
+        "mode": "strict",
+        "probe_seq": 4,
+        "settled": true,
+        "strict_rule": "event",
+        "tree_age_ms": 40
+      },
+      "status": "pass",
+      "step": "wait_for"
+    }
+  ],
+  "trust": "trusted",
+  "unsupported_steps": [],
+  "verdict": "pass"
+}

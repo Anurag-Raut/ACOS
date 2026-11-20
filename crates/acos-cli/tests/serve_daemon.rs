@@ -64,12 +64,10 @@ fn parse_json(bytes: &[u8]) -> Value {
 
 #[test]
 fn daemon_holds_a_native_session_across_cli_invocations_and_idles_out() {
-    if !boot_available() {
-        eprintln!("SKIP daemon_holds_a_native_session...: no boot cache");
+    if acos_test_support::require_prereq(boot_available(), "daemon_holds_a_native_session_across_cli_invocations_and_idles_out", "no boot cache").is_none() {
         return;
     }
-    let Some(apk) = fixture() else {
-        eprintln!("SKIP daemon_holds_a_native_session...: native-hello.apk missing");
+    let Some(apk) = acos_test_support::require_some(fixture(), "daemon_holds_a_native_session_across_cli_invocations_and_idles_out", "native-hello.apk missing") else {
         return;
     };
     let dir = runtime_dir();
@@ -87,10 +85,9 @@ fn daemon_holds_a_native_session_across_cli_invocations_and_idles_out() {
         "240",
     ]);
     let launch_json = parse_json(&launch.stdout);
-    if launch_json["error"].is_object()
-        && launch_json["error"]["code"] == "CONFINEMENT_UNAVAILABLE"
+    if launch_json["error"].is_object() && launch_json["error"]["code"] == "CONFINEMENT_UNAVAILABLE"
     {
-        eprintln!("SKIP: confinement unavailable on this host: {launch_json:#?}");
+        acos_test_support::require_prereq(false, "daemon_holds_a_native_session_across_cli_invocations_and_idles_out", &format!("confinement unavailable on this host: {launch_json:#?}"));
         return;
     }
     let first_frame_ok = launch_json["result"]["stages"]

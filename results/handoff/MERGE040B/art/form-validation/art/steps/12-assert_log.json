@@ -1,0 +1,47 @@
+{
+  "assertions": [
+    {
+      "actual": {
+        "matched_lines": 1,
+        "sample": [
+          "AcosForm: validation_failed reason=email message=Email is required"
+        ]
+      },
+      "expected": {
+        "min_matches": 1,
+        "ordered": true,
+        "patterns": [
+          "^validation_failed reason=email message=Email is required$"
+        ],
+        "since_previous_step": true,
+        "tag": "AcosForm"
+      },
+      "kind": "log",
+      "matched_node_ids": [],
+      "passed": true
+    }
+  ],
+  "certification": "certified-with-limits",
+  "certification_limits": {
+    "doc": "docs/SANDBOX_CERTIFICATION.md",
+    "section": "§8.7"
+  },
+  "duration_ms": 0,
+  "evidence": [
+    {
+      "kind": "log",
+      "path": "logs/logcat.txt"
+    },
+    {
+      "kind": "step",
+      "path": "steps/12-assert_log.json"
+    }
+  ],
+  "index": 12,
+  "provenance": {
+    "logs": "guest-asserted"
+  },
+  "status": "pass",
+  "step": "assert_log",
+  "trust": "trusted"
+}

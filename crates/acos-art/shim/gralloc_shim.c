@@ -369,6 +369,26 @@ void mapper_get_transport_size(void *self, const nh_t *nh, uint32_t *outFds, uin
     LOG("getTransportSize -> (1 fd, %d ints)", NH_NINTS);
 }
 
+/* getAllocationSize(handle, out) -- gralloc5 mapper virtual ("how many bytes
+ * does this buffer own"). libhwui asks it when an app wraps a `HardwareBuffer`
+ * as a `Bitmap` (`Bitmap.wrapHardwareBuffer`), and the HAL-less mapper has no
+ * implementation object behind that vtable slot, so the framework call
+ * dereferences null (SIGSEGV in GraphicBufferMapper::getAllocationSize+3, seen
+ * by fixtures/apps/a11y-probe when it read the screenshot's pixel). The shim
+ * owns the memory, so the size is the handle's own geometry -- exactly what
+ * lock()/unlock() already mmap. */
+int32_t mapper_get_allocation_size(void *self, const nh_t *nh, uint64_t *outSize)
+    __asm__("_ZN7android19GraphicBufferMapper17getAllocationSizeEPK13native_handlePm");
+int32_t mapper_get_allocation_size(void *self, const nh_t *nh, uint64_t *outSize) {
+    (void)self;
+    if (!nh || !outSize) return -22;
+    size_t size = handle_bytes(nh);
+    if (size < 1) return -22;
+    *outSize = (uint64_t)size;
+    LOG("getAllocationSize -> %zu", size);
+    return 0;
+}
+
 /* ----------------------------------------------------------------- lock ---- */
 
 static int32_t do_lock(const nh_t *nh, void **vaddr, int32_t *outBpp, int32_t *outStride) {

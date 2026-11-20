@@ -113,12 +113,7 @@ impl Framebuffer {
 
 fn clamp_rect(rect: (i32, i32, i32, i32), w: u32, h: u32) -> (i32, i32, i32, i32) {
     let (x0, y0, x1, y1) = rect;
-    (
-        x0.max(0),
-        y0.max(0),
-        x1.min(w as i32),
-        y1.min(h as i32),
-    )
+    (x0.max(0), y0.max(0), x1.min(w as i32), y1.min(h as i32))
 }
 
 /// A GLES2 depth compare function.
@@ -392,7 +387,8 @@ fn interpolate_into(
                 let cc = vc.to_vec4();
                 let mut r = [0.0f32; 4];
                 for k in 0..*n {
-                    let num = w[0] * ca[k] * a.inv_w + w[1] * cb[k] * b.inv_w + w[2] * cc[k] * c.inv_w;
+                    let num =
+                        w[0] * ca[k] * a.inv_w + w[1] * cb[k] * b.inv_w + w[2] * cc[k] * c.inv_w;
                     r[k] = if iw == 0.0 { ca[k] } else { num / iw };
                 }
                 Value::V(r, *n)
@@ -512,7 +508,11 @@ where
                     true
                 };
                 let stencil_pass = if state.stencil_test {
-                    match fb.stencil.as_ref().and_then(|s| s.get(depth_index).copied()) {
+                    match fb
+                        .stencil
+                        .as_ref()
+                        .and_then(|s| s.get(depth_index).copied())
+                    {
                         Some(stored) => {
                             let face = if is_front {
                                 state.stencil_front
@@ -532,9 +532,8 @@ where
                             let new = op.apply(stored, face.reference as u8);
                             if let Some(s) = fb.stencil.as_mut() {
                                 if depth_index < s.len() {
-                                    s[depth_index] =
-                                        (stored & !(face.write_mask as u8))
-                                            | (new & face.write_mask as u8);
+                                    s[depth_index] = (stored & !(face.write_mask as u8))
+                                        | (new & face.write_mask as u8);
                                 }
                             }
                             pass
@@ -574,7 +573,8 @@ where
                 Some(blend) => {
                     let mut r = [0.0f32; 4];
                     for k in 0..3 {
-                        r[k] = src[k] * blend.src_rgb.rgb(src, dst) + dst[k] * blend.dst_rgb.rgb(src, dst);
+                        r[k] = src[k] * blend.src_rgb.rgb(src, dst)
+                            + dst[k] * blend.dst_rgb.rgb(src, dst);
                     }
                     r[3] = src[3] * blend.src_alpha.alpha(src, dst)
                         + dst[3] * blend.dst_alpha.alpha(src, dst);
@@ -630,7 +630,10 @@ mod tests {
         let st = RasterState {
             viewport: (0, 0, 4, 4),
             scissor: Some((0, 0, 2, 4)),
-            blend: Some(Blend::same(BlendFactor::SrcAlpha, BlendFactor::OneMinusSrcAlpha)),
+            blend: Some(Blend::same(
+                BlendFactor::SrcAlpha,
+                BlendFactor::OneMinusSrcAlpha,
+            )),
             ..RasterState::default()
         };
         let a = project([-1.0, -1.0, 0.0, 1.0], vec![], &st);
@@ -693,7 +696,9 @@ mod tests {
         let a = project([-1.0, -1.0, 0.0, 1.0], vec![], &st);
         let b = project([3.0, -1.0, 0.0, 1.0], vec![], &st);
         let c = project([-1.0, 3.0, 0.0, 1.0], vec![], &st);
-        triangle(&mut fb, &st, [&a, &b, &c], |_, _| Some([1.0, 0.0, 0.0, 1.0]));
+        triangle(&mut fb, &st, [&a, &b, &c], |_, _| {
+            Some([1.0, 0.0, 0.0, 1.0])
+        });
         assert_eq!(fb.pixel(0, 0), [255, 0, 0, 255], "stencil==1 passes");
         assert_eq!(fb.pixel(3, 0), [0, 0, 0, 0], "stencil==0 is masked");
     }
@@ -722,7 +727,9 @@ mod tests {
         let a = project([-1.0, -1.0, 0.0, 1.0], vec![], &st);
         let b = project([1.0, -1.0, 0.0, 1.0], vec![], &st);
         let c = project([-1.0, 1.0, 0.0, 1.0], vec![], &st);
-        triangle(&mut fb, &st, [&a, &b, &c], |_, _| Some([1.0, 1.0, 1.0, 1.0]));
+        triangle(&mut fb, &st, [&a, &b, &c], |_, _| {
+            Some([1.0, 1.0, 1.0, 1.0])
+        });
         let s = fb.stencil.as_ref().unwrap();
         assert_eq!(s[0], 0xF0, "failing fragment inverts the stored value");
         assert_eq!(s[1], 0x00, "passing fragment keeps it");

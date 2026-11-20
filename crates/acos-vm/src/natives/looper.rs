@@ -83,12 +83,7 @@ impl LooperHandle {
 
     /// Register `fd` with the process `epoll` set and remember `callback_id`.
     /// Re-registering an fd replaces its callback list.
-    pub fn add_fd<Fd: AsFd>(
-        &self,
-        fd: Fd,
-        events: EventFlags,
-        callback_id: u64,
-    ) -> io::Result<()> {
+    pub fn add_fd<Fd: AsFd>(&self, fd: Fd, events: EventFlags, callback_id: u64) -> io::Result<()> {
         let raw = fd.as_fd().as_raw_fd();
         epoll::add(
             &*self.shared.epoll,
@@ -132,9 +127,7 @@ impl LooperHandle {
         let mut events = empty_events();
         let ts = timeout.map(timespec);
         let n = wait_epoll(&self.shared.epoll, &mut events, ts.as_ref());
-        let hit = events[..n]
-            .iter()
-            .any(|ev| ev.data.u64() == self.shared.id);
+        let hit = events[..n].iter().any(|ev| ev.data.u64() == self.shared.id);
         if hit {
             drain_wake(&self.shared.wake_fd);
         }
@@ -429,7 +422,10 @@ fn wake_threads(vm: &mut Vm, threads: &[usize]) {
     PROC.with(|p| {
         let mut p = p.borrow_mut();
         for l in p.loopers.values_mut() {
-            if l.parked_thread.map(|t| threads.contains(&t)).unwrap_or(false) {
+            if l.parked_thread
+                .map(|t| threads.contains(&t))
+                .unwrap_or(false)
+            {
                 l.parked_thread = None;
                 l.deadline = None;
             }
@@ -544,12 +540,7 @@ fn native_wake(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     }
     // If the looper's green thread is parked in this VM, wake it immediately so
     // the interpreter picks it without waiting for the next scheduler idle.
-    let parked = PROC.with(|p| {
-        p.borrow()
-            .loopers
-            .get(&ptr)
-            .and_then(|l| l.parked_thread)
-    });
+    let parked = PROC.with(|p| p.borrow().loopers.get(&ptr).and_then(|l| l.parked_thread));
     if let Some(t) = parked {
         if let Some(th) = vm.threads.get_mut(t) {
             if th.status == ThreadStatus::Parked {

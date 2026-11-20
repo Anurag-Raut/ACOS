@@ -13,8 +13,8 @@ use std::sync::{Arc, Mutex, OnceLock};
 use super::Shim;
 use crate::elf::Phdr;
 use crate::loader::{
-    current_loader, dl_handle_lookup, dl_handle_remove, is_shim_system_lib,
-    register_dl_handle, LibraryHandle, LoaderInner, NativeLibrary, OBJECTS,
+    current_loader, dl_handle_lookup, dl_handle_remove, is_shim_system_lib, register_dl_handle,
+    LibraryHandle, LoaderInner, NativeLibrary, OBJECTS,
 };
 
 /// Pseudo-`dlopen` handles for the bionic-provided system libraries
@@ -138,7 +138,9 @@ pub unsafe extern "C" fn dlopen(filename: *const c_char, _flags: c_int) -> *mut 
         .find(|l| l.matches_name(&name) || l.matches_name(&path.to_string_lossy()))
         .cloned()
     {
-        existing.refs.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        existing
+            .refs
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         let id = register_dl_handle(&inner, existing);
         return id as *mut c_void;
     }

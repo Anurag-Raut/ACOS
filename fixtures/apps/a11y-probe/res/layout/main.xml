@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:gravity="center">
+
+    <TextView
+        android:id="@+id/status"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:textSize="20sp"
+        android:text="a11y bootstrap" />
+
+    <!-- MODA11YNATIVE: a solid swatch at a known place, so the screenshot the
+         service takes has one pixel whose colour is not a guess. -->
+    <View
+        android:id="@+id/swatch"
+        android:layout_width="200dp"
+        android:layout_height="80dp"
+        android:background="#FF3366CC" />
+
+    <Button
+        android:id="@+id/send"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Send event" />
+
+    <Button
+        android:id="@+id/click_target"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Click target" />
+
+    <!-- MODA11YNATIVE: a Back control that must survive the reduced window, so
+         the 60 %-height layout still fits; the tap gesture lands here too. -->
+    <Button
+        android:id="@+id/gesture_target"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Gesture target" />
+
+    <Button
+        android:id="@+id/a11y_back"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Back via service" />
+
+    <!-- The list the service swipes with a real geste stroke. -->
+    <ScrollView
+        android:id="@+id/gesture_list"
+        android:layout_width="match_parent"
+        android:layout_height="160dp">
+        <LinearLayout
+            android:id="@+id/gesture_rows"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical" />
+    </ScrollView>
+    <!-- A11YPACE: the target the service drags with a paced stroke. Its
+         onTouchListener logs the finger delta, so the app itself proves how far
+         the gesture travelled (the commanded distance is in the scenario). -->
+    <View
+        android:id="@+id/drag_target"
+        android:layout_width="220dp"
+        android:layout_height="100dp"
+        android:background="#FF66BB66" />
+
+</LinearLayout>

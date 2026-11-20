@@ -143,12 +143,27 @@ pub enum Op {
     Nop,
     /// `kind`: 0 = copy ref flag, 1 = plain (clears ref), 2 = object (sets ref),
     /// 3 = wide.
-    Move { kind: u8, dst: u16, src: u16 },
+    Move {
+        kind: u8,
+        dst: u16,
+        src: u16,
+    },
     /// `kind`: 0 = move-result, 1 = move-result-wide, 2 = move-result-object.
-    MoveRes { kind: u8, dst: u16 },
-    MoveException { dst: u16 },
-    Const { dst: u16, val: i32 },
-    ConstWide { dst: u16, val: i64 },
+    MoveRes {
+        kind: u8,
+        dst: u16,
+    },
+    MoveException {
+        dst: u16,
+    },
+    Const {
+        dst: u16,
+        val: i32,
+    },
+    ConstWide {
+        dst: u16,
+        val: i64,
+    },
     /// Fused 32-bit `const*` + conditional branch. javac/d8 frequently emits
     /// the loop-bound constant immediately before the loop test, so this is
     /// the loop-invariant-producer idiom (the `const*` write is pure, so
@@ -162,29 +177,96 @@ pub enum Op {
         target: u32,
     },
     /// `const-string`/`const-string/jumbo`: intern string `string_index` into `dst`.
-    ConstString { dst: u16, string_index: u32 },
+    ConstString {
+        dst: u16,
+        string_index: u32,
+    },
     /// `new-instance`: allocate `type_index`, store the handle in `dst`.
-    NewInstance { dst: u16, type_index: u32 },
+    NewInstance {
+        dst: u16,
+        type_index: u32,
+    },
     /// `new-array`: allocate `type_index` with length from register `len`.
-    NewArray { dst: u16, type_index: u32, len: u16 },
-    ArrayLen { dst: u16, arr: u16 },
-    ArrayGet { op: u8, dst: u16, arr: u16, idx: u16 },
+    NewArray {
+        dst: u16,
+        type_index: u32,
+        len: u16,
+    },
+    ArrayLen {
+        dst: u16,
+        arr: u16,
+    },
+    ArrayGet {
+        op: u8,
+        dst: u16,
+        arr: u16,
+        idx: u16,
+    },
     /// Fused `aget` (int) + `int-to-long` (the `long x = arr[i]` idiom).
-    ArrayGetI2L { dst: u16, arr: u16, idx: u16 },
+    ArrayGetI2L {
+        dst: u16,
+        arr: u16,
+        idx: u16,
+    },
     /// Fused `aget` (int) + `int-to-long` + `add/sub/mul-long/2addr` (the
     /// `longAcc += arr[i]` idiom). `op` is the `Arith2` long opcode; `tmp` is
     /// the widened element register (written for exactness if read later).
-    ArrayGetI2LAdd2 { op: u8, acc: u16, tmp: u16, arr: u16, idx: u16 },
-    ArrayPut { op: u8, src: u16, arr: u16, idx: u16 },
-    Goto { target: u32 },
+    ArrayGetI2LAdd2 {
+        op: u8,
+        acc: u16,
+        tmp: u16,
+        arr: u16,
+        idx: u16,
+    },
+    ArrayPut {
+        op: u8,
+        src: u16,
+        arr: u16,
+        idx: u16,
+    },
+    Goto {
+        target: u32,
+    },
     /// `op` is the original `if-*` opcode; `IfZ` ignores `b`.
-    If { op: u8, a: u16, b: u16, target: u32 },
-    Cmp { op: u8, dst: u16, a: u16, b: u16 },
-    Unary { op: u8, dst: u16, src: u16 },
-    Convert { op: u8, dst: u16, src: u16 },
-    Arith3 { op: u8, dst: u16, a: u16, b: u16 },
-    Arith2 { op: u8, dst: u16, b: u16 },
-    ArithLit { op: u8, dst: u16, src: u16, lit: i32 },
+    If {
+        op: u8,
+        a: u16,
+        b: u16,
+        target: u32,
+    },
+    Cmp {
+        op: u8,
+        dst: u16,
+        a: u16,
+        b: u16,
+    },
+    Unary {
+        op: u8,
+        dst: u16,
+        src: u16,
+    },
+    Convert {
+        op: u8,
+        dst: u16,
+        src: u16,
+    },
+    Arith3 {
+        op: u8,
+        dst: u16,
+        a: u16,
+        b: u16,
+    },
+    Arith2 {
+        op: u8,
+        dst: u16,
+        b: u16,
+    },
+    ArithLit {
+        op: u8,
+        dst: u16,
+        src: u16,
+        lit: i32,
+    },
     /// Fused `<arith>/lit` + conditional branch (the loop-increment idiom).
     ArithLitIf {
         aop: u8,
@@ -211,13 +293,31 @@ pub enum Op {
     /// returns to the scheduler so the callee body runs.
     Invoke,
     /// `iget*`/`iget-object`; `slot` indexes the per-VM quickening table.
-    InstanceGet { op: u8, dst: u16, obj: u16, slot: u32 },
+    InstanceGet {
+        op: u8,
+        dst: u16,
+        obj: u16,
+        slot: u32,
+    },
     /// `iput*`/`iput-object`; `slot` indexes the per-VM quickening table.
-    InstancePut { op: u8, src: u16, obj: u16, slot: u32 },
+    InstancePut {
+        op: u8,
+        src: u16,
+        obj: u16,
+        slot: u32,
+    },
     /// `sget*`/`sget-object`; `slot` indexes the per-VM quickening table.
-    StaticGet { op: u8, dst: u16, slot: u32 },
+    StaticGet {
+        op: u8,
+        dst: u16,
+        slot: u32,
+    },
     /// `sput*`/`sput-object`; `slot` indexes the per-VM quickening table.
-    StaticPut { op: u8, src: u16, slot: u32 },
+    StaticPut {
+        op: u8,
+        src: u16,
+        slot: u32,
+    },
 }
 
 /// A lowered method body plus the reverse maps needed for re-entry.
@@ -290,7 +390,6 @@ pub(crate) fn get_or_lower(code: &Arc<MethodCode>) -> Arc<Program> {
         .clone()
 }
 
-
 // ---------------------------------------------------------------------------
 // Lowering
 // ---------------------------------------------------------------------------
@@ -323,7 +422,10 @@ pub(crate) fn is_loop_body(code: &MethodCode) -> bool {
                         acos_dex::Payload::SparseSwitch(sw) => &sw.targets,
                         _ => &[],
                     };
-                    if targets.iter().any(|&t| ((pc as i64 + t as i64) as u32) <= pc) {
+                    if targets
+                        .iter()
+                        .any(|&t| ((pc as i64 + t as i64) as u32) <= pc)
+                    {
                         return true;
                     }
                 }
@@ -398,16 +500,38 @@ fn lower_op(code: &MethodCode, pcs: &[u32], i: usize, field_refs: &mut Vec<Field
     };
     match op {
         0x00 => Op::Nop,
-        0x01 | 0x02 => Op::Move { kind: 0, dst: r0, src: r1 },
-        0x03 => Op::Move { kind: 1, dst: r0, src: r1 },
-        0x04..=0x06 => Op::Move { kind: 3, dst: r0, src: r1 },
-        0x07..=0x09 => Op::Move { kind: 2, dst: r0, src: r1 },
+        0x01 | 0x02 => Op::Move {
+            kind: 0,
+            dst: r0,
+            src: r1,
+        },
+        0x03 => Op::Move {
+            kind: 1,
+            dst: r0,
+            src: r1,
+        },
+        0x04..=0x06 => Op::Move {
+            kind: 3,
+            dst: r0,
+            src: r1,
+        },
+        0x07..=0x09 => Op::Move {
+            kind: 2,
+            dst: r0,
+            src: r1,
+        },
         0x0a => Op::MoveRes { kind: 0, dst: r0 },
         0x0b => Op::MoveRes { kind: 1, dst: r0 },
         0x0c => Op::MoveRes { kind: 2, dst: r0 },
         0x0d => Op::MoveException { dst: r0 },
-        0x12..=0x15 => Op::Const { dst: r0, val: insn.literal as i32 },
-        0x16..=0x19 => Op::ConstWide { dst: r0, val: insn.literal },
+        0x12..=0x15 => Op::Const {
+            dst: r0,
+            val: insn.literal as i32,
+        },
+        0x16..=0x19 => Op::ConstWide {
+            dst: r0,
+            val: insn.literal,
+        },
         0x1a..=0x1b => Op::ConstString {
             dst: r0,
             string_index: insn.index,
@@ -422,9 +546,19 @@ fn lower_op(code: &MethodCode, pcs: &[u32], i: usize, field_refs: &mut Vec<Field
             len: r1,
         },
         0x21 => Op::ArrayLen { dst: r0, arr: r1 },
-        0x44..=0x4a => Op::ArrayGet { op, dst: r0, arr: r1, idx: r2 },
+        0x44..=0x4a => Op::ArrayGet {
+            op,
+            dst: r0,
+            arr: r1,
+            idx: r2,
+        },
         // `aput-object` needs the ArrayStoreException check: fall back.
-        0x4b..=0x4c | 0x4e..=0x51 => Op::ArrayPut { op, src: r0, arr: r1, idx: r2 },
+        0x4b..=0x4c | 0x4e..=0x51 => Op::ArrayPut {
+            op,
+            src: r0,
+            arr: r1,
+            idx: r2,
+        },
         // Instance field get/put. Null checks, internal shadow fields, and
         // resolution failures stay `Fallback` via the `FieldQuick` state.
         0x52..=0x58 => Op::InstanceGet {
@@ -450,19 +584,44 @@ fn lower_op(code: &MethodCode, pcs: &[u32], i: usize, field_refs: &mut Vec<Field
             slot: field_slot(),
         },
         0x6e..=0x72 | 0x74..=0x78 | 0xfa | 0xfb => Op::Invoke,
-        0x28..=0x2a => Op::Goto { target: insn_target_insn(code, pcs, i) },
+        0x28..=0x2a => Op::Goto {
+            target: insn_target_insn(code, pcs, i),
+        },
         0x32..=0x3d => Op::If {
             op,
             a: r0,
             b: r1,
             target: insn_target_insn(code, pcs, i),
         },
-        0x2d..=0x31 => Op::Cmp { op, dst: r0, a: r1, b: r2 },
-        0x7b..=0x80 => Op::Unary { op, dst: r0, src: r1 },
-        0x81..=0x8f => Op::Convert { op, dst: r0, src: r1 },
-        0x90..=0xaf => Op::Arith3 { op, dst: r0, a: r1, b: r2 },
+        0x2d..=0x31 => Op::Cmp {
+            op,
+            dst: r0,
+            a: r1,
+            b: r2,
+        },
+        0x7b..=0x80 => Op::Unary {
+            op,
+            dst: r0,
+            src: r1,
+        },
+        0x81..=0x8f => Op::Convert {
+            op,
+            dst: r0,
+            src: r1,
+        },
+        0x90..=0xaf => Op::Arith3 {
+            op,
+            dst: r0,
+            a: r1,
+            b: r2,
+        },
         0xb0..=0xcf => Op::Arith2 { op, dst: r0, b: r1 },
-        0xd0..=0xe2 => Op::ArithLit { op, dst: r0, src: r1, lit: insn.literal as i32 },
+        0xd0..=0xe2 => Op::ArithLit {
+            op,
+            dst: r0,
+            src: r1,
+            lit: insn.literal as i32,
+        },
         _ => Op::Fallback,
     }
 }
@@ -1301,7 +1460,9 @@ fn run_ir_loop(
                         apply_sign(f.reg(src), qf.sign)
                     };
                     match heap.get_mut(h) {
-                        Some(Object::Instance { fields, .. }) if off < fields.len() => fields[off] = v,
+                        Some(Object::Instance { fields, .. }) if off < fields.len() => {
+                            fields[off] = v
+                        }
                         _ => break,
                     }
                 }
@@ -1353,7 +1514,11 @@ fn run_ir_loop(
                     break;
                 } else {
                     let v = f.reg(src);
-                    c.statics[off] = if op == 0x69 { v } else { apply_sign(v, qf.sign) };
+                    c.statics[off] = if op == 0x69 {
+                        v
+                    } else {
+                        apply_sign(v, qf.sign)
+                    };
                 }
             }
             Op::Goto { target } => {
@@ -1382,7 +1547,11 @@ fn run_ir_loop(
                         let x = f32::from_bits(f.reg(a));
                         let y = f32::from_bits(f.reg(b));
                         if x.is_nan() || y.is_nan() {
-                            if op == 0x2d { -1 } else { 1 }
+                            if op == 0x2d {
+                                -1
+                            } else {
+                                1
+                            }
                         } else if x < y {
                             -1
                         } else if x > y {
@@ -1395,7 +1564,11 @@ fn run_ir_loop(
                         let x = f64::from_bits(f.reg_wide(a));
                         let y = f64::from_bits(f.reg_wide(b));
                         if x.is_nan() || y.is_nan() {
-                            if op == 0x2f { -1 } else { 1 }
+                            if op == 0x2f {
+                                -1
+                            } else {
+                                1
+                            }
                         } else if x < y {
                             -1
                         } else if x > y {
@@ -1444,70 +1617,68 @@ fn run_ir_loop(
                     f.set_reg_wide(dst, (-a).to_bits());
                 }
             },
-            Op::Convert { op, dst, src } => {
-                match op {
-                    0x81 => {
-                        let v = f.reg(src) as i32 as i64;
-                        f.set_reg_wide(dst, v as u64);
-                    }
-                    0x82 => {
-                        let v = f.reg(src) as i32 as f32;
-                        f.set_reg(dst, v.to_bits());
-                    }
-                    0x83 => {
-                        let v = f.reg(src) as i32 as f64;
-                        f.set_reg_wide(dst, v.to_bits());
-                    }
-                    0x84 => {
-                        let v = f.reg_wide(src) as i64 as i32;
-                        f.set_reg(dst, v as u32);
-                    }
-                    0x85 => {
-                        let v = f.reg_wide(src) as i64 as f32;
-                        f.set_reg(dst, v.to_bits());
-                    }
-                    0x86 => {
-                        let v = f.reg_wide(src) as i64 as f64;
-                        f.set_reg_wide(dst, v.to_bits());
-                    }
-                    0x87 => {
-                        let v = f32::from_bits(f.reg(src)) as i32;
-                        f.set_reg(dst, v as u32);
-                    }
-                    0x88 => {
-                        let v = f32::from_bits(f.reg(src)) as i64;
-                        f.set_reg_wide(dst, v as u64);
-                    }
-                    0x89 => {
-                        let v = f32::from_bits(f.reg(src)) as f64;
-                        f.set_reg_wide(dst, v.to_bits());
-                    }
-                    0x8a => {
-                        let v = f64::from_bits(f.reg_wide(src)) as i32;
-                        f.set_reg(dst, v as u32);
-                    }
-                    0x8b => {
-                        let v = f64::from_bits(f.reg_wide(src)) as i64;
-                        f.set_reg_wide(dst, v as u64);
-                    }
-                    0x8c => {
-                        let v = f64::from_bits(f.reg_wide(src)) as f32;
-                        f.set_reg(dst, v.to_bits());
-                    }
-                    0x8d => {
-                        let v = f.reg(src) as i32 as i8 as i32;
-                        f.set_reg(dst, v as u32);
-                    }
-                    0x8e => {
-                        let v = f.reg(src) as u16;
-                        f.set_reg(dst, v as u32);
-                    }
-                    _ => {
-                        let v = f.reg(src) as i32 as i16 as i32;
-                        f.set_reg(dst, v as u32);
-                    }
+            Op::Convert { op, dst, src } => match op {
+                0x81 => {
+                    let v = f.reg(src) as i32 as i64;
+                    f.set_reg_wide(dst, v as u64);
                 }
-            }
+                0x82 => {
+                    let v = f.reg(src) as i32 as f32;
+                    f.set_reg(dst, v.to_bits());
+                }
+                0x83 => {
+                    let v = f.reg(src) as i32 as f64;
+                    f.set_reg_wide(dst, v.to_bits());
+                }
+                0x84 => {
+                    let v = f.reg_wide(src) as i64 as i32;
+                    f.set_reg(dst, v as u32);
+                }
+                0x85 => {
+                    let v = f.reg_wide(src) as i64 as f32;
+                    f.set_reg(dst, v.to_bits());
+                }
+                0x86 => {
+                    let v = f.reg_wide(src) as i64 as f64;
+                    f.set_reg_wide(dst, v.to_bits());
+                }
+                0x87 => {
+                    let v = f32::from_bits(f.reg(src)) as i32;
+                    f.set_reg(dst, v as u32);
+                }
+                0x88 => {
+                    let v = f32::from_bits(f.reg(src)) as i64;
+                    f.set_reg_wide(dst, v as u64);
+                }
+                0x89 => {
+                    let v = f32::from_bits(f.reg(src)) as f64;
+                    f.set_reg_wide(dst, v.to_bits());
+                }
+                0x8a => {
+                    let v = f64::from_bits(f.reg_wide(src)) as i32;
+                    f.set_reg(dst, v as u32);
+                }
+                0x8b => {
+                    let v = f64::from_bits(f.reg_wide(src)) as i64;
+                    f.set_reg_wide(dst, v as u64);
+                }
+                0x8c => {
+                    let v = f64::from_bits(f.reg_wide(src)) as f32;
+                    f.set_reg(dst, v.to_bits());
+                }
+                0x8d => {
+                    let v = f.reg(src) as i32 as i8 as i32;
+                    f.set_reg(dst, v as u32);
+                }
+                0x8e => {
+                    let v = f.reg(src) as u16;
+                    f.set_reg(dst, v as u32);
+                }
+                _ => {
+                    let v = f.reg(src) as i32 as i16 as i32;
+                    f.set_reg(dst, v as u32);
+                }
+            },
             Op::Arith3 { op, dst, a, b } => {
                 if !exec_arith3(f, op, dst, a, b) {
                     break;

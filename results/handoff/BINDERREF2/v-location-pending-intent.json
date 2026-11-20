@@ -1,0 +1,148 @@
+{
+ "engine": "art",
+ "fidelity": "art-reference",
+ "modules": [
+  {
+   "id": "core",
+   "profile": "real",
+   "state": "attached"
+  },
+  {
+   "id": "accessibility",
+   "profile": "off",
+   "state": "off"
+  },
+  {
+   "id": "system.permissions",
+   "profile": "off",
+   "state": "off"
+  },
+  {
+   "id": "system.notifications",
+   "profile": "off",
+   "state": "off"
+  },
+  {
+   "id": "sensors",
+   "profile": "off",
+   "state": "off"
+  },
+  {
+   "id": "feedback.vibrator",
+   "profile": "off",
+   "state": "off"
+  },
+  {
+   "id": "location",
+   "profile": "scripted",
+   "state": "attached"
+  },
+  {
+   "id": "net.telephony",
+   "profile": "off",
+   "state": "off"
+  },
+  {
+   "id": "hw.bluetooth",
+   "profile": "off",
+   "state": "off"
+  },
+  {
+   "id": "hw.biometric",
+   "profile": "off",
+   "state": "off"
+  },
+  {
+   "id": "network",
+   "profile": "off",
+   "state": "off"
+  },
+  {
+   "id": "hw.usb",
+   "profile": "off",
+   "state": "off"
+  },
+  {
+   "id": "system.dropbox",
+   "profile": "off",
+   "state": "off"
+  },
+  {
+   "id": "hw.nfc",
+   "profile": "off",
+   "state": "off"
+  },
+  {
+   "id": "system.wallpaper",
+   "profile": "off",
+   "state": "off"
+  },
+  {
+   "id": "system.print",
+   "profile": "off",
+   "state": "off"
+  },
+  {
+   "id": "system.search",
+   "profile": "off",
+   "state": "off"
+  },
+  {
+   "id": "system.usage",
+   "profile": "off",
+   "state": "off"
+  },
+  {
+   "id": "system.dpm",
+   "profile": "off",
+   "state": "off"
+  },
+  {
+   "id": "system.role",
+   "profile": "off",
+   "state": "off"
+  },
+  {
+   "id": "geo.country",
+   "profile": "off",
+   "state": "off"
+  }
+ ],
+ "reproducer": {
+  "acos_version": "0.2.2",
+  "apk_path": "fixtures/build/apps/location-probe.apk",
+  "apk_sha256": "169f88e53cfe0ea8f0952da20663826a5bc5d5359bff70968d8208c197e94338",
+  "backend": "acos-native",
+  "display": {
+   "density_dpi": 420,
+   "height": 2400,
+   "mode": "offscreen",
+   "width": 1080
+  },
+  "fidelity": "art-reference",
+  "flags": [],
+  "isolation": "process",
+  "scenario_path": "scenarios/location-pending-intent.yaml",
+  "scenario_sha256": "ea54a29a0244daf6878bfb86113f1992e7c93c916e7318a8836d4aca1a34b307"
+ },
+ "scenario": "v-location-pending-intent.json",
+ "session_exit": {
+  "abi": null,
+  "cgroup": "cgroup: memory.max=2048MiB swap=0 pids.max=512 peak=79MiB oom_kills=0 (/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p3474286-i3515052.scope)",
+  "code": null,
+  "disk_free_bytes": 228546142208,
+  "guest_crash": null,
+  "guest_exit": 0,
+  "guest_signal": null,
+  "native_crash": null,
+  "native_crash_path": null,
+  "outcome": "ok",
+  "panic": null,
+  "path": "out/location-pending-intent/art-frames/session-exit.json",
+  "retryable": false,
+  "stage": "teardown-evidence"
+ },
+ "status": "pass",
+ "steps": [],
+ "verdict": "pass"
+}

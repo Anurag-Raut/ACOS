@@ -171,6 +171,34 @@ pub const AXIS_TOUCH_MAJOR: i32 = 4;
 /// `AMOTION_EVENT_AXIS_TOUCH_MINOR`.
 pub const AXIS_TOUCH_MINOR: i32 = 5;
 
+/// `KeyEvent.KEYCODE_BACK` — what `performGlobalAction(GLOBAL_ACTION_BACK)`
+/// and a scenario `back` publish on the focused window's channel.
+pub const KEYCODE_BACK: i32 = 4;
+/// `KeyEvent.FLAG_TRACKING` (`0x200`, the same value as the wire format's
+/// `AKEY_EVENT_FLAG_TRACKING`).
+///
+/// The flag is **not** a host-side delivery detail: nothing here sets it. It is
+/// decided inside the app process, by the framework's own
+/// `KeyEvent.DispatcherState`:
+///
+/// * on the down, `KeyEvent.dispatch(down, state, target)` calls
+///   `receiver.onKeyDown`; when that returns `true` and the handler set
+///   `FLAG_START_TRACKING`, `state.startTracking(event, target)` records the
+///   key code (`.cache/aosp/base/core/java/android/view/KeyEvent.java:2960-2975`);
+/// * `Activity.onKeyDown(KEYCODE_BACK)` is that handler: it calls
+///   `event.startTracking()` and returns `true`
+///   (`.../android/app/Activity.java:4018-4028`);
+/// * on the up, `KeyEvent.dispatch` runs `state.handleUpEvent(event)` *before*
+///   `receiver.onKeyUp`, and that sets `FLAG_TRACKING` when the down was tracked
+///   (`KeyEvent.java:3088-3100`).
+///
+/// So `Activity.onKeyUp`'s `event.isTracking()` test
+/// (`Activity.java:4117-4136`) is satisfied by a plain up event with no flags,
+/// as long as down and up reach the same `DispatcherState` (same window; note
+/// `ViewRootImpl.handleWindowFocusChanged` resets it at
+/// `ViewRootImpl.java:4359`). This constant documents the value for readers and
+/// tests; nothing in this crate puts it on the wire.
+pub const KEY_FLAG_TRACKING: i32 = 0x200;
 /// `KeyEvent.KEYCODE_ENTER`.
 pub const KEYCODE_ENTER: i32 = 66;
 /// `KeyEvent.KEYCODE_DEL` (backspace).
@@ -270,6 +298,13 @@ pub enum ChannelError {
     /// A message type this module does not produce/consume.
     #[error("unsupported input message type {0}")]
     UnsupportedType(u32),
+    /// A touch at a display point with **no touchable window** under it.
+    ///
+    /// `InputDispatcher` drops such a gesture (there is nothing to deliver it
+    /// to). ACOS names the point instead of publishing it to some other window,
+    /// so "the tap vanished" can never look like a delivered tap.
+    #[error("no touch target: {0}")]
+    NoTouchTarget(String),
     /// `pointerCount` outside `1..=MAX_POINTERS`.
     #[error("bad pointer count {0}")]
     BadPointerCount(usize),
@@ -1313,6 +1348,11 @@ impl InputPublisher {
             down_time_ns,
             down_time_ns + hold_ns.max(0),
         );
+        // No `FLAG_TRACKING` on the wire (see [`KEY_FLAG_TRACKING`]): the app's
+        // own `KeyEvent.DispatcherState` sets it on the up because
+        // `Activity.onKeyDown` tracked the down, exactly as on a phone. The down
+        // must therefore be a first press (`repeat_count == 0`, no flags) so
+        // `KeyEvent.dispatch` starts tracking it.
         Ok(Gesture {
             dispatches: vec![self.publish_key(&down)?, self.publish_key(&up)?],
         })
@@ -1374,6 +1414,8 @@ impl InputPublisher {
         up.event_id = self.alloc_event_id();
         up.action = KEY_ACTION_UP;
         up.event_time = down_time + DEFAULT_TAP_HOLD_NANOS;
+        // Same rule as `key_at`: no `FLAG_TRACKING` on the wire — the app's own
+        // `KeyEvent.DispatcherState` sets it once it has tracked the down.
         Ok(Gesture {
             dispatches: vec![self.publish_key(&down)?, self.publish_key(&up)?],
         })
@@ -1821,7 +1863,10 @@ mod tests {
         .encode()
         .unwrap();
         assert_eq!(t.len(), 0x10);
-        assert_eq!(u32::from_le_bytes(t[0..4].try_into().unwrap()), TYPE_TOUCH_MODE);
+        assert_eq!(
+            u32::from_le_bytes(t[0..4].try_into().unwrap()),
+            TYPE_TOUCH_MODE
+        );
         assert_eq!(t[0x0c], 0);
     }
 

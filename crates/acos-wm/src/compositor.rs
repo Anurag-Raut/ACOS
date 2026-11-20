@@ -232,7 +232,12 @@ impl Compositor {
     ///
     /// A fresh layer has no buffer, so it covers nothing: it needs no damage.
     /// The later buffer/geometry commit records the damage.
-    pub fn create_layer(&mut self, window: Option<WindowId>, name: impl Into<String>, z: i64) -> u64 {
+    pub fn create_layer(
+        &mut self,
+        window: Option<WindowId>,
+        name: impl Into<String>,
+        z: i64,
+    ) -> u64 {
         let id = self.next_layer;
         self.next_layer += 1;
         self.layers.insert(
@@ -528,9 +533,7 @@ impl Compositor {
             if inter.is_empty() {
                 continue;
             }
-            let covered = opaque_above
-                .iter()
-                .any(|o| o.intersect(inter) == inter);
+            let covered = opaque_above.iter().any(|o| o.intersect(inter) == inter);
             if !covered {
                 plan.push((layer.id, inter));
             }
@@ -633,7 +636,11 @@ fn layer_coverage(l: &Layer, display: RectI) -> RectI {
     let Some(buf) = l.buffer.as_ref() else {
         return RectI::default();
     };
-    let src = source_rect(buf.bitmap.width() as i32, buf.bitmap.height() as i32, l.crop);
+    let src = source_rect(
+        buf.bitmap.width() as i32,
+        buf.bitmap.height() as i32,
+        l.crop,
+    );
     if src.is_empty() {
         return RectI::default();
     }
@@ -1018,14 +1025,37 @@ mod tests {
 
     #[derive(Debug, Clone)]
     enum Op {
-        SetBuffer { layer: u8, buf: u8 },
-        Position { layer: u8, x: i32, y: i32 },
-        Alpha { layer: u8, a: u8 },
-        Z { layer: u8, z: i8 },
-        Visible { layer: u8, v: bool },
-        Crop { layer: u8, crop: Option<(i32, i32, i32, i32)> },
-        Create { z: i8 },
-        Remove { layer: u8 },
+        SetBuffer {
+            layer: u8,
+            buf: u8,
+        },
+        Position {
+            layer: u8,
+            x: i32,
+            y: i32,
+        },
+        Alpha {
+            layer: u8,
+            a: u8,
+        },
+        Z {
+            layer: u8,
+            z: i8,
+        },
+        Visible {
+            layer: u8,
+            v: bool,
+        },
+        Crop {
+            layer: u8,
+            crop: Option<(i32, i32, i32, i32)>,
+        },
+        Create {
+            z: i8,
+        },
+        Remove {
+            layer: u8,
+        },
     }
 
     fn op() -> impl Strategy<Value = Op> {
@@ -1035,7 +1065,10 @@ mod tests {
             (0u8..8, 0u8..=255).prop_map(|(layer, a)| Op::Alpha { layer, a }),
             (0u8..8, -2i8..3).prop_map(|(layer, z)| Op::Z { layer, z }),
             (0u8..8, any::<bool>()).prop_map(|(layer, v)| Op::Visible { layer, v }),
-            (0u8..8, prop::option::of((-2i32..10, -2i32..10, 0i32..14, 0i32..14)))
+            (
+                0u8..8,
+                prop::option::of((-2i32..10, -2i32..10, 0i32..14, 0i32..14))
+            )
                 .prop_map(|(layer, crop)| Op::Crop { layer, crop }),
             (-1i8..3).prop_map(|z| Op::Create { z }),
             (0u8..8).prop_map(|layer| Op::Remove { layer }),
@@ -1092,7 +1125,10 @@ mod tests {
             Op::Crop { layer, crop } => {
                 if let Some(id) = pick(ids, *layer) {
                     let cr = crop.map(|(l, t, r, b)| RectI::new(l, t, r, b));
-                    let _ = c.apply(&Transaction::SetCrop { layer: id, crop: cr });
+                    let _ = c.apply(&Transaction::SetCrop {
+                        layer: id,
+                        crop: cr,
+                    });
                 }
             }
             Op::Create { z } => {

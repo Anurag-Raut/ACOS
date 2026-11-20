@@ -1,0 +1,63 @@
+{
+  "backend": "acos-native",
+  "capabilities_used": [
+    "lifecycle",
+    "static-manifest",
+    "ui.tree"
+  ],
+  "evidence": {
+    "events": "events.jsonl",
+    "log": "logs/logcat.txt",
+    "verdict": "verdict.json"
+  },
+  "fidelity": "art-reference",
+  "isolation": "process",
+  "metrics": {
+    "peak_rss_bytes": 15794176,
+    "wall_ms": 1409
+  },
+  "ok": true,
+  "request_id": "req_b9d6_18e915a734ad3b9b",
+  "result": {
+    "artifacts_dir": "/home/Qui/.t3/worktrees/acos/t3-d2cc4a78-63f4f48b9f963ec1/results/handoff/CONFKIT/evidence/location-probe",
+    "cap_bytes": 20480,
+    "evidence_provenance": {
+      "binder_transactions": "host-observed",
+      "crash_reports": "guest-asserted",
+      "frames": "host-observed",
+      "host_input": "host-observed",
+      "input_acks": "guest-asserted",
+      "launch_markers": "guest-asserted",
+      "lifecycle_markers": "guest-asserted",
+      "logs": "guest-asserted",
+      "static_manifest": "host-observed",
+      "tree": "guest-asserted"
+    },
+    "note": "this result was larger than the reply cap; only the bulk (tree, steps, logs) was dropped and the full evidence is in the artifacts paths named here",
+    "provenance": {
+      "apk": {
+        "mtime_ns": 1794986042706712015,
+        "path": "/home/Qui/.t3/worktrees/acos/t3-d2cc4a78-63f4f48b9f963ec1/fixtures/build/apps/location-probe.apk",
+        "sha256": "a25ca7ba5ec3af81dd0b3acc661b092adc887e7d38a2618430337f4d9613be11",
+        "sha256_12": "a25ca7ba5ec3",
+        "size_bytes": 16852
+      },
+      "engine": "art",
+      "fidelity": "art-reference",
+      "scenario": {
+        "mtime_ns": 1794989621156284953,
+        "path": "/home/Qui/.t3/worktrees/acos/t3-d2cc4a78-63f4f48b9f963ec1/scenarios/location-probe.yaml",
+        "sha256": "3e30864eff8909df50aec991a07e7b96f23a1198021a4fdc0c325af9454691fb",
+        "sha256_12": "3e30864eff89",
+        "size_bytes": 2084
+      },
+      "scenario_engine": "art",
+      "warnings": []
+    },
+    "reply_capped": true,
+    "verdict_path": "/home/Qui/.t3/worktrees/acos/t3-d2cc4a78-63f4f48b9f963ec1/results/handoff/CONFKIT/evidence/location-probe/verdict.json",
+    "verdict_status": "pass"
+  },
+  "session_id": "s_art_location-probe",
+  "status": "pass"
+}

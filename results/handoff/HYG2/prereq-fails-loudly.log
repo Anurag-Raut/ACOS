@@ -1,0 +1,8 @@
+## 1. default path, no ART sysroot: the test FAILS and names the artefact
+test guest_cannot_overwrite_boot_art_or_the_classpath ... FAILED
+FAIL cleanup test: missing prerequisite: no ART sysroot at /nonexistent/sysroot — run tools/art-sysroot.sh
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 8 filtered out; finished in 0.00s
+
+## 2. explicit opt-out: a counted skip, with the summary count
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.10s
+SKIP SUMMARY: 7 test(s) skipped in this process because ACOS_ALLOW_ART_SKIP is set; the default path must show 0.

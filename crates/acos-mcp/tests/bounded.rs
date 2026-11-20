@@ -16,10 +16,9 @@ use common::*;
 use serde_json::{json, Value};
 
 fn scratch(name: &str) -> PathBuf {
-    let dir = repo_root().join("target/acos-mcp-bounded").join(format!(
-        "{}-{name}",
-        std::process::id()
-    ));
+    let dir = repo_root()
+        .join("target/acos-mcp-bounded")
+        .join(format!("{}-{name}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).expect("scratch");
     dir
@@ -224,7 +223,10 @@ fn flags_are_name_value_metadata_and_malformed_ones_are_invalid_argument() {
                 "ACOS_STUB_JSON".to_string(),
                 envelope_file.display().to_string(),
             ),
-            ("ACOS_STUB_ARGV".to_string(), argv_file.display().to_string()),
+            (
+                "ACOS_STUB_ARGV".to_string(),
+                argv_file.display().to_string(),
+            ),
         ],
     );
     let mut config = test_config();

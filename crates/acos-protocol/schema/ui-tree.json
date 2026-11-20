@@ -195,6 +195,26 @@
           "default": "",
           "description": "Window this node belongs to (empty when the engine reports one window or predates multi-window probes). `bounds` is local to this window; `bounds_on_screen` is display space.",
           "type": "string"
+        },
+        "window_id": {
+          "description": "Stable id of the owning window inside this tree (`\"\"` when the engine does not report one). Short on purpose: it is repeated on every node and REL3C caps reply size.",
+          "type": "string"
+        },
+        "window_kind": {
+          "description": "Agent-facing window kind (`application`, `application_overlay`, …).",
+          "type": "string"
+        },
+        "window_type": {
+          "description": "Symbolic `LayoutParams.TYPE_*` name of the owning window (`\"\"` when unknown). Never a made-up name: an undocumented type is `TYPE_<n>`.",
+          "type": "string"
+        },
+        "window_z": {
+          "description": "Z-order index of the owning window, `0` = bottom. `None` only when the node has no window tag (a probe that predates the window block).",
+          "format": "int64",
+          "type": [
+            "integer",
+            "null"
+          ]
         }
       },
       "required": [
@@ -207,6 +227,61 @@
         "id",
         "scrollable",
         "visible"
+      ],
+      "type": "object"
+    },
+    "WindowInfo": {
+      "description": "One window of a UI tree, in **policy z order** (bottom first).\n\nThis is the window-level half of the LAYER1 tree contract: every node names its window, and this block names the window's type, kind, z and input state, so an agent can tell an application overlay from the app without guessing from the label.",
+      "properties": {
+        "bounds": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Bounds"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Window frame in display pixels, when the probe reports it."
+        },
+        "focus": {
+          "default": false,
+          "description": "Whether this window holds input focus.",
+          "type": "boolean"
+        },
+        "id": {
+          "description": "Stable id inside this tree (short hex; `\"\"` when the probe has none).",
+          "type": "string"
+        },
+        "kind": {
+          "description": "Agent-facing kind ([`acos_wm::layers::WindowKind::name`] vocabulary).",
+          "type": "string"
+        },
+        "label": {
+          "description": "The W36 `window` label the nodes carry (kept for compatibility).",
+          "type": "string"
+        },
+        "renderer_fallback": {
+          "description": "The window asked for `FLAG_HARDWARE_ACCELERATED` but the guest has no window GPU renderer, so it was painted in software (`Canvas. isHardwareAccelerated()` is false). The verdict records a `hardware_renderer_fallback` note for it.",
+          "type": "boolean"
+        },
+        "touchable": {
+          "default": false,
+          "description": "Whether this window receives touches (`!FLAG_NOT_TOUCHABLE`); the value an agent uses to explain why a tap passed through an overlay.",
+          "type": "boolean"
+        },
+        "type_name": {
+          "description": "Symbolic `LayoutParams.TYPE_*` name.",
+          "type": "string"
+        },
+        "z": {
+          "description": "Z-order index, `0` = bottom, contiguous over this vector.",
+          "format": "int64",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "z"
       ],
       "type": "object"
     }
@@ -241,6 +316,13 @@
       "default": false,
       "description": "True when any window of the tree was truncated by a node limit.",
       "type": "boolean"
+    },
+    "windows": {
+      "description": "The tree's windows in policy z order (bottom first). Empty on a probe that predates the window block; every node then still carries its `window` label.",
+      "items": {
+        "$ref": "#/definitions/WindowInfo"
+      },
+      "type": "array"
     }
   },
   "required": [

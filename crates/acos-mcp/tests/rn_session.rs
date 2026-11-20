@@ -24,19 +24,13 @@ use acos_runtime::session::SessionOptions;
 use common::{envelope_of, is_error, repo_root, McpClient};
 use serde_json::{json, Value};
 
-fn required() -> bool {
-    std::env::var_os("ACOS_REQUIRE_FIXTURES").is_some()
-}
-
 fn have(rel: &str) -> bool {
-    if acos_test_support::have_fixture(rel) {
-        return true;
-    }
-    if required() {
-        panic!("ACOS_REQUIRE_FIXTURES set but {rel} is missing");
-    }
-    eprintln!("SKIP rn_session: missing {rel}");
-    false
+    acos_test_support::require_prereq(
+        acos_test_support::have_fixture(rel),
+        "rn_session",
+        &format!("missing {rel} — build it with tools/build-apps.sh"),
+    )
+    .is_some()
 }
 
 fn prerequisites() -> Option<PathBuf> {
@@ -236,7 +230,10 @@ fn rn_launch_observe_tree_tap_round_trip() {
     );
     let logs_env = envelope_of(&logs);
     assert_eq!(logs_env["status"], "pass", "{logs_env:#?}");
-    assert!(logs_env["result"]["count"].as_u64().unwrap_or(0) > 0, "{logs_env:#?}");
+    assert!(
+        logs_env["result"]["count"].as_u64().unwrap_or(0) > 0,
+        "{logs_env:#?}"
+    );
 
     let summary = json!({
         "nodes_initial": first_nodes,
@@ -249,7 +246,7 @@ fn rn_launch_observe_tree_tap_round_trip() {
         "log_count": logs_env["result"]["count"],
         "frame_code": observed["error"]["code"],
     });
-    let out_dir = repo_root().join("results/rn");
+    let out_dir = acos_test_support::test_artifacts_dir("rn");
     let _ = std::fs::create_dir_all(&out_dir);
     let _ = std::fs::write(
         out_dir.join("w162a-rn-session.json"),

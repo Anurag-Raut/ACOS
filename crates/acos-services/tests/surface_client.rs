@@ -10,9 +10,7 @@ use std::os::fd::{AsFd, OwnedFd};
 use acos_parcel::{BinderId, Parcel};
 use acos_services::compositor_client::{self, DisplayDescriptor};
 use acos_services::exception::NO_EXCEPTION;
-use acos_services::surface_client::{
-    self, CallbackId, SurfaceState,
-};
+use acos_services::surface_client::{self, CallbackId, SurfaceState};
 use acos_services::{ServiceError, ServiceHost};
 
 const ISURFACE_COMPOSER: &str = "android.gui.ISurfaceComposer";
@@ -50,7 +48,8 @@ fn composer(host: &mut ServiceHost) -> BinderId {
 /// `ISurfaceComposer.createConnection()` (AIDL code 3): token only.
 fn create_connection(host: &mut ServiceHost, sf: BinderId) -> BinderId {
     let mut data = Parcel::new();
-    data.write_interface_token(ISURFACE_COMPOSER).expect("token");
+    data.write_interface_token(ISURFACE_COMPOSER)
+        .expect("token");
     data.set_data_position(0);
     let mut reply = transact(host, sf, CREATE_CONNECTION, 0, &mut data).expect("createConnection");
     no_exception(&mut reply);
@@ -58,7 +57,11 @@ fn create_connection(host: &mut ServiceHost, sf: BinderId) -> BinderId {
         .read_strong_binder()
         .expect("binder")
         .expect("non-null ISurfaceComposerClient");
-    assert_eq!(reply.data_avail(), 0, "createConnection reply has trailing bytes");
+    assert_eq!(
+        reply.data_avail(),
+        0,
+        "createConnection reply has trailing bytes"
+    );
     client
 }
 
@@ -72,8 +75,7 @@ fn create_surface(host: &mut ServiceHost, client: BinderId, name: &str) -> (Bind
     data.write_strong_binder_opt(None); // parent
     write_layer_metadata(&mut data);
     data.set_data_position(0);
-    let mut reply =
-        transact(host, client, CREATE_SURFACE, 0, &mut data).expect("createSurface");
+    let mut reply = transact(host, client, CREATE_SURFACE, 0, &mut data).expect("createSurface");
     no_exception(&mut reply);
     // `CreateSurfaceResult` AIDL parcelable: marker 1, inline size, then fields.
     assert_eq!(reply.read_int32().expect("parcelable marker"), 1);
@@ -88,7 +90,11 @@ fn create_surface(host: &mut ServiceHost, client: BinderId, name: &str) -> (Bind
     let transform_hint = reply.read_int32().expect("transform hint");
     assert_eq!(layer_name, name);
     assert_eq!(transform_hint, 0);
-    assert_eq!(reply.data_avail(), 0, "createSurface reply has trailing bytes");
+    assert_eq!(
+        reply.data_avail(),
+        0,
+        "createSurface reply has trailing bytes"
+    );
     (handle, layer_id)
 }
 
@@ -137,8 +143,8 @@ fn write_window_info(data: &mut Parcel, full: bool) {
     data.write_string16("com.acos.test").expect("package");
     data.write_int32(0); // inputConfig
     data.write_int32(0); // displayId
-    // InputApplicationInfo is written directly (no Parcelable marker): an
-    // inline size word then token/name/timeout.
+                         // InputApplicationInfo is written directly (no Parcelable marker): an
+                         // inline size word then token/name/timeout.
     let mut app = Parcel::new();
     app.write_strong_binder_opt(None);
     app.write_string16("app").expect("app name");
@@ -188,8 +194,8 @@ fn write_graphic_buffer(
     data.write_int32(1); // handle numFds
     data.write_int32(9); // handle numInts
     data.write_int32(0); // usage hi
-    // the nine gralloc-shim handle ints: w,h,stride,format,usage lo,usage hi,
-    // layers,bpp,dataspace
+                         // the nine gralloc-shim handle ints: w,h,stride,format,usage lo,usage hi,
+                         // layers,bpp,dataspace
     data.write_int32(width as i32);
     data.write_int32(height as i32);
     data.write_int32(stride as i32);
@@ -259,8 +265,16 @@ enum BufferSpec {
 impl BufferSpec {
     fn parts(self) -> (BinderId, u64, u64, bool) {
         match self {
-            Self::Inline { listener, frame, id } => (listener, frame, id, true),
-            Self::Cached { listener, frame, id } => (listener, frame, id, false),
+            Self::Inline {
+                listener,
+                frame,
+                id,
+            } => (listener, frame, id, true),
+            Self::Cached {
+                listener,
+                frame,
+                id,
+            } => (listener, frame, id, false),
         }
     }
 }
@@ -333,8 +347,8 @@ fn write_layer_state(
     data.write_float(0.0); // shadowRadius
     data.write_int32(0); // frameRateSelectionPriority
     data.write_float(60.0); // frameRate
-    // The image's frame-rate group is three bytes (no frameRateCategory,
-    // frameRateCategorySmoothSwitchOnly or frameRateSelectionStrategy).
+                            // The image's frame-rate group is three bytes (no frameRateCategory,
+                            // frameRateCategorySmoothSwitchOnly or frameRateSelectionStrategy).
     data.write_byte(0); // frameRateCompatibility
     data.write_byte(0); // changeFrameRateStrategy
     data.write_byte(0); // defaultFrameRateCompatibility
@@ -473,7 +487,9 @@ fn find_completed(
         .expect("onTransactionCompleted delivery")
 }
 
-fn score_state(state: &std::sync::Arc<std::sync::Mutex<SurfaceState>>) -> std::sync::MutexGuard<'_, SurfaceState> {
+fn score_state(
+    state: &std::sync::Arc<std::sync::Mutex<SurfaceState>>,
+) -> std::sync::MutexGuard<'_, SurfaceState> {
     state.lock().unwrap()
 }
 
@@ -506,7 +522,8 @@ fn create_connection_and_surface_produce_a_routable_layer_handle() {
 #[test]
 fn the_image_timeline_size_word_that_counts_itself_decodes() {
     let mut host = ServiceHost::new();
-    let (_pool, _state) = compositor_client::install_full(&mut host, DisplayDescriptor::reference());
+    let (_pool, _state) =
+        compositor_client::install_full(&mut host, DisplayDescriptor::reference());
     let sf = composer(&mut host);
     let client = create_connection(&mut host, sf);
     let (handle, layer_id) = create_surface(&mut host, client, "image-timeline");
@@ -588,8 +605,21 @@ fn the_live_capture_reads_the_newest_c1_buffer_and_reports_its_generation() {
     let listener = host.register_aux(ITRANSACTION_LISTENER);
 
     for (frame, id) in [(1u64, 100u64), (2, 200)] {
-        let mut parcel =
-            transaction_parcel(&[(handle, layer_id, Some(BufferSpec::Inline { listener, frame, id }), Vec::new())], &[0, 0, 0, 0, 0, 3], &[], frame);
+        let mut parcel = transaction_parcel(
+            &[(
+                handle,
+                layer_id,
+                Some(BufferSpec::Inline {
+                    listener,
+                    frame,
+                    id,
+                }),
+                Vec::new(),
+            )],
+            &[0, 0, 0, 0, 0, 3],
+            &[],
+            frame,
+        );
         transact(&mut host, sf, SET_TRANSACTION_STATE, 0, &mut parcel).expect("transaction");
     }
     {
@@ -602,8 +632,15 @@ fn the_live_capture_reads_the_newest_c1_buffer_and_reports_its_generation() {
         assert_eq!(capture.frame_number, 2);
         assert_eq!(capture.buffer_id, 200);
         assert_eq!(capture.layer_id, layer_id);
-        assert_eq!(capture.rgba.len(), capture.row_bytes * capture.height as usize);
-        assert_eq!(s.latest_generation(), 2, "a capture must not advance the store counter");
+        assert_eq!(
+            capture.rgba.len(),
+            capture.row_bytes * capture.height as usize
+        );
+        assert_eq!(
+            s.latest_generation(),
+            2,
+            "a capture must not advance the store counter"
+        );
     }
 }
 
@@ -623,18 +660,23 @@ fn two_buffer_transactions_release_the_first_and_keep_the_latest() {
         &[(
             handle,
             layer_id,
-            Some(BufferSpec::Inline { listener, frame: 1, id: 100 }),
+            Some(BufferSpec::Inline {
+                listener,
+                frame: 1,
+                id: 100,
+            }),
             vec![(listener, vec![callback])],
         )],
         &[0, 0, 0, 0, 0, 1],
         &[(listener, vec![callback])],
         1,
     );
-    transact(&mut host, sf, SET_TRANSACTION_STATE, 0, &mut parcel)
-        .expect("first transaction");
+    transact(&mut host, sf, SET_TRANSACTION_STATE, 0, &mut parcel).expect("first transaction");
     {
         let s = score_state(&state);
-        let latest = s.latest_buffer(handle).expect("latest buffer after frame 1");
+        let latest = s
+            .latest_buffer(handle)
+            .expect("latest buffer after frame 1");
         assert_eq!(latest.frame_number, 1);
         assert_eq!(latest.buffer_id, 100);
         assert_eq!((latest.width, latest.height), (64, 48));
@@ -649,18 +691,23 @@ fn two_buffer_transactions_release_the_first_and_keep_the_latest() {
         &[(
             handle,
             layer_id,
-            Some(BufferSpec::Inline { listener, frame: 2, id: 200 }),
+            Some(BufferSpec::Inline {
+                listener,
+                frame: 2,
+                id: 200,
+            }),
             vec![(listener, vec![callback])],
         )],
         &[0, 0, 0, 0, 0, 2],
         &[(listener, vec![callback])],
         2,
     );
-    transact(&mut host, sf, SET_TRANSACTION_STATE, 0, &mut parcel)
-        .expect("second transaction");
+    transact(&mut host, sf, SET_TRANSACTION_STATE, 0, &mut parcel).expect("second transaction");
     {
         let s = score_state(&state);
-        let latest = s.latest_buffer(handle).expect("latest buffer after frame 2");
+        let latest = s
+            .latest_buffer(handle)
+            .expect("latest buffer after frame 2");
         assert_eq!(latest.frame_number, 2);
         assert_eq!(latest.buffer_id, 200);
         assert_eq!(s.transactions_decoded, 2);
@@ -677,7 +724,9 @@ fn two_buffer_transactions_release_the_first_and_keep_the_latest() {
     );
     let completed = find_completed(&second, listener);
     let mut stats = completed.data.clone();
-    stats.enforce_interface(ITRANSACTION_LISTENER).expect("token");
+    stats
+        .enforce_interface(ITRANSACTION_LISTENER)
+        .expect("token");
     assert_eq!(stats.read_int32().expect("ListenerStats marker"), 1);
     assert_eq!(stats.read_int32().expect("TransactionStats count"), 1);
     assert_eq!(stats.read_int32().expect("TransactionStats marker"), 1);
@@ -721,7 +770,11 @@ fn two_buffer_transactions_release_the_first_and_keep_the_latest() {
     assert_eq!(stats.read_int32().expect("previous release marker"), 1);
     assert_eq!(stats.read_uint64().expect("previous buffer id"), 100);
     assert_eq!(stats.read_uint64().expect("previous frame"), 1);
-    assert_eq!(stats.data_avail(), 0, "completion stats have trailing bytes");
+    assert_eq!(
+        stats.data_avail(),
+        0,
+        "completion stats have trailing bytes"
+    );
 }
 
 #[test]
@@ -760,7 +813,12 @@ fn a_client_cached_buffer_reference_stores_the_frame_it_names() {
             }
         };
         let mut parcel = transaction_parcel(
-            &[(handle, layer_id, Some(spec), vec![(listener, vec![callback])])],
+            &[(
+                handle,
+                layer_id,
+                Some(spec),
+                vec![(listener, vec![callback])],
+            )],
             &[0, 0, 0, 0, 0, 1],
             &[(listener, vec![callback])],
             frame,
@@ -843,7 +901,8 @@ fn a_buffer_transaction_without_callbacks_releases_via_on_release_buffer() {
     let deliveries = host.take_deliveries();
     let release = find_release(&deliveries, listener);
     let mut data = release.data.clone();
-    data.enforce_interface(ITRANSACTION_LISTENER).expect("token");
+    data.enforce_interface(ITRANSACTION_LISTENER)
+        .expect("token");
     assert_eq!(data.read_int32().expect("marker"), 1);
     assert_eq!(data.read_uint64().expect("buffer id"), 101);
     assert_eq!(data.read_uint64().expect("frame"), 1);
@@ -861,10 +920,12 @@ fn a_buffer_transaction_without_callbacks_releases_via_on_release_buffer() {
 #[test]
 fn a_legacy_transaction_on_the_aidl_node_dispatches_by_interface_token() {
     let mut host = ServiceHost::new();
-    let (_pool, _state) = compositor_client::install_full(&mut host, DisplayDescriptor::reference());
+    let (_pool, _state) =
+        compositor_client::install_full(&mut host, DisplayDescriptor::reference());
     let sf = composer(&mut host);
     let mut data = Parcel::new();
-    data.write_interface_token(ISURFACE_COMPOSER_LEGACY).expect("token");
+    data.write_interface_token(ISURFACE_COMPOSER_LEGACY)
+        .expect("token");
     // Only the interface/code dispatch is under test here: a truncated body is
     // a BadRequest, not a silent success on the AIDL code 8.
     data.set_data_position(0);
@@ -874,7 +935,6 @@ fn a_legacy_transaction_on_the_aidl_node_dispatches_by_interface_token() {
         ServiceError::Internal(_) | ServiceError::BadRequest { .. }
     ));
 }
-
 
 #[test]
 fn an_image_shaped_window_info_decodes_to_the_last_byte() {
@@ -890,7 +950,8 @@ fn an_image_shaped_window_info_decodes_to_the_last_byte() {
     let (handle, layer_id) = create_surface(&mut host, client, "window-info");
 
     let mut data = Parcel::new();
-    data.write_interface_token(ISURFACE_COMPOSER_LEGACY).expect("token");
+    data.write_interface_token(ISURFACE_COMPOSER_LEGACY)
+        .expect("token");
     write_light_blob(&mut data, &[0, 0, 0, 0, 0, 0]); // FrameTimelineInfo
     data.write_uint32(1); // composers
     write_layer_state(
@@ -915,9 +976,14 @@ fn an_image_shaped_window_info_decodes_to_the_last_byte() {
     data.write_uint64(9);
     data.write_uint32(0); // mergedTransactionIds
     data.set_data_position(0);
-    data.enforce_interface(ISURFACE_COMPOSER_LEGACY).expect("token");
+    data.enforce_interface(ISURFACE_COMPOSER_LEGACY)
+        .expect("token");
     let decoded = surface_client::decode_transaction_state(&mut data).expect("decode");
-    assert_eq!(data.data_avail(), 0, "WindowInfo body was not consumed exactly");
+    assert_eq!(
+        data.data_avail(),
+        0,
+        "WindowInfo body was not consumed exactly"
+    );
     assert_eq!(decoded.transaction_id, 9);
     assert_eq!(decoded.composers[0].surface, Some(handle));
 }
@@ -1032,8 +1098,14 @@ fn an_image_blast_transaction_with_a_buffer_decodes_to_the_last_byte() {
     );
     assert_eq!(layer.listeners[0].callback_ids.len(), 2);
 
-    let buffer = layer.buffer.as_ref().expect("the transaction carries a buffer");
-    let meta = buffer.buffer.as_ref().expect("the buffer is a GraphicBuffer");
+    let buffer = layer
+        .buffer
+        .as_ref()
+        .expect("the transaction carries a buffer");
+    let meta = buffer
+        .buffer
+        .as_ref()
+        .expect("the buffer is a GraphicBuffer");
     assert_eq!((meta.width, meta.height, meta.stride), (1080, 2209, 1080));
     assert_eq!(meta.format, 1, "RGBA_8888");
     assert_eq!(meta.id, 0x2_0000_0000, "GraphicBuffer.id == cachedBufferId");
@@ -1064,7 +1136,11 @@ fn an_image_blast_transaction_without_a_buffer_decodes_to_the_last_byte() {
 
     let decoded = surface_client::decode_transaction_state(&mut parcel)
         .expect("the captured real BLAST transaction must decode");
-    assert_eq!(parcel.data_avail(), 0, "the real parcel was not consumed exactly");
+    assert_eq!(
+        parcel.data_avail(),
+        0,
+        "the real parcel was not consumed exactly"
+    );
     assert_eq!(decoded.composers.len(), 1);
     let layer = &decoded.composers[0];
     assert_eq!(layer.layer_id, 4098);
@@ -1096,7 +1172,10 @@ fn a_tag_shaped_frame_rate_group_is_rejected() {
     let err = surface_client::decode_transaction_state(&mut parcel)
         .expect_err("a tag-shaped frame-rate group must not decode as an image parcel");
     assert!(
-        matches!(err, ServiceError::BadRequest { .. } | ServiceError::Internal(_)),
+        matches!(
+            err,
+            ServiceError::BadRequest { .. } | ServiceError::Internal(_)
+        ),
         "the rejection must be a structured error, got {err:?}"
     );
 }

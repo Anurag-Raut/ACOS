@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="16dp">
+
+    <TextView
+        android:id="@+id/sensor_count"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/scanning" />
+
+    <TextView
+        android:id="@+id/sensor_names"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content" />
+
+    <TextView
+        android:id="@+id/accel"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/no_values" />
+
+    <TextView
+        android:id="@+id/light"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/no_values" />
+
+    <TextView
+        android:id="@+id/shake"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/shake_zero" />
+
+    <!--
+      Live markers. Each one is `gone` until the app has actually processed the
+      matching sensor event, so a scenario can wait for *visible* (an
+      event-driven wait) instead of sleeping: `wait_for` polls the tree, and the
+      text it asserts on was set in the same sensor callback that made the marker
+      visible. `accel_seen`/`light_seen` are the "this sensor is live"
+      indicators a debug build of a real app shows.
+    -->
+    <TextView
+        android:id="@+id/accel_seen"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/accel_live"
+        android:visibility="gone" />
+
+    <TextView
+        android:id="@+id/light_seen"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/light_live"
+        android:visibility="gone" />
+
+    <TextView
+        android:id="@+id/shake_state"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:visibility="gone" />
+
+    <Button
+        android:id="@+id/rescan"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/rescan" />
+</LinearLayout>

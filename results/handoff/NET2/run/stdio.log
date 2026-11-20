@@ -1,0 +1,6 @@
+acos-net: session=1 netns=net:[4026533694] iface=acoss1 addr=10.163.1.2/30 gw=10.163.1.1
+stdout-works
+stderr-works
+acos-netd: session s9 attached idx=1 addr=10.163.1.2 gw=10.163.1.1 pid=Some(1361645) attach_ms=28.7
+http=200
+run_exit=7

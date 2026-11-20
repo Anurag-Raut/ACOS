@@ -1,0 +1,63 @@
+{
+  "backend": "acos-native",
+  "capabilities_used": [
+    "lifecycle",
+    "static-manifest",
+    "ui.tree"
+  ],
+  "evidence": {
+    "events": "events.jsonl",
+    "log": "logs/logcat.txt",
+    "verdict": "verdict.json"
+  },
+  "fidelity": "art-reference",
+  "isolation": "process",
+  "metrics": {
+    "peak_rss_bytes": 16076800,
+    "wall_ms": 216
+  },
+  "ok": true,
+  "request_id": "req_10dc6c_18e8e76829db113a",
+  "result": {
+    "artifacts_dir": "out/location-geocoder",
+    "cap_bytes": 20480,
+    "evidence_provenance": {
+      "binder_transactions": "host-observed",
+      "crash_reports": "guest-asserted",
+      "frames": "host-observed",
+      "host_input": "host-observed",
+      "input_acks": "guest-asserted",
+      "launch_markers": "guest-asserted",
+      "lifecycle_markers": "guest-asserted",
+      "logs": "guest-asserted",
+      "static_manifest": "host-observed",
+      "tree": "guest-asserted"
+    },
+    "note": "this result was larger than the reply cap; only the bulk (tree, steps, logs) was dropped and the full evidence is in the artifacts paths named here",
+    "provenance": {
+      "apk": {
+        "mtime_ns": 1794937487245169833,
+        "path": "/home/Qui/.t3/worktrees/acos/t3-121d3058-b4fc4c69978d9127/fixtures/build/apps/location-probe.apk",
+        "sha256": "5f867c5e09494681c3fc081cfebff61fdfa8c2e8f9fd006cddc50e6de57435a7",
+        "sha256_12": "5f867c5e0949",
+        "size_bytes": 16852
+      },
+      "engine": "art",
+      "fidelity": "art-reference",
+      "scenario": {
+        "mtime_ns": 1794936715461500273,
+        "path": "/home/Qui/.t3/worktrees/acos/t3-121d3058-b4fc4c69978d9127/results/handoff/MODLOC2/location-geocoder.yaml",
+        "sha256": "e7dbee16904b9d7a280b8700070f8ddc086877064a076efbf89bcf21ac7f8a42",
+        "sha256_12": "e7dbee16904b",
+        "size_bytes": 1571
+      },
+      "scenario_engine": "art",
+      "warnings": []
+    },
+    "reply_capped": true,
+    "verdict_path": "out/location-geocoder/verdict.json",
+    "verdict_status": "pass"
+  },
+  "session_id": "s_art_location-probe",
+  "status": "pass"
+}

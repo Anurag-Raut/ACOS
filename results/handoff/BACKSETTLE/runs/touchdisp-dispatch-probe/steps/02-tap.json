@@ -1,0 +1,184 @@
+{
+  "assertions": [
+    {
+      "actual": {
+        "acks": 2,
+        "delivered": true,
+        "handled": false,
+        "visual_change": true
+      },
+      "expected": {
+        "delivered": true,
+        "handled": false
+      },
+      "kind": "input_delivery",
+      "matched_node_ids": [],
+      "message": "the app's window did not consume this tap (`finishInputEvent(handled) = false`, 2 guest ack(s)); nothing was handled, so no state change is expected or claimed - the target/hit-test in the input evidence names what the point hit and, when the tree shows one, the clickable node to tap",
+      "passed": true
+    }
+  ],
+  "certification": "certified-with-limits",
+  "certification_limits": {
+    "doc": "docs/SANDBOX_CERTIFICATION.md",
+    "section": "§8.7"
+  },
+  "duration_ms": 229,
+  "evidence": [
+    {
+      "kind": "tree",
+      "path": "tree/5.json"
+    },
+    {
+      "kind": "frame",
+      "path": "frames/5.png"
+    },
+    {
+      "kind": "step",
+      "path": "steps/02-tap.json"
+    }
+  ],
+  "frame_seq": 5,
+  "index": 2,
+  "input": {
+    "expect_change": "auto",
+    "handled": false,
+    "handled_evidence": {
+      "acked": 2,
+      "published": 2,
+      "source": "guest",
+      "unhandled": [
+        5,
+        6
+      ]
+    },
+    "handled_hint": "nothing tappable there: the node at this point is dev.acos.fixtures.touchprobe.ProbeView (no name) at [42,695][1038,1115], which is not clickable and neither is any ancestor, and the app's window answered `finishInputEvent(handled) = false` (no handler consumed the input); tap the nearest clickable android.widget.Button \"Increment\" at [42,1535][273,1661] (centre 157,1598) instead",
+    "target": {
+      "hit": {
+        "clickable": false,
+        "consumer": null,
+        "method": "tree-geometry",
+        "node": {
+          "bounds": "[42,695][1038,1115]",
+          "class": "dev.acos.fixtures.touchprobe.ProbeView",
+          "clickable": false,
+          "content_desc": "",
+          "enabled": true,
+          "focused": false,
+          "id": "n4_dev.acos.fixtures.touchprobe:id/probe",
+          "password": false,
+          "resource_id": "dev.acos.fixtures.touchprobe:id/probe",
+          "scrollable": false,
+          "text": "",
+          "visible_bounds": "[42,695][1038,1115]",
+          "window": "main"
+        },
+        "suggest": {
+          "bounds": "[42,1535][273,1661]",
+          "class": "android.widget.Button",
+          "clickable": true,
+          "content_desc": "",
+          "enabled": true,
+          "focused": false,
+          "id": "n5_dev.acos.fixtures.touchprobe:id/inc",
+          "password": false,
+          "resource_id": "dev.acos.fixtures.touchprobe:id/inc",
+          "scrollable": false,
+          "text": "Increment",
+          "visible_bounds": "[42,1535][273,1661]",
+          "window": "main"
+        }
+      },
+      "point": {
+        "x": 540,
+        "y": 905
+      },
+      "selector": {
+        "selector": "id==\"probe\""
+      }
+    }
+  },
+  "provenance": {
+    "frame": "host-observed",
+    "host_input": "host-observed",
+    "input_acks": "guest-asserted",
+    "tree": "guest-asserted"
+  },
+  "settle": {
+    "ack_ms": 5,
+    "bound": "strict-event",
+    "first_change_ms": 137,
+    "frame_ms": 175,
+    "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
+    "mode": "strict",
+    "pixels_changed": true,
+    "reason": "strict-event",
+    "settled": true,
+    "state_changed": null,
+    "strict_rule": "event",
+    "waited_ms": 229,
+    "waited_ms_source": "step"
+  },
+  "status": "pass",
+  "step": "tap",
+  "trust": "trusted",
+  "warnings": [
+    {
+      "acked": 2,
+      "code": "INPUT_UNHANDLED",
+      "handled": false,
+      "hint": "nothing tappable there: the node at this point is dev.acos.fixtures.touchprobe.ProbeView (no name) at [42,695][1038,1115], which is not clickable and neither is any ancestor, and the app's window answered `finishInputEvent(handled) = false` (no handler consumed the input); tap the nearest clickable android.widget.Button \"Increment\" at [42,1535][273,1661] (centre 157,1598) instead",
+      "message": "step 2 (tap): the gesture was delivered and the app window acknowledged every event `finishInputEvent(handled) = false` - nothing consumed it. The step is `pass` because it made no change claim; it is not evidence that the input reached a control.",
+      "published": 2,
+      "step": 2,
+      "step_kind": "tap",
+      "target": {
+        "hit": {
+          "clickable": false,
+          "consumer": null,
+          "method": "tree-geometry",
+          "node": {
+            "bounds": "[42,695][1038,1115]",
+            "class": "dev.acos.fixtures.touchprobe.ProbeView",
+            "clickable": false,
+            "content_desc": "",
+            "enabled": true,
+            "focused": false,
+            "id": "n4_dev.acos.fixtures.touchprobe:id/probe",
+            "password": false,
+            "resource_id": "dev.acos.fixtures.touchprobe:id/probe",
+            "scrollable": false,
+            "text": "",
+            "visible_bounds": "[42,695][1038,1115]",
+            "window": "main"
+          },
+          "suggest": {
+            "bounds": "[42,1535][273,1661]",
+            "class": "android.widget.Button",
+            "clickable": true,
+            "content_desc": "",
+            "enabled": true,
+            "focused": false,
+            "id": "n5_dev.acos.fixtures.touchprobe:id/inc",
+            "password": false,
+            "resource_id": "dev.acos.fixtures.touchprobe:id/inc",
+            "scrollable": false,
+            "text": "Increment",
+            "visible_bounds": "[42,1535][273,1661]",
+            "window": "main"
+          }
+        },
+        "point": {
+          "x": 540,
+          "y": 905
+        },
+        "selector": {
+          "selector": "id==\"probe\""
+        }
+      },
+      "unhandled": [
+        5,
+        6
+      ]
+    }
+  ]
+}

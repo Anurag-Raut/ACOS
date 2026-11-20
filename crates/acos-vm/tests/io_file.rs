@@ -74,8 +74,7 @@ fn compile_case() -> Option<(PathBuf, PathBuf)> {
     // Rebuild when the source is newer than the compiled class.
     let class_file = classes.join("JavaFileMain.class");
     let stale = !class_file.is_file()
-        || class_file.metadata().ok()?.modified().ok()?
-            < src.metadata().ok()?.modified().ok()?;
+        || class_file.metadata().ok()?.modified().ok()? < src.metadata().ok()?.modified().ok()?;
     if stale || !dex.is_file() {
         let ok = Command::new(&javac)
             .args(["--release", "11", "-encoding", "UTF-8", "-d"])
@@ -135,8 +134,7 @@ fn run_on_host_java(classes: &Path, base: &Path) -> Option<BTreeMap<String, Stri
 
 #[test]
 fn unix_file_system_matches_real_java() {
-    let Some((classes, dex)) = compile_case() else {
-        eprintln!("SKIP unix_file_system_matches_real_java: javac/d8/android.jar unavailable");
+    let Some((classes, dex)) = acos_test_support::require_some(compile_case(), "unix_file_system_matches_real_java", "javac/d8/android.jar unavailable") else {
         return;
     };
 
@@ -144,8 +142,7 @@ fn unix_file_system_matches_real_java() {
     let host_base = repo_root().join("target/tmp/acos-io-file/host-base");
     let _ = std::fs::remove_dir_all(&host_base);
     std::fs::create_dir_all(&host_base).unwrap();
-    let Some(host) = run_on_host_java(&classes, &host_base) else {
-        eprintln!("SKIP unix_file_system_matches_real_java: host java unavailable");
+    let Some(host) = acos_test_support::require_some(run_on_host_java(&classes, &host_base), "unix_file_system_matches_real_java", "host java unavailable") else {
         return;
     };
 
@@ -157,7 +154,7 @@ fn unix_file_system_matches_real_java() {
     let mut vm = match Vm::new(options) {
         Ok(vm) => vm,
         Err(VmError::BootClasspathMissing(m)) => {
-            eprintln!("SKIP unix_file_system_matches_real_java: {m}");
+            acos_test_support::require_prereq(false, "unix_file_system_matches_real_java", &format!("unix_file_system_matches_real_java: {m}"));
             return;
         }
         Err(e) => panic!("Vm::new failed: {e}"),
@@ -216,7 +213,11 @@ fn unix_file_system_matches_real_java() {
     assert_eq!(get("can_write_restored"), "true", "setPermission(W)");
     assert_eq!(get("can_execute_set"), "true", "setPermission(X)");
     assert_eq!(get("can_execute_cleared"), "false", "setPermission(!X)");
-    assert_eq!(get("last_modified"), "1600000000000", "get/setLastModifiedTime");
+    assert_eq!(
+        get("last_modified"),
+        "1600000000000",
+        "get/setLastModifiedTime"
+    );
     assert_eq!(get("rename"), "true", "rename0");
     assert_eq!(get("old_exists"), "false");
     assert_eq!(get("delete"), "true", "delete0");

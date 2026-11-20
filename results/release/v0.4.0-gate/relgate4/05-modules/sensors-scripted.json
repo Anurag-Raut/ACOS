@@ -1,0 +1,63 @@
+{
+  "backend": "acos-native",
+  "capabilities_used": [
+    "lifecycle",
+    "static-manifest",
+    "ui.tree"
+  ],
+  "evidence": {
+    "events": "events.jsonl",
+    "log": "logs/logcat.txt",
+    "verdict": "verdict.json"
+  },
+  "fidelity": "art-reference",
+  "isolation": "process",
+  "metrics": {
+    "peak_rss_bytes": 16756736,
+    "wall_ms": 1347
+  },
+  "ok": true,
+  "request_id": "req_5f305_18e9acab9c5b64f9",
+  "result": {
+    "artifacts_dir": "/home/Qui/.t3/worktrees/acos/t3-f4bcc4d4-5c49b0ef4f83b639/.cache/rg4-mod-art/sensors-scripted",
+    "cap_bytes": 20480,
+    "evidence_provenance": {
+      "binder_transactions": "host-observed",
+      "crash_reports": "guest-asserted",
+      "frames": "host-observed",
+      "host_input": "host-observed",
+      "input_acks": "guest-asserted",
+      "launch_markers": "guest-asserted",
+      "lifecycle_markers": "guest-asserted",
+      "logs": "guest-asserted",
+      "static_manifest": "host-observed",
+      "tree": "guest-asserted"
+    },
+    "note": "this result was larger than the reply cap; only the bulk (tree, steps, logs) was dropped and the full evidence is in the artifacts paths named here",
+    "provenance": {
+      "apk": {
+        "mtime_ns": 1795154428185417759,
+        "path": "/home/Qui/.t3/worktrees/acos/t3-f4bcc4d4-5c49b0ef4f83b639/fixtures/build/apps/sensor-probe.apk",
+        "sha256": "64801ce3d354bf68e30da0371ff222bd67f4941d43f2ed173f05a985453d4f01",
+        "sha256_12": "64801ce3d354",
+        "size_bytes": 16852
+      },
+      "engine": "art",
+      "fidelity": "art-reference",
+      "scenario": {
+        "mtime_ns": 1795154283734719300,
+        "path": "/home/Qui/.t3/worktrees/acos/t3-f4bcc4d4-5c49b0ef4f83b639/scenarios/sensors-scripted.yaml",
+        "sha256": "c21f87b1c9b7cd98f8a6673cc470a4787123e77d9cad84693878842e33be2ef6",
+        "sha256_12": "c21f87b1c9b7",
+        "size_bytes": 4207
+      },
+      "scenario_engine": "art",
+      "warnings": []
+    },
+    "reply_capped": true,
+    "verdict_path": "/home/Qui/.t3/worktrees/acos/t3-f4bcc4d4-5c49b0ef4f83b639/.cache/rg4-mod-art/sensors-scripted/verdict.json",
+    "verdict_status": "pass"
+  },
+  "session_id": "s_art_sensor-probe",
+  "status": "pass"
+}

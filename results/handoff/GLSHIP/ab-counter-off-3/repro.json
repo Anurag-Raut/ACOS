@@ -1,0 +1,17 @@
+{
+  "acos_version": "0.3.0",
+  "apk_path": "/home/Qui/.t3/worktrees/acos/t3-494c6621-431117b030d42b5b/fixtures/build/apps/counter.apk",
+  "apk_sha256": "cd46d57c10e0a6e4a2c1582b509e63f20f0271726fd70141d99ee3fd28526a81",
+  "scenario_path": "/home/Qui/.t3/worktrees/acos/t3-494c6621-431117b030d42b5b/results/handoff/GLSHIP/scenarios/counter-fast.yaml",
+  "scenario_sha256": "72cbcdcf990b46ff464c8740d6b8f4f72f75d8d858e89feeeee74edf6198bdbf",
+  "flags": [],
+  "isolation": "process",
+  "display": {
+    "mode": "offscreen",
+    "width": 1080,
+    "height": 2400,
+    "density_dpi": 420
+  },
+  "fidelity": "art-reference",
+  "backend": "acos-native"
+}

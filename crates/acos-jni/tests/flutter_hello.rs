@@ -169,11 +169,7 @@ fn missing_symbols(e: &LoaderError) -> Vec<serde_json::Value> {
 /// Write an RGBA8888 buffer as a PNG (8-bit, non-premultiplied channel order).
 fn write_png(path: &Path, width: u32, height: u32, rgba: &[u8]) -> Result<(), String> {
     let file = std::fs::File::create(path).map_err(|e| e.to_string())?;
-    let mut encoder = png::Encoder::new(
-        std::io::BufWriter::new(file),
-        width,
-        height,
-    );
+    let mut encoder = png::Encoder::new(std::io::BufWriter::new(file), width, height);
     encoder.set_color(png::ColorType::Rgba);
     encoder.set_depth(png::BitDepth::Eight);
     // `ANativeWindow_unlockAndPost` hands back the whole buffer, whose row
@@ -246,7 +242,10 @@ fn install_crash_handler() {
             };
             // SAFETY: `info` is a writable local; a failed lookup leaves it zeroed.
             let ok = unsafe {
-                acos_native_loader::bionic::dl::dladdr(value as *const std::os::raw::c_void, &mut info)
+                acos_native_loader::bionic::dl::dladdr(
+                    value as *const std::os::raw::c_void,
+                    &mut info,
+                )
             };
             if ok == 0 {
                 return ("<host>".to_string(), 0);
@@ -272,7 +271,10 @@ fn install_crash_handler() {
             let text = if sym.is_empty() {
                 format!("{name}+0x{offset:x}")
             } else {
-                format!("{name}+0x{offset:x} ({sym}+0x{:x})", value.wrapping_sub(info.dli_saddr as usize))
+                format!(
+                    "{name}+0x{offset:x} ({sym}+0x{:x})",
+                    value.wrapping_sub(info.dli_saddr as usize)
+                )
             };
             (text, base)
         };
@@ -293,9 +295,7 @@ fn install_crash_handler() {
                 return 0;
             }
             // SAFETY: x86_64 Linux `ucontext_t`.
-            unsafe {
-                (*(ctx as *const libc::ucontext_t)).uc_mcontext.gregs[i] as usize
-            }
+            unsafe { (*(ctx as *const libc::ucontext_t)).uc_mcontext.gregs[i] as usize }
         };
         let (rax, rbx, rsi, rdi, rbp, rsp) = (
             reg(libc::REG_RAX as usize),
@@ -438,7 +438,11 @@ fn flutter_child_worker() {
         "assets/flutter_assets/FontManifest.json",
         "assets/flutter_assets/NOTICES",
     ] {
-        let name = Path::new(entry).file_name().unwrap().to_string_lossy().to_string();
+        let name = Path::new(entry)
+            .file_name()
+            .unwrap()
+            .to_string_lossy()
+            .to_string();
         match extract_asset(&apk, entry, &assets_dir.join(&name)) {
             Ok(n) => println!(
                 "W93A_STAGE {}",
@@ -463,11 +467,19 @@ fn flutter_child_worker() {
     // 4. A VM so `JNI_OnLoad` gets a real `JavaVM*`, and the APK DEX so the
     //    engine's `RegisterNatives` can resolve `FlutterJNI`.
     let boot_ok = boot_dir.join("BOOTCLASSPATH").is_file();
-    let corelib = if boot_ok { CoreLib::Real } else { CoreLib::Bootstrap };
+    let corelib = if boot_ok {
+        CoreLib::Real
+    } else {
+        CoreLib::Bootstrap
+    };
     let mut vm = match Vm::new(VmOptions {
         heap_max_bytes: 512 * 1024 * 1024,
         corelib,
-        boot_dir: if boot_ok { Some(boot_dir.clone()) } else { None },
+        boot_dir: if boot_ok {
+            Some(boot_dir.clone())
+        } else {
+            None
+        },
         ..VmOptions::default()
     }) {
         Ok(vm) => vm,
@@ -572,11 +584,16 @@ fn flutter_child_worker() {
     // registration path as `System.loadLibrary`, without the VM yet).
     if let Some(handle) = &engine_handle {
         if let Some(p) = handle.symbol("JNI_OnLoad") {
-            println!("W93A_STAGE {}", serde_json::json!({"phase": "jni-onload-begin"}));
+            println!(
+                "W93A_STAGE {}",
+                serde_json::json!({"phase": "jni-onload-begin"})
+            );
             // SAFETY: JNI_OnLoad has the JNI-mandated `jint (*)(JavaVM*, void*)`
             // signature; `p` is an export of the library just mapped.
-            let f: unsafe extern "C" fn(*mut std::os::raw::c_void, *mut std::os::raw::c_void) -> i32 =
-                unsafe { std::mem::transmute(p) };
+            let f: unsafe extern "C" fn(
+                *mut std::os::raw::c_void,
+                *mut std::os::raw::c_void,
+            ) -> i32 = unsafe { std::mem::transmute(p) };
             // SAFETY: `rt.java_vm()` is the published JavaVM slot for the
             // attached runtime; `JNI_OnLoad` registers its natives on it.
             let rc = unsafe { f(rt.java_vm(), std::ptr::null_mut()) };
@@ -631,9 +648,7 @@ fn flutter_child_worker() {
     // this thread, or creates the platform-thread one if the engine has not
     // been attached yet.
     // SAFETY: `ALooper_prepare` has no preconditions.
-    let looper = unsafe {
-        acos_native_loader::bionic::ndk::ndk_looper::alooper_prepare(0)
-    };
+    let looper = unsafe { acos_native_loader::bionic::ndk::ndk_looper::alooper_prepare(0) };
     println!(
         "W93A_STAGE {}",
         serde_json::json!({"phase": "looper-prepared", "looper": format!("{looper:p}")})
@@ -717,17 +732,20 @@ fn flutter_child_worker() {
         // stage: once the tap frame has settled, exercise the platform-channel /
         // key-data / navigation surface and let the probe's animation run.
         let probe_desc = "Ldev/acos/fixtures/flutterhello/FlutterProbe;";
-        let call = |vm: &mut Vm, method: &str, sig: &str| {
-            match vm.call_static(probe_desc, method, sig, &[]) {
-                Ok(_) => println!(
-                    "W93A_STAGE {}",
-                    serde_json::json!({"phase": "drive", "method": method, "frames": seen_frames})
-                ),
-                Err(e) => println!(
-                    "W93A_STAGE {}",
-                    serde_json::json!({"phase": "drive-error", "method": method, "detail": format!("{e:?}")})
-                ),
-            }
+        let call = |vm: &mut Vm, method: &str, sig: &str| match vm.call_static(
+            probe_desc,
+            method,
+            sig,
+            &[],
+        ) {
+            Ok(_) => println!(
+                "W93A_STAGE {}",
+                serde_json::json!({"phase": "drive", "method": method, "frames": seen_frames})
+            ),
+            Err(e) => println!(
+                "W93A_STAGE {}",
+                serde_json::json!({"phase": "drive-error", "method": method, "detail": format!("{e:?}")})
+            ),
         };
         if _round % 40 == 39 {
             if seen_frames == 0 {
@@ -1007,16 +1025,16 @@ fn flutter_child_worker() {
 #[test]
 fn flutter_hello_under_confinement() {
     if !acos_test_support::have_fixture("fixtures/build/apps/flutter-hello.apk") {
-        eprintln!(
-            "SKIP flutter_hello_under_confinement: fixtures/build/apps/flutter-hello.apk is \
-             absent (build with tools/build-flutter-hello.sh x86_64)"
-        );
+        acos_test_support::require_prereq(false, "flutter_hello_under_confinement", "flutter_hello_under_confinement: fixtures/build/apps/flutter-hello.apk is absent (build with tools/build-flutter-hello.sh x86_64)");
         return;
     }
     let apk = repo_root().join("fixtures/build/apps/flutter-hello.apk");
     let libdir = default_lib_dir();
     if let Err(e) = ensure_libs(&apk, &libdir) {
-        panic!("could not extract the fixture libs to {}: {e}", libdir.display());
+        panic!(
+            "could not extract the fixture libs to {}: {e}",
+            libdir.display()
+        );
     }
 
     let scratch = std::env::temp_dir().join(format!("acos-flutter-w93a-{}", std::process::id()));
@@ -1198,7 +1216,9 @@ fn flutter_hello_under_confinement() {
                 .and_then(|j| serde_json::from_str::<serde_json::Value>(j).ok())
                 .filter(|v| v["phase"] == "surface")
         })
-        .unwrap_or_else(|| panic!("child never reported a surface stage: {stdout}\nstderr:\n{stderr}"));
+        .unwrap_or_else(|| {
+            panic!("child never reported a surface stage: {stdout}\nstderr:\n{stderr}")
+        });
     assert!(
         surface["platform_messages"].as_i64().unwrap_or(0) >= 2,
         "the embedder saw fewer than two Dart platform messages: {surface}"
@@ -1218,13 +1238,15 @@ fn flutter_hello_under_confinement() {
                 .and_then(|j| serde_json::from_str::<serde_json::Value>(j).ok())
                 .filter(|v| v["phase"] == "text-pixels")
         })
-        .unwrap_or_else(|| panic!("child never reported a text-pixels stage: {stdout}\nstderr:\n{stderr}"));
+        .unwrap_or_else(|| {
+            panic!("child never reported a text-pixels stage: {stdout}\nstderr:\n{stderr}")
+        });
     assert!(
         text_stage["max"].as_i64().unwrap_or(0) > 0,
         "the animated 'Hello ACOS' glyphs never reached the software frame: {text_stage}"
     );
 
-    let out_dir = repo_root().join("results/flutter");
+    let out_dir = acos_test_support::test_artifacts_dir("flutter");
     let _ = std::fs::create_dir_all(&out_dir);
     // Frames the confined child presented: written to its scratch (the only
     // place it may write) and published here by the parent.
@@ -1248,9 +1270,8 @@ fn flutter_hello_under_confinement() {
     // 0..108) and the bottom navigation bar band, which the ACOS window/1:1
     // compositor does not own; the numbers and their meaning are written up in
     // `results/flutter/FLUTTER_PARITY.md`.
-    let reference = repo_root().join(
-        "fixtures/reference-device/flutter-hello/screenshot_initial.png",
-    );
+    let reference =
+        repo_root().join("fixtures/reference-device/flutter-hello/screenshot_initial.png");
     if reference.is_file() {
         let opts = acos_render::diff::DiffOptions {
             mask: vec![[0, 0, 1080, 108], [0, 2304, 1080, 2400]],
@@ -1303,8 +1324,8 @@ fn flutter_hello_under_confinement() {
         if first.is_file() && tap.is_file() {
             let a = decode_image(&first);
             let b = decode_image(&tap);
-            let delta = acos_render::diff::diff(&a, &b, &Default::default())
-                .expect("frame-0 vs frame-tap");
+            let delta =
+                acos_render::diff::diff(&a, &b, &Default::default()).expect("frame-0 vs frame-tap");
             eprintln!(
                 "tap delta: differing={} bbox={:?} mean_abs_error={:.4}",
                 delta.differing_pixels, delta.changed_bbox, delta.mean_abs_error
@@ -1339,6 +1360,5 @@ fn flutter_hello_under_confinement() {
 /// Decode a PNG reference/candidate for the fixture-gated parity check.
 fn decode_image(path: &Path) -> acos_render::image::DecodedImage {
     let bytes = std::fs::read(path).unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
-    acos_render::image::decode(&bytes)
-        .unwrap_or_else(|e| panic!("decode {}: {e}", path.display()))
+    acos_render::image::decode(&bytes).unwrap_or_else(|e| panic!("decode {}: {e}", path.display()))
 }

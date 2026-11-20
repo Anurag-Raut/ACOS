@@ -1,0 +1,85 @@
+[emubench 06:07:55Z] === EMUBENCH preflight (stamp 20261118T060755Z) ===
+[emubench 06:07:55Z] host: avail=43705 MiB used=18202 MiB load1=6.69
+[emubench 06:07:55Z] adb devices: ZA222WGJPP	device;; (only emulator-55xx is ever addressed)
+AVDs ready: emb-1, emb-2, emb-3, emb-4
+[emubench 06:07:55Z] === phase n1-cold (guarded --mem 24G --time 900s) ===
+[emubench 06:07:55Z] host: avail=43735 MiB used=18173 MiB load1=6.69
+[emubench 11:39:18] AVDs ready: emb-1, emb-2, emb-3, emb-4
+[emubench 11:39:18] === n1-cold rep 1/1 ===
+[emubench 11:39:18] host n1-cold rep1: before               avail= 44598 MiB used= 28.0% load1=3.65 | Mem:           61908       17310        9261         651       36640       44598
+[emubench 11:39:18] host cold rep: before emulator start    avail= 44598 MiB used= 28.0% load1=3.65 | Mem:           61908       17308        9264         651       36640       44600
+[emubench 11:39:18] start emb-1 port 5554 snapshot=False pid 1252502
+[emubench 11:39:32] host cold rep: booted                   avail= 41745 MiB used= 32.6% load1=3.23 | Mem:           61908       20163        6396         650       36652       41745
+[emubench 11:39:33] install counter.apk              1173 ms ok=True
+[emubench 11:39:34] install form-validation.apk      960 ms ok=True
+[emubench 11:39:35] launcher frame captured for emulator-5554
+[emubench 11:39:39] cold rep: boot 12749 ms + launch 1863 ms (frames 6, frac 1.0, tree count 0)
+[emubench 11:39:41] stop emulator-5554 (2.0s, qemu left=None)
+[emubench 11:39:41] host n1-cold rep1: after shutdown       avail= 44672 MiB used= 27.8% load1=3.19 | Mem:           61908       17236        9305         650       36669       44672
+[emubench 11:39:41] host phase n1-cold: end                 avail= 44672 MiB used= 27.8% load1=3.19 | Mem:           61908       17236        9305         650       36669       44672
+[emubench 11:39:41] wrote /home/Qui/.t3/worktrees/acos/t3-e4a31892-023ffa7354fd5ab4/.cache/emubench/20261118T060755Z/phase-n1-cold.json
+[emubench 11:39:41]   cold_am_start_w_ms                 n=1   p50=1568.81   p90=1568.81   spread=0.0%
+[emubench 11:39:41]   cold_boot_ms                       n=1   p50=12748.84  p90=12748.84  spread=0.0%
+[emubench 11:39:41]   cold_first_frame_ms                n=1   p50=14612.05  p90=14612.05  spread=0.0%
+[emubench 11:39:41]   cold_launch_ms                     n=1   p50=1863.21   p90=1863.21   spread=0.0%
+[emubench 11:39:41]   install_form_ms                    n=1   p50=959.91    p90=959.91    spread=0.0%
+[emubench 11:39:41]   install_ms                         n=1   p50=1173.01   p90=1173.01   spread=0.0%
+[emubench 06:09:42Z] phase n1-cold rc=0
+[emubench 06:09:42Z] host: avail=44714 MiB used=17193 MiB load1=3.19
+[emubench 06:09:42Z] === phase n1-warm (guarded --mem 24G --time 900s) ===
+[emubench 06:09:42Z] host: avail=44713 MiB used=17194 MiB load1=3.19
+[emubench 11:40:04] AVDs ready: emb-1, emb-2, emb-3, emb-4
+[emubench 11:40:04] host n1-warm: before emulator start     avail= 44671 MiB used= 27.8% load1=2.36 | Mem:           61908       17237        9292         650       36682       44671
+[emubench 11:40:04] start emb-1 port 5554 snapshot=False pid 1270395
+[emubench 11:40:18] host n1-warm: booted                    avail= 41790 MiB used= 32.5% load1=2.37 | Mem:           61908       20118        6407         650       36686       41790
+[emubench 11:40:20] install counter.apk              1935 ms ok=True
+[emubench 11:40:21] install form-validation.apk      660 ms ok=True
+[emubench 11:40:22] launcher frame captured for emulator-5554
+[emubench 11:40:28] host n1-warm: after warm launches       avail= 41075 MiB used= 33.7% load1=2.86 | Mem:           61908       20833        5640         650       36738       41075
+[emubench 11:40:52] host n1-warm: after tap rows            avail= 41125 MiB used= 33.6% load1=3.19 | Mem:           61908       20782        5669         650       36759       41125
+[emubench 11:40:56] ERROR: The truth value of an array with more than one element is ambiguous. Use a.any() or a.all()
+[emubench 11:41:01] stop emulator-5554 (4.6s, qemu left=None)
+[emubench 11:41:01] host phase n1-warm: end                 avail= 44656 MiB used= 27.9% load1=2.77 | Mem:           61908       17252        9198         653       36763       44656
+[emubench 11:41:01] wrote /home/Qui/.t3/worktrees/acos/t3-e4a31892-023ffa7354fd5ab4/.cache/emubench/20261118T060755Z/phase-n1-warm.json
+[emubench 11:41:01]   install_form_ms                    n=1   p50=659.84    p90=659.84    spread=0.0%
+[emubench 11:41:01]   install_ms                         n=1   p50=1935.02   p90=1935.02   spread=0.0%
+[emubench 11:41:01]   screenshot_ms                      n=2   p50=185.42    p90=205.52    spread=24.4%
+[emubench 11:41:01]   tap_counter_ms                     n=2   p50=1986.78   p90=2005.78   spread=2.2%
+[emubench 11:41:01]   tap_form_ms                        n=2   p50=1952.08   p90=1956.73   spread=0.5%
+[emubench 11:41:01]   ui_tree_ms                         n=2   p50=2006.05   p90=2069.79   spread=7.1%
+[emubench 11:41:01]   warm_launch_ms                     n=1   p50=335.48    p90=335.48    spread=0.0%
+[emubench 06:11:01Z] phase n1-warm rc=0
+[emubench 06:11:01Z] host: avail=44694 MiB used=17214 MiB load1=2.77
+[emubench 06:11:01Z] === phase n2 (guarded --mem 24G --time 900s) ===
+[emubench 06:11:01Z] host: avail=44695 MiB used=17213 MiB load1=2.77
+[emubench 11:41:01] AVDs ready: emb-1, emb-2, emb-3, emb-4
+[emubench 11:41:01] === N=2 throughput phase ===
+[emubench 11:41:01] host n2 rep1: before starts             avail= 44680 MiB used= 27.8% load1=2.77 | Mem:           61908       17227        9222         653       36763       44680
+[emubench 11:41:01] host n2 rep1: before start of instance 1 avail= 44680 MiB used= 27.8% load1=2.77 | Mem:           61908       17227        9222         653       36763       44680
+[emubench 11:41:01] start emb-1 port 5554 snapshot=False pid 1299691
+[emubench 11:41:01] host n2 rep1: before start of instance 2 avail= 44680 MiB used= 27.8% load1=2.77 | Mem:           61908       17227        9222         653       36763       44680
+[emubench 11:41:01] start emb-2 port 5556 snapshot=False pid 1299693
+[emubench 11:41:16] launcher frame captured for emulator-5554
+[emubench 11:41:18] launcher frame captured for emulator-5556
+[emubench 11:41:18] host n2 rep1: all 2 booted              avail= 38040 MiB used= 38.6% load1=3.62 | Mem:           61908       23868        2270         650       37072       38040
+[emubench 11:41:19] install counter.apk              862 ms ok=True
+[emubench 11:41:20] install counter.apk              673 ms ok=True
+[emubench 11:41:21] warmup emulator-5554: frame 459 ms frames 1 frac 1.000
+[emubench 11:41:22] warmup emulator-5556: frame 786 ms frames 2 frac 1.000
+[emubench 11:41:22] host n2 rep1: tasks starting            avail= 37753 MiB used= 39.0% load1=4.29 | Mem:           61908       24155        1972         650       37083       37753
+[emubench 11:41:22] n2 rep1: verified 0/2 in 0.2s, 6.60 GiB mean, 0.00 tasks/GiB-min, cpu 0.0% total
+[emubench 11:41:27] stop emulator-5554 (4.6s, qemu left=None)
+[emubench 11:41:29] stop emulator-5556 (2.0s, qemu left=None)
+[emubench 11:41:29] host n2 rep1: after shutdown            avail= 44499 MiB used= 28.1% load1=4.10 | Mem:           61908       17409        8714         651       37087       44499
+[emubench 11:41:29] host phase n2: end                      avail= 44499 MiB used= 28.1% load1=4.10 | Mem:           61908       17409        8714         651       37087       44499
+[emubench 11:41:29] wrote /home/Qui/.t3/worktrees/acos/t3-e4a31892-023ffa7354fd5ab4/.cache/emubench/20261118T060755Z/phase-n2.json
+[emubench 11:41:29]   install_ms                         n=2   p50=767.52    p90=843.12    spread=22.2%
+[emubench 11:41:29]   n2_boot_ms                         n=1   p50=14085.53  p90=14085.53  spread=0.0%
+[emubench 11:41:29]   n2_cpu_pct_per_instance            n=1   p50=0.00      p90=0.00      spread=None%
+[emubench 11:41:29]   n2_pss_mib_per_instance            n=1   p50=3381.21   p90=3381.21   spread=0.0%
+[emubench 06:11:29Z] phase n2 rc=0
+[emubench 06:11:29Z] host: avail=44560 MiB used=17347 MiB load1=4.10
+[emubench 06:11:29Z] === postflight: no emulator may be left running ===
+[emubench 06:11:29Z] PASS no qemu-system process is running (pgrep -f qemu-system equivalent empty)
+[emubench 06:11:29Z] host: avail=44559 MiB used=17349 MiB load1=4.10
+[emubench 06:11:29Z] artifacts: /home/Qui/.t3/worktrees/acos/t3-e4a31892-023ffa7354fd5ab4/.cache/emubench/20261118T060755Z ; <smoke, no merged json> ; log /home/Qui/.t3/worktrees/acos/t3-e4a31892-023ffa7354fd5ab4/results/handoff/EMUBENCH/logs/driver-20261118T060755Z.log

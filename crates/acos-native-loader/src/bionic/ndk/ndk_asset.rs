@@ -9,9 +9,7 @@
 
 use std::os::raw::{c_char, c_int, c_void};
 
-use super::{
-    c_string, handle, handle_id, host_failed, with_host, NdkResult,
-};
+use super::{c_string, handle, handle_id, host_failed, with_host, NdkResult};
 
 const LIB: &str = "libandroid";
 
@@ -33,7 +31,10 @@ fn name(p: *const c_char) -> Option<String> {
 ///
 /// # Safety
 /// `env`/`manager` are guest JNI pointers; the host validates the object.
-pub unsafe extern "C" fn aassetmanager_fromjava(env: *mut c_void, manager: *mut c_void) -> *mut c_void {
+pub unsafe extern "C" fn aassetmanager_fromjava(
+    env: *mut c_void,
+    manager: *mut c_void,
+) -> *mut c_void {
     match with_host(|h| h.asset_manager_from_java(env as usize, manager as usize)) {
         Ok(id) => handle(id),
         Err(e) => host_failed(LIB, "AAssetManager_fromJava", e, std::ptr::null_mut()),
@@ -80,7 +81,9 @@ pub unsafe extern "C" fn aassetmanager_opendir(
 /// # Safety
 /// `buf` must be writable for `count` bytes.
 pub unsafe extern "C" fn aasset_read(asset: *mut c_void, buf: *mut c_void, count: usize) -> c_int {
-    let Some(id) = handle_id(asset) else { return -1 };
+    let Some(id) = handle_id(asset) else {
+        return -1;
+    };
     if count == 0 {
         return 0;
     }
@@ -166,7 +169,9 @@ pub unsafe extern "C" fn aasset_getremaininglength(asset: *mut c_void) -> i32 {
 /// # Safety
 /// `asset` must be a live asset handle.
 pub unsafe extern "C" fn aasset_getbuffer(asset: *mut c_void) -> *const c_void {
-    let Some(id) = handle_id(asset) else { return std::ptr::null() };
+    let Some(id) = handle_id(asset) else {
+        return std::ptr::null();
+    };
     match with_host(|h| h.asset_buffer(id)) {
         Ok(p) => p,
         Err(e) => host_failed(LIB, "AAsset_getBuffer", e, std::ptr::null()),
@@ -221,10 +226,14 @@ pub unsafe extern "C" fn aassetdir_getnextfilename(dir: *mut c_void) -> *const c
         static NAMES: RefCell<HashMap<u64, CString>> = RefCell::new(HashMap::new());
     }
 
-    let Some(id) = handle_id(dir) else { return std::ptr::null() };
+    let Some(id) = handle_id(dir) else {
+        return std::ptr::null();
+    };
     match with_host(|h| h.asset_dir_next(id)) {
         Ok(Some(next)) => {
-            let Ok(c) = CString::new(next) else { return std::ptr::null() };
+            let Ok(c) = CString::new(next) else {
+                return std::ptr::null();
+            };
             let ptr = c.as_ptr();
             NAMES.with(|n| n.borrow_mut().insert(id, c));
             ptr
@@ -259,9 +268,15 @@ pub unsafe extern "C" fn aassetdir_close(dir: *mut c_void) {
 /// Table entries for the asset API.
 pub fn table() -> Vec<(&'static str, *const c_void)> {
     vec![
-        ("AAssetManager_fromJava", aassetmanager_fromjava as *const c_void),
+        (
+            "AAssetManager_fromJava",
+            aassetmanager_fromjava as *const c_void,
+        ),
         ("AAssetManager_open", aassetmanager_open as *const c_void),
-        ("AAssetManager_openDir", aassetmanager_opendir as *const c_void),
+        (
+            "AAssetManager_openDir",
+            aassetmanager_opendir as *const c_void,
+        ),
         ("AAssetManager_close", aassetmanager_close as *const c_void),
         ("AAsset_read", aasset_read as *const c_void),
         ("AAsset_seek", aasset_seek32 as *const c_void),

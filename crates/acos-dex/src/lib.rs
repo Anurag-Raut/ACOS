@@ -451,10 +451,7 @@ impl DexFile {
     }
 
     /// Like [`DexFile::parse`], but with explicit validation options.
-    pub fn parse_with(
-        bytes: impl Into<Arc<[u8]>>,
-        options: ParseOptions,
-    ) -> DexResult<DexFile> {
+    pub fn parse_with(bytes: impl Into<Arc<[u8]>>, options: ParseOptions) -> DexResult<DexFile> {
         let bytes: Arc<[u8]> = bytes.into();
         let len = bytes.len();
         let r = Reader::new(&bytes);
@@ -960,10 +957,7 @@ impl DexFile {
     /// present. `def` must be a reference obtained from [`DexFile::class_defs`]
     /// (or a class found via [`DexFile::find_class`]).
     pub fn hiddenapi_flags(&self, def: &ClassDef) -> Option<&[u32]> {
-        let idx = self
-            .class_defs
-            .iter()
-            .position(|d| std::ptr::eq(d, def))?;
+        let idx = self.class_defs.iter().position(|d| std::ptr::eq(d, def))?;
         self.hiddenapi_flags_by_index(idx)
     }
 
@@ -1031,33 +1025,36 @@ impl DexFile {
     /// Resolve a string index.
     pub fn string(&self, idx: u32) -> DexResult<&str> {
         match self.strings.get_or_init(|| self.decode_strings()) {
-            Ok(v) => v.get(idx as usize).map(String::as_str).ok_or_else(|| {
-                DexError::index("string", idx, v.len() as u32, 0)
-            }),
+            Ok(v) => v
+                .get(idx as usize)
+                .map(String::as_str)
+                .ok_or_else(|| DexError::index("string", idx, v.len() as u32, 0)),
             Err(e) => Err(e.clone()),
         }
     }
 
     /// Resolve a type index to its descriptor string.
     pub fn type_descriptor(&self, idx: u32) -> DexResult<&str> {
-        let s = *self.type_ids.get(idx as usize).ok_or_else(|| {
-            DexError::index("type", idx, self.type_ids.len() as u32, 0)
-        })?;
+        let s = *self
+            .type_ids
+            .get(idx as usize)
+            .ok_or_else(|| DexError::index("type", idx, self.type_ids.len() as u32, 0))?;
         self.string(s)
     }
 
     /// Resolve a proto index to its parameters.
     pub fn proto(&self, idx: u32) -> DexResult<&ProtoId> {
-        self.proto_ids.get(idx as usize).ok_or_else(|| {
-            DexError::index("proto", idx, self.proto_ids.len() as u32, 0)
-        })
+        self.proto_ids
+            .get(idx as usize)
+            .ok_or_else(|| DexError::index("proto", idx, self.proto_ids.len() as u32, 0))
     }
 
     /// Resolve a method index into class/name/prototype.
     pub fn method_ref(&self, idx: u32) -> DexResult<MethodRef<'_>> {
-        let m = *self.method_ids.get(idx as usize).ok_or_else(|| {
-            DexError::index("method", idx, self.method_ids.len() as u32, 0)
-        })?;
+        let m = *self
+            .method_ids
+            .get(idx as usize)
+            .ok_or_else(|| DexError::index("method", idx, self.method_ids.len() as u32, 0))?;
         let proto = self.proto(m.proto_idx as u32)?;
         let class = self.type_descriptor(m.class_idx as u32)?;
         let name = self.string(m.name_idx)?;
@@ -1079,9 +1076,10 @@ impl DexFile {
 
     /// Resolve a field index into class/name/type.
     pub fn field_ref(&self, idx: u32) -> DexResult<FieldRef<'_>> {
-        let f = *self.field_ids.get(idx as usize).ok_or_else(|| {
-            DexError::index("field", idx, self.field_ids.len() as u32, 0)
-        })?;
+        let f = *self
+            .field_ids
+            .get(idx as usize)
+            .ok_or_else(|| DexError::index("field", idx, self.field_ids.len() as u32, 0))?;
         Ok(FieldRef {
             class: self.type_descriptor(f.class_idx as u32)?,
             name: self.string(f.name_idx)?,
@@ -1098,9 +1096,10 @@ impl DexFile {
 
     /// Decode a call site (an `encoded_array_item`) by index.
     pub fn call_site(&self, idx: u32) -> DexResult<Vec<EncodedValue>> {
-        let off = *self.call_site_ids.get(idx as usize).ok_or_else(|| {
-            DexError::index("call_site", idx, self.call_site_ids.len() as u32, 0)
-        })?;
+        let off = *self
+            .call_site_ids
+            .get(idx as usize)
+            .ok_or_else(|| DexError::index("call_site", idx, self.call_site_ids.len() as u32, 0))?;
         let r = self.reader();
         Ok(encoded::decode_array(&r, off as usize)?.0)
     }
@@ -1204,7 +1203,9 @@ impl DexFile {
             return Ok(None);
         }
         let r = self.reader();
-        Ok(Some(encoded::decode_array(&r, def.static_values_off as usize)?.0))
+        Ok(Some(
+            encoded::decode_array(&r, def.static_values_off as usize)?.0,
+        ))
     }
 
     /// The annotations directory for a class, parsed on first access.
@@ -1245,8 +1246,7 @@ impl DexFile {
                 anns.iter()
                     .map(|a| {
                         let n = a.annotation.elements.len();
-                        (std::mem::size_of::<Annotation>() as u64)
-                            .saturating_add(n as u64 * 8)
+                        (std::mem::size_of::<Annotation>() as u64).saturating_add(n as u64 * 8)
                     })
                     .sum()
             };
@@ -1265,12 +1265,7 @@ impl DexFile {
                 + dir
                     .parameter_annotations
                     .iter()
-                    .map(|(_, sets)| {
-                        8 + sets
-                            .iter()
-                            .map(|a| 24 + ann_bytes(a))
-                            .sum::<u64>()
-                    })
+                    .map(|(_, sets)| 8 + sets.iter().map(|a| 24 + ann_bytes(a)).sum::<u64>())
                     .sum::<u64>();
         }
         (guard.len(), bytes)
@@ -1306,7 +1301,10 @@ impl DexFile {
             + sz(self.method_ids.len(), std::mem::size_of::<MethodId>())
             + class_defs
             + sz(self.call_site_ids.len(), 4)
-            + sz(self.method_handles.len(), std::mem::size_of::<MethodHandle>())
+            + sz(
+                self.method_handles.len(),
+                std::mem::size_of::<MethodHandle>(),
+            )
             + sz(self.map.len(), std::mem::size_of::<MapItem>())
             + self
                 .hiddenapi

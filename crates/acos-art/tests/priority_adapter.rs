@@ -66,10 +66,17 @@ fn the_preloaded_shim_clamps_a_negative_nice_only_inside_the_process() {
     // Baseline without the adapter. On this host the hard RLIMIT_NICE is below
     // stock's 40, so -4 is refused; that is exactly the wall W20 recorded. On a
     // host that can do it the interposition half below still has to hold.
-    let base = Command::new(&probe).arg("-4").output().expect("baseline probe");
+    let base = Command::new(&probe)
+        .arg("-4")
+        .output()
+        .expect("baseline probe");
     let baseline_refused = !base.status.success();
     if baseline_refused {
-        assert_eq!(base.status.code(), Some(3), "probe reports failure as exit 3");
+        assert_eq!(
+            base.status.code(),
+            Some(3),
+            "probe reports failure as exit 3"
+        );
     }
 
     let out = Command::new(&probe)

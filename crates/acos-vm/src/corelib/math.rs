@@ -80,7 +80,11 @@ fn max_double(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let r = if a.is_nan() {
         a
     } else if a == 0.0 && b == 0.0 {
-        if a.is_sign_negative() { b } else { a }
+        if a.is_sign_negative() {
+            b
+        } else {
+            a
+        }
     } else if a >= b {
         a
     } else {
@@ -112,7 +116,11 @@ fn min_double(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> {
     let r = if a.is_nan() {
         a
     } else if a == 0.0 && b == 0.0 {
-        if a.is_sign_negative() { a } else { b }
+        if a.is_sign_negative() {
+            a
+        } else {
+            b
+        }
     } else if a <= b {
         a
     } else {

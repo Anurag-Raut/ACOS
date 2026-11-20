@@ -16,16 +16,19 @@ use common::new_runtime;
 /// Classes that must resolve from the merged boot classpath, with the APEX jar
 /// that defines them (from the API-34 image's `bootclasspath.pb` protos).
 const APEX_BOOT_CLASSES: &[(&str, &str)] = &[
-    ("Landroid/net/TetheringManager;", "framework-connectivity.jar"),
-    ("Landroid/net/ConnectivityManager;", "framework-connectivity.jar"),
+    (
+        "Landroid/net/TetheringManager;",
+        "framework-connectivity.jar",
+    ),
+    (
+        "Landroid/net/ConnectivityManager;",
+        "framework-connectivity.jar",
+    ),
     (
         "Landroid/net/ipsec/ike/IkeSession;",
         "android.net.ipsec.ike.jar",
     ),
-    (
-        "Landroid/net/wifi/WifiManager;",
-        "framework-wifi.jar",
-    ),
+    ("Landroid/net/wifi/WifiManager;", "framework-wifi.jar"),
     (
         "Landroid/permission/PermissionState;",
         "framework-permission.jar",

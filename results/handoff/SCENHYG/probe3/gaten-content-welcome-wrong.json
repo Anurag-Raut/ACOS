@@ -1,0 +1,96 @@
+{
+  "backend": "acos-native",
+  "capabilities_used": [
+    "lifecycle",
+    "static-manifest",
+    "ui.tree"
+  ],
+  "error": {
+    "class": "assertion",
+    "code": "ASSERTION_FAILED",
+    "hint": "Compare expected vs actual in the assertion diff, inspect the linked frame/tree, then fix the app or the expectation. Rerun the scenario.",
+    "message": "expected text containing \"This text does not exist\", got text \"Set up Gaten\" / hint \"\"",
+    "retryable": false
+  },
+  "evidence": {
+    "events": "events.jsonl",
+    "log": "logs/logcat.txt",
+    "verdict": "verdict.json"
+  },
+  "fidelity": "art-reference",
+  "isolation": "process",
+  "metrics": {
+    "peak_rss_bytes": 252116992,
+    "wall_ms": 430
+  },
+  "ok": false,
+  "request_id": "req_132337_18e8e8d256ef1426",
+  "result": {
+    "artifacts_dir": "/home/Qui/.t3/worktrees/acos/t3-aa065f95-064e8d2a8d945bad/results/handoff/SCENHYG/probe3/gaten-content-welcome-wrong",
+    "cap_bytes": 20480,
+    "evidence_provenance": {
+      "binder_transactions": "host-observed",
+      "crash_reports": "guest-asserted",
+      "frames": "host-observed",
+      "host_input": "host-observed",
+      "input_acks": "guest-asserted",
+      "launch_markers": "guest-asserted",
+      "lifecycle_markers": "guest-asserted",
+      "logs": "guest-asserted",
+      "static_manifest": "host-observed",
+      "tree": "guest-asserted"
+    },
+    "failed_step": {
+      "failure_index": 1,
+      "index": 1,
+      "kind": "assert_text",
+      "message": "expected text containing \"This text does not exist\", got text \"Set up Gaten\" / hint \"\"",
+      "status": "fail"
+    },
+    "failure": {
+      "code": "ASSERTION_FAILED",
+      "error": {
+        "class": "assertion",
+        "code": "ASSERTION_FAILED",
+        "hint": "Compare expected vs actual in the assertion diff, inspect the linked frame/tree, then fix the app or the expectation. Rerun the scenario.",
+        "message": "expected text containing \"This text does not exist\", got text \"Set up Gaten\" / hint \"\"",
+        "retryable": false
+      },
+      "step_index": 1,
+      "summary": "step 1 (assert_text) fail"
+    },
+    "note": "this result was larger than the reply cap; only the bulk (tree, steps, logs) was dropped and the full evidence is in the artifacts paths named here",
+    "provenance": {
+      "apk": {
+        "mtime_ns": 1794503846699559546,
+        "path": "/home/Qui/Projects/acos/.cache/gaten/gaten-dev-f344272-x86_64-release-unsigned.apk",
+        "sha256": "e04c7ffcf01209c98e511e1ab01a7f68d6decb178d14a08f2b7f0a6539e2ee29",
+        "sha256_12": "e04c7ffcf012",
+        "size_bytes": 114751344
+      },
+      "engine": "art",
+      "fidelity": "art-reference",
+      "scenario": {
+        "mtime_ns": 1794935949253089294,
+        "path": "/home/Qui/.t3/worktrees/acos/t3-aa065f95-064e8d2a8d945bad/scenarios/negative/gaten-content-welcome-wrong.yaml",
+        "sha256": "674f1d5b48070df4b4ae479e4c40d5cb21e6a7aa73111d07d5e151ef747f7144",
+        "sha256_12": "674f1d5b4807",
+        "size_bytes": 1543
+      },
+      "scenario_engine": "rust-vm",
+      "warnings": [
+        {
+          "code": "SCENARIO_ENGINE_MISMATCH",
+          "engine": "art",
+          "message": "the scenario declares `engine: rust-vm` but this run used `art`: the scenario field records the engine the scenario was written for, it does not select one (`--engine art… [ACOS: result.result.provenance.warnings[0].message bounded for size — 302 bytes total, keeping the first 170 and the last 85 bytes; the full text is in the run's artifacts] …is about the `art` run; pass `--engine rust-vm` to run the engine the scenario names.",
+          "scenario_engine": "rust-vm"
+        }
+      ]
+    },
+    "reply_capped": true,
+    "verdict_path": "/home/Qui/.t3/worktrees/acos/t3-aa065f95-064e8d2a8d945bad/results/handoff/SCENHYG/probe3/gaten-content-welcome-wrong/verdict.json",
+    "verdict_status": "fail"
+  },
+  "session_id": "s_art_gaten-dev-f344272-x86_64-release-unsigned",
+  "status": "fail"
+}

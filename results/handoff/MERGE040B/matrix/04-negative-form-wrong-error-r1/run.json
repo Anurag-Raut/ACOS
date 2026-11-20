@@ -1,0 +1,7 @@
+{
+  "request_id": "req_ac3ed_18e90d4fb127cd23",
+  "started_at": "2026-11-18T05:42:42.409Z",
+  "scenario": "scenarios/negative/form-wrong-error.yaml",
+  "apk": "",
+  "acos_version": "0.3.0"
+}

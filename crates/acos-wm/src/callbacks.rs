@@ -14,7 +14,8 @@ use acos_parcel::binder::BinderId;
 use acos_parcel::Parcel;
 
 use crate::codec::{
-    write_typed_array, write_typed_object, ClientWindowFrames, InsetsSourceControlArray, InsetsState,
+    write_typed_array, write_typed_object, ClientWindowFrames, InsetsSourceControlArray,
+    InsetsState,
 };
 use crate::error::Result;
 use crate::wms::WindowId;
@@ -343,8 +344,8 @@ mod tests {
             .unwrap()
             .unwrap();
         assert_eq!(got.display_frame, crate::RectI::DISPLAY_1080X2400);
-        let controls = crate::codec::read_typed_array::<crate::codec::InsetsSourceControl>(&mut p)
-            .unwrap();
+        let controls =
+            crate::codec::read_typed_array::<crate::codec::InsetsSourceControl>(&mut p).unwrap();
         assert_eq!(controls.unwrap().len(), 0);
     }
 }
