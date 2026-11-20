@@ -1,0 +1,235 @@
+warning: variable does not need to be mutable
+   --> crates/acos-netd-ctl/src/client.rs:574:13
+    |
+574 |         let mut r = self.request(&Request::KillPasta { hold })?;
+    |             ----^
+    |             |
+    |             help: remove this `mut`
+    |
+    = note: `#[warn(unused_mut)]` on by default
+
+warning: variable does not need to be mutable
+   --> crates/acos-netd-ctl/src/client.rs:584:13
+    |
+584 |         let mut r = self.request(&Request::Shutdown)?;
+    |             ----^
+    |             |
+    |             help: remove this `mut`
+
+   Compiling acos-mcp v0.3.0 (/home/Qui/.t3/worktrees/acos/t3-f4bcc4d4-5c49b0ef4f83b639/crates/acos-mcp)
+warning: `acos-netd-ctl` (lib) generated 2 warnings (run `cargo fix --lib -p acos-netd-ctl` to apply 2 suggestions)
+warning: unused attribute
+    --> crates/acos-services/src/atms.rs:2048:5
+     |
+2048 |     #[must_use]
+     |     ^^^^^^^^^^^ help: remove this attribute
+     |
+note: attribute also specified here
+    --> crates/acos-services/src/atms.rs:2039:5
+     |
+2039 |     #[must_use]
+     |     ^^^^^^^^^^^
+     = warning: this was previously accepted by the compiler but is being phased out; it will become a hard error in a future release!
+     = note: `#[warn(unused_attributes)]` on by default
+
+warning: unreachable pattern
+   --> crates/acos-services/src/intents.rs:151:21
+    |
+146 |                     Extra::Short(number) => serde_json::json!(number),
+    |                     -------------------- matches all the relevant values
+...
+151 |                     Extra::Short(short) => serde_json::json!(short),
+    |                     ^^^^^^^^^^^^^^^^^^^ no value can reach this
+    |
+    = note: `#[warn(unreachable_patterns)]` on by default
+
+warning: variable does not need to be mutable
+   --> crates/acos-services/src/modules/notifications.rs:341:13
+    |
+341 |         let mut store = store
+    |             ----^^^^^
+    |             |
+    |             help: remove this `mut`
+    |
+    = note: `#[warn(unused_mut)]` on by default
+
+warning: unreachable pattern
+    --> crates/acos-services/src/parcelable.rs:2909:9
+     |
+2889 |         FieldOp::BoolCond(fields) => {
+     |         ------------------------- matches all the relevant values
+...
+2909 |         FieldOp::BoolCond(fields) => {
+     |         ^^^^^^^^^^^^^^^^^^^^^^^^^ no value can reach this
+
+warning: unreachable pattern
+    --> crates/acos-services/src/parcelable.rs:3335:9
+     |
+3273 |         FieldOp::BoolCond(fields) => {
+     |         ------------------------- matches all the relevant values
+...
+3335 |         FieldOp::BoolCond(fields) => {
+     |         ^^^^^^^^^^^^^^^^^^^^^^^^^ no value can reach this
+
+warning: unreachable pattern
+    --> crates/acos-services/src/parcelable.rs:3414:9
+     |
+3397 |         FieldOp::Icon => {
+     |         ------------- matches all the relevant values
+...
+3414 |         FieldOp::Icon => {
+     |         ^^^^^^^^^^^^^ no value can reach this
+
+warning: unreachable pattern
+    --> crates/acos-services/src/parcelable.rs:3418:9
+     |
+3401 |         FieldOp::ArraySet => match value {
+     |         ----------------- matches all the relevant values
+...
+3418 |         FieldOp::ArraySet => match value {
+     |         ^^^^^^^^^^^^^^^^^ no value can reach this
+
+warning: unreachable pattern
+    --> crates/acos-services/src/parcelable.rs:5363:9
+     |
+5309 |         FieldOp::BoolCond(_) => call == "writeBoolean",
+     |         -------------------- matches all the relevant values
+...
+5363 |         FieldOp::BoolCond(_) => call == "writeBoolean",
+     |         ^^^^^^^^^^^^^^^^^^^^ no value can reach this
+
+warning: unreachable pattern
+    --> crates/acos-services/src/parcelable.rs:5446:9
+     |
+5404 |         FieldOp::BoolCond(inner) => {
+     |         ------------------------ matches all the relevant values
+...
+5446 |         FieldOp::BoolCond(inner) => {
+     |         ^^^^^^^^^^^^^^^^^^^^^^^^ no value can reach this
+
+warning: unused variable: `intent`
+   --> crates/acos-services/src/service_bind.rs:292:13
+    |
+292 |         let intent = bind_intent(package, class);
+    |             ^^^^^^ help: if this is intentional, prefix it with an underscore: `_intent`
+    |
+    = note: `#[warn(unused_variables)]` on by default
+
+warning: constant `ACTION_MASK` is never used
+   --> crates/acos-services/src/a11y_native.rs:102:7
+    |
+102 | const ACTION_MASK: i32 = 0xff;
+    |       ^^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` on by default
+
+warning: constant `RESTRICTIONS_GET_APPLICATION_PER_ADMIN` is never used
+   --> crates/acos-services/src/extras.rs:693:7
+    |
+693 | const RESTRICTIONS_GET_APPLICATION_PER_ADMIN: u32 = 2;
+    |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: constant `SERVICE_MANAGER_DESCRIPTOR` is never used
+  --> crates/acos-services/src/host.rs:82:7
+   |
+82 | const SERVICE_MANAGER_DESCRIPTOR: &str = "android.os.IServiceManager";
+   |       ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: field `session_binder` is never read
+   --> crates/acos-services/src/modules/media_session.rs:161:5
+    |
+155 | struct SessionRecord {
+    |        ------------- field in this struct
+...
+161 |     session_binder: u64,
+    |     ^^^^^^^^^^^^^^
+    |
+    = note: `SessionRecord` has a derived impl for the trait `Debug`, but this is intentionally ignored during dead code analysis
+
+warning: method `session_mut` is never used
+   --> crates/acos-services/src/modules/media_session.rs:205:8
+    |
+187 | impl MediaState {
+    | --------------- method in this implementation
+...
+205 |     fn session_mut(&mut self, id: u32) -> Option<&mut SessionRecord> {
+    |        ^^^^^^^^^^^
+
+warning: `acos-services` (lib) generated 15 warnings (run `cargo fix --lib -p acos-services` to apply 2 suggestions)
+warning: unused variable: `net`
+   --> crates/acos-netd/src/plan.rs:274:29
+    |
+274 | pub fn session_offline_cmds(net: &SessionNet, netns_pid: u32) -> Vec<String> {
+    |                             ^^^ help: if this is intentional, prefix it with an underscore: `_net`
+    |
+    = note: `#[warn(unused_variables)]` on by default
+
+warning: variable does not need to be mutable
+  --> crates/acos-netd/src/lib.rs:99:16
+   |
+99 |         let Ok(mut conn) = conn else { continue };
+   |                ----^^^^
+   |                |
+   |                help: remove this `mut`
+   |
+   = note: `#[warn(unused_mut)]` on by default
+
+warning: function `handle` is never used
+   --> crates/acos-netd/src/lib.rs:215:4
+    |
+215 | fn handle(relay: &Arc<Mutex<supervisor::Relay>>, req: Request) -> Reply {
+    |    ^^^^^^
+    |
+    = note: `#[warn(dead_code)]` on by default
+
+warning: field `cgroup` is never read
+  --> crates/acos-netd/src/supervisor.rs:69:5
+   |
+49 | struct Session {
+   |        ------- field in this struct
+...
+69 |     cgroup: Option<String>,
+   |     ^^^^^^
+
+warning: methods `start_forwarder` and `restart_pasta` are never used
+    --> crates/acos-netd/src/supervisor.rs:978:8
+     |
+ 127 | impl Relay {
+     | ---------- methods in this implementation
+...
+ 978 |     fn start_forwarder(&mut self, s: &mut Session, port: u16) -> Result<(), ProtoError> {
+     |        ^^^^^^^^^^^^^^^
+...
+1013 |     fn restart_pasta(&mut self) -> Result<(), ProtoError> {
+     |        ^^^^^^^^^^^^^
+
+warning: `acos-netd` (lib) generated 5 warnings (run `cargo fix --lib -p acos-netd` to apply 1 suggestion)
+    Finished `release` profile [optimized] target(s) in 0.93s
+     Running tests/fb5_hygiene.rs (.cache/rg4-target/release/deps/fb5_hygiene-10526fecd8e06768)
+
+running 8 tests
+test l1_status_ignores_a_session_another_client_relaunched ... ok
+test external_daemon_list_failure_never_falls_back_to_destroy_by_id ... ok
+test idle_ttl_destroys_the_session_and_later_calls_name_the_ttl ... ok
+test m2_tokenless_sessions_are_never_expired_on_the_external_daemon ... ok
+test h1_a_relaunched_foreign_session_with_the_same_id_is_never_destroyed ... ok
+test h1_a_failed_listing_destroys_nothing_on_the_external_daemon ... ok
+test m1_a_slow_call_in_flight_is_not_idleness ... ok
+test h1_default_session_expiry_does_not_break_the_next_sweeps_listing ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.72s
+
+     Running tests/serveleak2_ownership.rs (.cache/rg4-target/release/deps/serveleak2_ownership-093a81c409e7da29)
+
+running 1 test
+test a_default_id_does_not_let_one_server_destroy_another_servers_session ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.63s
+
+     Running tests/serveleak_shutdown.rs (.cache/rg4-target/release/deps/serveleak_shutdown-bd186c6cb0c70993)
+
+running 1 test
+test stdin_eof_destroys_the_sessions_the_server_launched ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+
