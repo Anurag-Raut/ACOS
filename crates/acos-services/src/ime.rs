@@ -43,8 +43,82 @@ pub const BIND_SUCCESS: i32 = 0;
 pub const BIND_NO_IME: i32 = 6; // API 34 InputBindResult.NO_IME = error(6)
 /// `InputBindResult.NO_EDITOR` — no editor on the client.
 pub const BIND_NO_EDITOR: i32 = 2;
+/// `InputBindResult.ResultCode.SUCCESS_REPORT_WINDOW_FOCUS_ONLY`.
+pub const BIND_REPORT_WINDOW_FOCUS_ONLY: i32 = 4;
 /// `InputBindResult.ALREADY_BOUND`.
 pub const BIND_ALREADY_BOUND: i32 = -1;
+
+/// `StartInputReason.WINDOW_FOCUS_GAIN_REPORT_ONLY`.
+pub const START_INPUT_REASON_WINDOW_FOCUS_GAIN_REPORT_ONLY: i32 = 2;
+
+/// `StartInputFlags.VIEW_HAS_FOCUS`.
+pub const START_INPUT_FLAG_VIEW_HAS_FOCUS: i32 = 1;
+/// `StartInputFlags.IS_TEXT_EDITOR`.
+pub const START_INPUT_FLAG_IS_TEXT_EDITOR: i32 = 2;
+/// `StartInputFlags.INITIAL_CONNECTION`.
+pub const START_INPUT_FLAG_INITIAL_CONNECTION: i32 = 4;
+/// `StartInputFlags.WINDOW_GAINED_FOCUS`.
+pub const START_INPUT_FLAG_WINDOW_GAINED_FOCUS: i32 = 8;
+
+/// `WindowManager.LayoutParams.SOFT_INPUT_MASK_STATE`.
+pub const SOFT_INPUT_MASK_STATE: i32 = 0x0f;
+/// `WindowManager.LayoutParams.SOFT_INPUT_STATE_UNSPECIFIED`.
+pub const SOFT_INPUT_STATE_UNSPECIFIED: i32 = 0;
+/// `WindowManager.LayoutParams.SOFT_INPUT_STATE_UNCHANGED`.
+pub const SOFT_INPUT_STATE_UNCHANGED: i32 = 1;
+/// `WindowManager.LayoutParams.SOFT_INPUT_STATE_HIDDEN`.
+pub const SOFT_INPUT_STATE_HIDDEN: i32 = 2;
+/// `WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN`.
+pub const SOFT_INPUT_STATE_ALWAYS_HIDDEN: i32 = 3;
+/// `WindowManager.LayoutParams.SOFT_INPUT_STATE_VISIBLE`.
+pub const SOFT_INPUT_STATE_VISIBLE: i32 = 4;
+/// `WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_VISIBLE`.
+pub const SOFT_INPUT_STATE_ALWAYS_VISIBLE: i32 = 5;
+/// `WindowManager.LayoutParams.SOFT_INPUT_MASK_ADJUST`.
+pub const SOFT_INPUT_MASK_ADJUST: i32 = 0xf0;
+/// `WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE`.
+pub const SOFT_INPUT_ADJUST_RESIZE: i32 = 0x10;
+/// `WindowManager.LayoutParams.SOFT_INPUT_IS_FORWARD_NAVIGATION`.
+pub const SOFT_INPUT_IS_FORWARD_NAVIGATION: i32 = 0x100;
+
+/// `WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE`.
+pub const FLAG_NOT_FOCUSABLE: i32 = 0x0000_0008;
+/// `WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM`.
+pub const FLAG_ALT_FOCUSABLE_IM: i32 = 0x0002_0000;
+
+/// `InputMethodManager.SHOW_IMPLICIT`.
+pub const SHOW_IMPLICIT: i32 = 0x0001;
+/// `InputMethodManager.SHOW_FORCED`.
+pub const SHOW_FORCED: i32 = 0x0002;
+/// `InputMethodManager.HIDE_IMPLICIT_ONLY`.
+pub const HIDE_IMPLICIT_ONLY: i32 = 0x0001;
+/// `InputMethodManager.HIDE_NOT_ALWAYS`.
+pub const HIDE_NOT_ALWAYS: i32 = 0x0002;
+
+/// `WindowManager.LayoutParams.mayUseInputMethod(int flags)`.
+#[must_use]
+pub const fn may_use_input_method(window_flags: i32) -> bool {
+    (window_flags & FLAG_NOT_FOCUSABLE) != FLAG_NOT_FOCUSABLE
+        && (window_flags & FLAG_ALT_FOCUSABLE_IM) != FLAG_ALT_FOCUSABLE_IM
+}
+
+/// Window-focus and soft-input attributes from
+/// `IInputMethodManager.startInputOrWindowGainedFocus`.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct StartInputContext {
+    /// `windowToken` (`IBinder`, arg 2): the focused window's token.
+    pub window_token: Option<BinderId>,
+    /// `startInputFlags` (arg 3): `com.android.internal.inputmethod.StartInputFlags`.
+    pub start_input_flags: i32,
+    /// `softInputMode` (arg 4): `WindowManager.LayoutParams.softInputMode`.
+    pub soft_input_mode: i32,
+    /// `windowFlags` (arg 5): `WindowManager.LayoutParams.flags`.
+    pub window_flags: i32,
+    /// `unverifiedTargetSdkVersion` (arg 9).
+    pub target_sdk_version: i32,
+    /// Whether a non-null `EditorInfo` accompanied the request.
+    pub has_editor_info: bool,
+}
 
 /// `InputMethodManager.RESULT_UNSHOWN_IME_IS_NOT_CURRENT`.
 pub const RESULT_UNSHOWN_IME_IS_NOT_CURRENT: i32 = 2;
@@ -177,6 +251,13 @@ pub struct ImeState {
     session_bound: bool,
     /// `true` while a handled BACK's UP half is still owed an answer.
     back_tracking: bool,
+    /// Currently focused window token (AOSP `mCurFocusedWindow`).
+    pub focused_window: Option<BinderId>,
+    /// `true` when soft input was requested explicitly (`flags` without `SHOW_IMPLICIT`,
+    /// or with `SHOW_FORCED`; AOSP `ImeVisibilityStateComputer.mRequestedShowExplicitly`).
+    requested_show_explicitly: bool,
+    /// `true` when soft input was shown with `SHOW_FORCED` (AOSP `mShowForced`).
+    show_forced: bool,
     /// The `ACOSWMS` state whose IME insets follow this manager's visibility.
     wms: Option<Arc<Mutex<crate::wms::WmsState>>>,
     /// The next synthetic session binder (never handed out by the null IME).
@@ -218,6 +299,9 @@ impl ImeState {
             channel_replies: Vec::new(),
             session_bound: false,
             back_tracking: false,
+            focused_window: None,
+            requested_show_explicitly: false,
+            show_forced: false,
             wms: None,
             refs: crate::refs::GuestRefs::new(),
             next_session: 0x1_3e00,
@@ -332,18 +416,41 @@ impl ImeState {
         });
     }
 
-    /// `startInputOrWindowGainedFocus`.
-    ///
-    /// Returns `(result_code, method, session_binder)`. With a session binder
-    /// attached (the ART transport) this binds the real session and creates a
-    /// fresh `InputChannel` pair, so the framework's `InputMethodManager` can
-    /// offer keys to the IME (`mCurChannel != null`). Without one it stays the
-    /// declared null-IME answer: `NO_IME`, no session, no channel.
+    /// `startInputOrWindowGainedFocus` without window-focus metadata (legacy
+    /// test/VM entry point).
     pub fn start_input(
         &mut self,
         client: Option<BinderId>,
         sequence: i32,
         remote_connection: Option<BinderId>,
+    ) -> (i32, Option<String>, Option<BinderId>) {
+        self.start_input_with_context(
+            client,
+            sequence,
+            remote_connection,
+            StartInputContext {
+                has_editor_info: true,
+                ..StartInputContext::default()
+            },
+        )
+    }
+
+    /// `startInputOrWindowGainedFocus` with AOSP's window-focus and soft-input
+    /// attributes (`ImeVisibilityStateComputer.computeState`).
+    ///
+    /// Returns `(result_code, method, session_binder)`. When focus moves to a
+    /// different window that has no focused text editor (for example a dialog
+    /// or `TYPE_ACCESSIBILITY_OVERLAY` window with `SOFT_INPUT_STATE_UNSPECIFIED`
+    /// and `mayUseInputMethod(windowFlags)`), AOSP hides the soft input
+    /// immediately so subsequent `KEYCODE_BACK` presses reach the newly focused
+    /// window instead of being swallowed by a stale keyboard from the previous
+    /// window.
+    pub fn start_input_with_context(
+        &mut self,
+        client: Option<BinderId>,
+        sequence: i32,
+        remote_connection: Option<BinderId>,
+        ctx: StartInputContext,
     ) -> (i32, Option<String>, Option<BinderId>) {
         if let Some(c) = client {
             if let Some(entry) = self.clients.iter_mut().find(|e| e.binder == Some(c)) {
@@ -352,6 +459,37 @@ impl ImeState {
                 }
             } else {
                 self.add_client(Some(c), remote_connection, 0);
+            }
+        }
+        let ime_focus_changed =
+            ctx.window_token.is_some() && self.focused_window != ctx.window_token;
+        // Android 13+ (`CLEAR_SHOW_FORCED_FLAG_WHEN_LEAVING`): leaving the
+        // window clears `mShowForced` so `HIDE_NOT_ALWAYS` can dismiss the IME
+        // for the newly focused window.
+        if ime_focus_changed
+            && self.show_forced
+            && (ctx.target_sdk_version >= 33 || ctx.target_sdk_version == 0)
+        {
+            self.show_forced = false;
+        }
+        if ctx.window_token.is_some() {
+            self.focused_window = ctx.window_token;
+        }
+        if self.ime_visible {
+            if let Some((reason, hide_flags)) =
+                compute_start_input_hide(ime_focus_changed, ctx)
+            {
+                if self.can_hide_ime(hide_flags) {
+                    self.clear_ime_visible();
+                    let win = ctx.window_token.map(|b| b.0).unwrap_or(0);
+                    let line = format!(
+                        "startInput hid the soft input (reason={reason} window={win:#x} \
+                         flags={:#x} softInputMode={:#x} windowFlags={:#x})",
+                        ctx.start_input_flags, ctx.soft_input_mode, ctx.window_flags
+                    );
+                    eprintln!("ACOSIME {line}");
+                    trace(&line);
+                }
             }
         }
         let Some(session) = self.session_binder else {
@@ -364,6 +502,16 @@ impl ImeState {
             self.ime_visible = false;
             return (BIND_NO_IME, None, None);
         };
+        // AOSP `WINDOW_FOCUS_GAIN_REPORT_ONLY` (no `EditorInfo`): the client
+        // only reported a window focus gain and ignores the `InputBindResult`.
+        // Keep the existing bound `InputChannel` intact rather than replacing
+        // it with a pair whose client end the framework immediately discards.
+        if sequence == START_INPUT_REASON_WINDOW_FOCUS_GAIN_REPORT_ONLY && !ctx.has_editor_info {
+            let client = client.unwrap_or(BinderId(0));
+            self.start_inputs
+                .push((client, sequence, BIND_REPORT_WINDOW_FOCUS_ONLY));
+            return (BIND_REPORT_WINDOW_FOCUS_ONLY, None, None);
+        }
         let id = format!("acos-ime-{sequence}");
         // `InputChannel::openInputChannelPair("<ime> (server)", ...)`: the app
         // gets the client end in the bind result, this manager keeps the
@@ -408,6 +556,30 @@ impl ImeState {
         }
     }
 
+    /// `ImeVisibilityStateComputer.canHideIme(flags)`.
+    fn can_hide_ime(&self, flags: i32) -> bool {
+        if (flags & HIDE_IMPLICIT_ONLY) != 0
+            && (self.requested_show_explicitly || self.show_forced)
+        {
+            return false;
+        }
+        if self.show_forced && (flags & HIDE_NOT_ALWAYS) != 0 {
+            return false;
+        }
+        true
+    }
+
+    fn clear_ime_visible(&mut self) {
+        let was = self.ime_visible;
+        self.ime_visible = false;
+        self.back_tracking = false;
+        self.requested_show_explicitly = false;
+        self.show_forced = false;
+        if was {
+            self.set_wms_ime_visible(false);
+        }
+    }
+
     /// `showSoftInput`: the soft input is shown when a session is bound.
     pub fn show_soft_input(&mut self, client: BinderId, flags: i32) -> bool {
         let bound = self.session_bound
@@ -418,6 +590,12 @@ impl ImeState {
                     .any(|c| c.session_bound && c.binder == Some(client)));
         self.show_inputs.push((client, flags, bound));
         if bound {
+            if (flags & SHOW_FORCED) != 0 {
+                self.requested_show_explicitly = true;
+                self.show_forced = true;
+            } else if (flags & SHOW_IMPLICIT) == 0 {
+                self.requested_show_explicitly = true;
+            }
             self.ime_visible = true;
             self.set_wms_ime_visible(true);
             eprintln!("ACOSIME showSoftInput client={:#x} shown=true", client.0);
@@ -429,12 +607,11 @@ impl ImeState {
     /// `hideSoftInput`: hides the soft input; the receiver is still answered.
     pub fn hide_soft_input(&mut self, client: BinderId, flags: i32) -> bool {
         self.hide_inputs.push((client, flags));
-        let was = self.ime_visible;
-        self.ime_visible = false;
-        self.back_tracking = false;
-        if was {
-            self.set_wms_ime_visible(false);
+        if !self.can_hide_ime(flags) {
+            return false;
         }
+        let was = self.ime_visible;
+        self.clear_ime_visible();
         was
     }
 
@@ -493,8 +670,7 @@ impl ImeState {
                         // The soft input consumed the press: hide it (the
                         // app sees the IME insets change and the framework's
                         // visibility state flips) and finish the key handled.
-                        self.ime_visible = false;
-                        self.set_wms_ime_visible(false);
+                        self.clear_ime_visible();
                         self.back_tracking = true;
                         eprintln!("ACOSIME back-down hid the soft input (seq={seq})");
                         trace(&format!("back-down hid the soft input seq={seq}"));
@@ -643,6 +819,62 @@ pub fn soft_input_shown() -> bool {
         .unwrap_or(false)
 }
 
+/// AOSP `ImeVisibilityStateComputer.computeState` hide decision for
+/// `startInputOrWindowGainedFocus` when the soft input is currently shown.
+///
+/// Returns `Some((reason_name, hide_flags))` when the newly focused window's
+/// `softInputMode`, `windowFlags`, and `startInputFlags` call for hiding the
+/// soft input.
+fn compute_start_input_hide(
+    ime_focus_changed: bool,
+    ctx: StartInputContext,
+) -> Option<(&'static str, i32)> {
+    let has_editor_focused = (ctx.start_input_flags & START_INPUT_FLAG_IS_TEXT_EDITOR) != 0;
+    let is_start_input_by_gain_focus =
+        (ctx.start_input_flags & START_INPUT_FLAG_WINDOW_GAINED_FOCUS) != 0;
+    let soft_input_state = ctx.soft_input_mode & SOFT_INPUT_MASK_STATE;
+    let do_auto_show =
+        (ctx.soft_input_mode & SOFT_INPUT_MASK_ADJUST) == SOFT_INPUT_ADJUST_RESIZE;
+    let is_forward_navigation =
+        (ctx.soft_input_mode & SOFT_INPUT_IS_FORWARD_NAVIGATION) != 0;
+
+    match soft_input_state {
+        SOFT_INPUT_STATE_UNSPECIFIED => {
+            if ime_focus_changed
+                && (!has_editor_focused || !do_auto_show)
+                && may_use_input_method(ctx.window_flags)
+            {
+                return Some(("HIDE_UNSPECIFIED_WINDOW", HIDE_NOT_ALWAYS));
+            }
+        }
+        SOFT_INPUT_STATE_HIDDEN => {
+            if is_forward_navigation {
+                return Some(("HIDE_STATE_HIDDEN_FORWARD_NAV", 0));
+            }
+        }
+        SOFT_INPUT_STATE_ALWAYS_HIDDEN => {
+            if ime_focus_changed {
+                return Some(("HIDE_ALWAYS_HIDDEN_STATE", 0));
+            }
+        }
+        _ => {}
+    }
+
+    // Android 14 fallback (`HIDE_WINDOW_GAINED_FOCUS_WITHOUT_EDITOR`): when
+    // focus moves to a window that can use the IME but has no focused text
+    // editor, hide the stale soft input even if its softInputMode was
+    // UNCHANGED / VISIBLE / ALWAYS_VISIBLE.
+    if ime_focus_changed
+        && !has_editor_focused
+        && is_start_input_by_gain_focus
+        && may_use_input_method(ctx.window_flags)
+    {
+        return Some(("HIDE_WINDOW_GAINED_FOCUS_WITHOUT_EDITOR", 0));
+    }
+
+    None
+}
+
 fn unsupported(interface: &str, method: &acos_aidl::MethodInfo) -> ServiceError {
     ServiceError::UnsupportedAndroidApi {
         interface: interface.to_string(),
@@ -689,10 +921,23 @@ impl ServiceObject for ImeService {
                 Vec::new()
             }
             "startInputOrWindowGainedFocus" => {
-                let client = binder_arg(args, 1);
                 let sequence = int_arg(args, 0);
-                let remote = binder_arg(args, 6);
-                let (result, _method, _session) = state.start_input(client, sequence, remote);
+                let client = binder_arg(args, 1);
+                let remote = binder_arg(args, 7).or_else(|| binder_arg(args, 6));
+                let has_editor_info = !matches!(
+                    args.get(6),
+                    None | Some(Value::TypedObject(crate::value::Parcelable::Null))
+                );
+                let ctx = StartInputContext {
+                    window_token: binder_arg(args, 2),
+                    start_input_flags: int_arg(args, 3),
+                    soft_input_mode: int_arg(args, 4),
+                    window_flags: int_arg(args, 5),
+                    target_sdk_version: int_arg(args, 9),
+                    has_editor_info,
+                };
+                let (result, _method, _session) =
+                    state.start_input_with_context(client, sequence, remote, ctx);
                 // `InputBindResult` is marshalled by `acos-runtime::ime_java`
                 // from a real Java object; the typed description below is the
                 // fallback the generic codec would write.
