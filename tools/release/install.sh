@@ -7,9 +7,10 @@
 # The install root is a copy of the checkout's *runtime* trees under
 # <prefix>/share/acos/<version>/ with the same relative layout the code already
 # uses (`.cache/art/sysroot`, `.cache/boot/android-34`,
-# `crates/acos-art/guest/java`), plus the four binaries and — when a pinned one
-# is available — the `network` module's `pasta` transport at `libexec/pasta`.
-# `<prefix>/bin/acos`
+# `crates/acos-art/guest/java`), plus the five binaries and — when a pinned one
+# is available — the `network` module's `pasta` transport at `libexec/pasta`
+# together with its upstream licence and source notice under
+# `share/doc/acos/pasta/`. `<prefix>/bin/acos`
 # and `<prefix>/bin/acos-mcp` are thin wrappers that export ACOS_HOME and exec
 # the versioned binary, so ACOS runs from any directory with no checkout.
 #
@@ -44,9 +45,9 @@ Options:
   --prefix DIR       install prefix (default: \$ACOS_PREFIX, else ~/.local)
   --version V        version directory to install into (default: $VERSION)
   --from-target DIR  use DIR/release binaries instead of building
-  --pasta PATH       install this `pasta` binary as the relay's transport
-                     (default: $ACOS_NET_PASTA, then <repo>/libexec/pasta, then
-                     `pasta` on PATH); without one the network module stays
+  --pasta PATH       install this \`pasta\` binary as the relay's transport
+                     (default: \$ACOS_NET_PASTA, then <repo>/libexec/pasta, then
+                     \`pasta\` on PATH); without one the network module stays
                      unavailable and the installer prints how to build it
   --force            overwrite an existing version directory built from
                      something else
@@ -55,8 +56,9 @@ Options:
   -h, --help         this text
 
 Layout (under <prefix>/share/acos/<version>/):
-  bin/acos bin/acos-art bin/acos-mcp bin/acos-netd
+  bin/acos bin/acos-art bin/acos-mcp bin/acos-netd bin/acos-webview
   libexec/pasta                   the pinned static transport (ADR-0030)
+  share/doc/acos/pasta/           pasta GPL-2.0-or-later licence + SOURCE.md (when pasta is shipped)
   .cache/art/sysroot              read-only ART sysroot (the framework)
   .cache/boot/android-34          fonts, overlays, bootclasspath
   crates/acos-art/guest/java      guest Java sources (compiled at run time)
@@ -95,10 +97,11 @@ esac
 
 SHARE="$PREFIX/share/acos"
 DEST="$SHARE/$VERSION"
-# acos-netd is the network module's relay supervisor (ADR-0030); a client finds
-# it next to its own executable, so an install without it could never attach
-# `network:real` however good its pasta is.
-BINS=(acos acos-art acos-mcp acos-netd)
+# acos-netd is the network module's relay supervisor (ADR-0030) and acos-webview
+# is the webview module's shared host broker (ADR-0031); clients resolve both as
+# siblings of their own executable, so an install without them could never attach
+# `network:real` or `webview:real`.
+BINS=(acos acos-art acos-mcp acos-netd acos-webview)
 
 # ---------------------------------------------------------------- binaries
 
@@ -118,7 +121,7 @@ else
     esac
     printf 'building release binaries (%s)\n' "$TARGET_DIR"
     ( cd "$REPO" && CARGO_TARGET_DIR="$TARGET_DIR" \
-        cargo build --release --offline -p acos-cli -p acos-art -p acos-mcp -p acos-netd )
+        cargo build --release --offline -p acos-cli -p acos-art -p acos-mcp -p acos-netd -p acos-webview )
     BIN_DIR="$TARGET_DIR/release"
 fi
 for bin in "${BINS[@]}"; do
@@ -212,15 +215,23 @@ ensure_webview_provider
 # the exact recipe and the install stays honest (`pasta: missing`, and
 # `needs_env: [pasta]` scenarios are skipped rather than faked).
 PASTA_REL="libexec/pasta"
+PASTA_DOC_REL="share/doc/acos/pasta"
 PASTA_RECORD="$REPO/research/spike-net/artifacts/passt-build.txt"
+PASTA_URL="https://passt.top/passt"
 PASTA_TAG=$(awk '/^pasta /{print $2; exit}' "$PASTA_RECORD" 2>/dev/null || true)
 PASTA_SHA=$(awk '/^sha256:/{print $2; exit}' "$PASTA_RECORD" 2>/dev/null || true)
+PASTA_COMMIT=$(awk '/^commit:/{sub(/^commit:[[:space:]]*/, ""); print; exit}' "$PASTA_RECORD" 2>/dev/null || true)
+PASTA_BUILD=$(awk '/^build:/{sub(/^build:[[:space:]]*/, ""); print; exit}' "$PASTA_RECORD" 2>/dev/null || true)
+PASTA_GCC=$(awk '/^gcc:/{sub(/^gcc:[[:space:]]*/, ""); print; exit}' "$PASTA_RECORD" 2>/dev/null || true)
 PASTA_TAG=${PASTA_TAG:-2026_10_02.cba3570}
+PASTA_COMMIT=${PASTA_COMMIT:-"cba357068dc586e7540971eb40bb56c5e62c4de1 (2026-09-28)"}
+PASTA_BUILD=${PASTA_BUILD:-"make clean && make static -j8 VERSION=$PASTA_TAG"}
+PASTA_LICENSE_DIR="$REPO/tools/release/licenses/pasta"
 
 pasta_recipe() {
     cat <<EOF
   build it (pinned tag $PASTA_TAG, sha256 $PASTA_SHA):
-      git clone --depth 1 -b $PASTA_TAG https://passt.top/passt pasta-src
+      git clone --depth 1 -b $PASTA_TAG $PASTA_URL pasta-src
       make -C pasta-src static VERSION=$PASTA_TAG
       $0 --prefix $PREFIX --pasta pasta-src/pasta
   ...or drop it at <repo>/libexec/pasta and re-run this installer.
@@ -241,8 +252,21 @@ pasta_source() {
     return 1
 }
 
+find_pasta_licence() {
+    local name=$1 src_real=$2
+    local src_dir cand
+    src_dir=$(dirname -- "$src_real")
+    for cand in \
+        "$src_dir/LICENSES/$name" \
+        "$src_dir/../LICENSES/$name" \
+        "$PASTA_LICENSE_DIR/$name"; do
+        [ -f "$cand" ] && { printf '%s\n' "$cand"; return 0; }
+    done
+    return 1
+}
+
 install_pasta() {
-    local src sha version
+    local src src_real sha version size gpl_src bsd_src doc_dir
     if ! src=$(pasta_source); then
         printf 'pasta: not found on this host; the network module stays unavailable\n'
         pasta_recipe
@@ -264,10 +288,73 @@ install_pasta() {
         pasta_recipe
         return 0
     fi
+    src_real=$(readlink -f -- "$src" 2>/dev/null || printf '%s' "$src")
+    gpl_src=$(find_pasta_licence "GPL-2.0-or-later.txt" "$src_real") ||
+        die "cannot ship GPL-2.0-or-later libexec/pasta without its licence text (expected LICENSES/GPL-2.0-or-later.txt or $PASTA_LICENSE_DIR/GPL-2.0-or-later.txt)"
+    size=$(stat -L -c '%s' "$src")
     mkdir -p "$DEST/$(dirname -- "$PASTA_REL")"
     install -m 0755 -- "$src" "$DEST/$PASTA_REL"
+    doc_dir="$DEST/$PASTA_DOC_REL"
+    mkdir -p "$doc_dir"
+    install -m 0644 -- "$gpl_src" "$doc_dir/COPYING"
+    if bsd_src=$(find_pasta_licence "BSD-3-Clause.txt" "$src_real"); then
+        install -m 0644 -- "$bsd_src" "$doc_dir/BSD-3-Clause.txt"
+    fi
+    cat >"$doc_dir/SOURCE.md" <<EOF
+# pasta — third-party binary licence and corresponding source notice
+
+This ACOS installation ships the unmodified upstream \`pasta\` static binary at
+\`$PASTA_REL\` for the optional \`network:real\` module (ADR-0030). \`pasta\` is a
+separate standalone executable invoked by \`acos-netd\` and is never linked into
+any ACOS binary (ACOS itself is licensed under Apache-2.0).
+
+## Provenance and build
+
+- **Project:** passt / pasta (Plug A Simple Socket Transport)
+- **Upstream repository:** $PASTA_URL
+- **Pinned release tag:** \`$PASTA_TAG\`
+- **Upstream commit:** \`$PASTA_COMMIT\`
+- **Upstream modifications:** none (unmodified upstream source at tag \`$PASTA_TAG\`)
+- **Installed binary:** \`$PASTA_REL\`
+- **Binary size:** $size bytes
+- **Binary SHA-256:** \`$sha\`
+- **Build command:** \`$PASTA_BUILD\`${PASTA_GCC:+
+- **Reference build compiler:** \`$PASTA_GCC\`}
+
+Reproduce from upstream source:
+
+\`\`\`bash
+git clone --depth 1 -b $PASTA_TAG $PASTA_URL pasta-src
+make -C pasta-src static VERSION=$PASTA_TAG
+\`\`\`
+
+## Licences
+
+- **GNU General Public License, version 2 or later (\`GPL-2.0-or-later\`):**
+  full verbatim upstream licence text installed alongside this notice at
+  \`$PASTA_DOC_REL/COPYING\` (upstream \`LICENSES/GPL-2.0-or-later.txt\`).
+- **BSD-3-Clause** (bundled compat/siphash components in upstream passt):
+  installed alongside this notice at \`$PASTA_DOC_REL/BSD-3-Clause.txt\` when
+  present (upstream \`LICENSES/BSD-3-Clause.txt\`).
+
+## Corresponding Source and GPL-2.0 Section 3 Written Offer
+
+The complete, unmodified corresponding source code for this \`pasta\` binary is
+publicly available from upstream Git at $PASTA_URL (tag \`$PASTA_TAG\`, commit
+\`$PASTA_COMMIT\`).
+
+In accordance with Section 3(b) of the GNU General Public License, version 2,
+for at least three (3) years from the date you received this binary, you may
+also obtain a complete machine-readable copy of the corresponding source code
+for this exact \`pasta\` build (tag \`$PASTA_TAG\`, commit \`$PASTA_COMMIT\`) at no
+charge beyond the cost of physically performing source distribution by
+requesting it from the distributor of this ACOS installation (or the ACOS
+project maintainers).
+EOF
+    chmod 0644 "$doc_dir/SOURCE.md"
     printf 'pasta: %s (%s bytes, version %s, sha256 %s) -> %s\n' \
-        "$src" "$(stat -c '%s' "$src")" "${version:-unknown}" "$sha" "$PASTA_REL"
+        "$src" "$size" "${version:-unknown}" "$sha" "$PASTA_REL"
+    printf 'pasta docs: %s/COPYING, %s/SOURCE.md\n' "$PASTA_DOC_REL" "$PASTA_DOC_REL"
 }
 install_pasta
 # Fail closed if the copy still points outside the install root.
@@ -308,6 +395,11 @@ fi
 
 # ------------------------------------------------------------- metadata
 
+MANIFEST_ROOTS=()
+for d in bin libexec share .cache/art/sysroot .cache/boot/android-34 crates/acos-art/guest/java; do
+    [ -e "$DEST/$d" ] && MANIFEST_ROOTS+=("$d")
+done
+
 printf '%s\n' "$VERSION" >"$DEST/VERSION"
 {
     printf 'ACOS %s\n' "$VERSION"
@@ -315,8 +407,7 @@ printf '%s\n' "$VERSION" >"$DEST/VERSION"
     printf 'source %s\n' "${FROM_TARGET:-$BIN_DIR}"
     printf 'gles %s\n' "$GLES_LINE"
     printf 'assets:\n'
-    ( cd "$DEST" && find bin libexec .cache/art/sysroot .cache/boot/android-34 \
-        crates/acos-art/guest/java -type f -print 2>/dev/null | LC_ALL=C sort )
+    ( cd "$DEST" && find "${MANIFEST_ROOTS[@]}" -type f -print | LC_ALL=C sort )
 } >"$DEST/MANIFEST.txt"
 
 # -------------------------------------------------------------- wrappers
@@ -349,7 +440,7 @@ fi
 
 # ------------------------------------------------------------------ report
 SIZE=$(du -sh "$DEST" | cut -f1)
-FILES=$(grep -c '^bin/\|^libexec/\|^\.cache/\|^crates/' "$DEST/MANIFEST.txt" || true)
+FILES=$(grep -c '^bin/\|^libexec/\|^share/\|^\.cache/\|^crates/' "$DEST/MANIFEST.txt" || true)
 cat <<EOF
 
 installed ACOS $VERSION
