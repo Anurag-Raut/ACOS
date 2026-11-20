@@ -39,10 +39,7 @@ fn real_vm(gc_stress: bool) -> Vm {
 macro_rules! require_boot {
     () => {
         if !boot_available() {
-            eprintln!(
-                "SKIP javabridge test: .cache/boot/android-34 is absent \
-                 (run tools/extract-bootclasspath.sh)"
-            );
+            acos_test_support::require_prereq(false, "real_vm", "javabridge test: .cache/boot/android-34 is absent (run tools/extract-bootclasspath.sh)");
             return;
         }
     };

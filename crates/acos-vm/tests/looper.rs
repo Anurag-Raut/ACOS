@@ -125,8 +125,7 @@ fn run_real(dex: &Path, main: &str) -> Option<(i32, String, Option<VmError>)> {
 
 #[test]
 fn real_looper_delayed_and_green_thread_wake() {
-    let Some(dex) = compile_java(&["LooperMain"]) else {
-        eprintln!("SKIP real_looper_delayed_and_green_thread_wake: javac/d8 unavailable");
+    let Some(dex) = acos_test_support::require_some(compile_java(&["LooperMain"]), "real_looper_delayed_and_green_thread_wake", "javac/d8 unavailable") else {
         return;
     };
     let Some((code, stdout, err)) = run_real(&dex, "LooperMain") else {
@@ -181,8 +180,7 @@ fn looper_handle_wakes_from_host_thread() {
 /// wall time, and the guest must still observe the full 60 s of uptime.
 #[test]
 fn virtual_looper_advances_clock_to_future_deadline() {
-    let Some(dex) = compile_java(&["LooperVirtual"]) else {
-        eprintln!("SKIP virtual_looper_advances_clock_to_future_deadline: javac/d8 unavailable");
+    let Some(dex) = acos_test_support::require_some(compile_java(&["LooperVirtual"]), "virtual_looper_advances_clock_to_future_deadline", "javac/d8 unavailable") else {
         return;
     };
     let Some(mut vm) = new_real_vm() else {

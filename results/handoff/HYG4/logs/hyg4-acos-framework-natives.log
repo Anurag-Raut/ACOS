@@ -1,0 +1,96 @@
+    Finished `test` profile [unoptimized] target(s) in 0.02s
+     Running unittests src/lib.rs (.cache/hyg4-target/debug/deps/acos_framework_natives-f59de6da12f592dc)
+
+running 10 tests
+test res::config::tests::dense_selection_rule_calibrated ... ok
+test res::config::tests::label_matches_aapt_examples ... ok
+test res::config::tests::locale_fallback_better_than ... ok
+test res::config::tests::screen_size_larger_than_request_does_not_match ... ok
+test res::config::tests::smallest_width_must_fit ... ok
+test res::strpool::tests::rejects_non_pool ... ok
+test res::theme::tests::raw_style_value_carries_no_resource_id ... ok
+test res::theme::tests::reference_style_value_targets_its_resource ... ok
+test res::xmlblock::tests::rejects_bad_magic ... ok
+test res::strpool::tests::empty_pool_is_empty ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/config_matching.rs (.cache/hyg4-target/debug/deps/config_matching-70e60a7e3fa761a8)
+
+running 7 tests
+test dens_any_wins ... ok
+test locale_exact_beats_language_beats_default ... ok
+test orientation_and_night_and_uimode ... ok
+test density_nearest_rule_calibrated_against_aapt2 ... ok
+test screen_size_larger_than_request_does_not_match ... ok
+test sdk_version_and_layout_direction ... ok
+test smallest_width_must_fit ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/differential_aapt2.rs (.cache/hyg4-target/debug/deps/differential_aapt2-540bd90d11e71139)
+
+running 3 tests
+test differential_app_values ... ok
+test differential_device_config_selection ... ok
+test differential_framework_res_values ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.07s
+
+     Running tests/fuzz_mutation.rs (.cache/hyg4-target/debug/deps/fuzz_mutation-8da188c407a88420)
+
+running 1 test
+test fuzz_arsc_and_axml_never_panic ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+
+     Running tests/memory_lazy.rs (.cache/hyg4-target/debug/deps/memory_lazy-9de167ffdb1e975b)
+
+running 1 test
+test framework_res_lazy_memory ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+
+     Running tests/smoke.rs (.cache/hyg4-target/debug/deps/smoke-c196aee3fcc4e27e)
+
+running 3 tests
+test app_apk_parses ... ok
+test manager_reads_asset ... ok
+test framework_res_loads_and_resolves ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/theme_resolution.rs (.cache/hyg4-target/debug/deps/theme_resolution-aedfe3fbe09bc720)
+
+running 9 tests
+test null_theme_reference_becomes_type_null ... ok
+test style_bag_string_keeps_its_asset_cookie ... ok
+test null_reference_entry_resolves_to_type_null ... ok
+test theme_copy_and_rebase ... ok
+test dark_action_bar_overlay_keeps_device_default_primaries ... ok
+test device_default_dark_action_bar_resolves_to_neutral_900 ... ok
+test retrieve_attributes_clears_unset_slots ... ok
+test theme_device_default_light_dark_action_bar ... ok
+test static_overlay_overrides_framework_bool ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.85s
+
+     Running tests/xmlblock_diff.rs (.cache/hyg4-target/debug/deps/xmlblock_diff-3d447e2798693464)
+
+running 6 tests
+test retrieve_attributes_through_manager ... ok
+test xmlblock_hello_views_layout ... ok
+test resolve_attrs_chases_a_theme_reference_to_a_concrete_color ... ok
+test retrieve_attributes_resolves_framework_color_reference ... ok
+test retrieve_attributes_clears_stale_slots_from_a_recycled_typed_array ... ok
+test xmlblock_screen_simple ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.35s
+
+   Doc-tests acos_framework_natives
+
+running 1 test
+test crates/acos-framework-natives/src/lib.rs - (line 21) ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s
+

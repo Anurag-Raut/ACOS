@@ -103,8 +103,7 @@ fn parse_stdout(stdout: &str) -> HashMap<String, String> {
 
 #[test]
 fn file_io_on_the_real_framework() {
-    let Some(dex) = compile_case("FileIoMain") else {
-        eprintln!("SKIP file_io_on_the_real_framework: javac/d8/android.jar unavailable");
+    let Some(dex) = acos_test_support::require_some(compile_case("FileIoMain"), "file_io_on_the_real_framework", "javac/d8/android.jar unavailable") else {
         return;
     };
     let options = VmOptions {
@@ -114,7 +113,7 @@ fn file_io_on_the_real_framework() {
     let mut vm = match Vm::new(options) {
         Ok(vm) => vm,
         Err(VmError::BootClasspathMissing(m)) => {
-            eprintln!("SKIP file_io_on_the_real_framework: {m}");
+            acos_test_support::require_prereq(false, "file_io_on_the_real_framework", &format!("file_io_on_the_real_framework: {m}"));
             return;
         }
         Err(e) => panic!("Vm::new failed: {e}"),

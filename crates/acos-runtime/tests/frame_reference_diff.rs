@@ -71,7 +71,7 @@ fn synthetic_frame_reaches_frame_store_and_matches_reference() {
     assert!(frame.pixels.chunks_exact(4).all(|p| p[3] == 0xFF));
 
     let Some(reference) = load_reference() else {
-        eprintln!("SKIP reference comparison: no ART reference screenshot");
+        acos_test_support::require_prereq(false, "synthetic_frame_reaches_frame_store_and_matches_reference", "reference comparison: no ART reference screenshot");
         clear_frame_handoff();
         return;
     };

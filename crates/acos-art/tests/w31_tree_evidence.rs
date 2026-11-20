@@ -124,11 +124,7 @@ fn artifacts_dir() -> Option<PathBuf> {
 #[test]
 fn saved_wait_for_and_assert_text_trees_contain_the_matched_node() {
     let Some(dir) = artifacts_dir() else {
-        eprintln!(
-            "W31 tree-evidence check skipped: no artifacts at \
-             results/art-runtime/evidence/W31-artifacts/gaten-release-evidence \
-             (the synthetic cases below still run)"
-        );
+        acos_test_support::require_prereq(false, "saved_wait_for_and_assert_text_trees_contain_the_matched_node", "W31 tree-evidence check skipped: no artifacts at results/art-runtime/evidence/W31-artifacts/gaten-release-evidence (the synthetic cases below still run)");
         return;
     };
     let text = "Recently looked up";

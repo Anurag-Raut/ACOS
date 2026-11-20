@@ -99,6 +99,12 @@ fn is_fresh(artifact: &Path, deps: &[PathBuf]) -> bool {
     let Ok(a) = std::fs::metadata(artifact) else {
         return false;
     };
+    // An empty artifact is a build that was killed half-way (d8 creates the file
+    // before writing it); trusting it would fail every later run on a cache that
+    // never heals.
+    if a.len() == 0 {
+        return false;
+    }
     let Ok(at) = a.modified() else { return false };
     deps.iter().all(|d| {
         std::fs::metadata(d)
@@ -363,9 +369,7 @@ fn case_launch_item(info: &Parcelable) -> Parcelable {
 #[test]
 fn real_java_client_transaction_matches_the_host_encoder() {
     let Some(dex) = compile_case("ClientTransactionCompareMain") else {
-        eprintln!(
-            "SKIP real_java_client_transaction_matches_the_host_encoder: toolchain unavailable"
-        );
+        acos_test_support::require_prereq(false, "real_java_client_transaction_matches_the_host_encoder", "real_java_client_transaction_matches_the_host_encoder: toolchain unavailable");
         return;
     };
 
@@ -376,9 +380,7 @@ fn real_java_client_transaction_matches_the_host_encoder() {
         .join("fixtures/build/apps/multi-activity.apk")
         .is_file()
     {
-        eprintln!(
-            "SKIP real_java_client_transaction_matches_the_host_encoder: fixtures/build absent"
-        );
+        acos_test_support::require_prereq(false, "real_java_client_transaction_matches_the_host_encoder", "real_java_client_transaction_matches_the_host_encoder: fixtures/build absent");
         return;
     }
 

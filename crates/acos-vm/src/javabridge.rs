@@ -1205,6 +1205,7 @@ mod tests {
             }
         }
         let _guard = EnvGuard;
+        let _sink = crate::natives::os_log::sink_test_guard();
         std::env::set_var("ACOS_BINDER_TRACE", "1");
         let mut vm = Vm::new(crate::VmOptions::default()).expect("vm");
         vm.native_roots.clear();

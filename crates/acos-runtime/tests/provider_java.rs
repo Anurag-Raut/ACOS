@@ -75,8 +75,7 @@ fn string(vm: &mut acos_vm::Vm, s: &str) -> Handle {
 
 #[test]
 fn app_provider_is_installed_published_and_reachable_through_the_binder() {
-    let Some(apk_path) = service_provider_apk() else {
-        eprintln!("SKIP app_provider_is_installed_published_and_reachable_through_the_binder: fixture APK not built");
+    let Some(apk_path) = acos_test_support::require_some(service_provider_apk(), "app_provider_is_installed_published_and_reachable_through_the_binder", "fixture APK not built") else {
         return;
     };
     let Some(mut rt) = new_runtime() else {

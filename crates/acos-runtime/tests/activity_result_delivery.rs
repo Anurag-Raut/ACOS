@@ -409,10 +409,7 @@ fn observe(apk_path: &std::path::Path, state: i32) -> Observation {
 #[test]
 fn the_hosts_result_transaction_reaches_the_caller_in_every_lifecycle_state() {
     let Some(apk_path) = perm_probe_apk() else {
-        eprintln!(
-            "SKIP the_hosts_result_transaction_reaches_the_caller_in_every_lifecycle_state: \
-             fixtures/build/apps/perm-probe.apk is absent (run tools/build-apps.sh)"
-        );
+        acos_test_support::require_prereq(false, "the_hosts_result_transaction_reaches_the_caller_in_every_lifecycle_state", "the_hosts_result_transaction_reaches_the_caller_in_every_lifecycle_state: fixtures/build/apps/perm-probe.apk is absent (run tools/build-apps.sh)");
         return;
     };
     let mut seen = Vec::new();

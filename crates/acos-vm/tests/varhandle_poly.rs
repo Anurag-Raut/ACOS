@@ -81,8 +81,7 @@ fn run(ir: bool, gc_stress: bool) -> Result<String, String> {
 
 #[test]
 fn varhandle_polymorphic_matches_jvm_both_tiers() {
-    if !boot_dir_available() {
-        eprintln!("SKIP varhandle_polymorphic_matches_jvm_both_tiers: boot classpath absent");
+    if acos_test_support::require_prereq(boot_dir_available(), "varhandle_polymorphic_matches_jvm_both_tiers", "boot classpath absent").is_none() {
         return;
     }
     let mut failures = Vec::new();

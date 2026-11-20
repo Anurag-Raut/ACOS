@@ -13,6 +13,7 @@ thiserror.workspace = true
 borsh = { version = "1", features = ["derive"] }
 
 [dev-dependencies]
+acos-test-support = { path = "../acos-test-support" }
 serde_json.workspace = true
 zip = { version = "2", default-features = false, features = ["deflate"] }
 

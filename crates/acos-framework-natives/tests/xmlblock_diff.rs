@@ -291,8 +291,13 @@ fn check_layout(apk_path: &PathBuf, entry: &str) {
 
 #[test]
 fn xmlblock_screen_simple() {
-    if !acos_test_support::have_fixture(".cache/boot/android-34/framework-res.apk") {
-        eprintln!("framework-res.apk missing; skipping");
+    if acos_test_support::require_prereq(
+        acos_test_support::have_fixture(".cache/boot/android-34/framework-res.apk"),
+        "xmlblock_screen_simple",
+        "framework-res.apk missing",
+    )
+    .is_none()
+    {
         return;
     }
     let apk = workspace_root().join(".cache/boot/android-34/framework-res.apk");
@@ -301,8 +306,13 @@ fn xmlblock_screen_simple() {
 
 #[test]
 fn xmlblock_hello_views_layout() {
-    if !acos_test_support::have_fixture("fixtures/build/apps/hello-views.apk") {
-        eprintln!("hello-views.apk missing; skipping");
+    if acos_test_support::require_prereq(
+        acos_test_support::have_fixture("fixtures/build/apps/hello-views.apk"),
+        "xmlblock_hello_views_layout",
+        "hello-views.apk missing",
+    )
+    .is_none()
+    {
         return;
     }
     let apk = workspace_root().join("fixtures/build/apps/hello-views.apk");
@@ -311,8 +321,13 @@ fn xmlblock_hello_views_layout() {
 
 #[test]
 fn retrieve_attributes_through_manager() {
-    if !acos_test_support::have_fixture("fixtures/build/apps/hello-views.apk") {
-        eprintln!("hello-views.apk missing; skipping");
+    if acos_test_support::require_prereq(
+        acos_test_support::have_fixture("fixtures/build/apps/hello-views.apk"),
+        "retrieve_attributes_through_manager",
+        "hello-views.apk missing",
+    )
+    .is_none()
+    {
         return;
     }
     let apk_path = workspace_root().join("fixtures/build/apps/hello-views.apk");
@@ -365,8 +380,13 @@ fn retrieve_attributes_through_manager() {
 /// `android:color="@0x01060035"` (`#ff161c20`).
 #[test]
 fn retrieve_attributes_resolves_framework_color_reference() {
-    if !acos_test_support::have_fixture(".cache/boot/android-34/framework-res.apk") {
-        eprintln!("framework-res.apk missing; skipping");
+    if acos_test_support::require_prereq(
+        acos_test_support::have_fixture(".cache/boot/android-34/framework-res.apk"),
+        "retrieve_attributes_resolves_framework_color_reference",
+        "framework-res.apk missing",
+    )
+    .is_none()
+    {
         return;
     }
     let apk_path = workspace_root().join(".cache/boot/android-34/framework-res.apk");
@@ -424,8 +444,13 @@ fn retrieve_attributes_resolves_framework_color_reference() {
 /// `width` dimension.
 #[test]
 fn retrieve_attributes_clears_stale_slots_from_a_recycled_typed_array() {
-    if !acos_test_support::have_fixture(".cache/boot/android-34/framework-res.apk") {
-        eprintln!("framework-res.apk missing; skipping");
+    if acos_test_support::require_prereq(
+        acos_test_support::have_fixture(".cache/boot/android-34/framework-res.apk"),
+        "retrieve_attributes_clears_stale_slots_from_a_recycled_typed_array",
+        "framework-res.apk missing",
+    )
+    .is_none()
+    {
         return;
     }
     let apk_path = workspace_root().join(".cache/boot/android-34/framework-res.apk");
@@ -501,8 +526,13 @@ fn retrieve_attributes_clears_stale_slots_from_a_recycled_typed_array() {
 /// while inflating `android:drawable/ic_ab_back_material` on `counter.apk`.
 #[test]
 fn resolve_attrs_chases_a_theme_reference_to_a_concrete_color() {
-    if !acos_test_support::have_fixture(".cache/boot/android-34/framework-res.apk") {
-        eprintln!("framework-res.apk missing; skipping");
+    if acos_test_support::require_prereq(
+        acos_test_support::have_fixture(".cache/boot/android-34/framework-res.apk"),
+        "resolve_attrs_chases_a_theme_reference_to_a_concrete_color",
+        "framework-res.apk missing",
+    )
+    .is_none()
+    {
         return;
     }
     let apk_path = workspace_root().join(".cache/boot/android-34/framework-res.apk");

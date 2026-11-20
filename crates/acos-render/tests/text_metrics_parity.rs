@@ -197,13 +197,11 @@ fn text_metrics_parity_vs_art() {
         return;
     }
     let mut ctx = RenderContext::new();
-    if !ctx.has_fonts() {
-        eprintln!("SKIP: no fonts available (set ACOS_FONT_DIR)");
+    if acos_test_support::require_prereq(ctx.has_fonts(), "text_metrics_parity_vs_art", "no fonts available (set ACOS_FONT_DIR)").is_none() {
         return;
     }
     // A separate engine so the tight-bounds column can be read directly.
-    let Some(fonts) = acos_render::FontCollection::shared() else {
-        eprintln!("SKIP: no shared font collection");
+    let Some(fonts) = acos_test_support::require_some(acos_render::FontCollection::shared(), "text_metrics_parity_vs_art", "no shared font collection") else {
         return;
     };
     let font = fonts
@@ -212,8 +210,7 @@ fn text_metrics_parity_vs_art() {
 
     let mut rows = Vec::new();
     for case in CASES {
-        let Some(xml) = reference_xml(case.app) else {
-            eprintln!("SKIP: no reference dump for {}", case.app);
+        let Some(xml) = acos_test_support::require_some(reference_xml(case.app), "text_metrics_parity_vs_art", &format!("no reference dump for {}", case.app)) else {
             return;
         };
         let bounds = if case.id.is_empty() {
@@ -222,7 +219,7 @@ fn text_metrics_parity_vs_art() {
             bounds_for_id(&xml, case.id)
         };
         let Some(bounds) = bounds else {
-            eprintln!("SKIP: bounds for {}/{} not found", case.app, case.label);
+            acos_test_support::require_prereq(false, "text_metrics_parity_vs_art", &format!("bounds for {}/{} not found", case.app, case.label));
             continue;
         };
 
@@ -272,8 +269,7 @@ fn text_metrics_parity_vs_art() {
         });
     }
 
-    if rows.is_empty() {
-        eprintln!("SKIP: no reference bounds resolved");
+    if acos_test_support::require_prereq(!(rows.is_empty()), "text_metrics_parity_vs_art", "no reference bounds resolved").is_none() {
         return;
     }
 

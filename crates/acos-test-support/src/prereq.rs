@@ -54,14 +54,25 @@ static SUMMARY: Once = Once::new();
 #[must_use]
 pub fn skip_allowed() -> bool {
     [ALLOW_SKIP_ENV, ALLOW_ANY_SKIP_ENV]
-        .iter()
-        .any(|name| match std::env::var(name) {
-            Ok(value) => {
-                let value = value.trim().to_ascii_lowercase();
-                value == "1" || value == "true" || value == "yes"
-            }
-            Err(_) => false,
-        })
+        .into_iter()
+        .any(skip_allowed_by)
+}
+
+/// The opt-out variable that is set (the name is printed, so a log says which
+/// one allowed the skip), or [`ALLOW_SKIP_ENV`] when none is.
+#[must_use]
+pub fn active_opt_out() -> &'static str {
+    [ALLOW_SKIP_ENV, ALLOW_ANY_SKIP_ENV]
+        .into_iter()
+        .find(|name| skip_allowed_by(name))
+        .unwrap_or(ALLOW_SKIP_ENV)
+}
+
+fn skip_allowed_by(name: &str) -> bool {
+    std::env::var(name).is_ok_and(|value| {
+        let value = value.trim().to_ascii_lowercase();
+        value == "1" || value == "true" || value == "yes"
+    })
 }
 
 /// How many prerequisites this process skipped (always 0 on the default path).
@@ -86,7 +97,8 @@ pub fn require_prereq(present: bool, test: &str, reason: &str) -> Option<()> {
     if skip_allowed() {
         let count = SKIPPED.fetch_add(1, Ordering::SeqCst) + 1;
         install_summary();
-        eprintln!("SKIP {test}: {reason} [{ALLOW_SKIP_ENV} is set; skip #{count} in this process]");
+        let opt_out = active_opt_out();
+        eprintln!("SKIP {test}: {reason} [{opt_out} is set; skip #{count} in this process]");
         return None;
     }
     panic!(
@@ -96,6 +108,23 @@ pub fn require_prereq(present: bool, test: &str, reason: &str) -> Option<()> {
          Provide the prerequisite named above, or set {ALLOW_SKIP_ENV}=1 to run \
          with a counted skip (the summary then prints how many were skipped)."
     );
+}
+
+/// A prerequisite that is a value: `Some(v)` is the prerequisite, `None` is
+/// missing and is reported through [`require_prereq`] (a failure by default, a
+/// counted skip behind the opt-out).
+///
+/// Call it as `let Some(x) = require_some(expr, "test", "reason") else { return; };`
+/// — the `None` path of `expr` *is* the prerequisite check, so no test
+/// returns early without the failure or the counted skip having happened.
+pub fn require_some<T>(value: Option<T>, test: &str, reason: &str) -> Option<T> {
+    match value {
+        Some(v) => Some(v),
+        None => {
+            require_prereq(false, test, reason);
+            None
+        }
+    }
 }
 
 /// Print the per-process skip summary once, on normal exit.
@@ -113,7 +142,8 @@ extern "C" fn summary_hook() {
     if count > 0 {
         eprintln!(
             "SKIP SUMMARY: {count} test(s) skipped in this process because \
-             {ALLOW_SKIP_ENV} is set; the default path must show 0."
+             {} is set; the default path must show 0.",
+            active_opt_out()
         );
     }
 }
@@ -199,10 +229,22 @@ pub fn require_art(checkout: &Path, test: &str) -> Option<ArtInputs> {
 mod tests {
     use super::*;
 
+    /// The tests below read and write process-global state (the opt-out
+    /// variables and the skip counter), and `cargo test` runs them on parallel
+    /// threads. Without this lock one test's `set_var` flips another's
+    /// prerequisite from "fails" to "skips" and the counter deltas double-count
+    /// (observed: `a_missing_value_prerequisite_fails_loudly` saw 2 skips for 1).
+    static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    fn env_lock() -> std::sync::MutexGuard<'static, ()> {
+        ENV_LOCK.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+
     /// The opt-out is an explicit, spelled-out value; anything else (including
     /// an empty string) is not an opt-out.
     #[test]
     fn the_opt_out_is_read_as_a_boolean() {
+        let _env = env_lock();
         let saved = std::env::var_os(ALLOW_SKIP_ENV);
         for (value, expected) in [
             (None, false),
@@ -228,6 +270,7 @@ mod tests {
     /// `None` and the test passed with nothing asserted).
     #[test]
     fn a_missing_prerequisite_fails_loudly_unless_the_opt_out_is_set() {
+        let _env = env_lock();
         let saved = std::env::var_os(ALLOW_SKIP_ENV);
         std::env::remove_var(ALLOW_SKIP_ENV);
         std::env::remove_var(ALLOW_ANY_SKIP_ENV);
@@ -267,10 +310,38 @@ mod tests {
         }
     }
 
+    /// `require_some` is the same rule for a value: a missing value fails by
+    /// default, and a present one is returned untouched.
+    #[test]
+    fn a_missing_value_prerequisite_fails_loudly() {
+        let _env = env_lock();
+        let saved = std::env::var_os(ALLOW_SKIP_ENV);
+        let saved_any = std::env::var_os(ALLOW_ANY_SKIP_ENV);
+        std::env::remove_var(ALLOW_SKIP_ENV);
+        std::env::remove_var(ALLOW_ANY_SKIP_ENV);
+        assert_eq!(require_some(Some(7), "hyg3-probe", "never printed"), Some(7));
+        let outcome = std::panic::catch_unwind(|| {
+            let _: Option<u8> = require_some(None, "hyg3-probe", "javac is absent");
+        });
+        assert!(outcome.is_err(), "a missing value must fail, not return None");
+        std::env::set_var(ALLOW_SKIP_ENV, "1");
+        let before = skipped_count();
+        assert_eq!(require_some::<u8>(None, "hyg3-probe", "javac is absent"), None);
+        assert_eq!(skipped_count(), before + 1, "the opt-out skip is counted");
+        std::env::remove_var(ALLOW_SKIP_ENV);
+        for (name, value) in [(ALLOW_SKIP_ENV, saved), (ALLOW_ANY_SKIP_ENV, saved_any)] {
+            match value {
+                Some(value) => std::env::set_var(name, value),
+                None => std::env::remove_var(name),
+            }
+        }
+    }
+
     /// A present prerequisite is not a skip: the count stays where it was and
     /// the caller gets `Some`.
     #[test]
     fn a_present_prerequisite_is_not_a_skip() {
+        let _env = env_lock();
         let before = skipped_count();
         assert!(require_prereq(true, "hyg2-probe", "never printed").is_some());
         assert_eq!(skipped_count(), before);
@@ -280,6 +351,7 @@ mod tests {
     /// the empty scratch dir `run-exclusive.sh` hands out.
     #[test]
     fn warm_data_prefers_a_variable_that_holds_a_guest_dex() {
+        let _env = env_lock();
         let dir = std::env::temp_dir().join(format!("hyg2-warm-{}", std::process::id()));
         let warm = dir.join("warm");
         let scratch = dir.join("scratch");

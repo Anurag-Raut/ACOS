@@ -1170,7 +1170,7 @@ mod tests {
         }) {
             Ok(rt) => rt,
             Err(VmError::BootClasspathMissing(msg)) => {
-                eprintln!("SKIP describe_throwable_unwraps_exception_in_initializer_error: {msg}");
+                acos_test_support::require_prereq(false, "describe_throwable_unwraps_exception_in_initializer_error", &format!("describe_throwable_unwraps_exception_in_initializer_error: {msg}"));
                 return;
             }
             Err(e) => panic!("Runtime::standard_with failed: {e}"),

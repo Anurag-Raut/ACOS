@@ -155,12 +155,20 @@ fn find_hex_after(s: &str, needle: &str) -> Option<u32> {
 
 #[test]
 fn differential_framework_res_values() {
-    let Some(aapt) = find_aapt() else {
-        eprintln!("aapt not found; skipping differential test");
+    let Some(aapt) = acos_test_support::require_some(
+        find_aapt(),
+        "differential_framework_res_values",
+        "aapt not found; skipping differential test",
+    ) else {
         return;
     };
-    if !acos_test_support::have_fixture(".cache/boot/android-34/framework-res.apk") {
-        eprintln!("framework-res.apk missing; skipping");
+    if acos_test_support::require_prereq(
+        acos_test_support::have_fixture(".cache/boot/android-34/framework-res.apk"),
+        "differential_framework_res_values",
+        "framework-res.apk missing",
+    )
+    .is_none()
+    {
         return;
     }
     let apk_path = workspace_root().join(".cache/boot/android-34/framework-res.apk");
@@ -180,12 +188,20 @@ fn differential_framework_res_values() {
 
 #[test]
 fn differential_app_values() {
-    let Some(aapt) = find_aapt() else {
-        eprintln!("aapt not found; skipping differential test");
+    let Some(aapt) = acos_test_support::require_some(
+        find_aapt(),
+        "differential_app_values",
+        "aapt not found; skipping differential test",
+    ) else {
         return;
     };
-    if !acos_test_support::have_fixture("fixtures/build/apps/hello-views.apk") {
-        eprintln!("hello-views.apk missing; skipping");
+    if acos_test_support::require_prereq(
+        acos_test_support::have_fixture("fixtures/build/apps/hello-views.apk"),
+        "differential_app_values",
+        "hello-views.apk missing",
+    )
+    .is_none()
+    {
         return;
     }
     let apk_path = workspace_root().join("fixtures/build/apps/hello-views.apk");
@@ -336,8 +352,11 @@ fn differential_apk(
 /// aapt block with the same configuration label.
 #[test]
 fn differential_device_config_selection() {
-    let Some(aapt) = find_aapt() else {
-        eprintln!("aapt not found; skipping");
+    let Some(aapt) = acos_test_support::require_some(
+        find_aapt(),
+        "differential_device_config_selection",
+        "aapt not found",
+    ) else {
         return;
     };
     let apk_path = workspace_root().join(".cache/boot/android-34/framework-res.apk");

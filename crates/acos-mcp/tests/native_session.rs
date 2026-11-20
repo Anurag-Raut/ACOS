@@ -27,12 +27,12 @@ fn boot_available() -> bool {
 fn native_fixture() -> Option<PathBuf> {
     let rel = "fixtures/build/apps/native-hello.apk";
     let apk = repo_root().join(rel);
-    if acos_test_support::have_fixture(rel) {
-        Some(apk)
-    } else {
-        eprintln!("SKIP native_session: missing {}", apk.display());
-        None
-    }
+    acos_test_support::require_prereq(
+        acos_test_support::have_fixture(rel),
+        "native_session",
+        &format!("missing {} — build it with tools/build-apps.sh", apk.display()),
+    )?;
+    Some(apk)
 }
 
 fn backend() -> SessionBackend {
@@ -43,8 +43,13 @@ fn backend() -> SessionBackend {
 
 #[test]
 fn native_launch_runs_in_a_confined_child_session() {
-    if !boot_available() {
-        eprintln!("SKIP native_launch_runs_in_a_confined_child_session: no boot cache");
+    if acos_test_support::require_prereq(
+        boot_available(),
+        "native_launch_runs_in_a_confined_child_session",
+        "no boot cache",
+    )
+    .is_none()
+    {
         return;
     }
     let Some(apk) = native_fixture() else {

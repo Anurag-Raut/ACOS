@@ -166,6 +166,21 @@ impl InputBindResult {
         }
     }
 
+    /// Focus-gain-only report result (`SUCCESS_REPORT_WINDOW_FOCUS_ONLY`).
+    #[must_use]
+    pub const fn report_window_focus_only(sequence: i32) -> Self {
+        Self {
+            result: crate::ime::BIND_REPORT_WINDOW_FOCUS_ONLY,
+            method: None,
+            accessibility_sessions: None,
+            channel: None,
+            id: None,
+            sequence,
+            matrix_values: None,
+            suppressing_spell_checker: false,
+        }
+    }
+
     /// Write the payload exactly as the image's `writeToParcel` does (no
     /// `writeTypedObject` presence marker; the caller writes that).
     pub fn write_payload(&self, p: &mut Parcel) -> Result<()> {
@@ -509,20 +524,31 @@ impl ImeWireService {
             .ok_or_else(|| bad("no decoded table entry for startInputOrWindowGainedFocus"))?;
         let mut sequence = 0i32;
         let mut client: Option<BinderId> = None;
+        let mut window_token: Option<BinderId> = None;
+        let mut start_input_flags = 0i32;
+        let mut soft_input_mode = 0i32;
+        let mut window_flags = 0i32;
+        let mut target_sdk_version = 0i32;
         let mut remote: Option<BinderId> = None;
         let mut editor: Option<EditorInfo> = None;
         for (index, op) in method.args.iter().enumerate() {
             match op {
                 WireOp::I32 => {
                     let value = data.read_int32()?;
-                    if index == 0 {
-                        sequence = value;
+                    match index {
+                        0 => sequence = value,
+                        3 => start_input_flags = value,
+                        4 => soft_input_mode = value,
+                        5 => window_flags = value,
+                        9 => target_sdk_version = value,
+                        _ => {}
                     }
                 }
                 WireOp::Binder { .. } => {
                     let value = data.read_strong_binder()?;
                     match index {
                         1 => client = value,
+                        2 => window_token = value,
                         7 => remote = value,
                         _ => {}
                     }
@@ -540,11 +566,19 @@ impl ImeWireService {
                 }
             }
         }
+        let ctx = crate::ime::StartInputContext {
+            window_token,
+            start_input_flags,
+            soft_input_mode,
+            window_flags,
+            target_sdk_version,
+            has_editor_info: editor.is_some(),
+        };
         let (recorded, _method, session) = self
             .state
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .start_input(client, sequence, remote);
+            .start_input_with_context(client, sequence, remote, ctx);
         let channel = {
             let mut state = self
                 .state
@@ -557,10 +591,13 @@ impl ImeWireService {
             }
         };
         eprintln!(
-            "ACOSW13 ime startInput sequence={sequence} client={:?} recorded={recorded} \
+            "ACOSW13 ime startInput sequence={sequence} client={:?} window={:?} \
+             flags={start_input_flags:#x} softInputMode={soft_input_mode:#x} \
+             windowFlags={window_flags:#x} recorded={recorded} \
              editor={{inputType={} imeOptions={} package={:?} fieldId={} hint={:?} autofill={:?} \
              extras={} surrounding={} mime={:?}}} -> {}",
             client.map(|b| b.0),
+            window_token.map(|b| b.0),
             editor.as_ref().map(|e| e.input_type).unwrap_or(-1),
             editor.as_ref().map(|e| e.ime_options).unwrap_or(-1),
             editor.as_ref().and_then(|e| e.package_name.clone()),
@@ -573,10 +610,10 @@ impl ImeWireService {
                 .map(|e| e.has_initial_surrounding_text)
                 .unwrap_or(false),
             editor.as_ref().and_then(|e| e.content_mime_types.clone()),
-            if recorded == crate::ime::BIND_SUCCESS {
-                "SUCCESS"
-            } else {
-                "NO_IME"
+            match recorded {
+                crate::ime::BIND_SUCCESS => "SUCCESS",
+                crate::ime::BIND_REPORT_WINDOW_FOCUS_ONLY => "SUCCESS_REPORT_WINDOW_FOCUS_ONLY",
+                _ => "NO_IME",
             },
         );
         reply.reset();
@@ -626,6 +663,8 @@ impl ImeWireService {
             reply.write_int32(sequence);
             reply.write_float_array(None)?;
             reply.write_bool(false);
+        } else if recorded == crate::ime::BIND_REPORT_WINDOW_FOCUS_ONLY {
+            InputBindResult::report_window_focus_only(sequence).write_payload(reply)?;
         } else {
             InputBindResult::no_ime(sequence).write_payload(reply)?;
         }

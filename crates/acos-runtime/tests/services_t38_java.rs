@@ -17,10 +17,7 @@ use common::{compile_case, run_ok};
 #[test]
 fn ime_and_clipboard_replies_round_trip_through_real_java_proxies() {
     let Some(dex) = compile_case(&["ImeClipboardMain"]) else {
-        eprintln!(
-            "SKIP ime_and_clipboard_replies_round_trip_through_real_java_proxies: \
-             javac/d8/android.jar unavailable"
-        );
+        acos_test_support::require_prereq(false, "ime_and_clipboard_replies_round_trip_through_real_java_proxies", "ime_and_clipboard_replies_round_trip_through_real_java_proxies: javac/d8/android.jar unavailable");
         return;
     };
     let Some(stdout) = run_ok(&dex, "ImeClipboardMain", "ImeClipboardMain") else {

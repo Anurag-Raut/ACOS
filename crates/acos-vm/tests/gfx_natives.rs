@@ -46,8 +46,7 @@ fn stale_handle_is_a_structured_error_not_a_panic() {
 
 #[test]
 fn paint_text_measurement_agrees_with_acos_render() {
-    let Some(fonts) = FontCollection::shared() else {
-        eprintln!("SKIP paint_text_measurement_agrees_with_acos_render: no /system/fonts");
+    let Some(fonts) = acos_test_support::require_some(FontCollection::shared(), "paint_text_measurement_agrees_with_acos_render", "no /system/fonts") else {
         return;
     };
     let font = fonts
@@ -183,7 +182,7 @@ fn gfx_natives_on_the_real_framework() {
     let out = match run_case() {
         Ok(out) => out,
         Err(m) => {
-            eprintln!("SKIP gfx_natives_on_the_real_framework: {m}");
+            acos_test_support::require_prereq(false, "gfx_natives_on_the_real_framework", &format!("gfx_natives_on_the_real_framework: {m}"));
             return;
         }
     };
@@ -204,8 +203,7 @@ fn gfx_natives_on_the_real_framework() {
     // acos-render's shaping within 0.01 px.
     let measured: f32 = line_value(&out, "measure").unwrap().parse().unwrap();
     let raw: f32 = line_value(&out, "widths").unwrap().parse().unwrap();
-    let Some(fonts) = FontCollection::shared() else {
-        eprintln!("SKIP measure comparison: no /system/fonts");
+    let Some(fonts) = acos_test_support::require_some(FontCollection::shared(), "gfx_natives_on_the_real_framework", "measure comparison: no /system/fonts") else {
         return;
     };
     let font = fonts

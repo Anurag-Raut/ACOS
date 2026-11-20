@@ -886,8 +886,7 @@ mod tests {
     /// rounded 37 px, whose `top=-40 bot=11` gives the ART reference's 51 px.
     #[test]
     fn skia_metrics_match_art_api34_emulator() {
-        let Some(e) = engine_or_skip() else {
-            eprintln!("SKIP: no fonts available");
+        let Some(e) = acos_test_support::require_some(engine_or_skip(), "skia_metrics_match_art_api34_emulator", "no fonts available") else {
             return;
         };
         // The host font set is not necessarily Roboto; only assert on Roboto.
@@ -898,7 +897,7 @@ mod tests {
         };
         let check = at(36.75);
         if !(check.ascent == -34 && check.descent == 9) {
-            eprintln!("SKIP: default font is not the ART Roboto ({check:?})");
+            acos_test_support::require_prereq(false, "skia_metrics_match_art_api34_emulator", &format!("default font is not the ART Roboto ({check:?})"));
             return;
         }
         assert_eq!(check.top, -39, "14sp/36.75px top");
@@ -919,8 +918,7 @@ mod tests {
 
     #[test]
     fn advances_sum_equals_measure_text() {
-        let Some(mut e) = engine_or_skip() else {
-            eprintln!("SKIP: no fonts available");
+        let Some(mut e) = acos_test_support::require_some(engine_or_skip(), "advances_sum_equals_measure_text", "no fonts available") else {
             return;
         };
         let st = style(&e);
@@ -938,8 +936,7 @@ mod tests {
 
     #[test]
     fn non_ascii_text_shapes_without_panic() {
-        let Some(mut e) = engine_or_skip() else {
-            eprintln!("SKIP: no fonts available");
+        let Some(mut e) = acos_test_support::require_some(engine_or_skip(), "non_ascii_text_shapes_without_panic", "no fonts available") else {
             return;
         };
         let st = style(&e);
@@ -955,8 +952,7 @@ mod tests {
 
     #[test]
     fn shaping_cache_reports_hit_rate() {
-        let Some(mut e) = engine_or_skip() else {
-            eprintln!("SKIP: no fonts available");
+        let Some(mut e) = acos_test_support::require_some(engine_or_skip(), "shaping_cache_reports_hit_rate", "no fonts available") else {
             return;
         };
         let st = style(&e);
@@ -971,8 +967,7 @@ mod tests {
 
     #[test]
     fn empty_text_is_zero_width() {
-        let Some(mut e) = engine_or_skip() else {
-            eprintln!("SKIP: no fonts available");
+        let Some(mut e) = acos_test_support::require_some(engine_or_skip(), "empty_text_is_zero_width", "no fonts available") else {
             return;
         };
         let st = style(&e);
@@ -981,8 +976,7 @@ mod tests {
 
     #[test]
     fn font_metrics_have_positive_descent() {
-        let Some(e) = engine_or_skip() else {
-            eprintln!("SKIP: no fonts available");
+        let Some(e) = acos_test_support::require_some(engine_or_skip(), "font_metrics_have_positive_descent", "no fonts available") else {
             return;
         };
         let st = style(&e);
@@ -993,8 +987,7 @@ mod tests {
 
     #[test]
     fn kerning_is_applied_for_av() {
-        let Some(mut e) = engine_or_skip() else {
-            eprintln!("SKIP: no fonts available");
+        let Some(mut e) = acos_test_support::require_some(engine_or_skip(), "kerning_is_applied_for_av", "no fonts available") else {
             return;
         };
         let st = style(&e);
@@ -1006,8 +999,7 @@ mod tests {
 
     #[test]
     fn text_path_is_non_empty() {
-        let Some(mut e) = engine_or_skip() else {
-            eprintln!("SKIP: no fonts available");
+        let Some(mut e) = acos_test_support::require_some(engine_or_skip(), "text_path_is_non_empty", "no fonts available") else {
             return;
         };
         let st = style(&e);

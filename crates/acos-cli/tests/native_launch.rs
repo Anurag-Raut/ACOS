@@ -71,8 +71,7 @@ fn stage_status<'a>(value: &'a Value, stage: &str) -> &'a str {
 
 #[test]
 fn native_hello_loads_and_runs_apk_library() {
-    if !boot_available() {
-        eprintln!("SKIP native_hello_loads_and_runs_apk_library: no boot cache");
+    if acos_test_support::require_prereq(boot_available(), "native_hello_loads_and_runs_apk_library", "no boot cache").is_none() {
         return;
     }
     let Some(apk) = fixture("native-hello.apk") else {
@@ -126,8 +125,7 @@ fn native_hello_loads_and_runs_apk_library() {
 
 #[test]
 fn native_hostile_actions_are_denied_by_confinement() {
-    if !boot_available() {
-        eprintln!("SKIP native_hostile_actions_are_denied_by_confinement: no boot cache");
+    if acos_test_support::require_prereq(boot_available(), "native_hostile_actions_are_denied_by_confinement", "no boot cache").is_none() {
         return;
     }
     let Some(apk) = fixture("native-hostile.apk") else {
@@ -151,8 +149,7 @@ fn native_hostile_actions_are_denied_by_confinement() {
 
 #[test]
 fn native_launch_without_native_reports_unsupported_with_hint() {
-    if !boot_available() {
-        eprintln!("SKIP native_launch_without_native_reports_unsupported_with_hint: no boot cache");
+    if acos_test_support::require_prereq(boot_available(), "native_launch_without_native_reports_unsupported_with_hint", "no boot cache").is_none() {
         return;
     }
     let Some(apk) = fixture("native-hello.apk") else {

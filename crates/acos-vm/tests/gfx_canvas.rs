@@ -182,7 +182,7 @@ fn gfx_canvas_records_renders_and_round_trips() {
     let out = match run_case("GfxCanvasMain") {
         Ok(out) => out,
         Err(m) => {
-            eprintln!("SKIP gfx_canvas_records_renders_and_round_trips: {m}");
+            acos_test_support::require_prereq(false, "gfx_canvas_records_renders_and_round_trips", &format!("gfx_canvas_records_renders_and_round_trips: {m}"));
             return;
         }
     };

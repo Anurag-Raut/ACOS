@@ -42,8 +42,13 @@ fn sandboxed_sleep() -> Command {
 fn the_engine_still_dies_with_the_broker_process() {
     // The other half of --die-with-parent must survive the fix: a broker that
     // exits (here: a child process standing in for it) takes its engine down.
-    if !bwrap_usable() {
-        eprintln!("SKIPPED: bwrap is not usable here");
+    if acos_test_support::require_prereq(
+        bwrap_usable(),
+        "the_engine_still_dies_with_the_broker_process",
+        "bwrap is not usable here (bwrap --ro-bind / / -- /bin/true fails)",
+    )
+    .is_none()
+    {
         return;
     }
     if std::env::var("ACOS_WVKILL_CHILD").as_deref() == Ok("1") {

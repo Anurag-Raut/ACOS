@@ -76,9 +76,7 @@ struct Case {
 #[test]
 fn broken_fixtures_never_false_pass() {
     let Some(boot) = boot_dir() else {
-        eprintln!(
-            "SKIP broken_fixtures_never_false_pass: no boot classpath; run tools/extract-bootclasspath.sh"
-        );
+        acos_test_support::require_prereq(false, "broken_fixtures_never_false_pass", "broken_fixtures_never_false_pass: no boot classpath; run tools/extract-bootclasspath.sh");
         return;
     };
     let apps = workspace().join("fixtures/build/apps");
@@ -111,10 +109,7 @@ fn broken_fixtures_never_false_pass() {
         .filter(|apk| !apps.join(apk).is_file())
         .collect();
     if !missing.is_empty() {
-        eprintln!(
-            "SKIP broken_fixtures_never_false_pass: build fixtures first: \
-             `tools/build-apps.sh && tools/build-negative-apps.sh` (missing {missing:?})"
-        );
+        acos_test_support::require_prereq(false, "broken_fixtures_never_false_pass", &format!("broken_fixtures_never_false_pass: build fixtures first: `tools/build-apps.sh && tools/build-negative-apps.sh` (missing {missing:?})"));
         return;
     }
 
