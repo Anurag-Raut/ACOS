@@ -1,7 +1,8 @@
 # ACOS engineering policy: reuse by default, replace only for massive gains (2026-11-11)
 
-The owner's direction of 2026-11-11 is consolidated in
-`docs/OWNER_DIRECTION_2026-11-11.md`. This file applies it.
+The founding ART direction (2026-11-11) is archived in
+`legacy/docs/OWNER_DIRECTION_2026-11-11.md`. This file applies it alongside
+`AGENTS.md` and `docs/internals/overview.md`.
 
 ## Primary objective (final direction, 2026-11-11)
 ACOS is an agent-first Android application execution and verification environment, not a replacement mobile OS. Run real Android APKs with the highest practical compatibility, fastest verification loops, lowest memory and minimum engineering effort. Agents install, launch, inspect, interact with, reset and verify apps quickly and concurrently. Final compatibility testing happens on a real emulator or physical device; ACOS gives high-fidelity development verification without reproducing unnecessary phone infrastructure.
