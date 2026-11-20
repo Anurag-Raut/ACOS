@@ -74,3 +74,23 @@ Compact visual evidence from rep 1:
 | `scenarios/back-layers-ime.yaml` | `pass` | 4,591 ms | 22/22 steps |
 | `scenarios/gaten-backstack.yaml` | `pass` | 11,386 ms | 25/25 steps |
 | `cargo test --release --offline -p acos-services` | `ok` | — | 741 passed, 0 failed, 2 ignored (includes 17 `ime_wire` tests, 4 new) |
+
+## GBMERGE verification (2026-11-20)
+
+Verified `gbmerge` (GATENBACK3 + `scenarios/gaten-word-lookup.yaml` Close-lookup extension + latest `origin/modules` merge) with `acos verify --engine art` (release `acos` + `acos-art`) and full `acos-services` tests:
+
+### 1. Scenario runs (7/7 PASS)
+
+| Scenario | Verdict | Steps | Wall ms | Evidence |
+| --- | --- | --- | --- | --- |
+| `scenarios/back-layers.yaml` | `pass` | 22/22 | 4,353 ms | `evidence/gbmerge/back-layers.json`, `evidence/gbmerge/back-layers-verdict.json` |
+| `scenarios/back-layers-ime.yaml` | `pass` | 22/22 | 4,640 ms | `evidence/gbmerge/back-layers-ime.json`, `evidence/gbmerge/back-layers-ime-verdict.json` |
+| `scenarios/gaten-backstack.yaml` | `pass` | 25/25 | 11,443 ms | `evidence/gbmerge/gaten-backstack.json`, `evidence/gbmerge/gaten-backstack-verdict.json` |
+| `scenarios/gaten-bubble-overlay.yaml` | `pass` | 28/28 | 16,324 ms | `evidence/gbmerge/gaten-bubble-overlay.json`, `evidence/gbmerge/gaten-bubble-overlay-verdict.json` |
+| `scenarios/gaten-word-lookup.yaml` (rep 1) | `pass` | 64/64 | 34,745 ms | `evidence/gbmerge/gaten-word-lookup-1.json`, `evidence/gbmerge/gaten-word-lookup-1-verdict.json` |
+| `scenarios/gaten-word-lookup.yaml` (rep 2) | `pass` | 64/64 | 33,164 ms | `evidence/gbmerge/gaten-word-lookup-2.json`, `evidence/gbmerge/gaten-word-lookup-2-verdict.json` |
+| `scenarios/gaten-word-lookup.yaml` (rep 3) | `pass` | 64/64 | 33,980 ms | `evidence/gbmerge/gaten-word-lookup-3.json`, `evidence/gbmerge/gaten-word-lookup-3-verdict.json` |
+
+### 2. Cargo tests
+
+- `cargo test -p acos-services` (all targets, 90 test binaries/doctests): **741 passed, 0 failed, 2 ignored** (includes 17/17 `tests/ime_wire.rs` tests).
