@@ -1,0 +1,371 @@
+{
+  "acos": "/home/Qui/.t3/worktrees/acos/t3-f4bcc4d4-5c49b0ef4f83b639/.cache/rg4-target/release/acos",
+  "binary_sha256": "0a39e118d81134481d7bc7635150ec3fd629a66ea37c170143718e04bb59ada2",
+  "checks": {
+    "apk_ready_n": 5,
+    "failed_steps": 0
+  },
+  "env": {
+    "ACOS_ART_STAGE_TIMING": "1",
+    "animations": "on"
+  },
+  "errors": [],
+  "failures": {
+    "failed_by_code": {},
+    "failed_steps": 0,
+    "rows": []
+  },
+  "host_after": {
+    "loadavg1": 0.41,
+    "loadavg15": 2.07,
+    "loadavg5": 1.85,
+    "mem_available_gib": 45.12,
+    "mem_available_mib": 46202.8,
+    "mem_total_gib": 60.46,
+    "mem_total_mib": 61908.7,
+    "noisy": false,
+    "other_acos": [],
+    "runnable": "1/2164",
+    "used_mib": 15705.9,
+    "used_pct": 25.37,
+    "utc": "2026-11-20T07:22:45+00:00"
+  },
+  "host_before": {
+    "loadavg1": 0.41,
+    "loadavg15": 2.07,
+    "loadavg5": 1.85,
+    "mem_available_gib": 45.12,
+    "mem_available_mib": 46202.8,
+    "mem_total_gib": 60.46,
+    "mem_total_mib": 61908.7,
+    "noisy": false,
+    "other_acos": [],
+    "runnable": "1/2164",
+    "used_mib": 15705.9,
+    "used_pct": 25.37,
+    "utc": "2026-11-20T07:22:45+00:00"
+  },
+  "ok": true,
+  "phase": "install",
+  "samples": {
+    "m9_apk_ready_cold_ms": {
+      "bad": 0,
+      "extra": [
+        {
+          "apk": "/home/Qui/.t3/worktrees/acos/t3-f4bcc4d4-5c49b0ef4f83b639/fixtures/build/apps/counter.apk",
+          "log": "/home/Qui/.t3/worktrees/acos/t3-f4bcc4d4-5c49b0ef4f83b639/.cache/rg4b/install-v040/sessions/s_h6_m9_cold_0/launcher.stderr.log",
+          "substages": {
+            "apk-stage": 0,
+            "art-shim": 0,
+            "binder-driver": 0,
+            "classpath": 0,
+            "classpath-hit": 0,
+            "ensure-data": 0,
+            "extra-apk-stage": 0,
+            "extra-native-libs": 0,
+            "gralloc-shim": 0,
+            "guest-dex": 10,
+            "guest-exec": 3680,
+            "launch-entry": 0,
+            "linkerconfig": 0,
+            "linkerconfig-hit": 0,
+            "native-libs": 0,
+            "overlays": 0,
+            "overlays-done": 0,
+            "overlays-list": 0,
+            "peer-setup": 0,
+            "props-logd": 0,
+            "render-shim": 0,
+            "run-dir": 0
+          }
+        }
+      ],
+      "median": 3690.0,
+      "n": 1,
+      "ok": 1,
+      "stats": {
+        "ci95_high": null,
+        "ci95_low": null,
+        "cv": null,
+        "max": 3690.0,
+        "mean": 3690.0,
+        "median": 3690.0,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 3690.0,
+        "n": 1,
+        "p5": 3690.0,
+        "p50": 3690.0,
+        "p95": 3690.0,
+        "resamples": 0,
+        "spread": null,
+        "spread_pct": null,
+        "stdev": null
+      },
+      "unit": "ms",
+      "values": [
+        3690.0
+      ]
+    },
+    "m9_apk_ready_ms": {
+      "bad": 0,
+      "extra": [
+        {
+          "apk": "/home/Qui/.t3/worktrees/acos/t3-f4bcc4d4-5c49b0ef4f83b639/fixtures/build/apps/counter.apk",
+          "launch_ok": true,
+          "log": "/home/Qui/.t3/worktrees/acos/t3-f4bcc4d4-5c49b0ef4f83b639/.cache/rg4b/install-v040/sessions/s_h6_m9_apk_ready_0/launcher.stderr.log",
+          "substages": {
+            "apk-stage": 0,
+            "art-shim": 0,
+            "binder-driver": 0,
+            "classpath": 0,
+            "ensure-data": 0,
+            "extra-apk-stage": 0,
+            "extra-native-libs": 0,
+            "gralloc-shim": 0,
+            "guest-dex": 0,
+            "guest-exec": 0,
+            "launch-entry": 0,
+            "linkerconfig": 0,
+            "native-libs": 0,
+            "overlays": 0,
+            "overlays-done": 0,
+            "overlays-list": 0,
+            "peer-setup": 0,
+            "props-logd": 0,
+            "render-shim": 0,
+            "run-dir": 0
+          }
+        },
+        {
+          "apk": "/home/Qui/.t3/worktrees/acos/t3-f4bcc4d4-5c49b0ef4f83b639/fixtures/build/apps/counter.apk",
+          "launch_ok": true,
+          "log": "/home/Qui/.t3/worktrees/acos/t3-f4bcc4d4-5c49b0ef4f83b639/.cache/rg4b/install-v040/sessions/s_h6_m9_apk_ready_1/launcher.stderr.log",
+          "substages": {
+            "apk-stage": 0,
+            "art-shim": 0,
+            "binder-driver": 0,
+            "classpath": 0,
+            "ensure-data": 0,
+            "extra-apk-stage": 0,
+            "extra-native-libs": 0,
+            "gralloc-shim": 0,
+            "guest-dex": 0,
+            "guest-exec": 0,
+            "launch-entry": 0,
+            "linkerconfig": 0,
+            "native-libs": 0,
+            "overlays": 0,
+            "overlays-done": 0,
+            "overlays-list": 0,
+            "peer-setup": 0,
+            "props-logd": 0,
+            "render-shim": 0,
+            "run-dir": 0
+          }
+        },
+        {
+          "apk": "/home/Qui/.t3/worktrees/acos/t3-f4bcc4d4-5c49b0ef4f83b639/fixtures/build/apps/counter.apk",
+          "launch_ok": true,
+          "log": "/home/Qui/.t3/worktrees/acos/t3-f4bcc4d4-5c49b0ef4f83b639/.cache/rg4b/install-v040/sessions/s_h6_m9_apk_ready_2/launcher.stderr.log",
+          "substages": {
+            "apk-stage": 0,
+            "art-shim": 0,
+            "binder-driver": 0,
+            "classpath": 0,
+            "ensure-data": 0,
+            "extra-apk-stage": 0,
+            "extra-native-libs": 0,
+            "gralloc-shim": 0,
+            "guest-dex": 0,
+            "guest-exec": 0,
+            "launch-entry": 0,
+            "linkerconfig": 0,
+            "native-libs": 0,
+            "overlays": 0,
+            "overlays-done": 0,
+            "overlays-list": 0,
+            "peer-setup": 0,
+            "props-logd": 0,
+            "render-shim": 0,
+            "run-dir": 0
+          }
+        },
+        {
+          "apk": "/home/Qui/.t3/worktrees/acos/t3-f4bcc4d4-5c49b0ef4f83b639/fixtures/build/apps/counter.apk",
+          "launch_ok": true,
+          "log": "/home/Qui/.t3/worktrees/acos/t3-f4bcc4d4-5c49b0ef4f83b639/.cache/rg4b/install-v040/sessions/s_h6_m9_apk_ready_3/launcher.stderr.log",
+          "substages": {
+            "apk-stage": 0,
+            "art-shim": 0,
+            "binder-driver": 0,
+            "classpath": 0,
+            "ensure-data": 0,
+            "extra-apk-stage": 0,
+            "extra-native-libs": 0,
+            "gralloc-shim": 0,
+            "guest-dex": 0,
+            "guest-exec": 0,
+            "launch-entry": 0,
+            "linkerconfig": 0,
+            "native-libs": 0,
+            "overlays": 0,
+            "overlays-done": 0,
+            "overlays-list": 0,
+            "peer-setup": 0,
+            "props-logd": 0,
+            "render-shim": 0,
+            "run-dir": 0
+          }
+        },
+        {
+          "apk": "/home/Qui/.t3/worktrees/acos/t3-f4bcc4d4-5c49b0ef4f83b639/fixtures/build/apps/counter.apk",
+          "launch_ok": true,
+          "log": "/home/Qui/.t3/worktrees/acos/t3-f4bcc4d4-5c49b0ef4f83b639/.cache/rg4b/install-v040/sessions/s_h6_m9_apk_ready_4/launcher.stderr.log",
+          "substages": {
+            "apk-stage": 0,
+            "art-shim": 0,
+            "binder-driver": 0,
+            "classpath": 0,
+            "ensure-data": 0,
+            "extra-apk-stage": 0,
+            "extra-native-libs": 0,
+            "gralloc-shim": 0,
+            "guest-dex": 0,
+            "guest-exec": 0,
+            "launch-entry": 0,
+            "linkerconfig": 0,
+            "native-libs": 0,
+            "overlays": 0,
+            "overlays-done": 0,
+            "overlays-list": 0,
+            "peer-setup": 0,
+            "props-logd": 0,
+            "render-shim": 0,
+            "run-dir": 0
+          }
+        }
+      ],
+      "median": 0.0,
+      "n": 5,
+      "ok": 5,
+      "stats": {
+        "ci95_high": 0.0,
+        "ci95_low": 0.0,
+        "cv": null,
+        "max": 0.0,
+        "mean": 0.0,
+        "median": 0.0,
+        "method": "linear-interpolated percentile; spread=(p95-p5)/p50; bootstrap 95% CI of the median",
+        "min": 0.0,
+        "n": 5,
+        "p5": 0.0,
+        "p50": 0.0,
+        "p95": 0.0,
+        "resamples": 2000,
+        "spread": null,
+        "spread_pct": null,
+        "stdev": 0.0
+      },
+      "unit": "ms",
+      "values": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ]
+    }
+  },
+  "schema": "acos-bench-phase/2",
+  "survivors": [
+    {
+      "cmd": "bash /home/Qui/.t3/worktrees/acos/t3-f4bcc4d4-5c49b0ef4f83b639/tools/art-runtime/run-exclusive.sh --task RELGATE4-inst --exclusive -- /home/Qui/.t3/worktrees/acos/t3-f4bcc4d4-5c49b0ef4f83b639/tools/guarded.sh --mem 8G --time 300 -- python3 ",
+      "comm": "bash",
+      "pid": 556352
+    },
+    {
+      "cmd": "bash /home/Qui/.t3/worktrees/acos/t3-f4bcc4d4-5c49b0ef4f83b639/tools/guarded.sh --mem 8G --time 300 -- python3 /home/Qui/.t3/worktrees/acos/t3-f4bcc4d4-5c49b0ef4f83b639/tools/bench/acos_bench.py --phase install --acos /home/Qui/.t3/worktree",
+      "comm": "bash",
+      "pid": 556874
+    },
+    {
+      "cmd": "/usr/bin/timeout -k 5 300 python3 /home/Qui/.t3/worktrees/acos/t3-f4bcc4d4-5c49b0ef4f83b639/tools/bench/acos_bench.py --phase install --acos /home/Qui/.t3/worktrees/acos/t3-f4bcc4d4-5c49b0ef4f83b639/.cache/rg4-target/release/acos --out /hom",
+      "comm": "timeout",
+      "pid": 556883
+    },
+    {
+      "cmd": "/home/Qui/.t3/worktrees/acos/t3-f4bcc4d4-5c49b0ef4f83b639/.cache/rg4-target/release/acos serve --socket /home/Qui/.t3/worktrees/acos/t3-f4bcc4d4-5c49b0ef4f83b639/.cache/rg4b/install-v040/serve.sock --engine art --idle-timeout 900 --max-sess",
+      "comm": "acos",
+      "pid": 556885
+    }
+  ],
+  "teardowns": [
+    {
+      "code": null,
+      "label": "m9-cold",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 19,
+      "verified": true,
+      "wall_ms": 20.264
+    },
+    {
+      "code": null,
+      "label": "m9-apk-ready",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 19,
+      "verified": true,
+      "wall_ms": 19.961
+    },
+    {
+      "code": null,
+      "label": "m9-apk-ready",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 20,
+      "verified": true,
+      "wall_ms": 20.992
+    },
+    {
+      "code": null,
+      "label": "m9-apk-ready",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 19,
+      "verified": true,
+      "wall_ms": 19.565
+    },
+    {
+      "code": null,
+      "label": "m9-apk-ready",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 20,
+      "verified": true,
+      "wall_ms": 20.947
+    },
+    {
+      "code": null,
+      "label": "m9-apk-ready",
+      "lifecycle": "lifecycle",
+      "ok": true,
+      "session_leftovers": 0,
+      "survivors": 0,
+      "teardown_ms": 20,
+      "verified": true,
+      "wall_ms": 20.528
+    }
+  ],
+  "utc": "2026-11-20T07:22:45+00:00"
+}

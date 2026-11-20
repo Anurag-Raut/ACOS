@@ -71,8 +71,7 @@ fn which(name: &str) -> Option<PathBuf> {
 
 #[test]
 fn unsupported_run_reports_ok_false() {
-    let Some(dex) = compile_unsupported() else {
-        eprintln!("SKIP unsupported_run_reports_ok_false: javac/d8 unavailable");
+    let Some(dex) = acos_test_support::require_some(compile_unsupported(), "unsupported_run_reports_ok_false", "javac/d8 unavailable") else {
         return;
     };
     let output = Command::cargo_bin("acos")
@@ -97,8 +96,7 @@ fn unsupported_run_reports_ok_false() {
 #[test]
 fn fixture_run_json_is_ok() {
     let dex = repo_root().join("fixtures/build/dexprogs/13_exceptions/classes.dex");
-    if !dex.is_file() {
-        eprintln!("SKIP fixture_run_json_is_ok: fixtures/build absent");
+    if acos_test_support::require_prereq(dex.is_file(), "fixture_run_json_is_ok", "fixtures/build absent").is_none() {
         return;
     }
     let output = Command::cargo_bin("acos")

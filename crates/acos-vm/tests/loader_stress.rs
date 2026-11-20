@@ -105,8 +105,7 @@ fn assert_nest_bridge_resolves(vm: &mut Vm) {
 /// halves of the nest complete.
 #[test]
 fn build_version_first_then_build() {
-    if !boot_available() {
-        eprintln!("SKIP build_version_first_then_build: .cache/boot/android-34 absent");
+    if acos_test_support::require_prereq(boot_available(), "build_version_first_then_build", ".cache/boot/android-34 absent").is_none() {
         return;
     }
     let mut vm = real_vm(false);
@@ -126,8 +125,7 @@ fn build_version_first_then_build() {
 /// reach the same complete state.
 #[test]
 fn build_first_then_build_version() {
-    if !boot_available() {
-        eprintln!("SKIP build_first_then_build_version: .cache/boot/android-34 absent");
+    if acos_test_support::require_prereq(boot_available(), "build_first_then_build_version", ".cache/boot/android-34 absent").is_none() {
         return;
     }
     let mut vm = real_vm(false);
@@ -146,8 +144,7 @@ fn build_first_then_build_version() {
 /// fresh VM (the loader's lazy-jar cursor is per-VM state).
 #[test]
 fn varied_load_orders_are_atomic() {
-    if !boot_available() {
-        eprintln!("SKIP varied_load_orders_are_atomic: .cache/boot/android-34 absent");
+    if acos_test_support::require_prereq(boot_available(), "varied_load_orders_are_atomic", ".cache/boot/android-34 absent").is_none() {
         return;
     }
     let mut order: Vec<(&str, bool)> = NESTED_CLASSES.iter().map(|c| (*c, true)).collect();
@@ -180,8 +177,7 @@ fn varied_load_orders_are_atomic() {
 /// behind by a failed lazy load).
 #[test]
 fn repeated_nested_init_stays_complete() {
-    if !boot_available() {
-        eprintln!("SKIP repeated_nested_init_stays_complete: .cache/boot/android-34 absent");
+    if acos_test_support::require_prereq(boot_available(), "repeated_nested_init_stays_complete", ".cache/boot/android-34 absent").is_none() {
         return;
     }
     let mut vm = real_vm(std::env::var_os("ACOS_GC_STRESS").is_some());

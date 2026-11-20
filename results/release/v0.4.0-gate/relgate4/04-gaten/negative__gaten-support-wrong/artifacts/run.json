@@ -1,0 +1,7 @@
+{
+  "request_id": "req_5d45f_18e9ac8b71b303c0",
+  "started_at": "2026-11-20T06:20:41.391Z",
+  "scenario": "scenarios/negative/gaten-support-wrong.yaml",
+  "apk": "",
+  "acos_version": "0.3.0"
+}

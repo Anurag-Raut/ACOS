@@ -1,0 +1,102 @@
+{
+  "assertions": [
+    {
+      "actual": {
+        "bounds": [
+          417,
+          2158,
+          662,
+          2211
+        ],
+        "hint": "",
+        "node": "n14_",
+        "text": "Set up Gaten",
+        "visible": true
+      },
+      "expected": {
+        "bounds": null,
+        "selector": {
+          "text": {
+            "contains": "Set up Gaten"
+          }
+        },
+        "text": {
+          "contains": "Set up Gaten"
+        }
+      },
+      "kind": "text",
+      "matched_node_ids": [
+        "n14_"
+      ],
+      "passed": true
+    }
+  ],
+  "certification": "certified-with-limits",
+  "certification_limits": {
+    "doc": "docs/SANDBOX_CERTIFICATION.md",
+    "section": "§8.7"
+  },
+  "duration_ms": 1,
+  "evidence": [
+    {
+      "kind": "tree",
+      "path": "tree/22.json"
+    },
+    {
+      "kind": "frame",
+      "path": "frames/22.png"
+    },
+    {
+      "kind": "step",
+      "path": "steps/01-assert_text.json"
+    }
+  ],
+  "frame_seq": 22,
+  "index": 1,
+  "provenance": {
+    "tree": "guest-asserted"
+  },
+  "settle": {
+    "bound": "content-stable",
+    "elapsed_ms": 347,
+    "frame_seq": 22,
+    "freshness": "each traversal's probe_seq strictly increased (guest-side                               min_probe_seq floor + host-side check); the pre-window sample                               never counts",
+    "mode": "content",
+    "pixel_evidence": false,
+    "probe_seq": 24,
+    "probe_seq_first": 5,
+    "probe_seq_floor": 4,
+    "reason": "content-stable",
+    "settled": true,
+    "signature": "9785d0b2893df8b3",
+    "signature_fields": [
+      "class",
+      "resource_id",
+      "text",
+      "content_desc",
+      "hint",
+      "visible",
+      "enabled",
+      "focused",
+      "clickable",
+      "scrollable",
+      "checked",
+      "selected",
+      "window",
+      "window_kind",
+      "window_z",
+      "package"
+    ],
+    "signature_tree_fields": [
+      "package",
+      "truncated",
+      "text_available"
+    ],
+    "traversals": 20,
+    "waited_ms": 347,
+    "window_ms": 300
+  },
+  "status": "pass",
+  "step": "assert_text",
+  "trust": "trusted"
+}

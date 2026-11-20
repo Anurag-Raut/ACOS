@@ -558,7 +558,11 @@ mod tests {
             .filter(|path| path.extension().is_some_and(|extension| extension == "apk"))
             .find(|path| path.is_file());
         let Some(apk) = gaten else {
-            eprintln!("SKIP gaten timing: .cache/gaten has no APK");
+            let _ = acos_test_support::require_prereq(
+                false,
+                "a_warm_launch_of_the_gaten_apk_pays_no_digest",
+                ".cache/gaten has no APK — put the Gaten release APK there",
+            );
             return;
         };
         let cold = std::time::Instant::now();

@@ -634,8 +634,7 @@ fn parse_writes(stdout: &str) -> HashMap<String, String> {
 
 #[test]
 fn real_java_write_to_parcel_matches_the_rust_codec() {
-    let Some(dex) = compile_case(&["ParcelableCompareMain"]) else {
-        eprintln!("SKIP real_java_write_to_parcel_matches_the_rust_codec: toolchain unavailable");
+    let Some(dex) = acos_test_support::require_some(compile_case(&["ParcelableCompareMain"]), "real_java_write_to_parcel_matches_the_rust_codec", "toolchain unavailable") else {
         return;
     };
 
@@ -1049,8 +1048,7 @@ fn parse_roundtrips(stdout: &str) -> HashMap<String, String> {
 fn webview_provider_package_info_reads_back_in_the_framework_order() {
     use acos_services::pms::{AppInfo, PackageInfo as PmsPackageInfo};
 
-    let Some(dex) = compile_case(&["ParcelableCompareMain"]) else {
-        eprintln!("SKIP webview_provider_package_info_reads_back_in_the_framework_order: toolchain unavailable");
+    let Some(dex) = acos_test_support::require_some(compile_case(&["ParcelableCompareMain"]), "webview_provider_package_info_reads_back_in_the_framework_order", "toolchain unavailable") else {
         return;
     };
 

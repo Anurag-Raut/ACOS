@@ -1,0 +1,118 @@
+    Finished `test` profile [unoptimized] target(s) in 0.02s
+     Running tests/boot_jars.rs (.cache/hyg4-target/debug/deps/boot_jars-2741239c49470c2b)
+
+running 2 tests
+test boot_classpath_dexdump_differential ... OK   framework.jar.classes.dex                methods=48104 instructions=658768
+OK   framework.jar.classes3.dex               methods=51606 instructions=649910
+OK   core-oj.jar.classes.dex                  methods=32717 instructions=487323
+------------------------------------------------------------
+files=3 methods=132427 instructions=1796001 mismatches=0
+
+ok
+test boot_classpath_parse_and_verify ... ok abx.jar                      classes.dex       4212 bytes classes=1     methods=5      instructions=147     sig_valid=true hiddenapi=false
+ok am.jar                       classes.dex     569152 bytes classes=246   methods=3105   instructions=55874   sig_valid=true hiddenapi=false
+ok android.hidl.base-V1.0-java.jar classes.dex      12556 bytes classes=5     methods=50     instructions=675     sig_valid=true hiddenapi=false
+ok android.hidl.manager-V1.0-java.jar classes.dex      29620 bytes classes=14    methods=149    instructions=2281    sig_valid=true hiddenapi=false
+ok android.net.ipsec.ike.jar    classes.dex     700172 bytes classes=660   methods=3205   instructions=47349   sig_valid=false hiddenapi=true
+ok android.test.base.jar        classes.dex      33144 bytes classes=29    methods=159    instructions=1940    sig_valid=true hiddenapi=false
+ok android.test.mock.jar        classes.dex      64200 bytes classes=23    methods=580    instructions=1952    sig_valid=true hiddenapi=false
+ok android.test.runner.jar      classes.dex     107932 bytes classes=69    methods=506    instructions=6255    sig_valid=true hiddenapi=false
+ok apache-xml.jar               classes.dex    1192504 bytes classes=679   methods=6080   instructions=103271  sig_valid=false hiddenapi=true
+ok appwidget.jar                classes.dex       5440 bytes classes=4     methods=11     instructions=170     sig_valid=true hiddenapi=false
+ok bmgr.jar                     classes.dex      33600 bytes classes=13    methods=75     instructions=2032    sig_valid=true hiddenapi=false
+ok bouncycastle.jar             classes.dex    1479136 bytes classes=1189  methods=7545   instructions=143958  sig_valid=false hiddenapi=true
+ok bu.jar                       classes.dex       7084 bytes classes=1     methods=10     instructions=465     sig_valid=true hiddenapi=false
+ok com.android.future.usb.accessory.jar classes.dex       5104 bytes classes=2     methods=18     instructions=290     sig_valid=true hiddenapi=false
+ok com.android.location.provider.jar classes.dex      26680 bytes classes=27    methods=136    instructions=850     sig_valid=true hiddenapi=false
+ok com.android.media.remotedisplay.jar classes.dex       9284 bytes classes=4     methods=46     instructions=397     sig_valid=true hiddenapi=false
+ok com.android.mediadrm.signer.jar classes.dex       2676 bytes classes=3     methods=10     instructions=37      sig_valid=true hiddenapi=false
+ok com.android.nfc_extras.jar   classes.dex       7716 bytes classes=9     methods=29     instructions=246     sig_valid=true hiddenapi=false
+ok conscrypt.jar                classes.dex     466672 bytes classes=347   methods=2430   instructions=32936   sig_valid=false hiddenapi=true
+ok content.jar                  classes.dex      19756 bytes classes=12    methods=39     instructions=1153    sig_valid=true hiddenapi=false
+ok core-icu4j.jar               classes.dex    2943700 bytes classes=1871  methods=13497  instructions=277776  sig_valid=false hiddenapi=true
+ok core-libart.jar              classes.dex     572248 bytes classes=468   methods=3027   instructions=39921   sig_valid=false hiddenapi=true
+ok core-oj.jar                  classes.dex    5579712 bytes classes=4053  methods=32717  instructions=486695  sig_valid=false hiddenapi=true
+ok ext.jar                      classes.dex     293836 bytes classes=108   methods=978    instructions=26873   sig_valid=false hiddenapi=true
+ok framework-adservices.jar     classes.dex     334560 bytes classes=514   methods=2457   instructions=17372   sig_valid=false hiddenapi=true
+ok framework-appsearch.jar      classes.dex     173548 bytes classes=167   methods=934    instructions=11909   sig_valid=false hiddenapi=true
+ok framework-bluetooth.jar      classes.dex    1108816 bytes classes=828   methods=5652   instructions=90729   sig_valid=false hiddenapi=true
+ok framework-configinfrastructure.jar classes.dex     140740 bytes classes=12    methods=53     instructions=5893    sig_valid=false hiddenapi=true
+ok framework-connectivity-t.jar classes.dex     401556 bytes classes=413   methods=2368   instructions=26943   sig_valid=false hiddenapi=true
+ok framework-connectivity.jar   classes.dex    1649584 bytes classes=1254  methods=9336   instructions=118222  sig_valid=false hiddenapi=true
+ok framework-devicelock.jar     classes.dex      27336 bytes classes=43    methods=165    instructions=1167    sig_valid=false hiddenapi=true
+ok framework-graphics.jar       classes.dex       3528 bytes classes=1     methods=16     instructions=296     sig_valid=false hiddenapi=true
+ok framework-healthfitness.jar  classes.dex     521660 bytes classes=593   methods=2902   instructions=29579   sig_valid=false hiddenapi=true
+ok framework-mediaprovider.jar  classes.dex      78008 bytes classes=61    methods=257    instructions=2854    sig_valid=false hiddenapi=true
+ok framework-ondevicepersonalization.jar classes.dex     183212 bytes classes=246   methods=1172   instructions=9881    sig_valid=false hiddenapi=true
+ok framework-permission-s.jar   classes.dex     212908 bytes classes=188   methods=1265   instructions=12736   sig_valid=false hiddenapi=true
+ok framework-permission.jar     classes.dex        608 bytes classes=1     methods=1      instructions=2       sig_valid=false hiddenapi=true
+ok framework-scheduling.jar     classes.dex      12780 bytes classes=15    methods=57     instructions=422     sig_valid=false hiddenapi=true
+ok framework-sdkextensions.jar  classes.dex       6628 bytes classes=4     methods=20     instructions=355     sig_valid=false hiddenapi=true
+ok framework-sdksandbox.jar     classes.dex      65944 bytes classes=74    methods=328    instructions=3226    sig_valid=false hiddenapi=true
+ok framework-statsd.jar         classes.dex      96660 bytes classes=71    methods=461    instructions=5597    sig_valid=false hiddenapi=true
+ok framework-tethering.jar      classes.dex      69276 bytes classes=88    methods=400    instructions=3525    sig_valid=false hiddenapi=true
+ok framework-uwb.jar            classes.dex     138104 bytes classes=131   methods=759    instructions=8958    sig_valid=false hiddenapi=true
+ok framework-virtualization.jar classes.dex      80284 bytes classes=67    methods=358    instructions=4807    sig_valid=false hiddenapi=true
+ok framework-wifi.jar           classes.dex    1162204 bytes classes=944   methods=6516   instructions=81188   sig_valid=false hiddenapi=true
+ok framework.jar                classes.dex    9529184 bytes classes=6517  methods=48104  instructions=657114  sig_valid=false hiddenapi=true
+ok framework.jar                classes2.dex   8949268 bytes classes=6704  methods=47229  instructions=704763  sig_valid=false hiddenapi=true
+ok framework.jar                classes3.dex  10274796 bytes classes=8588  methods=51606  instructions=648060  sig_valid=false hiddenapi=true
+ok framework.jar                classes4.dex   9846212 bytes classes=6489  methods=48887  instructions=754180  sig_valid=false hiddenapi=true
+ok framework.jar                classes5.dex   1362288 bytes classes=1046  methods=5957   instructions=93173   sig_valid=false hiddenapi=true
+ok hid.jar                      classes.dex      23740 bytes classes=9     methods=104    instructions=1444    sig_valid=true hiddenapi=false
+ok ims-common.jar               classes.dex     598160 bytes classes=382   methods=2788   instructions=43768   sig_valid=false hiddenapi=true
+ok incident-helper-cmd.jar      classes.dex      15352 bytes classes=10    methods=37     instructions=930     sig_valid=true hiddenapi=false
+ok javax.obex.jar               classes.dex       1396 bytes classes=1     methods=3      instructions=36      sig_valid=true hiddenapi=false
+ok lockagent.jar                classes.dex      18560 bytes classes=14    methods=64     instructions=1005    sig_valid=true hiddenapi=false
+ok locksettings.jar             classes.dex       2292 bytes classes=2     methods=5      instructions=34      sig_valid=true hiddenapi=false
+ok monkey.jar                   classes.dex     117640 bytes classes=94    methods=349    instructions=9069    sig_valid=true hiddenapi=false
+ok okhttp.jar                   classes.dex     405312 bytes classes=241   methods=2262   instructions=35580   sig_valid=false hiddenapi=true
+ok org.apache.http.legacy.jar   classes.dex     489804 bytes classes=456   methods=2550   instructions=38703   sig_valid=true hiddenapi=false
+ok requestsync.jar              classes.dex      12976 bytes classes=9     methods=28     instructions=741     sig_valid=true hiddenapi=false
+ok service-adservices.jar       classes.dex      58092 bytes classes=29    methods=235    instructions=3952    sig_valid=true hiddenapi=false
+ok service-appsearch.jar        classes.dex     694036 bytes classes=652   methods=4011   instructions=63478   sig_valid=true hiddenapi=false
+ok service-art.jar              classes.dex     397676 bytes classes=389   methods=2486   instructions=35971   sig_valid=true hiddenapi=false
+ok service-bluetooth.jar        classes.dex     333548 bytes classes=120   methods=435    instructions=9073    sig_valid=true hiddenapi=false
+ok service-configinfrastructure.jar classes.dex       4524 bytes classes=5     methods=14     instructions=168     sig_valid=true hiddenapi=false
+ok service-connectivity.jar     classes.dex    1804012 bytes classes=1743  methods=10665  instructions=149596  sig_valid=true hiddenapi=false
+ok service-devicelock.jar       classes.dex      54844 bytes classes=51    methods=277    instructions=2825    sig_valid=true hiddenapi=false
+ok service-healthfitness.jar    classes.dex     364444 bytes classes=283   methods=1957   instructions=28509   sig_valid=true hiddenapi=false
+ok service-media-s.jar          classes.dex      20580 bytes classes=14    methods=90     instructions=1333    sig_valid=true hiddenapi=false
+ok service-ondevicepersonalization.jar classes.dex       2332 bytes classes=2     methods=4      instructions=24      sig_valid=true hiddenapi=false
+ok service-permission.jar       classes.dex     396916 bytes classes=286   methods=2099   instructions=36763   sig_valid=true hiddenapi=false
+ok service-rkp.jar              classes.dex      32448 bytes classes=46    methods=164    instructions=1508    sig_valid=true hiddenapi=false
+ok service-scheduling.jar       classes.dex      38876 bytes classes=22    methods=137    instructions=2495    sig_valid=true hiddenapi=false
+ok service-sdksandbox.jar       classes.dex     103444 bytes classes=94    methods=463    instructions=7709    sig_valid=true hiddenapi=false
+ok service-statsd.jar           classes.dex      37948 bytes classes=24    methods=128    instructions=2315    sig_valid=true hiddenapi=false
+ok service-uwb.jar              classes.dex     869816 bytes classes=881   methods=5534   instructions=74874   sig_valid=true hiddenapi=false
+ok service-wifi.jar             classes.dex    4784376 bytes classes=3805  methods=25794  instructions=475600  sig_valid=true hiddenapi=false
+ok services.jar                 classes.dex   10428792 bytes classes=6891  methods=49868  instructions=916096  sig_valid=true hiddenapi=false
+ok services.jar                 classes2.dex   7949348 bytes classes=5293  methods=38914  instructions=709778  sig_valid=true hiddenapi=false
+ok services.jar                 classes3.dex   2208040 bytes classes=1359  methods=11344  instructions=209403  sig_valid=true hiddenapi=false
+ok sm.jar                       classes.dex      10608 bytes classes=3     methods=30     instructions=639     sig_valid=true hiddenapi=false
+ok svc.jar                      classes.dex      15380 bytes classes=8     methods=33     instructions=875     sig_valid=true hiddenapi=false
+ok telecom.jar                  classes.dex      17656 bytes classes=1     methods=32     instructions=769     sig_valid=true hiddenapi=false
+ok telephony-common.jar         classes.dex    3898980 bytes classes=2546  methods=19388  instructions=341514  sig_valid=false hiddenapi=true
+ok uiautomator.jar              classes.dex     414632 bytes classes=476   methods=2474   instructions=26111   sig_valid=true hiddenapi=false
+ok uinput.jar                   classes.dex      25044 bytes classes=12    methods=110    instructions=1600    sig_valid=true hiddenapi=false
+ok updatable-media.jar          classes.dex     765752 bytes classes=732   methods=4377   instructions=63962   sig_valid=false hiddenapi=true
+ok voip-common.jar              classes.dex     821916 bytes classes=600   methods=4053   instructions=72602   sig_valid=false hiddenapi=true
+ok vr.jar                       classes.dex       4208 bytes classes=1     methods=7      instructions=157     sig_valid=true hiddenapi=false
+boot totals: files=89 classes=72482 methods=504980 instructions=7897503 signature_mismatches_accepted=39 hiddenapi_files=39
+ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 8.48s
+
+     Running tests/legacy_apks.rs (.cache/hyg4-target/debug/deps/legacy_apks-cd10bafee22fa0bf)
+
+running 1 test
+test legacy_apk_dex_parse_and_verify ... ok "/home/Qui/Work/android-container/helper/build/acbench-tiny.apk"!classes.dex: 1808 bytes, 2 classes, 30 instructions
+ok "/home/Qui/Work/android-container/helper/build/observe.apk"!classes.dex: 8472 bytes, 1 classes, 532 instructions
+ok "/home/Qui/Work/android-container/helper/build/p1probe.apk"!classes.dex: 14956 bytes, 12 classes, 782 instructions
+ok "/home/Qui/Work/android-container/helper/build/vdisp.apk"!classes.dex: 21332 bytes, 8 classes, 1803 instructions
+ok "/home/Qui/Work/android-container/helper/build/webprobe.apk"!classes.dex: 2220 bytes, 1 classes, 38 instructions
+legacy totals: 5 dex files, 24 classes, 3185 instructions
+ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

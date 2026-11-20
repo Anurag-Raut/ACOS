@@ -119,8 +119,7 @@ fn run_lifecycle(label: &str) -> Option<acos_runtime::LifecycleReport> {
 /// hits a `SurfaceControl` NPE owned by the W144-A lifecycle/render work).
 #[test]
 fn m2_lifecycle_create_start_resume_matches_reference() {
-    let Some(reference) = reference_lifecycle() else {
-        eprintln!("SKIP m2_lifecycle_create_start_resume_matches_reference: reference missing");
+    let Some(reference) = acos_test_support::require_some(reference_lifecycle(), "m2_lifecycle_create_start_resume_matches_reference", "reference missing") else {
         return;
     };
     let Some(report) = run_lifecycle("normal") else {

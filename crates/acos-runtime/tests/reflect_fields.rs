@@ -15,8 +15,7 @@ use common::{compile_case, run_ok};
 
 #[test]
 fn reflect_field_slots_match_art() {
-    let Some(dex) = compile_case(&["ReflectFieldsMain"]) else {
-        eprintln!("SKIP reflect_field_slots_match_art: javac/d8/android.jar unavailable");
+    let Some(dex) = acos_test_support::require_some(compile_case(&["ReflectFieldsMain"]), "reflect_field_slots_match_art", "javac/d8/android.jar unavailable") else {
         return;
     };
     let Some(stdout) = run_ok(&dex, "ReflectFieldsMain", "ReflectFieldsMain") else {

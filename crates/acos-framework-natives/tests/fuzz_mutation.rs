@@ -151,10 +151,13 @@ fn fuzz_arsc_and_axml_never_panic() {
     let mut sources: Vec<Vec<u8>> = Vec::new();
 
     // A real resources.arsc and a real AXML.
-    if !acos_test_support::have_fixture("fixtures/build/apps/hello-views.apk") {
-        eprintln!(
-            "SKIP fuzz_arsc_and_axml_never_panic: fixtures/build/apps/hello-views.apk is absent"
-        );
+    if acos_test_support::require_prereq(
+        acos_test_support::have_fixture("fixtures/build/apps/hello-views.apk"),
+        "fuzz_arsc_and_axml_never_panic",
+        "fixtures/build/apps/hello-views.apk is absent — run tools/build-apps.sh",
+    )
+    .is_none()
+    {
         return;
     }
     let apk_path = workspace_root().join("fixtures/build/apps/hello-views.apk");

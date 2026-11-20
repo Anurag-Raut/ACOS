@@ -9,8 +9,7 @@ use common::{compile_case, repo_root, run_ok};
 
 #[test]
 fn settings_provider_generation_matches_the_golden() {
-    let Some(dex) = compile_case(&["SettingsMain"]) else {
-        eprintln!("SKIP settings_provider_generation_matches_the_golden: javac/d8/android.jar unavailable");
+    let Some(dex) = acos_test_support::require_some(compile_case(&["SettingsMain"]), "settings_provider_generation_matches_the_golden", "javac/d8/android.jar unavailable") else {
         return;
     };
     let Some(stdout) = run_ok(&dex, "android.content.SettingsMain", "SettingsMain") else {

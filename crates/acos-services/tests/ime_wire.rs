@@ -537,3 +537,376 @@ fn a_typed_object_class_with_no_verified_codec_is_unsupported() {
         EditorInfo::default(),
     );
 }
+
+/// GATENBACK: when an editor window shows the soft input and focus then moves
+/// to another window without a text editor (e.g. a dialog or Gaten's
+/// `TYPE_ACCESSIBILITY_OVERLAY` lookup sheet), AOSP's
+/// `ImeVisibilityStateComputer` hides the soft input on
+/// `startInputOrWindowGainedFocus`. Otherwise the next `KEYCODE_BACK` is
+/// swallowed by `ImeInputStage` as a stale keyboard hide and never reaches
+/// the focused overlay's `dispatchKeyEvent`.
+#[test]
+fn focusing_a_non_editor_overlay_window_hides_stale_soft_input_so_back_reaches_the_window() {
+    use acos_services::ime::{
+        StartInputContext, SOFT_INPUT_STATE_UNSPECIFIED, START_INPUT_FLAG_INITIAL_CONNECTION,
+        START_INPUT_FLAG_IS_TEXT_EDITOR, START_INPUT_FLAG_VIEW_HAS_FOCUS,
+        START_INPUT_FLAG_WINDOW_GAINED_FOCUS,
+    };
+
+    let _guard = state_lock();
+    let state = fresh_ime(true);
+    let client = Some(BinderId(0x1000_000b));
+    let activity_window = Some(BinderId(0x1000_000e));
+    let overlay_window = Some(BinderId(0x1000_0030));
+
+    // 1. MainActivity focuses its search EditText and shows the soft input.
+    let (res, _, _) = state.lock().unwrap().start_input_with_context(
+        client,
+        5,
+        Some(BinderId(0x2001)),
+        StartInputContext {
+            window_token: activity_window,
+            start_input_flags: START_INPUT_FLAG_VIEW_HAS_FOCUS
+                | START_INPUT_FLAG_IS_TEXT_EDITOR
+                | START_INPUT_FLAG_INITIAL_CONNECTION,
+            soft_input_mode: SOFT_INPUT_STATE_UNSPECIFIED,
+            window_flags: 0x0181_0100,
+            target_sdk_version: 34,
+            has_editor_info: true,
+        },
+    );
+    assert_eq!(res, BIND_SUCCESS);
+    let _first_chan = state.lock().unwrap().take_bind_channel().expect("channel");
+    assert!(state.lock().unwrap().show_soft_input(client.unwrap(), 0));
+    assert!(state.lock().unwrap().ime_visible);
+
+    // 2. Gaten's TYPE_ACCESSIBILITY_OVERLAY window gains focus (no editor,
+    //    SOFT_INPUT_STATE_UNSPECIFIED, mayUseInputMethod == true).
+    let (res, _, _) = state.lock().unwrap().start_input_with_context(
+        client,
+        1,
+        None,
+        StartInputContext {
+            window_token: overlay_window,
+            start_input_flags: START_INPUT_FLAG_VIEW_HAS_FOCUS
+                | START_INPUT_FLAG_INITIAL_CONNECTION
+                | START_INPUT_FLAG_WINDOW_GAINED_FOCUS,
+            soft_input_mode: SOFT_INPUT_STATE_UNSPECIFIED,
+            // FLAG_NOT_TOUCH_MODAL | FLAG_HARDWARE_ACCELERATED | FLAG_KEEP_SCREEN_ON |
+            // FLAG_LAYOUT_IN_SCREEN | FLAG_LAYOUT_NO_LIMITS (no FLAG_NOT_FOCUSABLE / ALT_FOCUSABLE_IM)
+            window_flags: 0x0100_03a0,
+            target_sdk_version: 34,
+            has_editor_info: true,
+        },
+    );
+    assert_eq!(res, BIND_SUCCESS);
+    assert!(
+        !state.lock().unwrap().ime_visible,
+        "moving focus to a non-editor overlay window must hide the stale soft input"
+    );
+
+    // 3. Pressing Back on the overlay's channel must NOT be consumed by the IME.
+    let (_token, _name, overlay_client_fd) = state
+        .lock()
+        .unwrap()
+        .take_bind_channel()
+        .expect("overlay channel");
+    for (seq, action) in [(1u32, 0i32), (2u32, 1i32)] {
+        let bytes = acos_services::input_channel::InputMessage::Key {
+            seq,
+            event: acos_services::input_channel::KeyEvent::new(9, action, KEYCODE_BACK, 1, 1),
+        }
+        .encode()
+        .expect("encode");
+        let fd = unsafe {
+            rustix::fd::BorrowedFd::borrow_raw(std::os::fd::AsRawFd::as_raw_fd(&overlay_client_fd))
+        };
+        let sent = rustix::net::send(&fd, &bytes, rustix::net::SendFlags::empty()).expect("send");
+        assert_eq!(sent, bytes.len());
+    }
+    assert_eq!(acos_services::ime::service_pending_keys(), 2);
+    let s = state.lock().unwrap();
+    assert_eq!(
+        s.channel_replies,
+        vec![(1, false), (2, false)],
+        "BACK must pass through ImeInputStage (handled=false) to OverlayRoot.dispatchKeyEvent"
+    );
+    assert!(s.channel_keys.iter().all(|k| !k.hid_ime));
+}
+
+#[test]
+fn ime_visibility_respects_same_window_editor_alt_focusable_im_and_soft_input_modes() {
+    use acos_services::ime::{
+        StartInputContext, FLAG_ALT_FOCUSABLE_IM, SOFT_INPUT_IS_FORWARD_NAVIGATION,
+        SOFT_INPUT_STATE_ALWAYS_HIDDEN, SOFT_INPUT_STATE_HIDDEN, SOFT_INPUT_STATE_UNSPECIFIED,
+        START_INPUT_FLAG_IS_TEXT_EDITOR, START_INPUT_FLAG_VIEW_HAS_FOCUS,
+        START_INPUT_FLAG_WINDOW_GAINED_FOCUS,
+    };
+
+    let _guard = state_lock();
+    let state = fresh_ime(true);
+    let client = Some(BinderId(0x10));
+    let win_a = Some(BinderId(0x100));
+    let win_alt = Some(BinderId(0x200));
+    let win_hidden = Some(BinderId(0x300));
+    let win_always_hidden = Some(BinderId(0x400));
+
+    // Bind & show IME on Window A's editor.
+    state.lock().unwrap().start_input_with_context(
+        client,
+        1,
+        None,
+        StartInputContext {
+            window_token: win_a,
+            start_input_flags: START_INPUT_FLAG_VIEW_HAS_FOCUS | START_INPUT_FLAG_IS_TEXT_EDITOR,
+            soft_input_mode: SOFT_INPUT_STATE_UNSPECIFIED,
+            window_flags: 0,
+            target_sdk_version: 34,
+            has_editor_info: true,
+        },
+    );
+    assert!(state.lock().unwrap().show_soft_input(client.unwrap(), 0));
+    assert!(state.lock().unwrap().ime_visible);
+
+    // Re-starting input on the SAME window with an editor keeps IME visible.
+    state.lock().unwrap().start_input_with_context(
+        client,
+        2,
+        None,
+        StartInputContext {
+            window_token: win_a,
+            start_input_flags: START_INPUT_FLAG_VIEW_HAS_FOCUS | START_INPUT_FLAG_IS_TEXT_EDITOR,
+            soft_input_mode: SOFT_INPUT_STATE_UNSPECIFIED,
+            window_flags: 0,
+            target_sdk_version: 34,
+            has_editor_info: true,
+        },
+    );
+    assert!(
+        state.lock().unwrap().ime_visible,
+        "same-window editor restart must not hide the soft input"
+    );
+
+    // Moving to a window with FLAG_ALT_FOCUSABLE_IM (mayUseInputMethod == false)
+    // keeps the soft input visible under SOFT_INPUT_STATE_UNSPECIFIED.
+    state.lock().unwrap().start_input_with_context(
+        client,
+        3,
+        None,
+        StartInputContext {
+            window_token: win_alt,
+            start_input_flags: START_INPUT_FLAG_VIEW_HAS_FOCUS
+                | START_INPUT_FLAG_WINDOW_GAINED_FOCUS,
+            soft_input_mode: SOFT_INPUT_STATE_UNSPECIFIED,
+            window_flags: FLAG_ALT_FOCUSABLE_IM,
+            target_sdk_version: 34,
+            has_editor_info: true,
+        },
+    );
+    assert!(
+        state.lock().unwrap().ime_visible,
+        "FLAG_ALT_FOCUSABLE_IM window must not hide IME under SOFT_INPUT_STATE_UNSPECIFIED"
+    );
+
+    // SOFT_INPUT_STATE_HIDDEN + FORWARD_NAVIGATION hides explicitly.
+    state.lock().unwrap().start_input_with_context(
+        client,
+        4,
+        None,
+        StartInputContext {
+            window_token: win_hidden,
+            start_input_flags: START_INPUT_FLAG_VIEW_HAS_FOCUS
+                | START_INPUT_FLAG_WINDOW_GAINED_FOCUS,
+            soft_input_mode: SOFT_INPUT_STATE_HIDDEN | SOFT_INPUT_IS_FORWARD_NAVIGATION,
+            window_flags: FLAG_ALT_FOCUSABLE_IM,
+            target_sdk_version: 34,
+            has_editor_info: true,
+        },
+    );
+    assert!(!state.lock().unwrap().ime_visible);
+
+    // Re-show on win_hidden, then move to SOFT_INPUT_STATE_ALWAYS_HIDDEN (no forward nav).
+    assert!(state.lock().unwrap().show_soft_input(client.unwrap(), 0));
+    state.lock().unwrap().start_input_with_context(
+        client,
+        5,
+        None,
+        StartInputContext {
+            window_token: win_always_hidden,
+            start_input_flags: START_INPUT_FLAG_VIEW_HAS_FOCUS
+                | START_INPUT_FLAG_WINDOW_GAINED_FOCUS,
+            soft_input_mode: SOFT_INPUT_STATE_ALWAYS_HIDDEN,
+            window_flags: FLAG_ALT_FOCUSABLE_IM,
+            target_sdk_version: 34,
+            has_editor_info: true,
+        },
+    );
+    assert!(!state.lock().unwrap().ime_visible);
+}
+
+#[test]
+fn window_focus_gain_report_only_hides_stale_ime_without_dropping_live_channel() {
+    use acos_services::ime::{
+        StartInputContext, BIND_REPORT_WINDOW_FOCUS_ONLY, SOFT_INPUT_STATE_UNSPECIFIED,
+        START_INPUT_FLAG_VIEW_HAS_FOCUS, START_INPUT_FLAG_WINDOW_GAINED_FOCUS,
+        START_INPUT_REASON_WINDOW_FOCUS_GAIN_REPORT_ONLY,
+    };
+
+    let _guard = state_lock();
+    let state = fresh_ime(true);
+    let client = Some(BinderId(0x11));
+    let win_a = Some(BinderId(0x101));
+    let win_b = Some(BinderId(0x202));
+
+    let (res, _, _) = state.lock().unwrap().start_input_with_context(
+        client,
+        1,
+        None,
+        StartInputContext {
+            window_token: win_a,
+            start_input_flags: START_INPUT_FLAG_VIEW_HAS_FOCUS,
+            soft_input_mode: SOFT_INPUT_STATE_UNSPECIFIED,
+            window_flags: 0,
+            target_sdk_version: 34,
+            has_editor_info: true,
+        },
+    );
+    assert_eq!(res, BIND_SUCCESS);
+    let original_token = state
+        .lock()
+        .unwrap()
+        .take_bind_channel()
+        .expect("channel")
+        .0;
+    assert!(state.lock().unwrap().show_soft_input(client.unwrap(), 0));
+
+    let (res, id, session) = state.lock().unwrap().start_input_with_context(
+        client,
+        START_INPUT_REASON_WINDOW_FOCUS_GAIN_REPORT_ONLY,
+        None,
+        StartInputContext {
+            window_token: win_b,
+            start_input_flags: START_INPUT_FLAG_VIEW_HAS_FOCUS
+                | START_INPUT_FLAG_WINDOW_GAINED_FOCUS,
+            soft_input_mode: SOFT_INPUT_STATE_UNSPECIFIED,
+            window_flags: 0,
+            target_sdk_version: 34,
+            has_editor_info: false,
+        },
+    );
+    assert_eq!(res, BIND_REPORT_WINDOW_FOCUS_ONLY);
+    assert_eq!(id, None);
+    assert_eq!(session, None);
+    let s = state.lock().unwrap();
+    assert!(!s.ime_visible);
+    assert_eq!(
+        s.channel.as_ref().map(|c| c.token),
+        Some(original_token),
+        "WINDOW_FOCUS_GAIN_REPORT_ONLY must not replace or drop the live InputChannel"
+    );
+}
+
+#[test]
+fn hiding_soft_input_on_focus_change_clears_ime_insets_on_previous_window_in_wms() {
+    use acos_services::ime::{
+        StartInputContext, SOFT_INPUT_STATE_UNSPECIFIED, START_INPUT_FLAG_IS_TEXT_EDITOR,
+        START_INPUT_FLAG_VIEW_HAS_FOCUS, START_INPUT_FLAG_WINDOW_GAINED_FOCUS,
+    };
+    use acos_services::wms::WmsState;
+    use acos_wm::codec::{inset_type, LayoutParams};
+
+    let _guard = state_lock();
+    let state = fresh_ime(true);
+    let wms = Arc::new(Mutex::new(WmsState::new()));
+    state.lock().unwrap().attach_wms(Arc::clone(&wms));
+
+    let activity_binder = BinderId(0x1000_000e);
+    let overlay_binder = BinderId(0x1000_0030);
+    let a11y_token = BinderId(232);
+    let activity_win = {
+        let mut w = wms.lock().unwrap();
+        let mut app_lp = LayoutParams::default();
+        app_lp.type_ = 1; // TYPE_BASE_APPLICATION
+        let r = w
+            .add_to_display_as_user(activity_binder, app_lp, 0)
+            .expect("add activity");
+        assert_eq!(r.result, 0);
+        r.window
+    };
+
+    let client = Some(BinderId(0x1000_000b));
+    state.lock().unwrap().start_input_with_context(
+        client,
+        1,
+        None,
+        StartInputContext {
+            window_token: Some(activity_binder),
+            start_input_flags: START_INPUT_FLAG_VIEW_HAS_FOCUS | START_INPUT_FLAG_IS_TEXT_EDITOR,
+            soft_input_mode: SOFT_INPUT_STATE_UNSPECIFIED,
+            window_flags: 0,
+            target_sdk_version: 34,
+            has_editor_info: true,
+        },
+    );
+    assert!(state.lock().unwrap().show_soft_input(client.unwrap(), 0));
+    let show_deliveries = state.lock().unwrap().take_ime_deliveries();
+    assert!(
+        show_deliveries
+            .iter()
+            .any(|d| d.target == activity_binder && d.method == "showInsets"),
+        "activity received showInsets: {show_deliveries:?}"
+    );
+    assert_ne!(
+        wms.lock().unwrap().wm.windows[&activity_win].requested_visible_types & inset_type::IME,
+        0
+    );
+
+    // Add a focusable overlay window above the activity (WMS shifts focus to it).
+    let overlay_win = {
+        let mut w = wms.lock().unwrap();
+        w.wm.add_overlay_token(a11y_token);
+        let mut ov_lp = LayoutParams::default();
+        ov_lp.type_ = 2032; // TYPE_ACCESSIBILITY_OVERLAY
+        ov_lp.token = Some(a11y_token);
+        let r = w
+            .add_to_display_as_user(overlay_binder, ov_lp, 0)
+            .expect("add overlay");
+        assert_eq!(r.result, 0);
+        assert_eq!(w.wm.focus, Some(r.window));
+        r.window
+    };
+    let _ = overlay_win;
+
+    // The overlay's startInputOrWindowGainedFocus hides the stale IME.
+    state.lock().unwrap().start_input_with_context(
+        client,
+        2,
+        None,
+        StartInputContext {
+            window_token: Some(overlay_binder),
+            start_input_flags: START_INPUT_FLAG_VIEW_HAS_FOCUS
+                | START_INPUT_FLAG_WINDOW_GAINED_FOCUS,
+            soft_input_mode: SOFT_INPUT_STATE_UNSPECIFIED,
+            window_flags: 0,
+            target_sdk_version: 34,
+            has_editor_info: true,
+        },
+    );
+    assert!(!state.lock().unwrap().ime_visible);
+    assert_eq!(
+        wms.lock().unwrap().wm.windows[&activity_win].requested_visible_types & inset_type::IME,
+        0,
+        "previous activity window's IME inset bit must be cleared"
+    );
+    let hide_deliveries = state.lock().unwrap().take_ime_deliveries();
+    assert!(
+        hide_deliveries
+            .iter()
+            .any(|d| d.target == activity_binder && d.method == "hideInsets"),
+        "previous activity window must receive hideInsets: {hide_deliveries:?}"
+    );
+    assert!(
+        hide_deliveries.iter().all(|d| d.target == activity_binder),
+        "overlay window that never showed IME must not get bogus hideInsets: {hide_deliveries:?}"
+    );
+}

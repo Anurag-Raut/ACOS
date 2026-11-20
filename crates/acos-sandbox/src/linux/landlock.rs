@@ -403,14 +403,24 @@ mod tests {
     #[test]
     fn device_nodes_accept_read_only_path_rules() {
         let Some(abi) = abi() else {
-            eprintln!("SKIP landlock device-node rule test: Landlock unavailable");
+            let _ = acos_test_support::require_prereq(
+                false,
+                "device_nodes_accept_read_only_path_rules",
+                "Landlock unavailable on this host — the kernel must be built with \
+                 CONFIG_SECURITY_LANDLOCK (Linux >= 5.13)",
+            );
             return;
         };
         let (ruleset_fd, _scope) = create_ruleset(abi).expect("create landlock ruleset");
         for raw in ["/dev/urandom", "/dev/null"] {
             let path = Path::new(raw);
-            if !path.exists() {
-                eprintln!("SKIP {raw}: missing on this host");
+            if acos_test_support::require_prereq(
+                path.exists(),
+                "device_nodes_accept_read_only_path_rules",
+                &format!("{raw} is missing on this host"),
+            )
+            .is_none()
+            {
                 continue;
             }
             match add_path_rule(ruleset_fd, path, read_only_access()) {
@@ -453,7 +463,12 @@ mod tests {
     #[test]
     fn guest_plan_confines_writes_to_the_rw_roots() {
         let Some(abi) = abi() else {
-            eprintln!("SKIP guest plan test: Landlock unavailable");
+            let _ = acos_test_support::require_prereq(
+                false,
+                "guest_plan_confines_writes_to_the_rw_roots",
+                "Landlock unavailable on this host — the kernel must be built with \
+                 CONFIG_SECURITY_LANDLOCK (Linux >= 5.13)",
+            );
             return;
         };
         let blob = plan(&["/"], &["/data/out", "/data/tmp"]).expect("plan");

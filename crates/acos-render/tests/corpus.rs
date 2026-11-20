@@ -191,12 +191,17 @@ fn fixture_scenes_match_art_reference() {
         let ref_path = repo_root().join(case.reference);
         // HONESTY_AUDIT #11 / W94-A #1: under `ACOS_REQUIRE_FIXTURES` a missing
         // reference is a hard failure, never a silent coverage drop.
-        if !acos_test_support::have_fixture(case.reference) {
-            eprintln!(
-                "SKIP {}: missing reference {} (capture with tools/oracle/)",
+        if acos_test_support::require_prereq(
+            acos_test_support::have_fixture(case.reference),
+            "fixture_scenes_match_art_reference",
+            &format!(
+                "{}: missing reference {} (capture with tools/oracle/)",
                 case.app,
                 ref_path.display()
-            );
+            ),
+        )
+        .is_none()
+        {
             continue;
         }
         let scene_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))

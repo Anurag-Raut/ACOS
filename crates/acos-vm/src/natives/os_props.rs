@@ -736,10 +736,7 @@ ro.build.version.sdk=34
         // Unit tests run with CWD = crates/acos-vm; `default_boot_dir` walks up
         // to the repo root, so this exercises the shipped seed.
         if matches!(seed_source(), SeedSource::Embedded) {
-            eprintln!(
-                "SKIP real_build_prop_matches_the_reference_image: \
-                 no .cache/boot/android-34/build.prop (embedded ART capture in use)"
-            );
+            acos_test_support::require_prereq(false, "real_build_prop_matches_the_reference_image", "real_build_prop_matches_the_reference_image: no .cache/boot/android-34/build.prop (embedded ART capture in use)");
             return;
         }
         assert_eq!(get("ro.build.version.sdk").as_deref(), Some("34"));

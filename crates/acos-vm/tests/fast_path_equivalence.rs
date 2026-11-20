@@ -51,8 +51,7 @@ fn run(name: &str, gc_stress: bool, fast: bool) -> (i32, String) {
 
 fn check(gc_stress: bool, skip_threads: bool) {
     let names = fixture_names();
-    if names.is_empty() {
-        eprintln!("SKIP fast_path_equals_general_path: fixtures/build/dexprogs is absent");
+    if acos_test_support::require_prereq(!(names.is_empty()), "check", "fixtures/build/dexprogs is absent").is_none() {
         return;
     }
     for name in &names {

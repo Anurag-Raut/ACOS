@@ -39,8 +39,7 @@ use common::{compile_case, repo_root, run_ok};
 
 #[test]
 fn pms_java_app_info_matches_the_reference_capture() {
-    let Some(dex) = compile_case(&["PmsMain"]) else {
-        eprintln!("SKIP pms_java_app_info_matches_the_reference_capture: javac/d8/android.jar unavailable");
+    let Some(dex) = acos_test_support::require_some(compile_case(&["PmsMain"]), "pms_java_app_info_matches_the_reference_capture", "javac/d8/android.jar unavailable") else {
         return;
     };
     let Some(stdout) = run_ok(&dex, "PmsMain", "PmsMain") else {

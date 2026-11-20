@@ -226,19 +226,17 @@ fn reset_restores_clean_state() {
 
 #[test]
 fn looping_session_is_killed_by_wall_guard() {
-    let Some(loop_dex_path) = common::compile_case(&["LoopForever"]) else {
-        eprintln!("SKIP looping_session_is_killed_by_wall_guard: javac/d8 toolchain absent");
+    let Some(loop_dex_path) = acos_test_support::require_some(common::compile_case(&["LoopForever"]), "looping_session_is_killed_by_wall_guard", "javac/d8 toolchain absent") else {
         return;
     };
     let bytes = match std::fs::read(&loop_dex_path) {
         Ok(b) => b,
         Err(e) => {
-            eprintln!("SKIP looping_session_is_killed_by_wall_guard: {e}");
+            acos_test_support::require_prereq(false, "looping_session_is_killed_by_wall_guard", &format!("looping_session_is_killed_by_wall_guard: {e}"));
             return;
         }
     };
-    let Some(loop_dex) = DexFile::parse(bytes).ok().map(Arc::new) else {
-        eprintln!("SKIP looping_session_is_killed_by_wall_guard: LoopForever DEX did not parse");
+    let Some(loop_dex) = acos_test_support::require_some(DexFile::parse(bytes).ok().map(Arc::new), "looping_session_is_killed_by_wall_guard", "LoopForever DEX did not parse") else {
         return;
     };
     let Some(ok_dex) = require("01_hello") else {

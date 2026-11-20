@@ -7,18 +7,18 @@ resolves under that root and no checkout is needed (or touched).
 ## Install
 
 ```bash
-tools/release/install.sh --prefix ~/.local --version 0.3.0
-# build the three release binaries and install (idempotent; ~1.5 GB)
+tools/release/install.sh --prefix ~/.local --version 0.4.0
+# build the five release binaries and install (idempotent; ~1.5 GB)
 ```
 
 ```bash
-cargo build --release -p acos-cli -p acos-art -p acos-mcp
+cargo build --release -p acos-cli -p acos-art -p acos-mcp -p acos-netd -p acos-webview
 tools/release/install.sh --prefix ~/.local --from-target target
 # reuse binaries already built in <dir>/release
 ```
 
 Options: `--prefix DIR` (default `$ACOS_PREFIX`, else `~/.local`), `--version V`
-(default `0.3.0`), `--from-target DIR`, `--pasta PATH`, `--force`,
+(default `0.4.0`), `--from-target DIR`, `--pasta PATH`, `--force`,
 `--register-mcp`. It prints the install size and the next steps. No root, no
 downloads. `--force` is
 required only when the version directory already exists and was not left by this
@@ -36,10 +36,11 @@ re-register after moving the prefix. Other MCP clients get the equivalent
 ```
 <prefix>/bin/acos                 wrapper: exports ACOS_HOME, execs the binary
 <prefix>/bin/acos-mcp             wrapper (same)
-<prefix>/share/acos/current -> 0.3.0
-<prefix>/share/acos/0.3.0/
-  bin/{acos,acos-art,acos-mcp,acos-netd}
+<prefix>/share/acos/current -> 0.4.0
+<prefix>/share/acos/0.4.0/
+  bin/{acos,acos-art,acos-mcp,acos-netd,acos-webview}
   libexec/pasta                   the pinned static transport (ADR-0030)
+  share/doc/acos/pasta/           COPYING (GPL-2.0-or-later), BSD-3-Clause.txt, SOURCE.md
   VERSION, MANIFEST.txt
   .cache/art/sysroot/             ART sysroot, the framework (~860 MB)
   .cache/boot/android-34/         fonts, static overlays, BOOTCLASSPATH (~250 MB)
@@ -114,7 +115,11 @@ install -m 755 pasta-src/pasta "$ACOS_HOME/libexec/pasta"    # or: install.sh --
 ```
 
 `pasta` is GPL-2.0-or-later (its own `LICENSES/` ship with the source); it is a
-separate executable, never linked into ACOS.
+separate executable, never linked into ACOS. Whenever `tools/release/install.sh`
+ships `libexec/pasta`, it also installs the verbatim upstream licence text at
+`share/doc/acos/pasta/COPYING` (and `BSD-3-Clause.txt`) plus a source and
+GPL-2.0 §3 written-offer notice at `share/doc/acos/pasta/SOURCE.md`, and lists
+them in `MANIFEST.txt`.
 
 Who reports it:
 
@@ -166,11 +171,11 @@ for building fixtures:
 * fixtures only: `zipalign`, `apksigner`, `keytool`, `tools/apk_append.py`.
 
 With `ACOS_HOME` set, doctor checks the install itself (root, `VERSION`, sysroot,
-fonts, overlays, guest sources, `acos-art`, writable state) and stops treating a
-missing checkout as a failure. The MCP server follows the same rule: its
-runtime paths (boot-classpath cache, engine/RN driver assets) resolve under
-`ACOS_HOME` exactly like the CLI's, so an installed server launched from another
-repository reads the installed tree and never a checkout.
+fonts, overlays, guest sources, `acos-art`, `install_webview`, writable state)
+and stops treating a missing checkout as a failure. The MCP server follows the
+same rule: its runtime paths (boot-classpath cache, engine/RN driver assets)
+resolve under `ACOS_HOME` exactly like the CLI's, so an installed server launched
+from another repository reads the installed tree and never a checkout.
 
 ## Environment
 
@@ -197,7 +202,7 @@ directory, so installing a new version cannot swap the tree under a running
 session.
 
 ```bash
-tools/release/install.sh --prefix ~/.local --version 0.3.0   # adds 0.3.0, flips current
+tools/release/install.sh --prefix ~/.local --version 0.4.0   # adds 0.4.0, flips current
 ```
 
 ## Uninstall

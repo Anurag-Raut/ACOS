@@ -23,19 +23,13 @@ use acos_runtime::session::SessionOptions;
 use common::{envelope_of, repo_root, McpClient};
 use serde_json::json;
 
-fn required() -> bool {
-    std::env::var_os("ACOS_REQUIRE_FIXTURES").is_some()
-}
-
 fn have(rel: &str) -> bool {
-    if acos_test_support::have_fixture(rel) {
-        return true;
-    }
-    if required() {
-        panic!("ACOS_REQUIRE_FIXTURES set but {rel} is missing");
-    }
-    eprintln!("SKIP flutter_session: missing {rel}");
-    false
+    acos_test_support::require_prereq(
+        acos_test_support::have_fixture(rel),
+        "flutter_session",
+        &format!("missing {rel} — build it with tools/build-apps.sh"),
+    )
+    .is_some()
 }
 
 fn prerequisites() -> Option<PathBuf> {
