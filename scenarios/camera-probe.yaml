@@ -1,7 +1,7 @@
-# CAMERA2 Slice 1 positive proof: `hw.camera` at `stub` on real ART.
+# CAMERA2/CAMERA3 positive proof: `hw.camera` at `stub` on real ART.
 #
 # Exercises the real framework CameraManager -> ICameraService (`media.camera`)
-# -> JNI libcamera_client.so + libcamera_metadata.so path:
+# -> JNI libcamera_client.so + libcamera_metadata.so -> ICameraDeviceUser path:
 #   * `hasSystemFeature(FEATURE_CAMERA / FEATURE_CAMERA_ANY)` is true;
 #   * `getCameraIdList()` returns `["0"]`;
 #   * `getCameraCharacteristics("0")` parses & validates the native metadata
@@ -9,14 +9,14 @@
 #     4000x3000 array, StreamConfigurationMap JPEG & YUV_420_888 sizes);
 #   * `getCameraCharacteristics("99")` throws IllegalArgumentException;
 #   * `openCamera("0")` throws SecurityException while CAMERA is denied, and
-#     structured UnsupportedOperationException (UNSUPPORTED_ANDROID_API) once
-#     CAMERA is granted via `system.permissions` (Slice 2 boundary).
+#     opens + closes cleanly (`onOpened` -> `close()` -> `onClosed`) once
+#     CAMERA is granted via `system.permissions`.
 version: 1
 name: camera-probe
 description: >-
   hw.camera stub on ART: CameraManager.getCameraIdList, real validated
   CameraCharacteristics & StreamConfigurationMap, unknown-id IllegalArgumentException,
-  CAMERA permission enforcement on openCamera, and structured Slice-2 refusal.
+  CAMERA permission enforcement on openCamera, and clean open/close lifecycle.
 app: fixtures/build/apps/camera-probe.apk
 api_level: 34
 isolation: process
@@ -71,7 +71,7 @@ steps:
       selector: {text: {contains: "OPEN error=SecurityException"}}
       timeout_ms: 20000
 
-  # Grant CAMERA via system.permissions, then openCamera hits the structured Slice-2 refusal.
+  # Grant CAMERA via system.permissions, then openCamera opens and closes cleanly.
   - service_ctl:
       module: system.permissions
       op: grant
@@ -81,8 +81,11 @@ steps:
   - tap:
       selector: {text: {exact: "Open"}}
   - wait_for:
-      selector: {text: {contains: "OPEN error=UnsupportedOperationException"}}
+      selector: {text: {contains: "OPEN callback=closed id=0"}}
       timeout_ms: 20000
+  - assert_text:
+      selector: {id: status}
+      text: {contains: "OPEN callback=opened id=0"}
 
   - service_ctl:
       module: hw.camera
@@ -96,3 +99,14 @@ steps:
           orientation: 90
           width: 4000
           height: 3000
+  - service_ctl:
+      module: hw.camera
+      op: status
+      expect:
+        ok: true
+        op: status
+        value:
+          pattern: ACOS_PATTERN_COLORBARS_V1
+          calls:
+            open_devices: 0
+            devices_opened: 1

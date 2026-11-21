@@ -1,17 +1,21 @@
-# CAMERA2 Slice 1 negative proof: `hw.camera` off (tombstone) on real ART.
+# CAMERA3 (Slice 2) negative proof: `hw.camera` off on real ART (Owner Default "Z").
 #
 # Same fixture APK, no `hw.camera` attached:
 #   * `getSystemService(CAMERA_SERVICE)` is lazy so the app launches cleanly;
 #   * `hasSystemFeature(FEATURE_CAMERA / FEATURE_CAMERA_ANY)` is false;
-#   * calling `CameraManager.getCameraIdList()` hits the `media.camera`
-#     tombstone and throws structured `UnsupportedOperationException` naming
-#     `UNSUPPORTED_ANDROID_API` and `hw.camera` without crashing the process.
+#   * `CameraManager.getCameraIdList()` returns an empty list (`[]`) cleanly,
+#     matching a device without a camera;
+#   * `openCamera("0")` / `connectDevice` throws structured
+#     `UnsupportedOperationException` naming `UNSUPPORTED_ANDROID_API`,
+#     `hw.camera`, and `"profile": "stub"` without crashing the process;
+#   * `Capture` (which opens camera `"0"`) hits the same structured refusal.
 version: 1
 name: camera-off
 description: >-
-  camera-probe on ART with hw.camera off: camera features are false, app startup
-  is unaffected, and CameraManager.getCameraIdList() hits the structured
-  UNSUPPORTED_ANDROID_API tombstone naming hw.camera without crashing.
+  camera-probe on ART with hw.camera off (Owner Default Z): camera features are
+  false, getCameraIdList() returns [] cleanly, and openCamera / Capture throw
+  structured UNSUPPORTED_ANDROID_API naming hw.camera and profile stub without
+  crashing.
 app: fixtures/build/apps/camera-probe.apk
 api_level: 34
 isolation: process
@@ -35,10 +39,20 @@ steps:
   - wait_for:
       selector: {text: {contains: "READY mgr=present feat_cam=false feat_any=false"}}
       timeout_ms: 20000
+
+  # Owner Default "Z": getCameraIdList() returns empty list cleanly.
   - tap:
       selector: {text: {exact: "List"}}
   - wait_for:
-      selector: {text: {contains: "LIST error=UnsupportedOperationException"}}
+      selector: {text: {contains: "LIST count=0 ids=[]"}}
+      timeout_ms: 20000
+
+  # Owner Default "Z": openCamera("0") throws structured UNSUPPORTED_ANDROID_API
+  # naming hw.camera and profile "stub" (not hardcoded "real").
+  - tap:
+      selector: {text: {exact: "Open"}}
+  - wait_for:
+      selector: {text: {contains: "OPEN error=UnsupportedOperationException"}}
       timeout_ms: 20000
   - assert_text:
       selector: {id: status}
@@ -46,3 +60,13 @@ steps:
   - assert_text:
       selector: {id: status}
       text: {contains: "acos_launch"}
+  - assert_text:
+      selector: {id: status}
+      text: {contains: "\"profile\": \"stub\""}
+
+  # Capture path also hits structured refusal cleanly without crashing.
+  - tap:
+      selector: {text: {exact: "Capture"}}
+  - wait_for:
+      selector: {text: {contains: "CAPTURE error=UnsupportedOperationException"}}
+      timeout_ms: 20000
