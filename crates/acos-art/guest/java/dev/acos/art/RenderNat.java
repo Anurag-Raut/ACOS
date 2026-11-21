@@ -25,4 +25,22 @@ public final class RenderNat {
 
     /** Resolve an exported symbol, for diagnostics. */
     public static native long sym(String plainName);
+
+    /**
+     * CAMERA3 Option A: attach to the app's local {@code Surface} ({@code ANativeWindow})
+     * for {@code streamId} so frames can be dequeued, filled, and queued in-process.
+     */
+    public static native int cameraSinkRegister(int streamId, Object surface, int width, int height);
+
+    /**
+     * CAMERA3 Option A: dequeue a buffer on {@code streamId}, write the deterministic
+     * ACOS test pattern for {@code (frameNumber, timestampNs, patternId)}, and queue it.
+     */
+    public static native int cameraSinkDeliver(
+            int streamId, int width, int height, long frameNumber, long timestampNs, int patternId);
+
+    /**
+     * CAMERA3 Option A: disconnect and release {@code streamId} ({@code < 0} releases all).
+     */
+    public static native int cameraSinkRelease(int streamId);
 }

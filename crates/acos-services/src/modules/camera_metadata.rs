@@ -909,3 +909,65 @@ pub fn characteristics(sensor: &Sensor) -> Metadata {
     m.i32s(t::REQUEST_AVAILABLE_CHARACTERISTICS_KEYS, &characteristics);
     m
 }
+
+/// Default `CaptureRequest` template metadata for
+/// `ICameraDeviceUser.createDefaultRequest(int templateId)`.
+///
+/// Matches `REQUEST_AVAILABLE_REQUEST_KEYS` advertised by [`characteristics`] so
+/// `CaptureRequest.Builder` starts with coherent, validated settings for every
+/// Camera2 template (`TEMPLATE_PREVIEW = 1` .. `TEMPLATE_MANUAL = 6`).
+#[must_use]
+pub fn default_request(sensor: &Sensor, template_id: i32) -> Metadata {
+    use tags as t;
+    let intent: u8 = match template_id {
+        1..=6 => template_id as u8,
+        _ => 1, // PREVIEW
+    };
+    let mut m = Metadata::new();
+    m.bytes(t::CONTROL_MODE, &[1]); // AUTO
+    m.bytes(t::CONTROL_CAPTURE_INTENT, &[intent]);
+    m.bytes(t::CONTROL_AE_MODE, &[1]); // ON
+    m.bytes(t::CONTROL_AE_ANTIBANDING_MODE, &[3]); // AUTO
+    m.i32s(t::CONTROL_AE_EXPOSURE_COMPENSATION, &[0]);
+    m.bytes(t::CONTROL_AE_LOCK, &[0]);
+    m.i32s(t::CONTROL_AE_TARGET_FPS_RANGE, &[15, 30]);
+    m.bytes(t::CONTROL_AF_MODE, &[0]); // OFF (fixed focus)
+    m.bytes(t::CONTROL_AWB_MODE, &[1]); // AUTO
+    m.bytes(t::CONTROL_AWB_LOCK, &[0]);
+    m.bytes(t::FLASH_MODE, &[0]); // OFF
+    m.i32s(t::JPEG_ORIENTATION, &[sensor.orientation]);
+    m.bytes(t::JPEG_QUALITY, &[90]);
+    m.bytes(t::NOISE_REDUCTION_MODE, &[1]); // FAST
+    m.i32s(t::SCALER_CROP_REGION, &[0, 0, sensor.width, sensor.height]);
+    m.bytes(t::STATISTICS_FACE_DETECT_MODE, &[0]); // OFF
+    m.f32s(t::LENS_APERTURE, &[1.8]);
+    m.f32s(t::LENS_FOCAL_LENGTH, &[4.38]);
+    m.i64s(t::SENSOR_EXPOSURE_TIME, &[16_666_666]);
+    m.i64s(t::SENSOR_FRAME_DURATION, &[33_333_333]);
+    m.i32s(t::SENSOR_SENSITIVITY, &[100]);
+    m
+}
+
+/// Real `TotalCaptureResult` metadata for `ICameraDeviceCallbacks.onResultReceived`.
+///
+/// Includes `SENSOR_TIMESTAMP` (matching `onCaptureStarted` and the buffer
+/// timestamp queued on `ImageReader`'s `ANativeWindow`), converged 3A states,
+/// and all request keys advertised by [`characteristics`].
+#[must_use]
+pub fn capture_result(
+    sensor: &Sensor,
+    timestamp_ns: i64,
+    frame_number: i64,
+    capture_intent: u8,
+) -> Metadata {
+    use tags as t;
+    let mut m = default_request(sensor, i32::from(capture_intent));
+    m.bytes(t::CONTROL_AE_STATE, &[2]); // CONVERGED
+    m.bytes(t::CONTROL_AF_STATE, &[0]); // INACTIVE (fixed focus)
+    m.bytes(t::CONTROL_AWB_STATE, &[2]); // CONVERGED
+    m.bytes(t::LENS_STATE, &[0]); // STATIONARY
+    m.i64s(t::SENSOR_TIMESTAMP, &[timestamp_ns]);
+    m.i32s(t::REQUEST_FRAME_COUNT, &[frame_number as i32]);
+    m
+}
+

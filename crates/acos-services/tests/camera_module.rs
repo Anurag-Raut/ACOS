@@ -12,9 +12,12 @@ use acos_parcel::{BinderId, Parcel};
 use acos_services::exception::EX_SERVICE_SPECIFIC;
 use acos_services::module::{self, AospReaction, ModuleConfig, ModuleRegistry, Profile, TOMBSTONES};
 use acos_services::modules::camera::{
-    code, CAMERA_API_LEVEL_1, CAMERA_API_LEVEL_2, CAMERA_TYPE_ALL, CAMERA_TYPE_BACKWARD_COMPATIBLE,
-    DESCRIPTOR, ERROR_ILLEGAL_ARGUMENT, ERROR_PERMISSION_DENIED, FACING_BACK, FACING_FRONT,
-    MODULE_ID, SERVICE_NAME, STATUS_NOT_PRESENT, STATUS_PRESENT,
+    callback_code, code, device_code, sink_code, test_pattern_yuv420_crc32, CAMERA_API_LEVEL_1,
+    CAMERA_API_LEVEL_2, CAMERA_TYPE_ALL, CAMERA_TYPE_BACKWARD_COMPATIBLE, DESCRIPTOR,
+    DEVICE_CALLBACKS_DESCRIPTOR, DEVICE_USER_DESCRIPTOR, ERROR_ILLEGAL_ARGUMENT,
+    ERROR_PERMISSION_DENIED, FACING_BACK, FACING_FRONT, FRAME_DURATION_NS, FRAME_SINK_DESCRIPTOR,
+    FRAME_SINK_SERVICE, INITIAL_TIMESTAMP_NS, MODULE_ID, NO_IN_FLIGHT_REPEATING_FRAMES,
+    SERVICE_NAME, STATUS_NOT_PRESENT, STATUS_PRESENT, SURFACE_PARCEL_MAGIC_BQUE,
 };
 use acos_services::modules::camera_metadata::{self, tags, HARDWARE_LEVEL_LIMITED};
 use acos_services::{ServiceError, ServiceHost};
@@ -298,7 +301,7 @@ fn the_module_is_registered_with_the_manifest_the_kit_expects() {
 }
 
 #[test]
-fn off_installs_structured_tombstone_naming_hw_camera() {
+fn off_mode_returns_empty_list_and_refuses_open_with_stub_attach_hint() {
     let mut host = ServiceHost::new();
     let _registry = module::install_standard(&mut host);
 
@@ -310,36 +313,93 @@ fn off_installs_structured_tombstone_naming_hw_camera() {
     assert_eq!(
         row.reaction,
         AospReaction::Tombstone,
-        "off mode must install a structured UNSUPPORTED_ANDROID_API tombstone"
+        "media.camera decision row remains documented in TOMBSTONES"
     );
+
+    // Tombstone::error() itself must use each module's default_profile (never
+    // hardcoded "real" for stub/scripted-only modules).
+    let cam_err = row.error(DESCRIPTOR);
+    match &cam_err {
+        ServiceError::ModuleUnavailable { attach, .. } => {
+            assert!(
+                attach.contains("\"profile\": \"stub\""),
+                "hw.camera tombstone hint must name profile stub, got {attach}"
+            );
+        }
+        other => panic!("expected ModuleUnavailable, got {other:?}"),
+    }
+    let vib_row = TOMBSTONES
+        .iter()
+        .find(|r| r.name == "vibrator_manager")
+        .expect("vibrator_manager tombstone");
+    match vib_row.error(vib_row.descriptor) {
+        ServiceError::ModuleUnavailable { attach, .. } => {
+            assert!(
+                attach.contains("\"profile\": \"scripted\""),
+                "feedback.vibrator tombstone hint must name profile scripted, got {attach}"
+            );
+        }
+        other => panic!("expected ModuleUnavailable, got {other:?}"),
+    }
 
     let binder = host
         .check_service(SERVICE_NAME)
         .expect("lookup")
-        .expect("tombstone binder installed");
+        .expect("off-node binder installed");
+
+    // 1. Owner Default "Z": getCameraIdList() -> addListener returns CameraStatus[0] cleanly.
     let mut data = Parcel::new();
     data.write_interface_token(DESCRIPTOR).expect("token");
+    data.write_strong_binder(BinderId::NULL);
     data.set_data_position(0);
     let mut reply = Parcel::new();
-    let error = host
-        .transact(binder, code::ADD_LISTENER, &mut data, &mut reply, 0)
-        .expect_err("tombstone must refuse transactions");
-    assert_eq!(error.code(), "UNSUPPORTED_ANDROID_API");
-    match &error {
-        ServiceError::ModuleUnavailable {
-            service,
-            module,
-            attach,
-            ..
-        } => {
-            assert_eq!(service, SERVICE_NAME);
-            assert_eq!(*module, MODULE_ID);
-            assert!(
-                attach.contains("acos_launch") && attach.contains(MODULE_ID),
-                "tombstone attach hint must name hw.camera, got {attach}"
-            );
+    host.transact(binder, code::ADD_LISTENER, &mut data, &mut reply, 0)
+        .expect("addListener succeeds with empty list when hw.camera is off");
+    reply.set_data_position(0);
+    assert_eq!(reply.read_int32().expect("ex"), 0);
+    assert_eq!(reply.read_int32().expect("CameraStatus[] len"), 0);
+
+    // getNumberOfCameras returns 0 cleanly.
+    let mut data = Parcel::new();
+    data.write_interface_token(DESCRIPTOR).expect("token");
+    data.write_int32(CAMERA_TYPE_ALL);
+    data.set_data_position(0);
+    let mut reply = Parcel::new();
+    host.transact(binder, code::GET_NUMBER_OF_CAMERAS, &mut data, &mut reply, 0)
+        .expect("getNumberOfCameras returns 0");
+    reply.set_data_position(0);
+    assert_eq!(reply.read_int32().expect("ex"), 0);
+    assert_eq!(reply.read_int32().expect("count"), 0);
+
+    // 2. Owner Default "Z": openCamera / connectDevice and getCameraCharacteristics
+    // throw structured ModuleUnavailable naming hw.camera and profile "stub".
+    for tx in [code::CONNECT_DEVICE, code::GET_CAMERA_CHARACTERISTICS] {
+        let mut data = Parcel::new();
+        data.write_interface_token(DESCRIPTOR).expect("token");
+        data.set_data_position(0);
+        let mut reply = Parcel::new();
+        let error = host
+            .transact(binder, tx, &mut data, &mut reply, 0)
+            .expect_err("off-node must refuse open/characteristics");
+        assert_eq!(error.code(), "UNSUPPORTED_ANDROID_API");
+        match &error {
+            ServiceError::ModuleUnavailable {
+                service,
+                module,
+                attach,
+                ..
+            } => {
+                assert_eq!(service, SERVICE_NAME);
+                assert_eq!(*module, MODULE_ID);
+                assert!(
+                    attach.contains("acos_launch")
+                        && attach.contains(MODULE_ID)
+                        && attach.contains("\"profile\": \"stub\""),
+                    "off-node attach hint must name hw.camera + stub profile, got {attach}"
+                );
+            }
+            other => panic!("expected ModuleUnavailable, got {other:?}"),
         }
-        other => panic!("expected ModuleUnavailable, got {other:?}"),
     }
 }
 
@@ -561,9 +621,9 @@ fn auxiliary_listing_and_notification_transactions_match_proxy_wire_format() {
 }
 
 #[test]
-fn connect_device_enforces_camera_permission_then_refuses_until_slice_2() {
+fn connect_device_enforces_camera_permission_then_opens_device_user() {
     let (mut host, _registry) = attach();
-    let cb = host.register_aux("android.hardware.camera2.ICameraDeviceCallbacks");
+    let cb = host.register_aux(DEVICE_CALLBACKS_DESCRIPTOR);
 
     let build_connect = |host: &mut ServiceHost, camera_id: &str| {
         let mut data = request(host);
@@ -608,17 +668,17 @@ fn connect_device_enforces_camera_permission_then_refuses_until_slice_2() {
         ERROR_ILLEGAL_ARGUMENT
     );
 
-    // 4. Valid camera id with CAMERA granted -> structured UNSUPPORTED_ANDROID_API citing Slice 2.
+    // 4. Valid camera id with CAMERA granted -> live ICameraDeviceUser binder.
     let data = build_connect(&mut host, "0");
-    let error = error_of(&mut host, code::CONNECT_DEVICE, data);
-    assert_eq!(error.code(), "UNSUPPORTED_ANDROID_API");
-    assert!(
-        matches!(
-            error,
-            ServiceError::UnsupportedAndroidApi { ref method, .. }
-                if method.contains("connectDevice") && method.contains("CAMERA_PLAN.md")
-        ),
-        "expected structured Slice 2 refusal, got {error:?}"
+    let mut reply = transact(&mut host, code::CONNECT_DEVICE, data);
+    let dev_binder = reply
+        .read_strong_binder()
+        .expect("read binder")
+        .expect("non-null ICameraDeviceUser");
+    assert_eq!(
+        host.descriptor_of(dev_binder),
+        Some(DEVICE_USER_DESCRIPTOR),
+        "connectDevice must register an ICameraDeviceUser node"
     );
 }
 
@@ -784,24 +844,36 @@ fn the_control_ops_report_the_served_camera_characteristics_and_transactions() {
 }
 
 #[test]
-fn detach_restores_the_tombstone_and_reattach_serves_cleanly() {
+fn detach_restores_the_off_node_and_reattach_serves_cleanly() {
     let (mut host, mut registry) = attach();
     assert!(host.check_service(SERVICE_NAME).unwrap().is_some());
 
     registry.detach(&mut host, MODULE_ID).expect("detach");
 
-    // Detach must restore the structured tombstone, never leave a silent null.
+    // Detach must restore the Owner Default "Z" off-node: empty list on
+    // addListener, structured ModuleUnavailable on connectDevice.
     let binder = host
         .check_service(SERVICE_NAME)
         .unwrap()
-        .expect("tombstone restored on detach");
-    let mut data = Parcel::new();
-    data.write_interface_token(DESCRIPTOR).expect("token");
-    data.set_data_position(0);
-    let mut reply = Parcel::new();
+        .expect("off-node restored on detach");
+    let mut list_data = Parcel::new();
+    list_data.write_interface_token(DESCRIPTOR).expect("token");
+    list_data.write_strong_binder(BinderId::NULL);
+    list_data.set_data_position(0);
+    let mut list_reply = Parcel::new();
+    host.transact(binder, code::ADD_LISTENER, &mut list_data, &mut list_reply, 0)
+        .expect("restored off-node returns empty list");
+    list_reply.set_data_position(0);
+    assert_eq!(list_reply.read_int32().expect("ex"), 0);
+    assert_eq!(list_reply.read_int32().expect("empty CameraStatus[]"), 0);
+
+    let mut open_data = Parcel::new();
+    open_data.write_interface_token(DESCRIPTOR).expect("token");
+    open_data.set_data_position(0);
+    let mut open_reply = Parcel::new();
     let error = host
-        .transact(binder, code::GET_NUMBER_OF_CAMERAS, &mut data, &mut reply, 0)
-        .expect_err("restored tombstone must refuse");
+        .transact(binder, code::CONNECT_DEVICE, &mut open_data, &mut open_reply, 0)
+        .expect_err("restored off-node must refuse connectDevice");
     assert_eq!(error.code(), "UNSUPPORTED_ANDROID_API");
 
     // Re-attaching works and serves cleanly with no stale state.
@@ -832,3 +904,431 @@ fn an_unknown_transaction_is_a_structured_refusal() {
     );
     let _ = BinderId(0);
 }
+
+#[test]
+fn every_device_user_and_callback_code_matches_framework_dex() {
+    // 1. All 23 TRANSACTION_* constants on ICameraDeviceUser$Stub.
+    let user_ints =
+        framework_static_ints_for("Landroid/hardware/camera2/ICameraDeviceUser$Stub;");
+    let expected_user_tx: &[(&str, u32)] = &[
+        ("TRANSACTION_disconnect", device_code::DISCONNECT),
+        ("TRANSACTION_submitRequest", device_code::SUBMIT_REQUEST),
+        ("TRANSACTION_submitRequestList", device_code::SUBMIT_REQUEST_LIST),
+        ("TRANSACTION_cancelRequest", device_code::CANCEL_REQUEST),
+        ("TRANSACTION_beginConfigure", device_code::BEGIN_CONFIGURE),
+        ("TRANSACTION_endConfigure", device_code::END_CONFIGURE),
+        (
+            "TRANSACTION_isSessionConfigurationSupported",
+            device_code::IS_SESSION_CONFIGURATION_SUPPORTED,
+        ),
+        ("TRANSACTION_deleteStream", device_code::DELETE_STREAM),
+        ("TRANSACTION_createStream", device_code::CREATE_STREAM),
+        ("TRANSACTION_createInputStream", device_code::CREATE_INPUT_STREAM),
+        ("TRANSACTION_getInputSurface", device_code::GET_INPUT_SURFACE),
+        (
+            "TRANSACTION_createDefaultRequest",
+            device_code::CREATE_DEFAULT_REQUEST,
+        ),
+        ("TRANSACTION_getCameraInfo", device_code::GET_CAMERA_INFO),
+        ("TRANSACTION_waitUntilIdle", device_code::WAIT_UNTIL_IDLE),
+        ("TRANSACTION_flush", device_code::FLUSH),
+        ("TRANSACTION_prepare", device_code::PREPARE),
+        ("TRANSACTION_tearDown", device_code::TEAR_DOWN),
+        ("TRANSACTION_prepare2", device_code::PREPARE2),
+        (
+            "TRANSACTION_updateOutputConfiguration",
+            device_code::UPDATE_OUTPUT_CONFIGURATION,
+        ),
+        (
+            "TRANSACTION_finalizeOutputConfigurations",
+            device_code::FINALIZE_OUTPUT_CONFIGURATIONS,
+        ),
+        (
+            "TRANSACTION_setCameraAudioRestriction",
+            device_code::SET_CAMERA_AUDIO_RESTRICTION,
+        ),
+        (
+            "TRANSACTION_getGlobalAudioRestriction",
+            device_code::GET_GLOBAL_AUDIO_RESTRICTION,
+        ),
+        ("TRANSACTION_switchToOffline", device_code::SWITCH_TO_OFFLINE),
+    ];
+    for &(name, expected) in expected_user_tx {
+        let actual = user_ints
+            .iter()
+            .find(|(n, _)| n == name)
+            .map(|(_, v)| *v)
+            .unwrap_or_else(|| {
+                panic!("{name} missing from ICameraDeviceUser$Stub in framework dex")
+            });
+        assert_eq!(
+            actual,
+            i64::from(expected),
+            "ICameraDeviceUser$Stub.{name} drifted from framework dex"
+        );
+    }
+
+    // 2. All 7 TRANSACTION_* constants on ICameraDeviceCallbacks$Stub.
+    let cb_ints =
+        framework_static_ints_for("Landroid/hardware/camera2/ICameraDeviceCallbacks$Stub;");
+    let expected_cb_tx: &[(&str, u32)] = &[
+        ("TRANSACTION_onDeviceError", callback_code::ON_DEVICE_ERROR),
+        ("TRANSACTION_onDeviceIdle", callback_code::ON_DEVICE_IDLE),
+        ("TRANSACTION_onCaptureStarted", callback_code::ON_CAPTURE_STARTED),
+        ("TRANSACTION_onResultReceived", callback_code::ON_RESULT_RECEIVED),
+        ("TRANSACTION_onPrepared", callback_code::ON_PREPARED),
+        (
+            "TRANSACTION_onRepeatingRequestError",
+            callback_code::ON_REPEATING_REQUEST_ERROR,
+        ),
+        (
+            "TRANSACTION_onRequestQueueEmpty",
+            callback_code::ON_REQUEST_QUEUE_EMPTY,
+        ),
+    ];
+    for &(name, expected) in expected_cb_tx {
+        let actual = cb_ints
+            .iter()
+            .find(|(n, _)| n == name)
+            .map(|(_, v)| *v)
+            .unwrap_or_else(|| {
+                panic!("{name} missing from ICameraDeviceCallbacks$Stub in framework dex")
+            });
+        assert_eq!(
+            actual,
+            i64::from(expected),
+            "ICameraDeviceCallbacks$Stub.{name} drifted from framework dex"
+        );
+    }
+
+    // 3. ICameraDeviceUser.NO_IN_FLIGHT_REPEATING_FRAMES == -1.
+    let iface_ints = framework_static_ints_for("Landroid/hardware/camera2/ICameraDeviceUser;");
+    let no_in_flight = iface_ints
+        .iter()
+        .find(|(n, _)| n == "NO_IN_FLIGHT_REPEATING_FRAMES")
+        .map(|(_, v)| *v)
+        .expect("NO_IN_FLIGHT_REPEATING_FRAMES missing");
+    assert_eq!(no_in_flight, NO_IN_FLIGHT_REPEATING_FRAMES);
+}
+
+fn dev_request() -> Parcel {
+    let mut p = Parcel::new();
+    p.write_interface_token(DEVICE_USER_DESCRIPTOR)
+        .expect("token");
+    p
+}
+
+fn dev_transact(host: &mut ServiceHost, dev: BinderId, tx: u32, mut data: Parcel) -> Parcel {
+    data.set_data_position(0);
+    let mut reply = Parcel::new();
+    host.transact(dev, tx, &mut data, &mut reply, 0)
+        .unwrap_or_else(|e| panic!("ICameraDeviceUser code {tx} failed: {e}"));
+    reply.set_data_position(0);
+    assert_eq!(reply.read_int32().expect("ex header"), 0);
+    reply
+}
+
+fn write_fake_output_config(p: &mut Parcel, width: i32, height: i32, igbp: BinderId) {
+    p.write_int32(1); // typed object present
+    p.write_int32(0); // rotation
+    p.write_int32(-1); // surfaceGroupId
+    p.write_int32(-1); // surfaceType
+    p.write_int32(width);
+    p.write_int32(height);
+    p.write_int32(0); // isDeferredConfig
+    p.write_int32(0); // isShared
+    // writeTypedList(mSurfaces): count=1, present=1, Surface.writeToParcel
+    p.write_int32(1);
+    p.write_int32(1);
+    p.write_string16("ImageReader-640x480f23m4-1-0").expect("name");
+    p.write_int32(0); // isSingleBuffered
+    p.write_int32(SURFACE_PARCEL_MAGIC_BQUE as i32);
+    p.write_strong_binder(igbp);
+    p.write_strong_binder(BinderId::NULL); // surfaceControlHandle
+    // Trailing OutputConfiguration fields
+    p.write_string16_opt(None).expect("physicalCameraId");
+    p.write_int32(0); // isMultiResolution
+    p.write_int32(0); // sensorPixelModesUsed[]
+    p.write_int64(1); // dynamicRangeProfile = STANDARD
+    p.write_int32(-1); // colorSpace
+    p.write_int64(0); // streamUseCase
+    p.write_int32(0); // timestampBase
+    p.write_int32(0); // mirrorMode
+    p.write_int32(0); // readoutTimestampEnabled
+}
+
+fn write_fake_capture_request(p: &mut Parcel, stream_id: i32, template_id: i32) {
+    let sensor = camera_metadata::Sensor {
+        back: true,
+        orientation: 90,
+        width: 4000,
+        height: 3000,
+    };
+    let meta = camera_metadata::default_request(&sensor, template_id).to_bytes();
+    p.write_int32(1); // present
+    p.write_int32(1); // physicalCameraCount = 1 (logical only)
+    p.write_string16("0").expect("logicalCameraId");
+    camera_metadata::write_parcel(p, &meta);
+    p.write_int32(0); // isReprocess = false
+    p.write_int32(0); // surfaces[] empty (converted to stream ids)
+    p.write_int32(1); // mStreamIdxArray.length = 1
+    p.write_int32(stream_id);
+    p.write_int32(0); // surfaceIdx = 0
+    p.write_int32(0); // no user tag
+}
+
+#[test]
+fn slice2_full_capture_and_repeating_lifecycle_delivers_sink_frames_and_validated_results() {
+    let (mut host, mut registry) = attach();
+    host.permission_store()
+        .expect("perm store")
+        .lock()
+        .unwrap()
+        .grant("android.permission.CAMERA");
+
+    // Simulate app process tag 7 registering guest `acos.camera.frame_sink`
+    // and passing its own `ICameraDeviceCallbacks` and `IGraphicBufferProducer`.
+    let app_tag = 7u32;
+    let sink_binder = BinderId((1u64 << 32) | 501);
+    let cb_binder = BinderId((1u64 << 32) | 502);
+    let igbp_binder = BinderId((1u64 << 32) | 503);
+    host.register_guest_service(app_tag, FRAME_SINK_SERVICE.to_string(), sink_binder);
+    host.set_binder_owner(cb_binder, app_tag);
+    host.set_binder_owner(igbp_binder, app_tag);
+
+    // 1. connectDevice -> ICameraDeviceUser
+    let mut data = request(&mut host);
+    data.write_strong_binder(cb_binder);
+    data.write_string16("0").expect("id");
+    data.write_string16("dev.acos.fixtures.cameraprobe").expect("pkg");
+    data.write_string16_opt(None).expect("feat");
+    data.write_int32(-1);
+    data.write_int32(0);
+    data.write_int32(34);
+    data.write_int32(0);
+    let mut reply = transact(&mut host, code::CONNECT_DEVICE, data);
+    let dev = reply
+        .read_strong_binder()
+        .expect("binder")
+        .expect("non-null device user");
+
+    // 2. beginConfigure -> createStream (640x480) -> endConfigure
+    dev_transact(&mut host, dev, device_code::BEGIN_CONFIGURE, dev_request());
+
+    let mut cs = dev_request();
+    write_fake_output_config(&mut cs, 640, 480, igbp_binder);
+    let mut cs_reply = dev_transact(&mut host, dev, device_code::CREATE_STREAM, cs);
+    let stream_id = cs_reply.read_int32().expect("streamId");
+    assert_eq!(stream_id, 0);
+
+    // Verify OP_REGISTER delivery queued for `acos.camera.frame_sink` with exact Surface layout.
+    let deliveries = host.take_deliveries();
+    assert_eq!(deliveries.len(), 1);
+    assert_eq!(deliveries[0].target, sink_binder);
+    assert_eq!(deliveries[0].interface, FRAME_SINK_DESCRIPTOR);
+    assert_eq!(deliveries[0].code, sink_code::REGISTER_STREAM);
+    let mut reg_p = deliveries[0].data.clone();
+    reg_p.set_data_position(0);
+    reg_p.enforce_interface(FRAME_SINK_DESCRIPTOR).expect("iface");
+    assert_eq!(reg_p.read_int32().expect("sid"), 0);
+    assert_eq!(
+        reg_p.read_string16().expect("name").as_deref(),
+        Some("ImageReader-640x480f23m4-1-0")
+    );
+    assert_eq!(reg_p.read_int32().expect("singleBuf"), 0);
+    assert_eq!(
+        reg_p.read_int32().expect("magic") as u32,
+        SURFACE_PARCEL_MAGIC_BQUE
+    );
+    assert_eq!(reg_p.read_strong_binder().expect("igbp"), Some(igbp_binder));
+    assert_eq!(reg_p.read_strong_binder().expect("scHandle"), None);
+    assert_eq!(reg_p.read_int32().expect("w"), 640);
+    assert_eq!(reg_p.read_int32().expect("h"), 480);
+
+    let mut ec = dev_request();
+    ec.write_int32(0); // operatingMode = NORMAL
+    ec.write_int32(0); // sessionParams = null
+    ec.write_int64(12345); // startTimeMs
+    let mut ec_reply = dev_transact(&mut host, dev, device_code::END_CONFIGURE, ec);
+    assert_eq!(ec_reply.read_int32().expect("offlineStreamIds len"), 0);
+
+    // 3. createDefaultRequest(TEMPLATE_STILL_CAPTURE = 2) -> validated metadata blob.
+    let mut dr = dev_request();
+    dr.write_int32(2);
+    let mut dr_reply = dev_transact(&mut host, dev, device_code::CREATE_DEFAULT_REQUEST, dr);
+    assert_eq!(dr_reply.read_int32().expect("present"), 1);
+    let dr_blob = camera_metadata::read_parcel(&mut dr_reply)
+        .expect("framing")
+        .expect("non-empty default request");
+    let dr_parsed = camera_metadata::validate(&dr_blob).expect("default request validates");
+    assert_eq!(
+        find_entry(&dr_parsed, tags::CONTROL_CAPTURE_INTENT.id).map(|e| e.as_i32()),
+        Some(vec![2]),
+        "TEMPLATE_STILL_CAPTURE sets CONTROL_CAPTURE_INTENT = 2"
+    );
+
+    // 4. submitRequestList (single-shot, streaming=false)
+    let mut sub = dev_request();
+    sub.write_int32(1); // 1 request
+    write_fake_capture_request(&mut sub, stream_id, 2);
+    sub.write_int32(0); // streaming = false
+    let mut sub_reply = dev_transact(&mut host, dev, device_code::SUBMIT_REQUEST_LIST, sub);
+    assert_eq!(sub_reply.read_int32().expect("SubmitInfo present"), 1);
+    let req_id = sub_reply.read_int32().expect("requestId");
+    let last_frame = sub_reply.read_int64().expect("lastFrameNumber");
+    assert_eq!(req_id, 1);
+    assert_eq!(last_frame, 0);
+
+    // Verify exact deliveries: OP_DELIVER -> onCaptureStarted -> onResultReceived -> onRequestQueueEmpty -> onDeviceIdle
+    let d = host.take_deliveries();
+    assert_eq!(d.len(), 5, "single capture emits 5 oneway deliveries");
+    assert_eq!(d[0].target, sink_binder);
+    assert_eq!(d[0].code, sink_code::DELIVER_FRAME);
+    let mut dp = d[0].data.clone();
+    dp.set_data_position(0);
+    dp.enforce_interface(FRAME_SINK_DESCRIPTOR).expect("iface");
+    assert_eq!(dp.read_int32().unwrap(), 0); // streamId
+    assert_eq!(dp.read_int32().unwrap(), 640);
+    assert_eq!(dp.read_int32().unwrap(), 480);
+    assert_eq!(dp.read_int64().unwrap(), 0); // frame 0
+    assert_eq!(dp.read_int64().unwrap(), INITIAL_TIMESTAMP_NS);
+    assert_eq!(dp.read_int32().unwrap(), 1); // ACOS_PATTERN_COLORBARS_V1
+
+    // onCaptureStarted
+    assert_eq!(d[1].target, cb_binder);
+    assert_eq!(d[1].code, callback_code::ON_CAPTURE_STARTED);
+    let mut sp = d[1].data.clone();
+    sp.set_data_position(0);
+    sp.enforce_interface(DEVICE_CALLBACKS_DESCRIPTOR).expect("iface");
+    assert_eq!(sp.read_int32().unwrap(), 1); // extras present
+    assert_eq!(sp.read_int32().unwrap(), 1); // requestId
+    assert_eq!(sp.read_int32().unwrap(), 0); // subsequenceId
+    assert_eq!(sp.read_int32().unwrap(), 0); // afTriggerId
+    assert_eq!(sp.read_int32().unwrap(), 0); // precaptureTriggerId
+    assert_eq!(sp.read_int64().unwrap(), 0); // frameNumber
+    assert_eq!(sp.read_int32().unwrap(), 1); // partialResultCount == REQUEST_PARTIAL_RESULT_COUNT
+    assert_eq!(sp.read_int32().unwrap(), -1); // errorStreamId
+    assert_eq!(sp.read_int32().unwrap(), 0); // errorPhysicalCameraIdPresent
+    assert_eq!(sp.read_int64().unwrap(), NO_IN_FLIGHT_REPEATING_FRAMES);
+    assert_eq!(sp.read_int64().unwrap(), NO_IN_FLIGHT_REPEATING_FRAMES);
+    assert_eq!(sp.read_int64().unwrap(), NO_IN_FLIGHT_REPEATING_FRAMES);
+    assert_eq!(sp.read_int32().unwrap(), 0); // hasReadoutTimestamp
+    assert_eq!(sp.read_int64().unwrap(), INITIAL_TIMESTAMP_NS);
+    assert_eq!(sp.data_size(), sp.data_position(), "enforceNoDataAvail");
+
+    // onResultReceived -> validated TotalCaptureResult metadata
+    assert_eq!(d[2].target, cb_binder);
+    assert_eq!(d[2].code, callback_code::ON_RESULT_RECEIVED);
+    let mut rp = d[2].data.clone();
+    rp.set_data_position(0);
+    rp.enforce_interface(DEVICE_CALLBACKS_DESCRIPTOR).expect("iface");
+    assert_eq!(rp.read_int32().unwrap(), 1); // metadata present
+    let res_blob = camera_metadata::read_parcel(&mut rp)
+        .expect("framing")
+        .expect("result metadata");
+    let res_parsed = camera_metadata::validate(&res_blob).expect("TotalCaptureResult validates");
+    assert_eq!(
+        find_entry(&res_parsed, tags::SENSOR_TIMESTAMP.id).map(|e| e.as_i64()),
+        Some(vec![INITIAL_TIMESTAMP_NS])
+    );
+    assert_eq!(
+        find_entry(&res_parsed, tags::CONTROL_CAPTURE_INTENT.id).map(|e| e.as_i32()),
+        Some(vec![2])
+    );
+    assert_eq!(rp.read_int32().unwrap(), 1); // extras present
+    assert_eq!(rp.read_int32().unwrap(), 1); // requestId
+    assert_eq!(rp.read_int32().unwrap(), 0); // subseq
+    assert_eq!(rp.read_int32().unwrap(), 0); // af
+    assert_eq!(rp.read_int32().unwrap(), 0); // precap
+    assert_eq!(rp.read_int64().unwrap(), 0); // frameNumber
+    assert_eq!(rp.read_int32().unwrap(), 1); // partialResultCount
+    assert_eq!(rp.read_int32().unwrap(), -1); // errorStreamId
+    assert_eq!(rp.read_int32().unwrap(), 0); // errPhys
+    assert_eq!(rp.read_int64().unwrap(), NO_IN_FLIGHT_REPEATING_FRAMES);
+    assert_eq!(rp.read_int64().unwrap(), NO_IN_FLIGHT_REPEATING_FRAMES);
+    assert_eq!(rp.read_int64().unwrap(), NO_IN_FLIGHT_REPEATING_FRAMES);
+    assert_eq!(rp.read_int32().unwrap(), 0); // hasReadoutTs
+    assert_eq!(rp.read_int32().unwrap(), 0); // PhysicalCaptureResultInfo[0]
+    assert_eq!(rp.data_size(), rp.data_position(), "enforceNoDataAvail");
+
+    assert_eq!(d[3].code, callback_code::ON_REQUEST_QUEUE_EMPTY);
+    assert_eq!(d[4].code, callback_code::ON_DEVICE_IDLE);
+
+    // 5. Repeating request (streaming = true) -> frame 1 immediately + frames 2, 3 via timed tick.
+    let mut rep = dev_request();
+    rep.write_int32(1);
+    write_fake_capture_request(&mut rep, stream_id, 1);
+    rep.write_int32(1); // streaming = true
+    let mut rep_reply = dev_transact(&mut host, dev, device_code::SUBMIT_REQUEST_LIST, rep);
+    assert_eq!(rep_reply.read_int32().unwrap(), 1);
+    let rep_req_id = rep_reply.read_int32().unwrap();
+    let prev_last = rep_reply.read_int64().unwrap();
+    assert_eq!(rep_req_id, 2);
+    assert_eq!(prev_last, NO_IN_FLIGHT_REPEATING_FRAMES);
+
+    let d1 = host.take_deliveries();
+    assert_eq!(d1.len(), 3, "frame 1: sink + started + result");
+    assert!(
+        host.next_timed_deadline().is_some(),
+        "repeating request must schedule next_timed_deadline"
+    );
+
+    // Wait just past 33ms twice to drive frames 2 and 3 via ServiceHost::take_timed_deliveries.
+    std::thread::sleep(std::time::Duration::from_millis(40));
+    let d2 = host.take_timed_deliveries();
+    assert_eq!(d2.len(), 3, "timed tick delivers frame 2");
+    let mut dp2 = d2[0].data.clone();
+    dp2.set_data_position(0);
+    dp2.enforce_interface(FRAME_SINK_DESCRIPTOR).unwrap();
+    let _ = (dp2.read_int32(), dp2.read_int32(), dp2.read_int32());
+    assert_eq!(dp2.read_int64().unwrap(), 2);
+    assert_eq!(
+        dp2.read_int64().unwrap(),
+        INITIAL_TIMESTAMP_NS + 2 * FRAME_DURATION_NS
+    );
+
+    std::thread::sleep(std::time::Duration::from_millis(40));
+    let d3 = host.take_timed_deliveries();
+    assert_eq!(d3.len(), 3, "timed tick delivers frame 3");
+
+    // 6. cancelRequest -> returns last frame number (3) and clears timed deadline.
+    let mut cancel = dev_request();
+    cancel.write_int32(rep_req_id);
+    let mut cancel_reply = dev_transact(&mut host, dev, device_code::CANCEL_REQUEST, cancel);
+    assert_eq!(cancel_reply.read_int64().unwrap(), 3);
+    assert!(host.next_timed_deadline().is_none());
+    let _ = host.take_deliveries();
+
+    // 7. waitUntilIdle + disconnect -> releases sink + marks node finished.
+    dev_transact(&mut host, dev, device_code::WAIT_UNTIL_IDLE, dev_request());
+    dev_transact(&mut host, dev, device_code::DISCONNECT, dev_request());
+    let rel = host.take_deliveries();
+    assert_eq!(rel.len(), 1);
+    assert_eq!(rel[0].target, sink_binder);
+    assert_eq!(rel[0].code, sink_code::RELEASE_STREAM);
+
+    // Control op `status` confirms 1 device opened, 0 still open, 4 frames delivered.
+    let status = registry
+        .control(&mut host, MODULE_ID, "status", &serde_json::json!(null))
+        .expect("status");
+    assert_eq!(status["calls"]["devices_opened"], 1);
+    assert_eq!(status["calls"]["open_devices"], 0);
+    assert_eq!(status["calls"]["streams_created"], 1);
+    assert_eq!(status["calls"]["frames_delivered"], 4);
+}
+
+#[test]
+fn test_pattern_colorbars_v1_crc32_is_deterministic_and_frame_tagged() {
+    let f0 = test_pattern_yuv420_crc32(640, 480, 0);
+    let f0_again = test_pattern_yuv420_crc32(640, 480, 0);
+    let f1 = test_pattern_yuv420_crc32(640, 480, 1);
+    let f2 = test_pattern_yuv420_crc32(640, 480, 2);
+    assert_eq!(f0, f0_again);
+    assert_ne!(f0, f1, "frame tag must make consecutive frames distinguishable");
+    assert_ne!(f1, f2);
+    assert_ne!(f0, 0);
+    eprintln!(
+        "ACOS_PATTERN_COLORBARS_V1 640x480 CRC32: f0={f0:#010x} f1={f1:#010x} f2={f2:#010x}"
+    );
+}
+

@@ -244,3 +244,412 @@ JNIEXPORT jint JNICALL Java_dev_acos_art_RenderNat_register(JNIEnv* env, jclass 
     (*env)->ReleaseStringUTFChars(env, name, plain);
     return rc;
 }
+
+// ------------------------------------------------ (4) Camera Option A frame sink
+//
+// CAMERA3 (ADR camera frames Option A): the host Session Controller (`hw.camera`
+// in acos-services) serves ICameraService / ICameraDeviceUser and drives
+// ICameraDeviceCallbacks. Pixels are filled in-process by this tiny JNI helper
+// on the app's own local ANativeWindow (from the stream's Surface), exercising
+// the real stock libgui BufferQueue, libnativewindow AHardwareBuffer_lockPlanes,
+// gralloc_shim.c YUV_420_888/BLOB, and ImageReader.OnImageAvailableListener.
+
+#include <pthread.h>
+
+typedef struct ANativeWindow ANativeWindow;
+typedef struct ANativeWindowBuffer ANativeWindowBuffer;
+typedef struct AHardwareBuffer AHardwareBuffer;
+
+typedef struct {
+    int32_t left;
+    int32_t top;
+    int32_t right;
+    int32_t bottom;
+} acos_arect_t;
+
+typedef struct {
+    uint32_t width;
+    uint32_t height;
+    uint32_t layers;
+    uint32_t format;
+    uint64_t usage;
+    uint32_t stride;
+    uint32_t rfu0;
+    uint64_t rfu1;
+} acos_ahb_desc_t;
+
+typedef struct {
+    void* data;
+    uint32_t pixelStride;
+    uint32_t rowStride;
+} acos_ahb_plane_t;
+
+typedef struct {
+    uint32_t planeCount;
+    acos_ahb_plane_t planes[4];
+} acos_ahb_planes_t;
+
+typedef ANativeWindow* (*fn_ANW_fromSurface)(JNIEnv*, jobject);
+typedef void (*fn_ANW_release)(ANativeWindow*);
+typedef int32_t (*fn_ANW_getDim)(ANativeWindow*);
+typedef int32_t (*fn_ANW_setUsage)(ANativeWindow*, uint64_t);
+typedef int32_t (*fn_ANW_setDims)(ANativeWindow*, int32_t, int32_t);
+typedef int32_t (*fn_ANW_setTimestamp)(ANativeWindow*, int64_t);
+typedef int32_t (*fn_ANW_dequeue)(ANativeWindow*, ANativeWindowBuffer**, int*);
+typedef int32_t (*fn_ANW_queue)(ANativeWindow*, ANativeWindowBuffer*, int);
+typedef int32_t (*fn_ANW_cancel)(ANativeWindow*, ANativeWindowBuffer*, int);
+typedef AHardwareBuffer* (*fn_ANWB_getAHB)(ANativeWindowBuffer*);
+typedef void (*fn_AHB_describe)(const AHardwareBuffer*, acos_ahb_desc_t*);
+typedef int (*fn_AHB_lockPlanes)(AHardwareBuffer*, uint64_t, int32_t, const acos_arect_t*, acos_ahb_planes_t*);
+typedef int (*fn_AHB_lock)(AHardwareBuffer*, uint64_t, int32_t, const acos_arect_t*, void**);
+typedef int (*fn_AHB_unlock)(AHardwareBuffer*, int32_t*);
+typedef int (*fn_ANW_perform)(ANativeWindow*, int, ...);
+
+/* Verified against this image's libnativewindow.so and libgui.so (Surface::perform). */
+#define ACOS_ANW_PERFORM_OFFSET 0x98
+#define ACOS_NATIVE_WINDOW_API_CONNECT 14
+#define ACOS_NATIVE_WINDOW_API_DISCONNECT 15
+#define ACOS_NATIVE_WINDOW_API_CAMERA 4
+#define ACOS_AHB_USAGE_CPU_WRITE_OFTEN 0x30ULL
+#define ACOS_FMT_BLOB 0x21u
+#define ACOS_FMT_YUV_420_888 0x23u
+
+static struct {
+    int loaded;
+    fn_ANW_fromSurface fromSurface;
+    fn_ANW_release release;
+    fn_ANW_getDim getWidth;
+    fn_ANW_getDim getHeight;
+    fn_ANW_getDim getFormat;
+    fn_ANW_setUsage setUsage;
+    fn_ANW_setDims setDims;
+    fn_ANW_setTimestamp setTimestamp;
+    fn_ANW_dequeue dequeue;
+    fn_ANW_queue queue;
+    fn_ANW_cancel cancel;
+    fn_ANWB_getAHB getAHB;
+    fn_AHB_describe describe;
+    fn_AHB_lockPlanes lockPlanes;
+    fn_AHB_lock lock;
+    fn_AHB_unlock unlock;
+} g_cam_api;
+
+#define ACOS_MAX_CAM_STREAMS 16
+static pthread_mutex_t g_cam_lock = PTHREAD_MUTEX_INITIALIZER;
+static struct {
+    int active;
+    int stream_id;
+    ANativeWindow* anw;
+    int width;
+    int height;
+    int format;
+} g_cam_streams[ACOS_MAX_CAM_STREAMS];
+
+static int cam_load_api(void) {
+    if (g_cam_api.loaded) return 0;
+    void* h_android = dlopen("libandroid.so", RTLD_LAZY | RTLD_LOCAL);
+    if (!h_android) h_android = dlopen("/system/lib64/libandroid.so", RTLD_LAZY | RTLD_LOCAL);
+    void* h_nw = dlopen("libnativewindow.so", RTLD_LAZY | RTLD_LOCAL);
+    if (!h_nw) h_nw = dlopen("/system/lib64/libnativewindow.so", RTLD_LAZY | RTLD_LOCAL);
+    if (!h_android || !h_nw) {
+        LOG("camera-sink: dlopen failed android=%p nw=%p err=%s", h_android, h_nw, dlerror());
+        return -ENOSYS;
+    }
+    g_cam_api.fromSurface = (fn_ANW_fromSurface)dlsym(h_android, "ANativeWindow_fromSurface");
+    g_cam_api.release = (fn_ANW_release)dlsym(h_nw, "ANativeWindow_release");
+    g_cam_api.getWidth = (fn_ANW_getDim)dlsym(h_nw, "ANativeWindow_getWidth");
+    g_cam_api.getHeight = (fn_ANW_getDim)dlsym(h_nw, "ANativeWindow_getHeight");
+    g_cam_api.getFormat = (fn_ANW_getDim)dlsym(h_nw, "ANativeWindow_getFormat");
+    g_cam_api.setUsage = (fn_ANW_setUsage)dlsym(h_nw, "ANativeWindow_setUsage");
+    g_cam_api.setDims = (fn_ANW_setDims)dlsym(h_nw, "ANativeWindow_setBuffersDimensions");
+    g_cam_api.setTimestamp = (fn_ANW_setTimestamp)dlsym(h_nw, "ANativeWindow_setBuffersTimestamp");
+    g_cam_api.dequeue = (fn_ANW_dequeue)dlsym(h_nw, "ANativeWindow_dequeueBuffer");
+    g_cam_api.queue = (fn_ANW_queue)dlsym(h_nw, "ANativeWindow_queueBuffer");
+    g_cam_api.cancel = (fn_ANW_cancel)dlsym(h_nw, "ANativeWindow_cancelBuffer");
+    g_cam_api.getAHB = (fn_ANWB_getAHB)dlsym(h_nw, "ANativeWindowBuffer_getHardwareBuffer");
+    g_cam_api.describe = (fn_AHB_describe)dlsym(h_nw, "AHardwareBuffer_describe");
+    g_cam_api.lockPlanes = (fn_AHB_lockPlanes)dlsym(h_nw, "AHardwareBuffer_lockPlanes");
+    g_cam_api.lock = (fn_AHB_lock)dlsym(h_nw, "AHardwareBuffer_lock");
+    g_cam_api.unlock = (fn_AHB_unlock)dlsym(h_nw, "AHardwareBuffer_unlock");
+    if (!g_cam_api.fromSurface || !g_cam_api.release || !g_cam_api.dequeue || !g_cam_api.queue ||
+        !g_cam_api.getAHB || !g_cam_api.describe || !g_cam_api.lockPlanes || !g_cam_api.unlock) {
+        LOG("camera-sink: missing ANativeWindow/AHardwareBuffer symbol(s)");
+        return -ENOSYS;
+    }
+    g_cam_api.loaded = 1;
+    return 0;
+}
+
+static int cam_anw_connect(ANativeWindow* anw) {
+    fn_ANW_perform perform = *(fn_ANW_perform*)((char*)anw + ACOS_ANW_PERFORM_OFFSET);
+    if (!perform) return -EINVAL;
+    return perform(anw, ACOS_NATIVE_WINDOW_API_CONNECT, ACOS_NATIVE_WINDOW_API_CAMERA);
+}
+
+static void cam_anw_disconnect(ANativeWindow* anw) {
+    fn_ANW_perform perform = *(fn_ANW_perform*)((char*)anw + ACOS_ANW_PERFORM_OFFSET);
+    if (perform) {
+        (void)perform(anw, ACOS_NATIVE_WINDOW_API_DISCONNECT, ACOS_NATIVE_WINDOW_API_CAMERA, 0);
+    }
+}
+
+/* Deterministic ACOS_PATTERN_COLORBARS_V1 test pattern (YUV_420_888):
+ *   - Rows 0 .. 3*H/4 - 1: 8 vertical BT.601 color bars
+ *       0=White(235,128,128), 1=Yellow(210,16,146), 2=Cyan(170,166,16),
+ *       3=Green(145,54,34),   4=Magenta(106,202,222), 5=Red(81,90,240),
+ *       6=Blue(41,240,110),   7=Black(16,128,128)
+ *   - Rows 3*H/4 .. H - 1: horizontal luma gradient Y = x*255/(W-1), U=128, V=128
+ *   - Frame tag at row 0, x=0..3:
+ *       Y(0,0)=0xA0|(fn&0xF), Y(1,0)=(fn>>4)&0xFF, Y(2,0)=(fn>>12)&0xFF, Y(3,0)=0x5A
+ * Keep in exact sync with Rust reference in crates/acos-services/src/modules/camera.rs. */
+static const uint8_t kBarY[8] = {235, 210, 170, 145, 106, 81, 41, 16};
+static const uint8_t kBarU[8] = {128, 16, 166, 54, 202, 90, 240, 128};
+static const uint8_t kBarV[8] = {128, 146, 16, 34, 222, 240, 110, 128};
+
+static void fill_yuv420_colorbars(const acos_ahb_planes_t* p,
+                                  uint32_t w, uint32_t h, uint64_t frame_number) {
+    uint8_t* y_base = (uint8_t*)p->planes[0].data;
+    uint32_t y_row = p->planes[0].rowStride;
+    uint32_t y_px = p->planes[0].pixelStride ? p->planes[0].pixelStride : 1u;
+
+    uint8_t* u_base = (uint8_t*)p->planes[1].data;
+    uint32_t u_row = p->planes[1].rowStride;
+    uint32_t u_px = p->planes[1].pixelStride ? p->planes[1].pixelStride : 1u;
+
+    uint8_t* v_base = (uint8_t*)p->planes[2].data;
+    uint32_t v_row = p->planes[2].rowStride;
+    uint32_t v_px = p->planes[2].pixelStride ? p->planes[2].pixelStride : 1u;
+
+    uint32_t ramp_y0 = (h * 3u) / 4u;
+    for (uint32_t y = 0; y < h; y++) {
+        uint8_t* row = y_base + (size_t)y * y_row;
+        for (uint32_t x = 0; x < w; x++) {
+            uint8_t val;
+            if (y == 0 && x < 4u) {
+                if (x == 0u) val = (uint8_t)(0xA0u | (frame_number & 0x0Fu));
+                else if (x == 1u) val = (uint8_t)((frame_number >> 4) & 0xFFu);
+                else if (x == 2u) val = (uint8_t)((frame_number >> 12) & 0xFFu);
+                else val = 0x5Au;
+            } else if (y >= ramp_y0) {
+                val = (w > 1u) ? (uint8_t)((x * 255u) / (w - 1u)) : 128u;
+            } else {
+                uint32_t bar = (x * 8u) / w;
+                if (bar > 7u) bar = 7u;
+                val = kBarY[bar];
+            }
+            row[(size_t)x * y_px] = val;
+        }
+    }
+
+    uint32_t cw = (w + 1u) / 2u;
+    uint32_t ch = (h + 1u) / 2u;
+    uint32_t ramp_cy0 = ramp_y0 / 2u;
+    for (uint32_t cy = 0; cy < ch; cy++) {
+        uint8_t* ur = u_base + (size_t)cy * u_row;
+        uint8_t* vr = v_base + (size_t)cy * v_row;
+        for (uint32_t cx = 0; cx < cw; cx++) {
+            uint8_t uval, vval;
+            if (cy >= ramp_cy0) {
+                uval = 128u;
+                vval = 128u;
+            } else {
+                uint32_t x = cx * 2u;
+                uint32_t bar = (x * 8u) / w;
+                if (bar > 7u) bar = 7u;
+                uval = kBarU[bar];
+                vval = kBarV[bar];
+            }
+            ur[(size_t)cx * u_px] = uval;
+            vr[(size_t)cx * v_px] = vval;
+        }
+    }
+}
+
+JNIEXPORT jint JNICALL Java_dev_acos_art_RenderNat_cameraSinkRegister(
+        JNIEnv* env, jclass klass, jint streamId, jobject surface, jint width, jint height) {
+    (void)klass;
+    if (!surface) return -EINVAL;
+    pthread_mutex_lock(&g_cam_lock);
+    int rc = cam_load_api();
+    if (rc != 0) {
+        pthread_mutex_unlock(&g_cam_lock);
+        return rc;
+    }
+    ANativeWindow* anw = g_cam_api.fromSurface(env, surface);
+    if (!anw) {
+        pthread_mutex_unlock(&g_cam_lock);
+        LOG("camera-sink: ANativeWindow_fromSurface returned NULL for stream %d", (int)streamId);
+        return -EINVAL;
+    }
+    int conn_rc = cam_anw_connect(anw);
+    if (conn_rc != 0) {
+        LOG("camera-sink: stream %d connect(CAMERA) -> %d", (int)streamId, conn_rc);
+    }
+    if (g_cam_api.setUsage) {
+        (void)g_cam_api.setUsage(anw, ACOS_AHB_USAGE_CPU_WRITE_OFTEN);
+    }
+    int w = g_cam_api.getWidth ? g_cam_api.getWidth(anw) : (int)width;
+    int h = g_cam_api.getHeight ? g_cam_api.getHeight(anw) : (int)height;
+    int fmt = g_cam_api.getFormat ? g_cam_api.getFormat(anw) : (int)ACOS_FMT_YUV_420_888;
+    if (width > 0 && height > 0 && (w != width || h != height) && g_cam_api.setDims) {
+        (void)g_cam_api.setDims(anw, width, height);
+        w = width;
+        h = height;
+    }
+    int slot = -1;
+    for (int i = 0; i < ACOS_MAX_CAM_STREAMS; i++) {
+        if (g_cam_streams[i].active && g_cam_streams[i].stream_id == streamId) {
+            cam_anw_disconnect(g_cam_streams[i].anw);
+            g_cam_api.release(g_cam_streams[i].anw);
+            g_cam_streams[i].active = 0;
+            slot = i;
+            break;
+        }
+    }
+    if (slot < 0) {
+        for (int i = 0; i < ACOS_MAX_CAM_STREAMS; i++) {
+            if (!g_cam_streams[i].active) { slot = i; break; }
+        }
+    }
+    if (slot < 0) {
+        cam_anw_disconnect(anw);
+        g_cam_api.release(anw);
+        pthread_mutex_unlock(&g_cam_lock);
+        return -ENOMEM;
+    }
+    g_cam_streams[slot].active = 1;
+    g_cam_streams[slot].stream_id = (int)streamId;
+    g_cam_streams[slot].anw = anw;
+    g_cam_streams[slot].width = w;
+    g_cam_streams[slot].height = h;
+    g_cam_streams[slot].format = fmt;
+    pthread_mutex_unlock(&g_cam_lock);
+    LOG("camera-sink: registered stream %d (%dx%d fmt=0x%x)", (int)streamId, w, h, (unsigned)fmt);
+    return 0;
+}
+
+JNIEXPORT jint JNICALL Java_dev_acos_art_RenderNat_cameraSinkDeliver(
+        JNIEnv* env, jclass klass, jint streamId, jint width, jint height,
+        jlong frameNumber, jlong timestampNs, jint patternId) {
+    (void)env; (void)klass; (void)patternId;
+    pthread_mutex_lock(&g_cam_lock);
+    if (!g_cam_api.loaded) {
+        pthread_mutex_unlock(&g_cam_lock);
+        return -ENOSYS;
+    }
+    ANativeWindow* anw = NULL;
+    int req_w = (int)width;
+    int req_h = (int)height;
+    for (int i = 0; i < ACOS_MAX_CAM_STREAMS; i++) {
+        if (g_cam_streams[i].active && g_cam_streams[i].stream_id == streamId) {
+            anw = g_cam_streams[i].anw;
+            if (req_w <= 0) req_w = g_cam_streams[i].width;
+            if (req_h <= 0) req_h = g_cam_streams[i].height;
+            break;
+        }
+    }
+    if (!anw) {
+        pthread_mutex_unlock(&g_cam_lock);
+        LOG("camera-sink: deliver unknown stream %d", (int)streamId);
+        return -ENOENT;
+    }
+
+    if (g_cam_api.setTimestamp) {
+        (void)g_cam_api.setTimestamp(anw, (int64_t)timestampNs);
+    }
+    ANativeWindowBuffer* buf = NULL;
+    int fence_fd = -1;
+    int rc = g_cam_api.dequeue(anw, &buf, &fence_fd);
+    if (fence_fd >= 0) close(fence_fd);
+    if (rc != 0 || !buf) {
+        pthread_mutex_unlock(&g_cam_lock);
+        LOG("camera-sink: dequeueBuffer(stream=%d) failed rc=%d", (int)streamId, rc);
+        return rc ? rc : -EIO;
+    }
+
+    AHardwareBuffer* ahb = g_cam_api.getAHB(buf);
+    if (!ahb) {
+        if (g_cam_api.cancel) g_cam_api.cancel(anw, buf, -1);
+        pthread_mutex_unlock(&g_cam_lock);
+        return -EINVAL;
+    }
+    acos_ahb_desc_t desc;
+    memset(&desc, 0, sizeof(desc));
+    g_cam_api.describe(ahb, &desc);
+    uint32_t w = desc.width ? desc.width : (uint32_t)req_w;
+    uint32_t h = desc.height ? desc.height : (uint32_t)req_h;
+
+    if (desc.format == ACOS_FMT_YUV_420_888) {
+        acos_ahb_planes_t planes;
+        memset(&planes, 0, sizeof(planes));
+        rc = g_cam_api.lockPlanes(ahb, ACOS_AHB_USAGE_CPU_WRITE_OFTEN, -1, NULL, &planes);
+        if (rc != 0 || planes.planeCount < 3u) {
+            LOG("camera-sink: lockPlanes failed rc=%d count=%u", rc, planes.planeCount);
+            if (rc == 0) g_cam_api.unlock(ahb, NULL);
+            if (g_cam_api.cancel) g_cam_api.cancel(anw, buf, -1);
+            pthread_mutex_unlock(&g_cam_lock);
+            return rc ? rc : -EINVAL;
+        }
+        fill_yuv420_colorbars(&planes, w, h, (uint64_t)frameNumber);
+        g_cam_api.unlock(ahb, NULL);
+    } else if (g_cam_api.lock) {
+        void* vaddr = NULL;
+        rc = g_cam_api.lock(ahb, ACOS_AHB_USAGE_CPU_WRITE_OFTEN, -1, NULL, &vaddr);
+        if (rc != 0 || !vaddr) {
+            if (g_cam_api.cancel) g_cam_api.cancel(anw, buf, -1);
+            pthread_mutex_unlock(&g_cam_lock);
+            return rc ? rc : -EIO;
+        }
+        if (desc.format == ACOS_FMT_BLOB) {
+            uint8_t* dst = (uint8_t*)vaddr;
+            size_t cap = (size_t)w * (size_t)(h ? h : 1u);
+            if (cap >= 24u) {
+                memcpy(dst, "ACOSBLOB", 8);
+                uint64_t fn = (uint64_t)frameNumber;
+                uint64_t ts = (uint64_t)timestampNs;
+                memcpy(dst + 8, &fn, 8);
+                memcpy(dst + 16, &ts, 8);
+            }
+        } else {
+            uint32_t stride = desc.stride ? desc.stride : w;
+            uint32_t* px = (uint32_t*)vaddr;
+            for (uint32_t y = 0; y < h; y++) {
+                for (uint32_t x = 0; x < w; x++) {
+                    uint32_t bar = (x * 8u) / w;
+                    if (bar > 7u) bar = 7u;
+                    uint8_t l = kBarY[bar];
+                    px[(size_t)y * stride + x] = 0xFF000000u | ((uint32_t)l << 16) | ((uint32_t)l << 8) | l;
+                }
+            }
+        }
+        g_cam_api.unlock(ahb, NULL);
+    }
+
+    rc = g_cam_api.queue(anw, buf, -1);
+    pthread_mutex_unlock(&g_cam_lock);
+    if (rc != 0) {
+        LOG("camera-sink: queueBuffer(stream=%d) failed rc=%d", (int)streamId, rc);
+    }
+    return rc;
+}
+
+JNIEXPORT jint JNICALL Java_dev_acos_art_RenderNat_cameraSinkRelease(
+        JNIEnv* env, jclass klass, jint streamId) {
+    (void)env; (void)klass;
+    pthread_mutex_lock(&g_cam_lock);
+    int released = 0;
+    for (int i = 0; i < ACOS_MAX_CAM_STREAMS; i++) {
+        if (g_cam_streams[i].active && (streamId < 0 || g_cam_streams[i].stream_id == streamId)) {
+            if (g_cam_streams[i].anw) {
+                cam_anw_disconnect(g_cam_streams[i].anw);
+                if (g_cam_api.release) g_cam_api.release(g_cam_streams[i].anw);
+            }
+            g_cam_streams[i].active = 0;
+            g_cam_streams[i].anw = NULL;
+            released++;
+        }
+    }
+    pthread_mutex_unlock(&g_cam_lock);
+    LOG("camera-sink: released stream=%d count=%d", (int)streamId, released);
+    return released;
+}

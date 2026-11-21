@@ -369,6 +369,7 @@ pub struct PendingNode {
 pub struct NodeRegistrar {
     registry: Arc<BinderRegistry>,
     owners: Arc<Mutex<std::collections::HashMap<u64, u32>>>,
+    guest_services: Arc<Mutex<std::collections::HashMap<(u32, String), BinderId>>>,
     pending: Arc<Mutex<Vec<PendingNode>>>,
 }
 
@@ -415,6 +416,24 @@ impl NodeRegistrar {
             .get(&binder.0)
             .copied()
     }
+
+    /// Look up a guest-registered service (`IServiceManager.addService`) owned
+    /// by process `tag`, or any process when `tag` is `None`.
+    #[must_use]
+    pub fn guest_service(&self, tag: Option<u32>, name: &str) -> Option<BinderId> {
+        let map = self
+            .guest_services
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if let Some(t) = tag {
+            if let Some(id) = map.get(&(t, name.to_string())).copied() {
+                return Some(id);
+            }
+        }
+        map.iter()
+            .find(|((_, n), _)| n == name)
+            .map(|(_, id)| *id)
+    }
 }
 
 /// Wiring handed to a lazily-constructed service.
@@ -444,6 +463,7 @@ impl Default for Wiring {
             nodes: NodeRegistrar {
                 registry: Arc::new(BinderRegistry::new()),
                 owners: Arc::new(Mutex::new(std::collections::HashMap::new())),
+                guest_services: Arc::new(Mutex::new(std::collections::HashMap::new())),
                 pending: Arc::new(Mutex::new(Vec::new())),
             },
         }
@@ -610,6 +630,9 @@ pub struct ServiceHost {
     /// recorded the first time its process hands it to the service layer
     /// (`addService`, `attachApplication`, any request parcel).
     binder_owners: Arc<Mutex<HashMap<u64, u32>>>,
+    /// Guest-registered per-process services (`IServiceManager.addService`),
+    /// keyed by `(process_tag, service_name)` -> guest `BinderId`.
+    guest_services: Arc<Mutex<HashMap<(u32, String), BinderId>>>,
     /// Binder records refused because the table was full (never a silent drop).
     binder_owner_drops: u64,
     /// Nodes services parked during a transaction ([`NodeRegistrar`]).
@@ -733,14 +756,17 @@ impl ServiceHost {
     pub fn new() -> Self {
         let registry = Arc::new(BinderRegistry::new());
         let binder_owners = Arc::new(Mutex::new(HashMap::new()));
+        let guest_services = Arc::new(Mutex::new(HashMap::new()));
         let pending_nodes: Arc<Mutex<Vec<PendingNode>>> = Arc::new(Mutex::new(Vec::new()));
         Self {
             registry: Arc::clone(&registry),
             binder_owners: Arc::clone(&binder_owners),
+            guest_services: Arc::clone(&guest_services),
             pending_nodes: Arc::clone(&pending_nodes),
             nodes: NodeRegistrar {
                 registry,
                 owners: binder_owners,
+                guest_services,
                 pending: pending_nodes,
             },
             entries: HashMap::new(),
@@ -1045,11 +1071,28 @@ impl ServiceHost {
         v
     }
 
+    /// Record a guest-registered service (`IServiceManager.addService`) so host
+    /// modules (e.g. `hw.camera`'s Option A frame-sink delivery) can target the
+    /// guest helper binder living in process `tag`.
+    pub fn register_guest_service(&mut self, tag: u32, name: String, binder: BinderId) {
+        if binder.is_null() {
+            return;
+        }
+        self.guest_services
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .insert((tag, name), binder);
+    }
+
     /// Drop every binder record owned by process `tag` (the process exited).
     ///
     /// Returns how many records were dropped. A later delivery to one of those
     /// ids fails structurally instead of reaching a stale handle.
     pub fn drop_process_binders(&mut self, tag: u32) -> usize {
+        self.guest_services
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .retain(|(owner, _), _| *owner != tag);
         let mut owners = self
             .binder_owners
             .lock()

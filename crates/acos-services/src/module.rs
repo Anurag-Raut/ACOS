@@ -967,11 +967,15 @@ impl Tombstone {
     /// The tombstone body: the error every transaction on the name answers.
     #[must_use]
     pub fn error(&self, interface: &str) -> ServiceError {
+        let profile = ModuleRegistry::standard()
+            .manifest(self.module)
+            .map(default_profile)
+            .unwrap_or(Profile::Real);
         ServiceError::ModuleUnavailable {
             service: self.name.to_string(),
             interface: interface.to_string(),
             module: self.module,
-            attach: attach_call(self.module, Profile::Real),
+            attach: attach_call(self.module, profile),
         }
     }
 }
@@ -1141,9 +1145,9 @@ pub const TOMBSTONES: &[Tombstone] = &[
         name: "media.camera",
         descriptor: "android.hardware.ICameraService",
         module: "hw.camera",
-        reason: "no camera attached (module `hw.camera` is off)",
+        reason: "no camera attached (module `hw.camera` is off; getCameraIdList returns [], openCamera/connectDevice answers UNSUPPORTED_ANDROID_API)",
         reaction: AospReaction::Tombstone,
-        evidence: "CameraManager is constructed lazily without transacting; CameraManagerGlobal.connectCameraServiceLocked() (`CameraManager.java:1951`) looks up `media.camera` via ServiceManager.getService only when an app calls CameraManager methods (`getCameraIdList`, `getCameraCharacteristics`, `openCamera`), so a tombstone answers structured `UNSUPPORTED_ANDROID_API` naming `hw.camera` when the module is off without affecting app startup",
+        evidence: "CameraManager is constructed lazily without transacting; when `hw.camera` is off, `CameraModule::off_node` serves `media.camera` so `getCameraIdList()` returns `[]` like a camera-less device (`addListener` -> empty `CameraStatus[]`, `getNumberOfCameras` -> 0), while `getCameraCharacteristics`/`openCamera`/`connectDevice` answer structured `UNSUPPORTED_ANDROID_API` naming `hw.camera` (`profile: \"stub\"`)",
     },
     Tombstone {
         name: "media_session",
@@ -1562,16 +1566,21 @@ impl ModuleRegistry {
         // the next `install_tombstones`, and restoring them here would leave a
         // registration behind after a detach (the kit's
         // `detaching_core_removes_its_registrations` check).
-        let restore: Vec<&'static Tombstone> = self.entries[index]
-            .module
-            .manifest()
-            .services
-            .iter()
-            .filter_map(|service| tombstone_for(service.name))
-            .filter(|tombstone| tombstone.reaction == AospReaction::Tombstone)
-            .filter(|tombstone| tombstone.module == id)
-            .filter(|tombstone| !self.tombstoned.contains(&tombstone.name))
-            .collect();
+        let has_off_node = self.entries[index].module.off_node().is_some();
+        let restore: Vec<&'static Tombstone> = if has_off_node {
+            Vec::new()
+        } else {
+            self.entries[index]
+                .module
+                .manifest()
+                .services
+                .iter()
+                .filter_map(|service| tombstone_for(service.name))
+                .filter(|tombstone| tombstone.reaction == AospReaction::Tombstone)
+                .filter(|tombstone| tombstone.module == id)
+                .filter(|tombstone| !self.tombstoned.contains(&tombstone.name))
+                .collect()
+        };
         for tombstone in restore {
             install_tombstone(host, tombstone);
             self.tombstoned.push(tombstone.name);
@@ -1584,13 +1593,17 @@ impl ModuleRegistry {
         for binder in freed {
             host.mark_detached_binder(binder, id_for_dead);
         }
-        // Every module that is still off and has a documented disabled node
-        // (see [`Module::off_node`]) answers its name again. This is what makes
-        // a detach return the host to the same state the session started in.
-        // (A node `core` publishes and a module fills — `sensorservice`,
-        // `location` — is emptied by the module's own `detach` and is rolled back
-        // with `core`'s registrations; no shipped module needs this hook.)
-        self.install_off_nodes(host);
+        // If the detached module declares an honest disabled node (see
+        // [`Module::off_node`]), restore *its* node so the session returns to
+        // the exact pre-attach state without installing unrelated modules'
+        // off-nodes when `core` detaches.
+        if let Some(node) = self.entries[index].module.off_node() {
+            if let Some(service) = self.entries[index].module.manifest().services.first() {
+                if !self.tombstoned.contains(&service.name) {
+                    host.register_dynamic_named(service.name, service.descriptor, node);
+                }
+            }
+        }
         Ok(())
     }
 
@@ -1862,6 +1875,12 @@ impl ModuleRegistry {
                     continue;
                 }
             }
+            let has_off_node = self.entries.iter().any(|entry| {
+                entry.module.manifest().id == tombstone.module && entry.module.off_node().is_some()
+            });
+            if has_off_node {
+                continue;
+            }
             install_tombstone(host, tombstone);
             self.tombstoned.push(tombstone.name);
             installed.push(tombstone.name);
@@ -1896,7 +1915,7 @@ impl ModuleRegistry {
             let Some(service) = manifest.services.first() else {
                 continue;
             };
-            if tombstone_for(service.name).is_some() {
+            if self.tombstoned.contains(&service.name) {
                 continue;
             }
             host.register_dynamic_named(service.name, service.descriptor, node);
