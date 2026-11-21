@@ -23,6 +23,7 @@ A module is a set of Android system pieces attached to a session. `off` is alway
 | `webview` | `off`, `real`, needs `acos-webview`, `chrome-headless-shell` | `at-launch` | `host-tool` | 4 | 11 | a real WebView: the `com.android.webview` provider package installed in the session plus the shared host Chromium behind the session's gate socket (one broker per host, ~130-140 MiB once, started on the first connect); `off` is Android's own no-provider path, and there is no stub/scripted profile | app `com.android.webview` | `status` |
 | `net.wifi` | `off`, `stub`, `scripted` | `hot` | `in-process` | 1 | 5 | Wi-Fi client radio: stub (one SSID from config) / scripted (connect, disconnect, rssi, scan -> WIFI_STATE_CHANGED, NETWORK_STATE_CHANGED, RSSI_CHANGED, SCAN_RESULTS, NetworkCallback loss/availability); no real radio, no hotspot/P2P/configured networks | `wifi`, feature `android.hardware.wifi`, broadcast `android.net.wifi.WIFI_STATE_CHANGED`, broadcast `android.net.wifi.STATE_CHANGE`, broadcast `android.net.wifi.RSSI_CHANGED`, broadcast `android.net.wifi.SCAN_RESULTS` | `state`, `enable`, `connect`, `disconnect`, `rssi`, `scan`, `reset` |
 | `media.session` | `off`, `stub`, `scripted` | `hot` | `in-process` | 1 | 5 | media sessions: stub (record what apps publish) / scripted (agent play, pause, next, seek reach MediaSession.Callback); no media-key routing, queue, volume, remote sessions or router | `media_session`, `media_router` | `sessions`, `play`, `pause`, `stop`, `next`, `previous`, `fast_forward`, `rewind`, `seek`, `skip_to_item`, `custom_action`, `reset` |
+| `multiwindow` | `off`, `real` | `hot` | `in-process` | 1 | 5 | real multi-window task bounds and windowing-mode transitions on the live WMS (slice 1: single-task split enter_split/resize/exit via the ServiceHost guest-command outbox; `off` keeps fullscreen and refuses control ops, no stub/scripted profile) | window `TYPE_APPLICATION` | `enter_split`, `resize`, `exit`, `status` |
 | `hw.usb` | `off`, `stub` | `hot` | `in-process` | 1 | 2 | USB host: stub (no USB hardware), empty device list and no configured functions | `usb` | — |
 | `system.dropbox` | `off`, `stub` | `hot` | `in-process` | 1 | 2 | DropBox: stub (no system DropBox), no entries and no enabled tags | `dropbox` | — |
 | `hw.nfc` | `off` | `hot` | `in-process` | 1 | 1 | NFC: off (no NFC hardware) | `nfc` | — |
@@ -117,6 +118,10 @@ A module is a set of Android system pieces attached to a session. `off` is alway
 | `media.session` | `skip_to_item` | {session?, id} (scripted) — onSkipToQueueItem(id) |
 | `media.session` | `custom_action` | {session?, action} (scripted) — onCustomAction(action, null) |
 | `media.session` | `reset` | none — clear the recorded `unsupported` calls |
+| `multiwindow` | `enter_split` | {position?: "top"|"bottom"|"left"|"right" (default "top"), ratio?: 0.2..=0.8 (default 0.5), task?: i32} — put the foreground task in multi-window bounds and push the activity override Configuration to the owning guest (`bottom` two-activity split is refused until slice 2) |
+| `multiwindow` | `resize` | {ratio: 0.2..=0.8, position?: "top"|"bottom"|"left"|"right", task?: i32} — resize the active split pane and deliver the new activity override Configuration |
+| `multiwindow` | `exit` | {task?: i32} (or empty) — clear task bounds, restore WINDOWING_MODE_FULLSCREEN and deliver the full-screen activity override Configuration |
+| `multiwindow` | `status` | none — current multi-window state, active task bounds and transition count |
 
 ## Names with no module attached
 

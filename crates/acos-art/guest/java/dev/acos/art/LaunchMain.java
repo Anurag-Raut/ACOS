@@ -1791,6 +1791,271 @@ public final class LaunchMain {
         }
     }
 
+    /**
+     * Find {@code ActivityThread.handleActivityConfigurationChanged} taking an
+     * {@code ActivityClientRecord}, preferring the public overload without the
+     * trailing {@code boolean alwaysReportChange} (which delegates with
+     * {@code alwaysReportChange = true}).
+     */
+    static java.lang.reflect.Method findHandleActivityConfigChanged(Class<?> at) {
+        java.lang.reflect.Method fallback = null;
+        for (java.lang.reflect.Method m : at.getDeclaredMethods()) {
+            if (!m.getName().equals("handleActivityConfigurationChanged")) continue;
+            Class<?>[] params = m.getParameterTypes();
+            boolean hasRecord = false;
+            boolean hasBool = false;
+            for (Class<?> p : params) {
+                if (p.getName().equals("android.app.ActivityThread$ActivityClientRecord")) {
+                    hasRecord = true;
+                } else if (p == boolean.class) {
+                    hasBool = true;
+                }
+            }
+            if (!hasRecord) continue;
+            if (!hasBool) return m;
+            fallback = m;
+        }
+        return fallback;
+    }
+
+    /**
+     * MULTIWIN3: force one relayout on the resumed Activity's decor so
+     * {@code ViewRootImpl.performTraversals} fetches the new task frame from the
+     * host WMS, then wake the probe *after* the frame traversal finishes so the
+     * first sample returned to the control caller carries the settled bounds.
+     */
+    static void finishWindow(final int windowingMode, final boolean relaunch,
+            final String rung, final int handled,
+            final int l, final int t, final int r, final int b) {
+        Object activity = null;
+        try {
+            Object thread = sThread;
+            activity = thread == null ? null : resumedActivity(thread);
+            if (activity != null) {
+                Object window = activity.getClass().getMethod("getWindow").invoke(activity);
+                Object decor = window.getClass().getMethod("getDecorView").invoke(window);
+                if (decor instanceof View) {
+                    Object vr = null;
+                    try {
+                        vr = decor.getClass().getMethod("getViewRootImpl").invoke(decor);
+                    } catch (Throwable ignored) {
+                    }
+                    if (vr != null) {
+                        setFieldForce(vr.getClass(), vr, "mForceNextWindowRelayout", Boolean.TRUE);
+                    }
+                    ((View) decor).requestLayout();
+                }
+            }
+        } catch (Throwable err) {
+            System.out.println("ACOSLAUNCH MARK window-relayout-failed " + unwrap(err));
+        }
+        final Object fActivity = activity;
+        final Runnable wakeProbe = new Runnable() {
+            @Override
+            public void run() {
+                sDirtyAtMs = 0;
+                sTreeDirty.set(true);
+                synchronized (sProbeWake) {
+                    sProbeRequested = true;
+                    sProbeWake.notifyAll();
+                }
+                System.out.println("ACOSLAUNCH MARK window mode=" + windowingMode
+                        + " bounds=[" + l + "," + t + "," + r + "," + b + "]"
+                        + " relaunch=" + relaunch + " via=" + rung
+                        + " handled=0x" + Integer.toHexString(handled)
+                        + " activity=" + (fActivity == null ? "<none>" : fActivity.getClass().getName()));
+                System.out.flush();
+            }
+        };
+        final android.os.Handler main = new android.os.Handler(Looper.getMainLooper());
+        try {
+            // Post inside Choreographer's frame callback, then hop to main so
+            // CALLBACK_TRAVERSAL (performTraversals -> relayoutWindow -> layout)
+            // completes before the probe walks the view tree.
+            android.view.Choreographer.getInstance().postFrameCallback(
+                    new android.view.Choreographer.FrameCallback() {
+                        @Override
+                        public void doFrame(long frameTimeNanos) {
+                            main.post(wakeProbe);
+                        }
+                    });
+        } catch (Throwable ignored) {
+            main.post(wakeProbe);
+        }
+    }
+
+    /**
+     * MULTIWIN3 (slice 1): deliver a host-owned task-bounds / windowing-mode
+     * transition ({@code WINDOW mode l t r b al at ar ab}) through the activity's
+     * override {@link Configuration} (never the process configuration and never
+     * recomputing split geometry guest-side).
+     */
+    static void applyWindow(final int windowingMode,
+            final int l, final int t, final int r, final int b,
+            final int al, final int atPx, final int ar, final int ab) {
+        final int mwBits = android.content.pm.ActivityInfo.CONFIG_SCREEN_SIZE;
+        try {
+            Object thread = sThread;
+            if (thread == null) throw new IllegalStateException("no ActivityThread");
+            Object activities = get(thread, "mActivities");
+            IBinder token = sCurrentToken;
+            Object record = null;
+            if (activities instanceof java.util.Map && token != null) {
+                record = ((java.util.Map<?, ?>) activities).get(token);
+            }
+            if (record == null && activities instanceof java.util.Map) {
+                Object resumed = resumedActivity(thread);
+                if (resumed != null) {
+                    Object mToken = get(resumed, "mToken");
+                    if (mToken instanceof IBinder) {
+                        token = (IBinder) mToken;
+                        record = ((java.util.Map<?, ?>) activities).get(token);
+                    }
+                }
+            }
+            if (record == null) {
+                throw new IllegalStateException("no ActivityClientRecord for token");
+            }
+
+            // Use the activity's real display density to convert the host's
+            // appBounds px to dp (AOSP TaskFragment.java:2360); never recompute
+            // the task rectangle guest-side.
+            float density = 2.625f;
+            try {
+                Object act = get(record, "activity");
+                if (act != null) {
+                    android.content.res.Resources res =
+                            (android.content.res.Resources) act.getClass()
+                                    .getMethod("getResources").invoke(act);
+                    if (res != null && res.getDisplayMetrics() != null
+                            && res.getDisplayMetrics().density > 0f) {
+                        density = res.getDisplayMetrics().density;
+                    }
+                }
+            } catch (Throwable ignored) {
+            }
+            int widthDp = Math.max(1, (int) ((ar - al) / density + 0.5f));
+            int heightDp = Math.max(1, (int) ((ab - atPx) / density + 0.5f));
+
+            // Activity override Configuration ONLY: leave smallestScreenWidthDp,
+            // screenLayout, orientation, and densityDpi undefined so they inherit
+            // display-level values from the global process Configuration, and keep
+            // seq = 0 so Configuration.isOtherSeqNewer accepts consecutive updates.
+            Configuration overrideConfig = new Configuration();
+            try {
+                setFieldForce(Configuration.class, overrideConfig, "seq", 0);
+            } catch (Throwable ignored) {
+            }
+            overrideConfig.screenWidthDp = widthDp;
+            overrideConfig.screenHeightDp = heightDp;
+            Object wc = get(overrideConfig, "windowConfiguration");
+            if (wc != null) {
+                android.graphics.Rect bounds = new android.graphics.Rect(l, t, r, b);
+                android.graphics.Rect appBounds = new android.graphics.Rect(al, atPx, ar, ab);
+                android.graphics.Rect maxBounds = new android.graphics.Rect(0, 0, PANEL_W, PANEL_H);
+                wc.getClass().getMethod("setBounds", android.graphics.Rect.class)
+                        .invoke(wc, bounds);
+                wc.getClass().getMethod("setAppBounds", android.graphics.Rect.class)
+                        .invoke(wc, appBounds);
+                wc.getClass().getMethod("setMaxBounds", android.graphics.Rect.class)
+                        .invoke(wc, maxBounds);
+                wc.getClass().getMethod("setWindowingMode", int.class)
+                        .invoke(wc, windowingMode);
+            }
+
+            Object ai = get(record, "activityInfo");
+            int handled = 0;
+            if (ai != null) {
+                try {
+                    java.lang.reflect.Method g = ai.getClass().getMethod("getRealConfigChanged");
+                    handled = (Integer) g.invoke(ai);
+                } catch (Throwable err) {
+                    System.out.println("ACOSLAUNCH MARK window-getRealConfigChanged-failed "
+                            + unwrap(err));
+                }
+            }
+            boolean relaunch = (handled & mwBits) != mwBits;
+            String rung;
+            Class<?> atCls = Class.forName("android.app.ActivityThread");
+            Object windowInfo = newWindowInfo();
+            if (relaunch) {
+                Configuration globalCfg = null;
+                try {
+                    Object cc = get(thread, "mConfigurationController");
+                    if (cc != null) {
+                        globalCfg = (Configuration) cc.getClass()
+                                .getMethod("getConfiguration").invoke(cc);
+                    }
+                } catch (Throwable ignored) {
+                }
+                if (globalCfg == null) globalCfg = displayConfiguration();
+                Class<?> merged = Class.forName("android.util.MergedConfiguration");
+                java.lang.reflect.Constructor<?> mergedCtor =
+                        merged.getConstructor(Configuration.class, Configuration.class);
+                mergedCtor.setAccessible(true);
+                Object mergedConfig = mergedCtor.newInstance(globalCfg, overrideConfig);
+                Class<?> ctxCls =
+                        Class.forName("android.app.servertransaction.ClientTransaction");
+                Class<?> iatCls = Class.forName("android.app.IApplicationThread");
+                Class<?> relaunchCls =
+                        Class.forName("android.app.servertransaction.ActivityRelaunchItem");
+                Class<?> resumeCls =
+                        Class.forName("android.app.servertransaction.ResumeActivityItem");
+                Object tx = ctxCls.getMethod("obtain", iatCls, IBinder.class)
+                        .invoke(null, sClient, token);
+                int prevBits = rotationBitsStatic;
+                rotationBitsStatic = mwBits;
+                Object item;
+                try {
+                    item = obtainRelaunchItem(relaunchCls, token, mergedConfig, windowInfo);
+                } finally {
+                    rotationBitsStatic = prevBits;
+                }
+                Object resumeItem = obtainResume(resumeCls);
+                java.util.ArrayList<Object> callbacks = new java.util.ArrayList<Object>();
+                callbacks.add(item);
+                setPrivateField(ctxCls, tx, "mActivityCallbacks", callbacks);
+                setPrivateField(ctxCls, tx, "mLifecycleStateRequest", resumeItem);
+                setPrivateFieldIfPresent(ctxCls, tx, "mTransactionItems", callbacks);
+                scheduleLocal(tx);
+                rung = "ActivityRelaunchItem(ClientTransaction)";
+            } else {
+                java.lang.reflect.Method hac = findHandleActivityConfigChanged(atCls);
+                if (hac == null) {
+                    throw new IllegalStateException(
+                            "ActivityThread.handleActivityConfigurationChanged is absent from "
+                                    + "this image");
+                }
+                hac.setAccessible(true);
+                Object[] args = relaunchArgs(hac, record, overrideConfig, windowInfo);
+                // If only the 5-arg overload exists, pass alwaysReportChange = true.
+                Class<?>[] params = hac.getParameterTypes();
+                for (int i = 0; i < params.length; i++) {
+                    if (params[i] == boolean.class) {
+                        args[i] = Boolean.TRUE;
+                    }
+                }
+                hac.invoke(thread, args);
+                rung = "handleActivityConfigurationChanged";
+            }
+
+            final boolean fRelaunch = relaunch;
+            final String fRung = rung;
+            final int fHandled = handled;
+            new android.os.Handler(Looper.getMainLooper()).post(new Runnable() {
+                @Override
+                public void run() {
+                    finishWindow(windowingMode, fRelaunch, fRung, fHandled, l, t, r, b);
+                }
+            });
+        } catch (Throwable err) {
+            System.out.println("ACOSLAUNCH MARK window-failed mode=" + windowingMode
+                    + " " + unwrap(err));
+            err.printStackTrace(System.out);
+            System.out.flush();
+        }
+    }
+
     static void startLiveProbe(final Object activity) {
         final android.os.Handler main = new android.os.Handler(Looper.getMainLooper());
         final java.util.concurrent.atomic.AtomicBoolean pending =
@@ -1854,6 +2119,38 @@ public final class LaunchMain {
                                 @Override
                                 public void run() {
                                     applyRotation(want);
+                                }
+                            });
+                        } else if (word.toUpperCase().startsWith("WINDOW ")) {
+                            // MULTIWIN3: host-owned task bounds + windowing mode
+                            // (`WINDOW mode l t r b al at ar ab`). Must run on the
+                            // main looper.
+                            String[] parts = word.split("\\s+");
+                            if (parts.length != 10) {
+                                System.out.println("ACOSLAUNCH MARK window-bad-arg line=" + word);
+                                System.out.flush();
+                                continue;
+                            }
+                            final int mode, l, t, r, b, al, atPx, ar, ab;
+                            try {
+                                mode = Integer.parseInt(parts[1]);
+                                l = Integer.parseInt(parts[2]);
+                                t = Integer.parseInt(parts[3]);
+                                r = Integer.parseInt(parts[4]);
+                                b = Integer.parseInt(parts[5]);
+                                al = Integer.parseInt(parts[6]);
+                                atPx = Integer.parseInt(parts[7]);
+                                ar = Integer.parseInt(parts[8]);
+                                ab = Integer.parseInt(parts[9]);
+                            } catch (Throwable bad) {
+                                System.out.println("ACOSLAUNCH MARK window-bad-arg line=" + word);
+                                System.out.flush();
+                                continue;
+                            }
+                            main.post(new Runnable() {
+                                @Override
+                                public void run() {
+                                    applyWindow(mode, l, t, r, b, al, atPx, ar, ab);
                                 }
                             });
                         }

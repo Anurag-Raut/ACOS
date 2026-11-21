@@ -692,6 +692,39 @@ pub struct ServiceHost {
     /// no transaction to ride (see [`DeliveryWake`]). `None` keeps the host
     /// synchronous-only: the VM transport never has an idle peer to wake.
     delivery_wake: Option<Arc<DeliveryWake>>,
+    /// MULTIWIN3 (ADR-0029, 2026-11-18 amendment): the session's live window
+    /// manager state (`WmsState`), published by `registry::install_*` just like
+    /// `atms`, so modules such as `multiwindow` mutate the real WMS state.
+    wms: Option<std::sync::Arc<std::sync::Mutex<crate::wms::WmsState>>>,
+    /// MULTIWIN3 (ADR-0029, 2026-11-18 amendment — option A): typed host → guest
+    /// commands queued by a module's `control` op. The launcher loop drains this
+    /// outbox after each `services` request, writes each command to the owning
+    /// guest process, waits for a fresh probe sample, and returns the settled
+    /// UI tree in the same control reply.
+    guest_commands: Vec<GuestCommand>,
+}
+
+/// One typed host → guest command queued via [`ServiceHost::push_guest_command`]
+/// (ADR-0029, 2026-11-18 amendment — option A outbox).
+///
+/// Reusable across windowing/configuration modules (`multiwindow` now; rotation
+/// and PiP later).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum GuestCommand {
+    /// Deliver a task windowing-mode / bounds update to the guest process that
+    /// owns `task` (`WINDOW <mode> <l> <t> <r> <b> <al> <at> <ar> <ab>`).
+    Window {
+        /// Task id (matches `ActivityRecord.task_id`, default `10`).
+        task: i32,
+        /// Owning guest process tag (`0` = primary process).
+        process: u32,
+        /// Task bounds in display pixels.
+        rect: acos_wm::RectI,
+        /// Task app bounds in display pixels (bounds minus overlapping system bars).
+        app_bounds: acos_wm::RectI,
+        /// `WindowConfiguration.WINDOWING_MODE_*` (`1` = fullscreen, `6` = multi-window, …).
+        windowing_mode: i32,
+    },
 }
 
 /// The host endpoints the launcher bound for a session's WebView (ADR-0031).
@@ -715,6 +748,7 @@ impl core::fmt::Debug for ServiceHost {
             .field("aux", &self.aux.len())
             .field("constructions", &self.constructions)
             .field("deliveries", &self.deliveries.len())
+            .field("guest_commands", &self.guest_commands.len())
             .field("trace", &self.trace.is_some())
             .finish()
     }
@@ -772,6 +806,8 @@ impl ServiceHost {
             webview_gate: None,
             overwrites: Vec::new(),
             delivery_wake: None,
+            wms: None,
+            guest_commands: Vec::new(),
         }
     }
 
@@ -1875,6 +1911,36 @@ impl ServiceHost {
     #[must_use]
     pub fn atms(&self) -> Option<std::sync::Arc<std::sync::Mutex<crate::atms::AtmsState>>> {
         self.atms.as_ref().map(std::sync::Arc::clone)
+    }
+
+    /// Publish the session's live window manager state (called by
+    /// [`crate::registry::install_with_handles_and_insets`]).
+    pub fn set_wms(&mut self, wms: std::sync::Arc<std::sync::Mutex<crate::wms::WmsState>>) {
+        self.wms = Some(wms);
+    }
+
+    /// The session's live window manager state, when a standard set published one.
+    #[must_use]
+    pub fn wms(&self) -> Option<std::sync::Arc<std::sync::Mutex<crate::wms::WmsState>>> {
+        self.wms.as_ref().map(std::sync::Arc::clone)
+    }
+
+    /// Queue a typed host → guest command for the launcher loop to write to the
+    /// owning guest process and settle to a fresh probe sample (ADR-0029,
+    /// 2026-11-18 amendment — option A).
+    pub fn push_guest_command(&mut self, command: GuestCommand) {
+        self.guest_commands.push(command);
+    }
+
+    /// Drain all queued host → guest commands in FIFO order.
+    pub fn drain_guest_commands(&mut self) -> Vec<GuestCommand> {
+        std::mem::take(&mut self.guest_commands)
+    }
+
+    /// Inspect queued host → guest commands without draining them.
+    #[must_use]
+    pub fn pending_guest_commands(&self) -> &[GuestCommand] {
+        &self.guest_commands
     }
 
     /// Publish this session's WebView endpoints (WV8: the launcher binds the

@@ -1589,3 +1589,15 @@ Three rules the WebView track had to settle, each measured first
    dropped. The known cause of a *cross-session* restart is the WebView daemon
    living in its spawner's cgroup (a session's scope ending kills the host's
    engine); moving it out is a process-model decision for the owner.
+
+**ADR-0029 amendment (owner, 2026-11-18, MULTIWIN3): module control seam is option A — a `ServiceHost` guest-command outbox.**
+
+Modules live in `acos-services` and run on the binder peer thread (`Module::control`), while the guest process's stdin command channel (`ROTATE`, `WINDOW`, …) and probe wait live in `acos-art`'s launcher loop. A module control op that changes window or configuration state (`multiwindow.enter_split`, `multiwindow.resize`, `multiwindow.exit`, and later rotation and PiP) needs both host-side `WmsState` mutation and guest-side delivery settled to a fresh UI probe sample in the same control reply.
+
+**Decision.** `ServiceHost` owns a typed guest-command outbox (`GuestCommand`, starting with `GuestCommand::Window { task, process, rect, app_bounds, windowing_mode }`). During `Module::control`, the module mutates `WmsState` (via `ServiceHost::wms()`) and pushes one or more `GuestCommand`s onto the host outbox (`ServiceHost::push_guest_command`). When the peer thread finishes handling a `services` control request, it drains the outbox (`ServiceHost::drain_guest_commands`) and returns the commands alongside the control reply to the launcher loop. The launcher loop writes each command to the stdin of the guest process that owns the task, waits for a fresh probe sample (`sample.seq > before`, failing closed with `NO_FRESH_TREE` / `GUEST_EXITED`), and attaches the settled `probe_seq` and `tree` to the same control reply.
+
+**Consequences.**
+- One reusable seam for all host-driven window/config transitions (`multiwindow` now; rotation and PiP later — `rotate` stays on its existing launcher path until migrated).
+- `acos-services` stays decoupled from `acos-art` process handles and probe loops; unit tests in `acos-services` can inspect the queued `GuestCommand`s directly via `ServiceHost::drain_guest_commands`.
+- The module itself never computes or fabricates guest layout; host-computed geometry flows from `WmsState` through `GuestCommand` to the guest's activity override `Configuration` and `relayout`.
+

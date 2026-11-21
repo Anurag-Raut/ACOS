@@ -22,7 +22,7 @@ use crate::codec::{
     LayoutParams, MergedConfiguration, PrivacyIndicatorBounds, RoundedCorner, RoundedCorners,
     SurfaceControlInfo, WindowConfiguration,
 };
-use crate::display::{DisplaySpec, InsetsMode};
+use crate::display::{DisplaySpec, InsetsMode, TaskRecord, WINDOWING_MODE_FULLSCREEN};
 use crate::error::{Result, WmError};
 use crate::geom::{InsetsI, PointI, RectI};
 use crate::transport::{Channel, InputChannelRegistry};
@@ -31,6 +31,8 @@ use crate::transport::{Channel, InputChannelRegistry};
 pub type WindowId = u64;
 /// A session is identified by the `IWindowSession` binder id.
 pub type SessionId = u64;
+/// Default primary task id (matches `acos_services::atms::ActivityRecord::task_id`).
+pub const DEFAULT_TASK_ID: i32 = 10;
 
 /// `IWindowSession.ADD_OKAY`.
 pub const ADD_OKAY: i32 = 0;
@@ -258,6 +260,14 @@ pub struct WindowManager {
     /// (`WindowManagerService.java:1630-1640`). Without this set any app could
     /// stack a window above the accessibility overlay layer.
     overlay_tokens: BTreeSet<u64>,
+    /// Per-task windowing bounds (`docs/MULTIWINDOW_PLAN.md` §4.1).
+    /// Empty in fullscreen sessions so existing fullscreen behaviour is byte-identical.
+    pub tasks: BTreeMap<i32, TaskRecord>,
+    /// Optional explicit window → task id mapping. Application windows without
+    /// an entry fall back to [`Self::active_task`] when a task override is active.
+    pub window_task: HashMap<WindowId, i32>,
+    /// Active task id for single-task multi-window overrides (slice 1).
+    pub active_task: Option<i32>,
 }
 
 impl WindowManager {
@@ -276,6 +286,9 @@ impl WindowManager {
             next_session: 0,
             next_window_seq: 0,
             overlay_tokens: BTreeSet::new(),
+            tasks: BTreeMap::new(),
+            window_task: HashMap::new(),
+            active_task: None,
         }
     }
 
@@ -351,7 +364,19 @@ impl WindowManager {
             });
         }
 
-        let frame = self.compute_frame(&params);
+        let kind = crate::layers::WindowKind::of(params.type_);
+        let task = self.task_for_new_window(window.0, kind);
+        let frame = compute_frame_for_requested_in_task(
+            &self.display,
+            &params,
+            UNSPECIFIED_LENGTH,
+            UNSPECIFIED_LENGTH,
+            task.as_ref(),
+        );
+        let display_frame = task
+            .filter(|t| t.is_multi_window())
+            .map(|t| t.bounds)
+            .unwrap_or(self.display.frame);
         let seq = self.next_window_seq;
         self.next_window_seq += 1;
         let layer = self.alloc_layer();
@@ -386,7 +411,6 @@ impl WindowManager {
         // was wrong for a focusable `TYPE_APPLICATION_OVERLAY` (AOSP lets it
         // receive keys) and disagreed with the layer stack's `focus_target`.
         let focusable = crate::layers::focusable(params.flags);
-        let kind = crate::layers::WindowKind::of(params.type_);
         // Provisional z; `renumber_z` sets the real layer-stack index once the
         // record is in `self.windows`.
         let z = 0;
@@ -397,7 +421,7 @@ impl WindowManager {
             callback: Some(window),
             params,
             frame,
-            display_frame: self.display.frame,
+            display_frame,
             parent_frame: frame,
             attached_in_parent: true,
             visible: true,
@@ -417,6 +441,9 @@ impl WindowManager {
             first_relayout_done: false,
         };
         self.windows.insert(id, record);
+        if let Some(t) = task {
+            self.window_task.insert(id, t.task_id);
+        }
         if let Some(s) = self.sessions.get_mut(&session) {
             s.windows.push(id);
         }
@@ -496,7 +523,8 @@ impl WindowManager {
         sync_seq: i32,
     ) -> Result<RelayoutResult> {
         let display = self.display;
-        let merged = reference_merged_configuration(&display);
+        let task = self.task_for_window(window);
+        let merged = merged_configuration_for_task(&display, task.as_ref());
         let record = self
             .windows
             .get_mut(&window)
@@ -508,12 +536,17 @@ impl WindowManager {
         let old_surface_size = record.surface_size();
         let first = !record.first_relayout_done;
         record.params = params;
-        record.frame = compute_frame_for_requested(
+        record.frame = compute_frame_for_requested_in_task(
             &display,
             &record.params,
             requested_width,
             requested_height,
+            task.as_ref(),
         );
+        record.display_frame = task
+            .filter(|t| t.is_multi_window())
+            .map(|t| t.bounds)
+            .unwrap_or(display.frame);
         record.parent_frame = record.frame;
         let (surface_width, surface_height) = record.surface_size();
         // Stock resizes the window surface when the frame *or* the surface
@@ -624,6 +657,7 @@ impl WindowManager {
             .windows
             .remove(&window)
             .ok_or(WmError::UnknownWindow(window))?;
+        self.window_task.remove(&window);
         self.channels.remove(record.input_channel_handle);
         if let Some(s) = self.sessions.get_mut(&record.session) {
             s.windows.retain(|w| *w != window);
@@ -953,6 +987,90 @@ impl WindowManager {
         self.overlay_tokens.contains(&token.0)
     }
 
+    /// Set or update the multi-window bounds and windowing mode of `task_id`
+    /// (`docs/MULTIWINDOW_PLAN.md` §4.1).
+    ///
+    /// When `windowing_mode` is fullscreen/undefined, clears any task override
+    /// for `task_id` so subsequent relayouts return the exact fullscreen bytes.
+    pub fn set_task_bounds(
+        &mut self,
+        task_id: i32,
+        bounds: RectI,
+        windowing_mode: i32,
+    ) -> TaskRecord {
+        let record = self.display.task_record(task_id, windowing_mode, bounds);
+        if record.is_multi_window() {
+            self.tasks.insert(task_id, record);
+            self.active_task = Some(task_id);
+            for (win_id, win) in &self.windows {
+                if win.kind == crate::layers::WindowKind::Application {
+                    self.window_task.entry(*win_id).or_insert(task_id);
+                }
+            }
+        } else {
+            self.clear_task_bounds(task_id);
+        }
+        record
+    }
+
+    /// Clear any multi-window bounds override for `task_id`, restoring fullscreen
+    /// relayout and configuration bytes.
+    pub fn clear_task_bounds(&mut self, task_id: i32) -> Option<TaskRecord> {
+        let removed = self.tasks.remove(&task_id);
+        self.window_task.retain(|_, tid| *tid != task_id);
+        if self.active_task == Some(task_id) {
+            self.active_task = self.tasks.keys().next().copied();
+        }
+        removed
+    }
+
+    /// Clear every task bounds override (e.g., when detaching `multiwindow`).
+    pub fn clear_all_task_bounds(&mut self) {
+        self.tasks.clear();
+        self.window_task.clear();
+        self.active_task = None;
+    }
+
+    /// Current task bounds override for `task_id`, if any.
+    #[must_use]
+    pub fn task_bounds(&self, task_id: i32) -> Option<TaskRecord> {
+        self.tasks.get(&task_id).copied()
+    }
+
+    /// Explicitly associate `window` with `task_id`.
+    pub fn bind_window_task(&mut self, window: WindowId, task_id: i32) {
+        self.window_task.insert(window, task_id);
+    }
+
+    /// Resolve the task bounds that govern an existing window. System windows
+    /// (overlays, IME, status/nav bars) never inherit task bounds.
+    #[must_use]
+    pub fn task_for_window(&self, window: WindowId) -> Option<TaskRecord> {
+        let record = self.windows.get(&window)?;
+        self.task_for_new_window(window, record.kind)
+    }
+
+    /// Resolve the task bounds for a window by id and [`crate::layers::WindowKind`].
+    #[must_use]
+    fn task_for_new_window(
+        &self,
+        window: WindowId,
+        kind: crate::layers::WindowKind,
+    ) -> Option<TaskRecord> {
+        if !matches!(
+            kind,
+            crate::layers::WindowKind::Application | crate::layers::WindowKind::SubWindow
+        ) {
+            return None;
+        }
+        let task_id = self
+            .window_task
+            .get(&window)
+            .copied()
+            .or(self.active_task)?;
+        self.tasks.get(&task_id).copied()
+    }
+
     fn alloc_layer(&mut self) -> u64 {
         self.next_layer += 1;
         self.next_layer
@@ -996,26 +1114,42 @@ fn fit_insets_frame(display: &DisplaySpec, params: &LayoutParams, bounds: RectI)
         params.fit_insets_sides
     };
     let mut frame = bounds;
-    if types & inset_type::STATUS_BAR != 0 && sides & 0x02 != 0 {
-        frame.top += display.bars.status_bar.height();
+    if types & inset_type::STATUS_BAR != 0 && sides & 0x02 != 0 && !display.bars.status_bar.is_empty() {
+        frame.top = frame.top.max(display.bars.status_bar.bottom);
     }
-    if types & inset_type::NAVIGATION_BAR != 0 && sides & 0x08 != 0 {
-        frame.bottom -= display.bars.nav_bar.height();
+    if types & inset_type::NAVIGATION_BAR != 0 && sides & 0x08 != 0 && !display.bars.nav_bar.is_empty() {
+        frame.bottom = frame.bottom.min(display.bars.nav_bar.top);
     }
     // System gestures use the mandatory-gesture strips in the reference model;
     // fitting them is a side inset only when the source is the side strip.
     if types & inset_type::SYSTEM_GESTURES != 0 {
-        if sides & 0x01 != 0 {
-            frame.left += display.bars.system_gestures_left.width();
+        if sides & 0x01 != 0 && !display.bars.system_gestures_left.is_empty() {
+            frame.left = frame.left.max(display.bars.system_gestures_left.right);
         }
-        if sides & 0x04 != 0 {
-            frame.right -= display.bars.system_gestures_right.width();
+        if sides & 0x04 != 0 && !display.bars.system_gestures_right.is_empty() {
+            frame.right = frame.right.min(display.bars.system_gestures_right.left);
         }
     }
+    frame.right = frame.right.max(frame.left);
+    frame.bottom = frame.bottom.max(frame.top);
     frame
 }
 
 /// `WindowLayout.computeFrames` for the fullscreen, `compatScale == 1` case.
+///
+/// Equivalent to [`compute_frame_for_requested_in_task`] with `task = None`.
+#[must_use]
+pub fn compute_frame_for_requested(
+    display: &DisplaySpec,
+    params: &LayoutParams,
+    requested_width: i32,
+    requested_height: i32,
+) -> RectI {
+    compute_frame_for_requested_in_task(display, params, requested_width, requested_height, None)
+}
+
+/// `WindowLayout.computeFrames` with an optional multi-window [`TaskRecord`]
+/// parent frame (`compatScale == 1`).
 ///
 /// This mirrors `frameworks/base/core/java/android/view/WindowLayout.java`:
 /// a `MATCH_PARENT` axis takes the parent-frame extent, a `WRAP_CONTENT` axis
@@ -1024,23 +1158,21 @@ fn fit_insets_frame(display: &DisplaySpec, params: &LayoutParams, bounds: RectI)
 /// verbatim. The frame is then positioned with `Gravity.apply` inside the
 /// parent frame and nudged on-screen with `Gravity.applyDisplay`.
 ///
-/// In [`InsetsMode::Carve`] the display content area
-/// [`DisplaySpec::app_bounds`] already excludes the system-bar insets, so it is
-/// both the parent frame and the display frame. In [`InsetsMode::Report`] the
-/// bounds are the full display and the frame is reduced only by the
-/// `LayoutParams.fitInsetsTypes`/`fitInsetsSides` the client actually asked for
-/// (AOSP `WindowLayout.computeFrames`): `PhoneWindow.generateLayout` sets both
-/// to zero for every non-floating window, so an Activity gets the full display
-/// and `DecorView` applies the reported insets itself; a floating dialog keeps
-/// the default `systemBars()` fit and stays inside the app area.
+/// When `task` is `Some(t)` in multi-window mode, the parent frame is
+/// `t.window_frame(display.insets_mode)` instead of `display.window_frame()`.
+/// When `task` is `None` or fullscreen, the frame is identical to fullscreen.
 #[must_use]
-pub fn compute_frame_for_requested(
+pub fn compute_frame_for_requested_in_task(
     display: &DisplaySpec,
     params: &LayoutParams,
     requested_width: i32,
     requested_height: i32,
+    task: Option<&TaskRecord>,
 ) -> RectI {
-    let window_bounds = display.window_frame();
+    let window_bounds = match task {
+        Some(t) if t.is_multi_window() => t.window_frame(display.insets_mode),
+        _ => display.window_frame(),
+    };
     let out_display_frame = match display.insets_mode {
         InsetsMode::Carve => window_bounds,
         InsetsMode::Report => fit_insets_frame(display, params, window_bounds),
@@ -1554,6 +1686,55 @@ pub fn reference_merged_configuration(display: &DisplaySpec) -> MergedConfigurat
         global: cfg.clone(),
         override_config: cfg.clone(),
         merged: cfg,
+    }
+}
+
+/// Per-task `MergedConfiguration` (`docs/MULTIWINDOW_PLAN.md` §4.1).
+///
+/// Full-screen tasks (or `None`) return [`reference_merged_configuration`]
+/// verbatim so every existing fullscreen gate produces byte-identical parcels.
+/// Multi-window tasks keep `global` display-level and put the task's bounds,
+/// `appBounds`, `windowingMode`, and task-relative `screenWidthDp` /
+/// `screenHeightDp` in `override_config` and `merged` while keeping display-level
+/// `screenLayout`, `orientation`, `smallestScreenWidthDp` and `densityDpi`.
+#[must_use]
+pub fn merged_configuration_for_task(
+    display: &DisplaySpec,
+    task: Option<&TaskRecord>,
+) -> MergedConfiguration {
+    let base = reference_merged_configuration(display);
+    let Some(task) = task.filter(|t| t.is_multi_window()) else {
+        return base;
+    };
+    let task_w_dp = display.px_to_dp(task.app_bounds.width());
+    let task_h_dp = display.px_to_dp(task.app_bounds.height());
+    let mut override_config = base.global.clone();
+    override_config.screen_width_dp = task_w_dp;
+    override_config.screen_height_dp = task_h_dp;
+    override_config.compat_screen_width_dp = task_w_dp;
+    override_config.compat_screen_height_dp = task_h_dp;
+    override_config.window_configuration = WindowConfiguration {
+        bounds: task.bounds,
+        app_bounds: Some(task.app_bounds),
+        max_bounds: display.frame,
+        windowing_mode: task.windowing_mode,
+        activity_type: 0, // ACTIVITY_TYPE_UNDEFINED
+        always_on_top: 0,
+        rotation: i32::from(display.rotation),
+        display_windowing_mode: WINDOWING_MODE_FULLSCREEN,
+        display_rotation: i32::from(display.rotation),
+    };
+    // Keep seq = 0 in the override so `Configuration.isOtherSeqNewer` always
+    // accepts subsequent task bounds updates on the guest (`Configuration.java:2043`).
+    override_config.seq = 0;
+
+    let mut merged = override_config.clone();
+    merged.seq = base.global.seq;
+
+    MergedConfiguration {
+        global: base.global,
+        override_config,
+        merged,
     }
 }
 
@@ -2095,5 +2276,119 @@ mod tests {
             }
         }
         assert_eq!(after, vec![(dialog, true)]);
+    }
+
+    #[test]
+    fn task_bounds_shrink_app_frame_and_clear_restores_exact_fullscreen_bytes() {
+        use crate::codec::ParcelCodec;
+        use crate::display::{SplitPosition, WINDOWING_MODE_FULLSCREEN, WINDOWING_MODE_MULTI_WINDOW};
+
+        let display = DisplaySpec::reference_with_insets(InsetsMode::Report);
+        let mut wm = WindowManager::new(display);
+        let (sess, _) = wm.open_session(None);
+        let win = wm
+            .add_to_display_as_user(sess, BinderId(0x10), app_params(), 0)
+            .unwrap()
+            .window;
+
+        let full_relayout = wm.relayout(sess, win, app_params(), 1).unwrap();
+        assert_eq!(full_relayout.frames.frame, RectI::new(0, 0, 1080, 2400));
+        assert_eq!(
+            full_relayout.merged_configuration.override_config.window_configuration.windowing_mode,
+            WINDOWING_MODE_FULLSCREEN
+        );
+        let mut full_parcel = acos_parcel::Parcel::new();
+        full_relayout
+            .merged_configuration
+            .write_to_parcel(&mut full_parcel)
+            .unwrap();
+        let full_bytes = full_parcel.marshall();
+
+        // Enter top 50% split: bounds [0, 0, 1080, 1200], app_bounds [0, 128, 1080, 1200].
+        let top_half = display.split_rect(SplitPosition::Top, 0.5);
+        assert_eq!(top_half, RectI::new(0, 0, 1080, 1200));
+        let task = wm.set_task_bounds(DEFAULT_TASK_ID, top_half, WINDOWING_MODE_MULTI_WINDOW);
+        assert_eq!(task.bounds, RectI::new(0, 0, 1080, 1200));
+        assert_eq!(task.app_bounds, RectI::new(0, 128, 1080, 1200));
+        assert_eq!(wm.task_bounds(DEFAULT_TASK_ID), Some(task));
+
+        let split_relayout = wm.relayout(sess, win, app_params(), 2).unwrap();
+        assert_eq!(split_relayout.frames.frame, RectI::new(0, 0, 1080, 1200));
+        assert_eq!(
+            split_relayout.result & RELAYOUT_RES_SURFACE_RESIZED,
+            RELAYOUT_RES_SURFACE_RESIZED
+        );
+        // Global config stays display-level (FULLSCREEN); override & merged carry task bounds.
+        assert_eq!(
+            split_relayout.merged_configuration.global.window_configuration.windowing_mode,
+            WINDOWING_MODE_FULLSCREEN
+        );
+        assert_eq!(
+            split_relayout.merged_configuration.global.window_configuration.bounds,
+            RectI::new(0, 0, 1080, 2400)
+        );
+        assert_eq!(
+            split_relayout.merged_configuration.override_config.window_configuration.windowing_mode,
+            WINDOWING_MODE_MULTI_WINDOW
+        );
+        assert_eq!(
+            split_relayout.merged_configuration.override_config.window_configuration.bounds,
+            RectI::new(0, 0, 1080, 1200)
+        );
+        assert_eq!(
+            split_relayout.merged_configuration.override_config.window_configuration.app_bounds,
+            Some(RectI::new(0, 128, 1080, 1200))
+        );
+        assert_eq!(
+            split_relayout.merged_configuration.override_config.screen_width_dp,
+            411
+        );
+        assert_eq!(
+            split_relayout.merged_configuration.override_config.screen_height_dp,
+            408
+        );
+        // Display-level qualifiers stay display-level so screenSize-only apps do not relaunch.
+        assert_eq!(
+            split_relayout.merged_configuration.override_config.smallest_screen_width_dp,
+            split_relayout.merged_configuration.global.smallest_screen_width_dp
+        );
+        assert_eq!(
+            split_relayout.merged_configuration.override_config.screen_layout,
+            split_relayout.merged_configuration.global.screen_layout
+        );
+        assert_eq!(
+            split_relayout.merged_configuration.override_config.orientation,
+            split_relayout.merged_configuration.global.orientation
+        );
+
+        // System windows never inherit task bounds.
+        let mut sys_params = app_params();
+        sys_params.type_ = crate::layers::TYPE_APPLICATION_OVERLAY;
+        let overlay = wm
+            .add_to_display_as_user(sess, BinderId(0x20), sys_params.clone(), 0)
+            .unwrap()
+            .window;
+        let overlay_relayout = wm.relayout(sess, overlay, sys_params, 3).unwrap();
+        assert_eq!(overlay_relayout.frames.frame, RectI::new(0, 0, 1080, 2400));
+        assert_eq!(
+            overlay_relayout.merged_configuration.override_config.window_configuration.windowing_mode,
+            WINDOWING_MODE_FULLSCREEN
+        );
+
+        // Clearing task bounds restores the exact fullscreen MergedConfiguration bytes.
+        assert!(wm.clear_task_bounds(DEFAULT_TASK_ID).is_some());
+        assert_eq!(wm.task_bounds(DEFAULT_TASK_ID), None);
+        let restored = wm.relayout(sess, win, app_params(), 4).unwrap();
+        assert_eq!(restored.frames.frame, RectI::new(0, 0, 1080, 2400));
+        let mut restored_parcel = acos_parcel::Parcel::new();
+        restored
+            .merged_configuration
+            .write_to_parcel(&mut restored_parcel)
+            .unwrap();
+        assert_eq!(
+            restored_parcel.marshall(),
+            full_bytes,
+            "clearing task bounds must restore byte-identical fullscreen MergedConfiguration"
+        );
     }
 }

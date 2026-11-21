@@ -5,6 +5,7 @@ pub mod biometric;
 pub mod bluetooth;
 pub mod location;
 pub mod media_session;
+pub mod multiwindow;
 pub mod network;
 pub mod notifications;
 pub mod permissions;
