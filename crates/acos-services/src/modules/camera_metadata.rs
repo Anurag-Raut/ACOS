@@ -754,10 +754,11 @@ pub mod format {
     pub const YCBCR_420_888: i32 = 0x23;
 }
 
-/// `INFO_SUPPORTED_HARDWARE_LEVEL_LIMITED`. A stub that never produces a real
-/// frame claims the middle level: BACKWARD_COMPATIBLE capability, fixed focus,
-/// no flash, no manual sensor control, no RAW.
-pub const HARDWARE_LEVEL_LIMITED: u8 = 1;
+/// `INFO_SUPPORTED_HARDWARE_LEVEL_LIMITED` (`CameraMetadata.INFO_SUPPORTED_HARDWARE_LEVEL_LIMITED = 0`;
+/// `FULL = 1`, `LEGACY = 2`, `LEVEL_3 = 3`, `EXTERNAL = 4`). A stub that never produces a real
+/// frame claims `LIMITED`: BACKWARD_COMPATIBLE capability, fixed focus, no flash, no manual sensor
+/// control, no RAW.
+pub const HARDWARE_LEVEL_LIMITED: u8 = 0;
 
 /// The output sizes a stub of `sensor`'s resolution offers: the full array and
 /// the usual 4:3 / 16:9 ladder at or below it, largest first.

@@ -1,0 +1,48 @@
+# CAMERA2 Slice 1 negative proof: `hw.camera` off (tombstone) on real ART.
+#
+# Same fixture APK, no `hw.camera` attached:
+#   * `getSystemService(CAMERA_SERVICE)` is lazy so the app launches cleanly;
+#   * `hasSystemFeature(FEATURE_CAMERA / FEATURE_CAMERA_ANY)` is false;
+#   * calling `CameraManager.getCameraIdList()` hits the `media.camera`
+#     tombstone and throws structured `UnsupportedOperationException` naming
+#     `UNSUPPORTED_ANDROID_API` and `hw.camera` without crashing the process.
+version: 1
+name: camera-off
+description: >-
+  camera-probe on ART with hw.camera off: camera features are false, app startup
+  is unaffected, and CameraManager.getCameraIdList() hits the structured
+  UNSUPPORTED_ANDROID_API tombstone naming hw.camera without crashing.
+app: fixtures/build/apps/camera-probe.apk
+api_level: 34
+isolation: process
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+capabilities:
+  - ui.offscreen
+  - ui.text
+  - input
+expectation: pass
+budgets:
+  memory_mib: 640
+  wall_ms: 180000
+steps:
+  - launch:
+      activity: dev.acos.fixtures.cameraprobe/.MainActivity
+      clear_state: true
+  - wait_for:
+      selector: {text: {contains: "READY mgr=present feat_cam=false feat_any=false"}}
+      timeout_ms: 20000
+  - tap:
+      selector: {text: {exact: "List"}}
+  - wait_for:
+      selector: {text: {contains: "LIST error=UnsupportedOperationException"}}
+      timeout_ms: 20000
+  - assert_text:
+      selector: {id: status}
+      text: {contains: "\"media.camera\" is provided by service module \"hw.camera\", which is not attached"}
+  - assert_text:
+      selector: {id: status}
+      text: {contains: "acos_launch"}

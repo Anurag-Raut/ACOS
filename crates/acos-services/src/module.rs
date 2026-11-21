@@ -1142,8 +1142,8 @@ pub const TOMBSTONES: &[Tombstone] = &[
         descriptor: "android.hardware.ICameraService",
         module: "hw.camera",
         reason: "no camera attached (module `hw.camera` is off)",
-        reaction: AospReaction::Null,
-        evidence: "CameraManagerGlobal.getCameraService() reads the name with ServiceManager.getService (the Java path, `CameraManager.java`) and its clients already build a working \"no camera on this device\" answer out of `null` (`getCameraIdList()` returns `new String[0]`, `getCameraCharacteristics` throws `IllegalArgumentException` for an unknown id), so a throwing tombstone would turn a handled path into a binder exception; the `hw.camera` module fills this name when attached (off/stub today, docs/CAMERA_PLAN.md)",
+        reaction: AospReaction::Tombstone,
+        evidence: "CameraManager is constructed lazily without transacting; CameraManagerGlobal.connectCameraServiceLocked() (`CameraManager.java:1951`) looks up `media.camera` via ServiceManager.getService only when an app calls CameraManager methods (`getCameraIdList`, `getCameraCharacteristics`, `openCamera`), so a tombstone answers structured `UNSUPPORTED_ANDROID_API` naming `hw.camera` when the module is off without affecting app startup",
     },
     Tombstone {
         name: "media_session",

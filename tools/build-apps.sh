@@ -338,6 +338,11 @@ build_apk media-probe
 # updates from a scripted track and the geocoder state on screen, so a scenario
 # can assert what the app really received (fixtures/apps/location-probe).
 build_apk location-probe
+
+# camera-probe is the CAMERA2 Slice 1 fixture: queries CameraManager
+# (getCameraIdList, getCameraCharacteristics + StreamConfigurationMap, unknown
+# id, openCamera permission/refusal) and tests the `hw.camera` off tombstone.
+build_apk camera-probe
 # MPROC4: the two-process pair (proc-a starts/binds components of proc-b).
 build_apk proc-a
 build_apk proc-b

@@ -4,31 +4,31 @@
 //! reaches the platform through **one** binder: `ServiceManager.getService(
 //! "media.camera")` -> `android.hardware.ICameraService`
 //! (`base/core/java/android/hardware/camera2/CameraManager.java`,
-//! `CameraManagerGlobal.getCameraService()`). Everything else — the device, the
-//! capture session, the buffers — hangs off the binders that service hands back.
-//! This module owns that name, so "ACOS has no camera" and "ACOS has one
-//! scripted camera" are one attach apart, exactly as ADR-0029 asks.
+//! `CameraManagerGlobal.connectCameraServiceLocked()`). Everything else — the
+//! device, the capture session, the buffers — hangs off the binders that
+//! service hands back. This module owns that name, so "ACOS has no camera" and
+//! "ACOS has one virtual camera" are one attach apart, as ADR-0029 asks.
 //!
 //! # What `stub` answers, and why each answer is not a lie
 //!
 //! | code | method | answer |
 //! |---|---|---|
-//! | 6 | `getNumberOfCameras(int)` | `1` — one back camera, so `CameraManager.getCameraIdList()` is `["0"]` |
-//! | 4 | `getCameraInfo(int, boolean)` | `android.hardware.CameraInfo` = `{facing: 0 (back), orientation: 90}` |
-//! | 13 | `addListener(ICameraServiceListener)` | one `CameraStatus` `{cameraId: "0", status: PRESENT (0)}` |
-//! | 20 | `removeListener` | `void` |
-//! | 22 | `supportsCameraApi(String, int)` | `true` for `CAMERA_API_LEVEL_2`, `false` for level 1 |
-//! | 15 | `isHiddenPhysicalCamera(String)` | `false` (no physical camera behind id `0`) |
-//! | 7/14/21 | `notifyDeviceStateChange`, `notifyDisplayConfigurationChange`, `notifySystemEvent` | `void` (notifications the client sends; nothing to do) |
-//! | 2/9 | `getCameraVendorTagDescriptor`, `getCameraVendorTagCache` | `null` — no vendor tags are published |
-//! | 10 | `getLegacyParameters(int)` | `null` — the API-1 parameters blob is not served |
-//! | 11 | `getConcurrentCameraIds()` | empty array — one camera, no concurrent set |
-//! | 12 | `getTorchStrengthLevel(String)` | `0` (no flash) |
-//! | 18 | `isConcurrentSessionConfigurationSupported(...)` | `false` |
-//! | 19 | `reportExtensionSessionStats(...)` | `null` |
-//! | 3 | `getCameraCharacteristics(String, int, boolean)` | a real `CameraMetadataNative`: the stub's `camera_metadata_t` ([`super::camera_metadata::characteristics`]) in `CameraMetadata::writeToParcel`'s framing; an unknown id is `ServiceSpecificException(ERROR_ILLEGAL_ARGUMENT)` |
-//! | 5 | `connectDevice(...)` | structured `UNSUPPORTED_ANDROID_API` — see below |
-//! | 1/8/16/17 | `injectCamera`, `setTorchMode`, `turnOnTorchWithStrengthLevel`, API-1 `connect` | structured `UNSUPPORTED_ANDROID_API` |
+//! | 1 | `getNumberOfCameras(int)` | `1` — one back camera, so `CameraManager.getCameraIdList()` is `["0"]` |
+//! | 2 | `getCameraInfo(int, boolean)` | `android.hardware.CameraInfo` = `{facing: 0 (back), orientation: 90}` |
+//! | 5 | `addListener(ICameraServiceListener)` | one `CameraStatus` `{cameraId: "0", status: PRESENT (1)}` |
+//! | 6 | `getConcurrentCameraIds()` | empty array — one camera, no concurrent set |
+//! | 7 | `isConcurrentSessionConfigurationSupported(...)` | `false` |
+//! | 8 | `removeListener` | `void` |
+//! | 9 | `getCameraCharacteristics(String, int, boolean)` | a real `CameraMetadataNative`: the stub's `camera_metadata_t` ([`super::camera_metadata::characteristics`]) in `CameraMetadata::writeToParcel`'s framing; an unknown id is `ServiceSpecificException(ERROR_ILLEGAL_ARGUMENT = 3)` |
+//! | 10/11 | `getCameraVendorTagDescriptor`, `getCameraVendorTagCache` | non-null empty parcelable (`present = 1, count = 0`) — no vendor tags published (`libcamera_client.so` rejects null with `UNEXPECTED_NULL`) |
+//! | 12 | `getLegacyParameters(int)` | `null` — the API-1 parameters blob is not served |
+//! | 13 | `supportsCameraApi(String, int)` | `true` for `CAMERA_API_LEVEL_2`, `false` for level 1 |
+//! | 14 | `isHiddenPhysicalCamera(String)` | `false` (no physical camera behind id `0`) |
+//! | 18 | `getTorchStrengthLevel(String)` | `0` (no flash) |
+//! | 19/20/21 | `notifySystemEvent`, `notifyDisplayConfigurationChange`, `notifyDeviceStateChange` | oneway `void` notifications; recorded, nothing to do |
+//! | 22 | `reportExtensionSessionStats(...)` | `null` |
+//! | 4 | `connectDevice(...)` | checks `android.permission.CAMERA` (`ServiceSpecificException(ERROR_PERMISSION_DENIED = 1)` if denied), validates id (`ERROR_ILLEGAL_ARGUMENT = 3`), then structured `UNSUPPORTED_ANDROID_API` until Slice 2 |
+//! | 3/15/16/17 | API-1 `connect`, `injectCamera`, `setTorchMode`, `turnOnTorchWithStrengthLevel` | structured `UNSUPPORTED_ANDROID_API` |
 //!
 //! `getCameraCharacteristics` is **not** a fabricated shortcut and the guest is
 //! not bypassed: `CameraMetadataNative.readFromParcel` is JNI into the image's
@@ -43,21 +43,21 @@
 //! `connectDevice` returns `ICameraDeviceUser`; opening one leads to
 //! `createStream`/`submitRequestList`, i.e. an `IGraphicBufferProducer` owned by
 //! the app's `ImageReader` that the service must dequeue frames from. That is
-//! slice 2 of `docs/CAMERA_PLAN.md`; until then the call is refused by name
-//! instead of handing back a device binder that would fail later, in the middle
-//! of a session, with a shape no app can act on.
+//! Slice 2 of `docs/CAMERA_PLAN.md`; until then the call enforces the `CAMERA`
+//! permission gate and then refuses by name instead of handing back a device
+//! binder that would fail later, in the middle of a session.
 //!
 //! # Profiles
 //!
-//! * `off` — the name answers `null`, AOSP's own "no camera on this device"
-//!   path: `CameraManagerGlobal.getCameraService()` returns `null` and
-//!   `getCameraIdList()` is `new String[0]`. This is the pre-module behaviour and
-//!   the `TOMBSTONES` row keeps it.
-//! * `stub` — one fixed back camera, fixed `CameraCharacteristics` values
-//!   (`config.camera` / the defaults), the table above.
-//! * `scripted` — same node, plus frames. **Not implemented yet** (slice 3:
-//!   `set_frame` with a host-side PNG/JPEG or the built-in test pattern, on top
-//!   of slice 2's `connectDevice` and `ImageReader` buffer path).
+//! * `off` — `media.camera` is tombstoned (`TOMBSTONES` row `AospReaction::Tombstone`),
+//!   so calling `CameraManager` methods when `hw.camera` is detached throws a
+//!   structured `UnsupportedOperationException` containing `UNSUPPORTED_ANDROID_API`
+//!   and naming `hw.camera`, while `PackageManager.hasSystemFeature(FEATURE_CAMERA*)`
+//!   answers `false` and app startup (`getSystemService(CAMERA_SERVICE)`) is unaffected.
+//! * `stub` — one fixed back camera, `CameraCharacteristics` from `config.camera`
+//!   (or defaults), answering the full discovery & characteristics surface above.
+//! * `scripted` — same node, plus frame sequences via `set_frame`. **Not
+//!   implemented yet** (Slices 2-3 in `docs/CAMERA_PLAN.md`).
 //!
 //! # Control ops
 //!
@@ -65,21 +65,17 @@
 //! |---|---|---|
 //! | `status` | none | the served camera table + every transaction the app made |
 //! | `camera` | none | the single camera's fixed description (what `getCameraInfo` answers) |
+//! | `characteristics` | none | the served `CameraCharacteristics` tag summary |
 //! | `calls` | none | the transaction log (`{code, method, camera_id}`) |
 //! | `reset` | none | clear the log |
 //!
 //! # Wire source
 //!
-//! Transaction ids and reply shapes are read from **this image's** framework
-//! dex: `android.hardware.ICameraService$Stub`'s `TRANSACTION_*` static values in
-//! `.cache/boot/android-34/dex/framework/classes.dex` (codes 1-12, 14-16, 18-22
-//! are named there; `addListener` = 13 and the API-1 `connect` = 17 are the two
-//! ids the interface declares without a `TRANSACTION_` constant, which is why
-//! the AIDL version markers `API_VERSION_1 = 13` / `API_VERSION_2 = 17` are
-//! those exact numbers). `CameraInfo`'s parcel is two ints
-//! (`base/core/java/android/hardware/CameraInfo.java:40-45`: `facing`,
-//! `orientation`) and `CameraStatus`'s is `(String, int, String[], String)`
-//! (`base/core/java/android/hardware/CameraStatus.java:42-47`).
+//! All 22 transaction ids and reply shapes are verified directly against **this
+//! image's** framework dex (`.cache/boot/android-34/dex/framework/classes.dex`,
+//! `Landroid/hardware/ICameraService$Stub;` + `Proxy`, `CameraInfo`,
+//! `CameraStatus`) and native libraries (`libcamera_client.so`,
+//! `libcamera_metadata.so`).
 
 use std::sync::{Arc, Mutex};
 
@@ -88,11 +84,12 @@ use serde_json::{json, Value};
 use crate::error::{Result, ServiceError};
 use crate::exception::{write_no_exception, EX_SERVICE_SPECIFIC};
 use crate::host::{CallResult, ServiceHost, ServiceObject};
-use crate::modules::camera_metadata;
 use crate::module::{
     AttachMode, Budget, ControlOp, Module, ModuleConfig, ModuleManifest, ModuleReport, Profile,
     SecurityClass, ServiceProvide,
 };
+use crate::modules::camera_metadata;
+use crate::permissions::{PermissionStore, PERMISSION_GRANTED};
 
 /// The module id (`acos_launch {"services": [{"id": "hw.camera"}]}`).
 pub const MODULE_ID: &str = "hw.camera";
@@ -109,64 +106,71 @@ pub const CAMERA_TYPE_ALL: i32 = 1;
 pub const CAMERA_API_LEVEL_1: i32 = 1;
 /// `ICameraService.CAMERA_API_LEVEL_2` (Camera2).
 pub const CAMERA_API_LEVEL_2: i32 = 2;
-/// `ICameraServiceListener.STATUS_PRESENT`.
-pub const STATUS_PRESENT: i32 = 0;
 
-/// `LENS_FACING_BACK` / `Camera.CameraInfo.CAMERA_FACING_BACK`: the legacy
-/// `android.hardware.Camera.CameraInfo.facing` value a back camera reports
-/// (`base/core/java/android/hardware/Camera.java`, `CAMERA_FACING_BACK = 0`).
+/// `ICameraServiceListener.STATUS_NOT_PRESENT` (verified from `framework/classes.dex`).
+pub const STATUS_NOT_PRESENT: i32 = 0;
+/// `ICameraServiceListener.STATUS_PRESENT` (verified from `framework/classes.dex`).
+pub const STATUS_PRESENT: i32 = 1;
+
+/// `ICameraService.ERROR_PERMISSION_DENIED` (verified from `framework/classes.dex`).
+pub const ERROR_PERMISSION_DENIED: i32 = 1;
+/// `ICameraService.ERROR_ILLEGAL_ARGUMENT` (verified from `framework/classes.dex`).
+pub const ERROR_ILLEGAL_ARGUMENT: i32 = 3;
+
+/// `Camera.CameraInfo.CAMERA_FACING_BACK` (legacy `CameraInfo.facing` = 0;
+/// note Camera2's `LENS_FACING_BACK` in metadata is 1).
 pub const FACING_BACK: i32 = 0;
-/// `CAMERA_FACING_FRONT`.
+/// `Camera.CameraInfo.CAMERA_FACING_FRONT` (legacy `CameraInfo.facing` = 1;
+/// note Camera2's `LENS_FACING_FRONT` in metadata is 0).
 pub const FACING_FRONT: i32 = 1;
 
-/// Transaction ids, from `ICameraService$Stub`'s `TRANSACTION_*` values in this
-/// image's `framework/classes.dex` (see the module docs for how 13 and 17 are
-/// resolved).
+/// Transaction ids from `Landroid/hardware/ICameraService$Stub;` in this
+/// image's `.cache/boot/android-34/dex/framework/classes.dex` (`TRANSACTION_*`).
 pub mod code {
-    /// `injectCamera`.
-    pub const INJECT_CAMERA: u32 = 1;
-    /// `getCameraVendorTagDescriptor`.
-    pub const GET_CAMERA_VENDOR_TAG_DESCRIPTOR: u32 = 2;
-    /// `getCameraCharacteristics`.
-    pub const GET_CAMERA_CHARACTERISTICS: u32 = 3;
-    /// `getCameraInfo`.
-    pub const GET_CAMERA_INFO: u32 = 4;
-    /// `connectDevice`.
-    pub const CONNECT_DEVICE: u32 = 5;
-    /// `getNumberOfCameras`.
-    pub const GET_NUMBER_OF_CAMERAS: u32 = 6;
-    /// `notifyDeviceStateChange`.
-    pub const NOTIFY_DEVICE_STATE_CHANGE: u32 = 7;
-    /// `setTorchMode`.
-    pub const SET_TORCH_MODE: u32 = 8;
-    /// `getCameraVendorTagCache`.
-    pub const GET_CAMERA_VENDOR_TAG_CACHE: u32 = 9;
-    /// `getLegacyParameters`.
-    pub const GET_LEGACY_PARAMETERS: u32 = 10;
-    /// `getConcurrentCameraIds`.
-    pub const GET_CONCURRENT_CAMERA_IDS: u32 = 11;
-    /// `getTorchStrengthLevel`.
-    pub const GET_TORCH_STRENGTH_LEVEL: u32 = 12;
-    /// `addListener` (`API_VERSION_1`).
-    pub const ADD_LISTENER: u32 = 13;
-    /// `notifyDisplayConfigurationChange`.
-    pub const NOTIFY_DISPLAY_CONFIGURATION_CHANGE: u32 = 14;
-    /// `isHiddenPhysicalCamera`.
-    pub const IS_HIDDEN_PHYSICAL_CAMERA: u32 = 15;
-    /// `turnOnTorchWithStrengthLevel`.
-    pub const TURN_ON_TORCH_WITH_STRENGTH_LEVEL: u32 = 16;
-    /// API-1 `connect` (`API_VERSION_2`).
-    pub const CONNECT: u32 = 17;
-    /// `isConcurrentSessionConfigurationSupported`.
-    pub const IS_CONCURRENT_SESSION_CONFIGURATION_SUPPORTED: u32 = 18;
-    /// `reportExtensionSessionStats`.
-    pub const REPORT_EXTENSION_SESSION_STATS: u32 = 19;
-    /// `removeListener`.
-    pub const REMOVE_LISTENER: u32 = 20;
-    /// `notifySystemEvent`.
-    pub const NOTIFY_SYSTEM_EVENT: u32 = 21;
-    /// `supportsCameraApi`.
-    pub const SUPPORTS_CAMERA_API: u32 = 22;
+    /// `getNumberOfCameras(int type) -> int`.
+    pub const GET_NUMBER_OF_CAMERAS: u32 = 1;
+    /// `getCameraInfo(int cameraId, boolean overrideToPortrait) -> CameraInfo`.
+    pub const GET_CAMERA_INFO: u32 = 2;
+    /// API-1 `connect(...) -> ICamera`.
+    pub const CONNECT: u32 = 3;
+    /// `connectDevice(...) -> ICameraDeviceUser`.
+    pub const CONNECT_DEVICE: u32 = 4;
+    /// `addListener(ICameraServiceListener) -> CameraStatus[]`.
+    pub const ADD_LISTENER: u32 = 5;
+    /// `getConcurrentCameraIds() -> ConcurrentCameraIdCombination[]`.
+    pub const GET_CONCURRENT_CAMERA_IDS: u32 = 6;
+    /// `isConcurrentSessionConfigurationSupported(...) -> boolean`.
+    pub const IS_CONCURRENT_SESSION_CONFIGURATION_SUPPORTED: u32 = 7;
+    /// `removeListener(ICameraServiceListener) -> void`.
+    pub const REMOVE_LISTENER: u32 = 8;
+    /// `getCameraCharacteristics(String, int, boolean) -> CameraMetadataNative`.
+    pub const GET_CAMERA_CHARACTERISTICS: u32 = 9;
+    /// `getCameraVendorTagDescriptor() -> VendorTagDescriptor`.
+    pub const GET_CAMERA_VENDOR_TAG_DESCRIPTOR: u32 = 10;
+    /// `getCameraVendorTagCache() -> VendorTagDescriptorCache`.
+    pub const GET_CAMERA_VENDOR_TAG_CACHE: u32 = 11;
+    /// `getLegacyParameters(int cameraId) -> String`.
+    pub const GET_LEGACY_PARAMETERS: u32 = 12;
+    /// `supportsCameraApi(String cameraId, int apiLevel) -> boolean`.
+    pub const SUPPORTS_CAMERA_API: u32 = 13;
+    /// `isHiddenPhysicalCamera(String cameraId) -> boolean`.
+    pub const IS_HIDDEN_PHYSICAL_CAMERA: u32 = 14;
+    /// `injectCamera(...) -> ICameraInjectionSession`.
+    pub const INJECT_CAMERA: u32 = 15;
+    /// `setTorchMode(String, boolean, IBinder) -> void`.
+    pub const SET_TORCH_MODE: u32 = 16;
+    /// `turnOnTorchWithStrengthLevel(String, int, IBinder) -> void`.
+    pub const TURN_ON_TORCH_WITH_STRENGTH_LEVEL: u32 = 17;
+    /// `getTorchStrengthLevel(String) -> int`.
+    pub const GET_TORCH_STRENGTH_LEVEL: u32 = 18;
+    /// `notifySystemEvent(int, int[]) -> void` (oneway).
+    pub const NOTIFY_SYSTEM_EVENT: u32 = 19;
+    /// `notifyDisplayConfigurationChange() -> void` (oneway).
+    pub const NOTIFY_DISPLAY_CONFIGURATION_CHANGE: u32 = 20;
+    /// `notifyDeviceStateChange(long) -> void` (oneway).
+    pub const NOTIFY_DEVICE_STATE_CHANGE: u32 = 21;
+    /// `reportExtensionSessionStats(CameraExtensionSessionStats) -> String`.
+    pub const REPORT_EXTENSION_SESSION_STATS: u32 = 22;
 }
 
 /// One camera the stub serves.
@@ -378,11 +382,9 @@ impl Default for CameraModule {
 
 /// `config.camera` -> [`StubCamera`].
 ///
-/// Only the fields the stub actually answers are configurable: the id, the
-/// facing and the orientation. A key it does not implement is refused
-/// (`ModuleRejected`, naming the accepted keys) rather than silently ignored,
-/// because an agent that set `width: 640` and got a camera that never produces
-/// a frame would have been lied to.
+/// Only the fields the stub actually answers are configurable: `id`, `facing`,
+/// `orientation`, `width`, and `height`. Any other key is refused
+/// (`ModuleRejected`, naming the accepted keys) rather than silently ignored.
 fn camera_from_config(config: &ModuleConfig) -> Result<StubCamera> {
     let mut camera = StubCamera::default();
     let Some(value) = config.get("camera") else {
@@ -464,6 +466,7 @@ fn camera_from_config(config: &ModuleConfig) -> Result<StubCamera> {
 struct CameraService {
     camera: StubCamera,
     state: Arc<Mutex<CameraState>>,
+    permissions: Option<Arc<Mutex<PermissionStore>>>,
 }
 
 impl CameraService {
@@ -596,18 +599,86 @@ impl CameraService {
         Ok(true)
     }
 
-    /// A `ServiceSpecificException(ERROR_ILLEGAL_ARGUMENT)` reply
-    /// (`ICameraService.ERROR_ILLEGAL_ARGUMENT` = 2): exception code `-8`
-    /// (`EX_SERVICE_SPECIFIC`), the message, then the service-specific code.
-    fn illegal_argument(&self, reply: &mut acos_parcel::Parcel, message: &str) -> bool {
-        const ERROR_ILLEGAL_ARGUMENT: i32 = 2;
+    /// A `ServiceSpecificException` reply (`EX_SERVICE_SPECIFIC = -8`),
+    /// message, remote stack-trace header size `0`, then the service-specific
+    /// `ICameraService.ERROR_*` code.
+    fn service_specific_error(
+        &self,
+        reply: &mut acos_parcel::Parcel,
+        error_code: i32,
+        message: &str,
+    ) -> bool {
         reply.write_int32(EX_SERVICE_SPECIFIC);
         reply
             .write_string16(message)
             .expect("an in-memory string is writable");
         reply.write_int32(0); // remote stack-trace header size
-        reply.write_int32(ERROR_ILLEGAL_ARGUMENT);
+        reply.write_int32(error_code);
         true
+    }
+
+    /// A `ServiceSpecificException(ERROR_ILLEGAL_ARGUMENT = 3)` reply
+    /// (`ExceptionUtils.throwAsPublicException` turns it into `IllegalArgumentException`).
+    fn illegal_argument(&self, reply: &mut acos_parcel::Parcel, message: &str) -> bool {
+        self.service_specific_error(reply, ERROR_ILLEGAL_ARGUMENT, message)
+    }
+
+    /// `connectDevice(ICameraDeviceCallbacks, String cameraId, String opPackageName,
+    /// String featureId, int clientUid, int oomScoreOffset, int targetSdkVersion,
+    /// boolean overrideToPortrait) -> ICameraDeviceUser`.
+    ///
+    /// Enforces `android.permission.CAMERA` against the shared `PermissionStore`
+    /// (`ServiceSpecificException(ERROR_PERMISSION_DENIED = 1)` -> `SecurityException`),
+    /// checks the camera id (`ERROR_ILLEGAL_ARGUMENT = 3`), and then refuses with
+    /// structured `UNSUPPORTED_ANDROID_API` until Slice 2 (`ICameraDeviceUser` +
+    /// gralloc buffer delivery).
+    fn connect_device(
+        &self,
+        data: &mut acos_parcel::Parcel,
+        reply: &mut acos_parcel::Parcel,
+    ) -> Result<bool> {
+        let _callbacks = data.read_strong_binder().ok();
+        let camera_id = data.read_string16_lenient();
+        let _op_package = data.read_string16_lenient();
+        let _feature_id = data.read_string16_lenient();
+        let _client_uid = data.read_int32().unwrap_or(-1);
+        let _oom_score_offset = data.read_int32().unwrap_or(0);
+        let _target_sdk = data.read_int32().unwrap_or(34);
+        let _override_to_portrait = data.read_int32().unwrap_or(0);
+        self.record(code::CONNECT_DEVICE, "connectDevice", camera_id.clone());
+
+        if let Some(store) = self.permissions.as_ref() {
+            let granted = store
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .check("android.permission.CAMERA")
+                == PERMISSION_GRANTED;
+            if !granted {
+                return Ok(self.service_specific_error(
+                    reply,
+                    ERROR_PERMISSION_DENIED,
+                    "Permission denial: android.permission.CAMERA is not granted",
+                ));
+            }
+        }
+
+        if camera_id.as_deref() != Some(self.camera.id.as_str()) {
+            return Ok(self.illegal_argument(
+                reply,
+                &format!(
+                    "Camera id {:?} does not exist (this stub serves {:?})",
+                    camera_id.unwrap_or_default(),
+                    self.camera.id
+                ),
+            ));
+        }
+
+        Err(self.unsupported(
+            code::CONNECT_DEVICE,
+            "connectDevice — opening a camera device and delivering frames to ImageReader/Surface \
+             requires Slice 2 (ICameraDeviceUser + gralloc YUV/BLOB buffer transport); see \
+             docs/CAMERA_PLAN.md",
+        ))
     }
 
     fn camera_for_index(&self, index: i32) -> Option<&StubCamera> {
@@ -687,7 +758,9 @@ impl ServiceObject for CameraService {
                 reply.write_int32(0);
                 Ok(true)
             }
-            // getCameraVendorTagDescriptor(): null, no vendor tags published
+            // getCameraVendorTagDescriptor(): non-null empty VendorTagDescriptor
+            // (present = 1, tagCount = 0). Native `BpCameraService::getCameraVendorTagDescriptor`
+            // uses `Parcel::readParcelable(Parcelable*)`, which returns UNEXPECTED_NULL on 0.
             code::GET_CAMERA_VENDOR_TAG_DESCRIPTOR => {
                 self.record(
                     code::GET_CAMERA_VENDOR_TAG_DESCRIPTOR,
@@ -695,10 +768,12 @@ impl ServiceObject for CameraService {
                     None,
                 );
                 write_no_exception(reply);
-                reply.write_int32(0);
+                reply.write_int32(1); // parcelable present
+                reply.write_int32(0); // tagCount = 0
                 Ok(true)
             }
-            // getCameraVendorTagCache(): null
+            // getCameraVendorTagCache(): non-null empty VendorTagDescriptorCache
+            // (present = 1, numDescriptors = 0).
             code::GET_CAMERA_VENDOR_TAG_CACHE => {
                 self.record(
                     code::GET_CAMERA_VENDOR_TAG_CACHE,
@@ -706,7 +781,8 @@ impl ServiceObject for CameraService {
                     None,
                 );
                 write_no_exception(reply);
-                reply.write_int32(0);
+                reply.write_int32(1); // parcelable present
+                reply.write_int32(0); // numDescriptors = 0
                 Ok(true)
             }
             // getLegacyParameters(int cameraId): null (no API-1 parameters blob)
@@ -778,13 +854,8 @@ impl ServiceObject for CameraService {
             }
             // getCameraCharacteristics(String, int, boolean): CameraMetadataNative
             code::GET_CAMERA_CHARACTERISTICS => self.camera_characteristics(data, reply),
-            // connectDevice(...): slice 2 (gralloc buffers + ImageReader).
-            code::CONNECT_DEVICE => Err(self.unsupported(
-                code::CONNECT_DEVICE,
-                "connectDevice — a device binder would have to configure streams and deliver \
-                 frames, which needs a gralloc-backed ImageReader surface; see \
-                 docs/CAMERA_PLAN.md slice 2",
-            )),
+            // connectDevice(...): CAMERA permission check + Slice 2 refusal.
+            code::CONNECT_DEVICE => self.connect_device(data, reply),
             // API-1 connect, setTorchMode, turnOnTorchWithStrengthLevel, injectCamera
             code::CONNECT
             | code::SET_TORCH_MODE
@@ -831,12 +902,14 @@ impl Module for CameraModule {
         }
         self.camera = camera_from_config(config)?;
         let state = Arc::new(Mutex::new(CameraState::default()));
+        let permissions = host.permission_store();
         host.register_dynamic_named(
             SERVICE_NAME,
             DESCRIPTOR,
             Box::new(CameraService {
                 camera: self.camera.clone(),
                 state: Arc::clone(&state),
+                permissions,
             }),
         );
         self.state = Some(state);

@@ -4228,6 +4228,13 @@ public final class LaunchMain {
                 // with no broker is the honest ENOENT/ECONNREFUSED, never a
                 // fabricated transport.
                 "register_android_net_LocalSocketImpl",
+                // CAMERA2: `CameraManagerGlobal.connectCameraServiceLocked()` calls
+                // `CameraMetadataNative.setupGlobalVendorTagDescriptor()`, and
+                // `getCameraCharacteristics` unparcels `CameraMetadataNative` via
+                // the image's own `libcamera_client.so` + `libcamera_metadata.so`.
+                // Registering binds the real AOSP JNI methods without touching
+                // `media.camera` until an app queries `CameraManager`.
+                "register_android_hardware_camera2_CameraMetadata",
         };
         String[] graphics = {"register_android_graphics_classes"};
         StringBuilder missing = new StringBuilder();

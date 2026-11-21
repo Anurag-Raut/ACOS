@@ -167,6 +167,11 @@ fn the_location_module_passes_the_conformance_kit() {
 }
 
 #[test]
+fn the_camera_module_passes_the_conformance_kit() {
+    run_in_quiet_process("hw.camera");
+}
+
+#[test]
 fn a_gap_name_answers_a_structured_tombstone_naming_the_module_and_the_attach_call() {
     let mut host = ServiceHost::new();
     let mut registry = ModuleRegistry::standard();
