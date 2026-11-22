@@ -1,0 +1,51 @@
+   Compiling aho-corasick v1.1.5
+   Compiling schemars v0.8.22
+   Compiling serde_yaml_ng v0.10.0
+   Compiling regex-automata v0.4.18
+   Compiling regex v1.13.1
+   Compiling acos-protocol v0.4.0 (/home/Qui/.t3/worktrees/acos/t3-8432ccd8-1d58d051095d020b/crates/acos-protocol)
+    Finished `release` profile [optimized] target(s) in 14.15s
+     Running unittests src/lib.rs (.cache/rg5-target/release/deps/acos_protocol-e970b478ef5e8d79)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 99 filtered out; finished in 0.00s
+
+     Running tests/golden.rs (.cache/rg5-target/release/deps/golden-321fbce00f6e289a)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 3 filtered out; finished in 0.00s
+
+     Running tests/invariants.rs (.cache/rg5-target/release/deps/invariants-6c48053f1232d26c)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 7 filtered out; finished in 0.00s
+
+     Running tests/roundtrip.rs (.cache/rg5-target/release/deps/roundtrip-52771b8b2808832f)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 9 filtered out; finished in 0.00s
+
+     Running tests/scenarios.rs (.cache/rg5-target/release/deps/scenarios-c0389cc29475aaa9)
+
+running 1 test
+test every_checked_in_scenario_parses_and_validates ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 9 filtered out; finished in 0.02s
+
+     Running tests/schemas.rs (.cache/rg5-target/release/deps/schemas-593e5878b66dc4b0)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 0.00s
+
+     Running tests/services_block.rs (.cache/rg5-target/release/deps/services_block-eb80016b1810ee39)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 3 filtered out; finished in 0.00s
+
+RC=0

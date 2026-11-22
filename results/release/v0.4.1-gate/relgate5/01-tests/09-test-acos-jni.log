@@ -1,0 +1,157 @@
+   Compiling acos-jni v0.4.0 (/home/Qui/.t3/worktrees/acos/t3-8432ccd8-1d58d051095d020b/crates/acos-jni)
+    Finished `release` profile [optimized] target(s) in 1.57s
+     Running unittests src/lib.rs (.cache/rg5-target/release/deps/acos_jni-ec3083b24527a467)
+
+running 31 tests
+test dispatch::abi_tests::double_and_float_arguments_do_not_collide ... ok
+test dispatch::abi_tests::integer_arguments_past_the_sixth_use_the_stack ... ok
+test flutter::tests::empty_buffer_yields_no_nodes ... ok
+test flutter::tests::truncated_buffer_is_an_error ... ok
+test flutter::tests::tap_packet_matches_the_pointer_wire_size ... ok
+test flutter_session::tests::abi_miss_is_unsupported_abi ... ok
+test hostmem::tests::an_empty_or_inverted_range_is_rejected ... ok
+test dispatch::abi_tests::float_argument_keeps_its_own_bits ... ok
+test flutter::tests::decodes_a_single_node ... ok
+test flutter::tests::decodes_multiple_nodes_with_children ... ok
+test hostmem::tests::a_range_past_the_mapping_end_is_rejected ... ok
+test jni::tests::descriptors_are_validated ... ok
+test hostmem::tests::an_unmapped_address_is_rejected ... ok
+test jni::tests::mutf8_round_trips_bmp_and_supplementary ... ok
+test jni::tests::table_has_the_jni_shape ... ok
+test load::tests::short_and_long_jni_names_are_mangled ... ok
+test ndk_host::tests::bitmap_layout_is_bounded ... ok
+test flutter::tests::a_plain_apk_is_not_flutter ... ok
+test jni::tests::direct_byte_buffer_range_is_validated_before_dereferencing ... ok
+test ndk_host::tests::buffer_len_requires_stride_at_least_width ... ok
+test ndk_host::tests::checked_geometry_accepts_reasonable_sizes ... ok
+test ndk_host::tests::checked_geometry_rejects_bad_format_and_empty_size ... ok
+test hostmem::tests::a_live_stack_buffer_is_readable ... ok
+test load::tests::underscores_and_arrays_are_escaped ... ok
+test ndk_host::tests::checked_geometry_rejects_unbounded_guest_sizes ... ok
+test flutter::tests::detects_a_flutter_apk_from_zip_layout ... ok
+test ndk_host::tests::window_set_geometry_caps_host_allocation ... ok
+test react_native::tests::tree_accepts_float_encoded_tags ... ok
+test react_native::tests::tree_replays_ops_and_resolves_text ... ok
+test react_native::tests::detect_requires_runtime_and_bundle ... ok
+test react_native::tests::detect_recognises_react_native ... ok
+
+test result: ok. 31 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/flutter_hello.rs (.cache/rg5-target/release/deps/flutter_hello-e6509a1f98bafc33)
+
+running 2 tests
+test flutter_child_worker ... ok
+test flutter_hello_under_confinement ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.68s
+
+     Running tests/gles_fixture.rs (.cache/rg5-target/release/deps/gles_fixture-c2b08c17630924cd)
+
+running 2 tests
+test gles_child_worker ... ok
+test gles_fixture_draws_a_triangle_under_confinement ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/hello_jni.rs (.cache/rg5-target/release/deps/hello_jni-0b52b2afb3c8a866)
+
+running 2 tests
+test jni_config_keeps_confinement_by_default ... ok
+test hello_jni_runs_through_the_vm ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running tests/jni_broker.rs (.cache/rg5-target/release/deps/jni_broker-88a4e03f7eb56476)
+
+running 7 tests
+test eight_workers_hammer_concurrently ... ok
+test attach_current_thread_and_call ... ok
+test gc_stress_holds_local_and_global_refs ... ok
+test reference_accounting_is_balanced ... ok
+test owner_native_loop_services_synchronously ... ok
+test worker_static_and_virtual_calls ... ok
+test java_exception_is_visible_to_worker ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.20s
+
+     Running tests/jni_errors.rs (.cache/rg5-target/release/deps/jni_errors-2854beb473bb1508)
+
+running 10 tests
+test missing_class_is_structured ... ok
+test bad_signature_and_missing_method_are_structured ... ok
+test pending_exception_blocks_non_exception_safe_calls ... ok
+test register_natives_rejects_unknown_method ... ok
+test static_fields_and_primitive_arrays_round_trip ... ok
+test dead_handle_is_a_hard_error ... ok
+test vm_only_setup_drop ... ok
+test null_reference_is_structured ... ok
+test string_round_trip_and_global_refs ... ok
+test unsupported_slot_records_unsupported ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/jni_native_fixture.rs (.cache/rg5-target/release/deps/jni_native_fixture-90e7529b395e7b90)
+
+running 2 tests
+test native_fixture_exercises_slots_through_jni_table ... ok
+test native_fixture_worker_brokers_java_call ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/jni_nonvirtual.rs (.cache/rg5-target/release/deps/jni_nonvirtual-2afce69ab7d3c390)
+
+running 1 test
+test nonvirtual_call_uses_the_named_class_not_the_override ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/jni_roots.rs (.cache/rg5-target/release/deps/jni_roots-d2aef19a9a00759d)
+
+running 2 tests
+test throw_new_then_clear_is_root_balanced ... ok
+test throw_then_delete_local_then_clear_releases_each_root ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/jni_slots.rs (.cache/rg5-target/release/deps/jni_slots-babd42b8fa52734e)
+
+running 5 tests
+test weak_global_ref_lifecycle ... ok
+test direct_buffer_round_trips_through_native_mem ... ok
+test monitor_enter_exit_is_recursive_and_scoped ... ok
+test register_natives_zero_count_and_unregister ... ok
+test javavm_attach_getenv_and_versions ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/rn_bridge.rs (.cache/rg5-target/release/deps/rn_bridge-e10227eaabc7b0df)
+
+running 2 tests
+test rn_bridge_child_worker ... ok
+test rn_bridge_reaches_uimanager_under_confinement ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.94s
+
+     Running tests/rn_hermes.rs (.cache/rg5-target/release/deps/rn_hermes-12dfc205a7379f71)
+
+running 2 tests
+test rn_hermes_child_worker ... ok
+test rn_hermes_merged_onloads_under_confinement ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.56s
+
+     Running tests/rn_native_stack.rs (.cache/rg5-target/release/deps/rn_native_stack-cb5a4bf4090de3e0)
+
+running 2 tests
+test rn_child_worker ... ok
+test rn_native_stack_under_confinement ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.48s
+
+   Doc-tests acos_jni
+
+running 1 test
+test crates/acos-jni/src/lib.rs - (line 31) ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.10s
+

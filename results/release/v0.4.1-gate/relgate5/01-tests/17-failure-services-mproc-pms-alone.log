@@ -1,0 +1,173 @@
+warning: variable does not need to be mutable
+   --> crates/acos-netd-ctl/src/client.rs:574:13
+    |
+574 |         let mut r = self.request(&Request::KillPasta { hold })?;
+    |             ----^
+    |             |
+    |             help: remove this `mut`
+    |
+    = note: `#[warn(unused_mut)]` on by default
+
+warning: variable does not need to be mutable
+   --> crates/acos-netd-ctl/src/client.rs:584:13
+    |
+584 |         let mut r = self.request(&Request::Shutdown)?;
+    |             ----^
+    |             |
+    |             help: remove this `mut`
+
+warning: `acos-netd-ctl` (lib) generated 2 warnings (run `cargo fix --lib -p acos-netd-ctl` to apply 2 suggestions)
+warning: unreachable pattern
+   --> crates/acos-services/src/intents.rs:151:21
+    |
+146 |                     Extra::Short(number) => serde_json::json!(number),
+    |                     -------------------- matches all the relevant values
+...
+151 |                     Extra::Short(short) => serde_json::json!(short),
+    |                     ^^^^^^^^^^^^^^^^^^^ no value can reach this
+    |
+    = note: `#[warn(unreachable_patterns)]` on by default
+
+warning: variable does not need to be mutable
+   --> crates/acos-services/src/modules/notifications.rs:341:13
+    |
+341 |         let mut store = store
+    |             ----^^^^^
+    |             |
+    |             help: remove this `mut`
+    |
+    = note: `#[warn(unused_mut)]` on by default
+
+warning: unreachable pattern
+    --> crates/acos-services/src/parcelable.rs:2909:9
+     |
+2889 |         FieldOp::BoolCond(fields) => {
+     |         ------------------------- matches all the relevant values
+...
+2909 |         FieldOp::BoolCond(fields) => {
+     |         ^^^^^^^^^^^^^^^^^^^^^^^^^ no value can reach this
+
+warning: unreachable pattern
+    --> crates/acos-services/src/parcelable.rs:3335:9
+     |
+3273 |         FieldOp::BoolCond(fields) => {
+     |         ------------------------- matches all the relevant values
+...
+3335 |         FieldOp::BoolCond(fields) => {
+     |         ^^^^^^^^^^^^^^^^^^^^^^^^^ no value can reach this
+
+warning: unreachable pattern
+    --> crates/acos-services/src/parcelable.rs:3414:9
+     |
+3397 |         FieldOp::Icon => {
+     |         ------------- matches all the relevant values
+...
+3414 |         FieldOp::Icon => {
+     |         ^^^^^^^^^^^^^ no value can reach this
+
+warning: unreachable pattern
+    --> crates/acos-services/src/parcelable.rs:3418:9
+     |
+3401 |         FieldOp::ArraySet => match value {
+     |         ----------------- matches all the relevant values
+...
+3418 |         FieldOp::ArraySet => match value {
+     |         ^^^^^^^^^^^^^^^^^ no value can reach this
+
+warning: unreachable pattern
+    --> crates/acos-services/src/parcelable.rs:5363:9
+     |
+5309 |         FieldOp::BoolCond(_) => call == "writeBoolean",
+     |         -------------------- matches all the relevant values
+...
+5363 |         FieldOp::BoolCond(_) => call == "writeBoolean",
+     |         ^^^^^^^^^^^^^^^^^^^^ no value can reach this
+
+warning: unreachable pattern
+    --> crates/acos-services/src/parcelable.rs:5446:9
+     |
+5404 |         FieldOp::BoolCond(inner) => {
+     |         ------------------------ matches all the relevant values
+...
+5446 |         FieldOp::BoolCond(inner) => {
+     |         ^^^^^^^^^^^^^^^^^^^^^^^^ no value can reach this
+
+warning: unused variable: `intent`
+   --> crates/acos-services/src/service_bind.rs:292:13
+    |
+292 |         let intent = bind_intent(package, class);
+    |             ^^^^^^ help: if this is intentional, prefix it with an underscore: `_intent`
+    |
+    = note: `#[warn(unused_variables)]` on by default
+
+warning: constant `ACTION_MASK` is never used
+   --> crates/acos-services/src/a11y_native.rs:102:7
+    |
+102 | const ACTION_MASK: i32 = 0xff;
+    |       ^^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` on by default
+
+warning: constant `RESTRICTIONS_GET_APPLICATION_PER_ADMIN` is never used
+   --> crates/acos-services/src/extras.rs:693:7
+    |
+693 | const RESTRICTIONS_GET_APPLICATION_PER_ADMIN: u32 = 2;
+    |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: constant `SERVICE_MANAGER_DESCRIPTOR` is never used
+  --> crates/acos-services/src/host.rs:82:7
+   |
+82 | const SERVICE_MANAGER_DESCRIPTOR: &str = "android.os.IServiceManager";
+   |       ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: field `session_binder` is never read
+   --> crates/acos-services/src/modules/media_session.rs:161:5
+    |
+155 | struct SessionRecord {
+    |        ------------- field in this struct
+...
+161 |     session_binder: u64,
+    |     ^^^^^^^^^^^^^^
+    |
+    = note: `SessionRecord` has a derived impl for the trait `Debug`, but this is intentionally ignored during dead code analysis
+
+warning: method `session_mut` is never used
+   --> crates/acos-services/src/modules/media_session.rs:205:8
+    |
+187 | impl MediaState {
+    | --------------- method in this implementation
+...
+205 |     fn session_mut(&mut self, id: u32) -> Option<&mut SessionRecord> {
+    |        ^^^^^^^^^^^
+
+warning: `acos-services` (lib) generated 14 warnings (run `cargo fix --lib -p acos-services` to apply 1 suggestion)
+    Finished `release` profile [optimized] target(s) in 0.03s
+     Running tests/mproc_pms.rs (.cache/rg5-target/release/deps/mproc_pms-73028bc812ec6468)
+
+running 9 tests
+test a_duplicate_install_is_a_structured_error ... ok
+test resolve_content_provider_searches_every_package ... ok
+test uids_are_per_package ... ok
+test query_intent_activities_honours_the_intent ... ok
+test get_package_info_answers_the_second_package_activities ... ok
+test get_application_info_is_per_package ... ok
+test unknown_package_is_the_wire_null_not_an_error ... ok
+test resolve_intent_returns_one_match_for_an_explicit_component ... ok
+test query_intent_activities_matches_every_installed_package ... FAILED
+
+failures:
+
+---- query_intent_activities_matches_every_installed_package stdout ----
+
+thread 'query_intent_activities_matches_every_installed_package' panicked at crates/acos-services/tests/mproc_pms.rs:220:9:
+the generic reply is a placeholder for the materialiser
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    query_intent_activities_matches_every_installed_package
+
+test result: FAILED. 8 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+error: test failed, to rerun pass `-p acos-services --test mproc_pms`
+RC=101
