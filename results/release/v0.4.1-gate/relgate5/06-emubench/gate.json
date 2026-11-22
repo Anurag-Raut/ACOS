@@ -95,10 +95,12 @@
    "direction": "lower",
    "acos_key": "m9_apk_ready_ms",
    "emu_key": "install_ms",
-   "acos": null,
+   "acos": 10.0,
    "emulator": 1358.8394319995132,
    "note": "MERGE040D(c): ACOS's counterpart of `adb install`. ACOS: the launcher's own stage ladder, `launch-entry` -> `guest-exec` (ingest of the package facts / manifest / dex list, staging into `<data>/app`, native-lib extraction, and the DEX/classpath preparation), measured for a fresh session per rep. Emulator: `adb install -r -t` (decompress + write into /data/app + dexopt), its *first* install \u2014 the emulator's more expensive number, so the pairing is conservative for ACOS. Reinstall (warm) is in the baseline for the record.",
-   "verdict": "NOT_MEASURED"
+   "delta_pct": -99.26407787671533,
+   "better": "ACOS",
+   "worse_beyond_noise": false
   },
   {
    "id": "reset",
@@ -186,8 +188,6 @@
  ],
  "worse": [],
  "worse_beyond_noise": [],
- "not_measured": [
-  "install"
- ],
+ "not_measured": [],
  "pass": true
 }

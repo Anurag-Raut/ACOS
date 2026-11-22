@@ -6,7 +6,7 @@
 | Tap -> settled UI result (form) | 930.2 | 1946 | ms | ACOS | -52.2 % | better |
 | UI tree read with text | 41.4 | 1928 | ms | ACOS | -97.9 % | better |
 | Fresh PNG screenshot | 11.7 | 527.1 | ms | ACOS | -97.8 % | better |
-| Install -> APK ready to launch | -- | 1359 | ms | -- | -- | **NOT_MEASURED** |
+| Install -> APK ready to launch | 10.0 | 1359 | ms | ACOS | -99.3 % | better |
 | Reset -> first correct screen | 331.3 | 530.8 | ms | ACOS | -37.6 % | better |
 | Instance memory, PSS | 239.3 | 3578.0 | MiB | ACOS | -93.3 % | better |
 | Instance memory, anon+shmem | 59.4 | 3531.6 | MiB | ACOS | -98.3 % | better |

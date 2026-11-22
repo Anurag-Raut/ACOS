@@ -2624,6 +2624,28 @@
       "threshold_pct": 5.0,
       "unit": "ms"
     },
+    "m9_apk_ready_cold_ms": {
+      "n": 1,
+      "p50": 3700.0,
+      "p95": 3700.0,
+      "samples": [
+        3700.0
+      ],
+      "source": "06-emubench/acos-install-phase.json"
+    },
+    "m9_apk_ready_ms": {
+      "n": 5,
+      "p50": 10.0,
+      "p95": 10.0,
+      "samples": [
+        0.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0
+      ],
+      "source": "06-emubench/acos-install-phase.json"
+    },
     "tap_ack_ms": {
       "bad": 0,
       "capped": false,
