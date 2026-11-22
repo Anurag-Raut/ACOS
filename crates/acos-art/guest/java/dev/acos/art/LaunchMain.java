@@ -5880,6 +5880,7 @@ public final class LaunchMain {
     private static final int CAMERA_SINK_OP_REGISTER = 1;
     private static final int CAMERA_SINK_OP_DELIVER = 2;
     private static final int CAMERA_SINK_OP_RELEASE = 3;
+    private static final int CAMERA_SINK_OP_DELIVER_FD = 4;
     private static android.os.Binder sCameraFrameSink;
     private static final java.util.HashMap<Integer, android.view.Surface> sCameraSinkSurfaces =
             new java.util.HashMap<Integer, android.view.Surface>();
@@ -5923,6 +5924,34 @@ public final class LaunchMain {
                                 streamId, width, height, frameNumber, timestampNs, patternId);
                         if (rc != 0) {
                             System.out.println("ACOSLAUNCH WARN camera-sink deliver stream="
+                                    + streamId + " frame=" + frameNumber + " rc=" + rc);
+                        }
+                        return true;
+                    }
+                    if (code == CAMERA_SINK_OP_DELIVER_FD) {
+                        data.enforceInterface(CAMERA_SINK_DESCRIPTOR);
+                        int streamId = data.readInt();
+                        int width = data.readInt();
+                        int height = data.readInt();
+                        long frameNumber = data.readLong();
+                        long timestampNs = data.readLong();
+                        int patternId = data.readInt();
+                        android.os.ParcelFileDescriptor pfd = data.readFileDescriptor();
+                        int rc = -1;
+                        try {
+                            int fd = pfd != null ? pfd.getFd() : -1;
+                            rc = RenderNat.cameraSinkDeliverFd(
+                                    streamId, width, height, frameNumber, timestampNs, patternId, fd);
+                        } finally {
+                            if (pfd != null) {
+                                try {
+                                    pfd.close();
+                                } catch (Throwable ignored) {
+                                }
+                            }
+                        }
+                        if (rc != 0) {
+                            System.out.println("ACOSLAUNCH WARN camera-sink deliverFd stream="
                                     + streamId + " frame=" + frameNumber + " rc=" + rc);
                         }
                         return true;

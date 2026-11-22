@@ -40,6 +40,20 @@ public final class RenderNat {
             int streamId, int width, int height, long frameNumber, long timestampNs, int patternId);
 
     /**
+     * CAMERA4: dequeue a buffer on {@code streamId} and populate it from the
+     * host-provided {@code acos_cam_frame_blob_t} memfd {@code fd} (supporting
+     * {@code YUV_420_888}, {@code BLOB}/JPEG, and {@code RGBA_8888}).
+     */
+    public static native int cameraSinkDeliverFd(
+            int streamId,
+            int width,
+            int height,
+            long frameNumber,
+            long timestampNs,
+            int patternId,
+            int fd);
+
+    /**
      * CAMERA3 Option A: disconnect and release {@code streamId} ({@code < 0} releases all).
      */
     public static native int cameraSinkRelease(int streamId);

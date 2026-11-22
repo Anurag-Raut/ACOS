@@ -294,8 +294,8 @@ fn the_module_is_registered_with_the_manifest_the_kit_expects() {
     assert!(manifest.features.contains(&"android.hardware.camera.any"));
     assert_eq!(
         manifest.profiles,
-        &[Profile::Stub],
-        "there is no camera HAL: `real` would be a fake success, `scripted` (frames) is slice 3"
+        &[Profile::Stub, Profile::Scripted],
+        "there is no camera HAL: `real` would be a fake success; `stub` and `scripted` are supported"
     );
     assert!(manifest.budget.ram_mib > 0 && manifest.budget.startup_ms > 0);
 }
@@ -322,8 +322,8 @@ fn off_mode_returns_empty_list_and_refuses_open_with_stub_attach_hint() {
     match &cam_err {
         ServiceError::ModuleUnavailable { attach, .. } => {
             assert!(
-                attach.contains("\"profile\": \"stub\""),
-                "hw.camera tombstone hint must name profile stub, got {attach}"
+                attach.contains("\"profile\": \"scripted\""),
+                "hw.camera tombstone hint must name highest profile scripted, got {attach}"
             );
         }
         other => panic!("expected ModuleUnavailable, got {other:?}"),
@@ -777,7 +777,7 @@ fn the_config_describes_the_one_camera_and_unknown_keys_are_refused() {
 
 #[test]
 fn the_profiles_it_does_not_implement_are_refused_by_name() {
-    for profile in [Profile::Scripted, Profile::Real] {
+    for profile in [Profile::Real] {
         let mut host = ServiceHost::new();
         let mut registry = module::install_standard(&mut host);
         let error = registry
@@ -1332,3 +1332,179 @@ fn test_pattern_colorbars_v1_crc32_is_deterministic_and_frame_tagged() {
     );
 }
 
+
+
+#[test]
+fn scripted_profile_set_frame_delivers_memfd_yuv_and_jpeg() {
+    use std::io::{Read, Seek, SeekFrom};
+    use std::os::fd::FromRawFd;
+    use acos_services::modules::camera::{
+        ieee_crc32, ACOS_FRAME_BLOB_MAGIC, ACOS_FRAME_BLOB_VERSION,
+    };
+
+    // 1. `stub` profile refuses `set_frame`.
+    {
+        let (mut host, mut registry) = attach();
+        let err = registry
+            .control(
+                &mut host,
+                MODULE_ID,
+                "set_frame",
+                &serde_json::json!({"path": "fixtures/camera/test-frame.png"}),
+            )
+            .expect_err("stub must refuse set_frame");
+        assert!(err.to_string().contains("scripted"), "got {err}");
+    }
+
+    // 2. Attach `scripted`.
+    let (mut host, mut registry) = attach_with(Profile::Scripted, serde_json::json!(null));
+    host.permission_store()
+        .expect("perm store")
+        .lock()
+        .unwrap()
+        .grant("android.permission.CAMERA");
+
+    let err_missing = registry
+        .control(
+            &mut host,
+            MODULE_ID,
+            "set_frame",
+            &serde_json::json!({"path": "fixtures/camera/does-not-exist.png"}),
+        )
+        .expect_err("missing file must be rejected");
+    assert!(err_missing.to_string().contains("not found"), "got {err_missing}");
+
+    // 3. Inject PNG fixture via `path`.
+    let res_png = registry
+        .control(
+            &mut host,
+            MODULE_ID,
+            "set_frame",
+            &serde_json::json!({"path": "fixtures/camera/test-frame.png"}),
+        )
+        .expect("set_frame png");
+    assert_eq!(res_png["source"], "image");
+    assert_eq!(res_png["width"], 640);
+    assert_eq!(res_png["height"], 480);
+    let png_crc_str = res_png["crc32_yuv"].as_str().expect("crc32_yuv");
+    eprintln!("test-frame.png YUV CRC32 = {png_crc_str}");
+
+    let app_tag = 7u32;
+    let sink_binder = BinderId((1u64 << 32) | 501);
+    let cb_binder = BinderId((1u64 << 32) | 502);
+    let igbp_yuv = BinderId((1u64 << 32) | 503);
+    host.register_guest_service(app_tag, FRAME_SINK_SERVICE.to_string(), sink_binder);
+    host.set_binder_owner(cb_binder, app_tag);
+    host.set_binder_owner(igbp_yuv, app_tag);
+
+    let mut conn = request(&mut host);
+    conn.write_strong_binder(cb_binder);
+    conn.write_string16("0").expect("id");
+    conn.write_string16("dev.acos.fixtures.cameraprobe").expect("pkg");
+    conn.write_string16_opt(None).expect("feat");
+    conn.write_int32(-1);
+    conn.write_int32(0);
+    conn.write_int32(34);
+    conn.write_int32(0);
+    let mut conn_reply = transact(&mut host, code::CONNECT_DEVICE, conn);
+    let dev = conn_reply.read_strong_binder().unwrap().unwrap();
+
+    dev_transact(&mut host, dev, device_code::BEGIN_CONFIGURE, dev_request());
+    let mut cs = dev_request();
+    write_fake_output_config(&mut cs, 640, 480, igbp_yuv);
+    let mut cs_reply = dev_transact(&mut host, dev, device_code::CREATE_STREAM, cs);
+    let stream_id = cs_reply.read_int32().unwrap();
+    dev_transact(&mut host, dev, device_code::END_CONFIGURE, dev_request());
+    let _ = host.take_deliveries();
+
+    let mut sub = dev_request();
+    sub.write_int32(1);
+    write_fake_capture_request(&mut sub, stream_id, 2);
+    sub.write_int32(0);
+    dev_transact(&mut host, dev, device_code::SUBMIT_REQUEST_LIST, sub);
+
+    let d = host.take_deliveries();
+    assert_eq!(d[0].target, sink_binder);
+    assert_eq!(d[0].code, sink_code::DELIVER_FRAME_FD);
+    let mut dp = d[0].data.clone();
+    dp.set_data_position(0);
+    dp.enforce_interface(FRAME_SINK_DESCRIPTOR).unwrap();
+    assert_eq!(dp.read_int32().unwrap(), stream_id);
+    assert_eq!(dp.read_int32().unwrap(), 640);
+    assert_eq!(dp.read_int32().unwrap(), 480);
+    assert_eq!(dp.read_int64().unwrap(), 0);
+    assert_eq!(dp.read_int64().unwrap(), INITIAL_TIMESTAMP_NS);
+    assert_eq!(dp.read_int32().unwrap(), 2); // scripted image patternId
+    let raw_fd = dp.read_file_descriptor().unwrap().expect("blob fd");
+    let mut file = unsafe { std::fs::File::from_raw_fd(raw_fd) };
+    file.seek(SeekFrom::Start(0)).unwrap();
+    let mut blob = Vec::new();
+    file.read_to_end(&mut blob).unwrap();
+    std::mem::forget(file); // Parcel `dp` still owns `raw_fd`
+
+    assert!(blob.len() > 48);
+    let magic = u32::from_le_bytes(blob[0..4].try_into().unwrap());
+    let ver = u32::from_le_bytes(blob[4..8].try_into().unwrap());
+    let w = u32::from_le_bytes(blob[8..12].try_into().unwrap());
+    let h = u32::from_le_bytes(blob[12..16].try_into().unwrap());
+    let yuv_off = u32::from_le_bytes(blob[28..32].try_into().unwrap()) as usize;
+    let yuv_size = u32::from_le_bytes(blob[32..36].try_into().unwrap()) as usize;
+    let jpeg_off = u32::from_le_bytes(blob[36..40].try_into().unwrap()) as usize;
+    let jpeg_size = u32::from_le_bytes(blob[40..44].try_into().unwrap()) as usize;
+    let crc = u32::from_le_bytes(blob[44..48].try_into().unwrap());
+    assert_eq!(magic, ACOS_FRAME_BLOB_MAGIC);
+    assert_eq!(ver, ACOS_FRAME_BLOB_VERSION);
+    assert_eq!((w, h), (640, 480));
+    assert_eq!(yuv_size, 640 * 480 * 3 / 2);
+    assert_eq!(format!("{crc:#010x}"), png_crc_str);
+    assert_eq!(ieee_crc32(&blob[yuv_off..yuv_off + yuv_size]), crc);
+    assert!(jpeg_size > 100);
+    assert_eq!(&blob[jpeg_off..jpeg_off + 2], &[0xFF, 0xD8]);
+    assert_eq!(&blob[jpeg_off + jpeg_size - 2..jpeg_off + jpeg_size], &[0xFF, 0xD9]);
+
+    // 4. Switch to JPEG fixture via base64, then back to test_pattern.
+    let jpg_bytes = std::fs::read(
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/camera/test-frame.jpg"),
+    )
+    .unwrap();
+    let b64 = encode_test_base64(&jpg_bytes);
+    let res_jpg = registry
+        .control(
+            &mut host,
+            MODULE_ID,
+            "set_frame",
+            &serde_json::json!({"base64": b64}),
+        )
+        .expect("set_frame base64");
+    assert_eq!(res_jpg["width"], 640);
+    assert_eq!(res_jpg["height"], 480);
+    eprintln!("test-frame.jpg YUV CRC32 = {}", res_jpg["crc32_yuv"]);
+
+    let res_tp = registry
+        .control(
+            &mut host,
+            MODULE_ID,
+            "set_frame",
+            &serde_json::json!({"source": "test_pattern"}),
+        )
+        .expect("restore test_pattern");
+    assert_eq!(res_tp["pattern"], "ACOS_PATTERN_COLORBARS_V1");
+
+    dev_transact(&mut host, dev, device_code::DISCONNECT, dev_request());
+}
+
+fn encode_test_base64(input: &[u8]) -> String {
+    const TBL: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut out = String::new();
+    for chunk in input.chunks(3) {
+        let b0 = u32::from(chunk[0]);
+        let b1 = u32::from(*chunk.get(1).unwrap_or(&0));
+        let b2 = u32::from(*chunk.get(2).unwrap_or(&0));
+        let n = (b0 << 16) | (b1 << 8) | b2;
+        out.push(TBL[((n >> 18) & 63) as usize] as char);
+        out.push(TBL[((n >> 12) & 63) as usize] as char);
+        out.push(if chunk.len() > 1 { TBL[((n >> 6) & 63) as usize] as char } else { '=' });
+        out.push(if chunk.len() > 2 { TBL[(n & 63) as usize] as char } else { '=' });
+    }
+    out
+}

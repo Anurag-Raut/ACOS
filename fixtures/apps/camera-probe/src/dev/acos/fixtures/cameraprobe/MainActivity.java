@@ -60,6 +60,7 @@ public final class MainActivity extends Activity {
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private TextView status;
     private CameraManager cameraManager;
+    private int captureSeq = 0;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -243,6 +244,11 @@ public final class MainActivity extends Activity {
         final String black;
         final String tag;
         final String ramp;
+        final String tl;
+        final String tr;
+        final String bl;
+        final String br;
+        final String ctr;
         final int tagByte0;
 
         YuvInspection(
@@ -258,6 +264,11 @@ public final class MainActivity extends Activity {
                 String black,
                 String tag,
                 String ramp,
+                String tl,
+                String tr,
+                String bl,
+                String br,
+                String ctr,
                 int tagByte0) {
             this.width = width;
             this.height = height;
@@ -271,6 +282,11 @@ public final class MainActivity extends Activity {
             this.black = black;
             this.tag = tag;
             this.ramp = ramp;
+            this.tl = tl;
+            this.tr = tr;
+            this.bl = bl;
+            this.br = br;
+            this.ctr = ctr;
             this.tagByte0 = tagByte0;
         }
     }
@@ -313,10 +329,15 @@ public final class MainActivity extends Activity {
         int t3 = readPlaneByte(planes[0], 3, 0);
         String tag = "(" + t0 + "," + t1 + "," + t2 + "," + t3 + ")";
         String ramp = sampleYuv(planes, 320, 420);
+        String tl = sampleYuv(planes, 160, 120);
+        String tr = sampleYuv(planes, 480, 120);
+        String bl = sampleYuv(planes, 160, 360);
+        String br = sampleYuv(planes, 480, 360);
+        String ctr = sampleYuv(planes, 320, 240);
 
         return new YuvInspection(
                 w, h, fmt, planes.length, ts, crc.getValue(),
-                white, green, red, black, tag, ramp, t0);
+                white, green, red, black, tag, ramp, tl, tr, bl, br, ctr, t0);
     }
 
     private static void updateCrcFromPlane(CRC32 crc, Image.Plane plane, int width, int height) {
@@ -378,10 +399,11 @@ public final class MainActivity extends Activity {
                 YuvInspection info = inspectYuv420Image(img);
                 log(String.format(
                         Locale.US,
-                        "CAPTURE image w=%d h=%d fmt=%d planes=%d ts=%d crc32=0x%08x white=%s green=%s red=%s black=%s tag=%s ramp=%s",
+                        "CAPTURE image w=%d h=%d fmt=%d planes=%d ts=%d crc32=0x%08x white=%s green=%s red=%s black=%s tag=%s ramp=%s tl=%s tr=%s bl=%s br=%s ctr=%s",
                         info.width, info.height, info.format, info.planeCount,
                         info.timestampNs, info.crc32,
-                        info.white, info.green, info.red, info.black, info.tag, info.ramp));
+                        info.white, info.green, info.red, info.black, info.tag, info.ramp,
+                        info.tl, info.tr, info.bl, info.br, info.ctr));
                 gotImage.set(true);
                 maybeClose.run();
             } catch (Throwable t) {
@@ -463,7 +485,8 @@ public final class MainActivity extends Activity {
                 public void onClosed(CameraDevice camera) {
                     reader.close();
                     bgThread.quitSafely();
-                    log("CAPTURE closed id=" + camera.getId());
+                    captureSeq++;
+                    log("CAPTURE closed id=" + camera.getId() + " seq=" + captureSeq);
                 }
 
                 @Override

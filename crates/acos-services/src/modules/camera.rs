@@ -38,11 +38,17 @@
 //! and native libraries (`libgui.so`, `libcamera_client.so`,
 //! `libcamera_metadata.so`).
 
+use std::borrow::Cow;
 use std::collections::BTreeMap;
+use std::io::{Seek, SeekFrom, Write};
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use acos_parcel::{BinderId, Parcel};
+use acos_parcel::{BinderId, Parcel, ParcelFd};
+use image::codecs::jpeg::JpegEncoder;
+use image::imageops::FilterType;
+use image::{ImageEncoder, RgbaImage};
 use serde_json::{json, Value};
 
 use crate::error::{Result, ServiceError};
@@ -238,7 +244,26 @@ pub mod sink_code {
     pub const DELIVER_FRAME: u32 = 2;
     /// `releaseStream(int streamId)` (`< 0` releases all streams).
     pub const RELEASE_STREAM: u32 = 3;
+    /// `deliverFrameFd(int streamId, int width, int height, long frameNumber, long timestampNs, int patternId, ParcelFileDescriptor blobFd)`.
+    pub const DELIVER_FRAME_FD: u32 = 4;
 }
+
+/// Magic header for `acos_cam_frame_blob_t` passed over `DELIVER_FRAME_FD` (`"ACMF"`).
+pub const ACOS_FRAME_BLOB_MAGIC: u32 = 0x464D_4341;
+/// Header version for `acos_cam_frame_blob_t`.
+pub const ACOS_FRAME_BLOB_VERSION: u32 = 1;
+
+/// 100% RGB color-bar colors matching [`TEST_PATTERN_BARS`] under BT.601.
+pub const TEST_PATTERN_RGB: [(u8, u8, u8); 8] = [
+    (255, 255, 255), // 0: White
+    (255, 255, 0),   // 1: Yellow
+    (0, 255, 255),   // 2: Cyan
+    (0, 255, 0),     // 3: Green
+    (255, 0, 255),   // 4: Magenta
+    (255, 0, 0),     // 5: Red
+    (0, 0, 255),     // 6: Blue
+    (0, 0, 0),       // 7: Black
+];
 
 /// BT.601 color-bar `(Y, U/Cb, V/Cr)` values for `ACOS_PATTERN_COLORBARS_V1`
 /// (exact mirror of `render_shim.c::fill_yuv420_colorbars`).
@@ -324,6 +349,279 @@ pub fn test_pattern_yuv420_crc32(width: u32, height: u32, frame_number: u64) -> 
     !crc
 }
 
+/// IEEE CRC32 over an arbitrary byte slice.
+#[must_use]
+pub fn ieee_crc32(bytes: &[u8]) -> u32 {
+    let mut crc = 0xFFFF_FFFFu32;
+    for &byte in bytes {
+        crc ^= u32::from(byte);
+        for _ in 0..8 {
+            if (crc & 1) != 0 {
+                crc = (crc >> 1) ^ 0xEDB8_8320;
+            } else {
+                crc >>= 1;
+            }
+        }
+    }
+    !crc
+}
+
+fn rgb_to_y(r: u8, g: u8, b: u8) -> u8 {
+    let r = i32::from(r);
+    let g = i32::from(g);
+    let b = i32::from(b);
+    (((66 * r + 129 * g + 25 * b + 128) >> 8) + 16).clamp(16, 235) as u8
+}
+
+fn rgb_to_cb(r: u8, g: u8, b: u8) -> u8 {
+    let r = i32::from(r);
+    let g = i32::from(g);
+    let b = i32::from(b);
+    (((-38 * r - 74 * g + 112 * b + 128) >> 8) + 128).clamp(16, 240) as u8
+}
+
+fn rgb_to_cr(r: u8, g: u8, b: u8) -> u8 {
+    let r = i32::from(r);
+    let g = i32::from(g);
+    let b = i32::from(b);
+    (((112 * r - 94 * g - 18 * b + 128) >> 8) + 128).clamp(16, 240) as u8
+}
+
+/// Convert an `RgbaImage` to tightly-packed planar `I420` (`Y`, then `U/Cb`,
+/// then `V/Cr`) using BT.601 studio-swing coefficients.
+#[must_use]
+pub fn rgba_to_yuv420_i420(rgba: &RgbaImage) -> Vec<u8> {
+    let (w, h) = rgba.dimensions();
+    let cw = w.div_ceil(2);
+    let ch = h.div_ceil(2);
+    let y_len = (w as usize) * (h as usize);
+    let c_len = (cw as usize) * (ch as usize);
+    let mut out = vec![0u8; y_len + 2 * c_len];
+    let raw = rgba.as_raw();
+
+    for y in 0..h {
+        for x in 0..w {
+            let idx = ((y * w + x) * 4) as usize;
+            out[(y * w + x) as usize] = rgb_to_y(raw[idx], raw[idx + 1], raw[idx + 2]);
+        }
+    }
+    let u_off = y_len;
+    let v_off = y_len + c_len;
+    for cy in 0..ch {
+        let y0 = cy * 2;
+        let y1 = (y0 + 1).min(h.saturating_sub(1));
+        for cx in 0..cw {
+            let x0 = cx * 2;
+            let x1 = (x0 + 1).min(w.saturating_sub(1));
+            let coords = [(x0, y0), (x1, y0), (x0, y1), (x1, y1)];
+            let (mut sr, mut sg, mut sb) = (0u32, 0u32, 0u32);
+            for (px, py) in coords {
+                let idx = ((py * w + px) * 4) as usize;
+                sr += u32::from(raw[idx]);
+                sg += u32::from(raw[idx + 1]);
+                sb += u32::from(raw[idx + 2]);
+            }
+            let r = ((sr + 2) / 4) as u8;
+            let g = ((sg + 2) / 4) as u8;
+            let b = ((sb + 2) / 4) as u8;
+            let cidx = (cy * cw + cx) as usize;
+            out[u_off + cidx] = rgb_to_cb(r, g, b);
+            out[v_off + cidx] = rgb_to_cr(r, g, b);
+        }
+    }
+    out
+}
+
+/// Generate an `RgbaImage` of `ACOS_PATTERN_COLORBARS_V1` for `(width, height)`
+/// and `frame_number` (used for BLOB/JPEG capture in `TestPattern` mode).
+#[must_use]
+pub fn test_pattern_rgba(width: u32, height: u32, frame_number: u64) -> RgbaImage {
+    let mut buf = vec![0u8; (width as usize) * (height as usize) * 4];
+    let ramp_y0 = (height * 3) / 4;
+    for y in 0..height {
+        for x in 0..width {
+            let (r, g, b) = if y == 0 && x < 4 {
+                let tag = match x {
+                    0 => (0xA0u8) | ((frame_number & 0x0F) as u8),
+                    1 => ((frame_number >> 4) & 0xFF) as u8,
+                    2 => ((frame_number >> 12) & 0xFF) as u8,
+                    _ => 0x5Au8,
+                };
+                (tag, tag, tag)
+            } else if y >= ramp_y0 {
+                let l = if width > 1 {
+                    ((x * 255) / (width - 1)) as u8
+                } else {
+                    128
+                };
+                (l, l, l)
+            } else {
+                let bar = ((x * 8) / width).min(7) as usize;
+                TEST_PATTERN_RGB[bar]
+            };
+            let idx = ((y * width + x) * 4) as usize;
+            buf[idx] = r;
+            buf[idx + 1] = g;
+            buf[idx + 2] = b;
+            buf[idx + 3] = 255;
+        }
+    }
+    RgbaImage::from_raw(width, height, buf).expect("test_pattern_rgba buffer size")
+}
+
+fn encode_jpeg_from_rgba(rgba: &RgbaImage, quality: u8) -> Result<Vec<u8>> {
+    let (w, h) = rgba.dimensions();
+    let raw = rgba.as_raw();
+    let mut rgb = Vec::with_capacity((w as usize) * (h as usize) * 3);
+    for px in raw.chunks_exact(4) {
+        rgb.push(px[0]);
+        rgb.push(px[1]);
+        rgb.push(px[2]);
+    }
+    let mut jpeg = Vec::new();
+    let encoder = JpegEncoder::new_with_quality(&mut jpeg, quality);
+    encoder
+        .write_image(&rgb, w, h, image::ExtendedColorType::Rgb8)
+        .map_err(|e| ServiceError::ModuleRejected {
+            module: MODULE_ID,
+            detail: format!("failed to encode JPEG frame: {e}"),
+        })?;
+    Ok(jpeg)
+}
+
+fn build_frame_blob_memfd(
+    rgba: &RgbaImage,
+    yuv: &[u8],
+    jpeg: &[u8],
+    crc32_yuv: u32,
+) -> Result<ParcelFd> {
+    let (w, h) = rgba.dimensions();
+    let rgba_bytes = rgba.as_raw();
+    let header_len = 48u32;
+    let rgba_off = header_len;
+    let rgba_len = rgba_bytes.len() as u32;
+    let yuv_off = rgba_off + rgba_len;
+    let yuv_len = yuv.len() as u32;
+    let jpeg_off = yuv_off + yuv_len;
+    let jpeg_len = jpeg.len() as u32;
+    let total = u64::from(jpeg_off) + u64::from(jpeg_len);
+
+    let memfd = ParcelFd::memfd_sized("acos-cam-frame", total).map_err(|e| {
+        ServiceError::ModuleRejected {
+            module: MODULE_ID,
+            detail: format!("memfd_sized failed: {e}"),
+        }
+    })?;
+    let dup = memfd.try_clone().map_err(|e| ServiceError::ModuleRejected {
+        module: MODULE_ID,
+        detail: format!("memfd dup failed: {e}"),
+    })?;
+    let mut file = std::fs::File::from(dup.into_owned());
+    let mut hdr = [0u8; 48];
+    let fields: [u32; 12] = [
+        ACOS_FRAME_BLOB_MAGIC,
+        ACOS_FRAME_BLOB_VERSION,
+        w,
+        h,
+        0,
+        rgba_off,
+        rgba_len,
+        yuv_off,
+        yuv_len,
+        jpeg_off,
+        jpeg_len,
+        crc32_yuv,
+    ];
+    for (i, word) in fields.iter().enumerate() {
+        hdr[i * 4..i * 4 + 4].copy_from_slice(&word.to_le_bytes());
+    }
+    file.seek(SeekFrom::Start(0))
+        .and_then(|_| file.write_all(&hdr))
+        .and_then(|_| file.write_all(rgba_bytes))
+        .and_then(|_| file.write_all(yuv))
+        .and_then(|_| file.write_all(jpeg))
+        .and_then(|_| file.flush())
+        .map_err(|e| ServiceError::ModuleRejected {
+            module: MODULE_ID,
+            detail: format!("writing frame memfd failed: {e}"),
+        })?;
+    Ok(memfd)
+}
+
+fn decode_base64(input: &str) -> std::result::Result<Vec<u8>, String> {
+    let trimmed = input.trim();
+    let payload = if let Some(rest) = trimmed.strip_prefix("data:") {
+        if let Some((_, b64)) = rest.split_once(";base64,") {
+            b64
+        } else {
+            return Err("data URI is missing `;base64,`".to_string());
+        }
+    } else {
+        trimmed
+    };
+    let clean: Vec<u8> = payload
+        .bytes()
+        .filter(|b| !b.is_ascii_whitespace())
+        .collect();
+    if clean.is_empty() || clean.len() % 4 != 0 {
+        return Err("base64 length must be a non-zero multiple of 4".to_string());
+    }
+    let mut out = Vec::with_capacity((clean.len() / 4) * 3);
+    for (chunk_idx, chunk) in clean.chunks_exact(4).enumerate() {
+        let mut vals = [0u8; 4];
+        let mut pad = 0usize;
+        for (i, &b) in chunk.iter().enumerate() {
+            if b == b'=' {
+                if chunk_idx * 4 + i < clean.len() - 2 || (i == 2 && chunk[3] != b'=') {
+                    return Err("invalid base64 padding".to_string());
+                }
+                pad += 1;
+                vals[i] = 0;
+            } else {
+                if pad > 0 {
+                    return Err("invalid base64 data after padding".to_string());
+                }
+                vals[i] = match b {
+                    b'A'..=b'Z' => b - b'A',
+                    b'a'..=b'z' => b - b'a' + 26,
+                    b'0'..=b'9' => b - b'0' + 52,
+                    b'+' => 62,
+                    b'/' => 63,
+                    _ => return Err(format!("invalid base64 byte 0x{b:02x}")),
+                };
+            }
+        }
+        out.push((vals[0] << 2) | (vals[1] >> 4));
+        if pad < 2 {
+            out.push((vals[1] << 4) | (vals[2] >> 2));
+        }
+        if pad < 1 {
+            out.push((vals[2] << 6) | vals[3]);
+        }
+    }
+    Ok(out)
+}
+
+fn resolve_frame_path(raw: &str) -> std::result::Result<PathBuf, String> {
+    let direct = PathBuf::from(raw);
+    if direct.is_file() {
+        return Ok(direct);
+    }
+    if direct.is_relative() {
+        if let Some(root) = std::env::var_os("ACOS_ROOT") {
+            let cand = PathBuf::from(root).join(&direct);
+            if cand.is_file() {
+                return Ok(cand);
+            }
+        }
+        let manifest_root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..").join(&direct);
+        if manifest_root.is_file() {
+            return Ok(manifest_root);
+        }
+    }
+    Err(format!("frame image path not found: {raw:?}"))
+}
+
 /// One camera the stub serves.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct StubCamera {
@@ -402,6 +700,23 @@ impl CallRecord {
     }
 }
 
+/// Active frame source served by `hw.camera`.
+#[derive(Clone, Debug, Default)]
+pub enum ActiveFrame {
+    /// Deterministic `ACOS_PATTERN_COLORBARS_V1` test pattern.
+    #[default]
+    TestPattern,
+    /// Decoded PNG/JPEG image injected via `set_frame` (`scripted` profile).
+    Image {
+        /// Human-readable label (`path:<...>` or `base64`).
+        label: String,
+        /// Decoded RGBA8888 pixels at the source image's dimensions.
+        rgba: Arc<RgbaImage>,
+        /// Monotonic generation bumped on every `set_frame`.
+        generation: u64,
+    },
+}
+
 /// What the app asked the camera service for.
 #[derive(Debug, Default)]
 pub struct CameraState {
@@ -419,6 +734,86 @@ pub struct CameraState {
     pub streams_created: u32,
     /// Total frames delivered (single-shot + repeating).
     pub frames_delivered: u64,
+    /// Active frame source (`TestPattern` by default, or `Image` via `set_frame`).
+    pub active_frame: ActiveFrame,
+    /// Monotonic generation bumped on every `set_frame`.
+    pub frame_generation: u64,
+    /// Cached `acos_cam_frame_blob_t` memfds keyed by `(generation, frame_tag, width, height)`.
+    frame_memfds: BTreeMap<(u64, i64, u32, u32), Arc<ParcelFd>>,
+}
+
+impl CameraState {
+    fn pattern_name(&self) -> &'static str {
+        match self.active_frame {
+            ActiveFrame::TestPattern => "ACOS_PATTERN_COLORBARS_V1",
+            ActiveFrame::Image { .. } => "ACOS_SCRIPTED_IMAGE",
+        }
+    }
+
+    fn active_frame_json(&self) -> Value {
+        match &self.active_frame {
+            ActiveFrame::TestPattern => json!({
+                "source": "test_pattern",
+                "pattern": "ACOS_PATTERN_COLORBARS_V1",
+                "generation": self.frame_generation,
+            }),
+            ActiveFrame::Image {
+                label,
+                rgba,
+                generation,
+            } => json!({
+                "source": "image",
+                "label": label,
+                "width": rgba.width(),
+                "height": rgba.height(),
+                "generation": generation,
+            }),
+        }
+    }
+
+    fn get_or_build_memfd(
+        &mut self,
+        width: u32,
+        height: u32,
+        frame_number: i64,
+    ) -> Result<(Arc<ParcelFd>, i32)> {
+        let (gen, tag_key, pattern_id) = match &self.active_frame {
+            ActiveFrame::TestPattern => (0u64, frame_number, 1i32),
+            ActiveFrame::Image { generation, .. } => (*generation, 0i64, 2i32),
+        };
+        let key = (gen, tag_key, width, height);
+        if let Some(fd) = self.frame_memfds.get(&key) {
+            return Ok((Arc::clone(fd), pattern_id));
+        }
+        let owned_rgba: Cow<'_, RgbaImage> = match &self.active_frame {
+            ActiveFrame::TestPattern => {
+                Cow::Owned(test_pattern_rgba(width, height, frame_number as u64))
+            }
+            ActiveFrame::Image { rgba, .. } => {
+                if rgba.dimensions() == (width, height) {
+                    Cow::Borrowed(rgba.as_ref())
+                } else {
+                    Cow::Owned(image::imageops::resize(
+                        rgba.as_ref(),
+                        width,
+                        height,
+                        FilterType::Triangle,
+                    ))
+                }
+            }
+        };
+        let yuv = rgba_to_yuv420_i420(&owned_rgba);
+        let crc32_yuv = ieee_crc32(&yuv);
+        let jpeg = encode_jpeg_from_rgba(&owned_rgba, 95)?;
+        let memfd = Arc::new(build_frame_blob_memfd(&owned_rgba, &yuv, &jpeg, crc32_yuv)?);
+        if self.frame_memfds.len() >= 8 {
+            if let Some(first_key) = self.frame_memfds.keys().next().copied() {
+                self.frame_memfds.remove(&first_key);
+            }
+        }
+        self.frame_memfds.insert(key, Arc::clone(&memfd));
+        Ok((memfd, pattern_id))
+    }
 }
 
 impl CameraState {
@@ -448,10 +843,10 @@ impl CameraState {
     }
 }
 
-const CONTROL_OPS: [ControlOp; 5] = [
+const CONTROL_OPS: [ControlOp; 6] = [
     ControlOp {
         name: "status",
-        args: "none — the served camera table, open devices/frames, and the transaction log",
+        args: "none — the served camera table, active frame source, open devices/frames, and the transaction log",
     },
     ControlOp {
         name: "camera",
@@ -467,6 +862,11 @@ const CONTROL_OPS: [ControlOp; 5] = [
         args: "none — every transaction the app made (`{code, method, camera_id}`)",
     },
     ControlOp {
+        name: "set_frame",
+        args: "{\"path\": \"...\"} | {\"base64\": \"...\"} | {\"source\": \"test_pattern\"} — \
+               inject a PNG/JPEG frame or restore `ACOS_PATTERN_COLORBARS_V1` (`scripted` profile)",
+    },
+    ControlOp {
         name: "reset",
         args: "none — clear the transaction log and counters",
     },
@@ -475,12 +875,13 @@ const CONTROL_OPS: [ControlOp; 5] = [
 fn manifest_ref() -> &'static ModuleManifest {
     static MANIFEST: ModuleManifest = ModuleManifest {
         id: MODULE_ID,
-        version: "0.3.0",
+        version: "0.4.0",
         summary: "camera service (`media.camera`): one camera (id, facing, orientation, sensor \
                   size from the config) with real CameraCharacteristics, Camera2 device/session \
-                  lifecycle (`ICameraDeviceUser` + `ICameraDeviceCallbacks`), and deterministic \
-                  `ACOS_PATTERN_COLORBARS_V1` frames into `ImageReader`/`Surface` (`YUV_420_888`, \
-                  `BLOB`); no `real` profile (ACOS has no camera HAL)",
+                  lifecycle (`ICameraDeviceUser` + `ICameraDeviceCallbacks`), deterministic \
+                  `ACOS_PATTERN_COLORBARS_V1` frames (`stub`) and host-injected PNG/JPEG frames via \
+                  `set_frame` (`scripted`) into `ImageReader`/`Surface` (`YUV_420_888`, `BLOB`, \
+                  `RGBA_8888`); no `real` profile (ACOS has no camera HAL)",
         services: &[ServiceProvide {
             name: SERVICE_NAME,
             descriptor: DESCRIPTOR,
@@ -495,7 +896,7 @@ fn manifest_ref() -> &'static ModuleManifest {
         requires: &[],
         requires_host_tools: &[],
         // `real` is deliberately absent: there is no camera HAL and no sensor.
-        profiles: &[Profile::Stub],
+        profiles: &[Profile::Stub, Profile::Scripted],
         budget: Budget {
             ram_mib: 1,
             startup_ms: 5,
@@ -732,7 +1133,21 @@ struct ParsedSurface {
 struct ConfiguredStream {
     width: i32,
     height: i32,
+    is_blob: bool,
     surfaces: Vec<ParsedSurface>,
+}
+
+fn parse_image_reader_dims(name: &str) -> Option<(i32, i32)> {
+    let rest = name.strip_prefix("ImageReader-")?;
+    let f_pos = rest.find('f')?;
+    let (ws, hs) = rest[..f_pos].split_once('x')?;
+    let w = ws.parse::<i32>().ok()?;
+    let h = hs.parse::<i32>().ok()?;
+    if w >= 16 && h >= 16 {
+        Some((w, h))
+    } else {
+        None
+    }
 }
 
 /// One `CaptureRequest` parsed from `submitRequest` / `submitRequestList`.
@@ -816,9 +1231,24 @@ fn read_output_configuration(data: &mut Parcel) -> Result<ConfiguredStream> {
     // `mSensorPixelModesUsed`, `mDynamicRangeProfile`, `mColorSpace`,
     // `mStreamUseCase`, `mTimestampBase`, `mMirrorMode`, `mReadoutTimestampEnabled`)
     // are optional to consume at the end of a single-arg `createStream` call.
+    let is_blob = surfaces.iter().any(|s| {
+        s.name.contains("f100m")
+            || s.name.contains("f100-")
+            || s.name.contains("f21m")
+            || s.name.contains("f21-")
+    });
+    let (eff_w, eff_h) = if width > 8192 || height < 16 {
+        surfaces
+            .iter()
+            .find_map(|s| parse_image_reader_dims(&s.name))
+            .unwrap_or((width.max(16), height.max(16)))
+    } else {
+        (width.max(16), height.max(16))
+    };
     Ok(ConfiguredStream {
-        width: width.max(16),
-        height: height.max(16),
+        width: eff_w,
+        height: eff_h,
+        is_blob,
         surfaces,
     })
 }
@@ -1008,12 +1438,42 @@ impl CameraDeviceUser {
         stream_id: i32,
         width: i32,
         height: i32,
+        is_blob: bool,
         frame_number: i64,
         timestamp_ns: i64,
     ) {
         let Some(sink) = self.frame_sink() else {
             return;
         };
+        let maybe_fd = {
+            let mut st = self.state();
+            match &st.active_frame {
+                ActiveFrame::TestPattern if !is_blob => None,
+                _ => st
+                    .get_or_build_memfd(width.max(16) as u32, height.max(16) as u32, frame_number)
+                    .ok(),
+            }
+        };
+        if let Some((memfd, pattern_id)) = maybe_fd {
+            let mut data = Parcel::new();
+            let _ = data.write_interface_token(FRAME_SINK_DESCRIPTOR);
+            data.write_int32(stream_id);
+            data.write_int32(width);
+            data.write_int32(height);
+            data.write_int64(frame_number);
+            data.write_int64(timestamp_ns);
+            data.write_int32(pattern_id);
+            if data.write_file_descriptor(memfd.as_fd()).is_ok() {
+                self.pending_deliveries.push(PendingDelivery {
+                    target: sink,
+                    interface: FRAME_SINK_DESCRIPTOR.to_string(),
+                    code: sink_code::DELIVER_FRAME_FD,
+                    method: "deliverFrameFd".to_string(),
+                    data,
+                });
+                return;
+            }
+        }
         let mut data = Parcel::new();
         let _ = data.write_interface_token(FRAME_SINK_DESCRIPTOR);
         data.write_int32(stream_id);
@@ -1078,11 +1538,11 @@ impl CameraDeviceUser {
         });
     }
 
-    fn resolve_target_streams(&self, req: &ParsedCaptureRequest) -> Vec<(i32, i32, i32)> {
+    fn resolve_target_streams(&self, req: &ParsedCaptureRequest) -> Vec<(i32, i32, i32, bool)> {
         let mut targets = Vec::new();
         for &sid in &req.stream_ids {
             if let Some(s) = self.streams.get(&sid) {
-                targets.push((sid, s.width, s.height));
+                targets.push((sid, s.width, s.height, s.is_blob));
             }
         }
         if targets.is_empty() && !req.surface_binders.is_empty() {
@@ -1091,13 +1551,13 @@ impl CameraDeviceUser {
                     .iter()
                     .any(|surf| req.surface_binders.contains(&surf.igbp))
                 {
-                    targets.push((sid, s.width, s.height));
+                    targets.push((sid, s.width, s.height, s.is_blob));
                 }
             }
         }
         if targets.is_empty() && self.streams.len() == 1 {
             if let Some((&sid, s)) = self.streams.iter().next() {
-                targets.push((sid, s.width, s.height));
+                targets.push((sid, s.width, s.height, s.is_blob));
             }
         }
         targets
@@ -1118,8 +1578,15 @@ impl CameraDeviceUser {
         let prev_completed = self.last_completed_regular_frame;
 
         let targets = self.resolve_target_streams(req);
-        for (stream_id, width, height) in targets {
-            self.queue_sink_deliver(stream_id, width, height, frame_number, timestamp_ns);
+        for (stream_id, width, height, is_blob) in targets {
+            self.queue_sink_deliver(
+                stream_id,
+                width,
+                height,
+                is_blob,
+                frame_number,
+                timestamp_ns,
+            );
         }
 
         if !self.callbacks.is_null() {
@@ -1936,13 +2403,12 @@ impl Module for CameraModule {
         profile: Profile,
         config: &ModuleConfig,
     ) -> Result<()> {
-        if profile != Profile::Stub {
+        if !matches!(profile, Profile::Stub | Profile::Scripted) {
             return Err(ServiceError::ModuleRejected {
                 module: MODULE_ID,
                 detail: format!(
-                    "{profile} is not implemented: there is no camera HAL or sensor to serve \
-                     `real`, and `scripted` (agent-supplied frames) arrives with \
-                     docs/CAMERA_PLAN.md slice 3; use `stub`"
+                    "{profile} is not implemented: ACOS has no camera HAL or physical sensor; \
+                     use `stub` or `scripted`"
                 ),
             });
         }
@@ -1971,7 +2437,7 @@ impl Module for CameraModule {
         Ok(())
     }
 
-    fn control(&mut self, _host: &mut ServiceHost, op: &str, _args: &Value) -> Result<Value> {
+    fn control(&mut self, _host: &mut ServiceHost, op: &str, args: &Value) -> Result<Value> {
         let Some(state) = self.state.as_ref() else {
             return Err(ServiceError::ModuleRejected {
                 module: MODULE_ID,
@@ -1979,14 +2445,17 @@ impl Module for CameraModule {
             });
         };
         match op {
-            "status" => Ok(json!({
-                "cameras": [self.camera.to_json()],
-                "pattern": "ACOS_PATTERN_COLORBARS_V1",
-                "calls": state
+            "status" => {
+                let st = state
                     .lock()
-                    .unwrap_or_else(std::sync::PoisonError::into_inner)
-                    .to_json(),
-            })),
+                    .unwrap_or_else(std::sync::PoisonError::into_inner);
+                Ok(json!({
+                    "cameras": [self.camera.to_json()],
+                    "pattern": st.pattern_name(),
+                    "active_frame": st.active_frame_json(),
+                    "calls": st.to_json(),
+                }))
+            }
             "camera" => Ok(self.camera.to_json()),
             "characteristics" => {
                 let metadata = camera_metadata::characteristics(&self.camera.sensor());
@@ -2016,11 +2485,125 @@ impl Module for CameraModule {
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner)
                 .to_json()),
-            "reset" => {
-                let mut state = state
+            "set_frame" => {
+                if self.profile != Profile::Scripted {
+                    return Err(ServiceError::ModuleRejected {
+                        module: MODULE_ID,
+                        detail: format!(
+                            "set_frame requires the `scripted` profile (current profile is `{}`); \
+                             attach with `scripted`",
+                            self.profile
+                        ),
+                    });
+                }
+                let Value::Object(map) = args else {
+                    return Err(ServiceError::ModuleRejected {
+                        module: MODULE_ID,
+                        detail: "set_frame args must be a JSON object with `path`, `base64`, or `source: \"test_pattern\"`".to_string(),
+                    });
+                };
+                if map.get("source").and_then(Value::as_str) == Some("test_pattern") {
+                    let mut st = state
+                        .lock()
+                        .unwrap_or_else(std::sync::PoisonError::into_inner);
+                    st.frame_generation += 1;
+                    st.active_frame = ActiveFrame::TestPattern;
+                    st.frame_memfds.clear();
+                    return Ok(json!({
+                        "source": "test_pattern",
+                        "pattern": "ACOS_PATTERN_COLORBARS_V1",
+                        "generation": st.frame_generation,
+                    }));
+                }
+                let (label, bytes) = if let Some(path_val) = map.get("path") {
+                    let Some(raw_path) = path_val.as_str() else {
+                        return Err(ServiceError::ModuleRejected {
+                            module: MODULE_ID,
+                            detail: "set_frame.path must be a string".to_string(),
+                        });
+                    };
+                    let resolved = resolve_frame_path(raw_path).map_err(|detail| {
+                        ServiceError::ModuleRejected {
+                            module: MODULE_ID,
+                            detail,
+                        }
+                    })?;
+                    let bytes = std::fs::read(&resolved).map_err(|e| {
+                        ServiceError::ModuleRejected {
+                            module: MODULE_ID,
+                            detail: format!("failed to read frame file {}: {e}", resolved.display()),
+                        }
+                    })?;
+                    (format!("path:{raw_path}"), bytes)
+                } else if let Some(b64_val) = map.get("base64") {
+                    let Some(raw_b64) = b64_val.as_str() else {
+                        return Err(ServiceError::ModuleRejected {
+                            module: MODULE_ID,
+                            detail: "set_frame.base64 must be a string".to_string(),
+                        });
+                    };
+                    let bytes = decode_base64(raw_b64).map_err(|detail| {
+                        ServiceError::ModuleRejected {
+                            module: MODULE_ID,
+                            detail,
+                        }
+                    })?;
+                    ("base64".to_string(), bytes)
+                } else {
+                    return Err(ServiceError::ModuleRejected {
+                        module: MODULE_ID,
+                        detail: "set_frame requires `path`, `base64`, or `source: \"test_pattern\"`".to_string(),
+                    });
+                };
+                let decoded = image::load_from_memory(&bytes).map_err(|e| {
+                    ServiceError::ModuleRejected {
+                        module: MODULE_ID,
+                        detail: format!("failed to decode PNG/JPEG image ({label}): {e}"),
+                    }
+                })?;
+                let rgba = Arc::new(decoded.to_rgba8());
+                let (w, h) = rgba.dimensions();
+                if w < 16 || h < 16 {
+                    return Err(ServiceError::ModuleRejected {
+                        module: MODULE_ID,
+                        detail: format!("frame image {w}x{h} is smaller than minimum 16x16"),
+                    });
+                }
+                let yuv = rgba_to_yuv420_i420(&rgba);
+                let crc32_yuv = ieee_crc32(&yuv);
+                let mut st = state
                     .lock()
                     .unwrap_or_else(std::sync::PoisonError::into_inner);
-                *state = CameraState::default();
+                st.frame_generation += 1;
+                let generation = st.frame_generation;
+                st.active_frame = ActiveFrame::Image {
+                    label: label.clone(),
+                    rgba,
+                    generation,
+                };
+                st.frame_memfds.clear();
+                Ok(json!({
+                    "source": "image",
+                    "label": label,
+                    "width": w,
+                    "height": h,
+                    "crc32_yuv": format!("{crc32_yuv:#010x}"),
+                    "generation": generation,
+                }))
+            }
+            "reset" => {
+                let mut st = state
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner);
+                let active_frame = st.active_frame.clone();
+                let frame_generation = st.frame_generation;
+                let frame_memfds = std::mem::take(&mut st.frame_memfds);
+                *st = CameraState {
+                    active_frame,
+                    frame_generation,
+                    frame_memfds,
+                    ..CameraState::default()
+                };
                 Ok(json!({"reset": true}))
             }
             other => Err(ServiceError::ModuleRejected {
@@ -2040,7 +2623,7 @@ impl Module for CameraModule {
     fn report(&self) -> ModuleReport {
         let mut report = ModuleReport::of(manifest_ref(), self.profile);
         if self.profile.is_attached() {
-            let (calls, unsupported, listeners, opened, frames) = self
+            let (calls, unsupported, listeners, opened, frames, pattern, active_frame) = self
                 .state
                 .as_ref()
                 .map(|state| {
@@ -2053,12 +2636,14 @@ impl Module for CameraModule {
                         state.listeners,
                         state.devices_opened,
                         state.frames_delivered,
+                        state.pattern_name(),
+                        state.active_frame_json(),
                     )
                 })
-                .unwrap_or((0, 0, 0, 0, 0));
+                .unwrap_or((0, 0, 0, 0, 0, "ACOS_PATTERN_COLORBARS_V1", json!(null)));
             report.reason = Some(format!(
-                "{} profile: one fixed {} camera (id {:?}, orientation {}), \
-                 ACOS_PATTERN_COLORBARS_V1 test-pattern frames (Option A frame-sink); \
+                "{} profile (no camera HAL): one fixed {} camera (id {:?}, orientation {}), \
+                 {pattern} frames (Option A frame-sink); \
                  {listeners} listener(s), {opened} open(s), {frames} frame(s) delivered, \
                  {calls} transaction(s) recorded, {unsupported} refused",
                 self.profile,
@@ -2072,10 +2657,11 @@ impl Module for CameraModule {
             report.details = Some(json!({
                 "cameras": [self.camera.to_json()],
                 "frames": true,
-                "pattern": "ACOS_PATTERN_COLORBARS_V1",
+                "pattern": pattern,
+                "active_frame": active_frame,
                 "frames_delivered": frames,
                 "devices_opened": opened,
-                "controls": ["status", "camera", "characteristics", "calls", "reset"],
+                "controls": ["status", "camera", "characteristics", "calls", "set_frame", "reset"],
             }));
         }
         report
