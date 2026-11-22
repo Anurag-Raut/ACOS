@@ -1021,11 +1021,13 @@ impl ServiceObject for WindowSessionService {
                     4 | 8 => Some(false),
                     _ => None,
                 };
-                if let Some(visible) = visibility {
+                let visibility_changed = if let Some(visible) = visibility {
                     state
                         .set_window_visible_for(self.session, window.0, visible)
-                        .map_err(werr)?;
-                }
+                        .map_err(werr)?
+                } else {
+                    false
+                };
                 if trace {
                     eprintln!(
                         "ACOSWMS relayout-done window={:#x} result={:#x} frame={:?} surface={}x{}",
@@ -1056,7 +1058,7 @@ impl ServiceObject for WindowSessionService {
                             // surface is hidden in the same transaction, a `VISIBLE`
                             // one is shown again (stock `WMS.relayoutWindow` keeps
                             // `mWinAnimator`'s visibility in step).
-                            if visibility.is_some() {
+                            if visibility_changed {
                                 state.refresh_bound_layer_placements(&compositor);
                             }
                             if drawn {
@@ -1126,14 +1128,18 @@ impl ServiceObject for WindowSessionService {
                     _ => None,
                 };
                 if let Some(visible) = async_visibility {
-                    let _ = state.set_window_visible_for(self.session, window.0, visible);
-                    if let Some(compositor) = self.compositor.clone() {
-                        state.refresh_bound_layer_placements(&compositor);
-                        state.set_surface_visible(window.0, visible, &compositor);
-                    }
-                    if let Some(input) = &self.input {
-                        if let Ok(mut dispatch) = input.state().lock() {
-                            let _ = dispatch.set_focus(state.wm.focus.map(BinderId));
+                    if state
+                        .set_window_visible_for(self.session, window.0, visible)
+                        .unwrap_or(false)
+                    {
+                        if let Some(compositor) = self.compositor.clone() {
+                            state.refresh_bound_layer_placements(&compositor);
+                            state.set_surface_visible(window.0, visible, &compositor);
+                        }
+                        if let Some(input) = &self.input {
+                            if let Ok(mut dispatch) = input.state().lock() {
+                                let _ = dispatch.set_focus(state.wm.focus.map(BinderId));
+                            }
                         }
                     }
                 }

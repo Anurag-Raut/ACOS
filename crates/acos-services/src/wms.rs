@@ -704,16 +704,18 @@ impl WmsState {
         session: SessionId,
         window: WindowId,
         visible: bool,
-    ) -> WmResult<()> {
+    ) -> WmResult<bool> {
         self.check_session_window(session, window)?;
-        self.wm.set_window_visible(window, visible)?;
-        let ids: Vec<WindowId> = self.wm.windows.keys().copied().collect();
-        for id in ids {
-            if let Some(record) = self.wm.windows.get(&id) {
-                self.input.refresh_window(record);
+        let changed = self.wm.set_relayout_window_visible(window, visible)?;
+        if changed {
+            let ids: Vec<WindowId> = self.wm.windows.keys().copied().collect();
+            for id in ids {
+                if let Some(record) = self.wm.windows.get(&id) {
+                    self.input.refresh_window(record);
+                }
             }
         }
-        Ok(())
+        Ok(changed)
     }
 
     /// Re-publish every bound compositor layer placement so z-order shifts

@@ -127,6 +127,12 @@ pub struct WindowRecord {
     pub state: WindowState,
     /// `true` once `relayout` has run at least once.
     pub first_relayout_done: bool,
+    /// `true` once `relayout` / `relayoutAsync` has observed `View.VISIBLE` (`0`).
+    /// Before `dispatchAppVisibility(true)` reaches `ViewRootImpl`, the
+    /// initial pre-visibility `relayout` passes `View.GONE` (`8`); ignoring
+    /// that pre-visibility `GONE` prevents a spurious WM focus loss/regain
+    /// bounce on every cold start.
+    pub ever_visible: bool,
 }
 
 impl WindowRecord {
@@ -415,6 +421,7 @@ impl WindowManager {
             insets_controls: insets_controls.clone(),
             state: WindowState::Added,
             first_relayout_done: false,
+            ever_visible: false,
         };
         self.windows.insert(id, record);
         if let Some(s) = self.sessions.get_mut(&session) {
@@ -603,12 +610,15 @@ impl WindowManager {
     /// `!record.visible`) and cannot hold focus; re-showing an existing
     /// window allocates a fresh sequence number so it rises to the top of its
     /// band and takes focus, matching AOSP task-to-front ordering.
-    pub fn set_window_visible(&mut self, window: WindowId, visible: bool) -> Result<()> {
+    pub fn set_window_visible(&mut self, window: WindowId, visible: bool) -> Result<bool> {
         let changed = {
             let record = self
                 .windows
                 .get_mut(&window)
                 .ok_or(WmError::UnknownWindow(window))?;
+            if visible {
+                record.ever_visible = true;
+            }
             if record.visible == visible {
                 false
             } else {
@@ -625,7 +635,29 @@ impl WindowManager {
             self.renumber_z();
             self.publish_focus_transition();
         }
-        Ok(())
+        Ok(changed)
+    }
+
+    /// Update window visibility from `relayout` / `relayoutAsync`, ignoring an
+    /// initial pre-visibility `INVISIBLE`/`GONE` before `View.VISIBLE` (`0`)
+    /// has ever been observed (i.e. before `dispatchAppVisibility(true)`).
+    pub fn set_relayout_window_visible(&mut self, window: WindowId, visible: bool) -> Result<bool> {
+        let should_apply = {
+            let record = self
+                .windows
+                .get_mut(&window)
+                .ok_or(WmError::UnknownWindow(window))?;
+            if visible {
+                record.ever_visible = true;
+                true
+            } else {
+                record.ever_visible
+            }
+        };
+        if !should_apply {
+            return Ok(false);
+        }
+        self.set_window_visible(window, visible)
     }
 
     /// Session death (stock `Session.kill` / process death): drop the session
@@ -2168,5 +2200,48 @@ mod tests {
         assert_eq!(wm.focus, Some(b));
         assert!(wm.windows[&b].seq > seq_a);
         assert!(wm.windows[&b].z > wm.windows[&a].z);
+    }
+
+    #[test]
+    fn set_relayout_window_visible_ignores_pre_visibility_gone() {
+        use crate::callbacks::WmCallback;
+        let mut wm = WindowManager::new(DisplaySpec::reference_with_insets(InsetsMode::Carve));
+        let (s1, _) = wm.open_session(None);
+
+        let a = wm
+            .add_to_display_as_user(s1, BinderId(0x01), app_params(), 0)
+            .unwrap()
+            .window;
+        assert_eq!(wm.focus, Some(a));
+        assert!(!wm.windows[&a].ever_visible);
+
+        // Drain initial focus-gained callback.
+        while wm.callbacks.pop().is_some() {}
+
+        // Pre-visibility View.GONE / INVISIBLE relayout must be a no-op.
+        assert!(!wm.set_relayout_window_visible(a, false).unwrap());
+        assert_eq!(wm.focus, Some(a));
+        assert!(wm.windows[&a].visible);
+        assert!(!wm.windows[&a].ever_visible);
+        while let Some(pc) = wm.callbacks.pop() {
+            assert!(
+                !matches!(pc.callback, WmCallback::WindowFocusChanged { .. }),
+                "pre-visibility GONE must not emit WindowFocusChanged"
+            );
+        }
+
+        // First View.VISIBLE relayout arms ever_visible without bouncing focus.
+        assert!(!wm.set_relayout_window_visible(a, true).unwrap());
+        assert!(wm.windows[&a].ever_visible);
+        assert_eq!(wm.focus, Some(a));
+
+        // Subsequent View.GONE / INVISIBLE relayout hides the window and drops focus,
+        // and View.VISIBLE restores it.
+        assert!(wm.set_relayout_window_visible(a, false).unwrap());
+        assert!(!wm.windows[&a].visible);
+        assert_eq!(wm.focus, None);
+        assert!(wm.set_relayout_window_visible(a, true).unwrap());
+        assert!(wm.windows[&a].visible);
+        assert_eq!(wm.focus, Some(a));
     }
 }
