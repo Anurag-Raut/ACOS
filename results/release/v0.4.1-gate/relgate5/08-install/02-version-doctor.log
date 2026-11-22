@@ -1,0 +1,90 @@
+=== DEST=/home/Qui/.t3/worktrees/acos/t3-8432ccd8-1d58d051095d020b/.cache/rg5-prefix/share/acos/0.4.0 ===
+=== VERSION ===
+0.4.0
+=== bins ===
+/home/Qui/.t3/worktrees/acos/t3-8432ccd8-1d58d051095d020b/.cache/rg5-prefix/bin:
+total 16
+drwxr-xr-x 2 Qui users 4096 Nov 22 21:40 .
+drwxr-xr-x 4 Qui users 4096 Nov 22 21:40 ..
+-rwxr-xr-x 1 Qui users  383 Nov 22 21:40 acos
+-rwxr-xr-x 1 Qui users  387 Nov 22 21:40 acos-mcp
+
+/home/Qui/.t3/worktrees/acos/t3-8432ccd8-1d58d051095d020b/.cache/rg5-prefix/share/acos/0.4.0/bin:
+total 80932
+drwxr-xr-x 2 Qui users     4096 Nov 22 21:40 .
+drwxr-xr-x 8 Qui users     4096 Nov 22 21:40 ..
+-rwxr-xr-x 1 Qui users 38322944 Nov 22 21:40 acos
+-rwxr-xr-x 1 Qui users 13840896 Nov 22 21:40 acos-art
+-rwxr-xr-x 1 Qui users 27695872 Nov 22 21:40 acos-mcp
+-rwxr-xr-x 1 Qui users  1417240 Nov 22 21:40 acos-netd
+-rwxr-xr-x 1 Qui users  1679240 Nov 22 21:40 acos-webview
+=== pasta & docs ===
+-rwxr-xr-x 1 Qui users 1548232 Nov 22 21:40 /home/Qui/.t3/worktrees/acos/t3-8432ccd8-1d58d051095d020b/.cache/rg5-prefix/share/acos/0.4.0/libexec/pasta
+
+/home/Qui/.t3/worktrees/acos/t3-8432ccd8-1d58d051095d020b/.cache/rg5-prefix/share/acos/0.4.0/share/doc/acos/pasta/:
+total 36
+drwxr-xr-x 2 Qui users  4096 Nov 22 21:40 .
+drwxr-xr-x 3 Qui users  4096 Nov 22 21:40 ..
+-rw-r--r-- 1 Qui users  1547 Nov 22 21:40 BSD-3-Clause.txt
+-rw-r--r-- 1 Qui users 17337 Nov 22 21:40 COPYING
+-rw-r--r-- 1 Qui users  2470 Nov 22 21:40 SOURCE.md
+314c37e878bd6ffe43200735800d5efd4859d81d46b0450358a103c36c0edf60  /home/Qui/.t3/worktrees/acos/t3-8432ccd8-1d58d051095d020b/.cache/rg5-prefix/share/acos/0.4.0/libexec/pasta
+32dfe03d9985f5feb581da26a2fe6c84530cccb6b53ede0d8dab075cd048ac5b  /home/Qui/.t3/worktrees/acos/t3-8432ccd8-1d58d051095d020b/.cache/rg5-prefix/share/acos/0.4.0/share/doc/acos/pasta/BSD-3-Clause.txt
+aaf135472f81c5b4a0dca9367e5bb5e9750032b5bebe5442b36e4c0a47430df3  /home/Qui/.t3/worktrees/acos/t3-8432ccd8-1d58d051095d020b/.cache/rg5-prefix/share/acos/0.4.0/share/doc/acos/pasta/COPYING
+b14c6fc879af41352257ae96de6e838631de52b9784965f1751fcbe03756c931  /home/Qui/.t3/worktrees/acos/t3-8432ccd8-1d58d051095d020b/.cache/rg5-prefix/share/acos/0.4.0/share/doc/acos/pasta/SOURCE.md
+=== MANIFEST.txt pasta/webview/bin entries ===
+.cache/art/sysroot/system/etc/permissions/android.software.webview.xml
+.cache/art/sysroot/system/lib64/arm64/libwebviewchromium_plat_support.so
+.cache/art/sysroot/system/lib64/libndk_translation_proxy_libwebviewchromium_plat_support.so
+.cache/art/sysroot/system/lib64/libwebviewchromium_loader.so
+.cache/art/sysroot/system/lib64/libwebviewchromium_plat_support.so
+.cache/boot/android-34/system-apps/com.android.webview.apk
+.cache/boot/android-34/system-apps/com.android.webview.apk.idsig
+bin/acos
+bin/acos-art
+bin/acos-mcp
+bin/acos-netd
+bin/acos-webview
+libexec/pasta
+share/doc/acos/pasta/BSD-3-Clause.txt
+share/doc/acos/pasta/COPYING
+share/doc/acos/pasta/SOURCE.md
+=== fetch-camerax-deps.sh in prefix? ===
+=== acos --version (from /tmp empty cwd, env -u ACOS_HOME) ===
+acos 0.4.0
+=== acos doctor (human, from /tmp empty cwd) ===
+[ok  ] acos_home          /home/Qui/.t3/worktrees/acos/t3-8432ccd8-1d58d051095d020b/.cache/rg5-prefix/share/acos/0.4.0
+[ok  ] install_version    0.4.0
+[ok  ] install_sysroot    /home/Qui/.t3/worktrees/acos/t3-8432ccd8-1d58d051095d020b/.cache/rg5-prefix/share/acos/0.4.0/.cache/art/sysroot
+[ok  ] install_fonts      /home/Qui/.t3/worktrees/acos/t3-8432ccd8-1d58d051095d020b/.cache/rg5-prefix/share/acos/0.4.0/.cache/boot/android-34/fonts
+[ok  ] install_overlays   /home/Qui/.t3/worktrees/acos/t3-8432ccd8-1d58d051095d020b/.cache/rg5-prefix/share/acos/0.4.0/.cache/boot/android-34/overlays
+[ok  ] install_bootclasspath /home/Qui/.t3/worktrees/acos/t3-8432ccd8-1d58d051095d020b/.cache/rg5-prefix/share/acos/0.4.0/.cache/boot/android-34/BOOTCLASSPATH
+[ok  ] install_guest_sources /home/Qui/.t3/worktrees/acos/t3-8432ccd8-1d58d051095d020b/.cache/rg5-prefix/share/acos/0.4.0/crates/acos-art/guest/java/dev/acos/art/AppMain.java
+[ok  ] install_acos_art   /home/Qui/.t3/worktrees/acos/t3-8432ccd8-1d58d051095d020b/.cache/rg5-prefix/share/acos/0.4.0/bin/acos-art
+[ok  ] install_webview    broker /home/Qui/.t3/worktrees/acos/t3-8432ccd8-1d58d051095d020b/.cache/rg5-prefix/share/acos/0.4.0/bin/acos-webview, provider /home/Qui/.t3/worktrees/acos/t3-8432ccd8-1d58d051095d020b/.cache/rg5-prefix/share/acos/0.4.0/.cache/boot/android-34/system-apps/com.android.webview.apk
+[ok  ] install_state      /home/Qui/.t3/worktrees/acos/t3-8432ccd8-1d58d051095d020b/.cache/rg5-prefix/share/acos/0.4.0/.cache (data, sessions, sockets, build caches)
+[ok  ] android_sdk        /home/Qui/Android/Sdk
+[ok  ] build_tools        /home/Qui/Android/Sdk/build-tools/35.0.0
+[ok  ] aapt2              /home/Qui/Android/Sdk/build-tools/35.0.0/aapt2
+[ok  ] d8                 /home/Qui/Android/Sdk/build-tools/35.0.0/d8
+[ok  ] zipalign           /home/Qui/Android/Sdk/build-tools/35.0.0/zipalign
+[ok  ] apksigner          /home/Qui/Android/Sdk/build-tools/35.0.0/apksigner
+[ok  ] android_jar        /home/Qui/Android/Sdk/platforms/android-34/android.jar
+[ok  ] java               openjdk version "17.0.21.0.2" 2026-10-22
+[ok  ] javac              javac 17.0.21.0.2
+[ok  ] keytool            /usr/bin/keytool
+[ok  ] ndk_clang          /home/Qui/Android/Sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/linux-x86_64/bin
+[ok  ] bwrap              /usr/bin/bwrap
+[ok  ] systemd-run        /usr/bin/systemd-run
+[ok  ] pasta              2026_10_02.cba3570 (/home/Qui/.t3/worktrees/acos/t3-8432ccd8-1d58d051095d020b/.cache/rg5-prefix/share/acos/0.4.0/libexec/pasta [acos_home])
+[warn] metro              no React Native node_modules with Metro (set ACOS_METRO_NODE_MODULES, or run `tools/build-rn-hello.sh fetch` for .cache/rn-0.81.4)
+       fix: `needs_env: [metro]` scenarios (the React Native dev loop) cannot run without node and a React Native node_modules; `tools/build-rn-hello.sh fetch` populates .cache/rn-0.81.4, or set ACOS_METRO_NODE_MODULES.
+[ok  ] workspace          installed layout (no checkout: runtime assets come from ACOS_HOME)
+[warn] apk_append         not installed (fixture builds only)
+       fix: Nothing to do to run APKs; the fixture build scripts live in the ACOS checkout.
+[ok  ] gles               angle-swiftshader (default; installed at /home/Qui/.t3/worktrees/acos/t3-8432ccd8-1d58d051095d020b/.cache/rg5-prefix/share/acos/0.4.0/.cache/art/sysroot/gles/angle-swiftshader)
+[ok  ] session_daemon     no daemon running (/tmp/acos-1000/session.sock absent); cli 46b622999b74+dirty.54343f3c.610292c9
+[ok  ] host_memory        28% used (44394 MiB available of 61908 MiB)
+
+acos doctor: healthy (0 failure(s))
+DOCTOR_HUMAN_RC=0

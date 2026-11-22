@@ -1,0 +1,165 @@
+{
+  "checks": [
+    {
+      "detail": "/home/Qui/.t3/worktrees/acos/t3-8432ccd8-1d58d051095d020b/.cache/rg5-prefix/share/acos/0.4.0",
+      "name": "acos_home",
+      "status": "ok"
+    },
+    {
+      "detail": "0.4.0",
+      "name": "install_version",
+      "status": "ok"
+    },
+    {
+      "detail": "/home/Qui/.t3/worktrees/acos/t3-8432ccd8-1d58d051095d020b/.cache/rg5-prefix/share/acos/0.4.0/.cache/art/sysroot",
+      "name": "install_sysroot",
+      "status": "ok"
+    },
+    {
+      "detail": "/home/Qui/.t3/worktrees/acos/t3-8432ccd8-1d58d051095d020b/.cache/rg5-prefix/share/acos/0.4.0/.cache/boot/android-34/fonts",
+      "name": "install_fonts",
+      "status": "ok"
+    },
+    {
+      "detail": "/home/Qui/.t3/worktrees/acos/t3-8432ccd8-1d58d051095d020b/.cache/rg5-prefix/share/acos/0.4.0/.cache/boot/android-34/overlays",
+      "name": "install_overlays",
+      "status": "ok"
+    },
+    {
+      "detail": "/home/Qui/.t3/worktrees/acos/t3-8432ccd8-1d58d051095d020b/.cache/rg5-prefix/share/acos/0.4.0/.cache/boot/android-34/BOOTCLASSPATH",
+      "name": "install_bootclasspath",
+      "status": "ok"
+    },
+    {
+      "detail": "/home/Qui/.t3/worktrees/acos/t3-8432ccd8-1d58d051095d020b/.cache/rg5-prefix/share/acos/0.4.0/crates/acos-art/guest/java/dev/acos/art/AppMain.java",
+      "name": "install_guest_sources",
+      "status": "ok"
+    },
+    {
+      "detail": "/home/Qui/.t3/worktrees/acos/t3-8432ccd8-1d58d051095d020b/.cache/rg5-prefix/share/acos/0.4.0/bin/acos-art",
+      "name": "install_acos_art",
+      "status": "ok"
+    },
+    {
+      "detail": "broker /home/Qui/.t3/worktrees/acos/t3-8432ccd8-1d58d051095d020b/.cache/rg5-prefix/share/acos/0.4.0/bin/acos-webview, provider /home/Qui/.t3/worktrees/acos/t3-8432ccd8-1d58d051095d020b/.cache/rg5-prefix/share/acos/0.4.0/.cache/boot/android-34/system-apps/com.android.webview.apk",
+      "name": "install_webview",
+      "status": "ok"
+    },
+    {
+      "detail": "/home/Qui/.t3/worktrees/acos/t3-8432ccd8-1d58d051095d020b/.cache/rg5-prefix/share/acos/0.4.0/.cache (data, sessions, sockets, build caches)",
+      "name": "install_state",
+      "status": "ok"
+    },
+    {
+      "detail": "/home/Qui/Android/Sdk",
+      "name": "android_sdk",
+      "status": "ok"
+    },
+    {
+      "detail": "/home/Qui/Android/Sdk/build-tools/35.0.0",
+      "name": "build_tools",
+      "status": "ok"
+    },
+    {
+      "detail": "/home/Qui/Android/Sdk/build-tools/35.0.0/aapt2",
+      "name": "aapt2",
+      "status": "ok"
+    },
+    {
+      "detail": "/home/Qui/Android/Sdk/build-tools/35.0.0/d8",
+      "name": "d8",
+      "status": "ok"
+    },
+    {
+      "detail": "/home/Qui/Android/Sdk/build-tools/35.0.0/zipalign",
+      "name": "zipalign",
+      "status": "ok"
+    },
+    {
+      "detail": "/home/Qui/Android/Sdk/build-tools/35.0.0/apksigner",
+      "name": "apksigner",
+      "status": "ok"
+    },
+    {
+      "detail": "/home/Qui/Android/Sdk/platforms/android-34/android.jar",
+      "name": "android_jar",
+      "status": "ok"
+    },
+    {
+      "detail": "openjdk version \"17.0.21.0.2\" 2026-10-22",
+      "name": "java",
+      "status": "ok"
+    },
+    {
+      "detail": "javac 17.0.21.0.2",
+      "name": "javac",
+      "status": "ok"
+    },
+    {
+      "detail": "/usr/bin/keytool",
+      "name": "keytool",
+      "status": "ok"
+    },
+    {
+      "detail": "/home/Qui/Android/Sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/linux-x86_64/bin",
+      "name": "ndk_clang",
+      "status": "ok"
+    },
+    {
+      "detail": "/usr/bin/bwrap",
+      "name": "bwrap",
+      "status": "ok"
+    },
+    {
+      "detail": "/usr/bin/systemd-run",
+      "name": "systemd-run",
+      "status": "ok"
+    },
+    {
+      "detail": "2026_10_02.cba3570 (/home/Qui/.t3/worktrees/acos/t3-8432ccd8-1d58d051095d020b/.cache/rg5-prefix/share/acos/0.4.0/libexec/pasta [acos_home])",
+      "name": "pasta",
+      "status": "ok"
+    },
+    {
+      "detail": "no React Native node_modules with Metro (set ACOS_METRO_NODE_MODULES, or run `tools/build-rn-hello.sh fetch` for .cache/rn-0.81.4)",
+      "fix": "`needs_env: [metro]` scenarios (the React Native dev loop) cannot run without node and a React Native node_modules; `tools/build-rn-hello.sh fetch` populates .cache/rn-0.81.4, or set ACOS_METRO_NODE_MODULES.",
+      "name": "metro",
+      "status": "warn"
+    },
+    {
+      "detail": "installed layout (no checkout: runtime assets come from ACOS_HOME)",
+      "name": "workspace",
+      "status": "ok"
+    },
+    {
+      "detail": "not installed (fixture builds only)",
+      "fix": "Nothing to do to run APKs; the fixture build scripts live in the ACOS checkout.",
+      "name": "apk_append",
+      "status": "warn"
+    },
+    {
+      "detail": "angle-swiftshader (default; installed at /home/Qui/.t3/worktrees/acos/t3-8432ccd8-1d58d051095d020b/.cache/rg5-prefix/share/acos/0.4.0/.cache/art/sysroot/gles/angle-swiftshader)",
+      "name": "gles",
+      "status": "ok"
+    },
+    {
+      "detail": "no daemon running (/tmp/acos-1000/session.sock absent); cli 46b622999b74+dirty.54343f3c.610292c9",
+      "name": "session_daemon",
+      "status": "ok"
+    },
+    {
+      "detail": "28% used (44383 MiB available of 61908 MiB)",
+      "name": "host_memory",
+      "status": "ok"
+    }
+  ],
+  "ok": true,
+  "subject": {
+    "acos_home": "/home/Qui/.t3/worktrees/acos/t3-8432ccd8-1d58d051095d020b/.cache/rg5-prefix/share/acos/0.4.0",
+    "acos_version": "0.4.0",
+    "arch": "x86_64",
+    "cwd": "/tmp/rg5-empty.OzDAq6",
+    "layout": "installed",
+    "os": "linux"
+  }
+}
