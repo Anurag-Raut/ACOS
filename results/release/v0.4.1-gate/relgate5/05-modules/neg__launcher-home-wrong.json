@@ -1,0 +1,90 @@
+{
+  "backend": "acos-native",
+  "capabilities_used": [
+    "input",
+    "lifecycle",
+    "static-manifest",
+    "ui.tree"
+  ],
+  "error": {
+    "class": "assertion",
+    "code": "ASSERTION_FAILED",
+    "hint": "Compare expected vs actual in the assertion diff, inspect the linked frame/tree, then fix the app or the expectation. Rerun the scenario.",
+    "message": "expected text exactly \"Nonexistent App\", got text \"Hello Views\" / hint \"\"",
+    "retryable": false
+  },
+  "evidence": {
+    "events": "events.jsonl",
+    "log": "logs/logcat.txt",
+    "verdict": "verdict.json"
+  },
+  "fidelity": "art-reference",
+  "isolation": "process",
+  "metrics": {
+    "peak_rss_bytes": 16211968,
+    "wall_ms": 786
+  },
+  "ok": false,
+  "request_id": "req_45f32_18ea64d868e0d175",
+  "result": {
+    "artifacts_dir": "/home/Qui/.t3/worktrees/acos/t3-8432ccd8-1d58d051095d020b/.cache/rg5-mod-art/neg__launcher-home-wrong",
+    "cap_bytes": 20480,
+    "evidence_provenance": {
+      "binder_transactions": "host-observed",
+      "crash_reports": "guest-asserted",
+      "frames": "host-observed",
+      "host_input": "host-observed",
+      "input_acks": "guest-asserted",
+      "launch_markers": "guest-asserted",
+      "lifecycle_markers": "guest-asserted",
+      "logs": "guest-asserted",
+      "static_manifest": "host-observed",
+      "tree": "guest-asserted"
+    },
+    "failed_step": {
+      "failure_index": 4,
+      "index": 4,
+      "kind": "assert_text",
+      "message": "expected text exactly \"Nonexistent App\", got text \"Hello Views\" / hint \"\"",
+      "status": "fail"
+    },
+    "failure": {
+      "code": "ASSERTION_FAILED",
+      "error": {
+        "class": "assertion",
+        "code": "ASSERTION_FAILED",
+        "hint": "Compare expected vs actual in the assertion diff, inspect the linked frame/tree, then fix the app or the expectation. Rerun the scenario.",
+        "message": "expected text exactly \"Nonexistent App\", got text \"Hello Views\" / hint \"\"",
+        "retryable": false
+      },
+      "step_index": 4,
+      "summary": "step 4 (assert_text) fail"
+    },
+    "note": "this result was larger than the reply cap; only the bulk (tree, steps, logs) was dropped and the full evidence is in the artifacts paths named here",
+    "provenance": {
+      "apk": {
+        "mtime_ns": 1795356324607838953,
+        "path": "/home/Qui/.t3/worktrees/acos/t3-8432ccd8-1d58d051095d020b/fixtures/build/apps/hello-views.apk",
+        "sha256": "8691ecbb2c8b5620754b83f02c1ddb084f4aa6ddf76fefecb28bb6301033c84b",
+        "sha256_12": "8691ecbb2c8b",
+        "size_bytes": 12756
+      },
+      "engine": "art",
+      "fidelity": "art-reference",
+      "scenario": {
+        "mtime_ns": 1795356189355128658,
+        "path": "/home/Qui/.t3/worktrees/acos/t3-8432ccd8-1d58d051095d020b/scenarios/negative/launcher-home-wrong.yaml",
+        "sha256": "648cbb284e307c90d6762c7e995eedf6244c2169254dc9789d96e8d203a5b20a",
+        "sha256_12": "648cbb284e30",
+        "size_bytes": 878
+      },
+      "scenario_engine": "art",
+      "warnings": []
+    },
+    "reply_capped": true,
+    "verdict_path": "/home/Qui/.t3/worktrees/acos/t3-8432ccd8-1d58d051095d020b/.cache/rg5-mod-art/neg__launcher-home-wrong/verdict.json",
+    "verdict_status": "fail"
+  },
+  "session_id": "s_art_hello-views",
+  "status": "fail"
+}

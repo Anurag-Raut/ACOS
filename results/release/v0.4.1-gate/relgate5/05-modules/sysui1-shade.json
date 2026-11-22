@@ -1,0 +1,115 @@
+{
+  "backend": "acos-native",
+  "capabilities_used": [
+    "lifecycle",
+    "static-manifest",
+    "ui.tree"
+  ],
+  "error": {
+    "class": "infra_timeout",
+    "code": "NO_FRESH_FRAME",
+    "details": {
+      "art_code": "NO_FRESH_FRAME",
+      "backend": "acos-art-session",
+      "context": "wait_for",
+      "reply": {
+        "animations": "on",
+        "cmd": "tree",
+        "code": "NO_FRESH_FRAME",
+        "error": "C1 has stored no buffer yet",
+        "ok": false
+      },
+      "session_exit_path": "/home/Qui/.t3/worktrees/acos/t3-8432ccd8-1d58d051095d020b/.cache/rg5-mod-art/sysui1-shade/art-frames/session-exit.json"
+    },
+    "hint": "Do not reuse an older capture. Wait for a new frame after the action, or request capture with the correct after_seq/cause_id, then retry.",
+    "message": "acos-art: NO_FRESH_FRAME: C1 has stored no buffer yet",
+    "retryable": true
+  },
+  "evidence": {
+    "events": "events.jsonl",
+    "log": "logs/logcat.txt",
+    "verdict": "verdict.json"
+  },
+  "fidelity": "art-reference",
+  "isolation": "process",
+  "metrics": {
+    "peak_rss_bytes": 17772544,
+    "wall_ms": 312
+  },
+  "ok": false,
+  "request_id": "req_43623_18ea64b08d99d57d",
+  "result": {
+    "artifacts_dir": "/home/Qui/.t3/worktrees/acos/t3-8432ccd8-1d58d051095d020b/.cache/rg5-mod-art/sysui1-shade",
+    "cap_bytes": 20480,
+    "evidence_provenance": {
+      "binder_transactions": "host-observed",
+      "crash_reports": "guest-asserted",
+      "frames": "host-observed",
+      "host_input": "host-observed",
+      "input_acks": "guest-asserted",
+      "launch_markers": "guest-asserted",
+      "lifecycle_markers": "guest-asserted",
+      "logs": "guest-asserted",
+      "static_manifest": "host-observed",
+      "tree": "guest-asserted"
+    },
+    "failed_step": {
+      "failure_index": 5,
+      "index": 5,
+      "kind": "wait_for",
+      "message": "acos-art: NO_FRESH_FRAME: C1 has stored no buffer yet",
+      "status": "error"
+    },
+    "failure": {
+      "code": "NO_FRESH_FRAME",
+      "error": {
+        "class": "infra_timeout",
+        "code": "NO_FRESH_FRAME",
+        "details": {
+          "art_code": "NO_FRESH_FRAME",
+          "backend": "acos-art-session",
+          "context": "wait_for",
+          "reply": {
+            "animations": "on",
+            "cmd": "tree",
+            "code": "NO_FRESH_FRAME",
+            "error": "C1 has stored no buffer yet",
+            "ok": false
+          },
+          "session_exit_path": "/home/Qui/.t3/worktrees/acos/t3-8432ccd8-1d58d051095d020b/.cache/rg5-mod-art/sysui1-shade/art-frames/session-exit.json"
+        },
+        "hint": "Do not reuse an older capture. Wait for a new frame after the action, or request capture with the correct after_seq/cause_id, then retry.",
+        "message": "acos-art: NO_FRESH_FRAME: C1 has stored no buffer yet",
+        "retryable": true
+      },
+      "step_index": 5,
+      "summary": "step 5 (wait_for) error"
+    },
+    "note": "this result was larger than the reply cap; only the bulk (tree, steps, logs) was dropped and the full evidence is in the artifacts paths named here",
+    "provenance": {
+      "apk": {
+        "mtime_ns": 1795356346218314232,
+        "path": "/home/Qui/.t3/worktrees/acos/t3-8432ccd8-1d58d051095d020b/fixtures/build/apps/notif-perm-probe.apk",
+        "sha256": "fadb2cab494939013e585ea01dc9011a409aea65a81ce630a48870f7f56dcc6b",
+        "sha256_12": "fadb2cab4949",
+        "size_bytes": 12756
+      },
+      "engine": "art",
+      "fidelity": "art-reference",
+      "scenario": {
+        "mtime_ns": 1795356189355128658,
+        "path": "/home/Qui/.t3/worktrees/acos/t3-8432ccd8-1d58d051095d020b/scenarios/sysui1-shade.yaml",
+        "sha256": "9dd515f6614338200312284d53f1ed73d0f8e4ec751d048f3339c7994e356709",
+        "sha256_12": "9dd515f66143",
+        "size_bytes": 3608
+      },
+      "scenario_engine": "art",
+      "warnings": []
+    },
+    "reply_capped": true,
+    "verdict_path": "/home/Qui/.t3/worktrees/acos/t3-8432ccd8-1d58d051095d020b/.cache/rg5-mod-art/sysui1-shade/verdict.json",
+    "verdict_status": "error"
+  },
+  "session_id": "s_art_notif-perm-probe",
+  "status": "error"
+}

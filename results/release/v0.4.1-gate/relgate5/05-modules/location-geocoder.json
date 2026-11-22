@@ -1,0 +1,63 @@
+{
+  "backend": "acos-native",
+  "capabilities_used": [
+    "lifecycle",
+    "static-manifest",
+    "ui.tree"
+  ],
+  "evidence": {
+    "events": "events.jsonl",
+    "log": "logs/logcat.txt",
+    "verdict": "verdict.json"
+  },
+  "fidelity": "art-reference",
+  "isolation": "process",
+  "metrics": {
+    "peak_rss_bytes": 16666624,
+    "wall_ms": 216
+  },
+  "ok": true,
+  "request_id": "req_439de_18ea64b31a83bead",
+  "result": {
+    "artifacts_dir": "/home/Qui/.t3/worktrees/acos/t3-8432ccd8-1d58d051095d020b/.cache/rg5-mod-art/location-geocoder",
+    "cap_bytes": 20480,
+    "evidence_provenance": {
+      "binder_transactions": "host-observed",
+      "crash_reports": "guest-asserted",
+      "frames": "host-observed",
+      "host_input": "host-observed",
+      "input_acks": "guest-asserted",
+      "launch_markers": "guest-asserted",
+      "lifecycle_markers": "guest-asserted",
+      "logs": "guest-asserted",
+      "static_manifest": "host-observed",
+      "tree": "guest-asserted"
+    },
+    "note": "this result was larger than the reply cap; only the bulk (tree, steps, logs) was dropped and the full evidence is in the artifacts paths named here",
+    "provenance": {
+      "apk": {
+        "mtime_ns": 1795356365946065970,
+        "path": "/home/Qui/.t3/worktrees/acos/t3-8432ccd8-1d58d051095d020b/fixtures/build/apps/location-probe.apk",
+        "sha256": "b6e34bfa71b78a86b6c356690ac635a417cb61623e81b46c3da785bf8a25896f",
+        "sha256_12": "b6e34bfa71b7",
+        "size_bytes": 16852
+      },
+      "engine": "art",
+      "fidelity": "art-reference",
+      "scenario": {
+        "mtime_ns": 1795356189354466042,
+        "path": "/home/Qui/.t3/worktrees/acos/t3-8432ccd8-1d58d051095d020b/scenarios/location-geocoder.yaml",
+        "sha256": "e7dbee16904b9d7a280b8700070f8ddc086877064a076efbf89bcf21ac7f8a42",
+        "sha256_12": "e7dbee16904b",
+        "size_bytes": 1571
+      },
+      "scenario_engine": "art",
+      "warnings": []
+    },
+    "reply_capped": true,
+    "verdict_path": "/home/Qui/.t3/worktrees/acos/t3-8432ccd8-1d58d051095d020b/.cache/rg5-mod-art/location-geocoder/verdict.json",
+    "verdict_status": "pass"
+  },
+  "session_id": "s_art_location-probe",
+  "status": "pass"
+}

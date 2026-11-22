@@ -1,0 +1,90 @@
+{
+  "backend": "acos-native",
+  "capabilities_used": [
+    "lifecycle",
+    "screenshot",
+    "static-manifest",
+    "ui.tree"
+  ],
+  "error": {
+    "class": "assertion",
+    "code": "ASSERTION_FAILED",
+    "hint": "Compare expected vs actual in the assertion diff, inspect the linked frame/tree, then fix the app or the expectation. Rerun the scenario.",
+    "message": "expected bounds [42,612][1038,2295], got [42,612][1038,1158]",
+    "retryable": false
+  },
+  "evidence": {
+    "events": "events.jsonl",
+    "log": "logs/logcat.txt",
+    "verdict": "verdict.json"
+  },
+  "fidelity": "art-reference",
+  "isolation": "process",
+  "metrics": {
+    "peak_rss_bytes": 16171008,
+    "wall_ms": 379
+  },
+  "ok": false,
+  "request_id": "req_46259_18ea64dd87975cc5",
+  "result": {
+    "artifacts_dir": "/home/Qui/.t3/worktrees/acos/t3-8432ccd8-1d58d051095d020b/.cache/rg5-mod-art/neg__multiwindow-split-wrong",
+    "cap_bytes": 20480,
+    "evidence_provenance": {
+      "binder_transactions": "host-observed",
+      "crash_reports": "guest-asserted",
+      "frames": "host-observed",
+      "host_input": "host-observed",
+      "input_acks": "guest-asserted",
+      "launch_markers": "guest-asserted",
+      "lifecycle_markers": "guest-asserted",
+      "logs": "guest-asserted",
+      "static_manifest": "host-observed",
+      "tree": "guest-asserted"
+    },
+    "failed_step": {
+      "failure_index": 4,
+      "index": 4,
+      "kind": "assert_text",
+      "message": "expected bounds [42,612][1038,2295], got [42,612][1038,1158]",
+      "status": "fail"
+    },
+    "failure": {
+      "code": "ASSERTION_FAILED",
+      "error": {
+        "class": "assertion",
+        "code": "ASSERTION_FAILED",
+        "hint": "Compare expected vs actual in the assertion diff, inspect the linked frame/tree, then fix the app or the expectation. Rerun the scenario.",
+        "message": "expected bounds [42,612][1038,2295], got [42,612][1038,1158]",
+        "retryable": false
+      },
+      "step_index": 4,
+      "summary": "step 4 (assert_text) fail"
+    },
+    "note": "this result was larger than the reply cap; only the bulk (tree, steps, logs) was dropped and the full evidence is in the artifacts paths named here",
+    "provenance": {
+      "apk": {
+        "mtime_ns": 1795356388755779912,
+        "path": "/home/Qui/.t3/worktrees/acos/t3-8432ccd8-1d58d051095d020b/fixtures/build/apps/two-activity.apk",
+        "sha256": "d57a2ae2985b79a829d289b3724b7dc9680f8269202d39bf25140241bcdfafa2",
+        "sha256_12": "d57a2ae2985b",
+        "size_bytes": 16919
+      },
+      "engine": "art",
+      "fidelity": "art-reference",
+      "scenario": {
+        "mtime_ns": 1795356189355128658,
+        "path": "/home/Qui/.t3/worktrees/acos/t3-8432ccd8-1d58d051095d020b/scenarios/negative/multiwindow-split-wrong.yaml",
+        "sha256": "a3cd4041dba7eee7155b2270aec607c65ef1673ab1a934c41995f95938ee86d5",
+        "sha256_12": "a3cd4041dba7",
+        "size_bytes": 1247
+      },
+      "scenario_engine": "art",
+      "warnings": []
+    },
+    "reply_capped": true,
+    "verdict_path": "/home/Qui/.t3/worktrees/acos/t3-8432ccd8-1d58d051095d020b/.cache/rg5-mod-art/neg__multiwindow-split-wrong/verdict.json",
+    "verdict_status": "fail"
+  },
+  "session_id": "s_art_two-activity",
+  "status": "fail"
+}

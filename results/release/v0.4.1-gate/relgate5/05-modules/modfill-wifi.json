@@ -1,0 +1,66 @@
+{
+  "backend": "acos-native",
+  "capabilities_used": [
+    "crash-reports",
+    "input",
+    "lifecycle",
+    "logs",
+    "static-manifest",
+    "ui.tree"
+  ],
+  "evidence": {
+    "events": "events.jsonl",
+    "log": "logs/logcat.txt",
+    "verdict": "verdict.json"
+  },
+  "fidelity": "art-reference",
+  "isolation": "process",
+  "metrics": {
+    "peak_rss_bytes": 21504000,
+    "wall_ms": 13945
+  },
+  "ok": true,
+  "request_id": "req_441b3_18ea64bf3cadf5fc",
+  "result": {
+    "artifacts_dir": "/home/Qui/.t3/worktrees/acos/t3-8432ccd8-1d58d051095d020b/.cache/rg5-mod-art/modfill-wifi",
+    "cap_bytes": 20480,
+    "evidence_provenance": {
+      "binder_transactions": "host-observed",
+      "crash_reports": "guest-asserted",
+      "frames": "host-observed",
+      "host_input": "host-observed",
+      "input_acks": "guest-asserted",
+      "launch_markers": "guest-asserted",
+      "lifecycle_markers": "guest-asserted",
+      "logs": "guest-asserted",
+      "static_manifest": "host-observed",
+      "tree": "guest-asserted"
+    },
+    "note": "this result was larger than the reply cap; only the bulk (tree, steps, logs) was dropped and the full evidence is in the artifacts paths named here",
+    "provenance": {
+      "apk": {
+        "mtime_ns": 1795356363756198127,
+        "path": "/home/Qui/.t3/worktrees/acos/t3-8432ccd8-1d58d051095d020b/fixtures/build/apps/wifi-probe.apk",
+        "sha256": "574c90be41ca04dad517a9f850436f8ab53f0d33faf3386980d71fa83ca38a03",
+        "sha256_12": "574c90be41ca",
+        "size_bytes": 16787
+      },
+      "engine": "art",
+      "fidelity": "art-reference",
+      "scenario": {
+        "mtime_ns": 1795356189354466042,
+        "path": "/home/Qui/.t3/worktrees/acos/t3-8432ccd8-1d58d051095d020b/scenarios/modfill-wifi.yaml",
+        "sha256": "b2b5dbf4809d00a1051863231da7411c98d1f27189bd5576eba75e65488ad449",
+        "sha256_12": "b2b5dbf4809d",
+        "size_bytes": 6819
+      },
+      "scenario_engine": "art",
+      "warnings": []
+    },
+    "reply_capped": true,
+    "verdict_path": "/home/Qui/.t3/worktrees/acos/t3-8432ccd8-1d58d051095d020b/.cache/rg5-mod-art/modfill-wifi/verdict.json",
+    "verdict_status": "pass"
+  },
+  "session_id": "s_art_wifi-probe",
+  "status": "pass"
+}

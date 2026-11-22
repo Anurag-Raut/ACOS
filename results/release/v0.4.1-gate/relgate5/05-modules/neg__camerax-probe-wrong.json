@@ -1,0 +1,90 @@
+{
+  "backend": "acos-native",
+  "capabilities_used": [
+    "input",
+    "lifecycle",
+    "static-manifest",
+    "ui.tree"
+  ],
+  "error": {
+    "class": "assertion",
+    "code": "ASSERTION_FAILED",
+    "hint": "Compare expected vs actual in the assertion diff, inspect the linked frame/tree, then fix the app or the expectation. Rerun the scenario.",
+    "message": "expected text containing \"crc32=0x00000000\", got text \"READY feat_cam=true feat_any=true\\nPREVIEW_STATE state=IDLE impl=PERFORMANCE\\nPROVIDER ok cameras=1 has_back=true\\n… [ACOS: result.error.message bounded for size — 508 bytes total, keeping the first 170 and the last 85 bytes; the full text is in the run's artifacts] …ts_inc=true crcs=[0xdead8870, 0xdfefda95, 0xdc292dba] tags=[160, 161, 162]\" / hint \"\"",
+    "retryable": false
+  },
+  "evidence": {
+    "events": "events.jsonl",
+    "log": "logs/logcat.txt",
+    "verdict": "verdict.json"
+  },
+  "fidelity": "art-reference",
+  "isolation": "process",
+  "metrics": {
+    "peak_rss_bytes": 27729920,
+    "wall_ms": 1281
+  },
+  "ok": false,
+  "request_id": "req_45e5e_18ea64d7f6b147b0",
+  "result": {
+    "artifacts_dir": "/home/Qui/.t3/worktrees/acos/t3-8432ccd8-1d58d051095d020b/.cache/rg5-mod-art/neg__camerax-probe-wrong",
+    "cap_bytes": 20480,
+    "evidence_provenance": {
+      "binder_transactions": "host-observed",
+      "crash_reports": "guest-asserted",
+      "frames": "host-observed",
+      "host_input": "host-observed",
+      "input_acks": "guest-asserted",
+      "launch_markers": "guest-asserted",
+      "lifecycle_markers": "guest-asserted",
+      "logs": "guest-asserted",
+      "static_manifest": "host-observed",
+      "tree": "guest-asserted"
+    },
+    "failed_step": {
+      "failure_index": 5,
+      "index": 5,
+      "kind": "assert_text",
+      "message": "… [ACOS: identical to result.error.message (508 bytes), not repeated; it begins: expected text containing \"crc32=0x00000000\", got text \"READY feat_cam=true feat_any=true\\nPREVIEW_STATE state=IDLE impl=PERFORMANCE\\nPROVIDER ok cameras=1 has_back=true\\nBIND ok rot=90\\nANALYSIS frame=1 w=640 h=480 fmt=35 planes=3 rot=90 ts=1000000000 crc32=0xdead8870 white=(235,128,128) green=(145,54,34) red=(81,90,240) black=(16,128,128) tag=(160,0,0,90) ramp=(127,128,128)\\nANALYSIS ok count=3 total=3 frames_inc=true ts_inc=true crcs=[0xdead8870, 0xdfefda95, 0xdc292dba] tags=[160, 161, 162]\" / hint \"\"] …",
+      "status": "fail"
+    },
+    "failure": {
+      "code": "ASSERTION_FAILED",
+      "error": {
+        "class": "assertion",
+        "code": "ASSERTION_FAILED",
+        "hint": "Compare expected vs actual in the assertion diff, inspect the linked frame/tree, then fix the app or the expectation. Rerun the scenario.",
+        "message": "… [ACOS: identical to result.error.message (508 bytes), not repeated; it begins: expected text containing \"crc32=0x00000000\", got text \"READY feat_cam=true feat_any=true\\nPREVIEW_STATE state=IDLE impl=PERFORMANCE\\nPROVIDER ok cameras=1 has_back=true\\nBIND ok rot=90\\nANALYSIS frame=1 w=640 h=480 fmt=35 planes=3 rot=90 ts=1000000000 crc32=0xdead8870 white=(235,128,128) green=(145,54,34) red=(81,90,240) black=(16,128,128) tag=(160,0,0,90) ramp=(127,128,128)\\nANALYSIS ok count=3 total=3 frames_inc=true ts_inc=true crcs=[0xdead8870, 0xdfefda95, 0xdc292dba] tags=[160, 161, 162]\" / hint \"\"] …",
+        "retryable": false
+      },
+      "step_index": 5,
+      "summary": "step 5 (assert_text) fail"
+    },
+    "note": "this result was larger than the reply cap; only the bulk (tree, steps, logs) was dropped and the full evidence is in the artifacts paths named here",
+    "provenance": {
+      "apk": {
+        "mtime_ns": 1795356373631614505,
+        "path": "/home/Qui/.t3/worktrees/acos/t3-8432ccd8-1d58d051095d020b/fixtures/build/apps/camerax-probe.apk",
+        "sha256": "d74c1c8a0b03509fa4b4f8cb87807f8479e81ea5a994d6dd1c8e28d1f8726088",
+        "sha256_12": "d74c1c8a0b03",
+        "size_bytes": 2734663
+      },
+      "engine": "art",
+      "fidelity": "art-reference",
+      "scenario": {
+        "mtime_ns": 1795356189354466042,
+        "path": "/home/Qui/.t3/worktrees/acos/t3-8432ccd8-1d58d051095d020b/scenarios/negative/camerax-probe-wrong.yaml",
+        "sha256": "a6302bd6e7b8ae8d0b3a05cea1df531f153b33dda4f39fb9a14c2acbc760d543",
+        "sha256_12": "a6302bd6e7b8",
+        "size_bytes": 1557
+      },
+      "scenario_engine": "art",
+      "warnings": []
+    },
+    "reply_capped": true,
+    "verdict_path": "/home/Qui/.t3/worktrees/acos/t3-8432ccd8-1d58d051095d020b/.cache/rg5-mod-art/neg__camerax-probe-wrong/verdict.json",
+    "verdict_status": "fail"
+  },
+  "session_id": "s_art_camerax-probe",
+  "status": "fail"
+}

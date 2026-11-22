@@ -1,0 +1,64 @@
+{
+  "backend": "acos-native",
+  "capabilities_used": [
+    "crash-reports",
+    "lifecycle",
+    "static-manifest",
+    "ui.tree"
+  ],
+  "evidence": {
+    "events": "events.jsonl",
+    "log": "logs/logcat.txt",
+    "verdict": "verdict.json"
+  },
+  "fidelity": "art-reference",
+  "isolation": "process",
+  "metrics": {
+    "peak_rss_bytes": 46346240,
+    "wall_ms": 5106
+  },
+  "ok": true,
+  "request_id": "req_44acf_18ea64cf8513b567",
+  "result": {
+    "artifacts_dir": "/home/Qui/.t3/worktrees/acos/t3-8432ccd8-1d58d051095d020b/.cache/rg5-mod-art/metro-reload-r1",
+    "cap_bytes": 20480,
+    "evidence_provenance": {
+      "binder_transactions": "host-observed",
+      "crash_reports": "guest-asserted",
+      "frames": "host-observed",
+      "host_input": "host-observed",
+      "input_acks": "guest-asserted",
+      "launch_markers": "guest-asserted",
+      "lifecycle_markers": "guest-asserted",
+      "logs": "guest-asserted",
+      "static_manifest": "host-observed",
+      "tree": "guest-asserted"
+    },
+    "note": "this result was larger than the reply cap; only the bulk (tree, steps, logs) was dropped and the full evidence is in the artifacts paths named here",
+    "provenance": {
+      "apk": {
+        "mtime_ns": 1795356410172713512,
+        "path": "/home/Qui/.t3/worktrees/acos/t3-8432ccd8-1d58d051095d020b/fixtures/build/apps/rn-debug.apk",
+        "sha256": "e7657e2ba61437b70335b338d810cad5487f4806fe51a3674a6ed4f39c694049",
+        "sha256_12": "e7657e2ba614",
+        "size_bytes": 8935640
+      },
+      "engine": "art",
+      "fidelity": "art-reference",
+      "scenario": {
+        "mtime_ns": 1795356189354466042,
+        "path": "/home/Qui/.t3/worktrees/acos/t3-8432ccd8-1d58d051095d020b/scenarios/metro-reload.yaml",
+        "sha256": "232d362edcb3df943cc3a48f6375d620a66b386b6dacbbcf8b05c8f0c90915be",
+        "sha256_12": "232d362edcb3",
+        "size_bytes": 2856
+      },
+      "scenario_engine": "art",
+      "warnings": []
+    },
+    "reply_capped": true,
+    "verdict_path": "/home/Qui/.t3/worktrees/acos/t3-8432ccd8-1d58d051095d020b/.cache/rg5-mod-art/metro-reload-r1/verdict.json",
+    "verdict_status": "pass"
+  },
+  "session_id": "s_art_rn-debug",
+  "status": "pass"
+}

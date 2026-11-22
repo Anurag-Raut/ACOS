@@ -1,0 +1,7 @@
+=== 5x rerun of sysui1-shade ===
+r1 rc=0 (1s) pass None
+r2 rc=0 (2s) pass None
+r3 rc=0 (2s) pass None
+r4 rc=0 (1s) pass None
+r5 rc=0 (2s) pass None
+SYSUI1_SHADE_RERUN=5/5

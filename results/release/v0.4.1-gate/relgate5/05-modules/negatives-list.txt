@@ -1,0 +1,9 @@
+scenarios/negative/camera-capture-wrong-checksum.yaml
+scenarios/negative/camera-jpeg-wrong-size.yaml
+scenarios/negative/camera-preview-wrong-color.yaml
+scenarios/negative/camera-scripted-wrong-checksum.yaml
+scenarios/negative/camerax-probe-wrong.yaml
+scenarios/negative/launcher-home-wrong.yaml
+scenarios/negative/metro-reload-wrong-text.yaml
+scenarios/negative/multiwindow-split-wrong.yaml
+scenarios/negative/settings-intents-wrong.yaml

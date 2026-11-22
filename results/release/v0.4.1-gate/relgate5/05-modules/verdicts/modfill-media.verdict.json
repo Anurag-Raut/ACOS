@@ -1,0 +1,4415 @@
+{
+  "animations": "on",
+  "app": {
+    "package": "dev.acos.fixtures.mediaprobe",
+    "path": "/home/Qui/.t3/worktrees/acos/t3-8432ccd8-1d58d051095d020b/fixtures/build/apps/media-probe.apk",
+    "sha256": "51266baa021a61e4b30286739d60262e1299be541bf809c8f9e5ee2b95f31d6d"
+  },
+  "backend": "acos-native",
+  "certification": "certified-with-limits",
+  "certification_limits": {
+    "doc": "docs/SANDBOX_CERTIFICATION.md",
+    "section": "§8.7"
+  },
+  "certification_policy": {
+    "doc": "docs/SANDBOX_CERTIFICATION.md",
+    "policy": "opt-in untrusted: trusted is the default, an explicit --untrusted or `trust: untrusted` is allowed",
+    "section": "§8.8"
+  },
+  "engine": "art",
+  "evidence": {
+    "artifacts": "/home/Qui/.t3/worktrees/acos/t3-8432ccd8-1d58d051095d020b/.cache/rg5-mod-art/modfill-media",
+    "engine_report": "/home/Qui/.t3/worktrees/acos/t3-8432ccd8-1d58d051095d020b/.cache/rg5-mod-art/modfill-media/engine.json",
+    "pruned_session_captures": 20,
+    "retention": "/home/Qui/.t3/worktrees/acos/t3-8432ccd8-1d58d051095d020b/.cache/rg5-mod-art/modfill-media/retention.json",
+    "verdict": "/home/Qui/.t3/worktrees/acos/t3-8432ccd8-1d58d051095d020b/.cache/rg5-mod-art/modfill-media/verdict.json"
+  },
+  "evidence_provenance": {
+    "binder_transactions": "host-observed",
+    "crash_reports": "guest-asserted",
+    "frames": "host-observed",
+    "host_input": "host-observed",
+    "input_acks": "guest-asserted",
+    "launch_markers": "guest-asserted",
+    "lifecycle_markers": "guest-asserted",
+    "logs": "guest-asserted",
+    "static_manifest": "host-observed",
+    "tree": "guest-asserted"
+  },
+  "extra_apks": [],
+  "fidelity": "art-reference",
+  "finished_at": "2026-11-22T14:36:34.526Z",
+  "insets": "report",
+  "isolation": "process",
+  "mode": "live",
+  "modules": [
+    {
+      "attach": "at-launch",
+      "details": null,
+      "fidelity": "real",
+      "id": "core",
+      "profile": "real",
+      "reason": null,
+      "state": "attached"
+    },
+    {
+      "attach": "hot",
+      "details": null,
+      "fidelity": "off",
+      "id": "accessibility",
+      "profile": "off",
+      "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"accessibility\", \"profile\": \"real\"}]}",
+      "state": "off"
+    },
+    {
+      "attach": "hot",
+      "details": null,
+      "fidelity": "off",
+      "id": "system.permissions",
+      "profile": "off",
+      "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.permissions\", \"profile\": \"real\"}]}",
+      "state": "off"
+    },
+    {
+      "attach": "hot",
+      "details": null,
+      "fidelity": "off",
+      "id": "system.notifications",
+      "profile": "off",
+      "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.notifications\", \"profile\": \"real\"}]}",
+      "state": "off"
+    },
+    {
+      "attach": "hot",
+      "details": null,
+      "fidelity": "off",
+      "id": "sensors",
+      "profile": "off",
+      "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"sensors\", \"profile\": \"scripted\"}]}",
+      "state": "off"
+    },
+    {
+      "attach": "hot",
+      "details": null,
+      "fidelity": "off",
+      "id": "feedback.vibrator",
+      "profile": "off",
+      "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"feedback.vibrator\", \"profile\": \"scripted\"}]}",
+      "state": "off"
+    },
+    {
+      "attach": "hot",
+      "details": null,
+      "fidelity": "off",
+      "id": "location",
+      "profile": "off",
+      "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"location\", \"profile\": \"scripted\"}]}",
+      "state": "off"
+    },
+    {
+      "attach": "at-launch",
+      "details": null,
+      "fidelity": "off",
+      "id": "net.telephony",
+      "profile": "off",
+      "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"net.telephony\", \"profile\": \"scripted\"}]}",
+      "state": "off"
+    },
+    {
+      "attach": "hot",
+      "details": null,
+      "fidelity": "off",
+      "id": "hw.bluetooth",
+      "profile": "off",
+      "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.bluetooth\", \"profile\": \"scripted\"}]}",
+      "state": "off"
+    },
+    {
+      "attach": "hot",
+      "details": null,
+      "fidelity": "off",
+      "id": "hw.biometric",
+      "profile": "off",
+      "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.biometric\", \"profile\": \"scripted\"}]}",
+      "state": "off"
+    },
+    {
+      "attach": "at-launch",
+      "details": null,
+      "fidelity": "off",
+      "id": "network",
+      "profile": "off",
+      "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"network\", \"profile\": \"real\"}]}",
+      "state": "off"
+    },
+    {
+      "attach": "at-launch",
+      "details": null,
+      "fidelity": "off",
+      "id": "webview",
+      "profile": "off",
+      "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"webview\", \"profile\": \"real\"}]}",
+      "state": "off"
+    },
+    {
+      "attach": "hot",
+      "details": null,
+      "fidelity": "off",
+      "id": "net.wifi",
+      "profile": "off",
+      "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"net.wifi\", \"profile\": \"scripted\"}]}",
+      "state": "off"
+    },
+    {
+      "attach": "hot",
+      "details": null,
+      "fidelity": "scripted",
+      "id": "media.session",
+      "profile": "scripted",
+      "reason": "scripted profile: sessions are recorded and commands are delivered to the app's MediaSession.Callback; 1 session(s) so far; no media-key routing, queue, volume, remote sessions or media router (UNSUPPORTED_ANDROID_API); metadata with an undecodable value (album art) is accepted but reported unreadable",
+      "state": "attached"
+    },
+    {
+      "attach": "hot",
+      "details": null,
+      "fidelity": "off",
+      "id": "hw.camera",
+      "profile": "off",
+      "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.camera\", \"profile\": \"scripted\"}]}",
+      "state": "off"
+    },
+    {
+      "attach": "hot",
+      "details": null,
+      "fidelity": "off",
+      "id": "multiwindow",
+      "profile": "off",
+      "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"multiwindow\", \"profile\": \"real\"}]}",
+      "state": "off"
+    },
+    {
+      "attach": "at-launch",
+      "details": null,
+      "fidelity": "off",
+      "id": "system.launcher",
+      "profile": "off",
+      "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.launcher\", \"profile\": \"real\"}]}",
+      "state": "off"
+    },
+    {
+      "attach": "at-launch",
+      "details": null,
+      "fidelity": "off",
+      "id": "system.settings",
+      "profile": "off",
+      "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.settings\", \"profile\": \"real\"}]}",
+      "state": "off"
+    },
+    {
+      "attach": "hot",
+      "details": null,
+      "fidelity": "off",
+      "id": "hw.usb",
+      "profile": "off",
+      "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.usb\", \"profile\": \"stub\"}]}",
+      "state": "off"
+    },
+    {
+      "attach": "hot",
+      "details": null,
+      "fidelity": "off",
+      "id": "system.dropbox",
+      "profile": "off",
+      "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.dropbox\", \"profile\": \"stub\"}]}",
+      "state": "off"
+    },
+    {
+      "attach": "hot",
+      "details": null,
+      "fidelity": "off",
+      "id": "hw.nfc",
+      "profile": "off",
+      "reason": "off: no NFC hardware: NfcAdapter throws UnsupportedOperationException before any binder (FEATURE_NFC is absent)",
+      "state": "off"
+    },
+    {
+      "attach": "hot",
+      "details": null,
+      "fidelity": "off",
+      "id": "system.wallpaper",
+      "profile": "off",
+      "reason": "off: no wallpaper service; AOSP's own DisabledWallpaperManager is the working missing path (config_enableWallpaperService is false)",
+      "state": "off"
+    },
+    {
+      "attach": "hot",
+      "details": null,
+      "fidelity": "off",
+      "id": "system.print",
+      "profile": "off",
+      "reason": "off: no print service; the client only resolves the name when FEATURE_PRINTING is reported, and ACOS reports it absent",
+      "state": "off"
+    },
+    {
+      "attach": "hot",
+      "details": null,
+      "fidelity": "off",
+      "id": "system.search",
+      "profile": "off",
+      "reason": "off: no search service and no searchable index; an empty SearchableInfo list would look like an installed search provider",
+      "state": "off"
+    },
+    {
+      "attach": "hot",
+      "details": null,
+      "fidelity": "off",
+      "id": "system.usage",
+      "profile": "off",
+      "reason": "off: nothing records app usage; an empty ParceledListSlice<UsageStats> would be indistinguishable from 'not used'",
+      "state": "off"
+    },
+    {
+      "attach": "hot",
+      "details": null,
+      "fidelity": "off",
+      "id": "system.dpm",
+      "profile": "off",
+      "reason": "off: no managed device or profile; every device-policy answer would be invented policy state",
+      "state": "off"
+    },
+    {
+      "attach": "hot",
+      "details": null,
+      "fidelity": "off",
+      "id": "system.role",
+      "profile": "off",
+      "reason": "off: IRoleManager lives in the Permission APEX; its transaction table is not in the framework dex this build reads, so a stub would guess codes",
+      "state": "off"
+    },
+    {
+      "attach": "hot",
+      "details": null,
+      "fidelity": "off",
+      "id": "geo.country",
+      "profile": "off",
+      "reason": "off: a detected country is a location claim ACOS cannot back",
+      "state": "off"
+    }
+  ],
+  "notes": [
+    "coordinates: UI-tree bounds, tap x/y, assert_region and assert_screenshot.region_masks are display pixels (display 1080x2400, origin [0,0]); frames/<seq>.png is the display area starting at display_origin [0,0], so png_y = display_y - 0 (frame 2 is display [0,0][1080,2400]). Do not compare a tree bound with a PNG pixel without that offset.",
+    "artifacts: referenced (prune-unreferenced): 84 file(s) / 8.8 MiB kept, 20 file(s) / 6.4 MiB pruned; see retention.json",
+    "fidelity: module `accessibility` is off (module is off; attach it: acos_launch {\"services\": [{\"id\": \"accessibility\", \"profile\": \"real\"}]}); behaviour that needs it is unsupported, never a pass",
+    "fidelity: module `system.permissions` is off (module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.permissions\", \"profile\": \"real\"}]}); behaviour that needs it is unsupported, never a pass",
+    "fidelity: module `system.notifications` is off (module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.notifications\", \"profile\": \"real\"}]}); behaviour that needs it is unsupported, never a pass",
+    "fidelity: module `sensors` is off (module is off; attach it: acos_launch {\"services\": [{\"id\": \"sensors\", \"profile\": \"scripted\"}]}); behaviour that needs it is unsupported, never a pass",
+    "fidelity: module `feedback.vibrator` is off (module is off; attach it: acos_launch {\"services\": [{\"id\": \"feedback.vibrator\", \"profile\": \"scripted\"}]}); behaviour that needs it is unsupported, never a pass",
+    "fidelity: module `location` is off (module is off; attach it: acos_launch {\"services\": [{\"id\": \"location\", \"profile\": \"scripted\"}]}); behaviour that needs it is unsupported, never a pass",
+    "fidelity: module `net.telephony` is off (module is off; attach it: acos_launch {\"services\": [{\"id\": \"net.telephony\", \"profile\": \"scripted\"}]}); behaviour that needs it is unsupported, never a pass",
+    "fidelity: module `hw.bluetooth` is off (module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.bluetooth\", \"profile\": \"scripted\"}]}); behaviour that needs it is unsupported, never a pass",
+    "fidelity: module `hw.biometric` is off (module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.biometric\", \"profile\": \"scripted\"}]}); behaviour that needs it is unsupported, never a pass",
+    "fidelity: module `network` is off (module is off; attach it: acos_launch {\"services\": [{\"id\": \"network\", \"profile\": \"real\"}]}); behaviour that needs it is unsupported, never a pass",
+    "fidelity: module `webview` is off (module is off; attach it: acos_launch {\"services\": [{\"id\": \"webview\", \"profile\": \"real\"}]}); behaviour that needs it is unsupported, never a pass",
+    "fidelity: module `net.wifi` is off (module is off; attach it: acos_launch {\"services\": [{\"id\": \"net.wifi\", \"profile\": \"scripted\"}]}); behaviour that needs it is unsupported, never a pass",
+    "fidelity: module `media.session` is attached at `scripted` (not `real`); every result that depends on it is that fidelity, not a real implementation",
+    "fidelity: module `hw.camera` is off (module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.camera\", \"profile\": \"scripted\"}]}); behaviour that needs it is unsupported, never a pass",
+    "fidelity: module `multiwindow` is off (module is off; attach it: acos_launch {\"services\": [{\"id\": \"multiwindow\", \"profile\": \"real\"}]}); behaviour that needs it is unsupported, never a pass",
+    "fidelity: module `system.launcher` is off (module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.launcher\", \"profile\": \"real\"}]}); behaviour that needs it is unsupported, never a pass",
+    "fidelity: module `system.settings` is off (module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.settings\", \"profile\": \"real\"}]}); behaviour that needs it is unsupported, never a pass",
+    "fidelity: module `hw.usb` is off (module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.usb\", \"profile\": \"stub\"}]}); behaviour that needs it is unsupported, never a pass",
+    "fidelity: module `system.dropbox` is off (module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.dropbox\", \"profile\": \"stub\"}]}); behaviour that needs it is unsupported, never a pass",
+    "fidelity: module `hw.nfc` is off (off: no NFC hardware: NfcAdapter throws UnsupportedOperationException before any binder (FEATURE_NFC is absent)); behaviour that needs it is unsupported, never a pass",
+    "fidelity: module `system.wallpaper` is off (off: no wallpaper service; AOSP's own DisabledWallpaperManager is the working missing path (config_enableWallpaperService is false)); behaviour that needs it is unsupported, never a pass",
+    "fidelity: module `system.print` is off (off: no print service; the client only resolves the name when FEATURE_PRINTING is reported, and ACOS reports it absent); behaviour that needs it is unsupported, never a pass",
+    "fidelity: module `system.search` is off (off: no search service and no searchable index; an empty SearchableInfo list would look like an installed search provider); behaviour that needs it is unsupported, never a pass",
+    "fidelity: module `system.usage` is off (off: nothing records app usage; an empty ParceledListSlice<UsageStats> would be indistinguishable from 'not used'); behaviour that needs it is unsupported, never a pass",
+    "fidelity: module `system.dpm` is off (off: no managed device or profile; every device-policy answer would be invented policy state); behaviour that needs it is unsupported, never a pass",
+    "fidelity: module `system.role` is off (off: IRoleManager lives in the Permission APEX; its transaction table is not in the framework dex this build reads, so a stub would guess codes); behaviour that needs it is unsupported, never a pass",
+    "fidelity: module `geo.country` is off (off: a detected country is a location claim ACOS cannot back); behaviour that needs it is unsupported, never a pass"
+  ],
+  "provenance": {
+    "apk": {
+      "mtime_ns": 1795356364858131431,
+      "path": "/home/Qui/.t3/worktrees/acos/t3-8432ccd8-1d58d051095d020b/fixtures/build/apps/media-probe.apk",
+      "sha256": "51266baa021a61e4b30286739d60262e1299be541bf809c8f9e5ee2b95f31d6d",
+      "sha256_12": "51266baa021a",
+      "size_bytes": 16787
+    },
+    "engine": "art",
+    "fidelity": "art-reference",
+    "scenario": {
+      "mtime_ns": 1795356189354466042,
+      "path": "/home/Qui/.t3/worktrees/acos/t3-8432ccd8-1d58d051095d020b/scenarios/modfill-media.yaml",
+      "sha256": "e80eedf50b886a56197be5db1fe1c6eea14e809ba9e361220e98fc26f7701f96",
+      "sha256_12": "e80eedf50b88",
+      "size_bytes": 4825
+    },
+    "scenario_engine": "art",
+    "warnings": []
+  },
+  "provenance_rule": "trusted fixture: guest-asserted evidence may corroborate a pass, and its provenance is still recorded",
+  "reproducer": {
+    "acos_version": "0.4.0",
+    "apk_path": "/home/Qui/.t3/worktrees/acos/t3-8432ccd8-1d58d051095d020b/fixtures/build/apps/media-probe.apk",
+    "apk_sha256": "51266baa021a61e4b30286739d60262e1299be541bf809c8f9e5ee2b95f31d6d",
+    "backend": "acos-native",
+    "display": {
+      "density_dpi": 420,
+      "height": 2400,
+      "mode": "offscreen",
+      "width": 1080
+    },
+    "fidelity": "art-reference",
+    "flags": [],
+    "isolation": "process",
+    "scenario_path": "/home/Qui/.t3/worktrees/acos/t3-8432ccd8-1d58d051095d020b/scenarios/modfill-media.yaml",
+    "scenario_sha256": "e80eedf50b886a56197be5db1fe1c6eea14e809ba9e361220e98fc26f7701f96"
+  },
+  "request_id": "req_4434d_18ea64c29cf34df6",
+  "resources": {
+    "events": 391,
+    "frames_captured": 22,
+    "memory_mib": 19,
+    "peak_rss_bytes": 20074496,
+    "sessions": 1,
+    "steps": 32,
+    "wall_ms": 5901
+  },
+  "scenario": {
+    "name": "modfill-media",
+    "path": "/home/Qui/.t3/worktrees/acos/t3-8432ccd8-1d58d051095d020b/scenarios/modfill-media.yaml",
+    "sha256": "e80eedf50b886a56197be5db1fe1c6eea14e809ba9e361220e98fc26f7701f96"
+  },
+  "schema_version": 1,
+  "session_exit": {
+    "abi": null,
+    "cgroup": "cgroup: memory.max=2048MiB swap=0 pids.max=512 peak=71MiB oom_kills=0 (/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p279384-i333168.scope)",
+    "code": null,
+    "disk_free_bytes": 167390031872,
+    "guest_crash": null,
+    "guest_exit": 0,
+    "guest_signal": null,
+    "native_crash": null,
+    "native_crash_path": null,
+    "outcome": "ok",
+    "panic": null,
+    "path": "/home/Qui/.t3/worktrees/acos/t3-8432ccd8-1d58d051095d020b/.cache/rg5-mod-art/modfill-media/art-frames/session-exit.json",
+    "retryable": false,
+    "stage": "teardown-evidence"
+  },
+  "session_id": "s_art_media-probe",
+  "started_at": "2026-11-22T14:36:28.625Z",
+  "status": "pass",
+  "steps": [
+    {
+      "assertions": [],
+      "duration_ms": 156,
+      "evidence": [
+        {
+          "kind": "step",
+          "path": "steps/00-launch.json"
+        }
+      ],
+      "index": 0,
+      "provenance": {
+        "frame": "host-observed",
+        "launch_markers": "guest-asserted",
+        "lifecycle_markers": "guest-asserted",
+        "tree": "guest-asserted"
+      },
+      "status": "pass",
+      "step": "launch"
+    },
+    {
+      "assertions": [],
+      "duration_ms": 54,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/2.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/2.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/01-wait_for.json"
+        }
+      ],
+      "frame_seq": 2,
+      "index": 1,
+      "provenance": {
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "bound": "strict-event",
+        "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
+        "mode": "strict",
+        "probe_seq": 7,
+        "reason": "strict-event",
+        "settled": true,
+        "strict_rule": "event",
+        "tree_age_ms": 39,
+        "waited_ms": 54,
+        "waited_ms_source": "step"
+      },
+      "status": "pass",
+      "step": "wait_for"
+    },
+    {
+      "assertions": [
+        {
+          "actual": {
+            "screenshot_changed": true,
+            "tree_changed": true
+          },
+          "expected": {
+            "screenshot_changed": true,
+            "tree_changed": true
+          },
+          "kind": "state_change",
+          "matched_node_ids": [],
+          "message": "UI tree and screenshot both changed",
+          "passed": true
+        }
+      ],
+      "duration_ms": 954,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/3.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/3.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/02-tap.json"
+        }
+      ],
+      "frame_seq": 3,
+      "index": 2,
+      "input": {
+        "expect_change": "auto",
+        "handled": true,
+        "handled_evidence": {
+          "acked": 2,
+          "published": 2,
+          "source": "guest"
+        },
+        "target": {
+          "hit": {
+            "clickable": true,
+            "consumer": {
+              "bounds": "[24,370][1056,496]",
+              "class": "android.widget.Button",
+              "clickable": true,
+              "content_desc": "",
+              "enabled": true,
+              "focused": false,
+              "id": "n5_",
+              "password": false,
+              "resource_id": "",
+              "scrollable": false,
+              "text": "Create",
+              "visible_bounds": "[24,370][1056,496]",
+              "window": "main"
+            },
+            "method": "tree-geometry",
+            "node": {
+              "bounds": "[24,370][1056,496]",
+              "class": "android.widget.Button",
+              "clickable": true,
+              "content_desc": "",
+              "enabled": true,
+              "focused": false,
+              "id": "n5_",
+              "password": false,
+              "resource_id": "",
+              "scrollable": false,
+              "text": "Create",
+              "visible_bounds": "[24,370][1056,496]",
+              "window": "main"
+            },
+            "suggest": null
+          },
+          "node": {
+            "bounds": "[24,370][1056,496]",
+            "class": "android.widget.Button",
+            "clickable": true,
+            "content_desc": "",
+            "enabled": true,
+            "focused": false,
+            "id": "n5_",
+            "password": false,
+            "resource_id": "",
+            "scrollable": false,
+            "text": "Create",
+            "visible_bounds": "[24,370][1056,496]",
+            "window": "main"
+          },
+          "point": {
+            "x": 540,
+            "y": 433
+          },
+          "selector": {
+            "selector": "text==\"Create\""
+          }
+        }
+      },
+      "provenance": {
+        "frame": "host-observed",
+        "host_input": "host-observed",
+        "input_acks": "guest-asserted",
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "ack_ms": 5,
+        "bound": "strict-event",
+        "first_change_ms": 96,
+        "frame_ms": 940,
+        "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
+        "mode": "strict",
+        "pixels_changed": true,
+        "reason": "strict-event",
+        "settled": true,
+        "state_changed": null,
+        "strict_rule": "event",
+        "waited_ms": 954,
+        "waited_ms_source": "step"
+      },
+      "status": "pass",
+      "step": "tap"
+    },
+    {
+      "assertions": [],
+      "duration_ms": 57,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/4.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/4.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/03-wait_for.json"
+        }
+      ],
+      "frame_seq": 4,
+      "index": 3,
+      "provenance": {
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "bound": "strict-event",
+        "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
+        "mode": "strict",
+        "probe_seq": 44,
+        "reason": "strict-event",
+        "settled": true,
+        "strict_rule": "event",
+        "tree_age_ms": 40,
+        "waited_ms": 56,
+        "waited_ms_source": "step"
+      },
+      "status": "pass",
+      "step": "wait_for"
+    },
+    {
+      "assertions": [
+        {
+          "actual": {
+            "screenshot_changed": true,
+            "tree_changed": true
+          },
+          "expected": {
+            "screenshot_changed": true,
+            "tree_changed": true
+          },
+          "kind": "state_change",
+          "matched_node_ids": [],
+          "message": "UI tree and screenshot both changed",
+          "passed": true
+        }
+      ],
+      "duration_ms": 940,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/5.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/5.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/04-tap.json"
+        }
+      ],
+      "frame_seq": 5,
+      "index": 4,
+      "input": {
+        "expect_change": "auto",
+        "handled": true,
+        "handled_evidence": {
+          "acked": 2,
+          "published": 2,
+          "source": "guest"
+        },
+        "target": {
+          "hit": {
+            "clickable": true,
+            "consumer": {
+              "bounds": "[24,496][1056,622]",
+              "class": "android.widget.Button",
+              "clickable": true,
+              "content_desc": "",
+              "enabled": true,
+              "focused": false,
+              "id": "n5_",
+              "password": false,
+              "resource_id": "",
+              "scrollable": false,
+              "text": "Publish",
+              "visible_bounds": "[24,496][1056,622]",
+              "window": "main"
+            },
+            "method": "tree-geometry",
+            "node": {
+              "bounds": "[24,496][1056,622]",
+              "class": "android.widget.Button",
+              "clickable": true,
+              "content_desc": "",
+              "enabled": true,
+              "focused": false,
+              "id": "n5_",
+              "password": false,
+              "resource_id": "",
+              "scrollable": false,
+              "text": "Publish",
+              "visible_bounds": "[24,496][1056,622]",
+              "window": "main"
+            },
+            "suggest": null
+          },
+          "node": {
+            "bounds": "[24,496][1056,622]",
+            "class": "android.widget.Button",
+            "clickable": true,
+            "content_desc": "",
+            "enabled": true,
+            "focused": false,
+            "id": "n5_",
+            "password": false,
+            "resource_id": "",
+            "scrollable": false,
+            "text": "Publish",
+            "visible_bounds": "[24,496][1056,622]",
+            "window": "main"
+          },
+          "point": {
+            "x": 540,
+            "y": 559
+          },
+          "selector": {
+            "selector": "text==\"Publish\""
+          }
+        }
+      },
+      "provenance": {
+        "frame": "host-observed",
+        "host_input": "host-observed",
+        "input_acks": "guest-asserted",
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "ack_ms": 5,
+        "bound": "strict-event",
+        "first_change_ms": 108,
+        "frame_ms": 925,
+        "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
+        "mode": "strict",
+        "pixels_changed": true,
+        "reason": "strict-event",
+        "settled": true,
+        "state_changed": null,
+        "strict_rule": "event",
+        "waited_ms": 940,
+        "waited_ms_source": "step"
+      },
+      "status": "pass",
+      "step": "tap"
+    },
+    {
+      "assertions": [],
+      "duration_ms": 57,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/6.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/6.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/05-wait_for.json"
+        }
+      ],
+      "frame_seq": 6,
+      "index": 5,
+      "provenance": {
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "bound": "strict-event",
+        "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
+        "mode": "strict",
+        "probe_seq": 80,
+        "reason": "strict-event",
+        "settled": true,
+        "strict_rule": "event",
+        "tree_age_ms": 41,
+        "waited_ms": 56,
+        "waited_ms_source": "step"
+      },
+      "status": "pass",
+      "step": "wait_for"
+    },
+    {
+      "assertions": [],
+      "duration_ms": 57,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/7.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/7.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/06-wait_for.json"
+        }
+      ],
+      "frame_seq": 7,
+      "index": 6,
+      "provenance": {
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "bound": "strict-event",
+        "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
+        "mode": "strict",
+        "probe_seq": 81,
+        "reason": "strict-event",
+        "settled": true,
+        "strict_rule": "event",
+        "tree_age_ms": 40,
+        "waited_ms": 56,
+        "waited_ms_source": "step"
+      },
+      "status": "pass",
+      "step": "wait_for"
+    },
+    {
+      "assertions": [],
+      "duration_ms": 57,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/8.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/8.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/07-wait_for.json"
+        }
+      ],
+      "frame_seq": 8,
+      "index": 7,
+      "provenance": {
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "bound": "strict-event",
+        "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
+        "mode": "strict",
+        "probe_seq": 82,
+        "reason": "strict-event",
+        "settled": true,
+        "strict_rule": "event",
+        "tree_age_ms": 40,
+        "waited_ms": 56,
+        "waited_ms_source": "step"
+      },
+      "status": "pass",
+      "step": "wait_for"
+    },
+    {
+      "assertions": [
+        {
+          "actual": {
+            "screenshot_changed": true,
+            "tree_changed": true
+          },
+          "expected": {
+            "screenshot_changed": true,
+            "tree_changed": true
+          },
+          "kind": "state_change",
+          "matched_node_ids": [],
+          "message": "UI tree and screenshot both changed",
+          "passed": true
+        }
+      ],
+      "duration_ms": 954,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/9.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/9.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/08-tap.json"
+        }
+      ],
+      "frame_seq": 9,
+      "index": 8,
+      "input": {
+        "expect_change": "auto",
+        "handled": true,
+        "handled_evidence": {
+          "acked": 2,
+          "published": 2,
+          "source": "guest"
+        },
+        "target": {
+          "hit": {
+            "clickable": true,
+            "consumer": {
+              "bounds": "[24,622][1056,748]",
+              "class": "android.widget.Button",
+              "clickable": true,
+              "content_desc": "",
+              "enabled": true,
+              "focused": false,
+              "id": "n5_",
+              "password": false,
+              "resource_id": "",
+              "scrollable": false,
+              "text": "Controller",
+              "visible_bounds": "[24,622][1056,748]",
+              "window": "main"
+            },
+            "method": "tree-geometry",
+            "node": {
+              "bounds": "[24,622][1056,748]",
+              "class": "android.widget.Button",
+              "clickable": true,
+              "content_desc": "",
+              "enabled": true,
+              "focused": false,
+              "id": "n5_",
+              "password": false,
+              "resource_id": "",
+              "scrollable": false,
+              "text": "Controller",
+              "visible_bounds": "[24,622][1056,748]",
+              "window": "main"
+            },
+            "suggest": null
+          },
+          "node": {
+            "bounds": "[24,622][1056,748]",
+            "class": "android.widget.Button",
+            "clickable": true,
+            "content_desc": "",
+            "enabled": true,
+            "focused": false,
+            "id": "n5_",
+            "password": false,
+            "resource_id": "",
+            "scrollable": false,
+            "text": "Controller",
+            "visible_bounds": "[24,622][1056,748]",
+            "window": "main"
+          },
+          "point": {
+            "x": 540,
+            "y": 685
+          },
+          "selector": {
+            "selector": "text==\"Controller\""
+          }
+        }
+      },
+      "provenance": {
+        "frame": "host-observed",
+        "host_input": "host-observed",
+        "input_acks": "guest-asserted",
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "ack_ms": 5,
+        "bound": "strict-event",
+        "first_change_ms": 108,
+        "frame_ms": 938,
+        "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
+        "mode": "strict",
+        "pixels_changed": true,
+        "reason": "strict-event",
+        "settled": true,
+        "state_changed": null,
+        "strict_rule": "event",
+        "waited_ms": 954,
+        "waited_ms_source": "step"
+      },
+      "status": "pass",
+      "step": "tap"
+    },
+    {
+      "assertions": [],
+      "duration_ms": 57,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/10.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/10.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/09-wait_for.json"
+        }
+      ],
+      "frame_seq": 10,
+      "index": 9,
+      "provenance": {
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "bound": "strict-event",
+        "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
+        "mode": "strict",
+        "probe_seq": 118,
+        "reason": "strict-event",
+        "settled": true,
+        "strict_rule": "event",
+        "tree_age_ms": 40,
+        "waited_ms": 57,
+        "waited_ms_source": "step"
+      },
+      "status": "pass",
+      "step": "wait_for"
+    },
+    {
+      "assertions": [
+        {
+          "actual": {
+            "animations": "on",
+            "attached": [
+              {
+                "id": "core",
+                "profile": "real"
+              },
+              {
+                "id": "media.session",
+                "profile": "scripted"
+              }
+            ],
+            "cmd": "services",
+            "id": "media.session",
+            "modules": [
+              {
+                "attach": "at-launch",
+                "details": null,
+                "fidelity": "real",
+                "id": "core",
+                "profile": "real",
+                "reason": null,
+                "state": "attached"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "accessibility",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"accessibility\", \"profile\": \"real\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "system.permissions",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.permissions\", \"profile\": \"real\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "system.notifications",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.notifications\", \"profile\": \"real\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "sensors",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"sensors\", \"profile\": \"scripted\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "feedback.vibrator",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"feedback.vibrator\", \"profile\": \"scripted\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "location",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"location\", \"profile\": \"scripted\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "at-launch",
+                "details": null,
+                "fidelity": "off",
+                "id": "net.telephony",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"net.telephony\", \"profile\": \"scripted\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "hw.bluetooth",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.bluetooth\", \"profile\": \"scripted\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "hw.biometric",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.biometric\", \"profile\": \"scripted\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "at-launch",
+                "details": null,
+                "fidelity": "off",
+                "id": "network",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"network\", \"profile\": \"real\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "at-launch",
+                "details": null,
+                "fidelity": "off",
+                "id": "webview",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"webview\", \"profile\": \"real\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "net.wifi",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"net.wifi\", \"profile\": \"scripted\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "scripted",
+                "id": "media.session",
+                "profile": "scripted",
+                "reason": "scripted profile: sessions are recorded and commands are delivered to the app's MediaSession.Callback; 1 session(s) so far; no media-key routing, queue, volume, remote sessions or media router (UNSUPPORTED_ANDROID_API); metadata with an undecodable value (album art) is accepted but reported unreadable",
+                "state": "attached"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "hw.camera",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.camera\", \"profile\": \"scripted\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "multiwindow",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"multiwindow\", \"profile\": \"real\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "at-launch",
+                "details": null,
+                "fidelity": "off",
+                "id": "system.launcher",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.launcher\", \"profile\": \"real\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "at-launch",
+                "details": null,
+                "fidelity": "off",
+                "id": "system.settings",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.settings\", \"profile\": \"real\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "hw.usb",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.usb\", \"profile\": \"stub\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "system.dropbox",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.dropbox\", \"profile\": \"stub\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "hw.nfc",
+                "profile": "off",
+                "reason": "off: no NFC hardware: NfcAdapter throws UnsupportedOperationException before any binder (FEATURE_NFC is absent)",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "system.wallpaper",
+                "profile": "off",
+                "reason": "off: no wallpaper service; AOSP's own DisabledWallpaperManager is the working missing path (config_enableWallpaperService is false)",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "system.print",
+                "profile": "off",
+                "reason": "off: no print service; the client only resolves the name when FEATURE_PRINTING is reported, and ACOS reports it absent",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "system.search",
+                "profile": "off",
+                "reason": "off: no search service and no searchable index; an empty SearchableInfo list would look like an installed search provider",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "system.usage",
+                "profile": "off",
+                "reason": "off: nothing records app usage; an empty ParceledListSlice<UsageStats> would be indistinguishable from 'not used'",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "system.dpm",
+                "profile": "off",
+                "reason": "off: no managed device or profile; every device-policy answer would be invented policy state",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "system.role",
+                "profile": "off",
+                "reason": "off: IRoleManager lives in the Permission APEX; its transaction table is not in the framework dex this build reads, so a stub would guess codes",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "geo.country",
+                "profile": "off",
+                "reason": "off: a detected country is a location claim ACOS cannot back",
+                "state": "off"
+              }
+            ],
+            "ok": true,
+            "op": "sessions",
+            "value": {
+              "sessions": [
+                {
+                  "active": true,
+                  "commands": [],
+                  "controller_callbacks": 1,
+                  "destroyed": false,
+                  "flags": 0,
+                  "id": 1,
+                  "ignored": [],
+                  "metadata": {
+                    "ARTIST": "Miles Davis",
+                    "DURATION": 337000,
+                    "TITLE": "Blue in Green"
+                  },
+                  "package": "dev.acos.fixtures.mediaprobe",
+                  "playback": {
+                    "actions": 310,
+                    "active_item_id": -1,
+                    "buffered_position": 0,
+                    "custom_actions": 0,
+                    "error": null,
+                    "position": 0,
+                    "speed": 1.0,
+                    "state": "PLAYING",
+                    "state_code": 3,
+                    "update_time": 4142770
+                  },
+                  "rating_type": 0,
+                  "tag": "acos-music",
+                  "user_id": 0
+                }
+              ],
+              "unsupported": []
+            }
+          },
+          "expected": {
+            "module": "media.session",
+            "op": "sessions"
+          },
+          "kind": "service_ctl",
+          "matched_node_ids": [],
+          "message": "attached=[{\"id\":\"core\",\"profile\":\"real\"},{\"id\":\"media.session\",\"profile\":\"scripted\"}]",
+          "passed": true
+        }
+      ],
+      "duration_ms": 0,
+      "evidence": [
+        {
+          "kind": "step",
+          "path": "steps/10-service_ctl.json"
+        }
+      ],
+      "index": 10,
+      "provenance": {},
+      "status": "pass",
+      "step": "service_ctl"
+    },
+    {
+      "assertions": [
+        {
+          "actual": {
+            "animations": "on",
+            "attached": [
+              {
+                "id": "core",
+                "profile": "real"
+              },
+              {
+                "id": "media.session",
+                "profile": "scripted"
+              }
+            ],
+            "cmd": "services",
+            "id": "media.session",
+            "modules": [
+              {
+                "attach": "at-launch",
+                "details": null,
+                "fidelity": "real",
+                "id": "core",
+                "profile": "real",
+                "reason": null,
+                "state": "attached"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "accessibility",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"accessibility\", \"profile\": \"real\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "system.permissions",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.permissions\", \"profile\": \"real\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "system.notifications",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.notifications\", \"profile\": \"real\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "sensors",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"sensors\", \"profile\": \"scripted\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "feedback.vibrator",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"feedback.vibrator\", \"profile\": \"scripted\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "location",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"location\", \"profile\": \"scripted\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "at-launch",
+                "details": null,
+                "fidelity": "off",
+                "id": "net.telephony",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"net.telephony\", \"profile\": \"scripted\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "hw.bluetooth",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.bluetooth\", \"profile\": \"scripted\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "hw.biometric",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.biometric\", \"profile\": \"scripted\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "at-launch",
+                "details": null,
+                "fidelity": "off",
+                "id": "network",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"network\", \"profile\": \"real\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "at-launch",
+                "details": null,
+                "fidelity": "off",
+                "id": "webview",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"webview\", \"profile\": \"real\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "net.wifi",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"net.wifi\", \"profile\": \"scripted\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "scripted",
+                "id": "media.session",
+                "profile": "scripted",
+                "reason": "scripted profile: sessions are recorded and commands are delivered to the app's MediaSession.Callback; 1 session(s) so far; no media-key routing, queue, volume, remote sessions or media router (UNSUPPORTED_ANDROID_API); metadata with an undecodable value (album art) is accepted but reported unreadable",
+                "state": "attached"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "hw.camera",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.camera\", \"profile\": \"scripted\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "multiwindow",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"multiwindow\", \"profile\": \"real\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "at-launch",
+                "details": null,
+                "fidelity": "off",
+                "id": "system.launcher",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.launcher\", \"profile\": \"real\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "at-launch",
+                "details": null,
+                "fidelity": "off",
+                "id": "system.settings",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.settings\", \"profile\": \"real\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "hw.usb",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.usb\", \"profile\": \"stub\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "system.dropbox",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.dropbox\", \"profile\": \"stub\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "hw.nfc",
+                "profile": "off",
+                "reason": "off: no NFC hardware: NfcAdapter throws UnsupportedOperationException before any binder (FEATURE_NFC is absent)",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "system.wallpaper",
+                "profile": "off",
+                "reason": "off: no wallpaper service; AOSP's own DisabledWallpaperManager is the working missing path (config_enableWallpaperService is false)",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "system.print",
+                "profile": "off",
+                "reason": "off: no print service; the client only resolves the name when FEATURE_PRINTING is reported, and ACOS reports it absent",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "system.search",
+                "profile": "off",
+                "reason": "off: no search service and no searchable index; an empty SearchableInfo list would look like an installed search provider",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "system.usage",
+                "profile": "off",
+                "reason": "off: nothing records app usage; an empty ParceledListSlice<UsageStats> would be indistinguishable from 'not used'",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "system.dpm",
+                "profile": "off",
+                "reason": "off: no managed device or profile; every device-policy answer would be invented policy state",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "system.role",
+                "profile": "off",
+                "reason": "off: IRoleManager lives in the Permission APEX; its transaction table is not in the framework dex this build reads, so a stub would guess codes",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "geo.country",
+                "profile": "off",
+                "reason": "off: a detected country is a location claim ACOS cannot back",
+                "state": "off"
+              }
+            ],
+            "ok": true,
+            "op": "pause",
+            "value": {
+              "callback": "onPause",
+              "sent": "pause",
+              "session": {
+                "active": true,
+                "commands": [
+                  "pause (agent)"
+                ],
+                "controller_callbacks": 1,
+                "destroyed": false,
+                "flags": 0,
+                "id": 1,
+                "ignored": [],
+                "metadata": {
+                  "ARTIST": "Miles Davis",
+                  "DURATION": 337000,
+                  "TITLE": "Blue in Green"
+                },
+                "package": "dev.acos.fixtures.mediaprobe",
+                "playback": {
+                  "actions": 310,
+                  "active_item_id": -1,
+                  "buffered_position": 0,
+                  "custom_actions": 0,
+                  "error": null,
+                  "position": 0,
+                  "speed": 1.0,
+                  "state": "PLAYING",
+                  "state_code": 3,
+                  "update_time": 4142770
+                },
+                "rating_type": 0,
+                "tag": "acos-music",
+                "user_id": 0
+              }
+            }
+          },
+          "expected": {
+            "module": "media.session",
+            "op": "pause"
+          },
+          "kind": "service_ctl",
+          "matched_node_ids": [],
+          "message": "attached=[{\"id\":\"core\",\"profile\":\"real\"},{\"id\":\"media.session\",\"profile\":\"scripted\"}]",
+          "passed": true
+        }
+      ],
+      "duration_ms": 0,
+      "evidence": [
+        {
+          "kind": "step",
+          "path": "steps/11-service_ctl.json"
+        }
+      ],
+      "index": 11,
+      "provenance": {},
+      "status": "pass",
+      "step": "service_ctl"
+    },
+    {
+      "assertions": [],
+      "duration_ms": 68,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/11.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/11.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/12-wait_for.json"
+        }
+      ],
+      "frame_seq": 11,
+      "index": 12,
+      "provenance": {
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "bound": "strict-event",
+        "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
+        "mode": "strict",
+        "probe_seq": 120,
+        "reason": "strict-event",
+        "settled": true,
+        "strict_rule": "event",
+        "tree_age_ms": 25,
+        "waited_ms": 68,
+        "waited_ms_source": "step"
+      },
+      "status": "pass",
+      "step": "wait_for"
+    },
+    {
+      "assertions": [],
+      "duration_ms": 57,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/12.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/12.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/13-wait_for.json"
+        }
+      ],
+      "frame_seq": 12,
+      "index": 13,
+      "provenance": {
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "bound": "strict-event",
+        "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
+        "mode": "strict",
+        "probe_seq": 121,
+        "reason": "strict-event",
+        "settled": true,
+        "strict_rule": "event",
+        "tree_age_ms": 40,
+        "waited_ms": 57,
+        "waited_ms_source": "step"
+      },
+      "status": "pass",
+      "step": "wait_for"
+    },
+    {
+      "assertions": [
+        {
+          "actual": {
+            "animations": "on",
+            "attached": [
+              {
+                "id": "core",
+                "profile": "real"
+              },
+              {
+                "id": "media.session",
+                "profile": "scripted"
+              }
+            ],
+            "cmd": "services",
+            "id": "media.session",
+            "modules": [
+              {
+                "attach": "at-launch",
+                "details": null,
+                "fidelity": "real",
+                "id": "core",
+                "profile": "real",
+                "reason": null,
+                "state": "attached"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "accessibility",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"accessibility\", \"profile\": \"real\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "system.permissions",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.permissions\", \"profile\": \"real\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "system.notifications",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.notifications\", \"profile\": \"real\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "sensors",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"sensors\", \"profile\": \"scripted\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "feedback.vibrator",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"feedback.vibrator\", \"profile\": \"scripted\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "location",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"location\", \"profile\": \"scripted\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "at-launch",
+                "details": null,
+                "fidelity": "off",
+                "id": "net.telephony",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"net.telephony\", \"profile\": \"scripted\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "hw.bluetooth",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.bluetooth\", \"profile\": \"scripted\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "hw.biometric",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.biometric\", \"profile\": \"scripted\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "at-launch",
+                "details": null,
+                "fidelity": "off",
+                "id": "network",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"network\", \"profile\": \"real\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "at-launch",
+                "details": null,
+                "fidelity": "off",
+                "id": "webview",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"webview\", \"profile\": \"real\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "net.wifi",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"net.wifi\", \"profile\": \"scripted\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "scripted",
+                "id": "media.session",
+                "profile": "scripted",
+                "reason": "scripted profile: sessions are recorded and commands are delivered to the app's MediaSession.Callback; 1 session(s) so far; no media-key routing, queue, volume, remote sessions or media router (UNSUPPORTED_ANDROID_API); metadata with an undecodable value (album art) is accepted but reported unreadable",
+                "state": "attached"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "hw.camera",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.camera\", \"profile\": \"scripted\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "multiwindow",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"multiwindow\", \"profile\": \"real\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "at-launch",
+                "details": null,
+                "fidelity": "off",
+                "id": "system.launcher",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.launcher\", \"profile\": \"real\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "at-launch",
+                "details": null,
+                "fidelity": "off",
+                "id": "system.settings",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.settings\", \"profile\": \"real\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "hw.usb",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.usb\", \"profile\": \"stub\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "system.dropbox",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.dropbox\", \"profile\": \"stub\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "hw.nfc",
+                "profile": "off",
+                "reason": "off: no NFC hardware: NfcAdapter throws UnsupportedOperationException before any binder (FEATURE_NFC is absent)",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "system.wallpaper",
+                "profile": "off",
+                "reason": "off: no wallpaper service; AOSP's own DisabledWallpaperManager is the working missing path (config_enableWallpaperService is false)",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "system.print",
+                "profile": "off",
+                "reason": "off: no print service; the client only resolves the name when FEATURE_PRINTING is reported, and ACOS reports it absent",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "system.search",
+                "profile": "off",
+                "reason": "off: no search service and no searchable index; an empty SearchableInfo list would look like an installed search provider",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "system.usage",
+                "profile": "off",
+                "reason": "off: nothing records app usage; an empty ParceledListSlice<UsageStats> would be indistinguishable from 'not used'",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "system.dpm",
+                "profile": "off",
+                "reason": "off: no managed device or profile; every device-policy answer would be invented policy state",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "system.role",
+                "profile": "off",
+                "reason": "off: IRoleManager lives in the Permission APEX; its transaction table is not in the framework dex this build reads, so a stub would guess codes",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "geo.country",
+                "profile": "off",
+                "reason": "off: a detected country is a location claim ACOS cannot back",
+                "state": "off"
+              }
+            ],
+            "ok": true,
+            "op": "next",
+            "value": {
+              "callback": "onNext",
+              "sent": "next",
+              "session": {
+                "active": true,
+                "commands": [
+                  "pause (agent)",
+                  "next (agent)"
+                ],
+                "controller_callbacks": 1,
+                "destroyed": false,
+                "flags": 0,
+                "id": 1,
+                "ignored": [],
+                "metadata": {
+                  "ARTIST": "Miles Davis",
+                  "DURATION": 337000,
+                  "TITLE": "Blue in Green"
+                },
+                "package": "dev.acos.fixtures.mediaprobe",
+                "playback": {
+                  "actions": 310,
+                  "active_item_id": -1,
+                  "buffered_position": 0,
+                  "custom_actions": 0,
+                  "error": null,
+                  "position": 0,
+                  "speed": 1.0,
+                  "state": "PAUSED",
+                  "state_code": 2,
+                  "update_time": 4144888
+                },
+                "rating_type": 0,
+                "tag": "acos-music",
+                "user_id": 0
+              }
+            }
+          },
+          "expected": {
+            "module": "media.session",
+            "op": "next"
+          },
+          "kind": "service_ctl",
+          "matched_node_ids": [],
+          "message": "attached=[{\"id\":\"core\",\"profile\":\"real\"},{\"id\":\"media.session\",\"profile\":\"scripted\"}]",
+          "passed": true
+        }
+      ],
+      "duration_ms": 1,
+      "evidence": [
+        {
+          "kind": "step",
+          "path": "steps/14-service_ctl.json"
+        }
+      ],
+      "index": 14,
+      "provenance": {},
+      "status": "pass",
+      "step": "service_ctl"
+    },
+    {
+      "assertions": [],
+      "duration_ms": 68,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/13.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/13.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/15-wait_for.json"
+        }
+      ],
+      "frame_seq": 13,
+      "index": 15,
+      "provenance": {
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "bound": "strict-event",
+        "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
+        "mode": "strict",
+        "probe_seq": 123,
+        "reason": "strict-event",
+        "settled": true,
+        "strict_rule": "event",
+        "tree_age_ms": 24,
+        "waited_ms": 67,
+        "waited_ms_source": "step"
+      },
+      "status": "pass",
+      "step": "wait_for"
+    },
+    {
+      "assertions": [],
+      "duration_ms": 59,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/14.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/14.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/16-wait_for.json"
+        }
+      ],
+      "frame_seq": 14,
+      "index": 16,
+      "provenance": {
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "bound": "strict-event",
+        "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
+        "mode": "strict",
+        "probe_seq": 124,
+        "reason": "strict-event",
+        "settled": true,
+        "strict_rule": "event",
+        "tree_age_ms": 40,
+        "waited_ms": 58,
+        "waited_ms_source": "step"
+      },
+      "status": "pass",
+      "step": "wait_for"
+    },
+    {
+      "assertions": [
+        {
+          "actual": {
+            "animations": "on",
+            "attached": [
+              {
+                "id": "core",
+                "profile": "real"
+              },
+              {
+                "id": "media.session",
+                "profile": "scripted"
+              }
+            ],
+            "cmd": "services",
+            "id": "media.session",
+            "modules": [
+              {
+                "attach": "at-launch",
+                "details": null,
+                "fidelity": "real",
+                "id": "core",
+                "profile": "real",
+                "reason": null,
+                "state": "attached"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "accessibility",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"accessibility\", \"profile\": \"real\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "system.permissions",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.permissions\", \"profile\": \"real\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "system.notifications",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.notifications\", \"profile\": \"real\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "sensors",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"sensors\", \"profile\": \"scripted\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "feedback.vibrator",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"feedback.vibrator\", \"profile\": \"scripted\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "location",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"location\", \"profile\": \"scripted\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "at-launch",
+                "details": null,
+                "fidelity": "off",
+                "id": "net.telephony",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"net.telephony\", \"profile\": \"scripted\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "hw.bluetooth",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.bluetooth\", \"profile\": \"scripted\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "hw.biometric",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.biometric\", \"profile\": \"scripted\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "at-launch",
+                "details": null,
+                "fidelity": "off",
+                "id": "network",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"network\", \"profile\": \"real\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "at-launch",
+                "details": null,
+                "fidelity": "off",
+                "id": "webview",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"webview\", \"profile\": \"real\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "net.wifi",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"net.wifi\", \"profile\": \"scripted\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "scripted",
+                "id": "media.session",
+                "profile": "scripted",
+                "reason": "scripted profile: sessions are recorded and commands are delivered to the app's MediaSession.Callback; 1 session(s) so far; no media-key routing, queue, volume, remote sessions or media router (UNSUPPORTED_ANDROID_API); metadata with an undecodable value (album art) is accepted but reported unreadable",
+                "state": "attached"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "hw.camera",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.camera\", \"profile\": \"scripted\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "multiwindow",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"multiwindow\", \"profile\": \"real\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "at-launch",
+                "details": null,
+                "fidelity": "off",
+                "id": "system.launcher",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.launcher\", \"profile\": \"real\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "at-launch",
+                "details": null,
+                "fidelity": "off",
+                "id": "system.settings",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.settings\", \"profile\": \"real\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "hw.usb",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.usb\", \"profile\": \"stub\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "system.dropbox",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.dropbox\", \"profile\": \"stub\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "hw.nfc",
+                "profile": "off",
+                "reason": "off: no NFC hardware: NfcAdapter throws UnsupportedOperationException before any binder (FEATURE_NFC is absent)",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "system.wallpaper",
+                "profile": "off",
+                "reason": "off: no wallpaper service; AOSP's own DisabledWallpaperManager is the working missing path (config_enableWallpaperService is false)",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "system.print",
+                "profile": "off",
+                "reason": "off: no print service; the client only resolves the name when FEATURE_PRINTING is reported, and ACOS reports it absent",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "system.search",
+                "profile": "off",
+                "reason": "off: no search service and no searchable index; an empty SearchableInfo list would look like an installed search provider",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "system.usage",
+                "profile": "off",
+                "reason": "off: nothing records app usage; an empty ParceledListSlice<UsageStats> would be indistinguishable from 'not used'",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "system.dpm",
+                "profile": "off",
+                "reason": "off: no managed device or profile; every device-policy answer would be invented policy state",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "system.role",
+                "profile": "off",
+                "reason": "off: IRoleManager lives in the Permission APEX; its transaction table is not in the framework dex this build reads, so a stub would guess codes",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "geo.country",
+                "profile": "off",
+                "reason": "off: a detected country is a location claim ACOS cannot back",
+                "state": "off"
+              }
+            ],
+            "ok": true,
+            "op": "seek",
+            "value": {
+              "callback": "onSeekTo",
+              "sent": "seek",
+              "session": {
+                "active": true,
+                "commands": [
+                  "pause (agent)",
+                  "next (agent)",
+                  "seek 90000 (agent)"
+                ],
+                "controller_callbacks": 1,
+                "destroyed": false,
+                "flags": 0,
+                "id": 1,
+                "ignored": [],
+                "metadata": {
+                  "ARTIST": "Miles Davis",
+                  "DURATION": 337000,
+                  "TITLE": "So What"
+                },
+                "package": "dev.acos.fixtures.mediaprobe",
+                "playback": {
+                  "actions": 310,
+                  "active_item_id": -1,
+                  "buffered_position": 0,
+                  "custom_actions": 0,
+                  "error": null,
+                  "position": 0,
+                  "speed": 1.0,
+                  "state": "PLAYING",
+                  "state_code": 3,
+                  "update_time": 4145017
+                },
+                "rating_type": 0,
+                "tag": "acos-music",
+                "user_id": 0
+              }
+            }
+          },
+          "expected": {
+            "module": "media.session",
+            "op": "seek"
+          },
+          "kind": "service_ctl",
+          "matched_node_ids": [],
+          "message": "attached=[{\"id\":\"core\",\"profile\":\"real\"},{\"id\":\"media.session\",\"profile\":\"scripted\"}]",
+          "passed": true
+        }
+      ],
+      "duration_ms": 0,
+      "evidence": [
+        {
+          "kind": "step",
+          "path": "steps/17-service_ctl.json"
+        }
+      ],
+      "index": 17,
+      "provenance": {},
+      "status": "pass",
+      "step": "service_ctl"
+    },
+    {
+      "assertions": [],
+      "duration_ms": 59,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/15.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/15.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/18-wait_for.json"
+        }
+      ],
+      "frame_seq": 15,
+      "index": 18,
+      "provenance": {
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "bound": "strict-event",
+        "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
+        "mode": "strict",
+        "probe_seq": 126,
+        "reason": "strict-event",
+        "settled": true,
+        "strict_rule": "event",
+        "tree_age_ms": 15,
+        "waited_ms": 59,
+        "waited_ms_source": "step"
+      },
+      "status": "pass",
+      "step": "wait_for"
+    },
+    {
+      "assertions": [
+        {
+          "actual": {
+            "animations": "on",
+            "attached": [
+              {
+                "id": "core",
+                "profile": "real"
+              },
+              {
+                "id": "media.session",
+                "profile": "scripted"
+              }
+            ],
+            "cmd": "services",
+            "id": "media.session",
+            "modules": [
+              {
+                "attach": "at-launch",
+                "details": null,
+                "fidelity": "real",
+                "id": "core",
+                "profile": "real",
+                "reason": null,
+                "state": "attached"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "accessibility",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"accessibility\", \"profile\": \"real\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "system.permissions",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.permissions\", \"profile\": \"real\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "system.notifications",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.notifications\", \"profile\": \"real\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "sensors",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"sensors\", \"profile\": \"scripted\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "feedback.vibrator",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"feedback.vibrator\", \"profile\": \"scripted\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "location",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"location\", \"profile\": \"scripted\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "at-launch",
+                "details": null,
+                "fidelity": "off",
+                "id": "net.telephony",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"net.telephony\", \"profile\": \"scripted\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "hw.bluetooth",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.bluetooth\", \"profile\": \"scripted\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "hw.biometric",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.biometric\", \"profile\": \"scripted\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "at-launch",
+                "details": null,
+                "fidelity": "off",
+                "id": "network",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"network\", \"profile\": \"real\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "at-launch",
+                "details": null,
+                "fidelity": "off",
+                "id": "webview",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"webview\", \"profile\": \"real\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "net.wifi",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"net.wifi\", \"profile\": \"scripted\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "scripted",
+                "id": "media.session",
+                "profile": "scripted",
+                "reason": "scripted profile: sessions are recorded and commands are delivered to the app's MediaSession.Callback; 1 session(s) so far; no media-key routing, queue, volume, remote sessions or media router (UNSUPPORTED_ANDROID_API); metadata with an undecodable value (album art) is accepted but reported unreadable",
+                "state": "attached"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "hw.camera",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.camera\", \"profile\": \"scripted\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "multiwindow",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"multiwindow\", \"profile\": \"real\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "at-launch",
+                "details": null,
+                "fidelity": "off",
+                "id": "system.launcher",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.launcher\", \"profile\": \"real\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "at-launch",
+                "details": null,
+                "fidelity": "off",
+                "id": "system.settings",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.settings\", \"profile\": \"real\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "hw.usb",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.usb\", \"profile\": \"stub\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "system.dropbox",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.dropbox\", \"profile\": \"stub\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "hw.nfc",
+                "profile": "off",
+                "reason": "off: no NFC hardware: NfcAdapter throws UnsupportedOperationException before any binder (FEATURE_NFC is absent)",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "system.wallpaper",
+                "profile": "off",
+                "reason": "off: no wallpaper service; AOSP's own DisabledWallpaperManager is the working missing path (config_enableWallpaperService is false)",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "system.print",
+                "profile": "off",
+                "reason": "off: no print service; the client only resolves the name when FEATURE_PRINTING is reported, and ACOS reports it absent",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "system.search",
+                "profile": "off",
+                "reason": "off: no search service and no searchable index; an empty SearchableInfo list would look like an installed search provider",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "system.usage",
+                "profile": "off",
+                "reason": "off: nothing records app usage; an empty ParceledListSlice<UsageStats> would be indistinguishable from 'not used'",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "system.dpm",
+                "profile": "off",
+                "reason": "off: no managed device or profile; every device-policy answer would be invented policy state",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "system.role",
+                "profile": "off",
+                "reason": "off: IRoleManager lives in the Permission APEX; its transaction table is not in the framework dex this build reads, so a stub would guess codes",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "geo.country",
+                "profile": "off",
+                "reason": "off: a detected country is a location claim ACOS cannot back",
+                "state": "off"
+              }
+            ],
+            "ok": true,
+            "op": "previous",
+            "value": {
+              "callback": "onPrevious",
+              "sent": "previous",
+              "session": {
+                "active": true,
+                "commands": [
+                  "pause (agent)",
+                  "next (agent)",
+                  "seek 90000 (agent)",
+                  "previous (agent)"
+                ],
+                "controller_callbacks": 1,
+                "destroyed": false,
+                "flags": 0,
+                "id": 1,
+                "ignored": [],
+                "metadata": {
+                  "ARTIST": "Miles Davis",
+                  "DURATION": 337000,
+                  "TITLE": "So What"
+                },
+                "package": "dev.acos.fixtures.mediaprobe",
+                "playback": {
+                  "actions": 310,
+                  "active_item_id": -1,
+                  "buffered_position": 0,
+                  "custom_actions": 0,
+                  "error": null,
+                  "position": 90000,
+                  "speed": 1.0,
+                  "state": "PLAYING",
+                  "state_code": 3,
+                  "update_time": 4145145
+                },
+                "rating_type": 0,
+                "tag": "acos-music",
+                "user_id": 0
+              }
+            }
+          },
+          "expected": {
+            "module": "media.session",
+            "op": "previous"
+          },
+          "kind": "service_ctl",
+          "matched_node_ids": [],
+          "message": "attached=[{\"id\":\"core\",\"profile\":\"real\"},{\"id\":\"media.session\",\"profile\":\"scripted\"}]",
+          "passed": true
+        }
+      ],
+      "duration_ms": 0,
+      "evidence": [
+        {
+          "kind": "step",
+          "path": "steps/19-service_ctl.json"
+        }
+      ],
+      "index": 19,
+      "provenance": {},
+      "status": "pass",
+      "step": "service_ctl"
+    },
+    {
+      "assertions": [],
+      "duration_ms": 69,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/16.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/16.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/20-wait_for.json"
+        }
+      ],
+      "frame_seq": 16,
+      "index": 20,
+      "provenance": {
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "bound": "strict-event",
+        "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
+        "mode": "strict",
+        "probe_seq": 128,
+        "reason": "strict-event",
+        "settled": true,
+        "strict_rule": "event",
+        "tree_age_ms": 25,
+        "waited_ms": 69,
+        "waited_ms_source": "step"
+      },
+      "status": "pass",
+      "step": "wait_for"
+    },
+    {
+      "assertions": [
+        {
+          "actual": {
+            "animations": "on",
+            "attached": [
+              {
+                "id": "core",
+                "profile": "real"
+              },
+              {
+                "id": "media.session",
+                "profile": "scripted"
+              }
+            ],
+            "cmd": "services",
+            "id": "media.session",
+            "modules": [
+              {
+                "attach": "at-launch",
+                "details": null,
+                "fidelity": "real",
+                "id": "core",
+                "profile": "real",
+                "reason": null,
+                "state": "attached"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "accessibility",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"accessibility\", \"profile\": \"real\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "system.permissions",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.permissions\", \"profile\": \"real\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "system.notifications",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.notifications\", \"profile\": \"real\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "sensors",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"sensors\", \"profile\": \"scripted\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "feedback.vibrator",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"feedback.vibrator\", \"profile\": \"scripted\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "location",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"location\", \"profile\": \"scripted\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "at-launch",
+                "details": null,
+                "fidelity": "off",
+                "id": "net.telephony",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"net.telephony\", \"profile\": \"scripted\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "hw.bluetooth",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.bluetooth\", \"profile\": \"scripted\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "hw.biometric",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.biometric\", \"profile\": \"scripted\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "at-launch",
+                "details": null,
+                "fidelity": "off",
+                "id": "network",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"network\", \"profile\": \"real\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "at-launch",
+                "details": null,
+                "fidelity": "off",
+                "id": "webview",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"webview\", \"profile\": \"real\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "net.wifi",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"net.wifi\", \"profile\": \"scripted\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "scripted",
+                "id": "media.session",
+                "profile": "scripted",
+                "reason": "scripted profile: sessions are recorded and commands are delivered to the app's MediaSession.Callback; 1 session(s) so far; no media-key routing, queue, volume, remote sessions or media router (UNSUPPORTED_ANDROID_API); metadata with an undecodable value (album art) is accepted but reported unreadable",
+                "state": "attached"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "hw.camera",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.camera\", \"profile\": \"scripted\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "multiwindow",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"multiwindow\", \"profile\": \"real\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "at-launch",
+                "details": null,
+                "fidelity": "off",
+                "id": "system.launcher",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.launcher\", \"profile\": \"real\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "at-launch",
+                "details": null,
+                "fidelity": "off",
+                "id": "system.settings",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.settings\", \"profile\": \"real\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "hw.usb",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.usb\", \"profile\": \"stub\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "system.dropbox",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.dropbox\", \"profile\": \"stub\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "hw.nfc",
+                "profile": "off",
+                "reason": "off: no NFC hardware: NfcAdapter throws UnsupportedOperationException before any binder (FEATURE_NFC is absent)",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "system.wallpaper",
+                "profile": "off",
+                "reason": "off: no wallpaper service; AOSP's own DisabledWallpaperManager is the working missing path (config_enableWallpaperService is false)",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "system.print",
+                "profile": "off",
+                "reason": "off: no print service; the client only resolves the name when FEATURE_PRINTING is reported, and ACOS reports it absent",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "system.search",
+                "profile": "off",
+                "reason": "off: no search service and no searchable index; an empty SearchableInfo list would look like an installed search provider",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "system.usage",
+                "profile": "off",
+                "reason": "off: nothing records app usage; an empty ParceledListSlice<UsageStats> would be indistinguishable from 'not used'",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "system.dpm",
+                "profile": "off",
+                "reason": "off: no managed device or profile; every device-policy answer would be invented policy state",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "system.role",
+                "profile": "off",
+                "reason": "off: IRoleManager lives in the Permission APEX; its transaction table is not in the framework dex this build reads, so a stub would guess codes",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "geo.country",
+                "profile": "off",
+                "reason": "off: a detected country is a location claim ACOS cannot back",
+                "state": "off"
+              }
+            ],
+            "ok": true,
+            "op": "custom_action",
+            "value": {
+              "callback": "onCustomAction",
+              "sent": "custom_action",
+              "session": {
+                "active": true,
+                "commands": [
+                  "pause (agent)",
+                  "next (agent)",
+                  "seek 90000 (agent)",
+                  "previous (agent)",
+                  "custom_action like (agent)"
+                ],
+                "controller_callbacks": 1,
+                "destroyed": false,
+                "flags": 0,
+                "id": 1,
+                "ignored": [],
+                "metadata": {
+                  "ARTIST": "Miles Davis",
+                  "DURATION": 337000,
+                  "TITLE": "Blue in Green"
+                },
+                "package": "dev.acos.fixtures.mediaprobe",
+                "playback": {
+                  "actions": 310,
+                  "active_item_id": -1,
+                  "buffered_position": 0,
+                  "custom_actions": 0,
+                  "error": null,
+                  "position": 0,
+                  "speed": 1.0,
+                  "state": "PLAYING",
+                  "state_code": 3,
+                  "update_time": 4145206
+                },
+                "rating_type": 0,
+                "tag": "acos-music",
+                "user_id": 0
+              }
+            }
+          },
+          "expected": {
+            "module": "media.session",
+            "op": "custom_action"
+          },
+          "kind": "service_ctl",
+          "matched_node_ids": [],
+          "message": "attached=[{\"id\":\"core\",\"profile\":\"real\"},{\"id\":\"media.session\",\"profile\":\"scripted\"}]",
+          "passed": true
+        }
+      ],
+      "duration_ms": 1,
+      "evidence": [
+        {
+          "kind": "step",
+          "path": "steps/21-service_ctl.json"
+        }
+      ],
+      "index": 21,
+      "provenance": {},
+      "status": "pass",
+      "step": "service_ctl"
+    },
+    {
+      "assertions": [],
+      "duration_ms": 59,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/17.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/17.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/22-wait_for.json"
+        }
+      ],
+      "frame_seq": 17,
+      "index": 22,
+      "provenance": {
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "bound": "strict-event",
+        "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
+        "mode": "strict",
+        "probe_seq": 130,
+        "reason": "strict-event",
+        "settled": true,
+        "strict_rule": "event",
+        "tree_age_ms": 15,
+        "waited_ms": 59,
+        "waited_ms_source": "step"
+      },
+      "status": "pass",
+      "step": "wait_for"
+    },
+    {
+      "assertions": [
+        {
+          "actual": {
+            "animations": "on",
+            "attached": [
+              {
+                "id": "core",
+                "profile": "real"
+              },
+              {
+                "id": "media.session",
+                "profile": "scripted"
+              }
+            ],
+            "cmd": "services",
+            "id": "media.session",
+            "modules": [
+              {
+                "attach": "at-launch",
+                "details": null,
+                "fidelity": "real",
+                "id": "core",
+                "profile": "real",
+                "reason": null,
+                "state": "attached"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "accessibility",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"accessibility\", \"profile\": \"real\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "system.permissions",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.permissions\", \"profile\": \"real\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "system.notifications",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.notifications\", \"profile\": \"real\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "sensors",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"sensors\", \"profile\": \"scripted\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "feedback.vibrator",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"feedback.vibrator\", \"profile\": \"scripted\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "location",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"location\", \"profile\": \"scripted\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "at-launch",
+                "details": null,
+                "fidelity": "off",
+                "id": "net.telephony",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"net.telephony\", \"profile\": \"scripted\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "hw.bluetooth",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.bluetooth\", \"profile\": \"scripted\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "hw.biometric",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.biometric\", \"profile\": \"scripted\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "at-launch",
+                "details": null,
+                "fidelity": "off",
+                "id": "network",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"network\", \"profile\": \"real\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "at-launch",
+                "details": null,
+                "fidelity": "off",
+                "id": "webview",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"webview\", \"profile\": \"real\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "net.wifi",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"net.wifi\", \"profile\": \"scripted\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "scripted",
+                "id": "media.session",
+                "profile": "scripted",
+                "reason": "scripted profile: sessions are recorded and commands are delivered to the app's MediaSession.Callback; 1 session(s) so far; no media-key routing, queue, volume, remote sessions or media router (UNSUPPORTED_ANDROID_API); metadata with an undecodable value (album art) is accepted but reported unreadable",
+                "state": "attached"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "hw.camera",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.camera\", \"profile\": \"scripted\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "multiwindow",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"multiwindow\", \"profile\": \"real\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "at-launch",
+                "details": null,
+                "fidelity": "off",
+                "id": "system.launcher",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.launcher\", \"profile\": \"real\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "at-launch",
+                "details": null,
+                "fidelity": "off",
+                "id": "system.settings",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.settings\", \"profile\": \"real\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "hw.usb",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.usb\", \"profile\": \"stub\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "system.dropbox",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.dropbox\", \"profile\": \"stub\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "hw.nfc",
+                "profile": "off",
+                "reason": "off: no NFC hardware: NfcAdapter throws UnsupportedOperationException before any binder (FEATURE_NFC is absent)",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "system.wallpaper",
+                "profile": "off",
+                "reason": "off: no wallpaper service; AOSP's own DisabledWallpaperManager is the working missing path (config_enableWallpaperService is false)",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "system.print",
+                "profile": "off",
+                "reason": "off: no print service; the client only resolves the name when FEATURE_PRINTING is reported, and ACOS reports it absent",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "system.search",
+                "profile": "off",
+                "reason": "off: no search service and no searchable index; an empty SearchableInfo list would look like an installed search provider",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "system.usage",
+                "profile": "off",
+                "reason": "off: nothing records app usage; an empty ParceledListSlice<UsageStats> would be indistinguishable from 'not used'",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "system.dpm",
+                "profile": "off",
+                "reason": "off: no managed device or profile; every device-policy answer would be invented policy state",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "system.role",
+                "profile": "off",
+                "reason": "off: IRoleManager lives in the Permission APEX; its transaction table is not in the framework dex this build reads, so a stub would guess codes",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "geo.country",
+                "profile": "off",
+                "reason": "off: a detected country is a location claim ACOS cannot back",
+                "state": "off"
+              }
+            ],
+            "ok": true,
+            "op": "play",
+            "value": {
+              "callback": "onPlay",
+              "sent": "play",
+              "session": {
+                "active": true,
+                "commands": [
+                  "pause (agent)",
+                  "next (agent)",
+                  "seek 90000 (agent)",
+                  "previous (agent)",
+                  "custom_action like (agent)",
+                  "play (agent)"
+                ],
+                "controller_callbacks": 1,
+                "destroyed": false,
+                "flags": 0,
+                "id": 1,
+                "ignored": [],
+                "metadata": {
+                  "ARTIST": "Miles Davis",
+                  "DURATION": 337000,
+                  "TITLE": "Blue in Green"
+                },
+                "package": "dev.acos.fixtures.mediaprobe",
+                "playback": {
+                  "actions": 310,
+                  "active_item_id": -1,
+                  "buffered_position": 0,
+                  "custom_actions": 0,
+                  "error": null,
+                  "position": 0,
+                  "speed": 1.0,
+                  "state": "PLAYING",
+                  "state_code": 3,
+                  "update_time": 4145206
+                },
+                "rating_type": 0,
+                "tag": "acos-music",
+                "user_id": 0
+              }
+            }
+          },
+          "expected": {
+            "module": "media.session",
+            "op": "play"
+          },
+          "kind": "service_ctl",
+          "matched_node_ids": [],
+          "message": "attached=[{\"id\":\"core\",\"profile\":\"real\"},{\"id\":\"media.session\",\"profile\":\"scripted\"}]",
+          "passed": true
+        }
+      ],
+      "duration_ms": 1,
+      "evidence": [
+        {
+          "kind": "step",
+          "path": "steps/23-service_ctl.json"
+        }
+      ],
+      "index": 23,
+      "provenance": {},
+      "status": "pass",
+      "step": "service_ctl"
+    },
+    {
+      "assertions": [],
+      "duration_ms": 70,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/18.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/18.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/24-wait_for.json"
+        }
+      ],
+      "frame_seq": 18,
+      "index": 24,
+      "provenance": {
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "bound": "strict-event",
+        "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
+        "mode": "strict",
+        "probe_seq": 132,
+        "reason": "strict-event",
+        "settled": true,
+        "strict_rule": "event",
+        "tree_age_ms": 25,
+        "waited_ms": 69,
+        "waited_ms_source": "step"
+      },
+      "status": "pass",
+      "step": "wait_for"
+    },
+    {
+      "assertions": [
+        {
+          "actual": {
+            "screenshot_changed": true,
+            "tree_changed": true
+          },
+          "expected": {
+            "screenshot_changed": true,
+            "tree_changed": true
+          },
+          "kind": "state_change",
+          "matched_node_ids": [],
+          "message": "UI tree and screenshot both changed",
+          "passed": true
+        }
+      ],
+      "duration_ms": 946,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/19.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/19.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/25-tap.json"
+        }
+      ],
+      "frame_seq": 19,
+      "index": 25,
+      "input": {
+        "expect_change": "auto",
+        "handled": true,
+        "handled_evidence": {
+          "acked": 2,
+          "published": 2,
+          "source": "guest"
+        },
+        "target": {
+          "hit": {
+            "clickable": true,
+            "consumer": {
+              "bounds": "[24,748][1056,874]",
+              "class": "android.widget.Button",
+              "clickable": true,
+              "content_desc": "",
+              "enabled": true,
+              "focused": false,
+              "id": "n5_",
+              "password": false,
+              "resource_id": "",
+              "scrollable": false,
+              "text": "SelfPause",
+              "visible_bounds": "[24,748][1056,874]",
+              "window": "main"
+            },
+            "method": "tree-geometry",
+            "node": {
+              "bounds": "[24,748][1056,874]",
+              "class": "android.widget.Button",
+              "clickable": true,
+              "content_desc": "",
+              "enabled": true,
+              "focused": false,
+              "id": "n5_",
+              "password": false,
+              "resource_id": "",
+              "scrollable": false,
+              "text": "SelfPause",
+              "visible_bounds": "[24,748][1056,874]",
+              "window": "main"
+            },
+            "suggest": null
+          },
+          "node": {
+            "bounds": "[24,748][1056,874]",
+            "class": "android.widget.Button",
+            "clickable": true,
+            "content_desc": "",
+            "enabled": true,
+            "focused": false,
+            "id": "n5_",
+            "password": false,
+            "resource_id": "",
+            "scrollable": false,
+            "text": "SelfPause",
+            "visible_bounds": "[24,748][1056,874]",
+            "window": "main"
+          },
+          "point": {
+            "x": 540,
+            "y": 811
+          },
+          "selector": {
+            "selector": "text==\"SelfPause\""
+          }
+        }
+      },
+      "provenance": {
+        "frame": "host-observed",
+        "host_input": "host-observed",
+        "input_acks": "guest-asserted",
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "ack_ms": 5,
+        "bound": "strict-event",
+        "first_change_ms": 108,
+        "frame_ms": 927,
+        "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
+        "mode": "strict",
+        "pixels_changed": true,
+        "reason": "strict-event",
+        "settled": true,
+        "state_changed": null,
+        "strict_rule": "event",
+        "waited_ms": 946,
+        "waited_ms_source": "step"
+      },
+      "status": "pass",
+      "step": "tap"
+    },
+    {
+      "assertions": [],
+      "duration_ms": 60,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/20.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/20.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/26-wait_for.json"
+        }
+      ],
+      "frame_seq": 20,
+      "index": 26,
+      "provenance": {
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "bound": "strict-event",
+        "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
+        "mode": "strict",
+        "probe_seq": 168,
+        "reason": "strict-event",
+        "settled": true,
+        "strict_rule": "event",
+        "tree_age_ms": 40,
+        "waited_ms": 60,
+        "waited_ms_source": "step"
+      },
+      "status": "pass",
+      "step": "wait_for"
+    },
+    {
+      "assertions": [
+        {
+          "actual": {
+            "acks": 2,
+            "delivered": true,
+            "handled": true,
+            "visual_change": false
+          },
+          "expected": {
+            "delivered": true
+          },
+          "kind": "input_delivery",
+          "matched_node_ids": [],
+          "message": "host-observed input delivery (2 guest ack(s), handled: Some(true)); no visual change; no state change claimed",
+          "passed": true
+        }
+      ],
+      "duration_ms": 957,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/21.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/21.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/27-tap.json"
+        }
+      ],
+      "frame_seq": 21,
+      "index": 27,
+      "input": {
+        "expect_change": "auto",
+        "handled": true,
+        "handled_evidence": {
+          "acked": 2,
+          "published": 2,
+          "source": "guest"
+        },
+        "handled_hint": "the app's window consumed the input (`finishInputEvent(handled) = true`) but the settled frame shows no change: the handler may be asynchronous, or the control already had that state. Assert on the state you expect instead of expecting a change",
+        "target": {
+          "hit": {
+            "clickable": true,
+            "consumer": {
+              "bounds": "[24,874][1056,1000]",
+              "class": "android.widget.Button",
+              "clickable": true,
+              "content_desc": "",
+              "enabled": true,
+              "focused": false,
+              "id": "n5_",
+              "password": false,
+              "resource_id": "",
+              "scrollable": false,
+              "text": "Active",
+              "visible_bounds": "[24,874][1056,1000]",
+              "window": "main"
+            },
+            "method": "tree-geometry",
+            "node": {
+              "bounds": "[24,874][1056,1000]",
+              "class": "android.widget.Button",
+              "clickable": true,
+              "content_desc": "",
+              "enabled": true,
+              "focused": false,
+              "id": "n5_",
+              "password": false,
+              "resource_id": "",
+              "scrollable": false,
+              "text": "Active",
+              "visible_bounds": "[24,874][1056,1000]",
+              "window": "main"
+            },
+            "suggest": null
+          },
+          "node": {
+            "bounds": "[24,874][1056,1000]",
+            "class": "android.widget.Button",
+            "clickable": true,
+            "content_desc": "",
+            "enabled": true,
+            "focused": false,
+            "id": "n5_",
+            "password": false,
+            "resource_id": "",
+            "scrollable": false,
+            "text": "Active",
+            "visible_bounds": "[24,874][1056,1000]",
+            "window": "main"
+          },
+          "point": {
+            "x": 540,
+            "y": 937
+          },
+          "selector": {
+            "selector": "text==\"Active\""
+          }
+        }
+      },
+      "provenance": {
+        "frame": "host-observed",
+        "host_input": "host-observed",
+        "input_acks": "guest-asserted",
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "ack_ms": 5,
+        "bound": "strict-event",
+        "first_change_ms": 98,
+        "frame_ms": 939,
+        "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
+        "mode": "strict",
+        "pixels_changed": false,
+        "reason": "strict-event",
+        "settled": true,
+        "state_changed": null,
+        "strict_rule": "event",
+        "waited_ms": 957,
+        "waited_ms_source": "step"
+      },
+      "status": "pass",
+      "step": "tap"
+    },
+    {
+      "assertions": [],
+      "duration_ms": 60,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/22.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/22.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/28-wait_for.json"
+        }
+      ],
+      "frame_seq": 22,
+      "index": 28,
+      "provenance": {
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "bound": "strict-event",
+        "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
+        "mode": "strict",
+        "probe_seq": 205,
+        "reason": "strict-event",
+        "settled": true,
+        "strict_rule": "event",
+        "tree_age_ms": 40,
+        "waited_ms": 60,
+        "waited_ms_source": "step"
+      },
+      "status": "pass",
+      "step": "wait_for"
+    },
+    {
+      "assertions": [
+        {
+          "actual": {
+            "animations": "on",
+            "attached": [
+              {
+                "id": "core",
+                "profile": "real"
+              },
+              {
+                "id": "media.session",
+                "profile": "scripted"
+              }
+            ],
+            "cmd": "services",
+            "id": "media.session",
+            "modules": [
+              {
+                "attach": "at-launch",
+                "details": null,
+                "fidelity": "real",
+                "id": "core",
+                "profile": "real",
+                "reason": null,
+                "state": "attached"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "accessibility",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"accessibility\", \"profile\": \"real\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "system.permissions",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.permissions\", \"profile\": \"real\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "system.notifications",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.notifications\", \"profile\": \"real\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "sensors",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"sensors\", \"profile\": \"scripted\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "feedback.vibrator",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"feedback.vibrator\", \"profile\": \"scripted\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "location",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"location\", \"profile\": \"scripted\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "at-launch",
+                "details": null,
+                "fidelity": "off",
+                "id": "net.telephony",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"net.telephony\", \"profile\": \"scripted\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "hw.bluetooth",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.bluetooth\", \"profile\": \"scripted\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "hw.biometric",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.biometric\", \"profile\": \"scripted\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "at-launch",
+                "details": null,
+                "fidelity": "off",
+                "id": "network",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"network\", \"profile\": \"real\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "at-launch",
+                "details": null,
+                "fidelity": "off",
+                "id": "webview",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"webview\", \"profile\": \"real\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "net.wifi",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"net.wifi\", \"profile\": \"scripted\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "scripted",
+                "id": "media.session",
+                "profile": "scripted",
+                "reason": "scripted profile: sessions are recorded and commands are delivered to the app's MediaSession.Callback; 1 session(s) so far; no media-key routing, queue, volume, remote sessions or media router (UNSUPPORTED_ANDROID_API); metadata with an undecodable value (album art) is accepted but reported unreadable",
+                "state": "attached"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "hw.camera",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.camera\", \"profile\": \"scripted\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "multiwindow",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"multiwindow\", \"profile\": \"real\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "at-launch",
+                "details": null,
+                "fidelity": "off",
+                "id": "system.launcher",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.launcher\", \"profile\": \"real\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "at-launch",
+                "details": null,
+                "fidelity": "off",
+                "id": "system.settings",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.settings\", \"profile\": \"real\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "hw.usb",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.usb\", \"profile\": \"stub\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "system.dropbox",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.dropbox\", \"profile\": \"stub\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "hw.nfc",
+                "profile": "off",
+                "reason": "off: no NFC hardware: NfcAdapter throws UnsupportedOperationException before any binder (FEATURE_NFC is absent)",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "system.wallpaper",
+                "profile": "off",
+                "reason": "off: no wallpaper service; AOSP's own DisabledWallpaperManager is the working missing path (config_enableWallpaperService is false)",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "system.print",
+                "profile": "off",
+                "reason": "off: no print service; the client only resolves the name when FEATURE_PRINTING is reported, and ACOS reports it absent",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "system.search",
+                "profile": "off",
+                "reason": "off: no search service and no searchable index; an empty SearchableInfo list would look like an installed search provider",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "system.usage",
+                "profile": "off",
+                "reason": "off: nothing records app usage; an empty ParceledListSlice<UsageStats> would be indistinguishable from 'not used'",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "system.dpm",
+                "profile": "off",
+                "reason": "off: no managed device or profile; every device-policy answer would be invented policy state",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "system.role",
+                "profile": "off",
+                "reason": "off: IRoleManager lives in the Permission APEX; its transaction table is not in the framework dex this build reads, so a stub would guess codes",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "geo.country",
+                "profile": "off",
+                "reason": "off: a detected country is a location claim ACOS cannot back",
+                "state": "off"
+              }
+            ],
+            "ok": true,
+            "op": "sessions",
+            "value": {
+              "sessions": [
+                {
+                  "active": true,
+                  "commands": [
+                    "pause (agent)",
+                    "next (agent)",
+                    "seek 90000 (agent)",
+                    "previous (agent)",
+                    "custom_action like (agent)",
+                    "play (agent)",
+                    "pause (dev.acos.fixtures.mediaprobe)"
+                  ],
+                  "controller_callbacks": 1,
+                  "destroyed": false,
+                  "flags": 0,
+                  "id": 1,
+                  "ignored": [],
+                  "metadata": {
+                    "ARTIST": "Miles Davis",
+                    "DURATION": 337000,
+                    "TITLE": "Blue in Green"
+                  },
+                  "package": "dev.acos.fixtures.mediaprobe",
+                  "playback": {
+                    "actions": 310,
+                    "active_item_id": -1,
+                    "buffered_position": 0,
+                    "custom_actions": 0,
+                    "error": null,
+                    "position": 0,
+                    "speed": 1.0,
+                    "state": "PAUSED",
+                    "state_code": 2,
+                    "update_time": 4145420
+                  },
+                  "rating_type": 0,
+                  "tag": "acos-music",
+                  "user_id": 0
+                }
+              ],
+              "unsupported": [
+                "code 2"
+              ]
+            }
+          },
+          "expected": {
+            "module": "media.session",
+            "op": "sessions"
+          },
+          "kind": "service_ctl",
+          "matched_node_ids": [],
+          "message": "attached=[{\"id\":\"core\",\"profile\":\"real\"},{\"id\":\"media.session\",\"profile\":\"scripted\"}]",
+          "passed": true
+        }
+      ],
+      "duration_ms": 0,
+      "evidence": [
+        {
+          "kind": "step",
+          "path": "steps/29-service_ctl.json"
+        }
+      ],
+      "index": 29,
+      "provenance": {},
+      "status": "pass",
+      "step": "service_ctl"
+    },
+    {
+      "assertions": [
+        {
+          "actual": {
+            "matched_lines": 12,
+            "sample": [
+              "mediaprobe: CREATE ok tag=acos-music pkg=dev.acos.fixtures.mediaprobe",
+              "mediaprobe: PUBLISH state=PLAYING track=Blue in Green pos=0",
+              "mediaprobe: CTL state=PLAYING pos=0 actions=310 title=Blue in Green artist=Miles Davis duration=337000",
+              "mediaprobe: CMD pause from=dev.acos.agent",
+              "mediaprobe: CMD next from=dev.acos.agent track=So What"
+            ]
+          },
+          "expected": {
+            "min_matches": 1,
+            "ordered": true,
+            "patterns": [
+              "CREATE ok",
+              "PUBLISH state=PLAYING track=Blue in Green",
+              "CTL state=PLAYING",
+              "CMD pause from=dev.acos.agent",
+              "CMD next from=dev.acos.agent track=So What",
+              "CMD seek from=dev.acos.agent pos=90000",
+              "CMD previous from=dev.acos.agent",
+              "CMD custom from=dev.acos.agent action=like",
+              "CMD play from=dev.acos.agent",
+              "CMD pause from=dev.acos.fixtures.mediaprobe"
+            ],
+            "since_previous_step": false,
+            "tag": "mediaprobe"
+          },
+          "kind": "log",
+          "matched_node_ids": [],
+          "passed": true
+        }
+      ],
+      "duration_ms": 1,
+      "evidence": [
+        {
+          "kind": "log",
+          "path": "logs/logcat.txt"
+        },
+        {
+          "kind": "step",
+          "path": "steps/30-assert_log.json"
+        }
+      ],
+      "index": 30,
+      "provenance": {
+        "logs": "guest-asserted"
+      },
+      "status": "pass",
+      "step": "assert_log"
+    },
+    {
+      "assertions": [
+        {
+          "actual": {
+            "crashes": 0
+          },
+          "expected": "no crash",
+          "kind": "no_crash",
+          "matched_node_ids": [],
+          "message": "no crash recorded",
+          "passed": true
+        }
+      ],
+      "duration_ms": 0,
+      "evidence": [
+        {
+          "kind": "log",
+          "path": "logs/logcat.txt"
+        },
+        {
+          "kind": "step",
+          "path": "steps/31-assert_no_crash.json"
+        }
+      ],
+      "index": 31,
+      "provenance": {
+        "crash_reports": "guest-asserted"
+      },
+      "status": "pass",
+      "step": "assert_no_crash"
+    }
+  ],
+  "trust": "trusted",
+  "unsupported_steps": [],
+  "verdict": "pass"
+}

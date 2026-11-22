@@ -1,0 +1,71 @@
+{
+  "backend": "acos-native",
+  "capabilities_used": [
+    "lifecycle",
+    "logs",
+    "static-manifest",
+    "ui.tree"
+  ],
+  "evidence": {
+    "events": "events.jsonl",
+    "log": "logs/logcat.txt",
+    "verdict": "verdict.json"
+  },
+  "fidelity": "art-reference",
+  "isolation": "process",
+  "metrics": {
+    "peak_rss_bytes": 16908288,
+    "wall_ms": 212
+  },
+  "ok": true,
+  "request_id": "req_43e7c_18ea64b9e2c97a76",
+  "result": {
+    "artifacts_dir": "/home/Qui/.t3/worktrees/acos/t3-8432ccd8-1d58d051095d020b/.cache/rg5-mod-art/mproc1-multi-package",
+    "cap_bytes": 20480,
+    "evidence_provenance": {
+      "binder_transactions": "host-observed",
+      "crash_reports": "guest-asserted",
+      "frames": "host-observed",
+      "host_input": "host-observed",
+      "input_acks": "guest-asserted",
+      "launch_markers": "guest-asserted",
+      "lifecycle_markers": "guest-asserted",
+      "logs": "guest-asserted",
+      "static_manifest": "host-observed",
+      "tree": "guest-asserted"
+    },
+    "note": "this result was larger than the reply cap; only the bulk (tree, steps, logs) was dropped and the full evidence is in the artifacts paths named here",
+    "provenance": {
+      "apk": {
+        "mtime_ns": 1795356354750758189,
+        "path": "/home/Qui/.t3/worktrees/acos/t3-8432ccd8-1d58d051095d020b/fixtures/build/apps/multi-package-probe.apk",
+        "sha256": "3ecb50ee6128364603dab67cda17c6e96e1f766b8944c4a10b0a5bb2647bbc21",
+        "sha256_12": "3ecb50ee6128",
+        "size_bytes": 12756
+      },
+      "engine": "art",
+      "fidelity": "art-reference",
+      "scenario": {
+        "mtime_ns": 1795356189354466042,
+        "path": "/home/Qui/.t3/worktrees/acos/t3-8432ccd8-1d58d051095d020b/scenarios/mproc1-multi-package.yaml",
+        "sha256": "7e4b627526066bf1f0aaf9cae8151bb1640c844d97934795f4d37aa3d602e15e",
+        "sha256_12": "7e4b62752606",
+        "size_bytes": 3019
+      },
+      "scenario_engine": "rust-vm",
+      "warnings": [
+        {
+          "code": "SCENARIO_ENGINE_MISMATCH",
+          "engine": "art",
+          "message": "the scenario declares `engine: rust-vm` but this run used `art`: the scenario field records the engine the scenario was written for, it does not select one (`--engine art… [ACOS: result.result.provenance.warnings[0].message bounded for size — 302 bytes total, keeping the first 170 and the last 85 bytes; the full text is in the run's artifacts] …is about the `art` run; pass `--engine rust-vm` to run the engine the scenario names.",
+          "scenario_engine": "rust-vm"
+        }
+      ]
+    },
+    "reply_capped": true,
+    "verdict_path": "/home/Qui/.t3/worktrees/acos/t3-8432ccd8-1d58d051095d020b/.cache/rg5-mod-art/mproc1-multi-package/verdict.json",
+    "verdict_status": "pass"
+  },
+  "session_id": "s_art_multi-package-probe",
+  "status": "pass"
+}

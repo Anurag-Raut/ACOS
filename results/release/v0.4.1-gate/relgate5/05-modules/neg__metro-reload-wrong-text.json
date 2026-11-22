@@ -1,0 +1,99 @@
+{
+  "backend": "acos-native",
+  "capabilities_used": [
+    "lifecycle",
+    "static-manifest",
+    "ui.tree"
+  ],
+  "error": {
+    "class": "assertion",
+    "code": "ELEMENT_NOT_FOUND",
+    "details": {
+      "attempts": 20,
+      "timeout_ms": 15000,
+      "waited_ms": 15054
+    },
+    "hint": "Re-observe the tree and check the selector (id/text/class/bounds). If the node is legitimately absent, fix the scenario expectation.",
+    "message": "selector text==\"Hello Nowhere\" matched no node",
+    "retryable": false
+  },
+  "evidence": {
+    "events": "events.jsonl",
+    "log": "logs/logcat.txt",
+    "verdict": "verdict.json"
+  },
+  "fidelity": "art-reference",
+  "isolation": "process",
+  "metrics": {
+    "peak_rss_bytes": 46120960,
+    "wall_ms": 20193
+  },
+  "ok": false,
+  "request_id": "req_45fb8_18ea64d8b81a16b8",
+  "result": {
+    "artifacts_dir": "/home/Qui/.t3/worktrees/acos/t3-8432ccd8-1d58d051095d020b/.cache/rg5-mod-art/neg__metro-reload-wrong-text",
+    "cap_bytes": 20480,
+    "evidence_provenance": {
+      "binder_transactions": "host-observed",
+      "crash_reports": "guest-asserted",
+      "frames": "host-observed",
+      "host_input": "host-observed",
+      "input_acks": "guest-asserted",
+      "launch_markers": "guest-asserted",
+      "lifecycle_markers": "guest-asserted",
+      "logs": "guest-asserted",
+      "static_manifest": "host-observed",
+      "tree": "guest-asserted"
+    },
+    "failed_step": {
+      "failure_index": 7,
+      "index": 7,
+      "kind": "assert_text",
+      "message": "selector text==\"Hello Nowhere\" matched no node",
+      "status": "fail"
+    },
+    "failure": {
+      "code": "ELEMENT_NOT_FOUND",
+      "error": {
+        "class": "assertion",
+        "code": "ELEMENT_NOT_FOUND",
+        "details": {
+          "attempts": 20,
+          "timeout_ms": 15000,
+          "waited_ms": 15054
+        },
+        "hint": "Re-observe the tree and check the selector (id/text/class/bounds). If the node is legitimately absent, fix the scenario expectation.",
+        "message": "selector text==\"Hello Nowhere\" matched no node",
+        "retryable": false
+      },
+      "step_index": 7,
+      "summary": "step 7 (assert_text) fail"
+    },
+    "note": "this result was larger than the reply cap; only the bulk (tree, steps, logs) was dropped and the full evidence is in the artifacts paths named here",
+    "provenance": {
+      "apk": {
+        "mtime_ns": 1795356410172713512,
+        "path": "/home/Qui/.t3/worktrees/acos/t3-8432ccd8-1d58d051095d020b/fixtures/build/apps/rn-debug.apk",
+        "sha256": "e7657e2ba61437b70335b338d810cad5487f4806fe51a3674a6ed4f39c694049",
+        "sha256_12": "e7657e2ba614",
+        "size_bytes": 8935640
+      },
+      "engine": "art",
+      "fidelity": "art-reference",
+      "scenario": {
+        "mtime_ns": 1795356189355128658,
+        "path": "/home/Qui/.t3/worktrees/acos/t3-8432ccd8-1d58d051095d020b/scenarios/negative/metro-reload-wrong-text.yaml",
+        "sha256": "109637e894a5ae96cf795e1e3a0953182e7c8071a207c10f063fcde67b6d3c96",
+        "sha256_12": "109637e894a5",
+        "size_bytes": 2101
+      },
+      "scenario_engine": "art",
+      "warnings": []
+    },
+    "reply_capped": true,
+    "verdict_path": "/home/Qui/.t3/worktrees/acos/t3-8432ccd8-1d58d051095d020b/.cache/rg5-mod-art/neg__metro-reload-wrong-text/verdict.json",
+    "verdict_status": "fail"
+  },
+  "session_id": "s_art_rn-debug",
+  "status": "fail"
+}

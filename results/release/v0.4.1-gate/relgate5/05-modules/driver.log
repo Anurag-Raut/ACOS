@@ -1,0 +1,82 @@
+=== 1. Conformance kit + modules_doc 2026-11-22T14:34:12Z ===
+KIT_RC=0 2026-11-22T14:34:13Z
+test result: ok. 22 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+=== 2. Positive module proof scenarios (48) 2026-11-22T14:34:13Z ===
+done gaten-bubble rc=0 (11s) status=pass steps=14 err=None
+done a11y-probe rc=0 (5s) status=pass steps=15 err=None
+done a11y-screenshot-wrap rc=0 (1s) status=pass steps=3 err=None
+done gaten-bubble-overlay rc=0 (18s) status=pass steps=28 err=None
+done webview-probe rc=0 (1s) status=pass steps=20 err=None
+done webview-fair rc=0 (12s) status=pass steps=14 err=None
+done net-check rc=0 (2s) status=pass steps=10 err=None
+done net-check-offline rc=0 (1s) status=pass steps=9 err=None
+done net-network-real rc=0 (1s) status=pass steps=9 err=None
+done net-network-offline rc=0 (3s) status=pass steps=14 err=None
+done net-network-off rc=0 (1s) status=pass steps=8 err=None
+done net-https-proof rc=0 (1s) status=pass steps=12 err=None
+done sysui1-shade rc=1 (1s) status=error steps=6 err=NO_FRESH_FRAME
+done notif-perm-granted rc=0 (1s) status=pass steps=10 err=None
+done notif-perm-denied rc=0 (1s) status=pass steps=5 err=None
+done sysui1-permission-allow rc=0 (2s) status=pass steps=17 err=None
+done sysui1-permission-deny rc=0 (3s) status=pass steps=13 err=None
+done sysui1-permission-pregranted rc=0 (1s) status=pass steps=9 err=None
+done location-probe rc=0 (2s) status=pass steps=12 err=None
+done location-geocoder rc=0 (1s) status=pass steps=3 err=None
+done location-live-attach rc=0 (3s) status=pass steps=18 err=None
+done sensors-scripted rc=0 (2s) status=pass steps=16 err=None
+done sensors-off rc=0 (1s) status=pass steps=5 err=None
+done tail-telephony rc=0 (5s) status=pass steps=15 err=None
+done tail-bluetooth rc=0 (4s) status=pass steps=14 err=None
+done tail-biometric rc=0 (5s) status=pass steps=14 err=None
+done tail-vibrator rc=0 (3s) status=pass steps=10 err=None
+done tail-detached rc=0 (5s) status=pass steps=9 err=None
+done mproc1-intents rc=0 (0s) status=pass steps=6 err=None
+done mproc1-multi-package rc=0 (1s) status=pass steps=6 err=None
+done rot1-rotate rc=0 (3s) status=pass steps=18 err=None
+done back-layers-ime rc=0 (6s) status=pass steps=22 err=None
+done gles-software rc=0 (1s) status=pass steps=3 err=None
+done modfill-clipboard rc=0 (9s) status=pass steps=22 err=None
+done modfill-autofill rc=0 (3s) status=pass steps=12 err=None
+done modfill-wifi rc=0 (15s) status=pass steps=44 err=None
+done modfill-media rc=0 (6s) status=pass steps=32 err=None
+done modfill-wifi-network-real rc=0 (6s) status=pass steps=14 err=None
+done camera-probe rc=0 (6s) status=pass steps=16 err=None
+done camera-off rc=0 (4s) status=pass steps=11 err=None
+done camera-capture rc=0 (4s) status=pass steps=14 err=None
+done camera-scripted rc=0 (3s) status=pass steps=17 err=None
+done camera-jpeg rc=0 (2s) status=pass steps=8 err=None
+done camera-preview rc=0 (2s) status=pass steps=11 err=None
+done camerax-probe rc=0 (6s) status=pass steps=21 err=None
+done multiwindow-split rc=0 (1s) status=pass steps=17 err=None
+done launcher-home rc=0 (4s) status=pass steps=21 err=None
+done settings-intents rc=0 (11s) status=pass steps=25 err=None
+=== POSITIVES DONE pass=47 fail=1 2026-11-22T14:37:23Z ===
+=== 3. metro-reload 5/5 2026-11-22T14:37:23Z ===
+done metro-reload-r1 rc=0 (6s) status=pass steps=12 err=None
+done metro-reload-r2 rc=0 (6s) status=pass steps=12 err=None
+done metro-reload-r3 rc=0 (6s) status=pass steps=12 err=None
+done metro-reload-r4 rc=0 (5s) status=pass steps=12 err=None
+done metro-reload-r5 rc=0 (6s) status=pass steps=12 err=None
+METRO_RELOAD_PASS=5/5 2026-11-22T14:37:52Z
+=== 4. New v0.4.1 negative scenarios (9, must FAIL) 2026-11-22T14:37:52Z ===
+done neg__camera-capture-wrong-checksum rc=1 (2s) status=fail steps=6 err=ASSERTION_FAILED
+done neg__camera-jpeg-wrong-size rc=1 (2s) status=fail steps=6 err=ASSERTION_FAILED
+done neg__camera-preview-wrong-color rc=1 (2s) status=fail steps=6 err=ASSERTION_FAILED
+done neg__camera-scripted-wrong-checksum rc=1 (2s) status=fail steps=7 err=ASSERTION_FAILED
+done neg__camerax-probe-wrong rc=1 (2s) status=fail steps=6 err=ASSERTION_FAILED
+done neg__launcher-home-wrong rc=1 (1s) status=fail steps=5 err=ASSERTION_FAILED
+done neg__metro-reload-wrong-text rc=1 (21s) status=fail steps=8 err=ELEMENT_NOT_FOUND
+done neg__multiwindow-split-wrong rc=1 (0s) status=fail steps=5 err=ASSERTION_FAILED
+done neg__settings-intents-wrong rc=1 (2s) status=fail steps=4 err=ELEMENT_NOT_FOUND
+NEW_NEGATIVES_OK=9 FALSE_PASS=0 2026-11-22T14:38:26Z
+=== 5. metro-reload-full (3x best-effort) 2026-11-22T14:38:26Z ===
+done metro-reload-full-r1 rc=0 (6s) status=pass steps=12 err=None
+done metro-reload-full-r2 rc=0 (6s) status=pass steps=12 err=None
+done metro-reload-full-r3 rc=0 (6s) status=pass steps=12 err=None
+METRO_RELOAD_FULL_BEST_EFFORT=3/3 2026-11-22T14:38:44Z
+=== Check orphan metro/node processes ===
+=== MODULES DONE 2026-11-22T14:38:44Z ===
+/dev/nvme0n1p6  945G  741G  156G  83% /
+               total        used        free      shared  buff/cache   available
+Mem:           61908       11505        7649        2509       45915       50403
