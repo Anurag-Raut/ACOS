@@ -1,0 +1,7 @@
+{
+  "request_id": "req_112526_18e91af330c44a57",
+  "started_at": "2026-11-18T09:52:38.281Z",
+  "scenario": "scenarios/gaten-word-lookup.yaml",
+  "apk": "",
+  "acos_version": "0.3.0"
+}

@@ -1,0 +1,63 @@
+{
+  "backend": "acos-native",
+  "capabilities_used": [
+    "lifecycle",
+    "static-manifest",
+    "ui.tree"
+  ],
+  "evidence": {
+    "events": "events.jsonl",
+    "log": "logs/logcat.txt",
+    "verdict": "verdict.json"
+  },
+  "fidelity": "art-reference",
+  "isolation": "process",
+  "metrics": {
+    "peak_rss_bytes": 15556608,
+    "wall_ms": 213
+  },
+  "ok": true,
+  "request_id": "req_5f397_18e9acac0ceb6895",
+  "result": {
+    "artifacts_dir": "/home/Qui/.t3/worktrees/acos/t3-f4bcc4d4-5c49b0ef4f83b639/.cache/rg4-mod-art/sensors-off",
+    "cap_bytes": 20480,
+    "evidence_provenance": {
+      "binder_transactions": "host-observed",
+      "crash_reports": "guest-asserted",
+      "frames": "host-observed",
+      "host_input": "host-observed",
+      "input_acks": "guest-asserted",
+      "launch_markers": "guest-asserted",
+      "lifecycle_markers": "guest-asserted",
+      "logs": "guest-asserted",
+      "static_manifest": "host-observed",
+      "tree": "guest-asserted"
+    },
+    "note": "this result was larger than the reply cap; only the bulk (tree, steps, logs) was dropped and the full evidence is in the artifacts paths named here",
+    "provenance": {
+      "apk": {
+        "mtime_ns": 1795154428185417759,
+        "path": "/home/Qui/.t3/worktrees/acos/t3-f4bcc4d4-5c49b0ef4f83b639/fixtures/build/apps/sensor-probe.apk",
+        "sha256": "64801ce3d354bf68e30da0371ff222bd67f4941d43f2ed173f05a985453d4f01",
+        "sha256_12": "64801ce3d354",
+        "size_bytes": 16852
+      },
+      "engine": "art",
+      "fidelity": "art-reference",
+      "scenario": {
+        "mtime_ns": 1795154283734719300,
+        "path": "/home/Qui/.t3/worktrees/acos/t3-f4bcc4d4-5c49b0ef4f83b639/scenarios/sensors-off.yaml",
+        "sha256": "83d853752cae39e248b41cc13ee6ec5fa41b9cebc6ff00a267e4c2d2d7bc617e",
+        "sha256_12": "83d853752cae",
+        "size_bytes": 1458
+      },
+      "scenario_engine": "art",
+      "warnings": []
+    },
+    "reply_capped": true,
+    "verdict_path": "/home/Qui/.t3/worktrees/acos/t3-f4bcc4d4-5c49b0ef4f83b639/.cache/rg4-mod-art/sensors-off/verdict.json",
+    "verdict_status": "pass"
+  },
+  "session_id": "s_art_sensor-probe",
+  "status": "pass"
+}

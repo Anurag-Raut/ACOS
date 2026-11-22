@@ -531,15 +531,97 @@ impl DisplaySpec {
     /// Screen width in dp at this density (framework rounding).
     #[must_use]
     pub fn screen_width_dp(&self) -> i32 {
-        ((self.frame.width() as i64 * 160 + self.density_dpi as i64 / 2)
-            / self.density_dpi.max(1) as i64) as i32
+        self.px_to_dp(self.frame.width())
     }
 
     /// Screen height in dp at this density (framework rounding).
     #[must_use]
     pub fn screen_height_dp(&self) -> i32 {
-        ((self.frame.height() as i64 * 160 + self.density_dpi as i64 / 2)
+        self.px_to_dp(self.frame.height())
+    }
+
+    /// Convert a pixel extent to dp at this display's density (framework rounding:
+    /// `floor(px / density + 0.5)` = `(px * 160 + density_dpi / 2) / density_dpi`).
+    #[must_use]
+    pub fn px_to_dp(&self, px: i32) -> i32 {
+        ((px.max(0) as i64 * 160 + self.density_dpi as i64 / 2)
             / self.density_dpi.max(1) as i64) as i32
+    }
+
+    /// Intersect a task rect with this display's application area (`app_bounds`)
+    /// so any system bar touching the task is excluded from its `appBounds`
+    /// (`TaskFragment.computeConfigResourceOverrides`).
+    #[must_use]
+    pub fn task_app_bounds(&self, bounds: RectI) -> RectI {
+        let left = bounds.left.max(self.app_bounds.left);
+        let top = bounds.top.max(self.app_bounds.top);
+        let right = bounds.right.min(self.app_bounds.right).max(left);
+        let bottom = bounds.bottom.min(self.app_bounds.bottom).max(top);
+        RectI::new(left, top, right, bottom)
+    }
+
+    /// Compute the split-screen task bounds on this display for `position` and
+    /// `ratio` (fraction of the split axis, e.g. `0.5` for half the display).
+    #[must_use]
+    pub fn split_rect(&self, position: SplitPosition, ratio: f32) -> RectI {
+        let r = ratio.clamp(0.05, 0.95);
+        let w = self.frame.width();
+        let h = self.frame.height();
+        match position {
+            SplitPosition::Top => {
+                let split_h = ((h as f32) * r).round() as i32;
+                RectI::new(
+                    self.frame.left,
+                    self.frame.top,
+                    self.frame.right,
+                    (self.frame.top + split_h).clamp(self.frame.top + 1, self.frame.bottom),
+                )
+            }
+            SplitPosition::Bottom => {
+                let split_h = ((h as f32) * r).round() as i32;
+                RectI::new(
+                    self.frame.left,
+                    (self.frame.bottom - split_h).clamp(self.frame.top, self.frame.bottom - 1),
+                    self.frame.right,
+                    self.frame.bottom,
+                )
+            }
+            SplitPosition::Left => {
+                let split_w = ((w as f32) * r).round() as i32;
+                RectI::new(
+                    self.frame.left,
+                    self.frame.top,
+                    (self.frame.left + split_w).clamp(self.frame.left + 1, self.frame.right),
+                    self.frame.bottom,
+                )
+            }
+            SplitPosition::Right => {
+                let split_w = ((w as f32) * r).round() as i32;
+                RectI::new(
+                    (self.frame.right - split_w).clamp(self.frame.left, self.frame.right - 1),
+                    self.frame.top,
+                    self.frame.right,
+                    self.frame.bottom,
+                )
+            }
+        }
+    }
+
+    /// Build a [`TaskRecord`] on this display for `task_id`, `windowing_mode`
+    /// and pixel `bounds`.
+    #[must_use]
+    pub fn task_record(&self, task_id: i32, windowing_mode: i32, bounds: RectI) -> TaskRecord {
+        let app_bounds = if in_multi_window_mode(windowing_mode) {
+            self.task_app_bounds(bounds)
+        } else {
+            self.window_frame()
+        };
+        TaskRecord {
+            task_id,
+            windowing_mode,
+            bounds,
+            app_bounds,
+        }
     }
 
     /// `InsetsSourceControl` surface positions from the dumpsys `Control map`:
@@ -566,6 +648,93 @@ impl DisplaySpec {
                 InsetsI::new(0, 0, 0, NAV_BAR_BOTTOM),
             ),
         ]
+    }
+}
+
+/// `android.app.WindowConfiguration.WINDOWING_MODE_UNDEFINED`.
+pub const WINDOWING_MODE_UNDEFINED: i32 = 0;
+/// `android.app.WindowConfiguration.WINDOWING_MODE_FULLSCREEN`.
+pub const WINDOWING_MODE_FULLSCREEN: i32 = 1;
+/// `android.app.WindowConfiguration.WINDOWING_MODE_PINNED` (PiP).
+pub const WINDOWING_MODE_PINNED: i32 = 2;
+/// `android.app.WindowConfiguration.WINDOWING_MODE_FREEFORM`.
+pub const WINDOWING_MODE_FREEFORM: i32 = 5;
+/// `android.app.WindowConfiguration.WINDOWING_MODE_MULTI_WINDOW` (split screen on API 34).
+pub const WINDOWING_MODE_MULTI_WINDOW: i32 = 6;
+
+/// `WindowConfiguration.inMultiWindowMode(int)` (AOSP r75 `WindowConfiguration.java:742`).
+#[must_use]
+pub const fn in_multi_window_mode(windowing_mode: i32) -> bool {
+    windowing_mode != WINDOWING_MODE_FULLSCREEN && windowing_mode != WINDOWING_MODE_UNDEFINED
+}
+
+/// Which edge of the display a split-screen pane occupies.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SplitPosition {
+    /// Upper half / top pane.
+    Top,
+    /// Lower half / bottom pane.
+    Bottom,
+    /// Left half / start pane.
+    Left,
+    /// Right half / end pane.
+    Right,
+}
+
+impl SplitPosition {
+    /// Parse a wire spelling (`top`, `bottom`, `left`, `right`).
+    #[must_use]
+    pub fn parse(value: &str) -> Option<Self> {
+        match value.trim().to_ascii_lowercase().as_str() {
+            "top" => Some(Self::Top),
+            "bottom" => Some(Self::Bottom),
+            "left" => Some(Self::Left),
+            "right" => Some(Self::Right),
+            _ => None,
+        }
+    }
+
+    /// The canonical wire spelling.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Top => "top",
+            Self::Bottom => "bottom",
+            Self::Left => "left",
+            Self::Right => "right",
+        }
+    }
+}
+
+/// Per-task windowing bounds owned by the WMS (`docs/MULTIWINDOW_PLAN.md` §4.1).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TaskRecord {
+    /// Task id (matches `ActivityRecord.task_id`, default `10`).
+    pub task_id: i32,
+    /// `WindowConfiguration.WINDOWING_MODE_*`.
+    pub windowing_mode: i32,
+    /// Task bounds in display coordinates.
+    pub bounds: RectI,
+    /// Task app bounds in display coordinates (task bounds minus overlapping system bars).
+    pub app_bounds: RectI,
+}
+
+impl TaskRecord {
+    /// The window parent frame under `insets_mode`: `bounds` under `Report`
+    /// (AOSP edge-to-edge where `DecorView` applies overlapping bar insets) and
+    /// `app_bounds` under `Carve`.
+    #[must_use]
+    pub const fn window_frame(&self, insets_mode: InsetsMode) -> RectI {
+        match insets_mode {
+            InsetsMode::Carve => self.app_bounds,
+            InsetsMode::Report => self.bounds,
+        }
+    }
+
+    /// `true` when this task is in a multi-window mode (`inMultiWindowMode`).
+    #[must_use]
+    pub const fn is_multi_window(&self) -> bool {
+        in_multi_window_mode(self.windowing_mode)
     }
 }
 

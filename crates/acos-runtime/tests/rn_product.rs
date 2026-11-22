@@ -207,10 +207,7 @@ fn rn_product_child_worker() {
 #[test]
 fn rn_product_launches_observes_and_taps() {
     if !acos_test_support::have_fixture("fixtures/build/apps/rn-hello.apk") {
-        eprintln!(
-            "SKIP rn_product_launches_observes_and_taps: fixtures/build/apps/rn-hello.apk is absent \
-             (build with tools/build-rn-hello.sh)"
-        );
+        acos_test_support::require_prereq(false, "rn_product_launches_observes_and_taps", "rn_product_launches_observes_and_taps: fixtures/build/apps/rn-hello.apk is absent (build with tools/build-rn-hello.sh)");
         return;
     }
     let apk = repo_root().join("fixtures/build/apps/rn-hello.apk");

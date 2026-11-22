@@ -62,8 +62,7 @@ fn bounds_for(xml: &str, id: &str) -> Option<[i32; 4]> {
 
 #[test]
 fn hello_views_text_metrics_vs_art() {
-    let Some(xml_path) = reference_xml() else {
-        eprintln!("SKIP: no hello-views reference UI dump at fixtures/reference");
+    let Some(xml_path) = acos_test_support::require_some(reference_xml(), "hello_views_text_metrics_vs_art", "no hello-views reference UI dump at fixtures/reference") else {
         return;
     };
     let xml = std::fs::read_to_string(&xml_path).unwrap();
@@ -78,8 +77,7 @@ fn hello_views_text_metrics_vs_art() {
     );
 
     let mut ctx = RenderContext::new();
-    if !ctx.has_fonts() {
-        eprintln!("SKIP: no fonts available (set ACOS_FONT_DIR)");
+    if acos_test_support::require_prereq(ctx.has_fonts(), "hello_views_text_metrics_vs_art", "no fonts available (set ACOS_FONT_DIR)").is_none() {
         return;
     }
     // The DeviceDefault TextView default size is 14sp, which the framework

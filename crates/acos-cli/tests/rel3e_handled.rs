@@ -224,12 +224,7 @@ fn tap_on_a_label_is_reported_not_handled_and_names_the_switch() {
     let apk = repo_root().join("fixtures/build/apps/tap-targets.apk");
     let art = art_bin();
     if !apk.is_file() || !art.is_file() {
-        eprintln!(
-            "SKIP: {} or {} missing (build with ACOS_APP_ONLY=tap-targets tools/build-apps.sh \
-             and cargo build --release -p acos-art)",
-            apk.display(),
-            art.display()
-        );
+        acos_test_support::require_prereq(false, "tap_on_a_label_is_reported_not_handled_and_names_the_switch", &format!("{} or {} missing (build with ACOS_APP_ONLY=tap-targets tools/build-apps.sh and cargo build --release -p acos-art)", apk.display(), art.display()));
         return;
     }
     let daemon = Daemon::start("handled");

@@ -36,6 +36,25 @@ use std::path::Path;
 /// File name inside the writable data dir (`/data` in the sandbox).
 pub const PROPS_FILE: &str = "acos.properties";
 
+/// The table the host-side `linkerconfig` generation step reads (FLAKEFIX),
+/// next to [`PROPS_FILE`] in the data dir. It is bound over
+/// `/data/acos.properties` for that one step only; no guest ever sees it.
+pub const LINKERCONFIG_PROPS_FILE: &str = "acos.linkerconfig.properties";
+
+/// Properties the image's `linkerconfig` binary reads to choose its **mode**
+/// and that the guests need for other reasons.
+///
+/// `ro.vndk.version` makes linkerconfig emit the strict, Treble-style config
+/// (`dir.system`/`dir.vendor` sections, isolated default namespace whose
+/// permitted paths exclude `/data/shim`). With it unset linkerconfig emits the
+/// legacy, unisolated config this runtime was built and validated against
+/// (every guest, `derive_classpath` and `dalvikvm64` are launched with the
+/// `libartshim.so` `LD_PRELOAD` from `/data/shim`, which the strict default
+/// namespace refuses to open). The guests still need `ro.vndk.version`
+/// (libcutils' memfd-backed ashmem, GATENE2E), so only the generation step
+/// is served a table without it.
+pub const LINKERCONFIG_MODE_KEYS: [&str; 1] = ["ro.vndk.version"];
+
 /// bionic `PROP_VALUE_MAX`.
 pub const PROP_VALUE_MAX: usize = 92;
 
@@ -542,6 +561,16 @@ impl Props {
         Ok(p)
     }
 
+    /// The table the `linkerconfig` generation step is served: the launch
+    /// table without [`LINKERCONFIG_MODE_KEYS`].
+    pub fn for_linkerconfig() -> Result<Self> {
+        let mut p = Self::for_launch()?;
+        for key in LINKERCONFIG_MODE_KEYS {
+            p.entries.remove(key);
+        }
+        Ok(p)
+    }
+
     pub fn set(&mut self, key: &str, value: &str) -> &mut Self {
         self.entries.insert(key.to_string(), value.to_string());
         self
@@ -669,6 +698,20 @@ mod tests {
         assert!(text.contains("ro.debuggable=1\n"));
         let round = Props::parse(&text);
         assert_eq!(round.get("ro.build.version.release"), Some("14"));
+    }
+
+    #[test]
+    fn the_linkerconfig_table_hides_only_the_mode_keys() {
+        let _env = ENV_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let launch = Props::for_launch().unwrap();
+        let lc = Props::for_linkerconfig().unwrap();
+        assert_eq!(launch.get("ro.vndk.version"), Some("34"));
+        assert_eq!(lc.get("ro.vndk.version"), None);
+        assert_eq!(lc.len() + LINKERCONFIG_MODE_KEYS.len(), launch.len());
+        // Everything else (memfd switch included) is identical.
+        assert_eq!(lc.get("sys.use_memfd"), Some("true"));
     }
 
     #[test]

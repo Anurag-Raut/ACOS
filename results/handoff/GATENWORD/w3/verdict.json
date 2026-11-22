@@ -1,0 +1,5347 @@
+{
+  "animations": "off",
+  "app": {
+    "package": "com.gaten",
+    "path": "/home/Qui/Projects/acos/.cache/gaten/gaten-dev-f344272-x86_64-release-unsigned.apk",
+    "sha256": "e04c7ffcf01209c98e511e1ab01a7f68d6decb178d14a08f2b7f0a6539e2ee29"
+  },
+  "backend": "acos-native",
+  "captures": {
+    "after-back": "frames/281-after-back.png",
+    "gaten-screen-lookup": "frames/14-gaten-screen-lookup.png",
+    "gaten-word-sheet": "frames/262-gaten-word-sheet.png",
+    "lookup-index-ready": "frames/259-lookup-index-ready.png"
+  },
+  "certification": "certified-with-limits",
+  "certification_limits": {
+    "doc": "docs/SANDBOX_CERTIFICATION.md",
+    "section": "§8.7"
+  },
+  "certification_policy": {
+    "doc": "docs/SANDBOX_CERTIFICATION.md",
+    "policy": "opt-in untrusted: trusted is the default, an explicit --untrusted or `trust: untrusted` is allowed",
+    "section": "§8.8"
+  },
+  "engine": "art",
+  "evidence": {
+    "artifacts": "/home/Qui/.t3/worktrees/acos/t3-47d6c485-d007559ed116102f/results/handoff/GATENWORD/w3",
+    "engine_report": "/home/Qui/.t3/worktrees/acos/t3-47d6c485-d007559ed116102f/results/handoff/GATENWORD/w3/engine.json",
+    "retention": "/home/Qui/.t3/worktrees/acos/t3-47d6c485-d007559ed116102f/results/handoff/GATENWORD/w3/retention.json",
+    "verdict": "/home/Qui/.t3/worktrees/acos/t3-47d6c485-d007559ed116102f/results/handoff/GATENWORD/w3/verdict.json"
+  },
+  "evidence_provenance": {
+    "binder_transactions": "host-observed",
+    "crash_reports": "guest-asserted",
+    "frames": "host-observed",
+    "host_input": "host-observed",
+    "input_acks": "guest-asserted",
+    "launch_markers": "guest-asserted",
+    "lifecycle_markers": "guest-asserted",
+    "logs": "guest-asserted",
+    "static_manifest": "host-observed",
+    "tree": "guest-asserted"
+  },
+  "extra_apks": [],
+  "failure": {
+    "code": "GUEST_EXITED",
+    "error": {
+      "class": "harness",
+      "code": "GUEST_EXITED",
+      "details": {
+        "backend": "acos-art-session",
+        "context": "capture",
+        "session_exit": {
+          "abi": null,
+          "cgroup": "cgroup: memory.max=2048MiB swap=0 pids.max=512 peak=590MiB oom_kills=0 (/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p1080217-i1123198.scope)",
+          "code": "GUEST_KILLED_BY_SIGNAL",
+          "disk_free_bytes": 226751406080,
+          "guest_crash": null,
+          "guest_exit": null,
+          "guest_signal": 6,
+          "native_crash": {
+            "cmdline": "<unset>",
+            "code": -6,
+            "code_name": "SI_TKILL",
+            "fault_addr": "0x0",
+            "fault_pc": "000013f4",
+            "frames": [
+              {
+                "index": 0,
+                "map": "/data/shim/libartshim.so",
+                "offset": null,
+                "pc": "000013f4",
+                "symbol": "BuildId: df7546c6a520b774f4f21cd5f318e57232258d7d"
+              }
+            ],
+            "shim": {
+              "code": -6,
+              "fault_addr": "0x0",
+              "pid": 2,
+              "signal": 6,
+              "source": "acos-shim",
+              "thread": "com.gaten",
+              "tid": 2
+            },
+            "signal": 6,
+            "signal_name": "SIGABRT",
+            "summary": "SIGABRT (6) fault_addr=0x0 in thread 2 \"com.gaten\": /data/shim/libartshim.so (BuildId: df7546c6a520b774f4f21cd5f318e57232258d7d)",
+            "thread": {
+              "name": "com.gaten",
+              "tid": 2
+            },
+            "unmapped_frames": 0
+          },
+          "native_crash_path": "/home/Qui/.t3/worktrees/acos/t3-47d6c485-d007559ed116102f/results/handoff/GATENWORD/w3/art-frames/native-crash.txt",
+          "outcome": "crash",
+          "panic": null,
+          "path": "/home/Qui/.t3/worktrees/acos/t3-47d6c485-d007559ed116102f/results/handoff/GATENWORD/w3/art-frames/session-exit.json",
+          "retryable": false,
+          "stage": "teardown-evidence"
+        }
+      },
+      "hint": "The guest process ended before the requested stage. Read error.details.session_exit for guest_exit, guest_signal, stage and the guest's own ACOSLAUNCH crash line: exit 126/signal 31 with a guard ERR is a host isolation condition; a guest SIGSEGV/abort or a fatal ART log is an app crash. Do not retry unchanged until the cause is named.",
+      "message": "command: the ART session stdin is closed (classified from /home/Qui/.t3/worktrees/acos/t3-47d6c485-d007559ed116102f/results/handoff/GATENWORD/w3/art-frames/session-exit.json); stderr tail: halled reply (256 bytes)\nacos-binder-peer: process 0: android.hardware.display.IDisplayManager.getDisplayInfo answered from a framework-marshalled reply (256 bytes)\nacos-binder-peer: UNSUPPORTED_ANDROID_API {\"code\":113,\"descriptor\":\"android.view.IWindowManager\",\"error\":\"UNSUPPORTED_ANDROID_API\",\"kind\":\"UNSUPPORTED_ANDROID_API\",\"message\":\"unsupported Android API: android.view.IWindowManager code 113 (getWindowInsets)\",\"method\":\"getWindowInsets\"}\nacos-binder-peer: process 0: android.hardware.display.IDisplayManager.getDisplayInfo answered from a framework-marshalled reply (256 bytes)\nacos-binder-peer: process 0: android.hardware.display.IDisplayManager.getDisplayInfo answered from a framework-marshalled reply (256 bytes)\nACOSWMS enter code=2 (addToDisplayAsUser) avail=356\nACOSWMS lock-wait code=2\nACOSWMS locked code=2\nACOSWMS add-request window=0x100000035 type=2032 token=Some(BinderId(120)) title=None w=-2 h=-2\nACOSWMS add-done window=0x100000035 result=0 frame=RectI { left: 0, top: 0, right: 1080, bottom: 2400 }\nACOSWMS exit code=2\nacos-binder-peer: process 0: android.hardware.display.IDisplayManager.getDisplayInfo answered from a framework-marshalled reply (256 bytes)\nacos-binder-peer: process 0: android.hardware.display.IDisplayManager.getDisplayInfo answered from a framework-marshalled reply (256 bytes)\nacos-binder-peer: process 0: android.hardware.display.IDisplayManager.getDisplayInfo answered from a framework-marshalled reply (256 bytes)\nacos-binder-peer: process 0: android.hardware.display.IDisplayManager.getDisplayInfo answered from a framework-marshalled reply (256 bytes)\nacos-binder-peer: process 0: android.hardware.display.IDisplayManager.getDisplayInfo answered from a framework-marshalled reply (256 bytes)\nacos-binder-peer: process 0: android.hardware.display.IDisplayManager.getDisplayInfo answered from a framework-marshalled reply (256 bytes)\nacos-binder-peer: process 0: android.hardware.display.IDisplayManager.getDisplayInfo answered from a framework-marshalled reply (256 bytes)\nACOSWMS enter code=2 (addToDisplayAsUser) avail=356\nACOSWMS lock-wait code=2\nACOSWMS locked code=2\nACOSWMS add-request window=0x100000036 type=2032 token=Some(BinderId(120)) title=None w=-2 h=-2\nACOSWMS add-done window=0x100000036 result=0 frame=RectI { left: 0, top: 0, right: 1080, bottom: 2400 }\nACOSWMS exit code=2\nacos-binder-peer: process 0: android.hardware.display.IDisplayManager.getDisplayInfo answered from a framework-marshalled reply (256 bytes)\nacos-binder-peer: process 0: android.hardware.display.IDisplayManager.getDisplayInfo answered from a framework-marshalled reply (256 bytes)\nacos-binder-peer: process 0: android.hardware.display.IDisplayManager.getDisplayInfo answered from a framework-marshalled reply (256 bytes)\nacos-binder-peer: process 0: android.hardware.display.IDisplayManager.getDisplayInfo answered from a framework-marshalled reply (256 bytes)\nacos-binder-peer: process 0: android.hardware.display.IDisplayManager.getDisplayInfo answered from a framework-marshalled reply (256 bytes)\nacos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {acc8081} D0.S@d003526\nacos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {62b33bd} androidx.lifecycle.B@f707515: 0\nacos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {62b33bd} androidx.lifecycle.B@f707515\nacos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {62b33bd} com.swmansion.worklets.AndroidUIScheduler$scheduleTriggerOnUI$1@9cc702a: 0\nacos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {62b33bd} com.swmansion.worklets.AndroidUIScheduler$scheduleTriggerOnUI$1@9cc702a\nacos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {5f32956} dev.acos.art.LaunchMain$8$1@b4be1b: 0\nACOSWMS enter code=39 (setOnBackInvokedCallbackInfo) avail=60\nACOSWMS lock-wait code=39\nACOSWMS locked code=39\nACOSWMS exit code=39\nACOSWMS enter code=5 (relayout) avail=360\nACOSWMS lock-wait code=5\nACOSWMS locked code=5\nACOSWMS relayout-request window=0x100000035 type=2032 token=Some(BinderId(120)) w=-2 h=-2 req=145x145 surfaceInsets=RectI { left: 0, top: 0, right: 0, bottom: 0 }\nACOSWMS relayout-done window=0x100000035 result=0x7 frame=RectI { left: 467, top: 2171, right: 612, bottom: 2316 } surface=145x145\nandroid.view.IWindowSession: relayout: no compositor layer bound for window 4294967349; replying with the placeholder SurfaceControl\nACOSWMS exit code=5\nacos-binder-peer: process 0: android.hardware.display.IDisplayManager.getDisplayInfo answered from a framework-marshalled reply (256 bytes)\nacos-binder-peer: process 0: android.hardware.display.IDisplayManager.getDisplayInfo answered from a framework-marshalled reply (256 bytes)\nacos-binder-peer: process 0: android.hardware.display.IDisplayManager.getDisplayInfo answered from a framework-marshalled reply (256 bytes)\nacos-binder-peer: UNSUPPORTED_ANDROID_API {\"code\":1,\"descriptor\":\"android.gui.ISurfaceComposerClient\",\"error\":\"SERVICE_UNKNOWN_BINDER\",\"kind\":\"UNSUPPORTED_ANDROID_API\",\"message\":\"unknown binder handle 0x1001011\",\"method\":\"code 1\"}\nacos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {5f32956} dev.acos.art.LaunchMain$8$1@b4be1b\nacos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {6f6b2de} android.view.Choreographer$FrameDisplayEventReceiver@73dfcbf: 0\nacos-binder-peer: process 0 connection closed: 7 host-held binder reference(s) released\nacos-binder-peer: process tag 0 disconnected \n                     (0 java binders dropped)\nacos-binder-peer: process tag 0 disconnected: window session 1 closed (0x75, 3 window(s): [4294967310, 4294967349, 4294967350])\nacos-binder-peer: process 0 connection closed (0 java binders, 55 host binder records dropped)\nacos-binder-peer: UNSUPPORTED_ANDROID_API: idle delivery to process 0 dropped (no such connection)\nacos-binder-peer: UNSUPPORTED_ANDROID_API: idle delivery to process 0 dropped (no such connection)\nacos-binder-peer: UNSUPPORTED_ANDROID_API: idle delivery to process 0 dropped (no such connection)\nacos-binder-peer: UNSUPPORTED_ANDROID_API: idle delivery to process 0 dropped (no such connection)\nacos-binder-peer: UNSUPPORTED_ANDROID_API: idle delivery to process 0 dropped (no such connection)\nacos-binder-peer: UNSUPPORTED_ANDROID_API: idle delivery to process 0 dropped (no such connection)\nacos-binder-peer: UNSUPPORTED_ANDROID_API: idle delivery to process 0 dropped (no such connection)\nacos-art: peer: processes=[] peak_connections=1 accepted=1 refused=0 closed=1 frames=4607/2189 unroutable=7\nacos-art: launch wall=28165ms until=activity-resumed application_created=true activity_resumed=true txn=None/false reverse_replies=796 reverse_failed=0 logd=428 (logd: 428 entries) peer_resource_limits=0\nacos-art: shared-boot-image: /home/Qui/.cache/acos/art/boot-images/fixed-ff39b037f1d6b9ff (ACOS_ART_BOOT_IMAGE=shared-fixed; -Ximage:/data/img/boot.art -Xnorelocate; fixed base 0x70000000, no image ASLR; cache hit)\nacos-art: boot_image: mode=shared-fixed cache=hit dir=/home/Qui/.cache/acos/art/boot-images/fixed-ff39b037f1d6b9ff input=ff39b037f1d6b9ff base=0x70000000\nacos-art: cgroup: memory.max=2048MiB swap=0 pids.max=512 peak=590MiB oom_kills=0 (/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p1080217-i1123198.scope)\nacos-art: seccomp: OK guard=active insns=83 / OK landlock=active abi=10 rules=15 skipped=0\nacos-art: logd: 428 entries\nacos-art: webview: module `webview` is off (no `com.android.webview` provider package, no gate socket): `WebView` takes Android's own no-provider path. Attach it with `services: [{id: webview, profile: real}]`.\nacos-art: native crash: SIGABRT (6) fault_addr=0x0 in thread 2 \"com.gaten\": /data/shim/libartshim.so (BuildId: df7546c6a520b774f4f21cd5f318e57232258d7d) (raw dump: /home/Qui/.t3/worktrees/acos/t3-47d6c485-d007559ed116102f/results/handoff/GATENWORD/w3/art-frames/native-crash.txt)\nacos-art: kept crashed run tree /home/Qui/Projects/acos/.cache/art-locks/data-GATENWORDc-1080082/runs/1080150-0 (1 of at most 8; 0 pruned)",
+      "retryable": false
+    },
+    "step_index": 45,
+    "summary": "step 45 (capture) error"
+  },
+  "fidelity": "art-reference",
+  "finished_at": "2026-11-18T09:47:56.763Z",
+  "insets": "report",
+  "isolation": "process",
+  "mode": "live",
+  "modules": [
+    {
+      "attach": "at-launch",
+      "details": null,
+      "fidelity": "real",
+      "id": "core",
+      "profile": "real",
+      "reason": null,
+      "state": "attached"
+    },
+    {
+      "attach": "hot",
+      "details": {
+        "app_thread": "0x100000001",
+        "bind_pending": null,
+        "binding": "bound: the app published its IAccessibilityServiceClient and the system delivered init(IAccessibilityServiceConnection, connectionId, windowToken), so onServiceConnected ran",
+        "bound_service": {
+          "binder": "0x10000001c",
+          "component": "com.gaten/com.gaten.app.GatenAccessibilityService",
+          "connection": "0x77",
+          "connection_id": 1,
+          "service_info_set": false
+        },
+        "clients": 1,
+        "connections": [],
+        "enabled": true,
+        "enabled_services": [
+          "com.gaten/com.gaten.app.GatenAccessibilityService"
+        ],
+        "event_count": 0,
+        "event_types": [],
+        "gestures": [],
+        "installed_services": [
+          "com.gaten/.app.GatenAccessibilityService"
+        ],
+        "interactions": [],
+        "screenshots": [
+          {
+            "display_id": 0,
+            "status": 0
+          }
+        ],
+        "self_disabled": false,
+        "service_bound": true,
+        "service_config": {
+          "can_perform_gestures": false,
+          "can_retrieve_window_content": false,
+          "can_retrieve_windows": false,
+          "can_take_screenshot": true,
+          "capabilities": 128,
+          "event_types": 96,
+          "feedback_type": 16,
+          "flags": 65,
+          "notification_timeout": 100
+        },
+        "unsupported": [],
+        "windows": [
+          {
+            "active": true,
+            "bounds": [
+              0,
+              0,
+              1080,
+              2400
+            ],
+            "connection": null,
+            "focused": true,
+            "id": 0,
+            "layer": 0,
+            "package": "",
+            "type": 1,
+            "window": "0x10000000e"
+          }
+        ]
+      },
+      "fidelity": "real",
+      "id": "accessibility",
+      "profile": "real",
+      "reason": "real: settings, client state, service lists, event and interaction records, system-initiated bind (scheduleCreateService + scheduleBindService -> publishService -> IAccessibilityServiceClient.init); the interaction surface (getWindows, node queries, gestures, screenshot) is not implemented yet",
+      "state": "attached"
+    },
+    {
+      "attach": "hot",
+      "details": null,
+      "fidelity": "off",
+      "id": "system.permissions",
+      "profile": "off",
+      "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.permissions\", \"profile\": \"real\"}]}",
+      "state": "off"
+    },
+    {
+      "attach": "hot",
+      "details": null,
+      "fidelity": "off",
+      "id": "system.notifications",
+      "profile": "off",
+      "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.notifications\", \"profile\": \"real\"}]}",
+      "state": "off"
+    },
+    {
+      "attach": "hot",
+      "details": null,
+      "fidelity": "off",
+      "id": "sensors",
+      "profile": "off",
+      "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"sensors\", \"profile\": \"scripted\"}]}",
+      "state": "off"
+    },
+    {
+      "attach": "hot",
+      "details": null,
+      "fidelity": "off",
+      "id": "feedback.vibrator",
+      "profile": "off",
+      "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"feedback.vibrator\", \"profile\": \"scripted\"}]}",
+      "state": "off"
+    },
+    {
+      "attach": "hot",
+      "details": null,
+      "fidelity": "off",
+      "id": "location",
+      "profile": "off",
+      "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"location\", \"profile\": \"scripted\"}]}",
+      "state": "off"
+    },
+    {
+      "attach": "at-launch",
+      "details": null,
+      "fidelity": "off",
+      "id": "net.telephony",
+      "profile": "off",
+      "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"net.telephony\", \"profile\": \"scripted\"}]}",
+      "state": "off"
+    },
+    {
+      "attach": "hot",
+      "details": null,
+      "fidelity": "off",
+      "id": "hw.bluetooth",
+      "profile": "off",
+      "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.bluetooth\", \"profile\": \"scripted\"}]}",
+      "state": "off"
+    },
+    {
+      "attach": "hot",
+      "details": null,
+      "fidelity": "off",
+      "id": "hw.biometric",
+      "profile": "off",
+      "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.biometric\", \"profile\": \"scripted\"}]}",
+      "state": "off"
+    },
+    {
+      "attach": "at-launch",
+      "details": null,
+      "fidelity": "off",
+      "id": "network",
+      "profile": "off",
+      "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"network\", \"profile\": \"real\"}]}",
+      "state": "off"
+    },
+    {
+      "attach": "at-launch",
+      "details": null,
+      "fidelity": "off",
+      "id": "webview",
+      "profile": "off",
+      "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"webview\", \"profile\": \"real\"}]}",
+      "state": "off"
+    },
+    {
+      "attach": "hot",
+      "details": null,
+      "fidelity": "off",
+      "id": "hw.usb",
+      "profile": "off",
+      "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.usb\", \"profile\": \"stub\"}]}",
+      "state": "off"
+    },
+    {
+      "attach": "hot",
+      "details": null,
+      "fidelity": "off",
+      "id": "system.dropbox",
+      "profile": "off",
+      "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.dropbox\", \"profile\": \"stub\"}]}",
+      "state": "off"
+    },
+    {
+      "attach": "hot",
+      "details": null,
+      "fidelity": "off",
+      "id": "hw.nfc",
+      "profile": "off",
+      "reason": "off: no NFC hardware: NfcAdapter throws UnsupportedOperationException before any binder (FEATURE_NFC is absent)",
+      "state": "off"
+    },
+    {
+      "attach": "hot",
+      "details": null,
+      "fidelity": "off",
+      "id": "system.wallpaper",
+      "profile": "off",
+      "reason": "off: no wallpaper service; AOSP's own DisabledWallpaperManager is the working missing path (config_enableWallpaperService is false)",
+      "state": "off"
+    },
+    {
+      "attach": "hot",
+      "details": null,
+      "fidelity": "off",
+      "id": "system.print",
+      "profile": "off",
+      "reason": "off: no print service; the client only resolves the name when FEATURE_PRINTING is reported, and ACOS reports it absent",
+      "state": "off"
+    },
+    {
+      "attach": "hot",
+      "details": null,
+      "fidelity": "off",
+      "id": "system.search",
+      "profile": "off",
+      "reason": "off: no search service and no searchable index; an empty SearchableInfo list would look like an installed search provider",
+      "state": "off"
+    },
+    {
+      "attach": "hot",
+      "details": null,
+      "fidelity": "off",
+      "id": "system.usage",
+      "profile": "off",
+      "reason": "off: nothing records app usage; an empty ParceledListSlice<UsageStats> would be indistinguishable from 'not used'",
+      "state": "off"
+    },
+    {
+      "attach": "hot",
+      "details": null,
+      "fidelity": "off",
+      "id": "system.dpm",
+      "profile": "off",
+      "reason": "off: no managed device or profile; every device-policy answer would be invented policy state",
+      "state": "off"
+    },
+    {
+      "attach": "hot",
+      "details": null,
+      "fidelity": "off",
+      "id": "system.role",
+      "profile": "off",
+      "reason": "off: IRoleManager lives in the Permission APEX; its transaction table is not in the framework dex this build reads, so a stub would guess codes",
+      "state": "off"
+    },
+    {
+      "attach": "hot",
+      "details": null,
+      "fidelity": "off",
+      "id": "geo.country",
+      "profile": "off",
+      "reason": "off: a detected country is a location claim ACOS cannot back",
+      "state": "off"
+    }
+  ],
+  "notes": [
+    "stopped at step 45 (capture): error; later steps were not executed",
+    "scenario expected `pass`, engine produced `error` — result is a truthful partial",
+    "coordinates: UI-tree bounds, tap x/y, assert_region and assert_screenshot.region_masks are display pixels (display 1080x2400, origin [0,0]); frames/<seq>.png is the display area starting at display_origin [0,0], so png_y = display_y - 0 (frame 2 is display [0,0][1080,2400]). Do not compare a tree bound with a PNG pixel without that offset.",
+    "artifacts: referenced (keep-all): 159 file(s) / 50.4 MiB kept, 0 file(s) / 0.0 MiB pruned; see retention.json",
+    "fidelity: module `system.permissions` is off (module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.permissions\", \"profile\": \"real\"}]}); behaviour that needs it is unsupported, never a pass",
+    "fidelity: module `system.notifications` is off (module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.notifications\", \"profile\": \"real\"}]}); behaviour that needs it is unsupported, never a pass",
+    "fidelity: module `sensors` is off (module is off; attach it: acos_launch {\"services\": [{\"id\": \"sensors\", \"profile\": \"scripted\"}]}); behaviour that needs it is unsupported, never a pass",
+    "fidelity: module `feedback.vibrator` is off (module is off; attach it: acos_launch {\"services\": [{\"id\": \"feedback.vibrator\", \"profile\": \"scripted\"}]}); behaviour that needs it is unsupported, never a pass",
+    "fidelity: module `location` is off (module is off; attach it: acos_launch {\"services\": [{\"id\": \"location\", \"profile\": \"scripted\"}]}); behaviour that needs it is unsupported, never a pass",
+    "fidelity: module `net.telephony` is off (module is off; attach it: acos_launch {\"services\": [{\"id\": \"net.telephony\", \"profile\": \"scripted\"}]}); behaviour that needs it is unsupported, never a pass",
+    "fidelity: module `hw.bluetooth` is off (module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.bluetooth\", \"profile\": \"scripted\"}]}); behaviour that needs it is unsupported, never a pass",
+    "fidelity: module `hw.biometric` is off (module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.biometric\", \"profile\": \"scripted\"}]}); behaviour that needs it is unsupported, never a pass",
+    "fidelity: module `network` is off (module is off; attach it: acos_launch {\"services\": [{\"id\": \"network\", \"profile\": \"real\"}]}); behaviour that needs it is unsupported, never a pass",
+    "fidelity: module `webview` is off (module is off; attach it: acos_launch {\"services\": [{\"id\": \"webview\", \"profile\": \"real\"}]}); behaviour that needs it is unsupported, never a pass",
+    "fidelity: module `hw.usb` is off (module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.usb\", \"profile\": \"stub\"}]}); behaviour that needs it is unsupported, never a pass",
+    "fidelity: module `system.dropbox` is off (module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.dropbox\", \"profile\": \"stub\"}]}); behaviour that needs it is unsupported, never a pass",
+    "fidelity: module `hw.nfc` is off (off: no NFC hardware: NfcAdapter throws UnsupportedOperationException before any binder (FEATURE_NFC is absent)); behaviour that needs it is unsupported, never a pass",
+    "fidelity: module `system.wallpaper` is off (off: no wallpaper service; AOSP's own DisabledWallpaperManager is the working missing path (config_enableWallpaperService is false)); behaviour that needs it is unsupported, never a pass",
+    "fidelity: module `system.print` is off (off: no print service; the client only resolves the name when FEATURE_PRINTING is reported, and ACOS reports it absent); behaviour that needs it is unsupported, never a pass",
+    "fidelity: module `system.search` is off (off: no search service and no searchable index; an empty SearchableInfo list would look like an installed search provider); behaviour that needs it is unsupported, never a pass",
+    "fidelity: module `system.usage` is off (off: nothing records app usage; an empty ParceledListSlice<UsageStats> would be indistinguishable from 'not used'); behaviour that needs it is unsupported, never a pass",
+    "fidelity: module `system.dpm` is off (off: no managed device or profile; every device-policy answer would be invented policy state); behaviour that needs it is unsupported, never a pass",
+    "fidelity: module `system.role` is off (off: IRoleManager lives in the Permission APEX; its transaction table is not in the framework dex this build reads, so a stub would guess codes); behaviour that needs it is unsupported, never a pass",
+    "fidelity: module `geo.country` is off (off: a detected country is a location claim ACOS cannot back); behaviour that needs it is unsupported, never a pass"
+  ],
+  "provenance": {
+    "apk": {
+      "mtime_ns": 1794503846699559546,
+      "path": "/home/Qui/Projects/acos/.cache/gaten/gaten-dev-f344272-x86_64-release-unsigned.apk",
+      "sha256": "e04c7ffcf01209c98e511e1ab01a7f68d6decb178d14a08f2b7f0a6539e2ee29",
+      "sha256_12": "e04c7ffcf012",
+      "size_bytes": 114751344
+    },
+    "engine": "art",
+    "fidelity": "art-reference",
+    "scenario": {
+      "mtime_ns": 1794995245420711911,
+      "path": "/home/Qui/.t3/worktrees/acos/t3-47d6c485-d007559ed116102f/scenarios/gaten-word-lookup.yaml",
+      "sha256": "80fb2e594a4dc2ae394e6efe5197c26c2fb52e37e8ac9054e909d510c3cdf48f",
+      "sha256_12": "80fb2e594a4d",
+      "size_bytes": 7280
+    },
+    "scenario_engine": "rust-vm",
+    "warnings": [
+      {
+        "code": "SCENARIO_ENGINE_MISMATCH",
+        "engine": "art",
+        "message": "the scenario declares `engine: rust-vm` but this run used `art`: the scenario field records the engine the scenario was written for, it does not select one (`--engine art` / the MCP `engine` argument do). The verdict is about the `art` run; pass `--engine rust-vm` to run the engine the scenario names.",
+        "scenario_engine": "rust-vm"
+      },
+      {
+        "acked": 8,
+        "code": "INPUT_UNHANDLED",
+        "handled": false,
+        "hint": "nothing at this point consumed the input and the tree has no node there (the app's window answered `finishInputEvent(handled) = false`); nothing changed because nothing was tappable",
+        "message": "step 23 (type): the gesture was delivered and the app window acknowledged every event `finishInputEvent(handled) = false` - nothing consumed it. The step is `pass` because it made no change claim; it is not evidence that the input reached a control.",
+        "published": 8,
+        "step": 23,
+        "step_kind": "type",
+        "target": null,
+        "unhandled": [
+          26,
+          28,
+          30,
+          32
+        ]
+      }
+    ]
+  },
+  "provenance_rule": "trusted fixture: guest-asserted evidence may corroborate a pass, and its provenance is still recorded",
+  "reproducer": {
+    "acos_version": "0.3.0",
+    "apk_path": "/home/Qui/Projects/acos/.cache/gaten/gaten-dev-f344272-x86_64-release-unsigned.apk",
+    "apk_sha256": "e04c7ffcf01209c98e511e1ab01a7f68d6decb178d14a08f2b7f0a6539e2ee29",
+    "backend": "acos-native",
+    "display": {
+      "density_dpi": 400,
+      "height": 2400,
+      "mode": "offscreen",
+      "width": 1080
+    },
+    "fidelity": "art-reference",
+    "flags": [],
+    "isolation": "process",
+    "scenario_path": "/home/Qui/.t3/worktrees/acos/t3-47d6c485-d007559ed116102f/scenarios/gaten-word-lookup.yaml",
+    "scenario_sha256": "80fb2e594a4dc2ae394e6efe5197c26c2fb52e37e8ac9054e909d510c3cdf48f"
+  },
+  "request_id": "req_107b54_18e91aaa5bf53fd9",
+  "resources": {
+    "events": 434,
+    "frames_captured": 37,
+    "memory_mib": 242,
+    "peak_rss_bytes": 254431232,
+    "sessions": 1,
+    "steps": 46,
+    "wall_ms": 30520
+  },
+  "scenario": {
+    "name": "gaten-word-lookup",
+    "path": "/home/Qui/.t3/worktrees/acos/t3-47d6c485-d007559ed116102f/scenarios/gaten-word-lookup.yaml",
+    "sha256": "80fb2e594a4dc2ae394e6efe5197c26c2fb52e37e8ac9054e909d510c3cdf48f"
+  },
+  "schema_version": 1,
+  "session_exit": {
+    "abi": null,
+    "cgroup": "cgroup: memory.max=2048MiB swap=0 pids.max=512 peak=590MiB oom_kills=0 (/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p1080217-i1123198.scope)",
+    "code": "GUEST_KILLED_BY_SIGNAL",
+    "disk_free_bytes": 226751406080,
+    "guest_crash": null,
+    "guest_exit": null,
+    "guest_signal": 6,
+    "native_crash": {
+      "cmdline": "<unset>",
+      "code": -6,
+      "code_name": "SI_TKILL",
+      "fault_addr": "0x0",
+      "fault_pc": "000013f4",
+      "frames": [
+        {
+          "index": 0,
+          "map": "/data/shim/libartshim.so",
+          "offset": null,
+          "pc": "000013f4",
+          "symbol": "BuildId: df7546c6a520b774f4f21cd5f318e57232258d7d"
+        }
+      ],
+      "shim": {
+        "code": -6,
+        "fault_addr": "0x0",
+        "pid": 2,
+        "signal": 6,
+        "source": "acos-shim",
+        "thread": "com.gaten",
+        "tid": 2
+      },
+      "signal": 6,
+      "signal_name": "SIGABRT",
+      "summary": "SIGABRT (6) fault_addr=0x0 in thread 2 \"com.gaten\": /data/shim/libartshim.so (BuildId: df7546c6a520b774f4f21cd5f318e57232258d7d)",
+      "thread": {
+        "name": "com.gaten",
+        "tid": 2
+      },
+      "unmapped_frames": 0
+    },
+    "native_crash_path": "/home/Qui/.t3/worktrees/acos/t3-47d6c485-d007559ed116102f/results/handoff/GATENWORD/w3/art-frames/native-crash.txt",
+    "outcome": "crash",
+    "panic": null,
+    "path": "/home/Qui/.t3/worktrees/acos/t3-47d6c485-d007559ed116102f/results/handoff/GATENWORD/w3/art-frames/session-exit.json",
+    "retryable": false,
+    "stage": "teardown-evidence"
+  },
+  "session_id": "s_art_gaten-dev-f344272-x86_64-release-unsigned",
+  "started_at": "2026-11-18T09:47:26.243Z",
+  "status": "error",
+  "steps": [
+    {
+      "assertions": [],
+      "duration_ms": 1526,
+      "evidence": [
+        {
+          "kind": "step",
+          "path": "steps/00-launch.json"
+        }
+      ],
+      "index": 0,
+      "provenance": {
+        "frame": "host-observed",
+        "launch_markers": "guest-asserted",
+        "lifecycle_markers": "guest-asserted",
+        "tree": "guest-asserted"
+      },
+      "status": "pass",
+      "step": "launch"
+    },
+    {
+      "assertions": [
+        {
+          "actual": {
+            "animations": "off",
+            "attached": [
+              {
+                "id": "core",
+                "profile": "real"
+              },
+              {
+                "id": "accessibility",
+                "profile": "real"
+              }
+            ],
+            "cmd": "services",
+            "id": "accessibility",
+            "modules": [
+              {
+                "attach": "at-launch",
+                "details": null,
+                "fidelity": "real",
+                "id": "core",
+                "profile": "real",
+                "reason": null,
+                "state": "attached"
+              },
+              {
+                "attach": "hot",
+                "details": {
+                  "app_thread": "0x100000001",
+                  "bind_pending": null,
+                  "binding": "accessibility is off, so no service is bound",
+                  "bound_service": null,
+                  "clients": 1,
+                  "connections": [],
+                  "enabled": false,
+                  "enabled_services": [],
+                  "event_count": 0,
+                  "event_types": [],
+                  "gestures": [],
+                  "installed_services": [
+                    "com.gaten/.app.GatenAccessibilityService"
+                  ],
+                  "interactions": [],
+                  "screenshots": [],
+                  "self_disabled": false,
+                  "service_bound": false,
+                  "service_config": null,
+                  "unsupported": [],
+                  "windows": [
+                    {
+                      "active": true,
+                      "bounds": [
+                        0,
+                        0,
+                        1080,
+                        2400
+                      ],
+                      "connection": null,
+                      "focused": true,
+                      "id": 0,
+                      "layer": 0,
+                      "package": "",
+                      "type": 1,
+                      "window": "0x10000000e"
+                    }
+                  ]
+                },
+                "fidelity": "real",
+                "id": "accessibility",
+                "profile": "real",
+                "reason": "real: settings, client state, service lists, event and interaction records, system-initiated bind (scheduleCreateService + scheduleBindService -> publishService -> IAccessibilityServiceClient.init); the interaction surface (getWindows, node queries, gestures, screenshot) is not implemented yet",
+                "state": "attached"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "system.permissions",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.permissions\", \"profile\": \"real\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "system.notifications",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.notifications\", \"profile\": \"real\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "sensors",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"sensors\", \"profile\": \"scripted\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "feedback.vibrator",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"feedback.vibrator\", \"profile\": \"scripted\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "location",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"location\", \"profile\": \"scripted\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "at-launch",
+                "details": null,
+                "fidelity": "off",
+                "id": "net.telephony",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"net.telephony\", \"profile\": \"scripted\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "hw.bluetooth",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.bluetooth\", \"profile\": \"scripted\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "hw.biometric",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.biometric\", \"profile\": \"scripted\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "at-launch",
+                "details": null,
+                "fidelity": "off",
+                "id": "network",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"network\", \"profile\": \"real\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "at-launch",
+                "details": null,
+                "fidelity": "off",
+                "id": "webview",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"webview\", \"profile\": \"real\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "hw.usb",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.usb\", \"profile\": \"stub\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "system.dropbox",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.dropbox\", \"profile\": \"stub\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "hw.nfc",
+                "profile": "off",
+                "reason": "off: no NFC hardware: NfcAdapter throws UnsupportedOperationException before any binder (FEATURE_NFC is absent)",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "system.wallpaper",
+                "profile": "off",
+                "reason": "off: no wallpaper service; AOSP's own DisabledWallpaperManager is the working missing path (config_enableWallpaperService is false)",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "system.print",
+                "profile": "off",
+                "reason": "off: no print service; the client only resolves the name when FEATURE_PRINTING is reported, and ACOS reports it absent",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "system.search",
+                "profile": "off",
+                "reason": "off: no search service and no searchable index; an empty SearchableInfo list would look like an installed search provider",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "system.usage",
+                "profile": "off",
+                "reason": "off: nothing records app usage; an empty ParceledListSlice<UsageStats> would be indistinguishable from 'not used'",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "system.dpm",
+                "profile": "off",
+                "reason": "off: no managed device or profile; every device-policy answer would be invented policy state",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "system.role",
+                "profile": "off",
+                "reason": "off: IRoleManager lives in the Permission APEX; its transaction table is not in the framework dex this build reads, so a stub would guess codes",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "geo.country",
+                "profile": "off",
+                "reason": "off: a detected country is a location claim ACOS cannot back",
+                "state": "off"
+              }
+            ],
+            "ok": true,
+            "op": "status",
+            "value": {
+              "app_thread": "0x100000001",
+              "bind_pending": null,
+              "bound_service": null,
+              "clients": 1,
+              "connections": [],
+              "enabled": false,
+              "enabled_services": [],
+              "event_count": 0,
+              "event_types": [],
+              "gestures": [],
+              "installed_services": [
+                "com.gaten/.app.GatenAccessibilityService"
+              ],
+              "interactions": [],
+              "screenshots": [],
+              "self_disabled": false,
+              "service_bound": false,
+              "service_config": null,
+              "unsupported": [],
+              "windows": [
+                {
+                  "active": true,
+                  "bounds": [
+                    0,
+                    0,
+                    1080,
+                    2400
+                  ],
+                  "connection": null,
+                  "focused": true,
+                  "id": 0,
+                  "layer": 0,
+                  "package": "",
+                  "type": 1,
+                  "window": "0x10000000e"
+                }
+              ]
+            }
+          },
+          "expected": {
+            "expect": {
+              "id": "accessibility",
+              "op": "status",
+              "value": {
+                "enabled": false,
+                "service_bound": false
+              }
+            },
+            "module": "accessibility",
+            "op": "status"
+          },
+          "kind": "service_ctl",
+          "matched_node_ids": [],
+          "message": "attached=[{\"id\":\"core\",\"profile\":\"real\"},{\"id\":\"accessibility\",\"profile\":\"real\"}]",
+          "passed": true
+        }
+      ],
+      "duration_ms": 0,
+      "evidence": [
+        {
+          "kind": "step",
+          "path": "steps/01-service_ctl.json"
+        }
+      ],
+      "index": 1,
+      "provenance": {},
+      "status": "pass",
+      "step": "service_ctl"
+    },
+    {
+      "assertions": [
+        {
+          "actual": {
+            "animations": "off",
+            "attached": [
+              {
+                "id": "core",
+                "profile": "real"
+              },
+              {
+                "id": "accessibility",
+                "profile": "real"
+              }
+            ],
+            "cmd": "services",
+            "id": "accessibility",
+            "modules": [
+              {
+                "attach": "at-launch",
+                "details": null,
+                "fidelity": "real",
+                "id": "core",
+                "profile": "real",
+                "reason": null,
+                "state": "attached"
+              },
+              {
+                "attach": "hot",
+                "details": {
+                  "app_thread": "0x100000001",
+                  "bind_pending": null,
+                  "binding": "no bind yet: it starts when the app's AccessibilityManager calls addClient and attachApplication named its IApplicationThread",
+                  "bound_service": null,
+                  "clients": 1,
+                  "connections": [],
+                  "enabled": true,
+                  "enabled_services": [
+                    "com.gaten/com.gaten.app.GatenAccessibilityService"
+                  ],
+                  "event_count": 0,
+                  "event_types": [],
+                  "gestures": [],
+                  "installed_services": [
+                    "com.gaten/.app.GatenAccessibilityService"
+                  ],
+                  "interactions": [],
+                  "screenshots": [],
+                  "self_disabled": false,
+                  "service_bound": false,
+                  "service_config": null,
+                  "unsupported": [],
+                  "windows": [
+                    {
+                      "active": true,
+                      "bounds": [
+                        0,
+                        0,
+                        1080,
+                        2400
+                      ],
+                      "connection": null,
+                      "focused": true,
+                      "id": 0,
+                      "layer": 0,
+                      "package": "",
+                      "type": 1,
+                      "window": "0x10000000e"
+                    }
+                  ]
+                },
+                "fidelity": "real",
+                "id": "accessibility",
+                "profile": "real",
+                "reason": "real: settings, client state, service lists, event and interaction records, system-initiated bind (scheduleCreateService + scheduleBindService -> publishService -> IAccessibilityServiceClient.init); the interaction surface (getWindows, node queries, gestures, screenshot) is not implemented yet",
+                "state": "attached"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "system.permissions",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.permissions\", \"profile\": \"real\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "system.notifications",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.notifications\", \"profile\": \"real\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "sensors",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"sensors\", \"profile\": \"scripted\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "feedback.vibrator",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"feedback.vibrator\", \"profile\": \"scripted\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "location",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"location\", \"profile\": \"scripted\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "at-launch",
+                "details": null,
+                "fidelity": "off",
+                "id": "net.telephony",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"net.telephony\", \"profile\": \"scripted\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "hw.bluetooth",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.bluetooth\", \"profile\": \"scripted\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "hw.biometric",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.biometric\", \"profile\": \"scripted\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "at-launch",
+                "details": null,
+                "fidelity": "off",
+                "id": "network",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"network\", \"profile\": \"real\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "at-launch",
+                "details": null,
+                "fidelity": "off",
+                "id": "webview",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"webview\", \"profile\": \"real\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "hw.usb",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.usb\", \"profile\": \"stub\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "system.dropbox",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.dropbox\", \"profile\": \"stub\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "hw.nfc",
+                "profile": "off",
+                "reason": "off: no NFC hardware: NfcAdapter throws UnsupportedOperationException before any binder (FEATURE_NFC is absent)",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "system.wallpaper",
+                "profile": "off",
+                "reason": "off: no wallpaper service; AOSP's own DisabledWallpaperManager is the working missing path (config_enableWallpaperService is false)",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "system.print",
+                "profile": "off",
+                "reason": "off: no print service; the client only resolves the name when FEATURE_PRINTING is reported, and ACOS reports it absent",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "system.search",
+                "profile": "off",
+                "reason": "off: no search service and no searchable index; an empty SearchableInfo list would look like an installed search provider",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "system.usage",
+                "profile": "off",
+                "reason": "off: nothing records app usage; an empty ParceledListSlice<UsageStats> would be indistinguishable from 'not used'",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "system.dpm",
+                "profile": "off",
+                "reason": "off: no managed device or profile; every device-policy answer would be invented policy state",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "system.role",
+                "profile": "off",
+                "reason": "off: IRoleManager lives in the Permission APEX; its transaction table is not in the framework dex this build reads, so a stub would guess codes",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "geo.country",
+                "profile": "off",
+                "reason": "off: a detected country is a location claim ACOS cannot back",
+                "state": "off"
+              }
+            ],
+            "ok": true,
+            "op": "enable",
+            "value": {
+              "enabled_services": [
+                "com.gaten/com.gaten.app.GatenAccessibilityService"
+              ]
+            }
+          },
+          "expected": {
+            "module": "accessibility",
+            "op": "enable"
+          },
+          "kind": "service_ctl",
+          "matched_node_ids": [],
+          "message": "attached=[{\"id\":\"core\",\"profile\":\"real\"},{\"id\":\"accessibility\",\"profile\":\"real\"}]",
+          "passed": true
+        }
+      ],
+      "duration_ms": 1,
+      "evidence": [
+        {
+          "kind": "step",
+          "path": "steps/02-service_ctl.json"
+        }
+      ],
+      "index": 2,
+      "provenance": {},
+      "status": "pass",
+      "step": "service_ctl"
+    },
+    {
+      "assertions": [
+        {
+          "actual": {
+            "previous_observation": false
+          },
+          "expected": {
+            "compared": false
+          },
+          "kind": "state_change",
+          "matched_node_ids": [],
+          "message": "no previous observation to compare; change not claimed",
+          "passed": true
+        }
+      ],
+      "duration_ms": 98,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/2.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/2.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/03-tap.json"
+        }
+      ],
+      "frame_seq": 2,
+      "index": 3,
+      "input": {
+        "expect_change": "auto",
+        "handled": true,
+        "handled_evidence": {
+          "acked": 2,
+          "published": 2,
+          "source": "guest"
+        },
+        "target": {
+          "hit": {
+            "clickable": false,
+            "consumer": null,
+            "method": "tree-geometry",
+            "node": {
+              "bounds": "[0,0][1080,2400]",
+              "class": "b5.g",
+              "clickable": false,
+              "content_desc": "",
+              "enabled": true,
+              "focused": false,
+              "id": "n10_",
+              "password": false,
+              "resource_id": "",
+              "scrollable": false,
+              "text": "",
+              "visible_bounds": "[0,0][1080,2400]",
+              "window": "main"
+            },
+            "suggest": {
+              "bounds": "[58,2117][1022,2253]",
+              "class": "b5.g",
+              "clickable": true,
+              "content_desc": "Set up Gaten",
+              "enabled": true,
+              "focused": false,
+              "id": "n13_",
+              "password": false,
+              "resource_id": "",
+              "scrollable": false,
+              "text": "",
+              "visible_bounds": "[58,2117][1022,2253]",
+              "window": "main"
+            }
+          },
+          "point": {
+            "x": 540,
+            "y": 2380
+          }
+        }
+      },
+      "provenance": {
+        "frame": "host-observed",
+        "host_input": "host-observed",
+        "input_acks": "guest-asserted",
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "ack_ms": 70,
+        "bound": "state-commit",
+        "first_change_ms": 13,
+        "frame_ms": 74,
+        "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
+        "mode": "fast",
+        "pixels_changed": null,
+        "reason": "state-commit",
+        "settled": true,
+        "state_changed": true,
+        "waited_ms": 98,
+        "waited_ms_source": "step"
+      },
+      "status": "pass",
+      "step": "tap"
+    },
+    {
+      "assertions": [
+        {
+          "actual": {
+            "animations": "off",
+            "attached": [
+              {
+                "id": "core",
+                "profile": "real"
+              },
+              {
+                "id": "accessibility",
+                "profile": "real"
+              }
+            ],
+            "cmd": "services",
+            "id": "accessibility",
+            "modules": [
+              {
+                "attach": "at-launch",
+                "details": null,
+                "fidelity": "real",
+                "id": "core",
+                "profile": "real",
+                "reason": null,
+                "state": "attached"
+              },
+              {
+                "attach": "hot",
+                "details": {
+                  "app_thread": "0x100000001",
+                  "bind_pending": null,
+                  "binding": "bound: the app published its IAccessibilityServiceClient and the system delivered init(IAccessibilityServiceConnection, connectionId, windowToken), so onServiceConnected ran",
+                  "bound_service": {
+                    "binder": "0x10000001c",
+                    "component": "com.gaten/com.gaten.app.GatenAccessibilityService",
+                    "connection": "0x77",
+                    "connection_id": 1,
+                    "service_info_set": false
+                  },
+                  "clients": 1,
+                  "connections": [],
+                  "enabled": true,
+                  "enabled_services": [
+                    "com.gaten/com.gaten.app.GatenAccessibilityService"
+                  ],
+                  "event_count": 0,
+                  "event_types": [],
+                  "gestures": [],
+                  "installed_services": [
+                    "com.gaten/.app.GatenAccessibilityService"
+                  ],
+                  "interactions": [],
+                  "screenshots": [],
+                  "self_disabled": false,
+                  "service_bound": true,
+                  "service_config": {
+                    "can_perform_gestures": false,
+                    "can_retrieve_window_content": false,
+                    "can_retrieve_windows": false,
+                    "can_take_screenshot": true,
+                    "capabilities": 128,
+                    "event_types": 96,
+                    "feedback_type": 16,
+                    "flags": 65,
+                    "notification_timeout": 100
+                  },
+                  "unsupported": [],
+                  "windows": [
+                    {
+                      "active": true,
+                      "bounds": [
+                        0,
+                        0,
+                        1080,
+                        2400
+                      ],
+                      "connection": null,
+                      "focused": true,
+                      "id": 0,
+                      "layer": 0,
+                      "package": "",
+                      "type": 1,
+                      "window": "0x10000000e"
+                    }
+                  ]
+                },
+                "fidelity": "real",
+                "id": "accessibility",
+                "profile": "real",
+                "reason": "real: settings, client state, service lists, event and interaction records, system-initiated bind (scheduleCreateService + scheduleBindService -> publishService -> IAccessibilityServiceClient.init); the interaction surface (getWindows, node queries, gestures, screenshot) is not implemented yet",
+                "state": "attached"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "system.permissions",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.permissions\", \"profile\": \"real\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "system.notifications",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.notifications\", \"profile\": \"real\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "sensors",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"sensors\", \"profile\": \"scripted\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "feedback.vibrator",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"feedback.vibrator\", \"profile\": \"scripted\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "location",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"location\", \"profile\": \"scripted\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "at-launch",
+                "details": null,
+                "fidelity": "off",
+                "id": "net.telephony",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"net.telephony\", \"profile\": \"scripted\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "hw.bluetooth",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.bluetooth\", \"profile\": \"scripted\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "hw.biometric",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.biometric\", \"profile\": \"scripted\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "at-launch",
+                "details": null,
+                "fidelity": "off",
+                "id": "network",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"network\", \"profile\": \"real\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "at-launch",
+                "details": null,
+                "fidelity": "off",
+                "id": "webview",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"webview\", \"profile\": \"real\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "hw.usb",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.usb\", \"profile\": \"stub\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "system.dropbox",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.dropbox\", \"profile\": \"stub\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "hw.nfc",
+                "profile": "off",
+                "reason": "off: no NFC hardware: NfcAdapter throws UnsupportedOperationException before any binder (FEATURE_NFC is absent)",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "system.wallpaper",
+                "profile": "off",
+                "reason": "off: no wallpaper service; AOSP's own DisabledWallpaperManager is the working missing path (config_enableWallpaperService is false)",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "system.print",
+                "profile": "off",
+                "reason": "off: no print service; the client only resolves the name when FEATURE_PRINTING is reported, and ACOS reports it absent",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "system.search",
+                "profile": "off",
+                "reason": "off: no search service and no searchable index; an empty SearchableInfo list would look like an installed search provider",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "system.usage",
+                "profile": "off",
+                "reason": "off: nothing records app usage; an empty ParceledListSlice<UsageStats> would be indistinguishable from 'not used'",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "system.dpm",
+                "profile": "off",
+                "reason": "off: no managed device or profile; every device-policy answer would be invented policy state",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "system.role",
+                "profile": "off",
+                "reason": "off: IRoleManager lives in the Permission APEX; its transaction table is not in the framework dex this build reads, so a stub would guess codes",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "geo.country",
+                "profile": "off",
+                "reason": "off: a detected country is a location claim ACOS cannot back",
+                "state": "off"
+              }
+            ],
+            "ok": true,
+            "op": "status",
+            "value": {
+              "app_thread": "0x100000001",
+              "bind_pending": null,
+              "bound_service": {
+                "binder": "0x10000001c",
+                "component": "com.gaten/com.gaten.app.GatenAccessibilityService",
+                "connection": "0x77",
+                "connection_id": 1,
+                "service_info_set": false
+              },
+              "clients": 1,
+              "connections": [],
+              "enabled": true,
+              "enabled_services": [
+                "com.gaten/com.gaten.app.GatenAccessibilityService"
+              ],
+              "event_count": 0,
+              "event_types": [],
+              "gestures": [],
+              "installed_services": [
+                "com.gaten/.app.GatenAccessibilityService"
+              ],
+              "interactions": [],
+              "screenshots": [],
+              "self_disabled": false,
+              "service_bound": true,
+              "service_config": {
+                "can_perform_gestures": false,
+                "can_retrieve_window_content": false,
+                "can_retrieve_windows": false,
+                "can_take_screenshot": true,
+                "capabilities": 128,
+                "event_types": 96,
+                "feedback_type": 16,
+                "flags": 65,
+                "notification_timeout": 100
+              },
+              "unsupported": [],
+              "windows": [
+                {
+                  "active": true,
+                  "bounds": [
+                    0,
+                    0,
+                    1080,
+                    2400
+                  ],
+                  "connection": null,
+                  "focused": true,
+                  "id": 0,
+                  "layer": 0,
+                  "package": "",
+                  "type": 1,
+                  "window": "0x10000000e"
+                }
+              ]
+            }
+          },
+          "expected": {
+            "expect": {
+              "id": "accessibility",
+              "op": "status",
+              "value": {
+                "enabled": true,
+                "enabled_services": [
+                  "com.gaten/com.gaten.app.GatenAccessibilityService"
+                ],
+                "service_bound": true
+              }
+            },
+            "module": "accessibility",
+            "op": "status"
+          },
+          "kind": "service_ctl",
+          "matched_node_ids": [],
+          "message": "attached=[{\"id\":\"core\",\"profile\":\"real\"},{\"id\":\"accessibility\",\"profile\":\"real\"}]",
+          "passed": true
+        }
+      ],
+      "duration_ms": 0,
+      "evidence": [
+        {
+          "kind": "step",
+          "path": "steps/04-service_ctl.json"
+        }
+      ],
+      "index": 4,
+      "provenance": {},
+      "status": "pass",
+      "step": "service_ctl"
+    },
+    {
+      "assertions": [
+        {
+          "actual": {
+            "screenshot_changed": true,
+            "tree_changed": true
+          },
+          "expected": {
+            "screenshot_changed": true,
+            "tree_changed": true
+          },
+          "kind": "state_change",
+          "matched_node_ids": [],
+          "message": "UI tree and screenshot both changed",
+          "passed": true
+        }
+      ],
+      "duration_ms": 5499,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/4.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/4.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/05-tap.json"
+        }
+      ],
+      "frame_seq": 4,
+      "index": 5,
+      "input": {
+        "expect_change": "auto",
+        "handled": true,
+        "handled_evidence": {
+          "acked": 2,
+          "published": 2,
+          "source": "guest"
+        },
+        "target": {
+          "hit": {
+            "clickable": false,
+            "consumer": null,
+            "method": "tree-geometry",
+            "node": {
+              "bounds": "[0,0][1080,2400]",
+              "class": "b5.g",
+              "clickable": false,
+              "content_desc": "",
+              "enabled": true,
+              "focused": false,
+              "id": "n10_",
+              "password": false,
+              "resource_id": "",
+              "scrollable": false,
+              "text": "",
+              "visible_bounds": "[0,0][1080,2400]",
+              "window": "main"
+            },
+            "suggest": {
+              "bounds": "[58,2117][1022,2253]",
+              "class": "b5.g",
+              "clickable": true,
+              "content_desc": "Set up Gaten",
+              "enabled": true,
+              "focused": false,
+              "id": "n13_",
+              "password": false,
+              "resource_id": "",
+              "scrollable": false,
+              "text": "",
+              "visible_bounds": "[58,2117][1022,2253]",
+              "window": "main"
+            }
+          },
+          "point": {
+            "x": 539,
+            "y": 2184
+          },
+          "selector": {
+            "selector": "text*=\"Set up Gaten\""
+          }
+        }
+      },
+      "provenance": {
+        "frame": "host-observed",
+        "host_input": "host-observed",
+        "input_acks": "guest-asserted",
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "ack_ms": 5,
+        "bound": "strict-event",
+        "first_change_ms": 77,
+        "frame_ms": 466,
+        "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
+        "mode": "strict",
+        "pixels_changed": true,
+        "reason": "strict-event",
+        "settled": true,
+        "state_changed": null,
+        "strict_rule": "event",
+        "waited_ms": 5499,
+        "waited_ms_source": "step"
+      },
+      "status": "pass",
+      "step": "tap"
+    },
+    {
+      "assertions": [
+        {
+          "actual": {
+            "screenshot_changed": true,
+            "tree_changed": true
+          },
+          "expected": {
+            "screenshot_changed": true,
+            "tree_changed": true
+          },
+          "kind": "state_change",
+          "matched_node_ids": [],
+          "message": "UI tree and screenshot both changed",
+          "passed": true
+        }
+      ],
+      "duration_ms": 75,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/5.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/5.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/06-tap.json"
+        }
+      ],
+      "frame_seq": 5,
+      "index": 6,
+      "input": {
+        "expect_change": "auto",
+        "handled": true,
+        "handled_evidence": {
+          "acked": 2,
+          "published": 2,
+          "source": "guest"
+        },
+        "target": {
+          "hit": {
+            "clickable": false,
+            "consumer": null,
+            "method": "tree-geometry",
+            "node": {
+              "bounds": "[0,0][1080,2400]",
+              "class": "b5.g",
+              "clickable": false,
+              "content_desc": "",
+              "enabled": true,
+              "focused": false,
+              "id": "n10_",
+              "password": false,
+              "resource_id": "",
+              "scrollable": false,
+              "text": "",
+              "visible_bounds": "[0,0][1080,2400]",
+              "window": "main"
+            },
+            "suggest": {
+              "bounds": "[58,2127][1022,2253]",
+              "class": "b5.g",
+              "clickable": true,
+              "content_desc": "Skip lookup mode setup",
+              "enabled": true,
+              "focused": false,
+              "id": "n17_",
+              "password": false,
+              "resource_id": "",
+              "scrollable": false,
+              "text": "",
+              "visible_bounds": "[58,2127][1022,2253]",
+              "window": "main"
+            }
+          },
+          "node": {
+            "bounds": "[498,2163][582,2216]",
+            "class": "X4.e",
+            "clickable": false,
+            "content_desc": "",
+            "enabled": true,
+            "focused": false,
+            "id": "n18_",
+            "password": false,
+            "resource_id": "",
+            "scrollable": false,
+            "text": "Skip",
+            "visible_bounds": "[498,2163][582,2216]",
+            "window": "main"
+          },
+          "point": {
+            "x": 540,
+            "y": 2189
+          },
+          "selector": {
+            "selector": "text==\"Skip\""
+          }
+        }
+      },
+      "provenance": {
+        "frame": "host-observed",
+        "host_input": "host-observed",
+        "input_acks": "guest-asserted",
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "ack_ms": 5,
+        "bound": "state-commit",
+        "first_change_ms": 52,
+        "frame_ms": 46,
+        "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
+        "mode": "fast",
+        "pixels_changed": null,
+        "reason": "state-commit",
+        "settled": true,
+        "state_changed": true,
+        "waited_ms": 75,
+        "waited_ms_source": "step"
+      },
+      "status": "pass",
+      "step": "tap"
+    },
+    {
+      "assertions": [
+        {
+          "actual": {
+            "screenshot_changed": true,
+            "tree_changed": true
+          },
+          "expected": {
+            "screenshot_changed": true,
+            "tree_changed": true
+          },
+          "kind": "state_change",
+          "matched_node_ids": [],
+          "message": "UI tree and screenshot both changed",
+          "passed": true
+        }
+      ],
+      "duration_ms": 35,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/6.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/6.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/07-tap.json"
+        }
+      ],
+      "frame_seq": 6,
+      "index": 7,
+      "input": {
+        "expect_change": "auto",
+        "handled": true,
+        "handled_evidence": {
+          "acked": 2,
+          "published": 2,
+          "source": "guest"
+        },
+        "target": {
+          "hit": {
+            "clickable": false,
+            "consumer": null,
+            "method": "tree-geometry",
+            "node": {
+              "bounds": "[0,0][1080,2400]",
+              "class": "b5.g",
+              "clickable": false,
+              "content_desc": "",
+              "enabled": true,
+              "focused": false,
+              "id": "n10_",
+              "password": false,
+              "resource_id": "",
+              "scrollable": false,
+              "text": "",
+              "visible_bounds": "[0,0][1080,2400]",
+              "window": "main"
+            },
+            "suggest": {
+              "bounds": "[58,2127][1022,2253]",
+              "class": "b5.g",
+              "clickable": true,
+              "content_desc": "Skip Anki setup",
+              "enabled": true,
+              "focused": false,
+              "id": "n17_",
+              "password": false,
+              "resource_id": "",
+              "scrollable": false,
+              "text": "",
+              "visible_bounds": "[58,2127][1022,2253]",
+              "window": "main"
+            }
+          },
+          "node": {
+            "bounds": "[498,2163][582,2216]",
+            "class": "X4.e",
+            "clickable": false,
+            "content_desc": "",
+            "enabled": true,
+            "focused": false,
+            "id": "n18_",
+            "password": false,
+            "resource_id": "",
+            "scrollable": false,
+            "text": "Skip",
+            "visible_bounds": "[498,2163][582,2216]",
+            "window": "main"
+          },
+          "point": {
+            "x": 540,
+            "y": 2189
+          },
+          "selector": {
+            "selector": "text==\"Skip\""
+          }
+        }
+      },
+      "provenance": {
+        "frame": "host-observed",
+        "host_input": "host-observed",
+        "input_acks": "guest-asserted",
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "ack_ms": 10,
+        "bound": "state-commit",
+        "first_change_ms": 13,
+        "frame_ms": 10,
+        "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
+        "mode": "fast",
+        "pixels_changed": null,
+        "reason": "state-commit",
+        "settled": true,
+        "state_changed": true,
+        "waited_ms": 35,
+        "waited_ms_source": "step"
+      },
+      "status": "pass",
+      "step": "tap"
+    },
+    {
+      "assertions": [
+        {
+          "actual": {
+            "screenshot_changed": true,
+            "tree_changed": true
+          },
+          "expected": {
+            "screenshot_changed": true,
+            "tree_changed": true
+          },
+          "kind": "state_change",
+          "matched_node_ids": [],
+          "message": "UI tree and screenshot both changed",
+          "passed": true
+        }
+      ],
+      "duration_ms": 38,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/7.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/7.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/08-tap.json"
+        }
+      ],
+      "frame_seq": 7,
+      "index": 8,
+      "input": {
+        "expect_change": "auto",
+        "handled": true,
+        "handled_evidence": {
+          "acked": 2,
+          "published": 2,
+          "source": "guest"
+        },
+        "target": {
+          "hit": {
+            "clickable": false,
+            "consumer": null,
+            "method": "tree-geometry",
+            "node": {
+              "bounds": "[0,0][1080,2400]",
+              "class": "b5.g",
+              "clickable": false,
+              "content_desc": "",
+              "enabled": true,
+              "focused": false,
+              "id": "n10_",
+              "password": false,
+              "resource_id": "",
+              "scrollable": false,
+              "text": "",
+              "visible_bounds": "[0,0][1080,2400]",
+              "window": "main"
+            },
+            "suggest": {
+              "bounds": "[58,2127][1022,2253]",
+              "class": "b5.g",
+              "clickable": true,
+              "content_desc": "Skip Anki setup",
+              "enabled": true,
+              "focused": false,
+              "id": "n17_",
+              "password": false,
+              "resource_id": "",
+              "scrollable": false,
+              "text": "",
+              "visible_bounds": "[58,2127][1022,2253]",
+              "window": "main"
+            }
+          },
+          "node": {
+            "bounds": "[498,2163][582,2216]",
+            "class": "X4.e",
+            "clickable": false,
+            "content_desc": "",
+            "enabled": true,
+            "focused": false,
+            "id": "n18_",
+            "password": false,
+            "resource_id": "",
+            "scrollable": false,
+            "text": "Skip",
+            "visible_bounds": "[498,2163][582,2216]",
+            "window": "main"
+          },
+          "point": {
+            "x": 540,
+            "y": 2189
+          },
+          "selector": {
+            "selector": "text==\"Skip\""
+          }
+        }
+      },
+      "provenance": {
+        "frame": "host-observed",
+        "host_input": "host-observed",
+        "input_acks": "guest-asserted",
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "ack_ms": 10,
+        "bound": "state-commit",
+        "first_change_ms": 15,
+        "frame_ms": 11,
+        "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
+        "mode": "fast",
+        "pixels_changed": null,
+        "reason": "state-commit",
+        "settled": true,
+        "state_changed": true,
+        "waited_ms": 38,
+        "waited_ms_source": "step"
+      },
+      "status": "pass",
+      "step": "tap"
+    },
+    {
+      "assertions": [],
+      "duration_ms": 323,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/8.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/8.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/09-wait_for.json"
+        }
+      ],
+      "frame_seq": 8,
+      "index": 9,
+      "provenance": {
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "bound": "strict-event",
+        "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
+        "mode": "strict",
+        "probe_seq": 271,
+        "reason": "strict-event",
+        "settled": true,
+        "strict_rule": "event",
+        "tree_age_ms": 33,
+        "waited_ms": 323,
+        "waited_ms_source": "step"
+      },
+      "status": "pass",
+      "step": "wait_for"
+    },
+    {
+      "assertions": [
+        {
+          "actual": {
+            "screenshot_changed": true,
+            "tree_changed": true
+          },
+          "expected": {
+            "screenshot_changed": true,
+            "tree_changed": true
+          },
+          "kind": "state_change",
+          "matched_node_ids": [],
+          "message": "UI tree and screenshot both changed",
+          "passed": true
+        }
+      ],
+      "duration_ms": 1298,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/10.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/10.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/10-tap.json"
+        }
+      ],
+      "frame_seq": 10,
+      "index": 10,
+      "input": {
+        "expect_change": "auto",
+        "handled": true,
+        "handled_evidence": {
+          "acked": 2,
+          "published": 2,
+          "source": "guest"
+        },
+        "target": {
+          "hit": {
+            "clickable": false,
+            "consumer": null,
+            "method": "tree-geometry",
+            "node": {
+              "bounds": "[0,0][1080,2400]",
+              "class": "b5.g",
+              "clickable": false,
+              "content_desc": "",
+              "enabled": true,
+              "focused": false,
+              "id": "n10_",
+              "password": false,
+              "resource_id": "",
+              "scrollable": false,
+              "text": "",
+              "visible_bounds": "[0,0][1080,2400]",
+              "window": "main"
+            },
+            "suggest": {
+              "bounds": "[689,2151][862,2316]",
+              "class": "b5.g",
+              "clickable": true,
+              "content_desc": "Settings",
+              "enabled": true,
+              "focused": false,
+              "id": "n14_",
+              "password": false,
+              "resource_id": "",
+              "scrollable": false,
+              "text": "",
+              "visible_bounds": "[688,2151][862,2316]",
+              "window": "main"
+            }
+          },
+          "point": {
+            "x": 775,
+            "y": 2233
+          },
+          "selector": {
+            "selector": "content_desc==\"Settings\""
+          }
+        }
+      },
+      "provenance": {
+        "frame": "host-observed",
+        "host_input": "host-observed",
+        "input_acks": "guest-asserted",
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "ack_ms": 5,
+        "bound": "strict-event",
+        "first_change_ms": 68,
+        "frame_ms": 1224,
+        "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
+        "mode": "strict",
+        "pixels_changed": true,
+        "reason": "strict-event",
+        "settled": true,
+        "state_changed": null,
+        "strict_rule": "event",
+        "waited_ms": 1298,
+        "waited_ms_source": "step"
+      },
+      "status": "pass",
+      "step": "tap"
+    },
+    {
+      "assertions": [],
+      "duration_ms": 85,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/11.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/11.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/11-wait_for.json"
+        }
+      ],
+      "frame_seq": 11,
+      "index": 11,
+      "provenance": {
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "bound": "strict-event",
+        "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
+        "mode": "strict",
+        "probe_seq": 309,
+        "reason": "strict-event",
+        "settled": true,
+        "strict_rule": "event",
+        "tree_age_ms": 43,
+        "waited_ms": 85,
+        "waited_ms_source": "step"
+      },
+      "status": "pass",
+      "step": "wait_for"
+    },
+    {
+      "assertions": [
+        {
+          "actual": {
+            "screenshot_changed": true,
+            "tree_changed": true
+          },
+          "expected": {
+            "screenshot_changed": true,
+            "tree_changed": true
+          },
+          "kind": "state_change",
+          "matched_node_ids": [],
+          "message": "UI tree and screenshot both changed",
+          "passed": true
+        }
+      ],
+      "duration_ms": 903,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/12.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/12.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/12-tap.json"
+        }
+      ],
+      "frame_seq": 12,
+      "index": 12,
+      "input": {
+        "expect_change": "auto",
+        "handled": true,
+        "handled_evidence": {
+          "acked": 2,
+          "published": 2,
+          "source": "guest"
+        },
+        "target": {
+          "hit": {
+            "clickable": false,
+            "consumer": null,
+            "method": "tree-geometry",
+            "node": {
+              "bounds": "[0,0][1080,2400]",
+              "class": "b5.g",
+              "clickable": false,
+              "content_desc": "",
+              "enabled": true,
+              "focused": false,
+              "id": "n10_",
+              "password": false,
+              "resource_id": "",
+              "scrollable": false,
+              "text": "",
+              "visible_bounds": "[0,0][1080,2400]",
+              "window": "main"
+            },
+            "suggest": {
+              "bounds": "[58,431][1022,588]",
+              "class": "b5.g",
+              "clickable": true,
+              "content_desc": "Screen lookup. On",
+              "enabled": true,
+              "focused": false,
+              "id": "n25_",
+              "password": false,
+              "resource_id": "",
+              "scrollable": false,
+              "text": "",
+              "visible_bounds": "[58,431][1022,588]",
+              "window": "main"
+            }
+          },
+          "node": {
+            "bounds": "[147,483][876,536]",
+            "class": "X4.e",
+            "clickable": false,
+            "content_desc": "",
+            "enabled": true,
+            "focused": false,
+            "id": "n26_",
+            "password": false,
+            "resource_id": "",
+            "scrollable": false,
+            "text": "Screen lookup",
+            "visible_bounds": "[147,483][876,536]",
+            "window": "main"
+          },
+          "point": {
+            "x": 511,
+            "y": 509
+          },
+          "selector": {
+            "selector": "text==\"Screen lookup\""
+          }
+        }
+      },
+      "provenance": {
+        "frame": "host-observed",
+        "host_input": "host-observed",
+        "input_acks": "guest-asserted",
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "ack_ms": 5,
+        "bound": "strict-event",
+        "first_change_ms": 557,
+        "frame_ms": 878,
+        "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
+        "mode": "strict",
+        "pixels_changed": true,
+        "reason": "strict-event",
+        "settled": true,
+        "state_changed": null,
+        "strict_rule": "event",
+        "waited_ms": 903,
+        "waited_ms_source": "step"
+      },
+      "status": "pass",
+      "step": "tap"
+    },
+    {
+      "assertions": [],
+      "duration_ms": 81,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/13.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/13.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/13-wait_for.json"
+        }
+      ],
+      "frame_seq": 13,
+      "index": 13,
+      "provenance": {
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "bound": "strict-event",
+        "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
+        "mode": "strict",
+        "probe_seq": 339,
+        "reason": "strict-event",
+        "settled": true,
+        "strict_rule": "event",
+        "tree_age_ms": 42,
+        "waited_ms": 81,
+        "waited_ms_source": "step"
+      },
+      "status": "pass",
+      "step": "wait_for"
+    },
+    {
+      "assertions": [],
+      "duration_ms": 83,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/14.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/14.png"
+        },
+        {
+          "kind": "capture",
+          "path": "frames/14-gaten-screen-lookup.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/14-capture.json"
+        }
+      ],
+      "frame_seq": 14,
+      "index": 14,
+      "name": "gaten-screen-lookup",
+      "provenance": {
+        "frame": "host-observed"
+      },
+      "settle": {
+        "bound": "strict-event",
+        "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
+        "mode": "strict",
+        "probe_seq": 340,
+        "reason": "strict-event",
+        "settled": true,
+        "strict_rule": "event",
+        "tree_age_ms": 41,
+        "waited_ms": 83,
+        "waited_ms_source": "step"
+      },
+      "status": "pass",
+      "step": "capture"
+    },
+    {
+      "assertions": [
+        {
+          "actual": {
+            "screenshot_changed": true,
+            "tree_changed": true
+          },
+          "expected": {
+            "screenshot_changed": true,
+            "tree_changed": true
+          },
+          "kind": "state_change",
+          "matched_node_ids": [],
+          "message": "UI tree and screenshot both changed",
+          "passed": true
+        }
+      ],
+      "duration_ms": 429,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/42.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/42.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/15-tap.json"
+        }
+      ],
+      "frame_seq": 42,
+      "index": 15,
+      "input": {
+        "expect_change": "auto",
+        "handled": true,
+        "handled_evidence": {
+          "acked": 2,
+          "published": 2,
+          "source": "guest"
+        },
+        "target": {
+          "hit": {
+            "clickable": false,
+            "consumer": null,
+            "method": "tree-geometry",
+            "node": {
+              "bounds": "[0,0][1080,2400]",
+              "class": "b5.g",
+              "clickable": false,
+              "content_desc": "",
+              "enabled": true,
+              "focused": false,
+              "id": "n10_",
+              "password": false,
+              "resource_id": "",
+              "scrollable": false,
+              "text": "",
+              "visible_bounds": "[0,0][1080,2400]",
+              "window": "main"
+            },
+            "suggest": {
+              "bounds": "[900,540][1022,666]",
+              "class": "W4.a",
+              "clickable": true,
+              "content_desc": "Floating button",
+              "enabled": true,
+              "focused": false,
+              "id": "n25_",
+              "password": false,
+              "resource_id": "",
+              "scrollable": false,
+              "text": "",
+              "visible_bounds": "[900,540][1022,666]",
+              "window": "main"
+            }
+          },
+          "point": {
+            "x": 961,
+            "y": 603
+          },
+          "selector": {
+            "selector": "content_desc==\"Floating button\""
+          }
+        }
+      },
+      "provenance": {
+        "frame": "host-observed",
+        "host_input": "host-observed",
+        "input_acks": "guest-asserted",
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "bound": "content-stable",
+        "elapsed_ms": 340,
+        "frame_seq": 42,
+        "freshness": "each traversal's probe_seq strictly increased (guest-side                               min_probe_seq floor + host-side check); the pre-window sample                               never counts",
+        "mode": "content",
+        "pixel_evidence": false,
+        "probe_seq": 367,
+        "probe_seq_first": 343,
+        "probe_seq_floor": 341,
+        "reason": "content-stable",
+        "settled": true,
+        "signature": "73d2b77b0a21a91e",
+        "signature_fields": [
+          "class",
+          "resource_id",
+          "text",
+          "content_desc",
+          "hint",
+          "visible",
+          "enabled",
+          "focused",
+          "clickable",
+          "scrollable",
+          "checked",
+          "selected",
+          "window",
+          "window_kind",
+          "window_z",
+          "package"
+        ],
+        "signature_tree_fields": [
+          "package",
+          "truncated",
+          "text_available"
+        ],
+        "traversals": 25,
+        "waited_ms": 340,
+        "window_ms": 300
+      },
+      "status": "pass",
+      "step": "tap"
+    },
+    {
+      "assertions": [
+        {
+          "actual": {
+            "focus": "application",
+            "focus_type": "TYPE_BASE_APPLICATION",
+            "order": [
+              "application",
+              "accessibility_overlay",
+              "accessibility_overlay"
+            ],
+            "types": [
+              "TYPE_BASE_APPLICATION",
+              "TYPE_ACCESSIBILITY_OVERLAY",
+              "TYPE_ACCESSIBILITY_OVERLAY"
+            ],
+            "windows": [
+              {
+                "bounds": [
+                  0,
+                  0,
+                  1080,
+                  2400
+                ],
+                "focus": true,
+                "id": "fe1c6c4",
+                "kind": "application",
+                "label": "main",
+                "touchable": true,
+                "type_name": "TYPE_BASE_APPLICATION",
+                "z": 0
+              },
+              {
+                "bounds": [
+                  467,
+                  2171,
+                  612,
+                  2316
+                ],
+                "focus": false,
+                "id": "133eb8",
+                "kind": "accessibility_overlay",
+                "label": "window-2032#1",
+                "touchable": true,
+                "type_name": "TYPE_ACCESSIBILITY_OVERLAY",
+                "z": 1
+              },
+              {
+                "bounds": [
+                  914,
+                  1080,
+                  1059,
+                  1225
+                ],
+                "focus": false,
+                "id": "f9df491",
+                "kind": "accessibility_overlay",
+                "label": "window-2032#2",
+                "touchable": true,
+                "type_name": "TYPE_ACCESSIBILITY_OVERLAY",
+                "z": 2
+              }
+            ]
+          },
+          "expected": {
+            "focus": null,
+            "focus_type": null,
+            "order": [
+              "application",
+              "accessibility_overlay",
+              "accessibility_overlay"
+            ],
+            "types": [
+              "TYPE_BASE_APPLICATION",
+              "TYPE_ACCESSIBILITY_OVERLAY",
+              "TYPE_ACCESSIBILITY_OVERLAY"
+            ]
+          },
+          "kind": "windows",
+          "matched_node_ids": [],
+          "message": "3 windows in policy z order",
+          "passed": true
+        }
+      ],
+      "duration_ms": 0,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/42.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/42.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/16-assert_windows.json"
+        }
+      ],
+      "frame_seq": 42,
+      "index": 16,
+      "provenance": {},
+      "settle": {
+        "bound": "content-stable",
+        "elapsed_ms": 340,
+        "frame_seq": 42,
+        "freshness": "each traversal's probe_seq strictly increased (guest-side                               min_probe_seq floor + host-side check); the pre-window sample                               never counts",
+        "mode": "content",
+        "pixel_evidence": false,
+        "probe_seq": 367,
+        "probe_seq_first": 343,
+        "probe_seq_floor": 341,
+        "reason": "content-stable",
+        "settled": true,
+        "signature": "73d2b77b0a21a91e",
+        "signature_fields": [
+          "class",
+          "resource_id",
+          "text",
+          "content_desc",
+          "hint",
+          "visible",
+          "enabled",
+          "focused",
+          "clickable",
+          "scrollable",
+          "checked",
+          "selected",
+          "window",
+          "window_kind",
+          "window_z",
+          "package"
+        ],
+        "signature_tree_fields": [
+          "package",
+          "truncated",
+          "text_available"
+        ],
+        "traversals": 25,
+        "waited_ms": 340,
+        "window_ms": 300
+      },
+      "status": "pass",
+      "step": "assert_windows"
+    },
+    {
+      "assertions": [
+        {
+          "actual": {
+            "bounds": [
+              923,
+              1089,
+              1049,
+              1215
+            ],
+            "node": "n1_",
+            "visible": true,
+            "visible_bounds": [
+              923,
+              1089,
+              1049,
+              1215
+            ]
+          },
+          "expected": {
+            "bounds": null,
+            "selector": {
+              "content_desc": {
+                "exact": "Screen lookup"
+              }
+            },
+            "visible": true
+          },
+          "kind": "visible",
+          "matched_node_ids": [
+            "n1_"
+          ],
+          "passed": true
+        }
+      ],
+      "duration_ms": 0,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/42.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/42.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/17-assert_visible.json"
+        }
+      ],
+      "frame_seq": 42,
+      "index": 17,
+      "provenance": {
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "bound": "content-stable",
+        "elapsed_ms": 340,
+        "frame_seq": 42,
+        "freshness": "each traversal's probe_seq strictly increased (guest-side                               min_probe_seq floor + host-side check); the pre-window sample                               never counts",
+        "mode": "content",
+        "pixel_evidence": false,
+        "probe_seq": 367,
+        "probe_seq_first": 343,
+        "probe_seq_floor": 341,
+        "reason": "content-stable",
+        "settled": true,
+        "signature": "73d2b77b0a21a91e",
+        "signature_fields": [
+          "class",
+          "resource_id",
+          "text",
+          "content_desc",
+          "hint",
+          "visible",
+          "enabled",
+          "focused",
+          "clickable",
+          "scrollable",
+          "checked",
+          "selected",
+          "window",
+          "window_kind",
+          "window_z",
+          "package"
+        ],
+        "signature_tree_fields": [
+          "package",
+          "truncated",
+          "text_available"
+        ],
+        "traversals": 25,
+        "waited_ms": 340,
+        "window_ms": 300
+      },
+      "status": "pass",
+      "step": "assert_visible"
+    },
+    {
+      "assertions": [
+        {
+          "actual": {
+            "bounds": [
+              476,
+              2180,
+              602,
+              2306
+            ],
+            "node": "n1_",
+            "present": true,
+            "visible": false,
+            "visible_bounds": [
+              476,
+              2180,
+              602,
+              2306
+            ]
+          },
+          "expected": {
+            "bounds": null,
+            "selector": {
+              "content_desc": {
+                "exact": "Remove floating button"
+              },
+              "include_invisible": true
+            },
+            "visible": false
+          },
+          "kind": "not_visible",
+          "matched_node_ids": [
+            "n1_"
+          ],
+          "message": "node is present in the tree but not visible to the user (bounds [476,2180][602,2306], visible_bounds [476,2180][602,2306])",
+          "passed": true
+        }
+      ],
+      "duration_ms": 0,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/42.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/42.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/18-assert_not_visible.json"
+        }
+      ],
+      "frame_seq": 42,
+      "index": 18,
+      "provenance": {
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "bound": "content-stable",
+        "elapsed_ms": 340,
+        "frame_seq": 42,
+        "freshness": "each traversal's probe_seq strictly increased (guest-side                               min_probe_seq floor + host-side check); the pre-window sample                               never counts",
+        "mode": "content",
+        "pixel_evidence": false,
+        "probe_seq": 367,
+        "probe_seq_first": 343,
+        "probe_seq_floor": 341,
+        "reason": "content-stable",
+        "settled": true,
+        "signature": "73d2b77b0a21a91e",
+        "signature_fields": [
+          "class",
+          "resource_id",
+          "text",
+          "content_desc",
+          "hint",
+          "visible",
+          "enabled",
+          "focused",
+          "clickable",
+          "scrollable",
+          "checked",
+          "selected",
+          "window",
+          "window_kind",
+          "window_z",
+          "package"
+        ],
+        "signature_tree_fields": [
+          "package",
+          "truncated",
+          "text_available"
+        ],
+        "traversals": 25,
+        "waited_ms": 340,
+        "window_ms": 300
+      },
+      "status": "pass",
+      "step": "assert_not_visible"
+    },
+    {
+      "assertions": [
+        {
+          "actual": {
+            "screenshot_changed": true,
+            "tree_changed": true
+          },
+          "expected": {
+            "screenshot_changed": true,
+            "tree_changed": true
+          },
+          "kind": "state_change",
+          "matched_node_ids": [],
+          "message": "UI tree and screenshot both changed",
+          "passed": true
+        }
+      ],
+      "duration_ms": 459,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/64.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/64.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/19-tap.json"
+        }
+      ],
+      "frame_seq": 64,
+      "index": 19,
+      "input": {
+        "expect_change": "auto",
+        "handled": true,
+        "handled_evidence": {
+          "acked": 2,
+          "published": 2,
+          "source": "guest"
+        },
+        "target": {
+          "hit": {
+            "clickable": false,
+            "consumer": null,
+            "method": "tree-geometry",
+            "node": {
+              "bounds": "[0,0][1080,2400]",
+              "class": "b5.g",
+              "clickable": false,
+              "content_desc": "",
+              "enabled": true,
+              "focused": false,
+              "id": "n10_",
+              "password": false,
+              "resource_id": "",
+              "scrollable": false,
+              "text": "",
+              "visible_bounds": "[0,0][1080,2400]",
+              "window": "main"
+            },
+            "suggest": {
+              "bounds": "[0,149][126,275]",
+              "class": "b5.g",
+              "clickable": true,
+              "content_desc": "Back",
+              "enabled": true,
+              "focused": false,
+              "id": "n23_",
+              "password": false,
+              "resource_id": "",
+              "scrollable": false,
+              "text": "",
+              "visible_bounds": "[0,149][126,275]",
+              "window": "main"
+            }
+          },
+          "point": {
+            "x": 63,
+            "y": 212
+          },
+          "selector": {
+            "selector": "content_desc==\"Back\""
+          }
+        }
+      },
+      "provenance": {
+        "frame": "host-observed",
+        "host_input": "host-observed",
+        "input_acks": "guest-asserted",
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "bound": "content-stable",
+        "elapsed_ms": 365,
+        "frame_seq": 64,
+        "freshness": "each traversal's probe_seq strictly increased (guest-side                               min_probe_seq floor + host-side check); the pre-window sample                               never counts",
+        "mode": "content",
+        "pixel_evidence": false,
+        "probe_seq": 389,
+        "probe_seq_first": 371,
+        "probe_seq_floor": 369,
+        "reason": "content-stable",
+        "settled": true,
+        "signature": "ad998e9b516dfb9e",
+        "signature_fields": [
+          "class",
+          "resource_id",
+          "text",
+          "content_desc",
+          "hint",
+          "visible",
+          "enabled",
+          "focused",
+          "clickable",
+          "scrollable",
+          "checked",
+          "selected",
+          "window",
+          "window_kind",
+          "window_z",
+          "package"
+        ],
+        "signature_tree_fields": [
+          "package",
+          "truncated",
+          "text_available"
+        ],
+        "traversals": 19,
+        "waited_ms": 365,
+        "window_ms": 300
+      },
+      "status": "pass",
+      "step": "tap"
+    },
+    {
+      "assertions": [
+        {
+          "actual": {
+            "screenshot_changed": true,
+            "tree_changed": true
+          },
+          "expected": {
+            "screenshot_changed": true,
+            "tree_changed": true
+          },
+          "kind": "state_change",
+          "matched_node_ids": [],
+          "message": "UI tree and screenshot both changed",
+          "passed": true
+        }
+      ],
+      "duration_ms": 739,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/98.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/98.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/20-tap.json"
+        }
+      ],
+      "frame_seq": 98,
+      "index": 20,
+      "input": {
+        "expect_change": "auto",
+        "handled": true,
+        "handled_evidence": {
+          "acked": 2,
+          "published": 2,
+          "source": "guest"
+        },
+        "target": {
+          "hit": {
+            "clickable": false,
+            "consumer": null,
+            "method": "tree-geometry",
+            "node": {
+              "bounds": "[0,0][1080,2400]",
+              "class": "b5.g",
+              "clickable": false,
+              "content_desc": "",
+              "enabled": true,
+              "focused": false,
+              "id": "n10_",
+              "password": false,
+              "resource_id": "",
+              "scrollable": false,
+              "text": "",
+              "visible_bounds": "[0,0][1080,2400]",
+              "window": "main"
+            },
+            "suggest": {
+              "bounds": "[225,2158][398,2323]",
+              "class": "b5.g",
+              "clickable": true,
+              "content_desc": "Home",
+              "enabled": true,
+              "focused": false,
+              "id": "n14_",
+              "password": false,
+              "resource_id": "",
+              "scrollable": false,
+              "text": "",
+              "visible_bounds": "[224,2158][398,2323]",
+              "window": "main"
+            }
+          },
+          "point": {
+            "x": 311,
+            "y": 2240
+          },
+          "selector": {
+            "selector": "content_desc==\"Home\""
+          }
+        }
+      },
+      "provenance": {
+        "frame": "host-observed",
+        "host_input": "host-observed",
+        "input_acks": "guest-asserted",
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "bound": "content-stable",
+        "elapsed_ms": 683,
+        "frame_seq": 98,
+        "freshness": "each traversal's probe_seq strictly increased (guest-side                               min_probe_seq floor + host-side check); the pre-window sample                               never counts",
+        "mode": "content",
+        "pixel_evidence": false,
+        "probe_seq": 423,
+        "probe_seq_first": 393,
+        "probe_seq_floor": 391,
+        "reason": "content-stable",
+        "settled": true,
+        "signature": "d0680fd782073a56",
+        "signature_fields": [
+          "class",
+          "resource_id",
+          "text",
+          "content_desc",
+          "hint",
+          "visible",
+          "enabled",
+          "focused",
+          "clickable",
+          "scrollable",
+          "checked",
+          "selected",
+          "window",
+          "window_kind",
+          "window_z",
+          "package"
+        ],
+        "signature_tree_fields": [
+          "package",
+          "truncated",
+          "text_available"
+        ],
+        "traversals": 31,
+        "waited_ms": 683,
+        "window_ms": 300
+      },
+      "status": "pass",
+      "step": "tap"
+    },
+    {
+      "assertions": [],
+      "duration_ms": 2243,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/133.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/133.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/21-wait_for.json"
+        }
+      ],
+      "frame_seq": 133,
+      "index": 21,
+      "provenance": {
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "bound": "content-stable",
+        "elapsed_ms": 334,
+        "fallback_from": "strict",
+        "fallback_reason": "strict-did-not-settle",
+        "frame_seq": 133,
+        "freshness": "each traversal's probe_seq strictly increased (guest-side                               min_probe_seq floor + host-side check); the pre-window sample                               never counts",
+        "mode": "content",
+        "pixel_evidence": false,
+        "probe_seq": 486,
+        "probe_seq_first": 471,
+        "probe_seq_floor": 470,
+        "reason": "content-stable",
+        "settled": true,
+        "signature": "d0680fd782073a56",
+        "signature_fields": [
+          "class",
+          "resource_id",
+          "text",
+          "content_desc",
+          "hint",
+          "visible",
+          "enabled",
+          "focused",
+          "clickable",
+          "scrollable",
+          "checked",
+          "selected",
+          "window",
+          "window_kind",
+          "window_z",
+          "package"
+        ],
+        "signature_tree_fields": [
+          "package",
+          "truncated",
+          "text_available"
+        ],
+        "traversals": 16,
+        "waited_ms": 334,
+        "window_ms": 300
+      },
+      "status": "pass",
+      "step": "wait_for"
+    },
+    {
+      "assertions": [
+        {
+          "actual": {
+            "screenshot_changed": true,
+            "tree_changed": true
+          },
+          "expected": {
+            "screenshot_changed": true,
+            "tree_changed": true
+          },
+          "kind": "state_change",
+          "matched_node_ids": [],
+          "message": "UI tree and screenshot both changed",
+          "passed": true
+        }
+      ],
+      "duration_ms": 634,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/165.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/165.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/22-tap.json"
+        }
+      ],
+      "frame_seq": 165,
+      "index": 22,
+      "input": {
+        "expect_change": "auto",
+        "handled": true,
+        "handled_evidence": {
+          "acked": 2,
+          "published": 2,
+          "source": "guest"
+        },
+        "target": {
+          "hit": {
+            "clickable": false,
+            "consumer": null,
+            "method": "tree-geometry",
+            "node": {
+              "bounds": "[0,0][1080,2400]",
+              "class": "b5.g",
+              "clickable": false,
+              "content_desc": "",
+              "enabled": true,
+              "focused": false,
+              "id": "n10_",
+              "password": false,
+              "resource_id": "",
+              "scrollable": false,
+              "text": "",
+              "visible_bounds": "[0,0][1080,2400]",
+              "window": "main"
+            },
+            "suggest": {
+              "bounds": "[189,366][978,482]",
+              "class": "Z4.g",
+              "clickable": true,
+              "content_desc": "Search Japanese dictionary",
+              "enabled": true,
+              "focused": false,
+              "id": "n27_",
+              "password": false,
+              "resource_id": "",
+              "scrollable": false,
+              "text": "猫, ねこ, neko...",
+              "visible_bounds": "[189,366][978,482]",
+              "window": "main"
+            }
+          },
+          "point": {
+            "x": 583,
+            "y": 424
+          },
+          "selector": {
+            "selector": "content_desc==\"Search Japanese dictionary\""
+          }
+        }
+      },
+      "provenance": {
+        "frame": "host-observed",
+        "host_input": "host-observed",
+        "input_acks": "guest-asserted",
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "bound": "content-stable",
+        "elapsed_ms": 565,
+        "frame_seq": 165,
+        "freshness": "each traversal's probe_seq strictly increased (guest-side                               min_probe_seq floor + host-side check); the pre-window sample                               never counts",
+        "mode": "content",
+        "pixel_evidence": false,
+        "probe_seq": 516,
+        "probe_seq_first": 488,
+        "probe_seq_floor": 487,
+        "reason": "content-stable",
+        "settled": true,
+        "signature": "75946ea2cf4fee60",
+        "signature_fields": [
+          "class",
+          "resource_id",
+          "text",
+          "content_desc",
+          "hint",
+          "visible",
+          "enabled",
+          "focused",
+          "clickable",
+          "scrollable",
+          "checked",
+          "selected",
+          "window",
+          "window_kind",
+          "window_z",
+          "package"
+        ],
+        "signature_tree_fields": [
+          "package",
+          "truncated",
+          "text_available"
+        ],
+        "traversals": 29,
+        "waited_ms": 565,
+        "window_ms": 300
+      },
+      "status": "pass",
+      "step": "tap"
+    },
+    {
+      "assertions": [],
+      "duration_ms": 59,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/166.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/166.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/23-type.json"
+        }
+      ],
+      "frame_seq": 166,
+      "index": 23,
+      "input": {
+        "expect_change": false,
+        "handled": false,
+        "handled_evidence": {
+          "acked": 8,
+          "published": 8,
+          "source": "guest",
+          "unhandled": [
+            26,
+            28,
+            30,
+            32
+          ]
+        },
+        "handled_hint": "nothing at this point consumed the input and the tree has no node there (the app's window answered `finishInputEvent(handled) = false`); nothing changed because nothing was tappable",
+        "target": null
+      },
+      "provenance": {
+        "frame": "host-observed",
+        "host_input": "host-observed",
+        "input_acks": "guest-asserted",
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "ack_ms": 10,
+        "bound": "state-commit",
+        "first_change_ms": 31,
+        "frame_ms": 19,
+        "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
+        "mode": "fast",
+        "pixels_changed": null,
+        "reason": "state-commit",
+        "settled": true,
+        "state_changed": true,
+        "waited_ms": 59,
+        "waited_ms_source": "step"
+      },
+      "status": "pass",
+      "step": "type",
+      "warnings": [
+        {
+          "acked": 8,
+          "code": "INPUT_UNHANDLED",
+          "handled": false,
+          "hint": "nothing at this point consumed the input and the tree has no node there (the app's window answered `finishInputEvent(handled) = false`); nothing changed because nothing was tappable",
+          "message": "step 23 (type): the gesture was delivered and the app window acknowledged every event `finishInputEvent(handled) = false` - nothing consumed it. The step is `pass` because it made no change claim; it is not evidence that the input reached a control.",
+          "published": 8,
+          "step": 23,
+          "step_kind": "type",
+          "target": null,
+          "unhandled": [
+            26,
+            28,
+            30,
+            32
+          ]
+        }
+      ]
+    },
+    {
+      "assertions": [],
+      "duration_ms": 2232,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/208.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/208.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/24-wait_for.json"
+        }
+      ],
+      "frame_seq": 208,
+      "index": 24,
+      "provenance": {
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "bound": "content-stable",
+        "elapsed_ms": 337,
+        "fallback_from": "strict",
+        "fallback_reason": "strict-did-not-settle",
+        "frame_seq": 208,
+        "freshness": "each traversal's probe_seq strictly increased (guest-side                               min_probe_seq floor + host-side check); the pre-window sample                               never counts",
+        "mode": "content",
+        "pixel_evidence": false,
+        "probe_seq": 598,
+        "probe_seq_first": 580,
+        "probe_seq_floor": 579,
+        "reason": "content-stable",
+        "settled": true,
+        "signature": "a1d6ee8c719c0d3c",
+        "signature_fields": [
+          "class",
+          "resource_id",
+          "text",
+          "content_desc",
+          "hint",
+          "visible",
+          "enabled",
+          "focused",
+          "clickable",
+          "scrollable",
+          "checked",
+          "selected",
+          "window",
+          "window_kind",
+          "window_z",
+          "package"
+        ],
+        "signature_tree_fields": [
+          "package",
+          "truncated",
+          "text_available"
+        ],
+        "traversals": 19,
+        "waited_ms": 337,
+        "window_ms": 300
+      },
+      "status": "pass",
+      "step": "wait_for"
+    },
+    {
+      "assertions": [
+        {
+          "actual": {
+            "focus": "application",
+            "focus_type": "TYPE_BASE_APPLICATION",
+            "order": [
+              "application",
+              "accessibility_overlay",
+              "accessibility_overlay"
+            ],
+            "types": [
+              "TYPE_BASE_APPLICATION",
+              "TYPE_ACCESSIBILITY_OVERLAY",
+              "TYPE_ACCESSIBILITY_OVERLAY"
+            ],
+            "windows": [
+              {
+                "bounds": [
+                  0,
+                  0,
+                  1080,
+                  2400
+                ],
+                "focus": true,
+                "id": "fe1c6c4",
+                "kind": "application",
+                "label": "main",
+                "touchable": true,
+                "type_name": "TYPE_BASE_APPLICATION",
+                "z": 0
+              },
+              {
+                "bounds": [
+                  467,
+                  2171,
+                  612,
+                  2316
+                ],
+                "focus": false,
+                "id": "133eb8",
+                "kind": "accessibility_overlay",
+                "label": "window-2032#1",
+                "touchable": true,
+                "type_name": "TYPE_ACCESSIBILITY_OVERLAY",
+                "z": 1
+              },
+              {
+                "bounds": [
+                  914,
+                  1080,
+                  1059,
+                  1225
+                ],
+                "focus": false,
+                "id": "f9df491",
+                "kind": "accessibility_overlay",
+                "label": "window-2032#2",
+                "touchable": true,
+                "type_name": "TYPE_ACCESSIBILITY_OVERLAY",
+                "z": 2
+              }
+            ]
+          },
+          "expected": {
+            "focus": null,
+            "focus_type": null,
+            "order": [
+              "application",
+              "accessibility_overlay",
+              "accessibility_overlay"
+            ],
+            "types": [
+              "TYPE_BASE_APPLICATION",
+              "TYPE_ACCESSIBILITY_OVERLAY",
+              "TYPE_ACCESSIBILITY_OVERLAY"
+            ]
+          },
+          "kind": "windows",
+          "matched_node_ids": [],
+          "message": "3 windows in policy z order",
+          "passed": true
+        }
+      ],
+      "duration_ms": 0,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/208.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/208.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/25-assert_windows.json"
+        }
+      ],
+      "frame_seq": 208,
+      "index": 25,
+      "provenance": {},
+      "settle": {
+        "bound": "content-stable",
+        "elapsed_ms": 337,
+        "frame_seq": 208,
+        "freshness": "each traversal's probe_seq strictly increased (guest-side                               min_probe_seq floor + host-side check); the pre-window sample                               never counts",
+        "mode": "content",
+        "pixel_evidence": false,
+        "probe_seq": 598,
+        "probe_seq_first": 580,
+        "probe_seq_floor": 579,
+        "reason": "content-stable",
+        "settled": true,
+        "signature": "a1d6ee8c719c0d3c",
+        "signature_fields": [
+          "class",
+          "resource_id",
+          "text",
+          "content_desc",
+          "hint",
+          "visible",
+          "enabled",
+          "focused",
+          "clickable",
+          "scrollable",
+          "checked",
+          "selected",
+          "window",
+          "window_kind",
+          "window_z",
+          "package"
+        ],
+        "signature_tree_fields": [
+          "package",
+          "truncated",
+          "text_available"
+        ],
+        "traversals": 19,
+        "waited_ms": 337,
+        "window_ms": 300
+      },
+      "status": "pass",
+      "step": "assert_windows"
+    },
+    {
+      "assertions": [],
+      "duration_ms": 1500,
+      "evidence": [
+        {
+          "kind": "step",
+          "path": "steps/26-wait.json"
+        }
+      ],
+      "index": 26,
+      "provenance": {},
+      "settle": {
+        "mode": "unknown",
+        "reason": "unsettled",
+        "requested_ms": 1500,
+        "settled": false,
+        "waited_ms": 1500
+      },
+      "status": "pass",
+      "step": "wait"
+    },
+    {
+      "assertions": [
+        {
+          "actual": {
+            "acks": 2,
+            "change_claimed": false,
+            "delivered": true,
+            "expect_change": false,
+            "handled": true,
+            "visual_change": true
+          },
+          "expected": {
+            "change_claimed": false,
+            "delivered": true
+          },
+          "kind": "input_delivery",
+          "matched_node_ids": [],
+          "message": "input delivered (2 guest ack(s), handled: Some(true)); no change claimed (`expect_change: false`: the effect is transient, so the post-settle tree is not this tap's state)",
+          "passed": true
+        }
+      ],
+      "duration_ms": 1565,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/210.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/210.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/27-tap.json"
+        }
+      ],
+      "frame_seq": 210,
+      "index": 27,
+      "input": {
+        "expect_change": false,
+        "handled": true,
+        "handled_evidence": {
+          "acked": 2,
+          "published": 2,
+          "source": "guest"
+        },
+        "target": {
+          "hit": {
+            "clickable": false,
+            "consumer": null,
+            "method": "tree-geometry",
+            "node": {
+              "bounds": "[0,0][1080,2400]",
+              "class": "b5.g",
+              "clickable": false,
+              "content_desc": "",
+              "enabled": true,
+              "focused": false,
+              "id": "n10_",
+              "password": false,
+              "resource_id": "",
+              "scrollable": false,
+              "text": "",
+              "visible_bounds": "[0,0][1080,2400]",
+              "window": "main"
+            },
+            "suggest": {
+              "bounds": "[58,903][1022,1201]",
+              "class": "b5.g",
+              "clickable": true,
+              "content_desc": "Open 猫愛好",
+              "enabled": true,
+              "focused": false,
+              "id": "n26_",
+              "password": false,
+              "resource_id": "",
+              "scrollable": false,
+              "text": "",
+              "visible_bounds": "[58,903][1022,1201]",
+              "window": "main"
+            }
+          },
+          "point": {
+            "x": 986,
+            "y": 1152
+          },
+          "selector": {
+            "selector": "content_desc==\"Screen lookup\""
+          }
+        }
+      },
+      "provenance": {
+        "frame": "host-observed",
+        "host_input": "host-observed",
+        "input_acks": "guest-asserted",
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "ack_ms": 5,
+        "bound": "state-commit",
+        "first_change_ms": 34,
+        "frame_ms": 13,
+        "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
+        "mode": "fast",
+        "pixels_changed": null,
+        "reason": "state-commit",
+        "settled": true,
+        "state_changed": true,
+        "waited_ms": 1565,
+        "waited_ms_source": "step"
+      },
+      "status": "pass",
+      "step": "tap"
+    },
+    {
+      "assertions": [
+        {
+          "actual": {
+            "animations": "off",
+            "attached": [
+              {
+                "id": "core",
+                "profile": "real"
+              },
+              {
+                "id": "accessibility",
+                "profile": "real"
+              }
+            ],
+            "cmd": "services",
+            "id": "accessibility",
+            "modules": [
+              {
+                "attach": "at-launch",
+                "details": null,
+                "fidelity": "real",
+                "id": "core",
+                "profile": "real",
+                "reason": null,
+                "state": "attached"
+              },
+              {
+                "attach": "hot",
+                "details": {
+                  "app_thread": "0x100000001",
+                  "bind_pending": null,
+                  "binding": "bound: the app published its IAccessibilityServiceClient and the system delivered init(IAccessibilityServiceConnection, connectionId, windowToken), so onServiceConnected ran",
+                  "bound_service": {
+                    "binder": "0x10000001c",
+                    "component": "com.gaten/com.gaten.app.GatenAccessibilityService",
+                    "connection": "0x77",
+                    "connection_id": 1,
+                    "service_info_set": false
+                  },
+                  "clients": 1,
+                  "connections": [],
+                  "enabled": true,
+                  "enabled_services": [
+                    "com.gaten/com.gaten.app.GatenAccessibilityService"
+                  ],
+                  "event_count": 0,
+                  "event_types": [],
+                  "gestures": [],
+                  "installed_services": [
+                    "com.gaten/.app.GatenAccessibilityService"
+                  ],
+                  "interactions": [],
+                  "screenshots": [
+                    {
+                      "display_id": 0,
+                      "status": 0
+                    }
+                  ],
+                  "self_disabled": false,
+                  "service_bound": true,
+                  "service_config": {
+                    "can_perform_gestures": false,
+                    "can_retrieve_window_content": false,
+                    "can_retrieve_windows": false,
+                    "can_take_screenshot": true,
+                    "capabilities": 128,
+                    "event_types": 96,
+                    "feedback_type": 16,
+                    "flags": 65,
+                    "notification_timeout": 100
+                  },
+                  "unsupported": [],
+                  "windows": [
+                    {
+                      "active": true,
+                      "bounds": [
+                        0,
+                        0,
+                        1080,
+                        2400
+                      ],
+                      "connection": null,
+                      "focused": true,
+                      "id": 0,
+                      "layer": 0,
+                      "package": "",
+                      "type": 1,
+                      "window": "0x10000000e"
+                    }
+                  ]
+                },
+                "fidelity": "real",
+                "id": "accessibility",
+                "profile": "real",
+                "reason": "real: settings, client state, service lists, event and interaction records, system-initiated bind (scheduleCreateService + scheduleBindService -> publishService -> IAccessibilityServiceClient.init); the interaction surface (getWindows, node queries, gestures, screenshot) is not implemented yet",
+                "state": "attached"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "system.permissions",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.permissions\", \"profile\": \"real\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "system.notifications",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.notifications\", \"profile\": \"real\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "sensors",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"sensors\", \"profile\": \"scripted\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "feedback.vibrator",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"feedback.vibrator\", \"profile\": \"scripted\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "location",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"location\", \"profile\": \"scripted\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "at-launch",
+                "details": null,
+                "fidelity": "off",
+                "id": "net.telephony",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"net.telephony\", \"profile\": \"scripted\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "hw.bluetooth",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.bluetooth\", \"profile\": \"scripted\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "hw.biometric",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.biometric\", \"profile\": \"scripted\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "at-launch",
+                "details": null,
+                "fidelity": "off",
+                "id": "network",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"network\", \"profile\": \"real\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "at-launch",
+                "details": null,
+                "fidelity": "off",
+                "id": "webview",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"webview\", \"profile\": \"real\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "hw.usb",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"hw.usb\", \"profile\": \"stub\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "system.dropbox",
+                "profile": "off",
+                "reason": "module is off; attach it: acos_launch {\"services\": [{\"id\": \"system.dropbox\", \"profile\": \"stub\"}]}",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "hw.nfc",
+                "profile": "off",
+                "reason": "off: no NFC hardware: NfcAdapter throws UnsupportedOperationException before any binder (FEATURE_NFC is absent)",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "system.wallpaper",
+                "profile": "off",
+                "reason": "off: no wallpaper service; AOSP's own DisabledWallpaperManager is the working missing path (config_enableWallpaperService is false)",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "system.print",
+                "profile": "off",
+                "reason": "off: no print service; the client only resolves the name when FEATURE_PRINTING is reported, and ACOS reports it absent",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "system.search",
+                "profile": "off",
+                "reason": "off: no search service and no searchable index; an empty SearchableInfo list would look like an installed search provider",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "system.usage",
+                "profile": "off",
+                "reason": "off: nothing records app usage; an empty ParceledListSlice<UsageStats> would be indistinguishable from 'not used'",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "system.dpm",
+                "profile": "off",
+                "reason": "off: no managed device or profile; every device-policy answer would be invented policy state",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "system.role",
+                "profile": "off",
+                "reason": "off: IRoleManager lives in the Permission APEX; its transaction table is not in the framework dex this build reads, so a stub would guess codes",
+                "state": "off"
+              },
+              {
+                "attach": "hot",
+                "details": null,
+                "fidelity": "off",
+                "id": "geo.country",
+                "profile": "off",
+                "reason": "off: a detected country is a location claim ACOS cannot back",
+                "state": "off"
+              }
+            ],
+            "ok": true,
+            "op": "status",
+            "value": {
+              "app_thread": "0x100000001",
+              "bind_pending": null,
+              "bound_service": {
+                "binder": "0x10000001c",
+                "component": "com.gaten/com.gaten.app.GatenAccessibilityService",
+                "connection": "0x77",
+                "connection_id": 1,
+                "service_info_set": false
+              },
+              "clients": 1,
+              "connections": [],
+              "enabled": true,
+              "enabled_services": [
+                "com.gaten/com.gaten.app.GatenAccessibilityService"
+              ],
+              "event_count": 0,
+              "event_types": [],
+              "gestures": [],
+              "installed_services": [
+                "com.gaten/.app.GatenAccessibilityService"
+              ],
+              "interactions": [],
+              "screenshots": [
+                {
+                  "display_id": 0,
+                  "status": 0
+                }
+              ],
+              "self_disabled": false,
+              "service_bound": true,
+              "service_config": {
+                "can_perform_gestures": false,
+                "can_retrieve_window_content": false,
+                "can_retrieve_windows": false,
+                "can_take_screenshot": true,
+                "capabilities": 128,
+                "event_types": 96,
+                "feedback_type": 16,
+                "flags": 65,
+                "notification_timeout": 100
+              },
+              "unsupported": [],
+              "windows": [
+                {
+                  "active": true,
+                  "bounds": [
+                    0,
+                    0,
+                    1080,
+                    2400
+                  ],
+                  "connection": null,
+                  "focused": true,
+                  "id": 0,
+                  "layer": 0,
+                  "package": "",
+                  "type": 1,
+                  "window": "0x10000000e"
+                }
+              ]
+            }
+          },
+          "expected": {
+            "expect": {
+              "id": "accessibility",
+              "op": "status",
+              "value": {
+                "screenshots": [
+                  {
+                    "display_id": 0,
+                    "status": 0
+                  }
+                ],
+                "service_bound": true
+              }
+            },
+            "module": "accessibility",
+            "op": "status"
+          },
+          "kind": "service_ctl",
+          "matched_node_ids": [],
+          "message": "attached=[{\"id\":\"core\",\"profile\":\"real\"},{\"id\":\"accessibility\",\"profile\":\"real\"}]",
+          "passed": true
+        }
+      ],
+      "duration_ms": 151,
+      "evidence": [
+        {
+          "kind": "step",
+          "path": "steps/28-service_ctl.json"
+        }
+      ],
+      "index": 28,
+      "provenance": {},
+      "status": "pass",
+      "step": "service_ctl"
+    },
+    {
+      "assertions": [
+        {
+          "actual": {
+            "matched_lines": 1,
+            "sample": [
+              "native: I0000 00:00:1794995266.412486     119 scheduler.cc:693] ImageMetadata: 1080x2400\n"
+            ]
+          },
+          "expected": {
+            "min_matches": 1,
+            "ordered": true,
+            "patterns": [
+              "ImageMetadata: 1080x2400"
+            ],
+            "since_previous_step": false,
+            "tag": "native"
+          },
+          "kind": "log",
+          "matched_node_ids": [],
+          "passed": true
+        }
+      ],
+      "duration_ms": 71,
+      "evidence": [
+        {
+          "kind": "log",
+          "path": "logs/logcat.txt"
+        },
+        {
+          "kind": "step",
+          "path": "steps/29-assert_log.json"
+        }
+      ],
+      "index": 29,
+      "provenance": {
+        "logs": "guest-asserted"
+      },
+      "status": "pass",
+      "step": "assert_log"
+    },
+    {
+      "assertions": [],
+      "duration_ms": 2251,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/258.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/258.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/30-wait_for.json"
+        }
+      ],
+      "frame_seq": 258,
+      "index": 30,
+      "provenance": {
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "bound": "content-stable",
+        "elapsed_ms": 344,
+        "fallback_from": "strict",
+        "fallback_reason": "strict-did-not-settle",
+        "frame_seq": 258,
+        "freshness": "each traversal's probe_seq strictly increased (guest-side                               min_probe_seq floor + host-side check); the pre-window sample                               never counts",
+        "mode": "content",
+        "pixel_evidence": false,
+        "probe_seq": 699,
+        "probe_seq_first": 681,
+        "probe_seq_floor": 679,
+        "reason": "content-stable",
+        "settled": true,
+        "signature": "fa58b3a0c81a3105",
+        "signature_fields": [
+          "class",
+          "resource_id",
+          "text",
+          "content_desc",
+          "hint",
+          "visible",
+          "enabled",
+          "focused",
+          "clickable",
+          "scrollable",
+          "checked",
+          "selected",
+          "window",
+          "window_kind",
+          "window_z",
+          "package"
+        ],
+        "signature_tree_fields": [
+          "package",
+          "truncated",
+          "text_available"
+        ],
+        "traversals": 19,
+        "waited_ms": 344,
+        "window_ms": 300
+      },
+      "status": "pass",
+      "step": "wait_for"
+    },
+    {
+      "assertions": [],
+      "duration_ms": 91,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/259.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/259.png"
+        },
+        {
+          "kind": "capture",
+          "path": "frames/259-lookup-index-ready.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/31-capture.json"
+        }
+      ],
+      "frame_seq": 259,
+      "index": 31,
+      "name": "lookup-index-ready",
+      "provenance": {
+        "frame": "host-observed"
+      },
+      "settle": {
+        "bound": "strict-event",
+        "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
+        "mode": "strict",
+        "probe_seq": 701,
+        "reason": "strict-event",
+        "settled": true,
+        "strict_rule": "event",
+        "tree_age_ms": 42,
+        "waited_ms": 91,
+        "waited_ms_source": "step"
+      },
+      "status": "pass",
+      "step": "capture"
+    },
+    {
+      "assertions": [
+        {
+          "actual": {
+            "acks": 2,
+            "change_claimed": false,
+            "delivered": true,
+            "expect_change": false,
+            "handled": true,
+            "visual_change": true
+          },
+          "expected": {
+            "change_claimed": false,
+            "delivered": true
+          },
+          "kind": "input_delivery",
+          "matched_node_ids": [],
+          "message": "input delivered (2 guest ack(s), handled: Some(true)); no change claimed (`expect_change: false`: the effect is transient, so the post-settle tree is not this tap's state)",
+          "passed": true
+        }
+      ],
+      "duration_ms": 122,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/260.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/260.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/32-tap.json"
+        }
+      ],
+      "frame_seq": 260,
+      "index": 32,
+      "input": {
+        "expect_change": false,
+        "handled": true,
+        "handled_evidence": {
+          "acked": 2,
+          "published": 2,
+          "source": "guest"
+        },
+        "target": {
+          "hit": {
+            "clickable": false,
+            "consumer": null,
+            "method": "tree-geometry",
+            "node": {
+              "bounds": "[0,0][1080,2400]",
+              "class": "b5.g",
+              "clickable": false,
+              "content_desc": "",
+              "enabled": true,
+              "focused": false,
+              "id": "n10_",
+              "password": false,
+              "resource_id": "",
+              "scrollable": false,
+              "text": "",
+              "visible_bounds": "[0,0][1080,2400]",
+              "window": "main"
+            },
+            "suggest": {
+              "bounds": "[58,415][1022,766]",
+              "class": "b5.g",
+              "clickable": true,
+              "content_desc": "Open 猫",
+              "enabled": true,
+              "focused": false,
+              "id": "n26_",
+              "password": false,
+              "resource_id": "",
+              "scrollable": false,
+              "text": "",
+              "visible_bounds": "[58,415][1022,766]",
+              "window": "main"
+            }
+          },
+          "point": {
+            "x": 120,
+            "y": 470
+          }
+        }
+      },
+      "provenance": {
+        "frame": "host-observed",
+        "host_input": "host-observed",
+        "input_acks": "guest-asserted",
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "ack_ms": 5,
+        "bound": "state-commit",
+        "first_change_ms": 49,
+        "frame_ms": 84,
+        "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
+        "mode": "fast",
+        "pixels_changed": null,
+        "reason": "state-commit",
+        "settled": true,
+        "state_changed": true,
+        "waited_ms": 122,
+        "waited_ms_source": "step"
+      },
+      "status": "pass",
+      "step": "tap"
+    },
+    {
+      "assertions": [],
+      "duration_ms": 646,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/261.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/261.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/33-wait_for.json"
+        }
+      ],
+      "frame_seq": 261,
+      "index": 33,
+      "provenance": {
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "bound": "strict-event",
+        "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
+        "mode": "strict",
+        "probe_seq": 713,
+        "reason": "strict-event",
+        "settled": true,
+        "strict_rule": "event",
+        "tree_age_ms": 42,
+        "waited_ms": 645,
+        "waited_ms_source": "step"
+      },
+      "status": "pass",
+      "step": "wait_for"
+    },
+    {
+      "assertions": [
+        {
+          "actual": {
+            "bounds": [
+              100,
+              510,
+              919,
+              555
+            ],
+            "node": "n27_",
+            "visible": true,
+            "visible_bounds": [
+              100,
+              510,
+              919,
+              555
+            ]
+          },
+          "expected": {
+            "bounds": null,
+            "selector": {
+              "text": {
+                "exact": "ねこ・ネコ"
+              }
+            },
+            "visible": true
+          },
+          "kind": "visible",
+          "matched_node_ids": [
+            "n27_"
+          ],
+          "passed": true
+        }
+      ],
+      "duration_ms": 0,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/261.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/261.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/34-assert_visible.json"
+        }
+      ],
+      "frame_seq": 261,
+      "index": 34,
+      "provenance": {
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "bound": "strict-event",
+        "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
+        "mode": "strict",
+        "probe_seq": 713,
+        "reason": "strict-event",
+        "settled": true,
+        "strict_rule": "event",
+        "tree_age_ms": 42,
+        "waited_ms": 0,
+        "waited_ms_source": "step"
+      },
+      "status": "pass",
+      "step": "assert_visible"
+    },
+    {
+      "assertions": [
+        {
+          "actual": {
+            "bounds": [
+              58,
+              1322,
+              1024,
+              1370
+            ],
+            "node": "n13_",
+            "visible": true,
+            "visible_bounds": [
+              58,
+              1322,
+              1024,
+              1370
+            ]
+          },
+          "expected": {
+            "bounds": null,
+            "selector": {
+              "text": {
+                "exact": "Meanings"
+              }
+            },
+            "visible": true
+          },
+          "kind": "visible",
+          "matched_node_ids": [
+            "n13_"
+          ],
+          "passed": true
+        }
+      ],
+      "duration_ms": 1,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/261.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/261.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/35-assert_visible.json"
+        }
+      ],
+      "frame_seq": 261,
+      "index": 35,
+      "provenance": {
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "bound": "strict-event",
+        "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
+        "mode": "strict",
+        "probe_seq": 713,
+        "reason": "strict-event",
+        "settled": true,
+        "strict_rule": "event",
+        "tree_age_ms": 42,
+        "waited_ms": 0,
+        "waited_ms_source": "step"
+      },
+      "status": "pass",
+      "step": "assert_visible"
+    },
+    {
+      "assertions": [
+        {
+          "actual": {
+            "bounds": [
+              807,
+              725,
+              933,
+              851
+            ],
+            "node": "n11_",
+            "visible": true,
+            "visible_bounds": [
+              807,
+              725,
+              933,
+              851
+            ]
+          },
+          "expected": {
+            "bounds": null,
+            "selector": {
+              "content_desc": {
+                "exact": "Select again"
+              }
+            },
+            "visible": true
+          },
+          "kind": "visible",
+          "matched_node_ids": [
+            "n11_"
+          ],
+          "passed": true
+        }
+      ],
+      "duration_ms": 1,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/261.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/261.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/36-assert_visible.json"
+        }
+      ],
+      "frame_seq": 261,
+      "index": 36,
+      "provenance": {
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "bound": "strict-event",
+        "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
+        "mode": "strict",
+        "probe_seq": 713,
+        "reason": "strict-event",
+        "settled": true,
+        "strict_rule": "event",
+        "tree_age_ms": 42,
+        "waited_ms": 0,
+        "waited_ms_source": "step"
+      },
+      "status": "pass",
+      "step": "assert_visible"
+    },
+    {
+      "assertions": [
+        {
+          "actual": {
+            "bounds": [
+              58,
+              1391,
+              1024,
+              1539
+            ],
+            "node": "n13_",
+            "visible": true,
+            "visible_bounds": [
+              58,
+              1391,
+              1024,
+              1539
+            ]
+          },
+          "expected": {
+            "bounds": null,
+            "selector": {
+              "text": {
+                "contains": "Cat (esp. the domestic cat"
+              }
+            },
+            "visible": true
+          },
+          "kind": "visible",
+          "matched_node_ids": [
+            "n13_"
+          ],
+          "passed": true
+        }
+      ],
+      "duration_ms": 1,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/261.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/261.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/37-assert_visible.json"
+        }
+      ],
+      "frame_seq": 261,
+      "index": 37,
+      "provenance": {
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "bound": "strict-event",
+        "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
+        "mode": "strict",
+        "probe_seq": 713,
+        "reason": "strict-event",
+        "settled": true,
+        "strict_rule": "event",
+        "tree_age_ms": 42,
+        "waited_ms": 0,
+        "waited_ms_source": "step"
+      },
+      "status": "pass",
+      "step": "assert_visible"
+    },
+    {
+      "assertions": [
+        {
+          "actual": {
+            "focus": "accessibility_overlay",
+            "focus_type": "TYPE_ACCESSIBILITY_OVERLAY",
+            "order": [
+              "application",
+              "accessibility_overlay"
+            ],
+            "types": [
+              "TYPE_BASE_APPLICATION",
+              "TYPE_ACCESSIBILITY_OVERLAY"
+            ],
+            "windows": [
+              {
+                "bounds": [
+                  0,
+                  0,
+                  1080,
+                  2400
+                ],
+                "focus": false,
+                "id": "fe1c6c4",
+                "kind": "application",
+                "label": "main",
+                "touchable": true,
+                "type_name": "TYPE_BASE_APPLICATION",
+                "z": 0
+              },
+              {
+                "bounds": [
+                  0,
+                  0,
+                  1080,
+                  2400
+                ],
+                "focus": true,
+                "id": "f4136ba",
+                "kind": "accessibility_overlay",
+                "label": "window-2032#1",
+                "touchable": true,
+                "type_name": "TYPE_ACCESSIBILITY_OVERLAY",
+                "z": 1
+              }
+            ]
+          },
+          "expected": {
+            "focus": null,
+            "focus_type": null,
+            "order": [
+              "application",
+              "accessibility_overlay"
+            ],
+            "types": [
+              "TYPE_BASE_APPLICATION",
+              "TYPE_ACCESSIBILITY_OVERLAY"
+            ]
+          },
+          "kind": "windows",
+          "matched_node_ids": [],
+          "message": "2 windows in policy z order",
+          "passed": true
+        }
+      ],
+      "duration_ms": 0,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/261.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/261.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/38-assert_windows.json"
+        }
+      ],
+      "frame_seq": 261,
+      "index": 38,
+      "provenance": {},
+      "settle": {
+        "bound": "strict-event",
+        "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
+        "mode": "strict",
+        "probe_seq": 713,
+        "reason": "strict-event",
+        "settled": true,
+        "strict_rule": "event",
+        "tree_age_ms": 42,
+        "waited_ms": 0,
+        "waited_ms_source": "step"
+      },
+      "status": "pass",
+      "step": "assert_windows"
+    },
+    {
+      "assertions": [],
+      "duration_ms": 90,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/262.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/262.png"
+        },
+        {
+          "kind": "capture",
+          "path": "frames/262-gaten-word-sheet.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/39-capture.json"
+        }
+      ],
+      "frame_seq": 262,
+      "index": 39,
+      "name": "gaten-word-sheet",
+      "provenance": {
+        "frame": "host-observed"
+      },
+      "settle": {
+        "bound": "strict-event",
+        "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
+        "mode": "strict",
+        "probe_seq": 714,
+        "reason": "strict-event",
+        "settled": true,
+        "strict_rule": "event",
+        "tree_age_ms": 42,
+        "waited_ms": 90,
+        "waited_ms_source": "step"
+      },
+      "status": "pass",
+      "step": "capture"
+    },
+    {
+      "assertions": [],
+      "duration_ms": 823,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/280.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/280.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/40-key.json"
+        }
+      ],
+      "frame_seq": 280,
+      "index": 40,
+      "input": {
+        "expect_change": false,
+        "handled": true,
+        "handled_evidence": {
+          "acked": 2,
+          "published": 2,
+          "source": "guest"
+        },
+        "target": null
+      },
+      "provenance": {
+        "frame": "host-observed",
+        "host_input": "host-observed",
+        "input_acks": "guest-asserted",
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "bound": "content-stable",
+        "elapsed_ms": 354,
+        "frame_seq": 280,
+        "freshness": "each traversal's probe_seq strictly increased (guest-side                               min_probe_seq floor + host-side check); the pre-window sample                               never counts",
+        "mode": "content",
+        "pixel_evidence": false,
+        "probe_seq": 731,
+        "probe_seq_first": 716,
+        "probe_seq_floor": 714,
+        "reason": "content-stable",
+        "settled": true,
+        "signature": "6bb31a606a47df23",
+        "signature_fields": [
+          "class",
+          "resource_id",
+          "text",
+          "content_desc",
+          "hint",
+          "visible",
+          "enabled",
+          "focused",
+          "clickable",
+          "scrollable",
+          "checked",
+          "selected",
+          "window",
+          "window_kind",
+          "window_z",
+          "package"
+        ],
+        "signature_tree_fields": [
+          "package",
+          "truncated",
+          "text_available"
+        ],
+        "traversals": 16,
+        "waited_ms": 354,
+        "window_ms": 300
+      },
+      "status": "pass",
+      "step": "key"
+    },
+    {
+      "assertions": [],
+      "duration_ms": 3001,
+      "evidence": [
+        {
+          "kind": "step",
+          "path": "steps/41-wait.json"
+        }
+      ],
+      "index": 41,
+      "provenance": {},
+      "settle": {
+        "mode": "unknown",
+        "reason": "unsettled",
+        "requested_ms": 3000,
+        "settled": false,
+        "waited_ms": 3000
+      },
+      "status": "pass",
+      "step": "wait"
+    },
+    {
+      "assertions": [],
+      "duration_ms": 91,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/281.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/281.png"
+        },
+        {
+          "kind": "capture",
+          "path": "frames/281-after-back.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/42-capture.json"
+        }
+      ],
+      "frame_seq": 281,
+      "index": 42,
+      "name": "after-back",
+      "provenance": {
+        "frame": "host-observed"
+      },
+      "settle": {
+        "bound": "strict-event",
+        "meaning": "mode=strict uses the event rule: the guest reported no pending framework UI work, the sample was taken after a draw at/after request entry, and the same draw stayed newest for the confirmation window; tree_age_ms is host receipt -> reply",
+        "mode": "strict",
+        "probe_seq": 733,
+        "reason": "strict-event",
+        "settled": true,
+        "strict_rule": "event",
+        "tree_age_ms": 42,
+        "waited_ms": 91,
+        "waited_ms_source": "step"
+      },
+      "status": "pass",
+      "step": "capture"
+    },
+    {
+      "assertions": [
+        {
+          "actual": {
+            "acks": 2,
+            "change_claimed": false,
+            "delivered": true,
+            "expect_change": false,
+            "handled": true,
+            "visual_change": true
+          },
+          "expected": {
+            "change_claimed": false,
+            "delivered": true
+          },
+          "kind": "input_delivery",
+          "matched_node_ids": [],
+          "message": "input delivered (2 guest ack(s), handled: Some(true)); no change claimed (`expect_change: false`: the effect is transient, so the post-settle tree is not this tap's state)",
+          "passed": true
+        }
+      ],
+      "duration_ms": 201,
+      "evidence": [
+        {
+          "kind": "tree",
+          "path": "tree/283.json"
+        },
+        {
+          "kind": "frame",
+          "path": "frames/283.png"
+        },
+        {
+          "kind": "step",
+          "path": "steps/43-tap.json"
+        }
+      ],
+      "frame_seq": 283,
+      "index": 43,
+      "input": {
+        "expect_change": false,
+        "handled": true,
+        "handled_evidence": {
+          "acked": 2,
+          "published": 2,
+          "source": "guest"
+        },
+        "target": {
+          "hit": {
+            "clickable": false,
+            "consumer": null,
+            "method": "tree-geometry",
+            "node": {
+              "bounds": "[0,0][1080,2400]",
+              "class": "b5.g",
+              "clickable": false,
+              "content_desc": "",
+              "enabled": true,
+              "focused": false,
+              "id": "n10_",
+              "password": false,
+              "resource_id": "",
+              "scrollable": false,
+              "text": "",
+              "visible_bounds": "[0,0][1080,2400]",
+              "window": "main"
+            },
+            "suggest": {
+              "bounds": "[933,725][1059,851]",
+              "class": "b5.g",
+              "clickable": true,
+              "content_desc": "Close lookup",
+              "enabled": true,
+              "focused": false,
+              "id": "n11_",
+              "password": false,
+              "resource_id": "",
+              "scrollable": false,
+              "text": "",
+              "visible_bounds": "[933,725][1059,851]",
+              "window": "window-2032#1"
+            }
+          },
+          "point": {
+            "x": 996,
+            "y": 788
+          },
+          "selector": {
+            "selector": "content_desc==\"Close lookup\""
+          }
+        }
+      },
+      "provenance": {
+        "frame": "host-observed",
+        "host_input": "host-observed",
+        "input_acks": "guest-asserted",
+        "tree": "guest-asserted"
+      },
+      "settle": {
+        "ack_ms": 5,
+        "bound": "state-commit",
+        "first_change_ms": 71,
+        "frame_ms": 105,
+        "meaning": "mode=fast frames may be mid-animation; ack_ms is publish -> the gesture's own FINISHED, first_change_ms is publish -> the probe sample that differs from the pre-action tree, frame_ms is publish -> the bound C1 store",
+        "mode": "fast",
+        "pixels_changed": null,
+        "reason": "state-commit",
+        "settled": true,
+        "state_changed": true,
+        "waited_ms": 201,
+        "waited_ms_source": "step"
+      },
+      "status": "pass",
+      "step": "tap"
+    },
+    {
+      "assertions": [],
+      "duration_ms": 3000,
+      "evidence": [
+        {
+          "kind": "step",
+          "path": "steps/44-wait.json"
+        }
+      ],
+      "index": 44,
+      "provenance": {},
+      "settle": {
+        "mode": "unknown",
+        "reason": "unsettled",
+        "requested_ms": 3000,
+        "settled": false,
+        "waited_ms": 3000
+      },
+      "status": "pass",
+      "step": "wait"
+    },
+    {
+      "assertions": [],
+      "duration_ms": 0,
+      "error": {
+        "class": "harness",
+        "code": "GUEST_EXITED",
+        "details": {
+          "backend": "acos-art-session",
+          "context": "capture",
+          "session_exit": {
+            "abi": null,
+            "cgroup": "cgroup: memory.max=2048MiB swap=0 pids.max=512 peak=590MiB oom_kills=0 (/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p1080217-i1123198.scope)",
+            "code": "GUEST_KILLED_BY_SIGNAL",
+            "disk_free_bytes": 226751406080,
+            "guest_crash": null,
+            "guest_exit": null,
+            "guest_signal": 6,
+            "native_crash": {
+              "cmdline": "<unset>",
+              "code": -6,
+              "code_name": "SI_TKILL",
+              "fault_addr": "0x0",
+              "fault_pc": "000013f4",
+              "frames": [
+                {
+                  "index": 0,
+                  "map": "/data/shim/libartshim.so",
+                  "offset": null,
+                  "pc": "000013f4",
+                  "symbol": "BuildId: df7546c6a520b774f4f21cd5f318e57232258d7d"
+                }
+              ],
+              "shim": {
+                "code": -6,
+                "fault_addr": "0x0",
+                "pid": 2,
+                "signal": 6,
+                "source": "acos-shim",
+                "thread": "com.gaten",
+                "tid": 2
+              },
+              "signal": 6,
+              "signal_name": "SIGABRT",
+              "summary": "SIGABRT (6) fault_addr=0x0 in thread 2 \"com.gaten\": /data/shim/libartshim.so (BuildId: df7546c6a520b774f4f21cd5f318e57232258d7d)",
+              "thread": {
+                "name": "com.gaten",
+                "tid": 2
+              },
+              "unmapped_frames": 0
+            },
+            "native_crash_path": "/home/Qui/.t3/worktrees/acos/t3-47d6c485-d007559ed116102f/results/handoff/GATENWORD/w3/art-frames/native-crash.txt",
+            "outcome": "crash",
+            "panic": null,
+            "path": "/home/Qui/.t3/worktrees/acos/t3-47d6c485-d007559ed116102f/results/handoff/GATENWORD/w3/art-frames/session-exit.json",
+            "retryable": false,
+            "stage": "teardown-evidence"
+          }
+        },
+        "hint": "The guest process ended before the requested stage. Read error.details.session_exit for guest_exit, guest_signal, stage and the guest's own ACOSLAUNCH crash line: exit 126/signal 31 with a guard ERR is a host isolation condition; a guest SIGSEGV/abort or a fatal ART log is an app crash. Do not retry unchanged until the cause is named.",
+        "message": "command: the ART session stdin is closed (classified from /home/Qui/.t3/worktrees/acos/t3-47d6c485-d007559ed116102f/results/handoff/GATENWORD/w3/art-frames/session-exit.json); stderr tail: halled reply (256 bytes)\nacos-binder-peer: process 0: android.hardware.display.IDisplayManager.getDisplayInfo answered from a framework-marshalled reply (256 bytes)\nacos-binder-peer: UNSUPPORTED_ANDROID_API {\"code\":113,\"descriptor\":\"android.view.IWindowManager\",\"error\":\"UNSUPPORTED_ANDROID_API\",\"kind\":\"UNSUPPORTED_ANDROID_API\",\"message\":\"unsupported Android API: android.view.IWindowManager code 113 (getWindowInsets)\",\"method\":\"getWindowInsets\"}\nacos-binder-peer: process 0: android.hardware.display.IDisplayManager.getDisplayInfo answered from a framework-marshalled reply (256 bytes)\nacos-binder-peer: process 0: android.hardware.display.IDisplayManager.getDisplayInfo answered from a framework-marshalled reply (256 bytes)\nACOSWMS enter code=2 (addToDisplayAsUser) avail=356\nACOSWMS lock-wait code=2\nACOSWMS locked code=2\nACOSWMS add-request window=0x100000035 type=2032 token=Some(BinderId(120)) title=None w=-2 h=-2\nACOSWMS add-done window=0x100000035 result=0 frame=RectI { left: 0, top: 0, right: 1080, bottom: 2400 }\nACOSWMS exit code=2\nacos-binder-peer: process 0: android.hardware.display.IDisplayManager.getDisplayInfo answered from a framework-marshalled reply (256 bytes)\nacos-binder-peer: process 0: android.hardware.display.IDisplayManager.getDisplayInfo answered from a framework-marshalled reply (256 bytes)\nacos-binder-peer: process 0: android.hardware.display.IDisplayManager.getDisplayInfo answered from a framework-marshalled reply (256 bytes)\nacos-binder-peer: process 0: android.hardware.display.IDisplayManager.getDisplayInfo answered from a framework-marshalled reply (256 bytes)\nacos-binder-peer: process 0: android.hardware.display.IDisplayManager.getDisplayInfo answered from a framework-marshalled reply (256 bytes)\nacos-binder-peer: process 0: android.hardware.display.IDisplayManager.getDisplayInfo answered from a framework-marshalled reply (256 bytes)\nacos-binder-peer: process 0: android.hardware.display.IDisplayManager.getDisplayInfo answered from a framework-marshalled reply (256 bytes)\nACOSWMS enter code=2 (addToDisplayAsUser) avail=356\nACOSWMS lock-wait code=2\nACOSWMS locked code=2\nACOSWMS add-request window=0x100000036 type=2032 token=Some(BinderId(120)) title=None w=-2 h=-2\nACOSWMS add-done window=0x100000036 result=0 frame=RectI { left: 0, top: 0, right: 1080, bottom: 2400 }\nACOSWMS exit code=2\nacos-binder-peer: process 0: android.hardware.display.IDisplayManager.getDisplayInfo answered from a framework-marshalled reply (256 bytes)\nacos-binder-peer: process 0: android.hardware.display.IDisplayManager.getDisplayInfo answered from a framework-marshalled reply (256 bytes)\nacos-binder-peer: process 0: android.hardware.display.IDisplayManager.getDisplayInfo answered from a framework-marshalled reply (256 bytes)\nacos-binder-peer: process 0: android.hardware.display.IDisplayManager.getDisplayInfo answered from a framework-marshalled reply (256 bytes)\nacos-binder-peer: process 0: android.hardware.display.IDisplayManager.getDisplayInfo answered from a framework-marshalled reply (256 bytes)\nacos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {acc8081} D0.S@d003526\nacos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {62b33bd} androidx.lifecycle.B@f707515: 0\nacos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {62b33bd} androidx.lifecycle.B@f707515\nacos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {62b33bd} com.swmansion.worklets.AndroidUIScheduler$scheduleTriggerOnUI$1@9cc702a: 0\nacos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {62b33bd} com.swmansion.worklets.AndroidUIScheduler$scheduleTriggerOnUI$1@9cc702a\nacos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.os.Handler) {5f32956} dev.acos.art.LaunchMain$8$1@b4be1b: 0\nACOSWMS enter code=39 (setOnBackInvokedCallbackInfo) avail=60\nACOSWMS lock-wait code=39\nACOSWMS locked code=39\nACOSWMS exit code=39\nACOSWMS enter code=5 (relayout) avail=360\nACOSWMS lock-wait code=5\nACOSWMS locked code=5\nACOSWMS relayout-request window=0x100000035 type=2032 token=Some(BinderId(120)) w=-2 h=-2 req=145x145 surfaceInsets=RectI { left: 0, top: 0, right: 0, bottom: 0 }\nACOSWMS relayout-done window=0x100000035 result=0x7 frame=RectI { left: 467, top: 2171, right: 612, bottom: 2316 } surface=145x145\nandroid.view.IWindowSession: relayout: no compositor layer bound for window 4294967349; replying with the placeholder SurfaceControl\nACOSWMS exit code=5\nacos-binder-peer: process 0: android.hardware.display.IDisplayManager.getDisplayInfo answered from a framework-marshalled reply (256 bytes)\nacos-binder-peer: process 0: android.hardware.display.IDisplayManager.getDisplayInfo answered from a framework-marshalled reply (256 bytes)\nacos-binder-peer: process 0: android.hardware.display.IDisplayManager.getDisplayInfo answered from a framework-marshalled reply (256 bytes)\nacos-binder-peer: UNSUPPORTED_ANDROID_API {\"code\":1,\"descriptor\":\"android.gui.ISurfaceComposerClient\",\"error\":\"SERVICE_UNKNOWN_BINDER\",\"kind\":\"UNSUPPORTED_ANDROID_API\",\"message\":\"unknown binder handle 0x1001011\",\"method\":\"code 1\"}\nacos-art: guest: ACOSLAUNCH TRACE <<<<< Finished to Handler (android.os.Handler) {5f32956} dev.acos.art.LaunchMain$8$1@b4be1b\nacos-art: guest: ACOSLAUNCH TRACE >>>>> Dispatching to Handler (android.view.Choreographer$FrameHandler) {6f6b2de} android.view.Choreographer$FrameDisplayEventReceiver@73dfcbf: 0\nacos-binder-peer: process 0 connection closed: 7 host-held binder reference(s) released\nacos-binder-peer: process tag 0 disconnected \n                     (0 java binders dropped)\nacos-binder-peer: process tag 0 disconnected: window session 1 closed (0x75, 3 window(s): [4294967310, 4294967349, 4294967350])\nacos-binder-peer: process 0 connection closed (0 java binders, 55 host binder records dropped)\nacos-binder-peer: UNSUPPORTED_ANDROID_API: idle delivery to process 0 dropped (no such connection)\nacos-binder-peer: UNSUPPORTED_ANDROID_API: idle delivery to process 0 dropped (no such connection)\nacos-binder-peer: UNSUPPORTED_ANDROID_API: idle delivery to process 0 dropped (no such connection)\nacos-binder-peer: UNSUPPORTED_ANDROID_API: idle delivery to process 0 dropped (no such connection)\nacos-binder-peer: UNSUPPORTED_ANDROID_API: idle delivery to process 0 dropped (no such connection)\nacos-binder-peer: UNSUPPORTED_ANDROID_API: idle delivery to process 0 dropped (no such connection)\nacos-binder-peer: UNSUPPORTED_ANDROID_API: idle delivery to process 0 dropped (no such connection)\nacos-art: peer: processes=[] peak_connections=1 accepted=1 refused=0 closed=1 frames=4607/2189 unroutable=7\nacos-art: launch wall=28165ms until=activity-resumed application_created=true activity_resumed=true txn=None/false reverse_replies=796 reverse_failed=0 logd=428 (logd: 428 entries) peer_resource_limits=0\nacos-art: shared-boot-image: /home/Qui/.cache/acos/art/boot-images/fixed-ff39b037f1d6b9ff (ACOS_ART_BOOT_IMAGE=shared-fixed; -Ximage:/data/img/boot.art -Xnorelocate; fixed base 0x70000000, no image ASLR; cache hit)\nacos-art: boot_image: mode=shared-fixed cache=hit dir=/home/Qui/.cache/acos/art/boot-images/fixed-ff39b037f1d6b9ff input=ff39b037f1d6b9ff base=0x70000000\nacos-art: cgroup: memory.max=2048MiB swap=0 pids.max=512 peak=590MiB oom_kills=0 (/sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/run-p1080217-i1123198.scope)\nacos-art: seccomp: OK guard=active insns=83 / OK landlock=active abi=10 rules=15 skipped=0\nacos-art: logd: 428 entries\nacos-art: webview: module `webview` is off (no `com.android.webview` provider package, no gate socket): `WebView` takes Android's own no-provider path. Attach it with `services: [{id: webview, profile: real}]`.\nacos-art: native crash: SIGABRT (6) fault_addr=0x0 in thread 2 \"com.gaten\": /data/shim/libartshim.so (BuildId: df7546c6a520b774f4f21cd5f318e57232258d7d) (raw dump: /home/Qui/.t3/worktrees/acos/t3-47d6c485-d007559ed116102f/results/handoff/GATENWORD/w3/art-frames/native-crash.txt)\nacos-art: kept crashed run tree /home/Qui/Projects/acos/.cache/art-locks/data-GATENWORDc-1080082/runs/1080150-0 (1 of at most 8; 0 pruned)",
+        "retryable": false
+      },
+      "evidence": [
+        {
+          "kind": "step",
+          "path": "steps/45-capture.json"
+        }
+      ],
+      "index": 45,
+      "provenance": {
+        "frame": "host-observed"
+      },
+      "status": "error",
+      "step": "capture"
+    }
+  ],
+  "trust": "trusted",
+  "unsupported_steps": [],
+  "verdict": "error"
+}

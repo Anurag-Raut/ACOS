@@ -121,6 +121,13 @@ pub const MAX_PROCESS_NAME: usize = 64;
 
 /// `TF_ONE_WAY` in `binder_transaction_data.flags`.
 pub const TF_ONE_WAY: u32 = 0x01;
+
+/// Frame-only flag on an `F_TXN` the **host** originates (a `system -> app`
+/// delivery: broadcast, `NetworkCallback`, window event). The driver delivers
+/// such frames one at a time in the order they were sent (it keeps the incoming
+/// queue until the previous handler is back in `read`) and clears the bit before
+/// libbinder sees `tr.flags`. See `binder_driver.c` `g_owner_held`.
+pub const TF_ACOS_ORDERED: u32 = 0x4000_0000;
 /// `TF_STATUS_CODE` in `binder_transaction_data.flags`: the reply carries a
 /// status word instead of a parcel body. libbinder sets it when the transaction
 /// could not be dispatched at all (e.g. `UNKNOWN_TRANSACTION` from

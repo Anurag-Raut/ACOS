@@ -1,0 +1,90 @@
+{
+  "backend": "acos-native",
+  "capabilities_used": [
+    "input",
+    "lifecycle",
+    "static-manifest",
+    "ui.tree"
+  ],
+  "error": {
+    "class": "assertion",
+    "code": "ASSERTION_FAILED",
+    "hint": "Compare expected vs actual in the assertion diff, inspect the linked frame/tree, then fix the app or the expectation. Rerun the scenario.",
+    "message": "expected text containing \"bmp=1280x720\", got text \"READY mgr=present feat_cam=true feat_any=true\\nJPEG opened id=0\\nJPEG image w=640 h=480 fmt=256 ts=1000000000 bytes=138… [ACOS: result.error.message bounded for size — 350 bytes total, keeping the first 170 and the last 85 bytes; the full text is in the run's artifacts] …=1 tol4=true\\nJPEG completed frame=0 ts=1000000000\\nJPEG closed id=0 seq=1\" / hint \"\"",
+    "retryable": false
+  },
+  "evidence": {
+    "events": "events.jsonl",
+    "log": "logs/logcat.txt",
+    "verdict": "verdict.json"
+  },
+  "fidelity": "art-reference",
+  "isolation": "process",
+  "metrics": {
+    "peak_rss_bytes": 38166528,
+    "wall_ms": 2545
+  },
+  "ok": false,
+  "request_id": "req_348a7_18ea480f31f680c5",
+  "result": {
+    "artifacts_dir": ".cache/verify-neg-camera-jpeg-wrong-size",
+    "cap_bytes": 20480,
+    "evidence_provenance": {
+      "binder_transactions": "host-observed",
+      "crash_reports": "guest-asserted",
+      "frames": "host-observed",
+      "host_input": "host-observed",
+      "input_acks": "guest-asserted",
+      "launch_markers": "guest-asserted",
+      "lifecycle_markers": "guest-asserted",
+      "logs": "guest-asserted",
+      "static_manifest": "host-observed",
+      "tree": "guest-asserted"
+    },
+    "failed_step": {
+      "failure_index": 5,
+      "index": 5,
+      "kind": "assert_text",
+      "message": "… [ACOS: identical to result.error.message (350 bytes), not repeated; it begins: expected text containing \"bmp=1280x720\", got text \"READY mgr=present feat_cam=true feat_any=true\\nJPEG opened id=0\\nJPEG image w=640 h=480 fmt=256 ts=1000000000 bytes=13896 soi=true bmp=640x480 white=(255,255,255) green=(0,255,1) red=(254,0,0) black=(0,0,0) max_err=1 tol4=true\\nJPEG completed frame=0 ts=1000000000\\nJPEG closed id=0 seq=1\" / hint \"\"] …",
+      "status": "fail"
+    },
+    "failure": {
+      "code": "ASSERTION_FAILED",
+      "error": {
+        "class": "assertion",
+        "code": "ASSERTION_FAILED",
+        "hint": "Compare expected vs actual in the assertion diff, inspect the linked frame/tree, then fix the app or the expectation. Rerun the scenario.",
+        "message": "… [ACOS: identical to result.error.message (350 bytes), not repeated; it begins: expected text containing \"bmp=1280x720\", got text \"READY mgr=present feat_cam=true feat_any=true\\nJPEG opened id=0\\nJPEG image w=640 h=480 fmt=256 ts=1000000000 bytes=13896 soi=true bmp=640x480 white=(255,255,255) green=(0,255,1) red=(254,0,0) black=(0,0,0) max_err=1 tol4=true\\nJPEG completed frame=0 ts=1000000000\\nJPEG closed id=0 seq=1\" / hint \"\"] …",
+        "retryable": false
+      },
+      "step_index": 5,
+      "summary": "step 5 (assert_text) fail"
+    },
+    "note": "this result was larger than the reply cap; only the bulk (tree, steps, logs) was dropped and the full evidence is in the artifacts paths named here",
+    "provenance": {
+      "apk": {
+        "mtime_ns": 1795326435852741616,
+        "path": "/home/Qui/.t3/worktrees/acos/t3-a779be14-64f50f3729c53ac4/fixtures/build/apps/camera-probe.apk",
+        "sha256": "b003e40f22315077500a8b84ddb8b06a6e167a7280b1d9a8bfa5d660f7eec12d",
+        "sha256_12": "b003e40f2231",
+        "size_bytes": 24979
+      },
+      "engine": "art",
+      "fidelity": "art-reference",
+      "scenario": {
+        "mtime_ns": 1795326011004337251,
+        "path": "/home/Qui/.t3/worktrees/acos/t3-a779be14-64f50f3729c53ac4/scenarios/negative/camera-jpeg-wrong-size.yaml",
+        "sha256": "f42a0ddf82d988ededdcd05dc992f087fbd975e1a01b5d7cdab4f116f8aa6677",
+        "sha256_12": "f42a0ddf82d9",
+        "size_bytes": 1541
+      },
+      "scenario_engine": "art",
+      "warnings": []
+    },
+    "reply_capped": true,
+    "verdict_path": ".cache/verify-neg-camera-jpeg-wrong-size/verdict.json",
+    "verdict_status": "fail"
+  },
+  "session_id": "s_art_camera-probe",
+  "status": "fail"
+}

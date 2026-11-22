@@ -1,0 +1,43 @@
+# CAMERA3 (`CAMERA4` Task) — `hw.camera` Slice 3 Evidence Bundle
+
+Branch: `camera3`
+Design plan: [`docs/CAMERA_PLAN.md`](../../../docs/CAMERA_PLAN.md)
+Module docs: [`docs/MODULES.md`](../../../docs/MODULES.md)
+
+## Summary of Results
+
+| Acceptance Item | Verdict | Evidence |
+|---|---|---|
+| 1. `scripted` profile + `set_frame` (`scenarios/camera-scripted.yaml`): PNG (`fixtures/camera/test-frame.png`, 2,076 B) -> `crc32=0xb106af65`, JPEG (`fixtures/camera/test-frame.jpg`, 6,982 B, `base64`) -> `crc32=0x83520be7`, restore `test_pattern` -> `crc32=0xdead8870` | **PASS** (`ok=true`, `wall_ms=5977`) | [`camera-scripted.verdict.json`](camera-scripted.verdict.json), [`camera-scripted/verdict.json`](camera-scripted/verdict.json), [`camera-scripted/logs/logcat.txt`](camera-scripted/logs/logcat.txt) |
+| 2. JPEG / BLOB (`scenarios/camera-jpeg.yaml`): `ImageFormat.JPEG` (`256`) 640x480 via `ImageReader`, `soi=true`, `BitmapFactory` decode `640x480`, `white=(255,255,255) green=(0,255,1) red=(254,0,0) black=(0,0,0) max_err=1 tol4=true` | **PASS** (`ok=true`, `wall_ms=2556`) | [`camera-jpeg.verdict.json`](camera-jpeg.verdict.json), [`camera-jpeg/verdict.json`](camera-jpeg/verdict.json), [`camera-jpeg/logs/logcat.txt`](camera-jpeg/logs/logcat.txt) |
+| 3. `SurfaceView` repeating preview (`scenarios/camera-preview.yaml`): `TEMPLATE_PREVIEW` delivers 5 frames (`frames=[0, 1, 2, 3, 4]`, `frames_inc=true`, `ts_inc=true`); host-observed `assert_region` verifies composited `BLASTBufferQueue` colorbars (`min_distinct_colors: 8`, exact SHA-256 on full bar band + White/Green/Red patches) | **PASS** (`ok=true`, `wall_ms=4390`) | [`camera-preview.verdict.json`](camera-preview.verdict.json), [`camera-preview/verdict.json`](camera-preview/verdict.json), [`camera-preview/frames/5.png`](camera-preview/frames/5.png) |
+| 4. CameraX probe (best-effort) | **not done: deps unavailable** (`androidx.camera` AAR/POMs and transitive deps absent from `/home/Qui/.gradle/caches`, `/home/Qui/.m2`, `/opt`, `/usr/share`, and repo; `tools/build-apps.sh` builds APKs offline with `aapt2`/`javac`/`d8` without Gradle) | — |
+| 5a. Negative scripted (`scenarios/negative/camera-scripted-wrong-checksum.yaml`) | **FAIL** (`ASSERTION_FAILED`, `wall_ms=2542`) | [`camera-scripted-wrong-checksum.verdict.json`](camera-scripted-wrong-checksum.verdict.json), [`camera-scripted-wrong-checksum/verdict.json`](camera-scripted-wrong-checksum/verdict.json) |
+| 5b. Negative JPEG (`scenarios/negative/camera-jpeg-wrong-size.yaml`) | **FAIL** (`ASSERTION_FAILED`, `wall_ms=2545`) | [`camera-jpeg-wrong-size.verdict.json`](camera-jpeg-wrong-size.verdict.json), [`camera-jpeg-wrong-size/verdict.json`](camera-jpeg-wrong-size/verdict.json) |
+| 5c. Negative preview (`scenarios/negative/camera-preview-wrong-color.yaml`) | **FAIL** (`ASSERTION_FAILED`, `wall_ms=3069`) | [`camera-preview-wrong-color.verdict.json`](camera-preview-wrong-color.verdict.json), [`camera-preview-wrong-color/verdict.json`](camera-preview-wrong-color/verdict.json) |
+| 6. Existing scenarios: `camera-capture`, `camera-probe`, `camera-off`, `negative/camera-capture-wrong-checksum` | **3 PASS + 1 expected FAIL** (`wall_ms=5364`, `8750`, `5780`; `negative` `ASSERTION_FAILED` `2544`) | [`camera-capture.verdict.json`](camera-capture.verdict.json), [`camera-probe.verdict.json`](camera-probe.verdict.json), [`camera-off.verdict.json`](camera-off.verdict.json), [`camera-capture-wrong-checksum.verdict.json`](camera-capture-wrong-checksum.verdict.json) |
+| 7. `cargo test --offline -p acos-services --test camera_module --test module_kit --test modules_doc` | **PASS** (`camera_module` 21/21, `module_kit` 21/21, `modules_doc` 2/2) | [`cargo-tests.log`](cargo-tests.log) |
+
+## Key Verbatim ART Logcat Output
+
+### `camera-scripted`
+```text
+I cameraprobe: CAPTURE image w=640 h=480 fmt=35 planes=3 ts=1000000000 crc32=0xb106af65 white=(82,90,240) green=(82,90,240) red=(144,54,34) black=(144,54,34) tag=(82,82,82,82) ramp=(210,16,146) tl=(82,90,240) tr=(144,54,34) bl=(41,240,110) br=(210,16,146) ctr=(235,128,128)
+I cameraprobe: CAPTURE image w=640 h=480 fmt=35 planes=3 ts=1000000000 crc32=0x83520be7 white=(81,90,239) green=(81,90,239) red=(145,55,34) black=(145,55,34) tag=(81,81,81,81) ramp=(210,44,141) tl=(81,90,239) tr=(145,55,34) bl=(41,239,110) br=(210,16,146) ctr=(235,128,128)
+I cameraprobe: CAPTURE image w=640 h=480 fmt=35 planes=3 ts=1000000000 crc32=0xdead8870 white=(235,128,128) green=(145,54,34) red=(81,90,240) black=(16,128,128) tag=(160,0,0,90) ramp=(127,128,128) tl=(170,166,16) tr=(41,240,110) bl=(63,128,128) br=(191,128,128) ctr=(106,202,222)
+```
+
+### `camera-jpeg`
+```text
+I cameraprobe: JPEG opened id=0
+I cameraprobe: JPEG image w=640 h=480 fmt=256 ts=1000000000 bytes=13896 soi=true bmp=640x480 white=(255,255,255) green=(0,255,1) red=(254,0,0) black=(0,0,0) max_err=1 tol4=true
+I cameraprobe: JPEG completed frame=0 ts=1000000000
+I cameraprobe: JPEG closed id=0 seq=1
+```
+
+### `camera-preview`
+```text
+I cameraprobe: PREVIEW opened id=0
+I cameraprobe: PREVIEW ok count=5 frames=[0, 1, 2, 3, 4] frames_inc=true ts_inc=true
+I cameraprobe: PREVIEW closed id=0 seq=1
+```

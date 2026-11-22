@@ -40,8 +40,7 @@ fn draw_weight(ctx: &mut RenderContext, weight: u16) -> (Vec<u8>, usize) {
 #[test]
 fn variable_weight_renders_strictly_heavier() {
     let mut ctx = RenderContext::new();
-    if !ctx.has_fonts() {
-        eprintln!("SKIP: no fonts available (set ACOS_FONT_DIR)");
+    if acos_test_support::require_prereq(ctx.has_fonts(), "variable_weight_renders_strictly_heavier", "no fonts available (set ACOS_FONT_DIR)").is_none() {
         return;
     }
     // The four weights are all `<font>` entries of the same variable file.
@@ -65,8 +64,7 @@ fn variable_weight_renders_strictly_heavier() {
 #[test]
 fn same_weight_is_deterministic_different_weight_is_not() {
     let mut ctx = RenderContext::new();
-    if !ctx.has_fonts() {
-        eprintln!("SKIP: no fonts available (set ACOS_FONT_DIR)");
+    if acos_test_support::require_prereq(ctx.has_fonts(), "same_weight_is_deterministic_different_weight_is_not", "no fonts available (set ACOS_FONT_DIR)").is_none() {
         return;
     }
     let (light_a, _) = draw_weight(&mut ctx, 200);

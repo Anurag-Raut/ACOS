@@ -1,0 +1,264 @@
+--------- beginning of main
+1795328307164      1  E cutils-trace: Error opening trace file: Permission denied (13)
+1795328307165      2  I : Using CollectorTypeCC GC.
+1795328307177      3  D nativeloader: InitDefaultPublicLibraries for_preload=1: libandroid.so:libaaudio.so:libamidi.so:libbinder_ndk.so:libc.so:libcamera2ndk.so:libdl.so:libEGL.so:libGLESv1_CM.so:libGLESv2.so:libGLESv3.so:libicu.so:libicui18n.so:libicuuc.so:libjnigraphics.so:liblog.so:libmediandk.so:libm.so:libnativehelper.so:libnativewindow.so:libOpenMAXAL.so:libOpenSLES.so:libRS.so:libstdc++.so:libsync.so:libvulkan.so:libwebviewchromium_plat_support.so:libz.so
+1795328307181      4  D : I18n APEX ICU file found: /apex/com.android.i18n/etc/icu/icudt72l.dat
+1795328307182      5  E logdw: Found user/group name 'root' in '/etc/passwd' without required prefix 'system_'
+1795328307182      6  E logdw: Found user/group name 'bin' in '/etc/passwd' without required prefix 'system_'
+1795328307182      7  E logdw: Found user/group name 'daemon' in '/etc/passwd' without required prefix 'system_'
+1795328307182      8  E logdw: Found user/group name 'mail' in '/etc/passwd' without required prefix 'system_'
+1795328307182      9  E logdw: Found user/group name 'ftp' in '/etc/passwd' without required prefix 'system_'
+1795328307182     10  E logdw: Found user/group name 'http' in '/etc/passwd' without required prefix 'system_'
+1795328307182     11  E logdw: Found user/group name 'nobody' in '/etc/passwd' without required prefix 'system_'
+1795328307182     12  E logdw: Found user/group name 'dbus' in '/etc/passwd' without required prefix 'system_'
+1795328307182     13  E logdw: Found user/group name 'systemd-coredump' in '/etc/passwd' without required prefix 'system_'
+1795328307182     14  E logdw: Found user/group name 'systemd-network' in '/etc/passwd' without required prefix 'system_'
+1795328307182     15  E logdw: Found user/group name 'systemd-oom' in '/etc/passwd' without required prefix 'system_'
+1795328307182     16  E logdw: Found user/group name 'systemd-journal-remote' in '/etc/passwd' without required prefix 'system_'
+1795328307182     17  E logdw: Found user/group name 'systemd-resolve' in '/etc/passwd' without required prefix 'system_'
+1795328307182     18  E logdw: Found user/group name 'systemd-timesync' in '/etc/passwd' without required prefix 'system_'
+1795328307182     19  E logdw: Found user/group name 'tss' in '/etc/passwd' without required prefix 'system_'
+1795328307182     20  E logdw: Found user/group name 'uuidd' in '/etc/passwd' without required prefix 'system_'
+1795328307182     21  E logdw: Found user/group name 'alpm' in '/etc/passwd' without required prefix 'system_'
+1795328307182     22  E logdw: Found user/group name 'git' in '/etc/passwd' without required prefix 'system_'
+1795328307182     23  E logdw: Found user/group name 'polkitd' in '/etc/passwd' without required prefix 'system_'
+1795328307182     24  E logdw: Found user/group name 'Qui' in '/etc/passwd' without required prefix 'system_'
+1795328307182     25  E logdw: Found user/group name 'avahi' in '/etc/passwd' without required prefix 'system_'
+1795328307182     26  E logdw: Found user/group name 'brltty' in '/etc/passwd' without required prefix 'system_'
+1795328307182     27  E logdw: Found user/group name 'colord' in '/etc/passwd' without required prefix 'system_'
+1795328307182     28  E logdw: Found user/group name 'flatpak' in '/etc/passwd' without required prefix 'system_'
+1795328307182     29  E logdw: Found user/group name 'gdm' in '/etc/passwd' without required prefix 'system_'
+1795328307182     30  E logdw: Found user/group name 'geoclue' in '/etc/passwd' without required prefix 'system_'
+1795328307182     31  E logdw: Found user/group name 'gnome-remote-desktop' in '/etc/passwd' without required prefix 'system_'
+1795328307182     32  E logdw: Found user/group name 'libvirt-qemu' in '/etc/passwd' without required prefix 'system_'
+1795328307182     33  E logdw: Found user/group name 'qemu' in '/etc/passwd' without required prefix 'system_'
+1795328307182     34  E logdw: Found user/group name 'rtkit' in '/etc/passwd' without required prefix 'system_'
+1795328307182     35  E logdw: Found user/group name 'saned' in '/etc/passwd' without required prefix 'system_'
+1795328307182     36  E logdw: Found user/group name 'usbmux' in '/etc/passwd' without required prefix 'system_'
+1795328307182     37  E logdw: Found user/group name 'nvidia-persistenced' in '/etc/passwd' without required prefix 'system_'
+1795328307182     38  E logdw: Found user/group name 'ollama' in '/etc/passwd' without required prefix 'system_'
+1795328307182     39  E logdw: Found user/group name 'named' in '/etc/passwd' without required prefix 'system_'
+1795328307182     40  E logdw: Found user/group name 'pcscd' in '/etc/passwd' without required prefix 'system_'
+1795328307182     41  E logdw: Found user/group name 'mongodb' in '/etc/passwd' without required prefix 'system_'
+1795328307183     42  E logdw: Found user/group name 'malcontent-timer-ext-agent' in '/etc/passwd' without required prefix 'system_'
+1795328307183     43  E logdw: Found user/group name 'malcontent-timerd' in '/etc/passwd' without required prefix 'system_'
+1795328307183     44  E logdw: Found user/group name 'malcontent-webd' in '/etc/passwd' without required prefix 'system_'
+1795328307183     45  E logdw: Found user/group name 'systemd-imds' in '/etc/passwd' without required prefix 'system_'
+1795328307183     46  E logdw: Found user/group name 'clamav' in '/etc/passwd' without required prefix 'system_'
+1795328307183     47  E logdw: Found user/group name 'dnsmasq' in '/etc/passwd' without required prefix 'system_'
+1795328307183     48  W ziparchive: Unable to open '/data/app/launch-guest/classes.dm': No such file or directory
+1795328307183     49  W ziparchive: Unable to open '/data/app/launch-guest/classes.dm': No such file or directory
+1795328307187     50  D nativeloader: InitApexLibraries:
+  
+1795328307187     51  D nativeloader: InitDefaultPublicLibraries for_preload=0: libandroid.so:libaaudio.so:libamidi.so:libbinder_ndk.so:libc.so:libcamera2ndk.so:libclang_rt.hwasan-aarch64-android.so:libdl.so:libEGL.so:libGLESv1_CM.so:libGLESv2.so:libGLESv3.so:libicu.so:libicui18n.so:libicuuc.so:libjnigraphics.so:liblog.so:libmediandk.so:libm.so:libnativehelper.so:libnativewindow.so:libneuralnetworks.so:libOpenMAXAL.so:libOpenSLES.so:libRS.so:libstdc++.so:libsync.so:libvulkan.so:libwebviewchromium_plat_support.so:libz.so
+1795328307187     52  D nativeloader: Configuring clns-1 for other apk . target_sdk_version=0, uses_libraries=ALL, library_path=/system/lib64:/vendor/lib64, permitted_path=/data:/mnt/expand
+1795328307187     53  D nativeloader: InitExtendedPublicLibraries: 
+1795328307187     54  I nativeloader: InitVendorPublicLibraries skipped: No such file or directory
+1795328307187     55  D nativeloader: InitProductPublicLibraries: 
+1795328307195     56  E ProcessState: Binder driver /dev/binder is unavailable. Using /dev/binder instead.
+1795328307199     57  D CompatibilityChangeReporter: Compat change id reported: 171979766; UID 10192; state: ENABLED
+1795328307199     58  D CompatibilityChangeReporter: Compat change id reported: 242716250; UID 10192; state: ENABLED
+1795328307199     59  I Typeface: Preloading /system/fonts/Roboto-Regular.ttf
+1795328307199     60  I Typeface: Preloading /system/fonts/RobotoStatic-Regular.ttf
+1795328307200     61  D CompatibilityChangeReporter: Compat change id reported: 247079863; UID 10192; state: ENABLED
+1795328307219     62  W ziparchive: Unable to open '/data/app/camera-probe.dm': No such file or directory
+1795328307219     63  W ziparchive: Unable to open '/data/app/camera-probe.dm': No such file or directory
+1795328307220     64  D nativeloader: Configuring clns-2 for other apk /data/app/camera-probe.apk. target_sdk_version=34, uses_libraries=, library_path=/data/app-lib/x86_64, permitted_path=/data:/mnt/expand:/data/app-data/dev.acos.fixtures.cameraprobe
+1795328307220     65  W ContextImpl: Failed to ensure /data/app-data/dev.acos.fixtures.cameraprobe/cache: chown failed: EINVAL (Invalid argument)
+1795328307220     66  W ContextImpl: Failed to ensure /data/app-data/dev.acos.fixtures.cameraprobe/code_cache: chown failed: EINVAL (Invalid argument)
+1795328307221     67  V GraphicsEnvironment: Currently set values for:
+1795328307221     68  V GraphicsEnvironment:   angle_gl_driver_selection_pkgs=[]
+1795328307221     69  V GraphicsEnvironment:   angle_gl_driver_selection_values=[]
+1795328307221     70  V GraphicsEnvironment: ANGLE GameManagerService for dev.acos.fixtures.cameraprobe: false
+1795328307221     71  V GraphicsEnvironment: dev.acos.fixtures.cameraprobe is not listed in per-application setting
+1795328307221     72  V GraphicsEnvironment: Neither updatable production driver nor prerelease driver is supported.
+1795328307221     73  W SystemServiceRegistry: No service published for: netstats
+1795328307221     74  E TrafficStats: TrafficStats not initialized, uid=10192
+1795328307226     75  I AcosRot6: ACOSLAUNCH MARK top-finish-watcher-started
+1795328307229     76  D CompatibilityChangeReporter: Compat change id reported: 210923482; UID 10192; state: ENABLED
+1795328307231     77  D CompatibilityChangeReporter: Compat change id reported: 171228096; UID 10192; state: ENABLED
+1795328307233     78  I cameraprobe: READY mgr=present feat_cam=true feat_any=true
+1795328307233     79  E logdw: dev.acos.fixtures.cameraprobe.MainActivity
+1795328307233     80  E logdw: dev.acos.fixtures.cameraprobe.MainActivity
+1795328307234     81  E logdw: dev.acos.fixtures.cameraprobe.MainActivity
+1795328307234     82  D CompatibilityChangeReporter: Compat change id reported: 237531167; UID 10192; state: ENABLED
+1795328308000     83  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795328308003     84  D MtpDeviceJNI: register_android_mtp_MtpDevice
+
+1795328308003     85  D CompatibilityChangeReporter: Compat change id reported: 236825255; UID 10192; state: ENABLED
+1795328308003     86  I CameraManagerGlobal: Connecting to camera service
+1795328308004     87  V CameraManagerGlobal: Failed to register device state listener!
+1795328308004     88  V CameraManagerGlobal: Device state dependent characteristics updates will not befunctional!
+1795328308004     89  I cameraprobe: CAPTURE opened id=0
+1795328308015     90  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795328308080     91  I cameraprobe: CAPTURE image w=640 h=480 fmt=35 planes=3 ts=1000000000 crc32=0xb106af65 white=(82,90,240) green=(82,90,240) red=(144,54,34) black=(144,54,34) tag=(82,82,82,82) ramp=(210,16,146) tl=(82,90,240) tr=(144,54,34) bl=(41,240,110) br=(210,16,146) ctr=(235,128,128)
+1795328308080     92  I cameraprobe: CAPTURE completed frame=0 ts=1000000000
+1795328308080     93  I cameraprobe: CAPTURE closed id=0 seq=1
+1795328308081     94  W MessageQueue: Handler (android.os.Handler) {2a8b7b3} sending message to a Handler on a dead thread
+java.lang.IllegalStateException: Handler (android.os.Handler) {2a8b7b3} sending message to a Handler on a dead thread
+	at android.os.MessageQueue.enqueueMessage(MessageQueue.java:560)
+	at android.os.Handler.enqueueMessage(Handler.java:786)
+	at android.os.Handler.sendMessageAtTime(Handler.java:735)
+	at android.os.Handler.sendMessageDelayed(Handler.java:705)
+	at android.os.Handler.post(Handler.java:435)
+	at android.hardware.camera2.impl.CameraDeviceImpl$CameraHandlerExecutor.execute(CameraDeviceImpl.java:2402)
+	at android.hardware.camera2.utils.TaskDrainer.postDrained(TaskDrainer.java:202)
+	at android.hardware.camera2.utils.TaskDrainer.checkIfDrainFinished(TaskDrainer.java:197)
+	at android.hardware.camera2.utils.TaskDrainer.beginDrain(TaskDrainer.java:185)
+	at android.hardware.camera2.utils.TaskSingleDrainer.beginDrain(TaskSingleDrainer.java:87)
+	at android.hardware.camera2.impl.CameraCaptureSessionImpl$AbortDrainListener.onDrained(CameraCaptureSessionImpl.java:984)
+	at android.hardware.camera2.utils.TaskDrainer.lambda$postDrained$0(TaskDrainer.java:207)
+	at android.hardware.camera2.utils.TaskDrainer.$r8$lambda$Kcrc5VQzKK_jxfOB0eKztvD0N2c(Unknown Source:0)
+	at android.hardware.camera2.utils.TaskDrainer$$ExternalSyntheticLambda0.run(Unknown Source:2)
+	at android.os.Handler.handleCallback(Handler.java:958)
+	at android.os.Handler.dispatchMessage(Handler.java:99)
+	at android.os.Looper.loopOnce(Looper.java:205)
+	at android.os.Looper.loop(Looper.java:294)
+	at android.os.HandlerThread.run(HandlerThread.java:67)
+
+1795328308099     95  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795328308115     96  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795328308134     97  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795328308150     98  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795328308199     99  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795328308215    100  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795328308232    101  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795328308248    102  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795328308265    103  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795328308282    104  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795328308315    105  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795328308332    106  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795328308349    107  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795328308382    108  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795328308399    109  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795328308415    110  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795328308431    111  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795328308449    112  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795328308499    113  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795328308515    114  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795328308565    115  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795328308582    116  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795328308632    117  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795328308648    118  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795328308699    119  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795328308715    120  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795328308766    121  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795328308782    122  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795328308832    123  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795328308848    124  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795328308899    125  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795328309916    126  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795328309916    127  V CameraManagerGlobal: Failed to register device state listener!
+1795328309916    128  V CameraManagerGlobal: Device state dependent characteristics updates will not befunctional!
+1795328309917    129  I cameraprobe: CAPTURE opened id=0
+1795328309932    130  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795328309995    131  I cameraprobe: CAPTURE image w=640 h=480 fmt=35 planes=3 ts=1000000000 crc32=0x83520be7 white=(81,90,239) green=(81,90,239) red=(145,55,34) black=(145,55,34) tag=(81,81,81,81) ramp=(210,44,141) tl=(81,90,239) tr=(145,55,34) bl=(41,239,110) br=(210,16,146) ctr=(235,128,128)
+1795328309995    132  I cameraprobe: CAPTURE completed frame=0 ts=1000000000
+1795328309995    133  I cameraprobe: CAPTURE closed id=0 seq=2
+1795328309995    134  W MessageQueue: Handler (android.os.Handler) {406d98a} sending message to a Handler on a dead thread
+java.lang.IllegalStateException: Handler (android.os.Handler) {406d98a} sending message to a Handler on a dead thread
+	at android.os.MessageQueue.enqueueMessage(MessageQueue.java:560)
+	at android.os.Handler.enqueueMessage(Handler.java:786)
+	at android.os.Handler.sendMessageAtTime(Handler.java:735)
+	at android.os.Handler.sendMessageDelayed(Handler.java:705)
+	at android.os.Handler.post(Handler.java:435)
+	at android.hardware.camera2.impl.CameraDeviceImpl$CameraHandlerExecutor.execute(CameraDeviceImpl.java:2402)
+	at android.hardware.camera2.utils.TaskDrainer.postDrained(TaskDrainer.java:202)
+	at android.hardware.camera2.utils.TaskDrainer.checkIfDrainFinished(TaskDrainer.java:197)
+	at android.hardware.camera2.utils.TaskDrainer.beginDrain(TaskDrainer.java:185)
+	at android.hardware.camera2.utils.TaskSingleDrainer.beginDrain(TaskSingleDrainer.java:87)
+	at android.hardware.camera2.impl.CameraCaptureSessionImpl$AbortDrainListener.onDrained(CameraCaptureSessionImpl.java:984)
+	at android.hardware.camera2.utils.TaskDrainer.lambda$postDrained$0(TaskDrainer.java:207)
+	at android.hardware.camera2.utils.TaskDrainer.$r8$lambda$Kcrc5VQzKK_jxfOB0eKztvD0N2c(Unknown Source:0)
+	at android.hardware.camera2.utils.TaskDrainer$$ExternalSyntheticLambda0.run(Unknown Source:2)
+	at android.os.Handler.handleCallback(Handler.java:958)
+	at android.os.Handler.dispatchMessage(Handler.java:99)
+	at android.os.Looper.loopOnce(Looper.java:205)
+	at android.os.Looper.loop(Looper.java:294)
+	at android.os.HandlerThread.run(HandlerThread.java:67)
+
+1795328309999    135  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795328310016    136  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795328310032    137  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795328310048    138  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795328310098    139  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795328310115    140  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795328310132    141  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795328310182    142  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795328310198    143  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795328310249    144  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795328310265    145  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795328310315    146  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795328310332    147  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795328310382    148  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795328310398    149  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795328310448    150  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795328310465    151  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795328310515    152  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795328310532    153  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795328310582    154  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795328310598    155  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795328310648    156  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795328310665    157  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795328310715    158  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795328310732    159  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795328310765    160  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795328310782    161  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795328310799    162  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795328311582    163  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795328311583    164  V CameraManagerGlobal: Failed to register device state listener!
+1795328311583    165  V CameraManagerGlobal: Device state dependent characteristics updates will not befunctional!
+1795328311583    166  I cameraprobe: CAPTURE opened id=0
+1795328311598    167  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795328311654    168  I cameraprobe: CAPTURE image w=640 h=480 fmt=35 planes=3 ts=1000000000 crc32=0xdead8870 white=(235,128,128) green=(145,54,34) red=(81,90,240) black=(16,128,128) tag=(160,0,0,90) ramp=(127,128,128) tl=(170,166,16) tr=(41,240,110) bl=(63,128,128) br=(191,128,128) ctr=(106,202,222)
+1795328311654    169  I cameraprobe: CAPTURE completed frame=0 ts=1000000000
+1795328311655    170  I cameraprobe: CAPTURE closed id=0 seq=3
+1795328311655    171  W MessageQueue: Handler (android.os.Handler) {83681af} sending message to a Handler on a dead thread
+java.lang.IllegalStateException: Handler (android.os.Handler) {83681af} sending message to a Handler on a dead thread
+	at android.os.MessageQueue.enqueueMessage(MessageQueue.java:560)
+	at android.os.Handler.enqueueMessage(Handler.java:786)
+	at android.os.Handler.sendMessageAtTime(Handler.java:735)
+	at android.os.Handler.sendMessageDelayed(Handler.java:705)
+	at android.os.Handler.post(Handler.java:435)
+	at android.hardware.camera2.impl.CameraDeviceImpl$CameraHandlerExecutor.execute(CameraDeviceImpl.java:2402)
+	at android.hardware.camera2.utils.TaskDrainer.postDrained(TaskDrainer.java:202)
+	at android.hardware.camera2.utils.TaskDrainer.checkIfDrainFinished(TaskDrainer.java:197)
+	at android.hardware.camera2.utils.TaskDrainer.beginDrain(TaskDrainer.java:185)
+	at android.hardware.camera2.utils.TaskSingleDrainer.beginDrain(TaskSingleDrainer.java:87)
+	at android.hardware.camera2.impl.CameraCaptureSessionImpl$AbortDrainListener.onDrained(CameraCaptureSessionImpl.java:984)
+	at android.hardware.camera2.utils.TaskDrainer.lambda$postDrained$0(TaskDrainer.java:207)
+	at android.hardware.camera2.utils.TaskDrainer.$r8$lambda$Kcrc5VQzKK_jxfOB0eKztvD0N2c(Unknown Source:0)
+	at android.hardware.camera2.utils.TaskDrainer$$ExternalSyntheticLambda0.run(Unknown Source:2)
+	at android.os.Handler.handleCallback(Handler.java:958)
+	at android.os.Handler.dispatchMessage(Handler.java:99)
+	at android.os.Looper.loopOnce(Looper.java:205)
+	at android.os.Looper.loop(Looper.java:294)
+	at android.os.HandlerThread.run(HandlerThread.java:67)
+
+1795328311666    172  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795328311682    173  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795328311698    174  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795328311715    175  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795328311732    176  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795328311749    177  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795328311799    178  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795328311815    179  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795328311865    180  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795328311882    181  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795328311932    182  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795328311948    183  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795328311998    184  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795328312015    185  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795328312065    186  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795328312082    187  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795328312132    188  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795328312148    189  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795328312199    190  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795328312215    191  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795328312265    192  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795328312282    193  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795328312332    194  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795328312348    195  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795328312399    196  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795328312415    197  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795328312465    198  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.

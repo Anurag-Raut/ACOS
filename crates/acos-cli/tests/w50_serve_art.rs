@@ -295,7 +295,7 @@ fn art_agent_loop_over_the_socket() {
     let apk = repo_root().join("fixtures/build/apps/counter.apk");
     let art = repo_root().join(".cache/w50-target/release/acos-art");
     if !apk.is_file() || !art.is_file() {
-        eprintln!("SKIP: counter.apk or release acos-art missing");
+        acos_test_support::require_prereq(false, "art_agent_loop_over_the_socket", "counter.apk or release acos-art missing");
         return;
     }
     let daemon = Daemon::start("art-loop", &[]);

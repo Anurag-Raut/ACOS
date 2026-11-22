@@ -28,7 +28,7 @@ fn repo_root() -> PathBuf {
 fn run_fixture(gc_stress: bool) -> Option<String> {
     let dex_path = repo_root().join("fixtures/build/dexprogs/25_security_digest/classes.dex");
     if !dex_path.is_file() {
-        eprintln!("SKIP conscrypt_natives: fixtures/build/dexprogs/25_security_digest is absent");
+        acos_test_support::require_prereq(false, "run_fixture", "conscrypt_natives: fixtures/build/dexprogs/25_security_digest is absent");
         return None;
     }
     let bytes = std::fs::read(&dex_path).expect("read fixture dex");
@@ -40,7 +40,7 @@ fn run_fixture(gc_stress: bool) -> Option<String> {
     let mut vm = match Vm::new(options) {
         Ok(vm) => vm,
         Err(VmError::BootClasspathMissing(m)) => {
-            eprintln!("SKIP conscrypt_natives: {m}");
+            acos_test_support::require_prereq(false, "run_fixture", &format!("conscrypt_natives: {m}"));
             return None;
         }
         Err(e) => panic!("Vm::new: {e}"),

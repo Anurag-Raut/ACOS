@@ -255,11 +255,13 @@ fn evidence_dir() -> PathBuf {
 
 #[test]
 fn engine_gate() {
-    if std::env::var("ACOS_WEBVIEW_TEST").as_deref() != Ok("1") {
-        eprintln!(
-            "SKIP engine_gate: set ACOS_WEBVIEW_TEST=1 (and run under run-exclusive + guarded) \
-             to measure the ADR-0031 gate against the real engine"
-        );
+    if acos_test_support::require_prereq(
+        std::env::var("ACOS_WEBVIEW_TEST").as_deref() == Ok("1"),
+        "engine_gate",
+        "set ACOS_WEBVIEW_TEST=1 to run this heavy Chromium test (the release gate runs it with the env set; see tools/test-prereq-optouts.txt)",
+    )
+    .is_none()
+    {
         return;
     }
     let mut report = json!({"test": "engine_gate", "startedAt": unix_now()});

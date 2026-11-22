@@ -159,11 +159,7 @@ fn gles_child_worker() {
 #[test]
 fn gles_fixture_draws_a_triangle_under_confinement() {
     if !acos_test_support::have_fixture(FIXTURE_REL) {
-        eprintln!(
-            "SKIP gles_fixture_draws_a_triangle_under_confinement: {} is absent; run \
-             fixtures/jni/build.sh",
-            fixture().display()
-        );
+        acos_test_support::require_prereq(false, "gles_fixture_draws_a_triangle_under_confinement", &format!("gles_fixture_draws_a_triangle_under_confinement: {} is absent; run fixtures/jni/build.sh", fixture().display()));
         return;
     }
     let exe = std::env::current_exe().expect("test binary");

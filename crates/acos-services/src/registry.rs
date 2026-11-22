@@ -418,6 +418,9 @@ pub fn install_with_handles_and_insets(
     // that app's activity and read the result it answered (the same state the
     // peer thread serves).
     host.set_atms(Arc::clone(&atms));
+    // MULTIWIN3 (ADR-0029, 2026-11-18 amendment): publish the live WMS state so
+    // windowing modules mutate the same state that relayout replies read.
+    host.set_wms(Arc::clone(&wms_state));
     let display =
         Arc::new(Mutex::new(crate::display::DisplayState::new(
             crate::display::DisplayInfo::hello_views_with(insets.unwrap_or_else(|| {

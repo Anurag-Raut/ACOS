@@ -437,6 +437,7 @@ public final class LaunchMain {
         int looper = Nat.startBinderLooper();
         if (looper != 1) throw new IllegalStateException("startBinderLooper -> " + looper);
         System.out.println("ACOSLAUNCH MARK binder-looper started");
+        registerCameraFrameSink();
 
         Class<?> at = Class.forName("android.app.ActivityThread");
         Constructor<?> ctor = at.getDeclaredConstructor();
@@ -1791,6 +1792,271 @@ public final class LaunchMain {
         }
     }
 
+    /**
+     * Find {@code ActivityThread.handleActivityConfigurationChanged} taking an
+     * {@code ActivityClientRecord}, preferring the public overload without the
+     * trailing {@code boolean alwaysReportChange} (which delegates with
+     * {@code alwaysReportChange = true}).
+     */
+    static java.lang.reflect.Method findHandleActivityConfigChanged(Class<?> at) {
+        java.lang.reflect.Method fallback = null;
+        for (java.lang.reflect.Method m : at.getDeclaredMethods()) {
+            if (!m.getName().equals("handleActivityConfigurationChanged")) continue;
+            Class<?>[] params = m.getParameterTypes();
+            boolean hasRecord = false;
+            boolean hasBool = false;
+            for (Class<?> p : params) {
+                if (p.getName().equals("android.app.ActivityThread$ActivityClientRecord")) {
+                    hasRecord = true;
+                } else if (p == boolean.class) {
+                    hasBool = true;
+                }
+            }
+            if (!hasRecord) continue;
+            if (!hasBool) return m;
+            fallback = m;
+        }
+        return fallback;
+    }
+
+    /**
+     * MULTIWIN3: force one relayout on the resumed Activity's decor so
+     * {@code ViewRootImpl.performTraversals} fetches the new task frame from the
+     * host WMS, then wake the probe *after* the frame traversal finishes so the
+     * first sample returned to the control caller carries the settled bounds.
+     */
+    static void finishWindow(final int windowingMode, final boolean relaunch,
+            final String rung, final int handled,
+            final int l, final int t, final int r, final int b) {
+        Object activity = null;
+        try {
+            Object thread = sThread;
+            activity = thread == null ? null : resumedActivity(thread);
+            if (activity != null) {
+                Object window = activity.getClass().getMethod("getWindow").invoke(activity);
+                Object decor = window.getClass().getMethod("getDecorView").invoke(window);
+                if (decor instanceof View) {
+                    Object vr = null;
+                    try {
+                        vr = decor.getClass().getMethod("getViewRootImpl").invoke(decor);
+                    } catch (Throwable ignored) {
+                    }
+                    if (vr != null) {
+                        setFieldForce(vr.getClass(), vr, "mForceNextWindowRelayout", Boolean.TRUE);
+                    }
+                    ((View) decor).requestLayout();
+                }
+            }
+        } catch (Throwable err) {
+            System.out.println("ACOSLAUNCH MARK window-relayout-failed " + unwrap(err));
+        }
+        final Object fActivity = activity;
+        final Runnable wakeProbe = new Runnable() {
+            @Override
+            public void run() {
+                sDirtyAtMs = 0;
+                sTreeDirty.set(true);
+                synchronized (sProbeWake) {
+                    sProbeRequested = true;
+                    sProbeWake.notifyAll();
+                }
+                System.out.println("ACOSLAUNCH MARK window mode=" + windowingMode
+                        + " bounds=[" + l + "," + t + "," + r + "," + b + "]"
+                        + " relaunch=" + relaunch + " via=" + rung
+                        + " handled=0x" + Integer.toHexString(handled)
+                        + " activity=" + (fActivity == null ? "<none>" : fActivity.getClass().getName()));
+                System.out.flush();
+            }
+        };
+        final android.os.Handler main = new android.os.Handler(Looper.getMainLooper());
+        try {
+            // Post inside Choreographer's frame callback, then hop to main so
+            // CALLBACK_TRAVERSAL (performTraversals -> relayoutWindow -> layout)
+            // completes before the probe walks the view tree.
+            android.view.Choreographer.getInstance().postFrameCallback(
+                    new android.view.Choreographer.FrameCallback() {
+                        @Override
+                        public void doFrame(long frameTimeNanos) {
+                            main.post(wakeProbe);
+                        }
+                    });
+        } catch (Throwable ignored) {
+            main.post(wakeProbe);
+        }
+    }
+
+    /**
+     * MULTIWIN3 (slice 1): deliver a host-owned task-bounds / windowing-mode
+     * transition ({@code WINDOW mode l t r b al at ar ab}) through the activity's
+     * override {@link Configuration} (never the process configuration and never
+     * recomputing split geometry guest-side).
+     */
+    static void applyWindow(final int windowingMode,
+            final int l, final int t, final int r, final int b,
+            final int al, final int atPx, final int ar, final int ab) {
+        final int mwBits = android.content.pm.ActivityInfo.CONFIG_SCREEN_SIZE;
+        try {
+            Object thread = sThread;
+            if (thread == null) throw new IllegalStateException("no ActivityThread");
+            Object activities = get(thread, "mActivities");
+            IBinder token = sCurrentToken;
+            Object record = null;
+            if (activities instanceof java.util.Map && token != null) {
+                record = ((java.util.Map<?, ?>) activities).get(token);
+            }
+            if (record == null && activities instanceof java.util.Map) {
+                Object resumed = resumedActivity(thread);
+                if (resumed != null) {
+                    Object mToken = get(resumed, "mToken");
+                    if (mToken instanceof IBinder) {
+                        token = (IBinder) mToken;
+                        record = ((java.util.Map<?, ?>) activities).get(token);
+                    }
+                }
+            }
+            if (record == null) {
+                throw new IllegalStateException("no ActivityClientRecord for token");
+            }
+
+            // Use the activity's real display density to convert the host's
+            // appBounds px to dp (AOSP TaskFragment.java:2360); never recompute
+            // the task rectangle guest-side.
+            float density = 2.625f;
+            try {
+                Object act = get(record, "activity");
+                if (act != null) {
+                    android.content.res.Resources res =
+                            (android.content.res.Resources) act.getClass()
+                                    .getMethod("getResources").invoke(act);
+                    if (res != null && res.getDisplayMetrics() != null
+                            && res.getDisplayMetrics().density > 0f) {
+                        density = res.getDisplayMetrics().density;
+                    }
+                }
+            } catch (Throwable ignored) {
+            }
+            int widthDp = Math.max(1, (int) ((ar - al) / density + 0.5f));
+            int heightDp = Math.max(1, (int) ((ab - atPx) / density + 0.5f));
+
+            // Activity override Configuration ONLY: leave smallestScreenWidthDp,
+            // screenLayout, orientation, and densityDpi undefined so they inherit
+            // display-level values from the global process Configuration, and keep
+            // seq = 0 so Configuration.isOtherSeqNewer accepts consecutive updates.
+            Configuration overrideConfig = new Configuration();
+            try {
+                setFieldForce(Configuration.class, overrideConfig, "seq", 0);
+            } catch (Throwable ignored) {
+            }
+            overrideConfig.screenWidthDp = widthDp;
+            overrideConfig.screenHeightDp = heightDp;
+            Object wc = get(overrideConfig, "windowConfiguration");
+            if (wc != null) {
+                android.graphics.Rect bounds = new android.graphics.Rect(l, t, r, b);
+                android.graphics.Rect appBounds = new android.graphics.Rect(al, atPx, ar, ab);
+                android.graphics.Rect maxBounds = new android.graphics.Rect(0, 0, PANEL_W, PANEL_H);
+                wc.getClass().getMethod("setBounds", android.graphics.Rect.class)
+                        .invoke(wc, bounds);
+                wc.getClass().getMethod("setAppBounds", android.graphics.Rect.class)
+                        .invoke(wc, appBounds);
+                wc.getClass().getMethod("setMaxBounds", android.graphics.Rect.class)
+                        .invoke(wc, maxBounds);
+                wc.getClass().getMethod("setWindowingMode", int.class)
+                        .invoke(wc, windowingMode);
+            }
+
+            Object ai = get(record, "activityInfo");
+            int handled = 0;
+            if (ai != null) {
+                try {
+                    java.lang.reflect.Method g = ai.getClass().getMethod("getRealConfigChanged");
+                    handled = (Integer) g.invoke(ai);
+                } catch (Throwable err) {
+                    System.out.println("ACOSLAUNCH MARK window-getRealConfigChanged-failed "
+                            + unwrap(err));
+                }
+            }
+            boolean relaunch = (handled & mwBits) != mwBits;
+            String rung;
+            Class<?> atCls = Class.forName("android.app.ActivityThread");
+            Object windowInfo = newWindowInfo();
+            if (relaunch) {
+                Configuration globalCfg = null;
+                try {
+                    Object cc = get(thread, "mConfigurationController");
+                    if (cc != null) {
+                        globalCfg = (Configuration) cc.getClass()
+                                .getMethod("getConfiguration").invoke(cc);
+                    }
+                } catch (Throwable ignored) {
+                }
+                if (globalCfg == null) globalCfg = displayConfiguration();
+                Class<?> merged = Class.forName("android.util.MergedConfiguration");
+                java.lang.reflect.Constructor<?> mergedCtor =
+                        merged.getConstructor(Configuration.class, Configuration.class);
+                mergedCtor.setAccessible(true);
+                Object mergedConfig = mergedCtor.newInstance(globalCfg, overrideConfig);
+                Class<?> ctxCls =
+                        Class.forName("android.app.servertransaction.ClientTransaction");
+                Class<?> iatCls = Class.forName("android.app.IApplicationThread");
+                Class<?> relaunchCls =
+                        Class.forName("android.app.servertransaction.ActivityRelaunchItem");
+                Class<?> resumeCls =
+                        Class.forName("android.app.servertransaction.ResumeActivityItem");
+                Object tx = ctxCls.getMethod("obtain", iatCls, IBinder.class)
+                        .invoke(null, sClient, token);
+                int prevBits = rotationBitsStatic;
+                rotationBitsStatic = mwBits;
+                Object item;
+                try {
+                    item = obtainRelaunchItem(relaunchCls, token, mergedConfig, windowInfo);
+                } finally {
+                    rotationBitsStatic = prevBits;
+                }
+                Object resumeItem = obtainResume(resumeCls);
+                java.util.ArrayList<Object> callbacks = new java.util.ArrayList<Object>();
+                callbacks.add(item);
+                setPrivateField(ctxCls, tx, "mActivityCallbacks", callbacks);
+                setPrivateField(ctxCls, tx, "mLifecycleStateRequest", resumeItem);
+                setPrivateFieldIfPresent(ctxCls, tx, "mTransactionItems", callbacks);
+                scheduleLocal(tx);
+                rung = "ActivityRelaunchItem(ClientTransaction)";
+            } else {
+                java.lang.reflect.Method hac = findHandleActivityConfigChanged(atCls);
+                if (hac == null) {
+                    throw new IllegalStateException(
+                            "ActivityThread.handleActivityConfigurationChanged is absent from "
+                                    + "this image");
+                }
+                hac.setAccessible(true);
+                Object[] args = relaunchArgs(hac, record, overrideConfig, windowInfo);
+                // If only the 5-arg overload exists, pass alwaysReportChange = true.
+                Class<?>[] params = hac.getParameterTypes();
+                for (int i = 0; i < params.length; i++) {
+                    if (params[i] == boolean.class) {
+                        args[i] = Boolean.TRUE;
+                    }
+                }
+                hac.invoke(thread, args);
+                rung = "handleActivityConfigurationChanged";
+            }
+
+            final boolean fRelaunch = relaunch;
+            final String fRung = rung;
+            final int fHandled = handled;
+            new android.os.Handler(Looper.getMainLooper()).post(new Runnable() {
+                @Override
+                public void run() {
+                    finishWindow(windowingMode, fRelaunch, fRung, fHandled, l, t, r, b);
+                }
+            });
+        } catch (Throwable err) {
+            System.out.println("ACOSLAUNCH MARK window-failed mode=" + windowingMode
+                    + " " + unwrap(err));
+            err.printStackTrace(System.out);
+            System.out.flush();
+        }
+    }
+
     static void startLiveProbe(final Object activity) {
         final android.os.Handler main = new android.os.Handler(Looper.getMainLooper());
         final java.util.concurrent.atomic.AtomicBoolean pending =
@@ -1854,6 +2120,38 @@ public final class LaunchMain {
                                 @Override
                                 public void run() {
                                     applyRotation(want);
+                                }
+                            });
+                        } else if (word.toUpperCase().startsWith("WINDOW ")) {
+                            // MULTIWIN3: host-owned task bounds + windowing mode
+                            // (`WINDOW mode l t r b al at ar ab`). Must run on the
+                            // main looper.
+                            String[] parts = word.split("\\s+");
+                            if (parts.length != 10) {
+                                System.out.println("ACOSLAUNCH MARK window-bad-arg line=" + word);
+                                System.out.flush();
+                                continue;
+                            }
+                            final int mode, l, t, r, b, al, atPx, ar, ab;
+                            try {
+                                mode = Integer.parseInt(parts[1]);
+                                l = Integer.parseInt(parts[2]);
+                                t = Integer.parseInt(parts[3]);
+                                r = Integer.parseInt(parts[4]);
+                                b = Integer.parseInt(parts[5]);
+                                al = Integer.parseInt(parts[6]);
+                                atPx = Integer.parseInt(parts[7]);
+                                ar = Integer.parseInt(parts[8]);
+                                ab = Integer.parseInt(parts[9]);
+                            } catch (Throwable bad) {
+                                System.out.println("ACOSLAUNCH MARK window-bad-arg line=" + word);
+                                System.out.flush();
+                                continue;
+                            }
+                            main.post(new Runnable() {
+                                @Override
+                                public void run() {
+                                    applyWindow(mode, l, t, r, b, al, atPx, ar, ab);
                                 }
                             });
                         }
@@ -2872,6 +3170,14 @@ public final class LaunchMain {
                 // and the tree simply carries no virtual children this sample.
                 android.util.Log.w("ACOSVIEW", "WebView virtual nodes failed: " + t);
             }
+            if (virtual == null || virtual.isEmpty()) {
+                // GATENWORD: a provider that does not implement the text search
+                // (Jetpack Compose's `AndroidComposeView` provider only serves
+                // `createAccessibilityNodeInfo` + child ids) is enumerated the way
+                // the framework's own accessibility traversal does: the host node's
+                // child ids, depth first.
+                virtual = enumerateProviderTree(provider);
+            }
             if (virtual != null) {
                 for (AccessibilityNodeInfo info : virtual) {
                     if (budget[0] <= 0) {
@@ -2892,6 +3198,49 @@ public final class LaunchMain {
             out.append(",\"children\":[").append(kids).append(']');
         }
         out.append('}');
+    }
+
+    /**
+     * GATENWORD: every virtual descendant of a View's `AccessibilityNodeProvider`
+     * by the standard traversal (host `createAccessibilityNodeInfo(HOST_VIEW_ID)`,
+     * then each child id's node), depth first, bounded. This is what the framework's
+     * `AccessibilityInteractionController` and UiAutomator walk; Compose exposes its
+     * whole semantics tree this way and nothing else.
+     */
+    static java.util.List<AccessibilityNodeInfo> enumerateProviderTree(
+            AccessibilityNodeProvider provider) {
+        java.util.ArrayList<AccessibilityNodeInfo> out = new java.util.ArrayList<>();
+        try {
+            java.lang.reflect.Method childId =
+                    AccessibilityNodeInfo.class.getMethod("getChildId", int.class);
+            java.lang.reflect.Method childCount =
+                    AccessibilityNodeInfo.class.getMethod("getChildCount");
+            AccessibilityNodeInfo host =
+                    provider.createAccessibilityNodeInfo(AccessibilityNodeProvider.HOST_VIEW_ID);
+            if (host == null) return out;
+            java.util.ArrayDeque<AccessibilityNodeInfo> stack = new java.util.ArrayDeque<>();
+            stack.push(host);
+            java.util.HashSet<Integer> seen = new java.util.HashSet<>();
+            while (!stack.isEmpty() && out.size() < 4000) {
+                AccessibilityNodeInfo cur = stack.pop();
+                int n = (Integer) childCount.invoke(cur);
+                // push in reverse so the first child pops first (document order)
+                java.util.ArrayList<AccessibilityNodeInfo> kids = new java.util.ArrayList<>();
+                for (int i = 0; i < n; i++) {
+                    long id = (Long) childId.invoke(cur, i);
+                    int vid = (int) ((id & 0xffffffff00000000L) >> 32);
+                    if (vid == AccessibilityNodeProvider.HOST_VIEW_ID || !seen.add(vid)) continue;
+                    AccessibilityNodeInfo k = provider.createAccessibilityNodeInfo(vid);
+                    if (k != null) kids.add(k);
+                }
+                for (int i = kids.size() - 1; i >= 0; i--) stack.push(kids.get(i));
+                if (cur != host) out.add(cur);
+                // keep emitting in pre-order: children are popped next
+            }
+        } catch (Throwable t) {
+            android.util.Log.w("ACOSVIEW", "provider tree walk failed: " + t);
+        }
+        return out;
     }
 
     /**
@@ -4069,6 +4418,7 @@ public final class LaunchMain {
                 // `Surface` natives were never registered either, so registering
                 // `SurfaceControl` alone is not enough (W4).
                 "register_android_view_Surface",
+                "register_android_graphics_BLASTBufferQueue",
                 // `ViewRootImpl.<init>` (line 724 on API 34) constructs a
                 // `SurfaceSession`, whose Java constructor calls
                 // `nativeCreate()` immediately.
@@ -4177,6 +4527,13 @@ public final class LaunchMain {
                 // with no broker is the honest ENOENT/ECONNREFUSED, never a
                 // fabricated transport.
                 "register_android_net_LocalSocketImpl",
+                // CAMERA2/3: `CameraManagerGlobal.connectCameraServiceLocked()` calls
+                // `CameraMetadataNative.setupGlobalVendorTagDescriptor()`,
+                // `getCameraCharacteristics` unparcels `CameraMetadataNative` via
+                // `libcamera_client.so` + `libcamera_metadata.so`, and
+                // `OutputConfiguration(Surface)` calls `SurfaceUtils.getSurface*`.
+                "register_android_hardware_camera2_CameraMetadata",
+                "register_android_hardware_camera2_utils_SurfaceUtils",
         };
         String[] graphics = {"register_android_graphics_classes"};
         StringBuilder missing = new StringBuilder();
@@ -5807,5 +6164,121 @@ public final class LaunchMain {
             return;
         }
         Nat.crashTest(mode.equals("abort") ? 1 : 0);
+    }
+
+    /**
+     * CAMERA3 Option A: guest-side frame-sink binder registered once per app
+     * process under {@code acos.camera.frame_sink}. The host {@code hw.camera}
+     * Session Controller drives stream registration, frame delivery, and stream
+     * teardown over ordered oneway deliveries while pixels are written directly
+     * into the app's own local {@code Surface} ({@code ANativeWindow}).
+     */
+    private static final String CAMERA_SINK_SERVICE = "acos.camera.frame_sink";
+    private static final String CAMERA_SINK_DESCRIPTOR = "dev.acos.camera.ICameraFrameSink";
+    private static final int CAMERA_SINK_OP_REGISTER = 1;
+    private static final int CAMERA_SINK_OP_DELIVER = 2;
+    private static final int CAMERA_SINK_OP_RELEASE = 3;
+    private static final int CAMERA_SINK_OP_DELIVER_FD = 4;
+    private static android.os.Binder sCameraFrameSink;
+    private static final java.util.HashMap<Integer, android.view.Surface> sCameraSinkSurfaces =
+            new java.util.HashMap<Integer, android.view.Surface>();
+
+    static void registerCameraFrameSink() {
+        try {
+            sCameraFrameSink = new android.os.Binder() {
+                @Override
+                protected boolean onTransact(int code, Parcel data, Parcel reply, int flags)
+                        throws android.os.RemoteException {
+                    if (code == CAMERA_SINK_OP_REGISTER) {
+                        data.enforceInterface(CAMERA_SINK_DESCRIPTOR);
+                        int streamId = data.readInt();
+                        android.view.Surface surface =
+                                android.view.Surface.CREATOR.createFromParcel(data);
+                        int width = data.readInt();
+                        int height = data.readInt();
+                        int rc = RenderNat.cameraSinkRegister(streamId, surface, width, height);
+                        if (rc != 0) {
+                            System.out.println("ACOSLAUNCH WARN camera-sink register stream="
+                                    + streamId + " rc=" + rc);
+                        }
+                        if (surface != null) {
+                            synchronized (sCameraSinkSurfaces) {
+                                android.view.Surface prev =
+                                        sCameraSinkSurfaces.put(streamId, surface);
+                                if (prev != null) prev.release();
+                            }
+                        }
+                        return true;
+                    }
+                    if (code == CAMERA_SINK_OP_DELIVER) {
+                        data.enforceInterface(CAMERA_SINK_DESCRIPTOR);
+                        int streamId = data.readInt();
+                        int width = data.readInt();
+                        int height = data.readInt();
+                        long frameNumber = data.readLong();
+                        long timestampNs = data.readLong();
+                        int patternId = data.readInt();
+                        int rc = RenderNat.cameraSinkDeliver(
+                                streamId, width, height, frameNumber, timestampNs, patternId);
+                        if (rc != 0) {
+                            System.out.println("ACOSLAUNCH WARN camera-sink deliver stream="
+                                    + streamId + " frame=" + frameNumber + " rc=" + rc);
+                        }
+                        return true;
+                    }
+                    if (code == CAMERA_SINK_OP_DELIVER_FD) {
+                        data.enforceInterface(CAMERA_SINK_DESCRIPTOR);
+                        int streamId = data.readInt();
+                        int width = data.readInt();
+                        int height = data.readInt();
+                        long frameNumber = data.readLong();
+                        long timestampNs = data.readLong();
+                        int patternId = data.readInt();
+                        android.os.ParcelFileDescriptor pfd = data.readFileDescriptor();
+                        int rc = -1;
+                        try {
+                            int fd = pfd != null ? pfd.getFd() : -1;
+                            rc = RenderNat.cameraSinkDeliverFd(
+                                    streamId, width, height, frameNumber, timestampNs, patternId, fd);
+                        } finally {
+                            if (pfd != null) {
+                                try {
+                                    pfd.close();
+                                } catch (Throwable ignored) {
+                                }
+                            }
+                        }
+                        if (rc != 0) {
+                            System.out.println("ACOSLAUNCH WARN camera-sink deliverFd stream="
+                                    + streamId + " frame=" + frameNumber + " rc=" + rc);
+                        }
+                        return true;
+                    }
+                    if (code == CAMERA_SINK_OP_RELEASE) {
+                        data.enforceInterface(CAMERA_SINK_DESCRIPTOR);
+                        int streamId = data.readInt();
+                        RenderNat.cameraSinkRelease(streamId);
+                        synchronized (sCameraSinkSurfaces) {
+                            if (streamId < 0) {
+                                for (android.view.Surface s : sCameraSinkSurfaces.values()) {
+                                    if (s != null) s.release();
+                                }
+                                sCameraSinkSurfaces.clear();
+                            } else {
+                                android.view.Surface s = sCameraSinkSurfaces.remove(streamId);
+                                if (s != null) s.release();
+                            }
+                        }
+                        return true;
+                    }
+                    return super.onTransact(code, data, reply, flags);
+                }
+            };
+            Class<?> sm = Class.forName("android.os.ServiceManager");
+            Method add = sm.getMethod("addService", String.class, IBinder.class);
+            add.invoke(null, CAMERA_SINK_SERVICE, sCameraFrameSink);
+        } catch (Throwable t) {
+            System.out.println("ACOSLAUNCH WARN camera-sink register failed: " + t);
+        }
     }
 }

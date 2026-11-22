@@ -1,0 +1,58 @@
+================ scenarios/multiwindow-split.yaml ================
+verify: pass (ok=true, backend=acos-native, fidelity=art-reference)
+  engine: art (mode: live)
+  services: core:real, multiwindow:real attached; off: accessibility, system.permissions, system.notifications, sensors, feedback.vibrator, location, net.telephony, hw.bluetooth, hw.biometric, network, webview, net.wifi, media.session, hw.usb, system.dropbox, hw.nfc, system.wallpaper, system.print, system.search, system.usage, system.dpm, system.role, geo.country
+  provenance: scenario /home/Qui/.t3/worktrees/acos/t3-f030e0d3-971dd57c22a3665c/scenarios/multiwindow-split.yaml (sha 82b4c5c17e3c), apk /home/Qui/.t3/worktrees/acos/t3-f030e0d3-971dd57c22a3665c/fixtures/build/apps/two-activity.apk (sha 96b8dd6bdebf), engine art, fidelity art-reference
+  artifacts: .cache/mw-suite/multiwindow-split
+  steps: 17
+EXIT=0 (scenarios/multiwindow-split.yaml)
+================ scenarios/negative/multiwindow-split-wrong.yaml ================
+verify: fail (ok=false, backend=acos-native, fidelity=art-reference)
+  engine: art (mode: live)
+  services: core:real, multiwindow:real attached; off: accessibility, system.permissions, system.notifications, sensors, feedback.vibrator, location, net.telephony, hw.bluetooth, hw.biometric, network, webview, net.wifi, media.session, hw.usb, system.dropbox, hw.nfc, system.wallpaper, system.print, system.search, system.usage, system.dpm, system.role, geo.country
+  provenance: scenario /home/Qui/.t3/worktrees/acos/t3-f030e0d3-971dd57c22a3665c/scenarios/negative/multiwindow-split-wrong.yaml (sha a3cd4041dba7), apk /home/Qui/.t3/worktrees/acos/t3-f030e0d3-971dd57c22a3665c/fixtures/build/apps/two-activity.apk (sha 96b8dd6bdebf), engine art, fidelity art-reference
+  error: ASSERTION_FAILED: expected bounds [42,612][1038,2295], got [42,612][1038,1158]
+  artifacts: .cache/mw-suite/multiwindow-split-wrong
+  steps: 5
+verify: ASSERTION_FAILED (assertion): expected bounds [42,612][1038,2295], got [42,612][1038,1158] [class=assertion, retryable=false]
+EXIT=1 (scenarios/negative/multiwindow-split-wrong.yaml)
+================ scenarios/w15-two-activity.yaml ================
+verify: pass (ok=true, backend=acos-native, fidelity=art-reference)
+  engine: art (mode: live)
+  services: core:real attached; off: accessibility, system.permissions, system.notifications, sensors, feedback.vibrator, location, net.telephony, hw.bluetooth, hw.biometric, network, webview, net.wifi, media.session, multiwindow, hw.usb, system.dropbox, hw.nfc, system.wallpaper, system.print, system.search, system.usage, system.dpm, system.role, geo.country
+  provenance: scenario /home/Qui/.t3/worktrees/acos/t3-f030e0d3-971dd57c22a3665c/scenarios/w15-two-activity.yaml (sha e030c28b3651), apk /home/Qui/.t3/worktrees/acos/t3-f030e0d3-971dd57c22a3665c/fixtures/build/apps/two-activity.apk (sha 96b8dd6bdebf), engine art, fidelity art-reference, warnings: 1 [SCENARIO_ENGINE_MISMATCH]
+  artifacts: .cache/mw-suite/w15-two-activity
+  steps: 3
+EXIT=0 (scenarios/w15-two-activity.yaml)
+================ scenarios/back-layers.yaml ================
+verify: pass (ok=true, backend=acos-native, fidelity=art-reference)
+  engine: art (mode: live)
+  services: core:real attached; off: accessibility, system.permissions, system.notifications, sensors, feedback.vibrator, location, net.telephony, hw.bluetooth, hw.biometric, network, webview, net.wifi, media.session, multiwindow, hw.usb, system.dropbox, hw.nfc, system.wallpaper, system.print, system.search, system.usage, system.dpm, system.role, geo.country
+  provenance: scenario /home/Qui/.t3/worktrees/acos/t3-f030e0d3-971dd57c22a3665c/scenarios/back-layers.yaml (sha 6b9ddd57c7fa), apk /home/Qui/.t3/worktrees/acos/t3-f030e0d3-971dd57c22a3665c/fixtures/build/apps/back-layers.apk (sha 96d61b8ec176), engine art, fidelity art-reference, warnings: 1 [SCENARIO_ENGINE_MISMATCH]
+  artifacts: .cache/mw-suite/back-layers
+  steps: 22
+EXIT=0 (scenarios/back-layers.yaml)
+================ scenarios/mproc3-two-process.yaml ================
+verify: pass (ok=true, backend=acos-native, fidelity=art-reference)
+  engine: art (mode: live)
+  services: core:real attached; off: accessibility, system.permissions, system.notifications, sensors, feedback.vibrator, location, net.telephony, hw.bluetooth, hw.biometric, network, webview, net.wifi, media.session, multiwindow, hw.usb, system.dropbox, hw.nfc, system.wallpaper, system.print, system.search, system.usage, system.dpm, system.role, geo.country
+  provenance: scenario /home/Qui/.t3/worktrees/acos/t3-f030e0d3-971dd57c22a3665c/scenarios/mproc3-two-process.yaml (sha 220f34970074), apk /home/Qui/.t3/worktrees/acos/t3-f030e0d3-971dd57c22a3665c/fixtures/build/apps/proc-a.apk (sha 9ea0d64f4990), engine art, fidelity art-reference
+  artifacts: .cache/mw-suite/mproc3-two-process
+  steps: 17
+EXIT=0 (scenarios/mproc3-two-process.yaml)
+================ scenarios/sysui1-shade.yaml ================
+verify: pass (ok=true, backend=acos-native, fidelity=art-reference)
+  engine: art (mode: live)
+  services: core:real, system.permissions:real, system.notifications:real attached; off: accessibility, sensors, feedback.vibrator, location, net.telephony, hw.bluetooth, hw.biometric, network, webview, net.wifi, media.session, multiwindow, hw.usb, system.dropbox, hw.nfc, system.wallpaper, system.print, system.search, system.usage, system.dpm, system.role, geo.country
+  provenance: scenario /home/Qui/.t3/worktrees/acos/t3-f030e0d3-971dd57c22a3665c/scenarios/sysui1-shade.yaml (sha 9dd515f66143), apk /home/Qui/.t3/worktrees/acos/t3-f030e0d3-971dd57c22a3665c/fixtures/build/apps/notif-perm-probe.apk (sha 2fbdf1131558), engine art, fidelity art-reference
+  artifacts: .cache/mw-suite/sysui1-shade
+  steps: 12
+EXIT=0 (scenarios/sysui1-shade.yaml)
+================ scenarios/rot1-rotate.yaml ================
+verify: pass (ok=true, backend=acos-native, fidelity=art-reference)
+  engine: art (mode: live)
+  services: core:real attached; off: accessibility, system.permissions, system.notifications, sensors, feedback.vibrator, location, net.telephony, hw.bluetooth, hw.biometric, network, webview, net.wifi, media.session, multiwindow, hw.usb, system.dropbox, hw.nfc, system.wallpaper, system.print, system.search, system.usage, system.dpm, system.role, geo.country
+  provenance: scenario /home/Qui/.t3/worktrees/acos/t3-f030e0d3-971dd57c22a3665c/scenarios/rot1-rotate.yaml (sha 659d5e7ba784), apk /home/Qui/Projects/acos/fixtures/build/apps/counter.apk (sha 8170835e70f2), engine art, fidelity art-reference, warnings: 1 [SCENARIO_ENGINE_MISMATCH]
+  artifacts: .cache/mw-suite/rot1-rotate
+  steps: 18
+EXIT=0 (scenarios/rot1-rotate.yaml)

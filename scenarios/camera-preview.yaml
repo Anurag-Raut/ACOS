@@ -1,0 +1,101 @@
+# CAMERA4 (Slice 3) SurfaceView preview proof on real ART.
+#
+# Opens camera "0", configures a 640x480 SurfaceView output surface, streams a
+# repeating TEMPLATE_PREVIEW request for 5 frames, verifies strictly increasing
+# frame numbers and timestamps, and uses host-observed `assert_region` on the
+# composited SurfaceView screenshot to verify the 8-bar ACOS_PATTERN_COLORBARS_V1
+# pixels (exact SHA-256 + 8 distinct colors + individual bar hashes).
+version: 1
+name: camera-preview
+description: >-
+  hw.camera Slice 3 SurfaceView preview on ART: streams a repeating
+  TEMPLATE_PREVIEW request into a 640x480 SurfaceView, verifies 5 completed
+  frames with strictly increasing frame numbers and timestamps, and asserts the
+  composited SurfaceView screenshot renders ACOS_PATTERN_COLORBARS_V1.
+app: fixtures/build/apps/camera-probe.apk
+api_level: 34
+isolation: process
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+capabilities:
+  - ui.offscreen
+  - ui.text
+  - ui.screenshot
+  - input
+services:
+  - id: system.permissions
+    profile: real
+  - id: hw.camera
+    profile: stub
+expectation: pass
+budgets:
+  memory_mib: 640
+  wall_ms: 180000
+steps:
+  - launch:
+      activity: dev.acos.fixtures.cameraprobe/.MainActivity
+      clear_state: true
+  - wait_for:
+      selector: {text: {contains: "READY mgr=present feat_cam=true feat_any=true"}}
+      timeout_ms: 20000
+
+  - service_ctl:
+      module: system.permissions
+      op: grant
+      args: {permission: "android.permission.CAMERA"}
+      expect:
+        ok: true
+
+  - tap:
+      selector: {text: {exact: "Preview"}}
+  - wait_for:
+      selector: {text: {contains: "PREVIEW closed id=0 seq=1"}}
+      timeout_ms: 30000
+  - assert_text:
+      selector: {id: status}
+      text: {contains: "PREVIEW ok count=5 frames=[0, 1, 2, 3, 4] frames_inc=true ts_inc=true"}
+
+  # Host-observed screenshot verification of the composited SurfaceView BLAST layer:
+  # All 8 color bars at y=420..620 (24..664, height 200) -> 8 distinct colors + exact SHA-256.
+  - assert_region:
+      x: 24
+      y: 420
+      w: 640
+      h: 200
+      min_distinct_colors: 8
+      hash: "dff30b3c69f4a4b025899642ddc11f9e7bc0d919f2c77cad8676fe531b615526"
+
+  # Sample individual bar patches: White (255,255,255), Green (0,255,0), Red (255,0,0).
+  - assert_region:
+      x: 40
+      y: 420
+      w: 40
+      h: 40
+      hash: "e202c0cf84a7cd41ca821495e47ca8ebdc68b32b8c6f4ea1724e6b64fcda46c2"
+  - assert_region:
+      x: 280
+      y: 420
+      w: 40
+      h: 40
+      hash: "b3fd49b07c4a70f28f309cb5185c5d57bba95d7d6df5e71e2099520d26143158"
+  - assert_region:
+      x: 440
+      y: 420
+      w: 40
+      h: 40
+      hash: "3efc49dcdedd05fc035960e947a03d4fad1b7904eeb5389b37ed72767cf55f60"
+
+  - service_ctl:
+      module: hw.camera
+      op: status
+      expect:
+        ok: true
+        op: status
+        value:
+          calls:
+            open_devices: 0
+            devices_opened: 1
+            streams_created: 1

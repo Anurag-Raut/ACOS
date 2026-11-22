@@ -189,8 +189,7 @@ fn timestamp_shape(ts: &str) -> bool {
 
 #[test]
 fn core_os_natives_on_the_real_framework() {
-    let Some(dex) = compile_case("OsNativesMain") else {
-        eprintln!("SKIP core_os_natives_on_the_real_framework: javac/d8/android.jar unavailable");
+    let Some(dex) = acos_test_support::require_some(compile_case("OsNativesMain"), "core_os_natives_on_the_real_framework", "javac/d8/android.jar unavailable") else {
         return;
     };
     let options = VmOptions {
@@ -200,7 +199,7 @@ fn core_os_natives_on_the_real_framework() {
     let mut vm = match Vm::new(options) {
         Ok(vm) => vm,
         Err(VmError::BootClasspathMissing(m)) => {
-            eprintln!("SKIP core_os_natives_on_the_real_framework: {m}");
+            acos_test_support::require_prereq(false, "core_os_natives_on_the_real_framework", &format!("core_os_natives_on_the_real_framework: {m}"));
             return;
         }
         Err(e) => panic!("Vm::new failed: {e}"),
@@ -333,8 +332,7 @@ fn core_os_natives_on_the_real_framework() {
     assert_eq!(info.priority, os_log::PRIORITY_INFO);
     assert_eq!(info.pid, std::process::id());
     let line = os_log::threadtime_line(info);
-    let Some(reference_file) = reference_logcat() else {
-        eprintln!("SKIP logcat comparison: reference capture missing");
+    let Some(reference_file) = acos_test_support::require_some(reference_logcat(), "core_os_natives_on_the_real_framework", "logcat comparison: reference capture missing") else {
         return;
     };
     let reference = reference_file

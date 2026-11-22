@@ -492,6 +492,11 @@ fn check_install(home: &Path) -> Vec<Check> {
             "Reinstall with tools/release/install.sh, or set ACOS_ART_BIN.",
         ));
     }
+    // ADR-0031: `webview: real` needs both the sibling `acos-webview` broker
+    // binary (`acos-art` resolves it next to `current_exe()`) and the staged
+    // `com.android.webview` provider APK. Optional (`webview` defaults to `off`),
+    // so a missing piece is a `warn`, not a `fail`.
+    out.push(check_install_webview(home));
     // Mutable state: created on demand, but it must be writable, never the repo.
     let state = home.join(".cache");
     match std::fs::create_dir_all(state.join("art/data")) {
@@ -509,6 +514,47 @@ fn check_install(home: &Path) -> Vec<Check> {
         )),
     }
     out
+}
+
+fn check_install_webview(home: &Path) -> Check {
+    let broker = home.join("bin/acos-webview");
+    let provider = home.join(acos_services::modules::webview::PROVIDER_APK_IMAGE_REL);
+    match (broker.is_file(), provider.is_file()) {
+        (true, true) => Check::ok(
+            "install_webview",
+            format!("broker {}, provider {}", broker.display(), provider.display()),
+        ),
+        (false, true) => Check::warn(
+            "install_webview",
+            format!(
+                "missing broker {} (provider {} present)",
+                broker.display(),
+                provider.display()
+            ),
+            "The `webview: real` module cannot start its shared broker without `acos-webview`. \
+             Reinstall with tools/release/install.sh, or set ACOS_WEBVIEW_BIN.",
+        ),
+        (true, false) => Check::warn(
+            "install_webview",
+            format!(
+                "missing provider {} (broker {} present)",
+                provider.display(),
+                broker.display()
+            ),
+            "The `webview: real` module needs com.android.webview.apk. Reinstall with \
+             tools/release/install.sh, or set ACOS_WEBVIEW_PROVIDER_APK.",
+        ),
+        (false, false) => Check::warn(
+            "install_webview",
+            format!(
+                "missing broker {} and provider {}",
+                broker.display(),
+                provider.display()
+            ),
+            "The `webview: real` module needs both `acos-webview` and com.android.webview.apk. \
+             Reinstall with tools/release/install.sh.",
+        ),
+    }
 }
 
 /// The host helpers the sandbox and the cgroup limit need: `bwrap` for the
@@ -900,5 +946,62 @@ mod tests {
         assert!(!report.ok);
         assert_eq!(report.failures(), vec!["c"]);
         assert!(report.to_text().contains("fix: fix it"));
+    }
+
+    #[test]
+    fn install_webview_check_requires_broker_and_provider() {
+        let root = std::env::temp_dir().join(format!(
+            "acos-doctor-wv-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos())
+                .unwrap_or(0)
+        ));
+        let broker = root.join("bin/acos-webview");
+        let provider = root.join(acos_services::modules::webview::PROVIDER_APK_IMAGE_REL);
+        std::fs::create_dir_all(broker.parent().unwrap()).unwrap();
+        std::fs::create_dir_all(provider.parent().unwrap()).unwrap();
+
+        let neither = check_install_webview(&root);
+        assert_eq!(neither.name, "install_webview");
+        assert_eq!(neither.status, "warn");
+        assert!(neither.detail.contains("acos-webview"), "{}", neither.detail);
+        assert!(
+            neither.detail.contains("com.android.webview.apk"),
+            "{}",
+            neither.detail
+        );
+
+        std::fs::write(&provider, b"apk").unwrap();
+        let no_broker = check_install_webview(&root);
+        assert_eq!(no_broker.status, "warn");
+        assert!(
+            no_broker.detail.contains("missing broker"),
+            "{}",
+            no_broker.detail
+        );
+
+        std::fs::write(&broker, b"elf").unwrap();
+        let both = check_install_webview(&root);
+        assert_eq!(both.status, "ok");
+        assert!(both.fix.is_none());
+        assert!(both.detail.contains("acos-webview"), "{}", both.detail);
+        assert!(
+            both.detail.contains("com.android.webview.apk"),
+            "{}",
+            both.detail
+        );
+
+        std::fs::remove_file(&provider).unwrap();
+        let no_provider = check_install_webview(&root);
+        assert_eq!(no_provider.status, "warn");
+        assert!(
+            no_provider.detail.contains("missing provider"),
+            "{}",
+            no_provider.detail
+        );
+
+        let _ = std::fs::remove_dir_all(&root);
     }
 }

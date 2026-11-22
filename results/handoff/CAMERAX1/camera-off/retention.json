@@ -1,0 +1,52 @@
+{
+  "mode": "none-on-pass",
+  "decision": "prune-all-frames",
+  "reason": "passing run (mode `none-on-pass`): reports, trees and logs kept, no frames",
+  "kept_files": 33,
+  "kept_bytes": 1940275,
+  "pruned_files": 8,
+  "pruned_bytes": 1634142,
+  "pruned": [
+    {
+      "path": "art-frames/live-frames/acos-c1-layer7-frame-114-g114-c7.png",
+      "bytes": 314343
+    },
+    {
+      "path": "art-frames/live-frames/acos-c1-layer7-frame-114-g114-c8.png",
+      "bytes": 314343
+    },
+    {
+      "path": "art-frames/live-frames/acos-c1-layer7-frame-51-g51-c3.png",
+      "bytes": 141607
+    },
+    {
+      "path": "art-frames/live-frames/acos-c1-layer7-frame-51-g51-c4.png",
+      "bytes": 141607
+    },
+    {
+      "path": "art-frames/live-frames/acos-c1-layer7-frame-7-g7-c1.png",
+      "bytes": 133860
+    },
+    {
+      "path": "art-frames/live-frames/acos-c1-layer7-frame-7-g7-c2.png",
+      "bytes": 133860
+    },
+    {
+      "path": "art-frames/live-frames/acos-c1-layer7-frame-85-g85-c5.png",
+      "bytes": 227261
+    },
+    {
+      "path": "art-frames/live-frames/acos-c1-layer7-frame-85-g85-c6.png",
+      "bytes": 227261
+    }
+  ],
+  "kept_because_referenced": [
+    "frames/2.png",
+    "frames/3.png",
+    "frames/4.png",
+    "frames/5.png",
+    "frames/6.png",
+    "frames/7.png",
+    "frames/8.png"
+  ]
+}

@@ -12,9 +12,8 @@
 //! `FLAG_INSTALLED` is the package manager's post-install bit
 //! ([`Manifest::application_flags_installed`]), not a parser flag.
 //!
-//! The real-APK cases run when the corpus is present (this checkout has both
-//! `fixtures/build/apps/` and `.cache/gaten/`); otherwise they print a skip line
-//! and the synthetic target-SDK cases still run.
+//! The real-APK cases need `fixtures/build/apps/` and `.cache/gaten/`. A missing
+//! APK fails its case loudly (HYG3); it is never a quiet skip.
 
 use std::path::{Path, PathBuf};
 
@@ -35,12 +34,18 @@ fn repo_path(relative: &str) -> PathBuf {
         .join(relative)
 }
 
+/// The real APK a case needs. A missing APK is a missing prerequisite: the case
+/// fails by default (HYG3), it is never a quiet early return.
 fn manifest_of(relative: &str) -> Option<Manifest> {
     let path = repo_path(relative);
-    if !path.is_file() {
-        eprintln!("skip: {relative} is not present in this checkout");
-        return None;
-    }
+    acos_test_support::require_prereq(
+        path.is_file(),
+        "w31_manifest_flags",
+        &format!(
+            "{relative} is not present in this checkout — build the fixtures \
+             (tools/build-apps.sh), or put the Gaten APK under .cache/gaten"
+        ),
+    )?;
     let apk = Apk::open(&path).unwrap_or_else(|e| panic!("open {}: {e}", path.display()));
     let manifest = apk
         .manifest()

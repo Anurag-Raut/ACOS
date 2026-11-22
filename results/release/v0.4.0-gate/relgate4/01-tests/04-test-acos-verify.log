@@ -1,0 +1,379 @@
+warning: variable does not need to be mutable
+   --> crates/acos-netd-ctl/src/client.rs:574:13
+    |
+574 |         let mut r = self.request(&Request::KillPasta { hold })?;
+    |             ----^
+    |             |
+    |             help: remove this `mut`
+    |
+    = note: `#[warn(unused_mut)]` on by default
+
+warning: variable does not need to be mutable
+   --> crates/acos-netd-ctl/src/client.rs:584:13
+    |
+584 |         let mut r = self.request(&Request::Shutdown)?;
+    |             ----^
+    |             |
+    |             help: remove this `mut`
+
+warning: `acos-netd-ctl` (lib) generated 2 warnings (run `cargo fix --lib -p acos-netd-ctl` to apply 2 suggestions)
+warning: unused attribute
+    --> crates/acos-services/src/atms.rs:2048:5
+     |
+2048 |     #[must_use]
+     |     ^^^^^^^^^^^ help: remove this attribute
+     |
+note: attribute also specified here
+    --> crates/acos-services/src/atms.rs:2039:5
+     |
+2039 |     #[must_use]
+     |     ^^^^^^^^^^^
+     = warning: this was previously accepted by the compiler but is being phased out; it will become a hard error in a future release!
+     = note: `#[warn(unused_attributes)]` on by default
+
+warning: unreachable pattern
+   --> crates/acos-services/src/intents.rs:151:21
+    |
+146 |                     Extra::Short(number) => serde_json::json!(number),
+    |                     -------------------- matches all the relevant values
+...
+151 |                     Extra::Short(short) => serde_json::json!(short),
+    |                     ^^^^^^^^^^^^^^^^^^^ no value can reach this
+    |
+    = note: `#[warn(unreachable_patterns)]` on by default
+
+warning: variable does not need to be mutable
+   --> crates/acos-services/src/modules/notifications.rs:341:13
+    |
+341 |         let mut store = store
+    |             ----^^^^^
+    |             |
+    |             help: remove this `mut`
+    |
+    = note: `#[warn(unused_mut)]` on by default
+
+warning: unreachable pattern
+    --> crates/acos-services/src/parcelable.rs:2909:9
+     |
+2889 |         FieldOp::BoolCond(fields) => {
+     |         ------------------------- matches all the relevant values
+...
+2909 |         FieldOp::BoolCond(fields) => {
+     |         ^^^^^^^^^^^^^^^^^^^^^^^^^ no value can reach this
+
+warning: unreachable pattern
+    --> crates/acos-services/src/parcelable.rs:3335:9
+     |
+3273 |         FieldOp::BoolCond(fields) => {
+     |         ------------------------- matches all the relevant values
+...
+3335 |         FieldOp::BoolCond(fields) => {
+     |         ^^^^^^^^^^^^^^^^^^^^^^^^^ no value can reach this
+
+warning: unreachable pattern
+    --> crates/acos-services/src/parcelable.rs:3414:9
+     |
+3397 |         FieldOp::Icon => {
+     |         ------------- matches all the relevant values
+...
+3414 |         FieldOp::Icon => {
+     |         ^^^^^^^^^^^^^ no value can reach this
+
+warning: unreachable pattern
+    --> crates/acos-services/src/parcelable.rs:3418:9
+     |
+3401 |         FieldOp::ArraySet => match value {
+     |         ----------------- matches all the relevant values
+...
+3418 |         FieldOp::ArraySet => match value {
+     |         ^^^^^^^^^^^^^^^^^ no value can reach this
+
+warning: unreachable pattern
+    --> crates/acos-services/src/parcelable.rs:5363:9
+     |
+5309 |         FieldOp::BoolCond(_) => call == "writeBoolean",
+     |         -------------------- matches all the relevant values
+...
+5363 |         FieldOp::BoolCond(_) => call == "writeBoolean",
+     |         ^^^^^^^^^^^^^^^^^^^^ no value can reach this
+
+warning: unreachable pattern
+    --> crates/acos-services/src/parcelable.rs:5446:9
+     |
+5404 |         FieldOp::BoolCond(inner) => {
+     |         ------------------------ matches all the relevant values
+...
+5446 |         FieldOp::BoolCond(inner) => {
+     |         ^^^^^^^^^^^^^^^^^^^^^^^^ no value can reach this
+
+warning: unused variable: `intent`
+   --> crates/acos-services/src/service_bind.rs:292:13
+    |
+292 |         let intent = bind_intent(package, class);
+    |             ^^^^^^ help: if this is intentional, prefix it with an underscore: `_intent`
+    |
+    = note: `#[warn(unused_variables)]` on by default
+
+warning: constant `ACTION_MASK` is never used
+   --> crates/acos-services/src/a11y_native.rs:102:7
+    |
+102 | const ACTION_MASK: i32 = 0xff;
+    |       ^^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` on by default
+
+warning: constant `RESTRICTIONS_GET_APPLICATION_PER_ADMIN` is never used
+   --> crates/acos-services/src/extras.rs:693:7
+    |
+693 | const RESTRICTIONS_GET_APPLICATION_PER_ADMIN: u32 = 2;
+    |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: constant `SERVICE_MANAGER_DESCRIPTOR` is never used
+  --> crates/acos-services/src/host.rs:82:7
+   |
+82 | const SERVICE_MANAGER_DESCRIPTOR: &str = "android.os.IServiceManager";
+   |       ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: field `session_binder` is never read
+   --> crates/acos-services/src/modules/media_session.rs:161:5
+    |
+155 | struct SessionRecord {
+    |        ------------- field in this struct
+...
+161 |     session_binder: u64,
+    |     ^^^^^^^^^^^^^^
+    |
+    = note: `SessionRecord` has a derived impl for the trait `Debug`, but this is intentionally ignored during dead code analysis
+
+warning: method `session_mut` is never used
+   --> crates/acos-services/src/modules/media_session.rs:205:8
+    |
+187 | impl MediaState {
+    | --------------- method in this implementation
+...
+205 |     fn session_mut(&mut self, id: u32) -> Option<&mut SessionRecord> {
+    |        ^^^^^^^^^^^
+
+warning: `acos-services` (lib) generated 15 warnings (run `cargo fix --lib -p acos-services` to apply 2 suggestions)
+warning: value assigned to `unsettled` is never read
+    --> crates/acos-verify/src/executor.rs:1276:21
+     |
+1276 |             let mut unsettled: Option<BackendError> = None;
+     |                     ^^^^^^^^^
+     |
+     = help: maybe it is overwritten before being read?
+     = note: `#[warn(unused_assignments)]` on by default
+
+warning: value assigned to `unsettled` is never read
+    --> crates/acos-verify/src/executor.rs:2437:13
+     |
+2437 |     let mut unsettled: Option<BackendError> = None;
+     |             ^^^^^^^^^
+     |
+     = help: maybe it is overwritten before being read?
+
+   Compiling acos-verify v0.3.0 (/home/Qui/.t3/worktrees/acos/t3-f4bcc4d4-5c49b0ef4f83b639/crates/acos-verify)
+warning: `acos-verify` (lib) generated 2 warnings
+warning: method `with_settle_pixels` is never used
+   --> crates/acos-verify/tests/scenarios.rs:436:8
+    |
+420 | impl SliceBackend {
+    | ----------------- method in this implementation
+...
+436 |     fn with_settle_pixels(mut self, pixels_changed: bool) -> Self {
+    |        ^^^^^^^^^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` on by default
+
+warning: function `delivered_but_visually_unchanged_input_is_not_a_state_change` is never used
+    --> crates/acos-verify/src/executor.rs:5208:8
+     |
+5208 |     fn delivered_but_visually_unchanged_input_is_not_a_state_change() {
+     |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = note: `#[warn(dead_code)]` on by default
+
+warning: `acos-verify` (test "scenarios") generated 1 warning
+warning: `acos-verify` (lib test) generated 3 warnings (2 duplicates)
+    Finished `release` profile [optimized] target(s) in 2.42s
+     Running unittests src/lib.rs (.cache/rg4-target/release/deps/acos_verify-88afca5a365b9d7e)
+
+running 120 tests
+test assertions::tests::assert_not_visible_sees_the_present_but_offscreen_node ... ok
+test artifacts::tests::prepares_and_writes_expected_files ... ok
+test artifacts::tests::shell_quote_handles_spaces ... ok
+test assertions::tests::a_passing_not_visible_assertion_echoes_the_expectation ... ok
+test assertions::tests::assert_text_on_an_offscreen_node_is_element_offscreen ... ok
+test assertions::tests::missing_node_is_element_not_found ... ok
+test assertions::tests::selectors_match_the_visible_node_first ... ok
+test assertions::tests::selector_miss_messages_use_the_human_selector_form ... ok
+test assertions::tests::text_assertion_fails_on_wrong_bounds ... ok
+test assertions::tests::text_assertion_fails_on_wrong_text ... ok
+test artifacts::tests::a_richer_tree_artifact_is_not_overwritten_by_a_skeleton ... ok
+test assertions::tests::text_assertion_passes_on_match ... ok
+test assertions::tests::assert_visible_on_an_offscreen_node_is_element_offscreen_not_a_pass ... ok
+test assertions::tests::truncated_tree_reports_tree_truncated_not_element_not_found ... ok
+test assertions::tests::ordered_logs_require_order ... ok
+test backend::tests::a_moving_list_uses_every_attempt ... ok
+test assertions::tests::a_passing_text_assertion_echoes_expected_and_actual_geometry ... ok
+test assertions::tests::window_order_assertion_passes_on_the_policy_stack_and_fails_on_a_reorder ... ok
+test backend::tests::a_not_handled_delivery_alone_refuses_the_end_of_list ... ok
+test backend::tests::a_list_that_loads_after_the_first_unchanged_observation_is_not_an_end ... ok
+test assertions::tests::a_passing_state_assertion_echoes_every_requested_flag ... ok
+test backend::tests::a_real_end_of_list_is_reported_after_two_consumed_gestures ... ok
+test backend::tests::a_swipe_that_moves_nothing_ends_the_search ... ok
+test backend::tests::a_visible_node_is_found_in_the_first_settled_observation ... ok
+test backend::tests::capability_names_are_stable ... ok
+test backend::tests::an_unconsumed_swipe_is_never_an_end_of_list ... ok
+test backend::tests::resolve_component_expands_android_component_shorthand ... ok
+test backend::tests::resolve_component_handles_forms ... ok
+test backend::tests::unsupported_maps_to_unsupported_status ... ok
+test clock::tests::epoch_is_formatted ... ok
+test clock::tests::fixed_clock_advances ... ok
+test clock::tests::known_instant_matches ... ok
+test display::tests::a_frame_of_an_unexpected_size_gets_no_origin ... ok
+test display::tests::an_unsigned_full_display_frame_is_signed_and_a_declared_one_is_kept ... ok
+test display::tests::report_mode_puts_the_full_display_frame_at_the_origin ... ok
+test display::tests::the_reference_display_puts_an_app_area_frame_at_the_status_bar ... ok
+test executor::content_settle_tests::expect_change_with_content_settle_is_invalid ... ok
+test executor::content_settle_tests::a_content_step_without_a_content_record_fails_closed ... ok
+test executor::content_settle_tests::a_negative_failure_must_match_its_pinned_error ... ok
+test executor::content_settle_tests::fast_still_never_backs_a_pass ... ok
+test executor::content_settle_tests::content_settle_parses_on_inputs_and_launch ... ok
+test executor::content_settle_tests::step_evidence_prefers_the_per_action_settle ... ok
+test executor::launch_gate_tests::documented_component_shorthand_passes_the_gate ... ok
+test executor::launch_gate_tests::a_scenario_without_an_activity_and_no_launcher_is_an_invalid_scenario ... ok
+test executor::content_settle_tests::content_settle_requires_the_settled_frame_identity ... ok
+test executor::content_settle_tests::geometry_claims_are_refused_on_content_settle ... ok
+test executor::content_settle_tests::pixel_assertion_backed_by_content_settle_fails_closed ... ok
+test executor::content_settle_tests::selector_bounds_is_a_geometry_claim_on_every_assertion_kind ... ok
+test executor::region_tests::a11ypace_tap_step_reports_the_explicit_no_change_claim ... ok
+test executor::content_settle_tests::text_assertions_are_allowed_on_content_settle ... ok
+test executor::region_tests::a_removed_delivered_window_is_host_handled_and_not_a_guest_ack ... ok
+test executor::launch_gate_tests::undeclared_activity_is_an_invalid_scenario_not_an_assertion ... ok
+test executor::region_tests::region_colour_statistics_and_ocr_unsupported ... ok
+test executor::region_tests::a_handled_window_removal_passes_the_tap_contract ... ok
+test executor::region_tests::merge3i3_a_removed_dialog_outranks_an_unhandled_ack ... ok
+test executor::service_module_tests::a_step_that_needs_an_off_module_is_unsupported_never_pass ... ok
+test executor::region_tests::rel3h2_an_unhandled_pass_carries_input_unhandled ... ok
+test executor::service_module_tests::a_step_without_a_requirement_is_never_gated ... ok
+test executor::region_tests::rel3h2_only_a_proven_unhandled_pass_warns ... ok
+test artifacts::tests::repro_sh_requires_a_fresh_artifacts_dir ... ok
+test manifest::tests::hex_encoding_is_lowercase ... ok
+test executor::region_tests::region_equals_png_is_exact_and_reads_a_region_of_the_frame ... ok
+test native::tests::native_capabilities_are_honest ... ok
+test executor::region_tests::region_hash_matches_exact_rgba ... ok
+test native::tests::view_tree_maps_to_protocol_ui_tree ... ok
+test executor::region_tests::a11ypace_expect_change_false_passes_on_an_unchanged_tree_with_delivery_evidence ... ok
+test manifest::tests::hello_views_manifest_resolves ... ok
+test executor::region_tests::a_status_bar_region_fails_and_names_the_geometry ... ok
+test executor::region_tests::region_hash_mismatch_fails ... ok
+test retention::tests::a_declared_frame_survives_even_none_on_pass ... ok
+test native::tests::blank_frames_are_not_meaningful ... ok
+test native::tests::every_key_name_has_a_code ... ok
+test retention::tests::capture_order_puts_first_and_last_first ... ok
+test retention::tests::a_retained_json_reference_unprunes_a_candidate ... ok
+test retention::tests::decision_never_prunes_a_non_pass ... ok
+test reference::tests::backend_replays_initial_state ... ok
+test retention::tests::mode_parsing_and_default ... ok
+test retention::tests::the_stored_block_detector_separates_the_two_layouts ... ok
+test executor::region_tests::rel3h2_expect_handled_false_silences_the_warning ... ok
+test executor::region_tests::rel3h2_expect_handled_true_fails_with_input_not_handled ... ok
+test executor::rel3a_settle_tests::fast_is_rejected_on_observation_steps ... ok
+test executor::region_tests::assert_region_takes_display_coordinates_and_finds_the_tree_crop ... ok
+test retention::tests::failing_run_keeps_every_frame_and_capture ... ok
+test executor::rel3a_settle_tests::an_unconfirmed_content_observation_is_labelled_strict ... ok
+test executor::region_tests::rel3e_tap_step_reports_handled_target_and_expect_change_auto ... ok
+test screenshot::tests::a_mask_outside_the_frame_excludes_nothing_and_a_straddling_one_is_clipped ... ok
+test screenshot::tests::display_space_masks_are_shifted_onto_the_frame ... ok
+test screenshot::tests::changed_pixel_fails_zero_tolerance ... ok
+test screenshot::tests::identical_images_pass ... ok
+test screenshot::tests::mask_excludes_a_region_from_both_terms ... ok
+test retention::tests::passing_run_keeps_referenced_frames_and_first_last_only ... ok
+test settle::tests::a_change_resets_the_window ... ok
+test screenshot::tests::size_mismatch_is_an_error_not_a_false_pass ... ok
+test settle::tests::a_repeated_probe_sample_does_not_count_as_a_distinct_traversal ... ok
+test settle::tests::a_reply_without_probe_seq_fails_closed ... ok
+test settle::tests::a_signature_that_changes_every_traversal_still_times_out ... ok
+test settle::tests::a_stale_probe_sample_never_counts_toward_the_window ... ok
+test settle::tests::configured_window_is_never_below_the_floor ... ok
+test settle::tests::child_structure_and_order_change_the_signature ... ok
+test settle::tests::same_content_has_the_same_signature ... ok
+test retention::tests::an_already_compressed_frame_is_not_reencoded ... ok
+test reference::tests::parses_reference_tree_and_logs ... ok
+test retention::tests::none_on_pass_drops_every_frame_but_keeps_trees_and_reports ... ok
+test settle::tests::signature_covers_every_field_an_assertion_reads ... ok
+test settle::tests::text_and_state_changes_change_the_signature_but_geometry_does_not ... ok
+test settle::tests::the_next_floor_is_the_last_consumed_sample ... ok
+test settle::tests::window_never_settles_before_two_traversals_even_at_a_zero_window ... ok
+test settle::tests::window_settles_only_after_two_traversals_over_the_window ... ok
+test retention::tests::reencoding_keeps_pixels_and_shrinks_the_frame ... ok
+test retention::tests::live_session_is_rewritten_so_no_png_path_dangles ... ok
+test artifacts::tests::repro_sh_replays_the_recorded_flags ... ok
+test executor::rel3a_settle_tests::assert_text_honours_timeout_ms ... ok
+test executor::rel3a_settle_tests::an_assertion_without_a_settled_observation_is_an_infra_timeout ... ok
+test executor::rel3a_settle_tests::wait_for_strict_on_an_animating_screen_is_a_timeout ... ok
+test executor::rel3a_settle_tests::a_content_observation_does_not_leak_into_the_next_capture ... ok
+test executor::rel3a_settle_tests::a_pixel_assertion_after_a_content_settled_wait_fails_closed ... ok
+test executor::rel3a_settle_tests::wait_for_falls_back_to_content_and_reports_it ... ok
+test executor::rel3a_settle_tests::assert_text_waits_under_content_settle_on_an_animating_screen ... ok
+test executor::rel3a_settle_tests::a_single_content_observation_does_not_pass_a_wait ... ok
+test executor::rel3a_settle_tests::hardware_renderer_fallback_is_a_visible_verdict_note ... ok
+
+test result: ok. 120 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.51s
+
+     Running tests/scenarios.rs (.cache/rg4-target/release/deps/scenarios-914f3af458850e41)
+
+running 43 tests
+test placeholder_frame_never_satisfies_an_assertion ... ok
+test a_retried_step_is_one_entry_with_its_attempts ... ok
+test fresh_capture_requires_a_new_completed_frame ... ok
+test a_step_that_never_passes_fails_with_every_attempt ... ok
+test required_fidelity_mismatch_is_unsupported_not_a_pass ... ok
+test assert_log_wait_judges_the_same_scope_as_the_assertion ... ok
+test assertion_on_a_fast_input_frame_fails_closed ... ok
+test expect_change_fails_when_the_settled_frame_is_pixel_identical ... ok
+test pure_assertion_drifting_frame_is_not_bound_to_the_completed_frame ... ok
+test an_apk_that_overrides_the_scenario_app_is_a_structured_warning ... ok
+test an_omitted_engine_is_not_a_mismatch ... ok
+test service_ctl_without_timeout_samples_once_and_fails_on_a_not_yet_state ... ok
+test a_first_attempt_pass_records_no_attempts_array ... ok
+test expect_change_without_a_settle_record_is_unsupported ... ok
+test a_relative_app_resolves_against_the_scenario_path_as_written ... ok
+test a_scenario_engine_that_differs_from_the_run_is_a_structured_warning ... ok
+test a_no_change_tap_without_the_flag_keeps_the_p12_rule ... ok
+test expect_change_passes_when_the_settled_frame_changed ... ok
+test capture_name_is_persisted_in_the_step_file_name_and_verdict_map ... ok
+test a_strict_wait_for_after_a_fast_input_rebinds_the_frame ... ok
+test positive_hello_views_is_a_truthful_partial ... ok
+test tap_changes_state_in_both_tree_and_screenshot ... ok
+test an_assertion_timeout_waits_for_the_tree_and_a_bare_assertion_does_not ... ok
+test unbound_tree_and_frame_is_a_backend_error_never_a_pass ... ok
+test tap_that_changes_only_the_screenshot_fails ... ok
+test tap_that_changes_only_the_tree_fails ... ok
+test positive_hello_jni_is_a_truthful_partial ... ok
+test the_verdict_names_both_inputs_absolutely_with_their_digests ... ok
+test verify_envelope_satisfies_protocol_invariants ... ok
+test unimplemented_step_kind_is_unsupported_with_the_missing_capability ... ok
+test negative_scenarios_fail_and_never_pass ... ok
+test a_refused_log_channel_fails_closed_with_the_backend_code ... ok
+test screenshot_assertion_uses_the_same_completed_frame ... ok
+test an_input_rewritten_during_the_run_is_a_warning_in_the_verdict ... ok
+test screenshot_assertion_fails_beyond_tolerance ... ok
+test the_ordered_log_cursor_starts_at_the_previous_steps_boundary ... ok
+test wait_for_returns_as_soon_as_the_condition_appears ... ok
+test assert_log_polls_until_the_line_appears_or_the_deadline_passes ... ok
+test wait_for_condition_that_never_appears_is_a_structured_timeout ... ok
+test service_ctl_timeout_waits_for_the_state_the_app_reaches_later ... ok
+test wait_for_on_a_never_settling_screen_is_a_settle_timeout ... ok
+test service_ctl_timeout_never_turns_a_miss_into_a_pass ... ok
+test wait_for_keeps_polling_through_unsettled_polls ... ok
+
+test result: ok. 43 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.38s
+
+   Doc-tests acos_verify
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

@@ -1,0 +1,119 @@
+--------- beginning of main
+1795326620542      1  E cutils-trace: Error opening trace file: Permission denied (13)
+1795326620543      2  I : Using CollectorTypeCC GC.
+1795326620555      3  D nativeloader: InitDefaultPublicLibraries for_preload=1: libandroid.so:libaaudio.so:libamidi.so:libbinder_ndk.so:libc.so:libcamera2ndk.so:libdl.so:libEGL.so:libGLESv1_CM.so:libGLESv2.so:libGLESv3.so:libicu.so:libicui18n.so:libicuuc.so:libjnigraphics.so:liblog.so:libmediandk.so:libm.so:libnativehelper.so:libnativewindow.so:libOpenMAXAL.so:libOpenSLES.so:libRS.so:libstdc++.so:libsync.so:libvulkan.so:libwebviewchromium_plat_support.so:libz.so
+1795326620558      4  D : I18n APEX ICU file found: /apex/com.android.i18n/etc/icu/icudt72l.dat
+1795326620560      5  E logdw: Found user/group name 'root' in '/etc/passwd' without required prefix 'system_'
+1795326620560      6  E logdw: Found user/group name 'bin' in '/etc/passwd' without required prefix 'system_'
+1795326620560      7  E logdw: Found user/group name 'daemon' in '/etc/passwd' without required prefix 'system_'
+1795326620560      8  E logdw: Found user/group name 'mail' in '/etc/passwd' without required prefix 'system_'
+1795326620560      9  E logdw: Found user/group name 'ftp' in '/etc/passwd' without required prefix 'system_'
+1795326620560     10  E logdw: Found user/group name 'http' in '/etc/passwd' without required prefix 'system_'
+1795326620560     11  E logdw: Found user/group name 'nobody' in '/etc/passwd' without required prefix 'system_'
+1795326620560     12  E logdw: Found user/group name 'dbus' in '/etc/passwd' without required prefix 'system_'
+1795326620560     13  E logdw: Found user/group name 'systemd-coredump' in '/etc/passwd' without required prefix 'system_'
+1795326620560     14  E logdw: Found user/group name 'systemd-network' in '/etc/passwd' without required prefix 'system_'
+1795326620560     15  E logdw: Found user/group name 'systemd-oom' in '/etc/passwd' without required prefix 'system_'
+1795326620560     16  E logdw: Found user/group name 'systemd-journal-remote' in '/etc/passwd' without required prefix 'system_'
+1795326620560     17  E logdw: Found user/group name 'systemd-resolve' in '/etc/passwd' without required prefix 'system_'
+1795326620560     18  E logdw: Found user/group name 'systemd-timesync' in '/etc/passwd' without required prefix 'system_'
+1795326620560     19  E logdw: Found user/group name 'tss' in '/etc/passwd' without required prefix 'system_'
+1795326620560     20  E logdw: Found user/group name 'uuidd' in '/etc/passwd' without required prefix 'system_'
+1795326620560     21  E logdw: Found user/group name 'alpm' in '/etc/passwd' without required prefix 'system_'
+1795326620560     22  E logdw: Found user/group name 'git' in '/etc/passwd' without required prefix 'system_'
+1795326620560     23  E logdw: Found user/group name 'polkitd' in '/etc/passwd' without required prefix 'system_'
+1795326620560     24  E logdw: Found user/group name 'Qui' in '/etc/passwd' without required prefix 'system_'
+1795326620560     25  E logdw: Found user/group name 'avahi' in '/etc/passwd' without required prefix 'system_'
+1795326620560     26  E logdw: Found user/group name 'brltty' in '/etc/passwd' without required prefix 'system_'
+1795326620560     27  E logdw: Found user/group name 'colord' in '/etc/passwd' without required prefix 'system_'
+1795326620560     28  E logdw: Found user/group name 'flatpak' in '/etc/passwd' without required prefix 'system_'
+1795326620560     29  E logdw: Found user/group name 'gdm' in '/etc/passwd' without required prefix 'system_'
+1795326620560     30  E logdw: Found user/group name 'geoclue' in '/etc/passwd' without required prefix 'system_'
+1795326620560     31  E logdw: Found user/group name 'gnome-remote-desktop' in '/etc/passwd' without required prefix 'system_'
+1795326620560     32  E logdw: Found user/group name 'libvirt-qemu' in '/etc/passwd' without required prefix 'system_'
+1795326620560     33  E logdw: Found user/group name 'qemu' in '/etc/passwd' without required prefix 'system_'
+1795326620560     34  E logdw: Found user/group name 'rtkit' in '/etc/passwd' without required prefix 'system_'
+1795326620560     35  E logdw: Found user/group name 'saned' in '/etc/passwd' without required prefix 'system_'
+1795326620560     36  E logdw: Found user/group name 'usbmux' in '/etc/passwd' without required prefix 'system_'
+1795326620560     37  E logdw: Found user/group name 'nvidia-persistenced' in '/etc/passwd' without required prefix 'system_'
+1795326620560     38  E logdw: Found user/group name 'ollama' in '/etc/passwd' without required prefix 'system_'
+1795326620560     39  E logdw: Found user/group name 'named' in '/etc/passwd' without required prefix 'system_'
+1795326620560     40  E logdw: Found user/group name 'pcscd' in '/etc/passwd' without required prefix 'system_'
+1795326620560     41  E logdw: Found user/group name 'mongodb' in '/etc/passwd' without required prefix 'system_'
+1795326620560     42  E logdw: Found user/group name 'malcontent-timer-ext-agent' in '/etc/passwd' without required prefix 'system_'
+1795326620560     43  E logdw: Found user/group name 'malcontent-timerd' in '/etc/passwd' without required prefix 'system_'
+1795326620560     44  E logdw: Found user/group name 'malcontent-webd' in '/etc/passwd' without required prefix 'system_'
+1795326620560     45  E logdw: Found user/group name 'systemd-imds' in '/etc/passwd' without required prefix 'system_'
+1795326620560     46  E logdw: Found user/group name 'clamav' in '/etc/passwd' without required prefix 'system_'
+1795326620560     47  E logdw: Found user/group name 'dnsmasq' in '/etc/passwd' without required prefix 'system_'
+1795326620561     48  W ziparchive: Unable to open '/data/app/launch-guest/classes.dm': No such file or directory
+1795326620561     49  W ziparchive: Unable to open '/data/app/launch-guest/classes.dm': No such file or directory
+1795326620564     50  D nativeloader: InitApexLibraries:
+  
+1795326620564     51  D nativeloader: InitDefaultPublicLibraries for_preload=0: libandroid.so:libaaudio.so:libamidi.so:libbinder_ndk.so:libc.so:libcamera2ndk.so:libclang_rt.hwasan-aarch64-android.so:libdl.so:libEGL.so:libGLESv1_CM.so:libGLESv2.so:libGLESv3.so:libicu.so:libicui18n.so:libicuuc.so:libjnigraphics.so:liblog.so:libmediandk.so:libm.so:libnativehelper.so:libnativewindow.so:libneuralnetworks.so:libOpenMAXAL.so:libOpenSLES.so:libRS.so:libstdc++.so:libsync.so:libvulkan.so:libwebviewchromium_plat_support.so:libz.so
+1795326620564     52  D nativeloader: Configuring clns-1 for other apk . target_sdk_version=0, uses_libraries=ALL, library_path=/system/lib64:/vendor/lib64, permitted_path=/data:/mnt/expand
+1795326620564     53  D nativeloader: InitExtendedPublicLibraries: 
+1795326620564     54  I nativeloader: InitVendorPublicLibraries skipped: No such file or directory
+1795326620564     55  D nativeloader: InitProductPublicLibraries: 
+1795326620572     56  E ProcessState: Binder driver /dev/binder is unavailable. Using /dev/binder instead.
+1795326620576     57  D CompatibilityChangeReporter: Compat change id reported: 171979766; UID 10192; state: ENABLED
+1795326620576     58  D CompatibilityChangeReporter: Compat change id reported: 242716250; UID 10192; state: ENABLED
+1795326620576     59  I Typeface: Preloading /system/fonts/Roboto-Regular.ttf
+1795326620576     60  I Typeface: Preloading /system/fonts/RobotoStatic-Regular.ttf
+1795326620577     61  D CompatibilityChangeReporter: Compat change id reported: 247079863; UID 10192; state: ENABLED
+1795326620596     62  W ziparchive: Unable to open '/data/app/camera-probe.dm': No such file or directory
+1795326620596     63  W ziparchive: Unable to open '/data/app/camera-probe.dm': No such file or directory
+1795326620596     64  D nativeloader: Configuring clns-2 for other apk /data/app/camera-probe.apk. target_sdk_version=34, uses_libraries=, library_path=/data/app-lib/x86_64, permitted_path=/data:/mnt/expand:/data/app-data/dev.acos.fixtures.cameraprobe
+1795326620596     65  W ContextImpl: Failed to ensure /data/app-data/dev.acos.fixtures.cameraprobe/cache: chown failed: EINVAL (Invalid argument)
+1795326620596     66  W ContextImpl: Failed to ensure /data/app-data/dev.acos.fixtures.cameraprobe/code_cache: chown failed: EINVAL (Invalid argument)
+1795326620597     67  V GraphicsEnvironment: Currently set values for:
+1795326620597     68  V GraphicsEnvironment:   angle_gl_driver_selection_pkgs=[]
+1795326620597     69  V GraphicsEnvironment:   angle_gl_driver_selection_values=[]
+1795326620597     70  V GraphicsEnvironment: ANGLE GameManagerService for dev.acos.fixtures.cameraprobe: false
+1795326620597     71  V GraphicsEnvironment: dev.acos.fixtures.cameraprobe is not listed in per-application setting
+1795326620597     72  V GraphicsEnvironment: Neither updatable production driver nor prerelease driver is supported.
+1795326620597     73  W SystemServiceRegistry: No service published for: netstats
+1795326620597     74  E TrafficStats: TrafficStats not initialized, uid=10192
+1795326620602     75  I AcosRot6: ACOSLAUNCH MARK top-finish-watcher-started
+1795326620606     76  D CompatibilityChangeReporter: Compat change id reported: 210923482; UID 10192; state: ENABLED
+1795326620607     77  D CompatibilityChangeReporter: Compat change id reported: 171228096; UID 10192; state: ENABLED
+1795326620609     78  I cameraprobe: READY mgr=present feat_cam=true feat_any=true
+1795326620609     79  E logdw: dev.acos.fixtures.cameraprobe.MainActivity
+1795326620609     80  E logdw: dev.acos.fixtures.cameraprobe.MainActivity
+1795326620610     81  E logdw: dev.acos.fixtures.cameraprobe.MainActivity
+1795326620610     82  D CompatibilityChangeReporter: Compat change id reported: 237531167; UID 10192; state: ENABLED
+1795326621316     83  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795326621317     84  I CameraManagerGlobal: Connecting to camera service
+1795326621318     85  V CameraManagerGlobal: Failed to register device state listener!
+1795326621318     86  V CameraManagerGlobal: Device state dependent characteristics updates will not befunctional!
+1795326621318     87  I cameraprobe: PREVIEW opened id=0
+1795326621331     88  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795326621398     89  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795326621415     90  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795326621433     91  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795326621515     92  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795326621632     93  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795326621765     94  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795326621899     95  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795326622016     96  I cameraprobe: PREVIEW ok count=5 frames=[0, 1, 2, 3, 4] frames_inc=true ts_inc=true
+1795326622032     97  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795326622154     98  I cameraprobe: PREVIEW closed id=0 seq=1
+1795326622166     99  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795326622183    100  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795326622405    101  W acos-binder: oneway handler on tid 22 held the incoming queue for 250 ms: delivering the next transaction on tid 13
+1795326622405    102  W MessageQueue: Handler (android.os.Handler) {22803ff} sending message to a Handler on a dead thread
+java.lang.IllegalStateException: Handler (android.os.Handler) {22803ff} sending message to a Handler on a dead thread
+	at android.os.MessageQueue.enqueueMessage(MessageQueue.java:560)
+	at android.os.Handler.enqueueMessage(Handler.java:786)
+	at android.os.Handler.sendMessageAtTime(Handler.java:735)
+	at android.os.Handler.sendMessageDelayed(Handler.java:705)
+	at android.os.Handler.post(Handler.java:435)
+	at android.hardware.camera2.impl.CameraDeviceImpl$CameraHandlerExecutor.execute(CameraDeviceImpl.java:2402)
+	at android.hardware.camera2.impl.CallbackProxies$SessionStateCallbackProxy.onCaptureQueueEmpty(CallbackProxies.java:94)
+	at android.hardware.camera2.impl.CameraCaptureSessionImpl$2.onRequestQueueEmpty(CameraCaptureSessionImpl.java:879)
+	at android.hardware.camera2.impl.CameraDeviceImpl$CameraDeviceCallbacks.onRequestQueueEmpty(CameraDeviceImpl.java:2380)
+	at android.hardware.camera2.ICameraDeviceCallbacks$Stub.onTransact(ICameraDeviceCallbacks.java:187)
+	at android.os.Binder.execTransactInternal(Binder.java:1344)
+	at android.os.Binder.execTransact(Binder.java:1275)
+
+1795326622407    103  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.

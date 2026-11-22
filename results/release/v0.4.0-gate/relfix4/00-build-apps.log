@@ -1,0 +1,1235 @@
+[build-webview-provider] generating hidden-API stubs + provider surface
+[build-webview-provider] compiling hidden-API stubs (compile-time only, never dexed)
+Note: /home/Qui/.t3/worktrees/acos/t3-3a063238-f609e073e6a62c6b/fixtures/apps/webview-provider/hidden-stubs/WebViewFactoryProvider.java uses or overrides a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+[build-webview-provider] linking manifest
+[build-webview-provider] compiling java (stubs first: they own the hidden names)
+Note: Some input files use or override a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+Note: /home/Qui/.t3/worktrees/acos/t3-3a063238-f609e073e6a62c6b/fixtures/apps/webview-provider/src/com/android/webview/chromium/WebViewChromium.java uses unchecked or unsafe operations.
+Note: Recompile with -Xlint:unchecked for details.
+[build-webview-provider] dexing (provider classes only, never the stubs)
+[build-webview-provider] aligning
+[build-webview-provider] signing
+[build-webview-provider] verifying
+    package: name='com.android.webview' versionCode='1' versionName='1.0' platformBuildVersionName='14' platformBuildVersionCode='34' compileSdkVersion='34' compileSdkVersionCodename='14'
+    minSdkVersion:'26'
+    targetSdkVersion:'34'
+    uses-permission: name='android.permission.INTERNET'
+    application: label='Android System WebView' icon=''
+    feature-group: label=''
+      uses-feature: name='android.hardware.faketouch'
+      uses-implied-feature: name='android.hardware.faketouch' reason='default feature for all apps'
+[build-webview-provider] -> /home/Qui/.t3/worktrees/acos/t3-3a063238-f609e073e6a62c6b/fixtures/build/apps/webview-provider.apk (49555 bytes)
+build-apps: [hello-views] compiling resources
+build-apps: [hello-views] linking resources + manifest
+build-apps: [hello-views] compiling java
+build-apps: [hello-views] dexing
+build-apps: [hello-views] aligning
+build-apps: [hello-views] signing
+build-apps: [hello-views] verifying
+    Signer #1 certificate DN: CN=Android Debug, O=Android, C=US
+    Signer #1 certificate SHA-256 digest: ac1bc8415eec4ed22aee65c8be596c08a0c543ef1c9cb85dc9f9a3165db12828
+    Signer #1 certificate SHA-1 digest: ed582387a39449324ab4136758c4bab2e9f0acff
+    Signer #1 certificate MD5 digest: e53c641db0acc0c240788b98ae3d9e78
+build-apps: [hello-views] badging:
+    package: name='dev.acos.fixtures.helloviews' versionCode='1' versionName='1.0' platformBuildVersionName='14' platformBuildVersionCode='34' compileSdkVersion='34' compileSdkVersionCodename='14'
+    minSdkVersion:'26'
+    targetSdkVersion:'34'
+    uses-permission: name='android.permission.INTERNET'
+    application-label:'Hello Views'
+    application: label='Hello Views' icon=''
+    application-debuggable
+    launchable-activity: name='dev.acos.fixtures.helloviews.MainActivity'  label='' icon=''
+    feature-group: label=''
+      uses-feature: name='android.hardware.faketouch'
+      uses-implied-feature: name='android.hardware.faketouch' reason='default feature for all apps'
+    main
+    supports-screens: 'small' 'normal' 'large' 'xlarge'
+    supports-any-density: 'true'
+    locales: '--_--'
+    densities: '160'
+build-apps: [hello-views] -> /home/Qui/.t3/worktrees/acos/t3-3a063238-f609e073e6a62c6b/fixtures/build/apps/hello-views.apk (12756 bytes)
+build-apps: [hello-jni] compiling native libs
+build-apps: [hello-jni] compiling resources
+build-apps: [hello-jni] linking resources + manifest
+build-apps: [hello-jni] compiling java
+build-apps: [hello-jni] dexing
+build-apps: [hello-jni] aligning
+build-apps: [hello-jni] signing
+build-apps: [hello-jni] verifying
+    Signer #1 certificate DN: CN=Android Debug, O=Android, C=US
+    Signer #1 certificate SHA-256 digest: ac1bc8415eec4ed22aee65c8be596c08a0c543ef1c9cb85dc9f9a3165db12828
+    Signer #1 certificate SHA-1 digest: ed582387a39449324ab4136758c4bab2e9f0acff
+    Signer #1 certificate MD5 digest: e53c641db0acc0c240788b98ae3d9e78
+build-apps: [hello-jni] badging:
+    package: name='dev.acos.fixtures.hellojni' versionCode='2' versionName='2.0' platformBuildVersionName='14' platformBuildVersionCode='34' compileSdkVersion='34' compileSdkVersionCodename='14'
+    minSdkVersion:'26'
+    targetSdkVersion:'34'
+    uses-permission: name='android.permission.INTERNET'
+    application-label:'Hello JNI'
+    application: label='Hello JNI' icon=''
+    application-debuggable
+    launchable-activity: name='dev.acos.fixtures.hellojni.MainActivity'  label='' icon=''
+    feature-group: label=''
+      uses-feature: name='android.hardware.faketouch'
+      uses-implied-feature: name='android.hardware.faketouch' reason='default feature for all apps'
+    main
+    supports-screens: 'small' 'normal' 'large' 'xlarge'
+    supports-any-density: 'true'
+    locales: '--_--'
+    densities: '160'
+    native-code: 'arm64-v8a' 'x86_64'
+build-apps: [hello-jni] -> /home/Qui/.t3/worktrees/acos/t3-3a063238-f609e073e6a62c6b/fixtures/build/apps/hello-jni.apk (16932 bytes)
+build-apps: [native-hello] compiling native libs
+build-apps: [native-hello] compiling resources
+build-apps: [native-hello] linking resources + manifest
+build-apps: [native-hello] compiling java
+build-apps: [native-hello] dexing
+build-apps: [native-hello] aligning
+build-apps: [native-hello] signing
+build-apps: [native-hello] verifying
+    Signer #1 certificate DN: CN=Android Debug, O=Android, C=US
+    Signer #1 certificate SHA-256 digest: ac1bc8415eec4ed22aee65c8be596c08a0c543ef1c9cb85dc9f9a3165db12828
+    Signer #1 certificate SHA-1 digest: ed582387a39449324ab4136758c4bab2e9f0acff
+    Signer #1 certificate MD5 digest: e53c641db0acc0c240788b98ae3d9e78
+build-apps: [native-hello] badging:
+    package: name='dev.acos.fixtures.nativehello' versionCode='1' versionName='1.0' platformBuildVersionName='14' platformBuildVersionCode='34' compileSdkVersion='34' compileSdkVersionCodename='14'
+    minSdkVersion:'26'
+    targetSdkVersion:'34'
+    application-label:'Native Hello'
+    application: label='Native Hello' icon=''
+    application-debuggable
+    launchable-activity: name='dev.acos.fixtures.nativehello.MainActivity'  label='' icon=''
+    feature-group: label=''
+      uses-feature: name='android.hardware.faketouch'
+      uses-implied-feature: name='android.hardware.faketouch' reason='default feature for all apps'
+    main
+    supports-screens: 'small' 'normal' 'large' 'xlarge'
+    supports-any-density: 'true'
+    locales: '--_--'
+    densities: '160'
+    native-code: 'arm64-v8a' 'x86_64'
+build-apps: [native-hello] -> /home/Qui/.t3/worktrees/acos/t3-3a063238-f609e073e6a62c6b/fixtures/build/apps/native-hello.apk (17000 bytes)
+build-apps: [native-hostile] compiling native libs
+build-apps: [native-hostile] compiling resources
+build-apps: [native-hostile] linking resources + manifest
+build-apps: [native-hostile] compiling java
+build-apps: [native-hostile] dexing
+build-apps: [native-hostile] aligning
+build-apps: [native-hostile] signing
+build-apps: [native-hostile] verifying
+    Signer #1 certificate DN: CN=Android Debug, O=Android, C=US
+    Signer #1 certificate SHA-256 digest: ac1bc8415eec4ed22aee65c8be596c08a0c543ef1c9cb85dc9f9a3165db12828
+    Signer #1 certificate SHA-1 digest: ed582387a39449324ab4136758c4bab2e9f0acff
+    Signer #1 certificate MD5 digest: e53c641db0acc0c240788b98ae3d9e78
+build-apps: [native-hostile] badging:
+    package: name='dev.acos.fixtures.nativehostile' versionCode='1' versionName='1.0' platformBuildVersionName='14' platformBuildVersionCode='34' compileSdkVersion='34' compileSdkVersionCodename='14'
+    minSdkVersion:'26'
+    targetSdkVersion:'34'
+    application-label:'Native Hostile'
+    application: label='Native Hostile' icon=''
+    application-debuggable
+    launchable-activity: name='dev.acos.fixtures.nativehostile.MainActivity'  label='' icon=''
+    feature-group: label=''
+      uses-feature: name='android.hardware.faketouch'
+      uses-implied-feature: name='android.hardware.faketouch' reason='default feature for all apps'
+    main
+    supports-screens: 'small' 'normal' 'large' 'xlarge'
+    supports-any-density: 'true'
+    locales: '--_--'
+    densities: '160'
+    native-code: 'arm64-v8a' 'x86_64'
+build-apps: [native-hostile] -> /home/Qui/.t3/worktrees/acos/t3-3a063238-f609e073e6a62c6b/fixtures/build/apps/native-hostile.apk (16930 bytes)
+build-apps: [counter] compiling resources
+build-apps: [counter] linking resources + manifest
+build-apps: [counter] compiling java
+build-apps: [counter] dexing
+build-apps: [counter] aligning
+build-apps: [counter] signing
+build-apps: [counter] verifying
+    Signer #1 certificate DN: CN=Android Debug, O=Android, C=US
+    Signer #1 certificate SHA-256 digest: ac1bc8415eec4ed22aee65c8be596c08a0c543ef1c9cb85dc9f9a3165db12828
+    Signer #1 certificate SHA-1 digest: ed582387a39449324ab4136758c4bab2e9f0acff
+    Signer #1 certificate MD5 digest: e53c641db0acc0c240788b98ae3d9e78
+build-apps: [counter] badging:
+    package: name='dev.acos.fixtures.counter' versionCode='1' versionName='1.0' platformBuildVersionName='14' platformBuildVersionCode='34' compileSdkVersion='34' compileSdkVersionCodename='14'
+    minSdkVersion:'26'
+    targetSdkVersion:'34'
+    uses-permission: name='android.permission.INTERNET'
+    application-label:'Counter'
+    application: label='Counter' icon=''
+    application-debuggable
+    launchable-activity: name='dev.acos.fixtures.counter.MainActivity'  label='' icon=''
+    feature-group: label=''
+      uses-feature: name='android.hardware.faketouch'
+      uses-implied-feature: name='android.hardware.faketouch' reason='default feature for all apps'
+    main
+    supports-screens: 'small' 'normal' 'large' 'xlarge'
+    supports-any-density: 'true'
+    locales: '--_--'
+    densities: '160'
+build-apps: [counter] -> /home/Qui/.t3/worktrees/acos/t3-3a063238-f609e073e6a62c6b/fixtures/build/apps/counter.apk (12756 bytes)
+build-apps: [todo-list] compiling resources
+build-apps: [todo-list] linking resources + manifest
+build-apps: [todo-list] compiling java
+build-apps: [todo-list] dexing
+build-apps: [todo-list] aligning
+build-apps: [todo-list] signing
+build-apps: [todo-list] verifying
+    Signer #1 certificate DN: CN=Android Debug, O=Android, C=US
+    Signer #1 certificate SHA-256 digest: ac1bc8415eec4ed22aee65c8be596c08a0c543ef1c9cb85dc9f9a3165db12828
+    Signer #1 certificate SHA-1 digest: ed582387a39449324ab4136758c4bab2e9f0acff
+    Signer #1 certificate MD5 digest: e53c641db0acc0c240788b98ae3d9e78
+build-apps: [todo-list] badging:
+    package: name='dev.acos.fixtures.todolist' versionCode='1' versionName='1.0' platformBuildVersionName='14' platformBuildVersionCode='34' compileSdkVersion='34' compileSdkVersionCodename='14'
+    minSdkVersion:'26'
+    targetSdkVersion:'34'
+    uses-permission: name='android.permission.INTERNET'
+    application-label:'Todo List'
+    application: label='Todo List' icon=''
+    application-debuggable
+    launchable-activity: name='dev.acos.fixtures.todolist.MainActivity'  label='' icon=''
+    feature-group: label=''
+      uses-feature: name='android.hardware.faketouch'
+      uses-implied-feature: name='android.hardware.faketouch' reason='default feature for all apps'
+    main
+    supports-screens: 'small' 'normal' 'large' 'xlarge'
+    supports-any-density: 'true'
+    locales: '--_--'
+    densities: '160'
+build-apps: [todo-list] -> /home/Qui/.t3/worktrees/acos/t3-3a063238-f609e073e6a62c6b/fixtures/build/apps/todo-list.apk (12756 bytes)
+build-apps: [multi-activity] compiling resources
+build-apps: [multi-activity] linking resources + manifest
+build-apps: [multi-activity] compiling java
+build-apps: [multi-activity] dexing
+build-apps: [multi-activity] aligning
+build-apps: [multi-activity] signing
+build-apps: [multi-activity] verifying
+    Signer #1 certificate DN: CN=Android Debug, O=Android, C=US
+    Signer #1 certificate SHA-256 digest: ac1bc8415eec4ed22aee65c8be596c08a0c543ef1c9cb85dc9f9a3165db12828
+    Signer #1 certificate SHA-1 digest: ed582387a39449324ab4136758c4bab2e9f0acff
+    Signer #1 certificate MD5 digest: e53c641db0acc0c240788b98ae3d9e78
+build-apps: [multi-activity] badging:
+    package: name='dev.acos.fixtures.multiactivity' versionCode='1' versionName='1.0' platformBuildVersionName='14' platformBuildVersionCode='34' compileSdkVersion='34' compileSdkVersionCodename='14'
+    minSdkVersion:'26'
+    targetSdkVersion:'34'
+    uses-permission: name='android.permission.INTERNET'
+    application-label:'Multi Activity'
+    application: label='Multi Activity' icon=''
+    application-debuggable
+    launchable-activity: name='dev.acos.fixtures.multiactivity.MainActivity'  label='' icon=''
+    feature-group: label=''
+      uses-feature: name='android.hardware.faketouch'
+      uses-implied-feature: name='android.hardware.faketouch' reason='default feature for all apps'
+    main
+    other-activities
+    supports-screens: 'small' 'normal' 'large' 'xlarge'
+    supports-any-density: 'true'
+    locales: '--_--'
+    densities: '160'
+build-apps: [multi-activity] -> /home/Qui/.t3/worktrees/acos/t3-3a063238-f609e073e6a62c6b/fixtures/build/apps/multi-activity.apk (12823 bytes)
+build-apps: [finish-start] compiling resources
+build-apps: [finish-start] linking resources + manifest
+build-apps: [finish-start] compiling java
+build-apps: [finish-start] dexing
+build-apps: [finish-start] aligning
+build-apps: [finish-start] signing
+build-apps: [finish-start] verifying
+    Signer #1 certificate DN: CN=Android Debug, O=Android, C=US
+    Signer #1 certificate SHA-256 digest: ac1bc8415eec4ed22aee65c8be596c08a0c543ef1c9cb85dc9f9a3165db12828
+    Signer #1 certificate SHA-1 digest: ed582387a39449324ab4136758c4bab2e9f0acff
+    Signer #1 certificate MD5 digest: e53c641db0acc0c240788b98ae3d9e78
+build-apps: [finish-start] badging:
+    package: name='dev.acos.fixtures.finishstart' versionCode='1' versionName='1.0' platformBuildVersionName='14' platformBuildVersionCode='34' compileSdkVersion='34' compileSdkVersionCodename='14'
+    minSdkVersion:'26'
+    targetSdkVersion:'34'
+    application-label:'Finish Start'
+    application: label='Finish Start' icon=''
+    application-debuggable
+    launchable-activity: name='dev.acos.fixtures.finishstart.SplashActivity'  label='' icon=''
+    feature-group: label=''
+      uses-feature: name='android.hardware.faketouch'
+      uses-implied-feature: name='android.hardware.faketouch' reason='default feature for all apps'
+    main
+    other-activities
+    supports-screens: 'small' 'normal' 'large' 'xlarge'
+    supports-any-density: 'true'
+    locales: '--_--'
+    densities: '160'
+build-apps: [finish-start] -> /home/Qui/.t3/worktrees/acos/t3-3a063238-f609e073e6a62c6b/fixtures/build/apps/finish-start.apk (12823 bytes)
+build-apps: [form-validation] compiling resources
+build-apps: [form-validation] linking resources + manifest
+build-apps: [form-validation] compiling java
+build-apps: [form-validation] dexing
+build-apps: [form-validation] aligning
+build-apps: [form-validation] signing
+build-apps: [form-validation] verifying
+    Signer #1 certificate DN: CN=Android Debug, O=Android, C=US
+    Signer #1 certificate SHA-256 digest: ac1bc8415eec4ed22aee65c8be596c08a0c543ef1c9cb85dc9f9a3165db12828
+    Signer #1 certificate SHA-1 digest: ed582387a39449324ab4136758c4bab2e9f0acff
+    Signer #1 certificate MD5 digest: e53c641db0acc0c240788b98ae3d9e78
+build-apps: [form-validation] badging:
+    package: name='dev.acos.fixtures.formvalidation' versionCode='1' versionName='1.0' platformBuildVersionName='14' platformBuildVersionCode='34' compileSdkVersion='34' compileSdkVersionCodename='14'
+    minSdkVersion:'26'
+    targetSdkVersion:'34'
+    uses-permission: name='android.permission.INTERNET'
+    application-label:'Form Validation'
+    application: label='Form Validation' icon=''
+    application-debuggable
+    launchable-activity: name='dev.acos.fixtures.formvalidation.MainActivity'  label='' icon=''
+    feature-group: label=''
+      uses-feature: name='android.hardware.faketouch'
+      uses-implied-feature: name='android.hardware.faketouch' reason='default feature for all apps'
+    main
+    supports-screens: 'small' 'normal' 'large' 'xlarge'
+    supports-any-density: 'true'
+    locales: '--_--'
+    densities: '160'
+build-apps: [form-validation] -> /home/Qui/.t3/worktrees/acos/t3-3a063238-f609e073e6a62c6b/fixtures/build/apps/form-validation.apk (12756 bytes)
+build-apps: [settle-lab] compiling resources
+build-apps: [settle-lab] linking resources + manifest
+build-apps: [settle-lab] compiling java
+build-apps: [settle-lab] dexing
+build-apps: [settle-lab] aligning
+build-apps: [settle-lab] signing
+build-apps: [settle-lab] verifying
+    Signer #1 certificate DN: CN=Android Debug, O=Android, C=US
+    Signer #1 certificate SHA-256 digest: ac1bc8415eec4ed22aee65c8be596c08a0c543ef1c9cb85dc9f9a3165db12828
+    Signer #1 certificate SHA-1 digest: ed582387a39449324ab4136758c4bab2e9f0acff
+    Signer #1 certificate MD5 digest: e53c641db0acc0c240788b98ae3d9e78
+build-apps: [settle-lab] badging:
+    package: name='dev.acos.fixtures.settletab' versionCode='1' versionName='1.0' platformBuildVersionName='14' platformBuildVersionCode='34' compileSdkVersion='34' compileSdkVersionCodename='14'
+    minSdkVersion:'26'
+    targetSdkVersion:'34'
+    application-label:'Settle Lab'
+    application: label='Settle Lab' icon=''
+    application-debuggable
+    launchable-activity: name='dev.acos.fixtures.settletab.MainActivity'  label='' icon=''
+    feature-group: label=''
+      uses-feature: name='android.hardware.faketouch'
+      uses-implied-feature: name='android.hardware.faketouch' reason='default feature for all apps'
+    main
+    other-activities
+    supports-screens: 'small' 'normal' 'large' 'xlarge'
+    supports-any-density: 'true'
+    locales: '--_--'
+    densities: '160'
+build-apps: [settle-lab] -> /home/Qui/.t3/worktrees/acos/t3-3a063238-f609e073e6a62c6b/fixtures/build/apps/settle-lab.apk (21082 bytes)
+build-apps: [thread-heavy] compiling resources
+build-apps: [thread-heavy] linking resources + manifest
+build-apps: [thread-heavy] compiling java
+build-apps: [thread-heavy] dexing
+build-apps: [thread-heavy] aligning
+build-apps: [thread-heavy] signing
+build-apps: [thread-heavy] verifying
+    Signer #1 certificate DN: CN=Android Debug, O=Android, C=US
+    Signer #1 certificate SHA-256 digest: ac1bc8415eec4ed22aee65c8be596c08a0c543ef1c9cb85dc9f9a3165db12828
+    Signer #1 certificate SHA-1 digest: ed582387a39449324ab4136758c4bab2e9f0acff
+    Signer #1 certificate MD5 digest: e53c641db0acc0c240788b98ae3d9e78
+build-apps: [thread-heavy] badging:
+    package: name='dev.acos.fixtures.threadheavy' versionCode='1' versionName='1.0' platformBuildVersionName='14' platformBuildVersionCode='34' compileSdkVersion='34' compileSdkVersionCodename='14'
+    minSdkVersion:'26'
+    targetSdkVersion:'34'
+    application-label:'Thread Heavy'
+    application: label='Thread Heavy' icon=''
+    application-debuggable
+    launchable-activity: name='dev.acos.fixtures.threadheavy.MainActivity'  label='' icon=''
+    feature-group: label=''
+      uses-feature: name='android.hardware.faketouch'
+      uses-implied-feature: name='android.hardware.faketouch' reason='default feature for all apps'
+    main
+    supports-screens: 'small' 'normal' 'large' 'xlarge'
+    supports-any-density: 'true'
+    locales: '--_--'
+    densities: '160'
+build-apps: [thread-heavy] -> /home/Qui/.t3/worktrees/acos/t3-3a063238-f609e073e6a62c6b/fixtures/build/apps/thread-heavy.apk (12756 bytes)
+build-apps: [svg-viewbox] compiling resources
+build-apps: [svg-viewbox] linking resources + manifest
+build-apps: [svg-viewbox] compiling java
+Note: /home/Qui/.t3/worktrees/acos/t3-3a063238-f609e073e6a62c6b/fixtures/apps/svg-viewbox/src/dev/acos/fixtures/svgviewbox/SvgProbeView.java uses or overrides a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+build-apps: [svg-viewbox] dexing
+build-apps: [svg-viewbox] aligning
+build-apps: [svg-viewbox] signing
+build-apps: [svg-viewbox] verifying
+    Signer #1 certificate DN: CN=Android Debug, O=Android, C=US
+    Signer #1 certificate SHA-256 digest: ac1bc8415eec4ed22aee65c8be596c08a0c543ef1c9cb85dc9f9a3165db12828
+    Signer #1 certificate SHA-1 digest: ed582387a39449324ab4136758c4bab2e9f0acff
+    Signer #1 certificate MD5 digest: e53c641db0acc0c240788b98ae3d9e78
+build-apps: [svg-viewbox] badging:
+    package: name='dev.acos.fixtures.svgviewbox' versionCode='1' versionName='1.0' platformBuildVersionName='14' platformBuildVersionCode='34' compileSdkVersion='34' compileSdkVersionCodename='14'
+    minSdkVersion:'26'
+    targetSdkVersion:'34'
+    application-label:'SVG ViewBox'
+    application: label='SVG ViewBox' icon=''
+    application-debuggable
+    launchable-activity: name='dev.acos.fixtures.svgviewbox.MainActivity'  label='' icon=''
+    feature-group: label=''
+      uses-feature: name='android.hardware.faketouch'
+      uses-implied-feature: name='android.hardware.faketouch' reason='default feature for all apps'
+    main
+    supports-screens: 'small' 'normal' 'large' 'xlarge'
+    supports-any-density: 'true'
+    locales: '--_--'
+    densities: '160'
+build-apps: [svg-viewbox] -> /home/Qui/.t3/worktrees/acos/t3-3a063238-f609e073e6a62c6b/fixtures/build/apps/svg-viewbox.apk (12756 bytes)
+build-apps: [offscreen-pager] compiling resources
+build-apps: [offscreen-pager] linking resources + manifest
+build-apps: [offscreen-pager] compiling java
+build-apps: [offscreen-pager] dexing
+build-apps: [offscreen-pager] aligning
+build-apps: [offscreen-pager] signing
+build-apps: [offscreen-pager] verifying
+    Signer #1 certificate DN: CN=Android Debug, O=Android, C=US
+    Signer #1 certificate SHA-256 digest: ac1bc8415eec4ed22aee65c8be596c08a0c543ef1c9cb85dc9f9a3165db12828
+    Signer #1 certificate SHA-1 digest: ed582387a39449324ab4136758c4bab2e9f0acff
+    Signer #1 certificate MD5 digest: e53c641db0acc0c240788b98ae3d9e78
+build-apps: [offscreen-pager] badging:
+    package: name='dev.acos.fixtures.offscreenpager' versionCode='1' versionName='1.0' platformBuildVersionName='14' platformBuildVersionCode='34' compileSdkVersion='34' compileSdkVersionCodename='14'
+    minSdkVersion:'26'
+    targetSdkVersion:'34'
+    application-label:'Offscreen Pager'
+    application: label='Offscreen Pager' icon=''
+    application-debuggable
+    launchable-activity: name='dev.acos.fixtures.offscreenpager.MainActivity'  label='' icon=''
+    feature-group: label=''
+      uses-feature: name='android.hardware.faketouch'
+      uses-implied-feature: name='android.hardware.faketouch' reason='default feature for all apps'
+    main
+    supports-screens: 'small' 'normal' 'large' 'xlarge'
+    supports-any-density: 'true'
+    locales: '--_--'
+    densities: '160'
+build-apps: [offscreen-pager] -> /home/Qui/.t3/worktrees/acos/t3-3a063238-f609e073e6a62c6b/fixtures/build/apps/offscreen-pager.apk (12756 bytes)
+build-apps: [looper-wake] compiling resources
+build-apps: [looper-wake] linking resources + manifest
+build-apps: [looper-wake] compiling java
+build-apps: [looper-wake] dexing
+build-apps: [looper-wake] aligning
+build-apps: [looper-wake] signing
+build-apps: [looper-wake] verifying
+    Signer #1 certificate DN: CN=Android Debug, O=Android, C=US
+    Signer #1 certificate SHA-256 digest: ac1bc8415eec4ed22aee65c8be596c08a0c543ef1c9cb85dc9f9a3165db12828
+    Signer #1 certificate SHA-1 digest: ed582387a39449324ab4136758c4bab2e9f0acff
+    Signer #1 certificate MD5 digest: e53c641db0acc0c240788b98ae3d9e78
+build-apps: [looper-wake] badging:
+    package: name='dev.acos.fixtures.looperwake' versionCode='1' versionName='1.0' platformBuildVersionName='14' platformBuildVersionCode='34' compileSdkVersion='34' compileSdkVersionCodename='14'
+    minSdkVersion:'26'
+    targetSdkVersion:'34'
+    application-label:'Looper Wake'
+    application: label='Looper Wake' icon=''
+    application-debuggable
+    launchable-activity: name='dev.acos.fixtures.looperwake.MainActivity'  label='' icon=''
+    feature-group: label=''
+      uses-feature: name='android.hardware.faketouch'
+      uses-implied-feature: name='android.hardware.faketouch' reason='default feature for all apps'
+    main
+    supports-screens: 'small' 'normal' 'large' 'xlarge'
+    supports-any-density: 'true'
+    locales: '--_--'
+    densities: '160'
+build-apps: [looper-wake] -> /home/Qui/.t3/worktrees/acos/t3-3a063238-f609e073e6a62c6b/fixtures/build/apps/looper-wake.apk (16852 bytes)
+build-apps: [sensor-probe] compiling resources
+build-apps: [sensor-probe] linking resources + manifest
+build-apps: [sensor-probe] compiling java
+build-apps: [sensor-probe] dexing
+build-apps: [sensor-probe] aligning
+build-apps: [sensor-probe] signing
+build-apps: [sensor-probe] verifying
+    Signer #1 certificate DN: CN=Android Debug, O=Android, C=US
+    Signer #1 certificate SHA-256 digest: ac1bc8415eec4ed22aee65c8be596c08a0c543ef1c9cb85dc9f9a3165db12828
+    Signer #1 certificate SHA-1 digest: ed582387a39449324ab4136758c4bab2e9f0acff
+    Signer #1 certificate MD5 digest: e53c641db0acc0c240788b98ae3d9e78
+build-apps: [sensor-probe] badging:
+    package: name='dev.acos.fixtures.sensorprobe' versionCode='1' versionName='1.0' platformBuildVersionName='14' platformBuildVersionCode='34' compileSdkVersion='34' compileSdkVersionCodename='14'
+    minSdkVersion:'26'
+    targetSdkVersion:'34'
+    uses-permission: name='android.permission.ACTIVITY_RECOGNITION'
+    application-label:'Sensor probe'
+    application: label='Sensor probe' icon=''
+    application-debuggable
+    launchable-activity: name='dev.acos.fixtures.sensorprobe.MainActivity'  label='' icon=''
+    feature-group: label=''
+      uses-feature: name='android.hardware.faketouch'
+      uses-implied-feature: name='android.hardware.faketouch' reason='default feature for all apps'
+    main
+    supports-screens: 'small' 'normal' 'large' 'xlarge'
+    supports-any-density: 'true'
+    locales: '--_--'
+    densities: '160'
+build-apps: [sensor-probe] -> /home/Qui/.t3/worktrees/acos/t3-3a063238-f609e073e6a62c6b/fixtures/build/apps/sensor-probe.apk (16852 bytes)
+build-apps: [notif-perm-probe] compiling resources
+build-apps: [notif-perm-probe] linking resources + manifest
+build-apps: [notif-perm-probe] compiling java
+build-apps: [notif-perm-probe] dexing
+build-apps: [notif-perm-probe] aligning
+build-apps: [notif-perm-probe] signing
+build-apps: [notif-perm-probe] verifying
+    Signer #1 certificate DN: CN=Android Debug, O=Android, C=US
+    Signer #1 certificate SHA-256 digest: ac1bc8415eec4ed22aee65c8be596c08a0c543ef1c9cb85dc9f9a3165db12828
+    Signer #1 certificate SHA-1 digest: ed582387a39449324ab4136758c4bab2e9f0acff
+    Signer #1 certificate MD5 digest: e53c641db0acc0c240788b98ae3d9e78
+build-apps: [notif-perm-probe] badging:
+    package: name='dev.acos.fixtures.notifpermprobe' versionCode='1' versionName='1.0' platformBuildVersionName='14' platformBuildVersionCode='34' compileSdkVersion='34' compileSdkVersionCodename='14'
+    minSdkVersion:'26'
+    targetSdkVersion:'34'
+    uses-permission: name='android.permission.POST_NOTIFICATIONS'
+    application-label:'Notification probe'
+    application: label='Notification probe' icon=''
+    application-debuggable
+    launchable-activity: name='dev.acos.fixtures.notifpermprobe.MainActivity'  label='' icon=''
+    feature-group: label=''
+      uses-feature: name='android.hardware.faketouch'
+      uses-implied-feature: name='android.hardware.faketouch' reason='default feature for all apps'
+    main
+    other-activities
+    supports-screens: 'small' 'normal' 'large' 'xlarge'
+    supports-any-density: 'true'
+    locales: '--_--'
+    densities: '160'
+build-apps: [notif-perm-probe] -> /home/Qui/.t3/worktrees/acos/t3-3a063238-f609e073e6a62c6b/fixtures/build/apps/notif-perm-probe.apk (12756 bytes)
+build-apps: [permissioncontroller] compiling resources
+build-apps: [permissioncontroller] linking resources + manifest
+build-apps: [permissioncontroller] compiling java
+build-apps: [permissioncontroller] dexing
+build-apps: [permissioncontroller] aligning
+build-apps: [permissioncontroller] signing
+build-apps: [permissioncontroller] verifying
+    Signer #1 certificate DN: CN=Android Debug, O=Android, C=US
+    Signer #1 certificate SHA-256 digest: ac1bc8415eec4ed22aee65c8be596c08a0c543ef1c9cb85dc9f9a3165db12828
+    Signer #1 certificate SHA-1 digest: ed582387a39449324ab4136758c4bab2e9f0acff
+    Signer #1 certificate MD5 digest: e53c641db0acc0c240788b98ae3d9e78
+build-apps: [permissioncontroller] badging:
+    package: name='com.android.permissioncontroller' versionCode='1' versionName='1.0' platformBuildVersionName='14' platformBuildVersionCode='34' compileSdkVersion='34' compileSdkVersionCodename='14'
+    minSdkVersion:'26'
+    targetSdkVersion:'34'
+    application-label:'Permission controller'
+    application: label='Permission controller' icon=''
+    application-debuggable
+    feature-group: label=''
+      uses-feature: name='android.hardware.faketouch'
+      uses-implied-feature: name='android.hardware.faketouch' reason='default feature for all apps'
+    other-activities
+    supports-screens: 'small' 'normal' 'large' 'xlarge'
+    supports-any-density: 'true'
+    locales: '--_--'
+    densities: '160'
+build-apps: [permissioncontroller] -> /home/Qui/.t3/worktrees/acos/t3-3a063238-f609e073e6a62c6b/fixtures/build/apps/permissioncontroller.apk (16865 bytes)
+build-apps: [perm-probe] compiling resources
+build-apps: [perm-probe] linking resources + manifest
+build-apps: [perm-probe] compiling java
+build-apps: [perm-probe] dexing
+build-apps: [perm-probe] aligning
+build-apps: [perm-probe] signing
+build-apps: [perm-probe] verifying
+    Signer #1 certificate DN: CN=Android Debug, O=Android, C=US
+    Signer #1 certificate SHA-256 digest: ac1bc8415eec4ed22aee65c8be596c08a0c543ef1c9cb85dc9f9a3165db12828
+    Signer #1 certificate SHA-1 digest: ed582387a39449324ab4136758c4bab2e9f0acff
+    Signer #1 certificate MD5 digest: e53c641db0acc0c240788b98ae3d9e78
+build-apps: [perm-probe] badging:
+    package: name='dev.acos.fixtures.permprobe' versionCode='1' versionName='1.0' platformBuildVersionName='14' platformBuildVersionCode='34' compileSdkVersion='34' compileSdkVersionCodename='14'
+    minSdkVersion:'26'
+    targetSdkVersion:'34'
+    uses-permission: name='android.permission.CAMERA'
+    uses-permission: name='android.permission.ACCESS_FINE_LOCATION'
+    application-label:'Permission probe'
+    application: label='Permission probe' icon=''
+    application-debuggable
+    launchable-activity: name='dev.acos.fixtures.permprobe.MainActivity'  label='' icon=''
+    feature-group: label=''
+      uses-feature: name='android.hardware.camera'
+      uses-implied-feature: name='android.hardware.camera' reason='requested android.permission.CAMERA permission'
+      uses-feature: name='android.hardware.faketouch'
+      uses-implied-feature: name='android.hardware.faketouch' reason='default feature for all apps'
+      uses-feature: name='android.hardware.location'
+      uses-implied-feature: name='android.hardware.location' reason='requested android.permission.ACCESS_FINE_LOCATION permission'
+    main
+    supports-screens: 'small' 'normal' 'large' 'xlarge'
+    supports-any-density: 'true'
+    locales: '--_--'
+build-apps: [perm-probe] -> /home/Qui/.t3/worktrees/acos/t3-3a063238-f609e073e6a62c6b/fixtures/build/apps/perm-probe.apk (12756 bytes)
+build-apps: [systemui] compiling resources
+build-apps: [systemui] linking resources + manifest
+build-apps: [systemui] compiling java
+build-apps: [systemui] dexing
+build-apps: [systemui] aligning
+build-apps: [systemui] signing
+build-apps: [systemui] verifying
+    Signer #1 certificate DN: CN=Android Debug, O=Android, C=US
+    Signer #1 certificate SHA-256 digest: ac1bc8415eec4ed22aee65c8be596c08a0c543ef1c9cb85dc9f9a3165db12828
+    Signer #1 certificate SHA-1 digest: ed582387a39449324ab4136758c4bab2e9f0acff
+    Signer #1 certificate MD5 digest: e53c641db0acc0c240788b98ae3d9e78
+build-apps: [systemui] badging:
+    package: name='com.android.systemui' versionCode='1' versionName='1.0' platformBuildVersionName='14' platformBuildVersionCode='34' compileSdkVersion='34' compileSdkVersionCodename='14'
+    minSdkVersion:'26'
+    targetSdkVersion:'34'
+    application-label:'System UI'
+    application: label='System UI' icon=''
+    application-debuggable
+    feature-group: label=''
+      uses-feature: name='android.hardware.faketouch'
+      uses-implied-feature: name='android.hardware.faketouch' reason='default feature for all apps'
+    other-activities
+    supports-screens: 'small' 'normal' 'large' 'xlarge'
+    supports-any-density: 'true'
+    locales: '--_--'
+    densities: '160'
+build-apps: [systemui] -> /home/Qui/.t3/worktrees/acos/t3-3a063238-f609e073e6a62c6b/fixtures/build/apps/systemui.apk (12757 bytes)
+build-apps: [launch-extras-probe] compiling resources
+build-apps: [launch-extras-probe] linking resources + manifest
+build-apps: [launch-extras-probe] compiling java
+build-apps: [launch-extras-probe] dexing
+build-apps: [launch-extras-probe] aligning
+build-apps: [launch-extras-probe] signing
+build-apps: [launch-extras-probe] verifying
+    Signer #1 certificate DN: CN=Android Debug, O=Android, C=US
+    Signer #1 certificate SHA-256 digest: ac1bc8415eec4ed22aee65c8be596c08a0c543ef1c9cb85dc9f9a3165db12828
+    Signer #1 certificate SHA-1 digest: ed582387a39449324ab4136758c4bab2e9f0acff
+    Signer #1 certificate MD5 digest: e53c641db0acc0c240788b98ae3d9e78
+build-apps: [launch-extras-probe] badging:
+    package: name='dev.acos.fixtures.launchextras' versionCode='1' versionName='1.0' platformBuildVersionName='14' platformBuildVersionCode='34' compileSdkVersion='34' compileSdkVersionCodename='14'
+    minSdkVersion:'26'
+    targetSdkVersion:'34'
+    application-label:'Launch Extras Probe'
+    application: label='Launch Extras Probe' icon=''
+    application-debuggable
+    launchable-activity: name='dev.acos.fixtures.launchextras.MainActivity'  label='' icon=''
+    feature-group: label=''
+      uses-feature: name='android.hardware.faketouch'
+      uses-implied-feature: name='android.hardware.faketouch' reason='default feature for all apps'
+    main
+    supports-screens: 'small' 'normal' 'large' 'xlarge'
+    supports-any-density: 'true'
+    locales: '--_--'
+    densities: '160'
+build-apps: [launch-extras-probe] -> /home/Qui/.t3/worktrees/acos/t3-3a063238-f609e073e6a62c6b/fixtures/build/apps/launch-extras-probe.apk (12756 bytes)
+build-apps: [multi-package-probe] compiling resources
+build-apps: [multi-package-probe] linking resources + manifest
+build-apps: [multi-package-probe] compiling java
+build-apps: [multi-package-probe] dexing
+build-apps: [multi-package-probe] aligning
+build-apps: [multi-package-probe] signing
+build-apps: [multi-package-probe] verifying
+    Signer #1 certificate DN: CN=Android Debug, O=Android, C=US
+    Signer #1 certificate SHA-256 digest: ac1bc8415eec4ed22aee65c8be596c08a0c543ef1c9cb85dc9f9a3165db12828
+    Signer #1 certificate SHA-1 digest: ed582387a39449324ab4136758c4bab2e9f0acff
+    Signer #1 certificate MD5 digest: e53c641db0acc0c240788b98ae3d9e78
+build-apps: [multi-package-probe] badging:
+    package: name='dev.acos.fixtures.multipkg' versionCode='1' versionName='1.0' platformBuildVersionName='14' platformBuildVersionCode='34' compileSdkVersion='34' compileSdkVersionCodename='14'
+    minSdkVersion:'26'
+    targetSdkVersion:'34'
+    application-label:'Multi-package probe'
+    application: label='Multi-package probe' icon=''
+    application-debuggable
+    launchable-activity: name='dev.acos.fixtures.multipkg.MainActivity'  label='' icon=''
+    feature-group: label=''
+      uses-feature: name='android.hardware.faketouch'
+      uses-implied-feature: name='android.hardware.faketouch' reason='default feature for all apps'
+    main
+    supports-screens: 'small' 'normal' 'large' 'xlarge'
+    supports-any-density: 'true'
+    locales: '--_--'
+    densities: '160'
+build-apps: [multi-package-probe] -> /home/Qui/.t3/worktrees/acos/t3-3a063238-f609e073e6a62c6b/fixtures/build/apps/multi-package-probe.apk (12756 bytes)
+build-apps: [intent-probe] compiling resources
+build-apps: [intent-probe] linking resources + manifest
+build-apps: [intent-probe] compiling java
+build-apps: [intent-probe] dexing
+build-apps: [intent-probe] aligning
+build-apps: [intent-probe] signing
+build-apps: [intent-probe] verifying
+    Signer #1 certificate DN: CN=Android Debug, O=Android, C=US
+    Signer #1 certificate SHA-256 digest: ac1bc8415eec4ed22aee65c8be596c08a0c543ef1c9cb85dc9f9a3165db12828
+    Signer #1 certificate SHA-1 digest: ed582387a39449324ab4136758c4bab2e9f0acff
+    Signer #1 certificate MD5 digest: e53c641db0acc0c240788b98ae3d9e78
+build-apps: [intent-probe] badging:
+    package: name='dev.acos.fixtures.intentprobe' versionCode='1' versionName='1.0' platformBuildVersionName='14' platformBuildVersionCode='34' compileSdkVersion='34' compileSdkVersionCodename='14'
+    minSdkVersion:'26'
+    targetSdkVersion:'34'
+    application-label:'Intent probe'
+    application: label='Intent probe' icon=''
+    application-debuggable
+    launchable-activity: name='dev.acos.fixtures.intentprobe.MainActivity'  label='' icon=''
+    feature-group: label=''
+      uses-feature: name='android.hardware.faketouch'
+      uses-implied-feature: name='android.hardware.faketouch' reason='default feature for all apps'
+    main
+    supports-screens: 'small' 'normal' 'large' 'xlarge'
+    supports-any-density: 'true'
+    locales: '--_--'
+    densities: '160'
+build-apps: [intent-probe] -> /home/Qui/.t3/worktrees/acos/t3-3a063238-f609e073e6a62c6b/fixtures/build/apps/intent-probe.apk (12756 bytes)
+build-apps: [pms-parcel] compiling resources
+build-apps: [pms-parcel] linking resources + manifest
+build-apps: [pms-parcel] compiling java
+Note: /home/Qui/.t3/worktrees/acos/t3-3a063238-f609e073e6a62c6b/fixtures/apps/pms-parcel/src/dev/acos/fixtures/pmsparcel/MainActivity.java uses or overrides a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+build-apps: [pms-parcel] dexing
+build-apps: [pms-parcel] aligning
+build-apps: [pms-parcel] signing
+build-apps: [pms-parcel] verifying
+    Signer #1 certificate DN: CN=Android Debug, O=Android, C=US
+    Signer #1 certificate SHA-256 digest: ac1bc8415eec4ed22aee65c8be596c08a0c543ef1c9cb85dc9f9a3165db12828
+    Signer #1 certificate SHA-1 digest: ed582387a39449324ab4136758c4bab2e9f0acff
+    Signer #1 certificate MD5 digest: e53c641db0acc0c240788b98ae3d9e78
+build-apps: [pms-parcel] badging:
+    package: name='dev.acos.fixtures.pmsparcel' versionCode='1' versionName='1.0' platformBuildVersionName='14' platformBuildVersionCode='34' compileSdkVersion='34' compileSdkVersionCodename='14'
+    minSdkVersion:'26'
+    targetSdkVersion:'34'
+    uses-permission: name='android.permission.INTERNET'
+    uses-permission: name='android.permission.VIBRATE'
+    application-label:'PMS Parcel'
+    application: label='PMS Parcel' icon=''
+    application-debuggable
+    launchable-activity: name='dev.acos.fixtures.pmsparcel.MainActivity'  label='' icon=''
+    feature-group: label=''
+      uses-feature: name='android.hardware.faketouch'
+      uses-implied-feature: name='android.hardware.faketouch' reason='default feature for all apps'
+    main
+    supports-screens: 'small' 'normal' 'large' 'xlarge'
+    supports-any-density: 'true'
+    locales: '--_--'
+    densities: '160'
+build-apps: [pms-parcel] -> /home/Qui/.t3/worktrees/acos/t3-3a063238-f609e073e6a62c6b/fixtures/build/apps/pms-parcel.apk (16852 bytes)
+build-apps: [a11y-probe] compiling resources
+build-apps: [a11y-probe] linking resources + manifest
+build-apps: [a11y-probe] compiling java
+Note: /home/Qui/.t3/worktrees/acos/t3-3a063238-f609e073e6a62c6b/fixtures/apps/a11y-probe/src/dev/acos/fixtures/a11yprobe/MainActivity.java uses or overrides a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+build-apps: [a11y-probe] dexing
+build-apps: [a11y-probe] aligning
+build-apps: [a11y-probe] signing
+build-apps: [a11y-probe] verifying
+    Signer #1 certificate DN: CN=Android Debug, O=Android, C=US
+    Signer #1 certificate SHA-256 digest: ac1bc8415eec4ed22aee65c8be596c08a0c543ef1c9cb85dc9f9a3165db12828
+    Signer #1 certificate SHA-1 digest: ed582387a39449324ab4136758c4bab2e9f0acff
+    Signer #1 certificate MD5 digest: e53c641db0acc0c240788b98ae3d9e78
+build-apps: [a11y-probe] badging:
+    package: name='dev.acos.fixtures.a11yprobe' versionCode='1' versionName='1.0' platformBuildVersionName='14' platformBuildVersionCode='34' compileSdkVersion='34' compileSdkVersionCodename='14'
+    minSdkVersion:'26'
+    targetSdkVersion:'34'
+    uses-permission: name='android.permission.BIND_ACCESSIBILITY_SERVICE'
+    application-label:'a11y probe'
+    application: label='a11y probe' icon=''
+    application-debuggable
+    launchable-activity: name='dev.acos.fixtures.a11yprobe.MainActivity'  label='' icon=''
+    feature-group: label=''
+      uses-feature: name='android.hardware.faketouch'
+      uses-implied-feature: name='android.hardware.faketouch' reason='default feature for all apps'
+    provides-component:'accessibility'
+    main
+    supports-screens: 'small' 'normal' 'large' 'xlarge'
+    supports-any-density: 'true'
+    locales: '--_--'
+    densities: '160'
+build-apps: [a11y-probe] -> /home/Qui/.t3/worktrees/acos/t3-3a063238-f609e073e6a62c6b/fixtures/build/apps/a11y-probe.apk (29310 bytes)
+build-apps: [a11y-names-probe] compiling resources
+build-apps: [a11y-names-probe] linking resources + manifest
+build-apps: [a11y-names-probe] compiling java
+build-apps: [a11y-names-probe] dexing
+build-apps: [a11y-names-probe] aligning
+build-apps: [a11y-names-probe] signing
+build-apps: [a11y-names-probe] verifying
+    Signer #1 certificate DN: CN=Android Debug, O=Android, C=US
+    Signer #1 certificate SHA-256 digest: ac1bc8415eec4ed22aee65c8be596c08a0c543ef1c9cb85dc9f9a3165db12828
+    Signer #1 certificate SHA-1 digest: ed582387a39449324ab4136758c4bab2e9f0acff
+    Signer #1 certificate MD5 digest: e53c641db0acc0c240788b98ae3d9e78
+build-apps: [a11y-names-probe] badging:
+    package: name='dev.acos.fixtures.a11ynames' versionCode='1' versionName='1.0' platformBuildVersionName='14' platformBuildVersionCode='34' compileSdkVersion='34' compileSdkVersionCodename='14'
+    minSdkVersion:'26'
+    targetSdkVersion:'34'
+    application-label:'A11y names probe'
+    application: label='A11y names probe' icon=''
+    application-debuggable
+    launchable-activity: name='dev.acos.fixtures.a11ynames.MainActivity'  label='' icon=''
+    feature-group: label=''
+      uses-feature: name='android.hardware.faketouch'
+      uses-implied-feature: name='android.hardware.faketouch' reason='default feature for all apps'
+    main
+    supports-screens: 'small' 'normal' 'large' 'xlarge'
+    supports-any-density: 'true'
+    locales: '--_--'
+    densities: '160'
+build-apps: [a11y-names-probe] -> /home/Qui/.t3/worktrees/acos/t3-3a063238-f609e073e6a62c6b/fixtures/build/apps/a11y-names-probe.apk (12756 bytes)
+build-apps: [egl-probe] compiling resources
+build-apps: [egl-probe] linking resources + manifest
+build-apps: [egl-probe] compiling java
+build-apps: [egl-probe] dexing
+build-apps: [egl-probe] aligning
+build-apps: [egl-probe] signing
+build-apps: [egl-probe] verifying
+    Signer #1 certificate DN: CN=Android Debug, O=Android, C=US
+    Signer #1 certificate SHA-256 digest: ac1bc8415eec4ed22aee65c8be596c08a0c543ef1c9cb85dc9f9a3165db12828
+    Signer #1 certificate SHA-1 digest: ed582387a39449324ab4136758c4bab2e9f0acff
+    Signer #1 certificate MD5 digest: e53c641db0acc0c240788b98ae3d9e78
+build-apps: [egl-probe] badging:
+    package: name='dev.acos.fixtures.eglprobe' versionCode='1' versionName='1.0' platformBuildVersionName='14' platformBuildVersionCode='34' compileSdkVersion='34' compileSdkVersionCodename='14'
+    minSdkVersion:'26'
+    targetSdkVersion:'34'
+    application-label:'EglProbe'
+    application: label='EglProbe' icon=''
+    application-debuggable
+    launchable-activity: name='dev.acos.fixtures.eglprobe.MainActivity'  label='' icon=''
+    feature-group: label=''
+      uses-feature: name='android.hardware.faketouch'
+      uses-implied-feature: name='android.hardware.faketouch' reason='default feature for all apps'
+    main
+    supports-screens: 'small' 'normal' 'large' 'xlarge'
+    supports-any-density: 'true'
+    locales: '--_--'
+    densities: '160'
+build-apps: [egl-probe] -> /home/Qui/.t3/worktrees/acos/t3-3a063238-f609e073e6a62c6b/fixtures/build/apps/egl-probe.apk (20883 bytes)
+build-apps: [tail-probe] compiling resources
+build-apps: [tail-probe] linking resources + manifest
+build-apps: [tail-probe] compiling java
+Note: /home/Qui/.t3/worktrees/acos/t3-3a063238-f609e073e6a62c6b/fixtures/apps/tail-probe/src/dev/acos/fixtures/tailprobe/MainActivity.java uses or overrides a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+build-apps: [tail-probe] dexing
+build-apps: [tail-probe] aligning
+build-apps: [tail-probe] signing
+build-apps: [tail-probe] verifying
+    Signer #1 certificate DN: CN=Android Debug, O=Android, C=US
+    Signer #1 certificate SHA-256 digest: ac1bc8415eec4ed22aee65c8be596c08a0c543ef1c9cb85dc9f9a3165db12828
+    Signer #1 certificate SHA-1 digest: ed582387a39449324ab4136758c4bab2e9f0acff
+    Signer #1 certificate MD5 digest: e53c641db0acc0c240788b98ae3d9e78
+build-apps: [tail-probe] badging:
+    package: name='dev.acos.fixtures.tailprobe' versionCode='1' versionName='1.0' platformBuildVersionName='14' platformBuildVersionCode='34' compileSdkVersion='34' compileSdkVersionCodename='14'
+    minSdkVersion:'26'
+    targetSdkVersion:'34'
+    uses-permission: name='android.permission.READ_PHONE_STATE'
+    uses-permission: name='android.permission.READ_PHONE_NUMBERS'
+    uses-permission: name='android.permission.SEND_SMS'
+    uses-permission: name='android.permission.RECEIVE_SMS'
+    uses-permission: name='android.permission.USE_BIOMETRIC'
+    uses-permission: name='android.permission.BLUETOOTH_CONNECT'
+    uses-permission: name='android.permission.BLUETOOTH_SCAN'
+    uses-permission: name='android.permission.VIBRATE'
+    application-label:'Tail Probe'
+    application: label='Tail Probe' icon=''
+    application-debuggable
+    launchable-activity: name='dev.acos.fixtures.tailprobe.MainActivity'  label='' icon=''
+    feature-group: label=''
+      uses-feature: name='android.hardware.faketouch'
+      uses-implied-feature: name='android.hardware.faketouch' reason='default feature for all apps'
+      uses-feature: name='android.hardware.telephony'
+      uses-implied-feature: name='android.hardware.telephony' reason='requested a telephony permission'
+build-apps: [tail-probe] -> /home/Qui/.t3/worktrees/acos/t3-3a063238-f609e073e6a62c6b/fixtures/build/apps/tail-probe.apk (24979 bytes)
+build-apps: [clip-probe] compiling resources
+build-apps: [clip-probe] linking resources + manifest
+build-apps: [clip-probe] compiling java
+build-apps: [clip-probe] dexing
+build-apps: [clip-probe] aligning
+build-apps: [clip-probe] signing
+build-apps: [clip-probe] verifying
+    Signer #1 certificate DN: CN=Android Debug, O=Android, C=US
+    Signer #1 certificate SHA-256 digest: ac1bc8415eec4ed22aee65c8be596c08a0c543ef1c9cb85dc9f9a3165db12828
+    Signer #1 certificate SHA-1 digest: ed582387a39449324ab4136758c4bab2e9f0acff
+    Signer #1 certificate MD5 digest: e53c641db0acc0c240788b98ae3d9e78
+build-apps: [clip-probe] badging:
+    package: name='dev.acos.fixtures.clipprobe' versionCode='1' versionName='1.0' platformBuildVersionName='14' platformBuildVersionCode='34' compileSdkVersion='34' compileSdkVersionCodename='14'
+    minSdkVersion:'26'
+    targetSdkVersion:'34'
+    uses-permission: name='android.permission.READ_CLIPBOARD_IN_BACKGROUND'
+    application-label:'Clip Probe'
+    application: label='Clip Probe' icon=''
+    application-debuggable
+    launchable-activity: name='dev.acos.fixtures.clipprobe.MainActivity'  label='' icon=''
+    feature-group: label=''
+      uses-feature: name='android.hardware.faketouch'
+      uses-implied-feature: name='android.hardware.faketouch' reason='default feature for all apps'
+    main
+    supports-screens: 'small' 'normal' 'large' 'xlarge'
+    supports-any-density: 'true'
+    locales: '--_--'
+    densities: '160'
+build-apps: [clip-probe] -> /home/Qui/.t3/worktrees/acos/t3-3a063238-f609e073e6a62c6b/fixtures/build/apps/clip-probe.apk (16787 bytes)
+build-apps: [wifi-probe] compiling resources
+build-apps: [wifi-probe] linking resources + manifest
+build-apps: [wifi-probe] compiling java
+Note: /home/Qui/.t3/worktrees/acos/t3-3a063238-f609e073e6a62c6b/fixtures/apps/wifi-probe/src/dev/acos/fixtures/wifiprobe/MainActivity.java uses or overrides a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+build-apps: [wifi-probe] dexing
+build-apps: [wifi-probe] aligning
+build-apps: [wifi-probe] signing
+build-apps: [wifi-probe] verifying
+    Signer #1 certificate DN: CN=Android Debug, O=Android, C=US
+    Signer #1 certificate SHA-256 digest: ac1bc8415eec4ed22aee65c8be596c08a0c543ef1c9cb85dc9f9a3165db12828
+    Signer #1 certificate SHA-1 digest: ed582387a39449324ab4136758c4bab2e9f0acff
+    Signer #1 certificate MD5 digest: e53c641db0acc0c240788b98ae3d9e78
+build-apps: [wifi-probe] badging:
+    package: name='dev.acos.fixtures.wifiprobe' versionCode='1' versionName='1.0' platformBuildVersionName='14' platformBuildVersionCode='34' compileSdkVersion='34' compileSdkVersionCodename='14'
+    minSdkVersion:'26'
+    targetSdkVersion:'34'
+    uses-permission: name='android.permission.ACCESS_WIFI_STATE'
+    uses-permission: name='android.permission.CHANGE_WIFI_STATE'
+    uses-permission: name='android.permission.ACCESS_NETWORK_STATE'
+    uses-permission: name='android.permission.ACCESS_FINE_LOCATION'
+    application-label:'Wifi Probe'
+    application: label='Wifi Probe' icon=''
+    application-debuggable
+    launchable-activity: name='dev.acos.fixtures.wifiprobe.MainActivity'  label='' icon=''
+    feature-group: label=''
+      uses-feature: name='android.hardware.faketouch'
+      uses-implied-feature: name='android.hardware.faketouch' reason='default feature for all apps'
+      uses-feature: name='android.hardware.location'
+      uses-implied-feature: name='android.hardware.location' reason='requested android.permission.ACCESS_FINE_LOCATION permission'
+      uses-feature: name='android.hardware.wifi'
+      uses-implied-feature: name='android.hardware.wifi' reason='requested android.permission.ACCESS_WIFI_STATE permission, and requested android.permission.CHANGE_WIFI_STATE permission'
+    main
+    supports-screens: 'small' 'normal' 'large' 'xlarge'
+build-apps: [wifi-probe] -> /home/Qui/.t3/worktrees/acos/t3-3a063238-f609e073e6a62c6b/fixtures/build/apps/wifi-probe.apk (16787 bytes)
+build-apps: [media-probe] compiling resources
+build-apps: [media-probe] linking resources + manifest
+build-apps: [media-probe] compiling java
+build-apps: [media-probe] dexing
+build-apps: [media-probe] aligning
+build-apps: [media-probe] signing
+build-apps: [media-probe] verifying
+    Signer #1 certificate DN: CN=Android Debug, O=Android, C=US
+    Signer #1 certificate SHA-256 digest: ac1bc8415eec4ed22aee65c8be596c08a0c543ef1c9cb85dc9f9a3165db12828
+    Signer #1 certificate SHA-1 digest: ed582387a39449324ab4136758c4bab2e9f0acff
+    Signer #1 certificate MD5 digest: e53c641db0acc0c240788b98ae3d9e78
+build-apps: [media-probe] badging:
+    package: name='dev.acos.fixtures.mediaprobe' versionCode='1' versionName='1.0' platformBuildVersionName='14' platformBuildVersionCode='34' compileSdkVersion='34' compileSdkVersionCodename='14'
+    minSdkVersion:'26'
+    targetSdkVersion:'34'
+    application-label:'Media Probe'
+    application: label='Media Probe' icon=''
+    application-debuggable
+    launchable-activity: name='dev.acos.fixtures.mediaprobe.MainActivity'  label='' icon=''
+    feature-group: label=''
+      uses-feature: name='android.hardware.faketouch'
+      uses-implied-feature: name='android.hardware.faketouch' reason='default feature for all apps'
+    main
+    supports-screens: 'small' 'normal' 'large' 'xlarge'
+    supports-any-density: 'true'
+    locales: '--_--'
+    densities: '160'
+build-apps: [media-probe] -> /home/Qui/.t3/worktrees/acos/t3-3a063238-f609e073e6a62c6b/fixtures/build/apps/media-probe.apk (16787 bytes)
+build-apps: [location-probe] compiling resources
+build-apps: [location-probe] linking resources + manifest
+build-apps: [location-probe] compiling java
+Note: /home/Qui/.t3/worktrees/acos/t3-3a063238-f609e073e6a62c6b/fixtures/apps/location-probe/src/dev/acos/fixtures/locationprobe/MainActivity.java uses or overrides a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+build-apps: [location-probe] dexing
+build-apps: [location-probe] aligning
+build-apps: [location-probe] signing
+build-apps: [location-probe] verifying
+    Signer #1 certificate DN: CN=Android Debug, O=Android, C=US
+    Signer #1 certificate SHA-256 digest: ac1bc8415eec4ed22aee65c8be596c08a0c543ef1c9cb85dc9f9a3165db12828
+    Signer #1 certificate SHA-1 digest: ed582387a39449324ab4136758c4bab2e9f0acff
+    Signer #1 certificate MD5 digest: e53c641db0acc0c240788b98ae3d9e78
+build-apps: [location-probe] badging:
+    package: name='dev.acos.fixtures.locationprobe' versionCode='1' versionName='1.0' platformBuildVersionName='14' platformBuildVersionCode='34' compileSdkVersion='34' compileSdkVersionCodename='14'
+    minSdkVersion:'26'
+    targetSdkVersion:'34'
+    uses-permission: name='android.permission.ACCESS_FINE_LOCATION'
+    uses-permission: name='android.permission.ACCESS_COARSE_LOCATION'
+    application-label:'Location Probe'
+    application: label='Location Probe' icon=''
+    application-debuggable
+    launchable-activity: name='dev.acos.fixtures.locationprobe.MainActivity'  label='' icon=''
+    feature-group: label=''
+      uses-feature: name='android.hardware.faketouch'
+      uses-implied-feature: name='android.hardware.faketouch' reason='default feature for all apps'
+      uses-feature: name='android.hardware.location'
+      uses-implied-feature: name='android.hardware.location' reason='requested android.permission.ACCESS_COARSE_LOCATION permission, and requested android.permission.ACCESS_FINE_LOCATION permission'
+    main
+    supports-screens: 'small' 'normal' 'large' 'xlarge'
+    supports-any-density: 'true'
+    locales: '--_--'
+    densities: '160'
+build-apps: [location-probe] -> /home/Qui/.t3/worktrees/acos/t3-3a063238-f609e073e6a62c6b/fixtures/build/apps/location-probe.apk (16852 bytes)
+build-apps: [proc-a] compiling resources
+build-apps: [proc-a] linking resources + manifest
+build-apps: [proc-a] compiling java
+build-apps: [proc-a] dexing
+build-apps: [proc-a] aligning
+build-apps: [proc-a] signing
+build-apps: [proc-a] verifying
+    Signer #1 certificate DN: CN=Android Debug, O=Android, C=US
+    Signer #1 certificate SHA-256 digest: ac1bc8415eec4ed22aee65c8be596c08a0c543ef1c9cb85dc9f9a3165db12828
+    Signer #1 certificate SHA-1 digest: ed582387a39449324ab4136758c4bab2e9f0acff
+    Signer #1 certificate MD5 digest: e53c641db0acc0c240788b98ae3d9e78
+build-apps: [proc-a] badging:
+    package: name='dev.acos.fixtures.proca' versionCode='1' versionName='1.0' platformBuildVersionName='14' platformBuildVersionCode='34' compileSdkVersion='34' compileSdkVersionCodename='14'
+    minSdkVersion:'26'
+    targetSdkVersion:'34'
+    application-label:'Proc A'
+    application: label='Proc A' icon=''
+    application-debuggable
+    launchable-activity: name='dev.acos.fixtures.proca.ProcAActivity'  label='' icon=''
+    feature-group: label=''
+      uses-feature: name='android.hardware.faketouch'
+      uses-implied-feature: name='android.hardware.faketouch' reason='default feature for all apps'
+    main
+    supports-screens: 'small' 'normal' 'large' 'xlarge'
+    supports-any-density: 'true'
+    locales: '--_--'
+    densities: '160'
+build-apps: [proc-a] -> /home/Qui/.t3/worktrees/acos/t3-3a063238-f609e073e6a62c6b/fixtures/build/apps/proc-a.apk (16852 bytes)
+build-apps: [proc-b] compiling resources
+build-apps: [proc-b] linking resources + manifest
+build-apps: [proc-b] compiling java
+build-apps: [proc-b] dexing
+build-apps: [proc-b] aligning
+build-apps: [proc-b] signing
+build-apps: [proc-b] verifying
+    Signer #1 certificate DN: CN=Android Debug, O=Android, C=US
+    Signer #1 certificate SHA-256 digest: ac1bc8415eec4ed22aee65c8be596c08a0c543ef1c9cb85dc9f9a3165db12828
+    Signer #1 certificate SHA-1 digest: ed582387a39449324ab4136758c4bab2e9f0acff
+    Signer #1 certificate MD5 digest: e53c641db0acc0c240788b98ae3d9e78
+build-apps: [proc-b] badging:
+    package: name='dev.acos.fixtures.procb' versionCode='1' versionName='1.0' platformBuildVersionName='14' platformBuildVersionCode='34' compileSdkVersion='34' compileSdkVersionCodename='14'
+    minSdkVersion:'26'
+    targetSdkVersion:'34'
+    application-label:'Proc B'
+    application: label='Proc B' icon=''
+    application-debuggable
+    launchable-activity: name='dev.acos.fixtures.procb.ProcBActivity'  label='' icon=''
+    feature-group: label=''
+      uses-feature: name='android.hardware.faketouch'
+      uses-implied-feature: name='android.hardware.faketouch' reason='default feature for all apps'
+    main
+    other-services
+    supports-screens: 'small' 'normal' 'large' 'xlarge'
+    supports-any-density: 'true'
+    locales: '--_--'
+    densities: '160'
+build-apps: [proc-b] -> /home/Qui/.t3/worktrees/acos/t3-3a063238-f609e073e6a62c6b/fixtures/build/apps/proc-b.apk (16852 bytes)
+build-apps: [scroll-list] compiling resources
+build-apps: [scroll-list] linking resources + manifest
+build-apps: [scroll-list] compiling java
+build-apps: [scroll-list] dexing
+build-apps: [scroll-list] aligning
+build-apps: [scroll-list] signing
+build-apps: [scroll-list] verifying
+    Signer #1 certificate DN: CN=Android Debug, O=Android, C=US
+    Signer #1 certificate SHA-256 digest: ac1bc8415eec4ed22aee65c8be596c08a0c543ef1c9cb85dc9f9a3165db12828
+    Signer #1 certificate SHA-1 digest: ed582387a39449324ab4136758c4bab2e9f0acff
+    Signer #1 certificate MD5 digest: e53c641db0acc0c240788b98ae3d9e78
+build-apps: [scroll-list] badging:
+    package: name='dev.acos.fixtures.scrolllist' versionCode='1' versionName='1.0' platformBuildVersionName='14' platformBuildVersionCode='34' compileSdkVersion='34' compileSdkVersionCodename='14'
+    minSdkVersion:'26'
+    targetSdkVersion:'34'
+    application-label:'Scroll List'
+    application: label='Scroll List' icon=''
+    application-debuggable
+    launchable-activity: name='dev.acos.fixtures.scrolllist.MainActivity'  label='' icon=''
+    feature-group: label=''
+      uses-feature: name='android.hardware.faketouch'
+      uses-implied-feature: name='android.hardware.faketouch' reason='default feature for all apps'
+    main
+    supports-screens: 'small' 'normal' 'large' 'xlarge'
+    supports-any-density: 'true'
+    locales: '--_--'
+    densities: '160'
+build-apps: [scroll-list] -> /home/Qui/.t3/worktrees/acos/t3-3a063238-f609e073e6a62c6b/fixtures/build/apps/scroll-list.apk (12756 bytes)
+build-apps: [back-layers] compiling resources
+build-apps: [back-layers] linking resources + manifest
+build-apps: [back-layers] compiling java
+Note: /home/Qui/.t3/worktrees/acos/t3-3a063238-f609e073e6a62c6b/fixtures/apps/back-layers/src/dev/acos/fixtures/backlayers/MainActivity.java uses or overrides a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+build-apps: [back-layers] dexing
+build-apps: [back-layers] aligning
+build-apps: [back-layers] signing
+build-apps: [back-layers] verifying
+    Signer #1 certificate DN: CN=Android Debug, O=Android, C=US
+    Signer #1 certificate SHA-256 digest: ac1bc8415eec4ed22aee65c8be596c08a0c543ef1c9cb85dc9f9a3165db12828
+    Signer #1 certificate SHA-1 digest: ed582387a39449324ab4136758c4bab2e9f0acff
+    Signer #1 certificate MD5 digest: e53c641db0acc0c240788b98ae3d9e78
+build-apps: [back-layers] badging:
+    package: name='dev.acos.fixtures.backlayers' versionCode='1' versionName='1.0' platformBuildVersionName='14' platformBuildVersionCode='34' compileSdkVersion='34' compileSdkVersionCodename='14'
+    minSdkVersion:'26'
+    targetSdkVersion:'34'
+    application-label:'Back Layers'
+    application: label='Back Layers' icon=''
+    application-debuggable
+    launchable-activity: name='dev.acos.fixtures.backlayers.MainActivity'  label='' icon=''
+    feature-group: label=''
+      uses-feature: name='android.hardware.faketouch'
+      uses-implied-feature: name='android.hardware.faketouch' reason='default feature for all apps'
+    main
+    supports-screens: 'small' 'normal' 'large' 'xlarge'
+    supports-any-density: 'true'
+    locales: '--_--'
+    densities: '160'
+build-apps: [back-layers] -> /home/Qui/.t3/worktrees/acos/t3-3a063238-f609e073e6a62c6b/fixtures/build/apps/back-layers.apk (12756 bytes)
+build-apps: [tap-targets] compiling resources
+build-apps: [tap-targets] linking resources + manifest
+build-apps: [tap-targets] compiling java
+build-apps: [tap-targets] dexing
+build-apps: [tap-targets] aligning
+build-apps: [tap-targets] signing
+build-apps: [tap-targets] verifying
+    Signer #1 certificate DN: CN=Android Debug, O=Android, C=US
+    Signer #1 certificate SHA-256 digest: ac1bc8415eec4ed22aee65c8be596c08a0c543ef1c9cb85dc9f9a3165db12828
+    Signer #1 certificate SHA-1 digest: ed582387a39449324ab4136758c4bab2e9f0acff
+    Signer #1 certificate MD5 digest: e53c641db0acc0c240788b98ae3d9e78
+build-apps: [tap-targets] badging:
+    package: name='dev.acos.fixtures.taptargets' versionCode='1' versionName='1.0' platformBuildVersionName='14' platformBuildVersionCode='34' compileSdkVersion='34' compileSdkVersionCodename='14'
+    minSdkVersion:'26'
+    targetSdkVersion:'34'
+    application-label:'Tap targets'
+    application: label='Tap targets' icon=''
+    application-debuggable
+    launchable-activity: name='dev.acos.fixtures.taptargets.MainActivity'  label='' icon=''
+    feature-group: label=''
+      uses-feature: name='android.hardware.faketouch'
+      uses-implied-feature: name='android.hardware.faketouch' reason='default feature for all apps'
+    main
+    supports-screens: 'small' 'normal' 'large' 'xlarge'
+    supports-any-density: 'true'
+    locales: '--_--'
+    densities: '160'
+build-apps: [tap-targets] -> /home/Qui/.t3/worktrees/acos/t3-3a063238-f609e073e6a62c6b/fixtures/build/apps/tap-targets.apk (12756 bytes)
+build-apps: [touch-probe] compiling resources
+build-apps: [touch-probe] linking resources + manifest
+build-apps: [touch-probe] compiling java
+build-apps: [touch-probe] dexing
+build-apps: [touch-probe] aligning
+build-apps: [touch-probe] signing
+build-apps: [touch-probe] verifying
+    Signer #1 certificate DN: CN=Android Debug, O=Android, C=US
+    Signer #1 certificate SHA-256 digest: ac1bc8415eec4ed22aee65c8be596c08a0c543ef1c9cb85dc9f9a3165db12828
+    Signer #1 certificate SHA-1 digest: ed582387a39449324ab4136758c4bab2e9f0acff
+    Signer #1 certificate MD5 digest: e53c641db0acc0c240788b98ae3d9e78
+build-apps: [touch-probe] badging:
+    package: name='dev.acos.fixtures.touchprobe' versionCode='1' versionName='1.0' platformBuildVersionName='14' platformBuildVersionCode='34' compileSdkVersion='34' compileSdkVersionCodename='14'
+    minSdkVersion:'26'
+    targetSdkVersion:'34'
+    application-label:'Touch probe'
+    application: label='Touch probe' icon=''
+    application-debuggable
+    launchable-activity: name='dev.acos.fixtures.touchprobe.MainActivity'  label='' icon=''
+    feature-group: label=''
+      uses-feature: name='android.hardware.faketouch'
+      uses-implied-feature: name='android.hardware.faketouch' reason='default feature for all apps'
+    main
+    supports-screens: 'small' 'normal' 'large' 'xlarge'
+    supports-any-density: 'true'
+    locales: '--_--'
+    densities: '160'
+build-apps: [touch-probe] -> /home/Qui/.t3/worktrees/acos/t3-3a063238-f609e073e6a62c6b/fixtures/build/apps/touch-probe.apk (16852 bytes)
+build-apps: [net-check] compiling resources
+build-apps: [net-check] linking resources + manifest
+build-apps: [net-check] compiling java
+build-apps: [net-check] dexing
+build-apps: [net-check] aligning
+build-apps: [net-check] signing
+build-apps: [net-check] verifying
+    Signer #1 certificate DN: CN=Android Debug, O=Android, C=US
+    Signer #1 certificate SHA-256 digest: ac1bc8415eec4ed22aee65c8be596c08a0c543ef1c9cb85dc9f9a3165db12828
+    Signer #1 certificate SHA-1 digest: ed582387a39449324ab4136758c4bab2e9f0acff
+    Signer #1 certificate MD5 digest: e53c641db0acc0c240788b98ae3d9e78
+build-apps: [net-check] badging:
+    package: name='dev.acos.fixtures.netcheck' versionCode='1' versionName='1.0' platformBuildVersionName='14' platformBuildVersionCode='34' compileSdkVersion='34' compileSdkVersionCodename='14'
+    minSdkVersion:'26'
+    targetSdkVersion:'34'
+    uses-permission: name='android.permission.INTERNET'
+    uses-permission: name='android.permission.ACCESS_NETWORK_STATE'
+    application-label:'Net Check'
+    application: label='Net Check' icon=''
+    application-debuggable
+    launchable-activity: name='dev.acos.fixtures.netcheck.MainActivity'  label='' icon=''
+    feature-group: label=''
+      uses-feature: name='android.hardware.faketouch'
+      uses-implied-feature: name='android.hardware.faketouch' reason='default feature for all apps'
+    main
+    supports-screens: 'small' 'normal' 'large' 'xlarge'
+    supports-any-density: 'true'
+    locales: '--_--'
+    densities: '160'
+build-apps: [net-check] -> /home/Qui/.t3/worktrees/acos/t3-3a063238-f609e073e6a62c6b/fixtures/build/apps/net-check.apk (20948 bytes)
+build-apps: [keystore-probe] compiling resources
+build-apps: [keystore-probe] linking resources + manifest
+build-apps: [keystore-probe] compiling java
+Note: Some input files use or override a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+build-apps: [keystore-probe] dexing
+build-apps: [keystore-probe] aligning
+build-apps: [keystore-probe] signing
+build-apps: [keystore-probe] verifying
+    Signer #1 certificate DN: CN=Android Debug, O=Android, C=US
+    Signer #1 certificate SHA-256 digest: ac1bc8415eec4ed22aee65c8be596c08a0c543ef1c9cb85dc9f9a3165db12828
+    Signer #1 certificate SHA-1 digest: ed582387a39449324ab4136758c4bab2e9f0acff
+    Signer #1 certificate MD5 digest: e53c641db0acc0c240788b98ae3d9e78
+build-apps: [keystore-probe] badging:
+    package: name='dev.acos.fixtures.keystoreprobe' versionCode='1' versionName='1.0' platformBuildVersionName='14' platformBuildVersionCode='34' compileSdkVersion='34' compileSdkVersionCodename='14'
+    minSdkVersion:'26'
+    targetSdkVersion:'34'
+    application-label:'Keystore Probe'
+    application: label='Keystore Probe' icon=''
+    application-debuggable
+    launchable-activity: name='dev.acos.fixtures.keystoreprobe.MainActivity'  label='' icon=''
+    feature-group: label=''
+      uses-feature: name='android.hardware.faketouch'
+      uses-implied-feature: name='android.hardware.faketouch' reason='default feature for all apps'
+    main
+    supports-screens: 'small' 'normal' 'large' 'xlarge'
+    supports-any-density: 'true'
+    locales: '--_--'
+    densities: '160'
+build-apps: [keystore-probe] -> /home/Qui/.t3/worktrees/acos/t3-3a063238-f609e073e6a62c6b/fixtures/build/apps/keystore-probe.apk (24979 bytes)
+build-apps: [webview-probe] compiling resources
+build-apps: [webview-probe] linking resources + manifest
+build-apps: [webview-probe] compiling java
+build-apps: [webview-probe] dexing
+build-apps: [webview-probe] aligning
+build-apps: [webview-probe] signing
+build-apps: [webview-probe] verifying
+    Signer #1 certificate DN: CN=Android Debug, O=Android, C=US
+    Signer #1 certificate SHA-256 digest: ac1bc8415eec4ed22aee65c8be596c08a0c543ef1c9cb85dc9f9a3165db12828
+    Signer #1 certificate SHA-1 digest: ed582387a39449324ab4136758c4bab2e9f0acff
+    Signer #1 certificate MD5 digest: e53c641db0acc0c240788b98ae3d9e78
+build-apps: [webview-probe] badging:
+    package: name='dev.acos.fixtures.webview' versionCode='1' versionName='1.0' platformBuildVersionName='14' platformBuildVersionCode='34' compileSdkVersion='34' compileSdkVersionCodename='14'
+    minSdkVersion:'26'
+    targetSdkVersion:'34'
+    uses-permission: name='android.permission.INTERNET'
+    application-label:'ACOS WebView probe'
+    application: label='ACOS WebView probe' icon=''
+    application-debuggable
+    launchable-activity: name='dev.acos.fixtures.webview.MainActivity'  label='' icon=''
+    feature-group: label=''
+      uses-feature: name='android.hardware.faketouch'
+      uses-implied-feature: name='android.hardware.faketouch' reason='default feature for all apps'
+    main
+    supports-screens: 'small' 'normal' 'large' 'xlarge'
+    supports-any-density: 'true'
+    locales: '--_--'
+    densities: '160'
+build-apps: [webview-probe] -> /home/Qui/.t3/worktrees/acos/t3-3a063238-f609e073e6a62c6b/fixtures/build/apps/webview-probe.apk (16920 bytes)
+build-apps: [insets-probe] compiling resources
+build-apps: [insets-probe] linking resources + manifest
+build-apps: [insets-probe] compiling java
+Note: /home/Qui/.t3/worktrees/acos/t3-3a063238-f609e073e6a62c6b/fixtures/apps/insets-probe/src/dev/acos/fixtures/insetsprobe/MainActivity.java uses or overrides a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+build-apps: [insets-probe] dexing
+build-apps: [insets-probe] aligning
+build-apps: [insets-probe] signing
+build-apps: [insets-probe] verifying
+    Signer #1 certificate DN: CN=Android Debug, O=Android, C=US
+    Signer #1 certificate SHA-256 digest: ac1bc8415eec4ed22aee65c8be596c08a0c543ef1c9cb85dc9f9a3165db12828
+    Signer #1 certificate SHA-1 digest: ed582387a39449324ab4136758c4bab2e9f0acff
+    Signer #1 certificate MD5 digest: e53c641db0acc0c240788b98ae3d9e78
+build-apps: [insets-probe] badging:
+    package: name='dev.acos.fixtures.insetsprobe' versionCode='1' versionName='1.0' platformBuildVersionName='15' platformBuildVersionCode='35' compileSdkVersion='35' compileSdkVersionCodename='15'
+    minSdkVersion:'26'
+    targetSdkVersion:'35'
+    application-label:'Insets probe'
+    application: label='Insets probe' icon=''
+    application-debuggable
+    launchable-activity: name='dev.acos.fixtures.insetsprobe.MainActivity'  label='' icon=''
+    feature-group: label=''
+      uses-feature: name='android.hardware.faketouch'
+      uses-implied-feature: name='android.hardware.faketouch' reason='default feature for all apps'
+    main
+    supports-screens: 'small' 'normal' 'large' 'xlarge'
+    supports-any-density: 'true'
+    locales: '--_--'
+    densities: '160'
+build-apps: [insets-probe] -> /home/Qui/.t3/worktrees/acos/t3-3a063238-f609e073e6a62c6b/fixtures/build/apps/insets-probe.apk (12756 bytes)
+build-apps: not device-verified (device smoke is opt-in: ACOS_DEVICE_SMOKE=1 ANDROID_SERIAL=...)
+build-apps: done -> /home/Qui/.t3/worktrees/acos/t3-3a063238-f609e073e6a62c6b/fixtures/build/apps/*.apk

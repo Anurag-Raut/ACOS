@@ -345,16 +345,20 @@ fn logger_entry_max_payload_native(vm: &mut Vm, ctx: NativeCtx) -> VmResult<()> 
     Ok(())
 }
 
+/// The sink is process-wide; a test that reads `records()` must hold this guard so
+/// concurrent unit tests cannot interleave (HYG4: javabridge's native-root test raced
+/// the ring-buffer test without it).
+#[cfg(test)]
+pub(crate) fn sink_test_guard() -> MutexGuard<'static, ()> {
+    static GUARD: Mutex<()> = Mutex::new(());
+    GUARD.lock().unwrap_or_else(|p| p.into_inner())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::path::Path;
 
-    /// The sink is process-wide; tests that read it must not interleave.
-    fn sink_test_guard() -> MutexGuard<'static, ()> {
-        static GUARD: Mutex<()> = Mutex::new(());
-        GUARD.lock().unwrap_or_else(|p| p.into_inner())
-    }
 
     fn reference_logcat() -> Option<String> {
         let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
@@ -364,8 +368,7 @@ mod tests {
 
     #[test]
     fn threadtime_layout_matches_the_art_reference_capture() {
-        let Some(text) = reference_logcat() else {
-            eprintln!("SKIP threadtime_layout_matches_the_art_reference_capture: no capture");
+        let Some(text) = acos_test_support::require_some(reference_logcat(), "threadtime_layout_matches_the_art_reference_capture", "no capture") else {
             return;
         };
         let reference = text

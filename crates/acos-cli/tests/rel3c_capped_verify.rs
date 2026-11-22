@@ -76,8 +76,7 @@ fn live_verify(scenario: &str, apk: &Path, artifacts: &Path) -> (Value, usize, P
 #[test]
 #[ignore = "boots a real ART guest; run under tools/guarded.sh + run-exclusive.sh"]
 fn a_capped_live_verify_reply_keeps_the_outcome_and_provenance() {
-    let Some(apk) = gaten_apk() else {
-        eprintln!("SKIP: no Gaten x86_64 release APK (set ACOS_GATEN_APK)");
+    let Some(apk) = acos_test_support::require_some(gaten_apk(), "a_capped_live_verify_reply_keeps_the_outcome_and_provenance", "no Gaten x86_64 release APK (set ACOS_GATEN_APK)") else {
         return;
     };
     let artifacts = scratch("pass");
@@ -166,8 +165,7 @@ fn a_capped_live_verify_reply_keeps_the_outcome_and_provenance() {
 #[test]
 #[ignore = "boots a real ART guest; run under tools/guarded.sh + run-exclusive.sh"]
 fn a_capped_live_failing_verify_reply_names_the_failing_step() {
-    let Some(apk) = gaten_apk() else {
-        eprintln!("SKIP: no Gaten x86_64 release APK (set ACOS_GATEN_APK)");
+    let Some(apk) = acos_test_support::require_some(gaten_apk(), "a_capped_live_failing_verify_reply_names_the_failing_step", "no Gaten x86_64 release APK (set ACOS_GATEN_APK)") else {
         return;
     };
     let artifacts = scratch("neg");

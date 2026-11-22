@@ -134,8 +134,7 @@ fn run_on_host_java(classes: &Path, base: &Path) -> Option<BTreeMap<String, Stri
 
 #[test]
 fn unix_file_system_matches_real_java() {
-    let Some((classes, dex)) = compile_case() else {
-        eprintln!("SKIP unix_file_system_matches_real_java: javac/d8/android.jar unavailable");
+    let Some((classes, dex)) = acos_test_support::require_some(compile_case(), "unix_file_system_matches_real_java", "javac/d8/android.jar unavailable") else {
         return;
     };
 
@@ -143,8 +142,7 @@ fn unix_file_system_matches_real_java() {
     let host_base = repo_root().join("target/tmp/acos-io-file/host-base");
     let _ = std::fs::remove_dir_all(&host_base);
     std::fs::create_dir_all(&host_base).unwrap();
-    let Some(host) = run_on_host_java(&classes, &host_base) else {
-        eprintln!("SKIP unix_file_system_matches_real_java: host java unavailable");
+    let Some(host) = acos_test_support::require_some(run_on_host_java(&classes, &host_base), "unix_file_system_matches_real_java", "host java unavailable") else {
         return;
     };
 
@@ -156,7 +154,7 @@ fn unix_file_system_matches_real_java() {
     let mut vm = match Vm::new(options) {
         Ok(vm) => vm,
         Err(VmError::BootClasspathMissing(m)) => {
-            eprintln!("SKIP unix_file_system_matches_real_java: {m}");
+            acos_test_support::require_prereq(false, "unix_file_system_matches_real_java", &format!("unix_file_system_matches_real_java: {m}"));
             return;
         }
         Err(e) => panic!("Vm::new failed: {e}"),

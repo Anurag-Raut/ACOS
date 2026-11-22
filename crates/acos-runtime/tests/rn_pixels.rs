@@ -129,8 +129,7 @@ fn rn_platform_launch_probe() {
     const APK_FIXTURE: &str = "fixtures/build/apps/rn-hello.apk";
     // Routed through the global gate: `ACOS_REQUIRE_FIXTURES=1` must fail, not
     // skip, when the React Native fixture is absent (W170-A C4/H5).
-    if !acos_test_support::have_fixture(APK_FIXTURE) {
-        eprintln!("SKIP rn_platform_launch_probe: no fixture apk");
+    if acos_test_support::require_prereq(acos_test_support::have_fixture(APK_FIXTURE), "rn_platform_launch_probe", "no fixture apk").is_none() {
         return;
     }
     let apk = repo_root().join(APK_FIXTURE);

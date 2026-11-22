@@ -1,0 +1,16 @@
+=== RUN 1: camera-probe ===
+verify: pass (ok=true, backend=acos-native, fidelity=art-reference)
+  engine: art (mode: live)
+  services: core:real, system.permissions:real, hw.camera:stub attached; off: accessibility, system.notifications, sensors, feedback.vibrator, location, net.telephony, hw.bluetooth, hw.biometric, network, webview, net.wifi, media.session, hw.usb, system.dropbox, hw.nfc, system.wallpaper, system.print, system.search, system.usage, system.dpm, system.role, geo.country
+  provenance: scenario /home/Qui/.t3/worktrees/acos/t3-82089e16-8e0be04d40aaaa38/scenarios/camera-probe.yaml (sha 89cb1608c12a), apk /home/Qui/.t3/worktrees/acos/t3-82089e16-8e0be04d40aaaa38/fixtures/build/apps/camera-probe.apk (sha 1b4572058b8e), engine art, fidelity art-reference
+  artifacts: results/handoff/CAMERA1/camera-probe
+  steps: 14
+=== RUN 2: camera-off ===
+verify: fail (ok=false, backend=acos-native, fidelity=art-reference)
+  engine: art (mode: live)
+  services: core:real attached; off: accessibility, system.permissions, system.notifications, sensors, feedback.vibrator, location, net.telephony, hw.bluetooth, hw.biometric, network, webview, net.wifi, media.session, hw.camera, hw.usb, system.dropbox, hw.nfc, system.wallpaper, system.print, system.search, system.usage, system.dpm, system.role, geo.country
+  provenance: scenario /home/Qui/.t3/worktrees/acos/t3-82089e16-8e0be04d40aaaa38/scenarios/camera-off.yaml (sha f63e6662090c), apk /home/Qui/.t3/worktrees/acos/t3-82089e16-8e0be04d40aaaa38/fixtures/build/apps/camera-probe.apk (sha 1b4572058b8e), engine art, fidelity art-reference
+  error: ASSERTION_FAILED: expected text containing "UNSUPPORTED_ANDROID_API", got text "READY mgr=present feat_cam=false feat_any=false\nLIST error=UnsupportedOperationException: \"media.camera\" is provided by service module \"hw.camera\", which is not attached — attach it: acos_launch {\"services\": [{\"id\": \"hw.camera\", \"profile\": \"real\"}]}" / hint ""
+  artifacts: results/handoff/CAMERA1/camera-off
+  steps: 5
+verify: ASSERTION_FAILED (assertion): expected text containing "UNSUPPORTED_ANDROID_API", got text "READY mgr=present feat_cam=false feat_any=false\nLIST error=UnsupportedOperationException: \"media.camera\" is provided by service module \"hw.camera\", which is not attached — attach it: acos_launch {\"services\": [{\"id\": \"hw.camera\", \"profile\": \"real\"}]}" / hint "" [class=assertion, retryable=false]

@@ -38,9 +38,7 @@ fn static_int(rt: &mut acos_runtime::Runtime, class: &str, name: &str) -> Option
 #[test]
 fn commit_text_calls_the_real_input_connection() {
     let Some(dex) = compile_case(&["TextInputMain"]) else {
-        eprintln!(
-            "SKIP commit_text_calls_the_real_input_connection: javac/d8/android.jar unavailable"
-        );
+        acos_test_support::require_prereq(false, "commit_text_calls_the_real_input_connection", "commit_text_calls_the_real_input_connection: javac/d8/android.jar unavailable");
         return;
     };
     let mut rt = new_runtime().expect("real-corelib runtime");

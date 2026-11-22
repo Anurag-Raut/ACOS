@@ -731,20 +731,18 @@ mod tests {
     }
 
     fn read_response_head(stream: &mut TcpStream) -> String {
-        let mut reader = std::io::BufReader::new(stream.try_clone().expect("clone"));
-        let mut head = String::new();
-        loop {
-            let mut line = String::new();
-            if reader.read_line(&mut line).unwrap_or(0) == 0 {
-                break;
-            }
-            let done = line == "\r\n";
-            head.push_str(&line);
-            if done {
+        // Read byte-by-byte so we stop right after `\r\n\r\n` without a
+        // BufReader buffering (and discarding on drop) initial SSE/MJPEG body
+        // bytes that arrive in the same TCP segment.
+        let mut head = Vec::new();
+        let mut byte = [0u8; 1];
+        while stream.read(&mut byte).unwrap_or(0) == 1 {
+            head.push(byte[0]);
+            if head.ends_with(b"\r\n\r\n") {
                 break;
             }
         }
-        head
+        String::from_utf8_lossy(&head).into_owned()
     }
 
     #[test]
