@@ -102,6 +102,8 @@ fn launcher_activity(apk_path: &Path) -> Result<PmsActivityInfo, ClientTransacti
         // with targetSdk >= 14 (the manifest carries no `android:hardwareAccelerated`).
         flags: 0x200, // ActivityInfo.FLAG_HARDWARE_ACCELERATED
         theme: manifest.application.theme.unwrap_or(0) as i32,
+        label_res: 0,
+        non_localized_label: None,
         exported: component.exported.unwrap_or(true),
         parent_activity_name: String::new(),
         meta_data: component.meta_data.clone(),

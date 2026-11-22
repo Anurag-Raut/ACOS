@@ -1016,6 +1016,18 @@ impl ServiceObject for WindowSessionService {
                         seq,
                     )
                     .map_err(werr)?;
+                let visibility = match view_visibility {
+                    0 => Some(true),
+                    4 | 8 => Some(false),
+                    _ => None,
+                };
+                let visibility_changed = if let Some(visible) = visibility {
+                    state
+                        .set_window_visible_for(self.session, window.0, visible)
+                        .map_err(werr)?
+                } else {
+                    false
+                };
                 if trace {
                     eprintln!(
                         "ACOSWMS relayout-done window={:#x} result={:#x} frame={:?} surface={}x{}",
@@ -1042,15 +1054,13 @@ impl ServiceObject for WindowSessionService {
                             let drawn =
                                 state.publish_layer_placement(binding, window.0, &compositor);
                             // W42: `relayout` carries the client root's
-                            // `View.getVisibility()`. A `GONE` window surface is
-                            // hidden in the same transaction, a `VISIBLE` one is
-                            // shown again (stock `WMS.relayoutWindow` keeps
+                            // `View.getVisibility()`. An `INVISIBLE`/`GONE` window
+                            // surface is hidden in the same transaction, a `VISIBLE`
+                            // one is shown again (stock `WMS.relayoutWindow` keeps
                             // `mWinAnimator`'s visibility in step).
-                            let visibility = match view_visibility {
-                                0 => Some(true),
-                                8 => Some(false),
-                                _ => None,
-                            };
+                            if visibility_changed {
+                                state.refresh_bound_layer_placements(&compositor);
+                            }
                             if drawn {
                                 if let Some(visible) = visibility {
                                     state.set_surface_visible(window.0, visible, &compositor);
@@ -1111,12 +1121,27 @@ impl ServiceObject for WindowSessionService {
                         .map_err(werr)?;
                 }
                 // W42: the async form carries the same `viewVisibility`; honour
-                // a `GONE`/`VISIBLE` toggle on an already-bound window layer.
-                if let (Some(compositor), true) = (
-                    self.compositor.clone(),
-                    view_visibility == 0 || view_visibility == 8,
-                ) {
-                    state.set_surface_visible(window.0, view_visibility == 0, &compositor);
+                // a `VISIBLE`/`INVISIBLE`/`GONE` toggle on the WM window & layer.
+                let async_visibility = match view_visibility {
+                    0 => Some(true),
+                    4 | 8 => Some(false),
+                    _ => None,
+                };
+                if let Some(visible) = async_visibility {
+                    if state
+                        .set_window_visible_for(self.session, window.0, visible)
+                        .unwrap_or(false)
+                    {
+                        if let Some(compositor) = self.compositor.clone() {
+                            state.refresh_bound_layer_placements(&compositor);
+                            state.set_surface_visible(window.0, visible, &compositor);
+                        }
+                        if let Some(input) = &self.input {
+                            if let Ok(mut dispatch) = input.state().lock() {
+                                let _ = dispatch.set_focus(state.wm.focus.map(BinderId));
+                            }
+                        }
+                    }
                 }
             }
             codes::OUT_OF_MEMORY => {

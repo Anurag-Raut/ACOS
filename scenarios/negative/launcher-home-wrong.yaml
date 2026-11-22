@@ -1,0 +1,32 @@
+# LAUNCHER2 negative: pressing HOME opens Launcher; asserting an uninstalled app fails strictly.
+version: 1
+name: negative-launcher-home-wrong
+description: Press HOME to open com.acos.launcher, then assert a nonexistent app label.
+app: fixtures/build/apps/hello-views.apk
+engine: art
+fallback: forbid
+api_level: 34
+isolation: process
+display: {mode: offscreen, width: 1080, height: 2400, density_dpi: 420}
+services:
+  - id: system.launcher
+    profile: real
+expectation: fail
+budgets:
+  memory_mib: 1024
+  wall_ms: 120000
+steps:
+  - launch:
+      activity: dev.acos.fixtures.helloviews/.MainActivity
+      clear_state: true
+  - wait_for:
+      selector: {id: title}
+      timeout_ms: 20000
+  - key:
+      key: home
+  - wait_for:
+      selector: {id: launcher_title}
+      timeout_ms: 30000
+  - assert_text:
+      selector: {id: app_row_0}
+      text: {exact: "Nonexistent App"}

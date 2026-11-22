@@ -2280,6 +2280,34 @@ impl ServiceHost {
             .unwrap_or(false)
     }
 
+    /// Name the session's primary launcher activity `(package, class)` so an
+    /// adopted tag-0 activity token can be registered in AMS's task stack for
+    /// later `NEW_TASK` / Launcher resume switches.
+    pub fn seed_primary_activity(&mut self, package: &str, class: &str) -> bool {
+        let Ok(object) = self.ensure("android.app.IActivityTaskManager") else {
+            return false;
+        };
+        object
+            .as_any_mut()
+            .and_then(|any| any.downcast_mut::<crate::atms::AtmsService>())
+            .map(|service| service.set_primary_activity(package, class))
+            .unwrap_or(false)
+    }
+
+    /// Host-initiated HOME key launch (`ACTION_MAIN` + `CATEGORY_HOME` with
+    /// `FLAG_ACTIVITY_NEW_TASK | FLAG_ACTIVITY_RESET_TASK_IF_NEEDED`).
+    /// Fails honestly when no installed activity answers `CATEGORY_HOME`.
+    pub fn launch_home(&mut self) -> Result<i32> {
+        let object = self.ensure("android.app.IActivityTaskManager")?;
+        let atms = object
+            .as_any_mut()
+            .and_then(|any| any.downcast_mut::<crate::atms::AtmsService>())
+            .ok_or(ServiceError::Internal(
+                "IActivityTaskManager is not AtmsService".into(),
+            ))?;
+        atms.launch_home()
+    }
+
     /// The dynamic receiver registrations `IActivityManager`
     /// (`registerReceiver[WithFeature]`) has recorded, with the decoded
     /// `IntentFilter` facts (W28). Oldest first.
@@ -3308,6 +3336,8 @@ impl ServiceHost {
                 launch_mode: 0,
                 flags: 0,
                 theme: 0,
+                label_res: 0,
+                non_localized_label: None,
                 exported: true,
                 parent_activity_name: String::new(),
                 meta_data: Vec::new(),

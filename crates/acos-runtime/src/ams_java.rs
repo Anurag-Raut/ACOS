@@ -634,6 +634,7 @@ fn provider_application_info(vm: &mut Vm, package: &str, process_name: &str) -> 
         process_name: process_name.to_string(),
         theme: 0,
         label_res: 0,
+        non_localized_label: None,
         icon: 0,
         resource_dirs: Vec::new(),
         split_names: Vec::new(),
@@ -1435,6 +1436,8 @@ pub fn schedule_launch(
         launch_mode: 0,
         flags: 0x200, // ActivityInfo.FLAG_HARDWARE_ACCELERATED
         theme: 0,
+        label_res: 0,
+        non_localized_label: None,
         exported: true,
         parent_activity_name: String::new(),
         meta_data: Vec::new(),

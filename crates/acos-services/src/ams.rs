@@ -500,8 +500,11 @@ impl Filter {
         {
             return false;
         }
-        if let Some(scheme) = intent.data.as_deref().and_then(scheme_of) {
-            if !self.schemes.is_empty() && !self.schemes.iter().any(|s| s == scheme) {
+        if !self.schemes.is_empty() {
+            let Some(scheme) = intent.data.as_deref().and_then(scheme_of) else {
+                return false;
+            };
+            if !self.schemes.iter().any(|s| s == scheme) {
                 return false;
             }
         }
@@ -529,8 +532,11 @@ impl Filter {
         {
             return false;
         }
-        if let Some(scheme) = intent.data.as_deref().and_then(scheme_of) {
-            if !self.schemes.is_empty() && !self.schemes.iter().any(|s| s == scheme) {
+        if !self.schemes.is_empty() {
+            let Some(scheme) = intent.data.as_deref().and_then(scheme_of) else {
+                return false;
+            };
+            if !self.schemes.iter().any(|s| s == scheme) {
                 return false;
             }
         }
@@ -881,8 +887,10 @@ fn launch_mode_code(mode: Option<&str>) -> i32 {
 pub const START_SUCCESS: i32 = 0;
 /// `ActivityManager.START_CANCELED`.
 pub const START_CANCELED: i32 = 2;
-/// `ActivityManager.START_NOT_FOUND`.
-pub const START_NOT_FOUND: i32 = 4;
+/// `ActivityManager.START_INTENT_NOT_RESOLVED` (`FIRST_START_FATAL_ERROR_CODE + 9 = -91`),
+/// so `ActivityManager.isStartResultFatalError` is true and
+/// `Instrumentation.checkStartActivityResult` throws `ActivityNotFoundException`.
+pub const START_NOT_FOUND: i32 = -91;
 
 /// The start code for a captured intent.
 ///
@@ -1299,6 +1307,10 @@ pub struct PendingLaunch {
     pub result_who: Option<String>,
     /// Who asked for this launch (MERGEFIX2): it decides which side delivers it.
     pub origin: LaunchOrigin,
+    /// Process tag of the caller (`None` for host-origin launches).
+    /// Cross-process launches targeting tag 0 (`caller_tag != Some(0)`) still
+    /// need host delivery because tag 0's guest never marshalled them locally.
+    pub caller_tag: Option<u32>,
 }
 
 /// A `bindService` the runtime must deliver to the real `IServiceConnection`.
@@ -1465,6 +1477,9 @@ pub struct AmsState {
     /// MPROC7: `onNewIntent` deliveries the host still owes a process
     /// (`FLAG_ACTIVITY_SINGLE_TOP` to an activity that is already the top).
     pub pending_new_intents: Vec<(u64, IntentFacts)>,
+    /// Tokens of existing paused/stopped activities that must be brought to the
+    /// front (`ResumeActivityItem`) by a `NEW_TASK` / task-switch start.
+    pub pending_resumes: Vec<u64>,
     /// MPROC4 step 3b: components that resolved to a package the service layer
     /// cannot run by itself. The launcher drains them and spawns the guest; a
     /// request names only what was resolved, never a pid, a tag or a command
@@ -1521,7 +1536,15 @@ impl AmsState {
         result_to: u64,
         request_code: i32,
     ) -> Result<i32> {
-        self.start_activity_origin(intent, flags, result_to, request_code, None, LaunchOrigin::Host)
+        self.start_activity_origin_tagged(
+            intent,
+            flags,
+            result_to,
+            request_code,
+            None,
+            LaunchOrigin::Host,
+            None,
+        )
     }
 
     /// [`Self::start_activity`] with the AIDL `resultWho` string.
@@ -1550,6 +1573,29 @@ impl AmsState {
         )
     }
 
+    /// Guest `startActivity` recording the calling process tag (`caller_tag`),
+    /// so cross-process starts into tag 0 are delivered by the host.
+    #[allow(clippy::too_many_arguments)]
+    pub fn start_activity_with_caller(
+        &mut self,
+        intent: &IntentFacts,
+        flags: i32,
+        result_to: u64,
+        request_code: i32,
+        result_who: Option<String>,
+        caller_tag: Option<u32>,
+    ) -> Result<i32> {
+        self.start_activity_origin_tagged(
+            intent,
+            flags,
+            result_to,
+            request_code,
+            result_who,
+            LaunchOrigin::Guest,
+            caller_tag,
+        )
+    }
+
     /// [`Self::start_activity_with_who`] with the fact of **who** asked.
     #[allow(clippy::too_many_arguments)]
     pub fn start_activity_origin(
@@ -1560,6 +1606,33 @@ impl AmsState {
         request_code: i32,
         result_who: Option<String>,
         origin: LaunchOrigin,
+    ) -> Result<i32> {
+        let caller_tag = match origin {
+            LaunchOrigin::Guest => Some(crate::atms::PRIMARY_PROCESS_TAG),
+            LaunchOrigin::Host => None,
+        };
+        self.start_activity_origin_tagged(
+            intent,
+            flags,
+            result_to,
+            request_code,
+            result_who,
+            origin,
+            caller_tag,
+        )
+    }
+
+    /// Full activity-start implementation with explicit `origin` and `caller_tag`.
+    #[allow(clippy::too_many_arguments)]
+    pub fn start_activity_origin_tagged(
+        &mut self,
+        intent: &IntentFacts,
+        flags: i32,
+        result_to: u64,
+        request_code: i32,
+        result_who: Option<String>,
+        origin: LaunchOrigin,
+        caller_tag: Option<u32>,
     ) -> Result<i32> {
         // `Instrumentation.execStartActivity` passes `0` as the AIDL
         // `startFlags` argument; the flags the caller set live **in the
@@ -1645,6 +1718,80 @@ impl AmsState {
             intent.clone()
         };
         let intent = &intent;
+        // 1. `singleTask` (2) / `singleInstance` (3): search ALL live tasks
+        //    first (even when `NEW_TASK` is set, as for Launcher / Settings /
+        //    HOME) for an existing non-finished instance of this component.
+        if matches!(component.launch_mode, 2 | 3) {
+            let found = self.tasks.iter().rev().find_map(|task| {
+                task.activities
+                    .iter()
+                    .rev()
+                    .copied()
+                    .find(|tok| {
+                        self.activities.iter().any(|a| {
+                            a.token == *tok
+                                && !a.finished
+                                && a.package == component.package
+                                && a.class == component.class
+                        })
+                    })
+                    .map(|tok| (task.id, tok))
+            });
+            if let Some((existing_task_id, token)) = found {
+                self.bring_task_to_front(existing_task_id);
+                let above = self.clear_above(existing_task_id, token);
+                for finished in above {
+                    if let Some(a) = self.activities.iter_mut().find(|a| a.token == finished) {
+                        a.finished = true;
+                    }
+                }
+                self.new_intents.push((token, intent.clone()));
+                self.pending_new_intents.push((token, intent.clone()));
+                return Ok(START_SUCCESS);
+            }
+        }
+
+        // 2. `FLAG_ACTIVITY_NEW_TASK` (e.g. Launcher tapping an already-running
+        //    app): find an existing task whose root (or live) activity matches
+        //    this component and bring that task to the front.
+        if flags & NEW_TASK != 0 && component.launch_mode == 0 {
+            let found_task = self.tasks.iter().rev().find_map(|task| {
+                let root = task.activities.first().copied()?;
+                let root_matches = self.activities.iter().any(|a| {
+                    a.token == root
+                        && !a.finished
+                        && a.package == component.package
+                        && a.class == component.class
+                });
+                if !root_matches {
+                    return None;
+                }
+                let top_live = task
+                    .activities
+                    .iter()
+                    .rev()
+                    .copied()
+                    .find(|tok| self.activities.iter().any(|a| a.token == *tok && !a.finished))?;
+                Some((task.id, root, top_live))
+            });
+            if let Some((existing_task_id, root, top_live)) = found_task {
+                self.bring_task_to_front(existing_task_id);
+                if flags & CLEAR_TOP != 0 {
+                    let above = self.clear_above(existing_task_id, root);
+                    for finished in above {
+                        if let Some(a) = self.activities.iter_mut().find(|a| a.token == finished) {
+                            a.finished = true;
+                        }
+                    }
+                    self.new_intents.push((root, intent.clone()));
+                    self.pending_new_intents.push((root, intent.clone()));
+                } else {
+                    self.pending_resumes.push(top_live);
+                }
+                return Ok(START_SUCCESS);
+            }
+        }
+
         let behaviour = if flags & NEW_TASK != 0 || component.launch_mode == 3 {
             LaunchBehaviour::NewTask
         } else {
@@ -1675,7 +1822,7 @@ impl AmsState {
             .and_then(|t| t.activities.last().copied());
         let top_same = top
             .and_then(|token| self.activities.iter().find(|a| a.token == token))
-            .is_some_and(|a| a.package == component.package && a.class == component.class);
+            .is_some_and(|a| !a.finished && a.package == component.package && a.class == component.class);
 
         if matches!(
             behaviour,
@@ -1696,6 +1843,7 @@ impl AmsState {
                 }
             }
             self.new_intents.push((token, intent.clone()));
+            self.pending_new_intents.push((token, intent.clone()));
             return Ok(START_SUCCESS);
         }
 
@@ -1724,6 +1872,7 @@ impl AmsState {
             request_code,
             result_who,
             origin,
+            caller_tag,
         });
         Ok(START_SUCCESS)
     }
@@ -1900,10 +2049,11 @@ impl AmsState {
         // token it minted to the launch it asked for. A host-origin launch (the
         // shade's sender) was never the guest's to materialise; it stays queued
         // for the peer's host-built delivery.
-        let index = self
-            .pending_launches
-            .iter()
-            .position(|launch| launch.origin == LaunchOrigin::Guest)?;
+        let index = self.pending_launches.iter().position(|launch| {
+            launch.origin == LaunchOrigin::Guest
+                && launch.caller_tag.unwrap_or(crate::atms::PRIMARY_PROCESS_TAG)
+                    == crate::atms::PRIMARY_PROCESS_TAG
+        })?;
         let pending = self.pending_launches.remove(index);
         for activity in &mut self.activities {
             if activity.token == pending.token {
@@ -1947,8 +2097,63 @@ impl AmsState {
     pub fn pending_launch_for_tag(&self, tag: u32, package: &str) -> Option<&PendingLaunch> {
         self.pending_launches.iter().find(|launch| {
             launch.package == package
-                && (tag != crate::atms::PRIMARY_PROCESS_TAG || launch.origin == LaunchOrigin::Host)
+                && (tag != crate::atms::PRIMARY_PROCESS_TAG
+                    || launch.origin == LaunchOrigin::Host
+                    || launch.caller_tag != Some(crate::atms::PRIMARY_PROCESS_TAG))
         })
+    }
+
+    /// Record an externally launched activity (e.g. primary process's initial
+    /// `MAIN` activity) into AMS's task/activity table once its guest token is
+    /// known, so later `NEW_TASK` / `singleTask` switches find and resume it.
+    pub fn register_adopted_activity(&mut self, token: u64, package: &str, class: &str) {
+        if self.activities.iter().any(|a| a.token == token) {
+            return;
+        }
+        let task_id = if self.tasks.is_empty() {
+            let id = self.next_task_id;
+            self.next_task_id += 1;
+            self.tasks.push(Task {
+                id,
+                activities: Vec::new(),
+            });
+            id
+        } else {
+            // Put primary root in its own task if tasks already exist, else task 1.
+            let id = self.next_task_id;
+            self.next_task_id += 1;
+            self.tasks.insert(
+                0,
+                Task {
+                    id,
+                    activities: Vec::new(),
+                },
+            );
+            id
+        };
+        self.activities.push(ActivityEntry {
+            token,
+            package: package.to_string(),
+            class: class.to_string(),
+            task_id,
+            finished: false,
+            reused: false,
+        });
+        if let Some(task) = self.tasks.iter_mut().find(|t| t.id == task_id) {
+            task.activities.push(token);
+        }
+    }
+
+    /// Drain tokens of existing activities that a task-to-front start must resume.
+    pub fn take_pending_resumes(&mut self) -> Vec<u64> {
+        std::mem::take(&mut self.pending_resumes)
+    }
+
+    fn bring_task_to_front(&mut self, task_id: i32) {
+        if let Some(pos) = self.tasks.iter().position(|t| t.id == task_id) {
+            let task = self.tasks.remove(pos);
+            self.tasks.push(task);
+        }
     }
 
     /// MPROC7: take one `onNewIntent` delivery owed to process `tag`
@@ -2580,6 +2785,19 @@ pub fn dispatch(
     method: &MethodInfo,
     args: &[Value],
 ) -> Result<Option<CallResult>> {
+    dispatch_with_caller(state, interface, method, args, Some(crate::atms::PRIMARY_PROCESS_TAG))
+}
+
+/// Dispatch an `IActivityManager`/`IActivityTaskManager` transaction with an
+/// explicit `caller_tag` (used by `AtmsService::call` so cross-process calls
+/// into tag 0 record the caller rather than pretending tag 0 asked itself).
+pub fn dispatch_with_caller(
+    state: &mut AmsState,
+    interface: &str,
+    method: &MethodInfo,
+    args: &[Value],
+    caller_tag: Option<u32>,
+) -> Result<Option<CallResult>> {
     let value = |i: usize| args.get(i);
     let intent = |i: usize| -> Result<IntentFacts> {
         value(i)
@@ -2632,12 +2850,13 @@ pub fn dispatch(
             let result_who = value(positions.result_who)
                 .and_then(Value::as_str)
                 .map(str::to_string);
-            let code = match state.start_activity_with_who(
+            let code = match state.start_activity_with_caller(
                 &intent,
                 flags,
                 result_to,
                 request_code,
                 result_who,
+                caller_tag,
             ) {
                 Ok(code) => code,
                 Err(ServiceError::IllegalState { .. }) => START_NOT_FOUND,
@@ -3698,5 +3917,125 @@ mod tests {
         );
         assert!(matches!(empty, Err(ServiceError::BadRequest { .. })));
         assert_eq!(state.package_dependencies.len(), 1);
+    }
+
+    #[test]
+    fn filter_with_scheme_rejects_missing_or_wrong_scheme() {
+        let filter = Filter {
+            actions: vec!["android.settings.APPLICATION_DETAILS_SETTINGS".into()],
+            categories: vec!["android.intent.category.DEFAULT".into()],
+            schemes: vec!["package".into()],
+            mime_types: Vec::new(),
+        };
+        let missing_data = IntentFacts {
+            action: Some("android.settings.APPLICATION_DETAILS_SETTINGS".into()),
+            ..Default::default()
+        };
+        assert!(!filter.matches(&missing_data), "filter with package scheme must reject intent without data URI");
+
+        let wrong_scheme = IntentFacts {
+            action: Some("android.settings.APPLICATION_DETAILS_SETTINGS".into()),
+            data: Some("https://example.com".into()),
+            ..Default::default()
+        };
+        assert!(!filter.matches(&wrong_scheme));
+
+        let matching = IntentFacts {
+            action: Some("android.settings.APPLICATION_DETAILS_SETTINGS".into()),
+            data: Some("package:dev.acos.fixtures.settingsprobe".into()),
+            ..Default::default()
+        };
+        assert!(filter.matches(&matching));
+    }
+
+    #[test]
+    fn start_not_found_is_negative_intent_not_resolved_and_home_resumes_tasks() {
+        assert_eq!(START_NOT_FOUND, -91, "ActivityManager.START_INTENT_NOT_RESOLVED");
+
+        let mut ams = AmsState::new();
+        ams.manifests.packages.push(PackageRecord {
+            package: "dev.acos.app".into(),
+            uid: 10000,
+            activities: vec![DeclaredComponent {
+                package: "dev.acos.app".into(),
+                class: "dev.acos.app.MainActivity".into(),
+                exported: true,
+                launch_mode: 0,
+                filters: vec![Filter {
+                    actions: vec!["android.intent.action.MAIN".into()],
+                    categories: vec!["android.intent.category.LAUNCHER".into()],
+                    schemes: Vec::new(),
+                    mime_types: Vec::new(),
+                }],
+            }],
+            ..Default::default()
+        });
+        ams.manifests.packages.push(PackageRecord {
+            package: "com.acos.launcher".into(),
+            uid: 10001,
+            activities: vec![DeclaredComponent {
+                package: "com.acos.launcher".into(),
+                class: "com.acos.launcher.LauncherActivity".into(),
+                exported: true,
+                launch_mode: 2, // singleTask
+                filters: vec![Filter {
+                    actions: vec!["android.intent.action.MAIN".into()],
+                    categories: vec![
+                        "android.intent.category.HOME".into(),
+                        "android.intent.category.DEFAULT".into(),
+                    ],
+                    schemes: Vec::new(),
+                    mime_types: Vec::new(),
+                }],
+            }],
+            ..Default::default()
+        });
+
+        // Register adopted primary activity on tag 0.
+        let primary_token = 0x1001u64;
+        ams.register_adopted_activity(primary_token, "dev.acos.app", "dev.acos.app.MainActivity");
+
+        // Unhandled settings action stays an honest IllegalState -> START_NOT_FOUND.
+        let missing_settings = IntentFacts {
+            action: Some("android.settings.LOCATION_SOURCE_SETTINGS".into()),
+            ..Default::default()
+        };
+        assert!(matches!(
+            ams.start_activity(&missing_settings, 0, 0, 0),
+            Err(ServiceError::IllegalState { .. })
+        ));
+
+        // First host HOME start creates Launcher in its own task.
+        let home_intent = IntentFacts {
+            action: Some("android.intent.action.MAIN".into()),
+            categories: vec!["android.intent.category.HOME".into()],
+            ..Default::default()
+        };
+        assert_eq!(
+            ams.start_activity_from_host(&home_intent, 0x1020_0000, 0, 0)
+                .expect("home start"),
+            START_SUCCESS
+        );
+        assert_eq!(ams.tasks.len(), 2);
+
+        // Launcher tapping the already-running primary app with NEW_TASK brings
+        // the primary task back to top and queues ResumeActivity instead of
+        // spawning a duplicate activity.
+        let launch_app = IntentFacts {
+            action: Some("android.intent.action.MAIN".into()),
+            categories: vec!["android.intent.category.LAUNCHER".into()],
+            component: Some(("dev.acos.app".into(), "dev.acos.app.MainActivity".into())),
+            ..Default::default()
+        };
+        assert_eq!(
+            ams.start_activity_with_caller(&launch_app, 0x1000_0000, 0, 0, None, Some(1))
+                .expect("bring app to front"),
+            START_SUCCESS
+        );
+        assert_eq!(ams.take_pending_resumes(), vec![primary_token]);
+        assert_eq!(
+            ams.tasks.last().and_then(|t| t.activities.last().copied()),
+            Some(primary_token)
+        );
     }
 }
