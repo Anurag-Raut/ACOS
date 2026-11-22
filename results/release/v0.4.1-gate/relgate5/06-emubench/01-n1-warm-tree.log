@@ -1,0 +1,21 @@
+[emubench 21:37:37] creating AVD emb-1
+[emubench 21:37:38] creating AVD emb-2
+[emubench 21:37:38] creating AVD emb-3
+[emubench 21:37:39] creating AVD emb-4
+[emubench 21:37:39] AVDs ready: emb-1, emb-2, emb-3, emb-4
+[emubench 21:37:39] host n1-warm-tree: before emulator start avail= 45903 MiB used= 25.9% load1=1.10 | Mem:           61908       16004        6335        2628       42711       45903
+[emubench 21:37:39] start emb-1 port 5554 snapshot=False pid 512173
+[emubench 21:38:04] host n1-warm-tree: booted               avail= 42992 MiB used= 30.6% load1=1.90 | Mem:           61908       18915         607        2632       45549       42992
+[emubench 21:38:06] install counter.apk              2093 ms ok=True
+[emubench 21:38:08] launcher frame captured for emulator-5554
+[emubench 21:38:39] host n1-warm-tree: after warm launches  avail= 41357 MiB used= 33.2% load1=4.49 | Mem:           61908       20550         507        2682       44070       41357
+[emubench 21:38:40] stop emulator-5554 (1.5s, qemu left=None)
+[emubench 21:38:40] host phase n1-warm-tree: end            avail= 44935 MiB used= 27.4% load1=4.49 | Mem:           61908       16973        4037        2682       44117       44934
+[emubench 21:38:40] wrote /home/Qui/.t3/worktrees/acos/t3-8432ccd8-1d58d051095d020b/results/release/v0.4.1-gate/relgate5/06-emubench/phase-n1-warm-tree.json
+[emubench 21:38:40]   install_ms                         n=1   p50=2092.73   p90=2092.73   spread=0.0%
+[emubench 21:38:40]   warm_launch_ms                     n=5   p50=366.24    p90=429.74    spread=47.3%
+[emubench 21:38:40]   warm_launch_tree_ms                n=5   p50=5050.35   p90=5259.17   spread=12.7%
+EMU_PHASE_RC=0
+PASS no qemu-system process is running
+merged 5 phase(s) -> /home/Qui/.t3/worktrees/acos/t3-8432ccd8-1d58d051095d020b/results/release/v0.4.1-gate/relgate5/06-emubench/emubench-relgate5.json (35 rows)
+EMU_MERGE_RC=0

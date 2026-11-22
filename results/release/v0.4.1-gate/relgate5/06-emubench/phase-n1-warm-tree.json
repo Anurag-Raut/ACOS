@@ -1,0 +1,148 @@
+{
+ "config": {
+  "avds": [
+   "emb-1"
+  ],
+  "cores": 4,
+  "gpu": "swiftshader_indirect",
+  "guest_mb": 2048,
+  "host_ceiling_pct": 85.0,
+  "host_per_instance_reserve_mib": 4400,
+  "ports": [
+   5554
+  ],
+  "snapshot_cold": false,
+  "window": false
+ },
+ "errors": [],
+ "generated_utc": "2026-11-22T16:08:40Z",
+ "host": {
+  "cpu_model": "AMD Ryzen 9 9950X 16-Core Processor",
+  "kernel": "7.2.11-arch1-1",
+  "loadavg1": 4.49462890625,
+  "mem_available_mib": 44935,
+  "mem_total_mib": 61908,
+  "swap_free_mib": 0,
+  "swap_total_mib": 0,
+  "threads": 32
+ },
+ "host_log": [
+  {
+   "free_m": "Mem:           61908       16004        6335        2628       42711       45903",
+   "load1": 1.1,
+   "mem_available_mib": 45903,
+   "mem_total_mib": 61908,
+   "step": "n1-warm-tree: before emulator start",
+   "swap_free_mib": 0,
+   "swap_total_mib": 0,
+   "t": 1795363659.631,
+   "used_pct": 25.85
+  },
+  {
+   "free_m": "Mem:           61908       18915         607        2632       45549       42992",
+   "load1": 1.9,
+   "mem_available_mib": 42992,
+   "mem_total_mib": 61908,
+   "step": "n1-warm-tree: booted",
+   "swap_free_mib": 0,
+   "swap_total_mib": 0,
+   "t": 1795363684.863,
+   "used_pct": 30.56
+  },
+  {
+   "free_m": "Mem:           61908       20550         507        2682       44070       41357",
+   "load1": 4.49,
+   "mem_available_mib": 41357,
+   "mem_total_mib": 61908,
+   "step": "n1-warm-tree: after warm launches",
+   "swap_free_mib": 0,
+   "swap_total_mib": 0,
+   "t": 1795363719.169,
+   "used_pct": 33.2
+  },
+  {
+   "free_m": "Mem:           61908       16973        4037        2682       44117       44934",
+   "load1": 4.49,
+   "mem_available_mib": 44935,
+   "mem_total_mib": 61908,
+   "step": "phase n1-warm-tree: end",
+   "swap_free_mib": 0,
+   "swap_total_mib": 0,
+   "t": 1795363720.714,
+   "used_pct": 27.42
+  }
+ ],
+ "phase": "n1-warm-tree",
+ "reps": [],
+ "rows": {
+  "install_ms": {
+   "ci95_of_p50": [
+    2092.72513399992,
+    2092.72513399992
+   ],
+   "max": 2092.72513399992,
+   "min": 2092.72513399992,
+   "n": 1,
+   "n_failed": 0,
+   "n_total": 1,
+   "p5": 2092.72513399992,
+   "p50": 2092.72513399992,
+   "p90": 2092.72513399992,
+   "p95": 2092.72513399992,
+   "samples": [
+    2092.7251
+   ],
+   "spread_pct": 0.0,
+   "unit": "ms"
+  },
+  "warm_launch_ms": {
+   "ci95_of_p50": [
+    259.27729199975147,
+    438.888587999827
+   ],
+   "max": 438.888587999827,
+   "min": 259.27729199975147,
+   "n": 5,
+   "n_failed": 0,
+   "n_total": 5,
+   "p5": 261.20476639989647,
+   "p50": 366.2409980006487,
+   "p90": 429.7352627996588,
+   "p95": 434.3119253997429,
+   "samples": [
+    366.241,
+    416.0053,
+    438.8886,
+    268.9147,
+    259.2773
+   ],
+   "spread_pct": 47.265915051798714,
+   "unit": "ms"
+  },
+  "warm_launch_tree_ms": {
+   "ci95_of_p50": [
+    4628.247169999668,
+    5311.197824001283
+   ],
+   "max": 5311.197824001283,
+   "min": 4628.247169999668,
+   "n": 5,
+   "n_failed": 0,
+   "n_total": 5,
+   "p5": 4645.538186999693,
+   "p50": 5050.3503489999275,
+   "p90": 5259.1664280007535,
+   "p95": 5285.182126001018,
+   "samples": [
+    5311.1978,
+    5181.1193,
+    5050.3503,
+    4628.2472,
+    4714.7023
+   ],
+   "spread_pct": 12.665337942901093,
+   "unit": "ms"
+  }
+ },
+ "schema": "emubench/1"
+}
