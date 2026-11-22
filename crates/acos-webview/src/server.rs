@@ -12,11 +12,12 @@
 
 use std::collections::HashMap;
 use std::io::{BufReader, BufWriter, Read, Write};
+use std::os::unix::fs::MetadataExt;
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering};
 use std::sync::mpsc::{sync_channel, SyncSender};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Condvar, Mutex};
 use std::time::{Duration, Instant};
 
 use serde_json::{json, Value};
@@ -49,9 +50,18 @@ pub struct ServerConfig {
 /// A running server. Dropping it stops the accept loop and removes the socket.
 pub struct ServerHandle {
     socket: PathBuf,
+    /// `(st_dev, st_ino)` of the socket node bound by this server, so `Drop`
+    /// never unlinks a replacement broker's socket at the same path.
+    socket_id: Option<(u64, u64)>,
     stop: Arc<AtomicBool>,
+    stop_cv: Arc<(Mutex<()>, Condvar)>,
     threads: Mutex<Vec<std::thread::JoinHandle<()>>>,
     broker: Arc<Broker>,
+}
+
+fn path_dev_ino(path: &Path) -> Option<(u64, u64)> {
+    let meta = std::fs::symlink_metadata(path).ok()?;
+    Some((meta.dev(), meta.ino()))
 }
 
 impl ServerHandle {
@@ -68,7 +78,7 @@ impl ServerHandle {
     /// is "serve until something stops us".
     pub fn wait(&self) {
         while !self.stopped() {
-            std::thread::sleep(Duration::from_millis(25));
+            std::thread::sleep(Duration::from_millis(20));
         }
     }
 
@@ -82,8 +92,7 @@ impl ServerHandle {
 
     pub fn stop(&self) {
         self.stop.store(true, Ordering::SeqCst);
-        // Nudge accept(): a connect makes it loop once more and see the flag.
-        let _ = UnixStream::connect(&self.socket);
+        self.stop_cv.1.notify_all();
         self.broker.shutdown();
     }
 }
@@ -96,7 +105,14 @@ impl Drop for ServerHandle {
                 let _ = t.join();
             }
         }
-        let _ = std::fs::remove_file(&self.socket);
+        // Only unlink if the path still refers to the socket node this instance
+        // created; an exiting old broker must never delete a newer broker's
+        // live socket.
+        if let Some(expected) = self.socket_id {
+            if path_dev_ino(&self.socket) == Some(expected) {
+                let _ = std::fs::remove_file(&self.socket);
+            }
+        }
     }
 }
 
@@ -200,13 +216,16 @@ fn start_server(
     mode: AcceptMode,
     shared: SharedConfig,
 ) -> ServerHandle {
+    let socket_id = path_dev_ino(&socket);
     let stop = Arc::new(AtomicBool::new(false));
+    let stop_cv = Arc::new((Mutex::new(()), Condvar::new()));
     let conns: Arc<Mutex<Vec<Arc<Conn>>>> = Arc::new(Mutex::new(Vec::new()));
     let mut threads = Vec::new();
 
     // Accept loop.
     {
         let stop = Arc::clone(&stop);
+        let stop_cv = Arc::clone(&stop_cv);
         let conns = Arc::clone(&conns);
         let broker = Arc::clone(&broker);
         let mode = mode.clone();
@@ -242,7 +261,11 @@ fn start_server(
                                 &mode,
                                 live.iter().filter(|c| !c.closed()).count(),
                                 &stop,
+                                &stop_cv,
                             ) else {
+                                if stop.load(Ordering::SeqCst) {
+                                    break;
+                                }
                                 continue;
                             };
                             let conn = Arc::new(Conn::new(
@@ -259,9 +282,9 @@ fn start_server(
                                 .ok();
                         }
                         Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
-                            std::thread::sleep(Duration::from_millis(50));
+                            std::thread::sleep(Duration::from_millis(20));
                         }
-                        Err(_) => std::thread::sleep(Duration::from_millis(50)),
+                        Err(_) => std::thread::sleep(Duration::from_millis(20)),
                     }
                 }
             })
@@ -274,6 +297,7 @@ fn start_server(
     // (shared mode) the daemon's own idle exit.
     {
         let stop = Arc::clone(&stop);
+        let stop_cv = Arc::clone(&stop_cv);
         let conns = Arc::clone(&conns);
         let broker = Arc::clone(&broker);
         let socket = socket.clone();
@@ -283,7 +307,15 @@ fn start_server(
                 let mut last_restarts = broker.restarts();
                 let mut idle_since = Instant::now();
                 while !stop.load(Ordering::SeqCst) {
-                    std::thread::sleep(Duration::from_millis(250));
+                    {
+                        let guard = stop_cv.0.lock().expect("stop_cv");
+                        if !stop.load(Ordering::SeqCst) {
+                            let _ = stop_cv.1.wait_timeout(guard, Duration::from_millis(250));
+                        }
+                    }
+                    if stop.load(Ordering::SeqCst) {
+                        break;
+                    }
                     match broker.tick() {
                         crate::broker::Tick::Restarted { .. } => {
                             let _ = broker.restart_now();
@@ -334,7 +366,9 @@ fn start_server(
 
     ServerHandle {
         socket,
+        socket_id,
         stop,
+        stop_cv,
         threads: Mutex::new(threads),
         broker,
     }
@@ -355,11 +389,12 @@ fn session_for(
     mode: &AcceptMode,
     live_sessions: usize,
     stop: &AtomicBool,
+    stop_cv: &(Mutex<()>, Condvar),
 ) -> Option<String> {
     match mode {
         AcceptMode::Single(id) => Some(id.clone()),
         AcceptMode::Attached => {
-            let line = read_line(stream, Duration::from_secs(5))?;
+            let line = read_line(stream, Duration::from_secs(2))?;
             let v: Value = serde_json::from_slice(&line).ok()?;
             let attach = v["attach"].as_u64();
             let sid = v["session"].as_str().unwrap_or("").to_string();
@@ -404,6 +439,7 @@ fn session_for(
                         let _ = stream.flush();
                         if exiting {
                             stop.store(true, Ordering::SeqCst);
+                            stop_cv.1.notify_all();
                         }
                         return None;
                     }
@@ -439,7 +475,7 @@ fn read_line(stream: &mut UnixStream, timeout: Duration) -> Option<Vec<u8>> {
         match stream.read(&mut byte) {
             Ok(1) if byte[0] == b'\n' => return Some(buf),
             Ok(1) => buf.push(byte[0]),
-            Ok(_) => {}
+            Ok(_) => return None,
             Err(_) => return None,
         }
     }
@@ -1455,3 +1491,98 @@ enum Outcome {
 pub fn asset_body_b64(bytes: &[u8]) -> String {
     base64_encode(bytes)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::broker::BrokerConfig;
+    use crate::engine::EngineCache;
+
+    fn scratch(tag: &str) -> PathBuf {
+        let base = std::env::temp_dir().join(format!("acos-wv-srv-{}", std::process::id()));
+        let dir = base.join(tag);
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("scratch");
+        dir
+    }
+
+    #[test]
+    fn read_line_returns_none_immediately_on_eof() {
+        let (mut a, b) = UnixStream::pair().expect("pair");
+        drop(b);
+        let started = Instant::now();
+        assert!(read_line(&mut a, Duration::from_secs(5)).is_none());
+        assert!(
+            started.elapsed() < Duration::from_millis(200),
+            "read_line spun on EOF instead of returning immediately"
+        );
+    }
+
+    #[test]
+    fn shared_server_survives_eof_probe_and_does_not_unlink_replacement_socket() {
+        let dir = scratch("eof-and-ino");
+        let socket = dir.join("broker.sock");
+        let cfg = BrokerConfig::new(EngineCache::new(dir.join("cache")));
+        let first = serve_shared(Broker::new(cfg.clone()), &socket, SharedConfig::default())
+            .expect("bind first");
+
+        // Simulate a probe connect+drop (as ServerHandle::stop / bind_socket used to do):
+        // must not spin `wv-accept` or prevent a valid attach afterwards.
+        drop(UnixStream::connect(&socket).expect("probe connect"));
+
+        let mut probe = UnixStream::connect(&socket).expect("valid attach connect");
+        probe
+            .set_read_timeout(Some(Duration::from_secs(2)))
+            .expect("timeout");
+        probe
+            .write_all(&crate::gate::encode_attach("s1", "0.0.0+old.00000000"))
+            .expect("write mismatch attach");
+        probe.flush().expect("flush");
+        let mut reply = String::new();
+        std::io::BufReader::new(&probe)
+            .read_line_compat(&mut reply)
+            .ok();
+        assert!(reply.contains("BUILD_MISMATCH"), "reply: {reply}");
+        assert!(reply.contains("\"exiting\":true"), "reply: {reply}");
+        drop(probe);
+
+        // Wait for `first` accept/watch threads to finish quickly on BUILD_MISMATCH.
+        let started = Instant::now();
+        first.wait();
+        assert!(
+            started.elapsed() < Duration::from_millis(500),
+            "exiting server took too long: {:?}",
+            started.elapsed()
+        );
+
+        // Bind a replacement at the same path before dropping `first`.
+        let second = serve_shared(Broker::new(cfg), &socket, SharedConfig::default())
+            .expect("bind replacement after listener dropped");
+        let second_ino = path_dev_ino(&socket);
+        assert!(second_ino.is_some());
+
+        // Dropping `first` must NOT delete `second`'s socket!
+        drop(first);
+        assert_eq!(
+            path_dev_ino(&socket),
+            second_ino,
+            "old ServerHandle::drop must not unlink replacement socket"
+        );
+        assert!(
+            UnixStream::connect(&socket).is_ok(),
+            "replacement broker must still accept connections"
+        );
+        drop(second);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    trait ReadLineCompat {
+        fn read_line_compat(&mut self, out: &mut String) -> std::io::Result<usize>;
+    }
+    impl<T: std::io::BufRead> ReadLineCompat for T {
+        fn read_line_compat(&mut self, out: &mut String) -> std::io::Result<usize> {
+            self.read_line(out)
+        }
+    }
+}
+

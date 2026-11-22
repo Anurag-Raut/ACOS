@@ -357,3 +357,276 @@ fn another_builds_idle_daemon_exits_and_this_build_takes_the_endpoint() {
     drop(stale);
     let _ = std::fs::remove_dir_all(&root);
 }
+
+const MOCK_MODE_ENV: &str = "ACOS_WV_MOCK_DAEMON_MODE";
+const MOCK_SOCKET_ENV: &str = "ACOS_WV_MOCK_SOCKET";
+
+#[test]
+fn mock_daemon_child() {
+    let Ok(mode) = std::env::var(MOCK_MODE_ENV) else {
+        return;
+    };
+    let socket = PathBuf::from(std::env::var_os(MOCK_SOCKET_ENV).expect("mock socket"));
+    let _ = std::fs::remove_file(&socket);
+    if let Some(parent) = socket.parent() {
+        std::fs::create_dir_all(parent).expect("mock parent");
+    }
+    let listener = UnixListener::bind(&socket).expect("bind mock socket");
+    let ready = PathBuf::from(format!("{}.ready", socket.display()));
+    std::fs::write(&ready, b"ready").expect("ready marker");
+
+    match mode.as_str() {
+        "idle_refuses_to_exit" => loop {
+            if let Ok((mut stream, _)) = listener.accept() {
+                let mut buf = [0u8; 4096];
+                let _ = stream.read(&mut buf);
+                let _ = stream.write_all(
+                    br#"{"ok":false,"code":"BUILD_MISMATCH","build":"0.4.0+g0c2254418890.0000000000000000","sessions":0,"exiting":true}"#,
+                );
+                let _ = stream.write_all(b"\n");
+                let _ = stream.flush();
+                // Intentionally remain alive & keep listening until signaled.
+            }
+        },
+        "idle_slow_drop_v040" => {
+            if let Ok((mut stream, _)) = listener.accept() {
+                let mut buf = [0u8; 4096];
+                let _ = stream.read(&mut buf);
+                let _ = stream.write_all(
+                    br#"{"ok":false,"code":"BUILD_MISMATCH","build":"0.4.0+g0c2254418890.0000000000000000","sessions":0,"exiting":true}"#,
+                );
+                let _ = stream.write_all(b"\n");
+                let _ = stream.flush();
+                drop(stream);
+                // Drop listener immediately so connect() gets ECONNREFUSED, then
+                // mimic v0.4.0 ServerHandle::drop running 350ms later and attempting
+                // to nudge+unlink `socket`.
+                drop(listener);
+                std::thread::sleep(Duration::from_millis(350));
+                let _ = std::os::unix::net::UnixStream::connect(&socket);
+                let _ = std::fs::remove_file(&socket);
+                let dropped = PathBuf::from(format!("{}.dropped", socket.display()));
+                let _ = std::fs::write(&dropped, b"dropped");
+            }
+        }
+        "busy_sessions" => loop {
+            if let Ok((mut stream, _)) = listener.accept() {
+                let mut buf = [0u8; 4096];
+                let _ = stream.read(&mut buf);
+                let _ = stream.write_all(
+                    br#"{"ok":false,"code":"BUILD_MISMATCH","build":"0.4.0+g0c2254418890.0000000000000000","sessions":1,"exiting":false}"#,
+                );
+                let _ = stream.write_all(b"\n");
+                let _ = stream.flush();
+            }
+        },
+        "wedged_accept" => {
+            let mut held = Vec::new();
+            loop {
+                if let Ok((stream, _)) = listener.accept() {
+                    // Never read or write the attach answer, simulating a hung loop.
+                    held.push(stream);
+                }
+            }
+        }
+        other => panic!("unknown mock mode {other}"),
+    }
+}
+
+struct ChildGuard(Option<std::process::Child>);
+
+impl Drop for ChildGuard {
+    fn drop(&mut self) {
+        if let Some(mut child) = self.0.take() {
+            let pid = child.id();
+            kill(pid);
+            let _ = child.wait();
+        }
+    }
+}
+
+fn spawn_mock_daemon(mode: &str, socket: &Path) -> ChildGuard {
+    let exe = std::env::current_exe().expect("test binary");
+    let ready = PathBuf::from(format!("{}.ready", socket.display()));
+    let _ = std::fs::remove_file(&ready);
+    let child = std::process::Command::new(exe)
+        .args(["--exact", "mock_daemon_child", "--nocapture", "--test-threads=1"])
+        .env(MOCK_MODE_ENV, mode)
+        .env(MOCK_SOCKET_ENV, socket)
+        .stdin(std::process::Stdio::null())
+        .spawn()
+        .expect("spawn mock daemon");
+    let guard = ChildGuard(Some(child));
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while !ready.exists() && Instant::now() < deadline {
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    assert!(ready.exists(), "mock daemon {mode} did not become ready");
+    guard
+}
+
+#[test]
+fn idle_old_daemon_that_does_not_exit_is_sigtermed_via_peercred_and_replaced() {
+    let root = scratch("b1");
+    let canonical = root.join("b.sock");
+    let mut mock = spawn_mock_daemon("idle_refuses_to_exit", &canonical);
+    let old_pid = mock.0.as_ref().unwrap().id();
+
+    let bin = PathBuf::from(env!("CARGO_BIN_EXE_acos-webview"));
+    let dir = root.join("s");
+    let started = Instant::now();
+    let gate = Gate::start(config(&dir, &canonical, BrokerSource::Binary(bin), &root)).expect("gate");
+    let new_pid = {
+        let guest = WireGuest::connect(gate.socket());
+        let refusal = guest
+            .call("hello", json!({"proto": 99}))
+            .expect_err("proto 99 must be refused by replacement broker");
+        assert_eq!(refusal["code"], json!("PROTO_VERSION"), "{refusal}");
+        let pid = gate.spawned_broker_pid();
+        guest.close();
+        pid
+    };
+    let elapsed = started.elapsed();
+    assert!(
+        elapsed < Duration::from_secs(8),
+        "idle replacement took too long: {elapsed:?}"
+    );
+
+    if let Some(ref mut ch) = mock.0 {
+        let _ = ch.wait();
+    }
+    assert!(
+        !pid_alive(old_pid),
+        "idle unresponsive old daemon {old_pid} must be terminated via SO_PEERCRED"
+    );
+    assert!(pid_alive(new_pid), "replacement broker must be alive");
+    assert_eq!(gate.endpoint(), canonical);
+    let stats = gate.stats();
+    assert_eq!(stats.stale_exits, 1, "{stats:?}");
+    assert_eq!(stats.broker_spawns, 1, "{stats:?}");
+
+    kill(new_pid);
+    drop(gate);
+    drop(mock);
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+#[test]
+fn idle_old_daemon_slow_drop_is_waited_on_until_process_exit() {
+    let root = scratch("b2");
+    let canonical = root.join("b.sock");
+    let mut mock = spawn_mock_daemon("idle_slow_drop_v040", &canonical);
+    let old_pid = mock.0.as_ref().unwrap().id();
+    let dropped_marker = PathBuf::from(format!("{}.dropped", canonical.display()));
+
+    let bin = PathBuf::from(env!("CARGO_BIN_EXE_acos-webview"));
+    let dir = root.join("s");
+    let gate = Gate::start(config(&dir, &canonical, BrokerSource::Binary(bin), &root)).expect("gate");
+    let new_pid = {
+        let guest = WireGuest::connect(gate.socket());
+        let refusal = guest
+            .call("hello", json!({"proto": 99}))
+            .expect_err("proto 99 must be refused by replacement broker");
+        assert_eq!(refusal["code"], json!("PROTO_VERSION"), "{refusal}");
+        let pid = gate.spawned_broker_pid();
+        guest.close();
+        pid
+    };
+
+    if let Some(ref mut ch) = mock.0 {
+        let _ = ch.wait();
+    }
+    assert!(dropped_marker.exists(), "old daemon completed its drop");
+    assert!(!pid_alive(old_pid), "old daemon has exited");
+    assert!(
+        canonical.exists(),
+        "new broker socket must not be unlinked by old daemon's delayed Drop"
+    );
+    assert!(pid_alive(new_pid), "replacement broker must still be alive");
+    assert_eq!(gate.endpoint(), canonical);
+
+    kill(new_pid);
+    drop(gate);
+    drop(mock);
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+#[test]
+fn busy_old_daemon_process_is_not_killed_and_gate_uses_build_private_endpoint() {
+    let root = scratch("b3");
+    let canonical = root.join("b.sock");
+    let own = build_private_endpoint(&canonical);
+    let mock = spawn_mock_daemon("busy_sessions", &canonical);
+    let old_pid = mock.0.as_ref().unwrap().id();
+
+    let bin = PathBuf::from(env!("CARGO_BIN_EXE_acos-webview"));
+    let dir = root.join("s");
+    let gate = Gate::start(config(&dir, &canonical, BrokerSource::Binary(bin), &root)).expect("gate");
+    let new_pid = {
+        let guest = WireGuest::connect(gate.socket());
+        let refusal = guest
+            .call("hello", json!({"proto": 99}))
+            .expect_err("proto 99 must be refused by build-private broker");
+        assert_eq!(refusal["code"], json!("PROTO_VERSION"), "{refusal}");
+        let pid = gate.spawned_broker_pid();
+        guest.close();
+        pid
+    };
+
+    assert!(
+        pid_alive(old_pid),
+        "busy old daemon {old_pid} with live sessions must NEVER be killed"
+    );
+    assert!(pid_alive(new_pid), "build-private broker must be alive");
+    assert_eq!(gate.endpoint(), own);
+    let stats = gate.stats();
+    assert_eq!(stats.build_mismatches, 1, "{stats:?}");
+    assert_eq!(stats.stale_exits, 0, "{stats:?}");
+    assert_eq!(stats.broker_spawns, 1, "{stats:?}");
+
+    kill(new_pid);
+    drop(gate);
+    drop(mock);
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+#[test]
+fn wedged_canonical_daemon_with_unknown_sessions_is_not_killed_and_falls_back_within_bound() {
+    let root = scratch("b4");
+    let canonical = root.join("b.sock");
+    let own = build_private_endpoint(&canonical);
+    let mock = spawn_mock_daemon("wedged_accept", &canonical);
+    let wedged_pid = mock.0.as_ref().unwrap().id();
+
+    let bin = PathBuf::from(env!("CARGO_BIN_EXE_acos-webview"));
+    let dir = root.join("s");
+    let started = Instant::now();
+    let gate = Gate::start(config(&dir, &canonical, BrokerSource::Binary(bin), &root)).expect("gate");
+    let new_pid = {
+        let guest = WireGuest::connect(gate.socket());
+        let refusal = guest
+            .call("hello", json!({"proto": 99}))
+            .expect_err("proto 99 must be refused by build-private fallback broker");
+        assert_eq!(refusal["code"], json!("PROTO_VERSION"), "{refusal}");
+        let pid = gate.spawned_broker_pid();
+        guest.close();
+        pid
+    };
+    let elapsed = started.elapsed();
+    assert!(
+        elapsed < Duration::from_secs(8),
+        "wedged fallback took too long: {elapsed:?}"
+    );
+    assert!(
+        pid_alive(wedged_pid),
+        "wedged daemon {wedged_pid} with unknown sessions must not be killed"
+    );
+    assert!(pid_alive(new_pid));
+    assert_eq!(gate.endpoint(), own);
+
+    kill(new_pid);
+    drop(gate);
+    drop(mock);
+    let _ = std::fs::remove_dir_all(&root);
+}
+

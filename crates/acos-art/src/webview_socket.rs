@@ -247,6 +247,86 @@ pub fn is_guest_socket_path(guest: &str) -> bool {
     guest == GUEST_SOCKET_PATH
 }
 
+fn parse_session_dir_pid(name: &str) -> Option<u32> {
+    let (pid_str, seq_str) = name.split_once('-')?;
+    if pid_str.is_empty()
+        || seq_str.is_empty()
+        || !pid_str.bytes().all(|b| b.is_ascii_digit())
+        || !seq_str.bytes().all(|b| b.is_ascii_digit())
+    {
+        return None;
+    }
+    let pid: u32 = pid_str.parse().ok()?;
+    (pid > 0).then_some(pid)
+}
+
+fn session_pid_alive(pid: u32) -> bool {
+    if pid == 0 {
+        return false;
+    }
+    if pid == std::process::id() {
+        return true;
+    }
+    if let Ok(stat) = fs::read_to_string(format!("/proc/{pid}/stat")) {
+        if let Some((_, rest)) = stat.rsplit_once(')') {
+            let state = rest.trim_start().chars().next();
+            return !matches!(state, Some('Z' | 'X'));
+        }
+        return true;
+    }
+    // SAFETY: signal 0 is a pure existence probe for `pid`.
+    let rc = unsafe { libc::kill(pid as i32, 0) };
+    if rc == 0 {
+        true
+    } else {
+        std::io::Error::last_os_error().raw_os_error() != Some(libc::ESRCH)
+    }
+}
+
+/// Remove the default per-session WebView directory (`<runtime>/acos-wv/<pid>-<n>`)
+/// when a `RunDir` drops (covers `webview: off` and non-gate sessions).
+pub fn cleanup_session_dir(run_root: &Path) {
+    if std::env::var_os(HOST_DIR_ENV).is_some() {
+        return;
+    }
+    let dir = default_session_dir(run_root);
+    let _ = fs::remove_file(host_socket_path(&dir));
+    let _ = fs::remove_dir(&dir);
+}
+
+/// Sweep stale `<pid>-<n>` per-session directories under `root` (typically
+/// [`runtime_root`]) whose owner PID has exited.
+///
+/// Leaves `broker.sock`, `broker-*.sock`, `broker.log`, live-PID session dirs,
+/// and any unrelated files/dirs untouched.
+pub fn sweep_stale_session_dirs(root: &Path) -> usize {
+    let Ok(rd) = fs::read_dir(root) else {
+        return 0;
+    };
+    let mut removed = 0;
+    for entry in rd.flatten() {
+        if !entry.file_type().map(|t| t.is_dir()).unwrap_or(false) {
+            continue;
+        }
+        let name = entry.file_name();
+        let Some(name_str) = name.to_str() else {
+            continue;
+        };
+        let Some(pid) = parse_session_dir_pid(name_str) else {
+            continue;
+        };
+        if session_pid_alive(pid) {
+            continue;
+        }
+        let path = entry.path();
+        let _ = fs::remove_file(host_socket_path(&path));
+        if fs::remove_dir(&path).is_ok() {
+            removed += 1;
+        }
+    }
+    removed
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -469,4 +549,54 @@ mod tests {
 
         let _ = fs::remove_dir_all(&run);
     }
+
+    #[test]
+    fn sweep_stale_session_dirs_removes_dead_pid_dirs_only() {
+        let root = scratch("sweep");
+        let dead = std::process::Command::new("/bin/true")
+            .status()
+            .expect("spawn /bin/true");
+        assert!(dead.success());
+        // Spawn and wait to obtain a genuinely exited PID.
+        let child = std::process::Command::new("/bin/true")
+            .spawn()
+            .expect("spawn child");
+        let dead_pid = child.id();
+        let mut child = child;
+        let _ = child.wait();
+
+        let stale_dir = root.join(format!("{dead_pid}-1"));
+        fs::create_dir_all(&stale_dir).expect("stale dir");
+        fs::write(host_socket_path(&stale_dir), b"").expect("stale sock");
+
+        let live_dir = root.join(format!("{}-1", std::process::id()));
+        fs::create_dir_all(&live_dir).expect("live dir");
+        fs::write(host_socket_path(&live_dir), b"").expect("live sock");
+
+        let unrelated_dir = root.join("notes");
+        fs::create_dir_all(&unrelated_dir).expect("unrelated dir");
+        fs::write(root.join("broker.sock"), b"").expect("broker sock");
+
+        let removed = sweep_stale_session_dirs(&root);
+        assert_eq!(removed, 1, "only dead-pid session dir should be removed");
+        assert!(!stale_dir.exists(), "dead-pid session dir must be removed");
+        assert!(live_dir.exists(), "live-pid session dir must survive");
+        assert!(unrelated_dir.exists(), "non-session dir must survive");
+        assert!(root.join("broker.sock").exists(), "broker.sock must survive");
+
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn cleanup_session_dir_removes_default_dir_when_unpinned() {
+        let run = scratch("cleanup");
+        with_env_dir(None, || {
+            let dir = host_dir(&run).expect("host dir");
+            assert!(dir.is_dir());
+            cleanup_session_dir(&run);
+            assert!(!dir.exists(), "cleanup_session_dir must remove empty default dir");
+        });
+        let _ = fs::remove_dir_all(&run);
+    }
 }
+
