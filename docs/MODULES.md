@@ -25,6 +25,8 @@ A module is a set of Android system pieces attached to a session. `off` is alway
 | `media.session` | `off`, `stub`, `scripted` | `hot` | `in-process` | 1 | 5 | media sessions: stub (record what apps publish) / scripted (agent play, pause, next, seek reach MediaSession.Callback); no media-key routing, queue, volume, remote sessions or router | `media_session`, `media_router` | `sessions`, `play`, `pause`, `stop`, `next`, `previous`, `fast_forward`, `rewind`, `seek`, `skip_to_item`, `custom_action`, `reset` |
 | `hw.camera` | `off`, `stub`, `scripted` | `hot` | `in-process` | 1 | 5 | camera service (`media.camera`): one camera (id, facing, orientation, sensor size from the config) with real CameraCharacteristics, Camera2 device/session lifecycle (`ICameraDeviceUser` + `ICameraDeviceCallbacks`), deterministic `ACOS_PATTERN_COLORBARS_V1` frames (`stub`) and host-injected PNG/JPEG frames via `set_frame` (`scripted`) into `ImageReader`/`Surface` (`YUV_420_888`, `BLOB`, `RGBA_8888`); no `real` profile (ACOS has no camera HAL) | `media.camera`, feature `android.hardware.camera`, feature `android.hardware.camera.any` | `status`, `camera`, `characteristics`, `calls`, `set_frame`, `reset` |
 | `multiwindow` | `off`, `real` | `hot` | `in-process` | 1 | 5 | real multi-window task bounds and windowing-mode transitions on the live WMS (slice 1: single-task split enter_split/resize/exit via the ServiceHost guest-command outbox; `off` keeps fullscreen and refuses control ops, no stub/scripted profile) | window `TYPE_APPLICATION` | `enter_split`, `resize`, `exit`, `status` |
+| `system.launcher` | `off`, `real` | `at-launch` | `in-process` | 1 | 1 | guest Launcher system app (`com.acos.launcher`) answering ACTION_MAIN / CATEGORY_HOME and listing MAIN/LAUNCHER apps from PackageManager | app `com.acos.launcher` | `status` |
+| `system.settings` | `off`, `real` | `at-launch` | `in-process` | 1 | 1 | guest Settings stub system app (`com.android.settings`) answering ACTION_SETTINGS, ACTION_APPLICATION_DETAILS_SETTINGS, and ACTION_WIFI_SETTINGS | app `com.android.settings` | `status` |
 | `hw.usb` | `off`, `stub` | `hot` | `in-process` | 1 | 2 | USB host: stub (no USB hardware), empty device list and no configured functions | `usb` | — |
 | `system.dropbox` | `off`, `stub` | `hot` | `in-process` | 1 | 2 | DropBox: stub (no system DropBox), no entries and no enabled tags | `dropbox` | — |
 | `hw.nfc` | `off` | `hot` | `in-process` | 1 | 1 | NFC: off (no NFC hardware) | `nfc` | — |
@@ -129,6 +131,8 @@ A module is a set of Android system pieces attached to a session. `off` is alway
 | `multiwindow` | `resize` | {ratio: 0.2..=0.8, position?: "top"|"bottom"|"left"|"right", task?: i32} — resize the active split pane and deliver the new activity override Configuration |
 | `multiwindow` | `exit` | {task?: i32} (or empty) — clear task bounds, restore WINDOWING_MODE_FULLSCREEN and deliver the full-screen activity override Configuration |
 | `multiwindow` | `status` | none — current multi-window state, active task bounds and transition count |
+| `system.launcher` | `status` | none — whether com.acos.launcher is staged for HOME and app launching |
+| `system.settings` | `status` | none — whether com.android.settings is staged for settings intents |
 
 ## Names with no module attached
 
@@ -140,7 +144,7 @@ A name a phone publishes that this build does not. Each row says what the app ob
 | `vibrator` | `feedback.vibrator` | Android's missing path (`null`) | no vibrator hardware model |
 | `usb` | `hw.usb` | structured `UNSUPPORTED_ANDROID_API` | no USB host/device model |
 | `midi` | `hw.midi` | structured `UNSUPPORTED_ANDROID_API` | no MIDI device model |
-| `launcherapps` | `system.launcher` | structured `UNSUPPORTED_ANDROID_API` | no launcher and no launcher-apps service |
+| `launcherapps` | `system.launcherapps` | structured `UNSUPPORTED_ANDROID_API` | no launcher and no launcher-apps service |
 | `usagestats` | `system.usage` | structured `UNSUPPORTED_ANDROID_API` | no usage-stats service (nothing records app usage) |
 | `dropbox` | `system.dropbox` | structured `UNSUPPORTED_ANDROID_API` | no DropBox service |
 | `device_policy` | `system.dpm` | structured `UNSUPPORTED_ANDROID_API` | no device-policy manager (no managed device/profile) |

@@ -5573,41 +5573,78 @@ public final class LaunchMain {
      * callbacks. Nothing is fabricated: the items are the framework's, and the
      * trigger is the framework's own `mFinished` flag.
      */
+    private static final java.util.Set<IBinder> sLocallyWatchedFinishes =
+            java.util.Collections.synchronizedSet(new java.util.HashSet<IBinder>());
+    private static final java.util.Set<IBinder> sTopFinishHandled =
+            java.util.Collections.synchronizedSet(new java.util.HashSet<IBinder>());
+    private static final java.util.concurrent.atomic.AtomicBoolean sTopFinishWatcherStarted =
+            new java.util.concurrent.atomic.AtomicBoolean(false);
+
     static void startTopFinishWatcher(final IBinder token) {
+        if (!sTopFinishWatcherStarted.compareAndSet(false, true)) {
+            return;
+        }
         Thread t = new Thread(new Runnable() {
             @Override
             public void run() {
                 try {
-                    long deadline = System.currentTimeMillis() + 120000;
                     android.util.Log.i("AcosRot6", "ACOSLAUNCH MARK top-finish-watcher-started");
-                    Object activity = null;
-                    while (System.currentTimeMillis() < deadline) {
-                        activity = activityForToken(token);
-                        if (activity != null && Boolean.TRUE.equals(get(activity, "mFinished"))) break;
+                    Class<?> pauseCls = null;
+                    Class<?> stopCls = null;
+                    Class<?> destroyCls = null;
+                    while (true) {
+                        java.util.List<IBinder> finishedTokens = new java.util.ArrayList<IBinder>();
+                        try {
+                            Object activities = sThread == null ? null : get(sThread, "mActivities");
+                            if (activities instanceof java.util.Map) {
+                                for (java.util.Map.Entry<?, ?> entry :
+                                        ((java.util.Map<?, ?>) activities).entrySet()) {
+                                    Object key = entry.getKey();
+                                    if (!(key instanceof IBinder)) continue;
+                                    IBinder tkn = (IBinder) key;
+                                    if (sLocallyWatchedFinishes.contains(tkn)
+                                            || sTopFinishHandled.contains(tkn)) {
+                                        continue;
+                                    }
+                                    Object rec = entry.getValue();
+                                    Object activity = rec == null ? null : get(rec, "activity");
+                                    if (activity == null) continue;
+                                    if (!Boolean.TRUE.equals(get(activity, "mFinished"))) continue;
+                                    if (Boolean.TRUE.equals(
+                                            activity.getClass().getMethod("isDestroyed").invoke(activity))) {
+                                        continue;
+                                    }
+                                    finishedTokens.add(tkn);
+                                }
+                            }
+                        } catch (java.util.ConcurrentModificationException ignored) {
+                            // `mActivities` is mutated on the main thread; retry on the next poll.
+                        }
+                        if (!finishedTokens.isEmpty() && pauseCls == null) {
+                            pauseCls = Class.forName("android.app.servertransaction.PauseActivityItem");
+                            stopCls = Class.forName("android.app.servertransaction.StopActivityItem");
+                            destroyCls = Class.forName("android.app.servertransaction.DestroyActivityItem");
+                        }
+                        for (IBinder tkn : finishedTokens) {
+                            if (!sTopFinishHandled.add(tkn)) continue;
+                            // PauseActivityItem.obtain(finished, userLeaving, configChanges, dontReport)
+                            scheduleLocal(lifecycleTransaction(tkn,
+                                    obtainPrimitiveItem(pauseCls, new boolean[]{true, false, false})));
+                            scheduleLocal(lifecycleTransaction(tkn,
+                                    obtainPrimitiveItem(stopCls, new boolean[]{false})));
+                            scheduleLocal(lifecycleTransaction(tkn,
+                                    obtainPrimitiveItem(destroyCls, new boolean[]{true, false, false})));
+                            android.util.Log.i("AcosRot6",
+                                    "ACOSLAUNCH MARK activity-destroyed-after-finish token=binder:"
+                                            + Integer.toHexString(System.identityHashCode(tkn))
+                                            + " order=Pause(finished)->Stop->Destroy");
+                        }
                         Thread.sleep(10);
                     }
-                    if (activity == null || !Boolean.TRUE.equals(get(activity, "mFinished"))) {
-                        android.util.Log.i("AcosRot6", "ACOSLAUNCH MARK top-finish-watcher-timeout");
-                                                return;
-                    }
-                    Class<?> pauseCls = Class.forName("android.app.servertransaction.PauseActivityItem");
-                    Class<?> stopCls = Class.forName("android.app.servertransaction.StopActivityItem");
-                    Class<?> destroyCls =
-                            Class.forName("android.app.servertransaction.DestroyActivityItem");
-                    // PauseActivityItem.obtain(finished, userLeaving, configChanges, dontReport)
-                    scheduleLocal(lifecycleTransaction(token,
-                            obtainPrimitiveItem(pauseCls, new boolean[]{true, false, false})));
-                    scheduleLocal(lifecycleTransaction(token,
-                            obtainPrimitiveItem(stopCls, new boolean[]{false})));
-                    scheduleLocal(lifecycleTransaction(token,
-                            obtainPrimitiveItem(destroyCls, new boolean[]{true, false, false})));
-                    android.util.Log.i("AcosRot6", "ACOSLAUNCH MARK activity-destroyed-after-finish token=binder:"
-                            + Integer.toHexString(System.identityHashCode(token))
-                            + " order=Pause(finished)->Stop->Destroy");
-                                    } catch (Throwable x) {
+                } catch (Throwable x) {
                     android.util.Log.i("AcosRot6", "ACOSLAUNCH MARK top-finish-watcher-error " + x);
                     x.printStackTrace(System.out);
-                                    }
+                }
             }
         }, "acos-top-finish-watcher");
         t.setDaemon(true);
@@ -5621,6 +5658,9 @@ public final class LaunchMain {
      * for it, then `ResumeActivityItem` for the Activity below it.
      */
     static void startFinishWatcher(final IBinder token, final IBinder previous) {
+        if (token != null) {
+            sLocallyWatchedFinishes.add(token);
+        }
         Thread t = new Thread(new Runnable() {
             @Override
             public void run() {

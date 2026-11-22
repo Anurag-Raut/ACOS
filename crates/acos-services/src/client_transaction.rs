@@ -162,8 +162,9 @@ pub fn intent(facts: &IntentFacts) -> Result<Parcelable> {
         };
         bundle.put(key.clone(), value);
     }
-    Ok(intent_payload(
+    Ok(intent_payload_with_data(
         facts.action.as_deref(),
+        facts.data.as_deref(),
         facts.mime_type.as_deref(),
         facts.flags,
         facts.package.as_deref(),
@@ -937,6 +938,7 @@ impl AtmsState {
     /// Returns `None` when the process has no `onNewIntent` pending.
     pub fn take_new_intent_for_tag(&mut self, tag: u32) -> Option<Parcelable> {
         let (token, facts) = self.ams.take_pending_new_intent(tag)?;
+        self.withdraw_pending_pause_stop(tag, token);
         let intent = match intent(&facts) {
             Ok(intent) => intent,
             Err(err) => {

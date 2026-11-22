@@ -103,7 +103,7 @@ fn an_unresolved_explicit_component_is_not_captured() {
         acos_services::ServiceError::IllegalState { .. }
     ));
     assert!(intents.lock().unwrap().last().is_none());
-    assert_eq!(START_NOT_FOUND, 4);
+    assert_eq!(START_NOT_FOUND, -91);
 }
 
 #[test]

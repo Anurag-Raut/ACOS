@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">ACOS Launcher</string>
+    <string name="launcher_title">ACOS Home</string>
+    <string name="launcher_empty">No launchable apps</string>
+</resources>

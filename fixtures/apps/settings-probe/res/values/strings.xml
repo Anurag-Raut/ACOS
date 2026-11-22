@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Settings Probe</string>
+    <string name="btn_settings">Open Settings</string>
+    <string name="btn_app_details">Open App Info</string>
+    <string name="btn_wifi">Open Wi-Fi Settings</string>
+    <string name="btn_location">Open Location Settings</string>
+    <string name="status_ready">ready</string>
+</resources>
