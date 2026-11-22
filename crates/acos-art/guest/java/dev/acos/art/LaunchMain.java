@@ -4121,6 +4121,7 @@ public final class LaunchMain {
                 // `Surface` natives were never registered either, so registering
                 // `SurfaceControl` alone is not enough (W4).
                 "register_android_view_Surface",
+                "register_android_graphics_BLASTBufferQueue",
                 // `ViewRootImpl.<init>` (line 724 on API 34) constructs a
                 // `SurfaceSession`, whose Java constructor calls
                 // `nativeCreate()` immediately.

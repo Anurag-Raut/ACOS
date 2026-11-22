@@ -1,0 +1,7 @@
+{
+  "request_id": "req_342cf_18ea48078651f7ad",
+  "started_at": "2026-11-22T05:49:58.616Z",
+  "scenario": "scenarios/camera-off.yaml",
+  "apk": "",
+  "acos_version": "0.4.0"
+}

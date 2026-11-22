@@ -7,6 +7,7 @@ import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Color;
 import android.graphics.ImageFormat;
+import android.graphics.PixelFormat;
 import android.graphics.Rect;
 import android.hardware.camera2.CameraCaptureSession;
 import android.hardware.camera2.CameraCharacteristics;
@@ -26,6 +27,9 @@ import android.os.Looper;
 import android.util.Log;
 import android.util.Size;
 import android.view.Gravity;
+import android.view.Surface;
+import android.view.SurfaceHolder;
+import android.view.SurfaceView;
 import android.view.View;
 import android.widget.Button;
 import android.widget.LinearLayout;
@@ -59,12 +63,16 @@ public final class MainActivity extends Activity {
     private static final int CAPTURE_WIDTH = 640;
     private static final int CAPTURE_HEIGHT = 480;
     private static final int REPEAT_TARGET_FRAMES = 3;
+    private static final int PREVIEW_TARGET_FRAMES = 5;
 
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private TextView status;
     private CameraManager cameraManager;
     private int captureSeq = 0;
     private int jpegSeq = 0;
+    private int previewSeq = 0;
+    private SurfaceView previewSurface;
+    private final AtomicBoolean previewSurfaceReady = new AtomicBoolean(false);
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -79,24 +87,52 @@ public final class MainActivity extends Activity {
         title.setText("CAMERAPROBE");
         root.addView(title);
 
+        previewSurface = new SurfaceView(this);
+        previewSurface.setId(R.id.preview_surface);
+        previewSurface.getHolder().setFixedSize(CAPTURE_WIDTH, CAPTURE_HEIGHT);
+        previewSurface.getHolder().setFormat(PixelFormat.RGBA_8888);
+        previewSurface.getHolder().addCallback(new SurfaceHolder.Callback() {
+            @Override
+            public void surfaceCreated(SurfaceHolder holder) {
+                previewSurfaceReady.set(true);
+            }
+
+            @Override
+            public void surfaceChanged(SurfaceHolder holder, int format, int width, int height) {
+                previewSurfaceReady.set(true);
+            }
+
+            @Override
+            public void surfaceDestroyed(SurfaceHolder holder) {
+                previewSurfaceReady.set(false);
+            }
+        });
+        root.addView(previewSurface, new LinearLayout.LayoutParams(CAPTURE_WIDTH, CAPTURE_HEIGHT));
+
         cameraManager = (CameraManager) getSystemService(Context.CAMERA_SERVICE);
 
-        root.addView(button("List", v -> listCameras()));
-        root.addView(button("Chars", v -> queryCharacteristics()));
-        root.addView(button("Unknown", v -> queryUnknown()));
-        root.addView(button("Open", v -> openCamera()));
-        root.addView(button("Capture", v -> runSingleCapture()));
-        root.addView(button("Capture JPEG", v -> runJpegCapture()));
-        root.addView(button("Repeat", v -> runRepeatingCapture()));
+        root.addView(buttonRow(
+                button("List", v -> listCameras()),
+                button("Chars", v -> queryCharacteristics())));
+        root.addView(buttonRow(
+                button("Unknown", v -> queryUnknown()),
+                button("Open", v -> openCamera())));
+        root.addView(buttonRow(
+                button("Capture", v -> runSingleCapture()),
+                button("Capture JPEG", v -> runJpegCapture())));
+        root.addView(buttonRow(
+                button("Repeat", v -> runRepeatingCapture()),
+                button("Preview", v -> runPreviewCapture())));
 
         status = new TextView(this);
         status.setId(R.id.status);
         status.setTextIsSelectable(true);
-        root.addView(status);
 
         ScrollView scroll = new ScrollView(this);
-        scroll.addView(root);
-        setContentView(scroll);
+        scroll.addView(status);
+        root.addView(scroll, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, 0, 1.0f));
+        setContentView(root);
 
         PackageManager pm = getPackageManager();
         boolean featCam = pm.hasSystemFeature(PackageManager.FEATURE_CAMERA);
@@ -104,6 +140,17 @@ public final class MainActivity extends Activity {
         log("READY mgr=" + (cameraManager != null ? "present" : "null")
                 + " feat_cam=" + featCam
                 + " feat_any=" + featAny);
+    }
+
+    private LinearLayout buttonRow(Button left, Button right) {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                0, LinearLayout.LayoutParams.WRAP_CONTENT, 1.0f);
+        row.addView(left, lp);
+        row.addView(right, new LinearLayout.LayoutParams(
+                0, LinearLayout.LayoutParams.WRAP_CONTENT, 1.0f));
+        return row;
     }
 
     private Button button(String label, View.OnClickListener onClick) {
@@ -698,6 +745,149 @@ public final class MainActivity extends Activity {
             reader.close();
             bgThread.quitSafely();
             log("JPEG error=" + t.getClass().getSimpleName() + ": " + t.getMessage());
+        }
+    }
+
+    private void runPreviewCapture() {
+        final SurfaceHolder holder = previewSurface != null ? previewSurface.getHolder() : null;
+        final Surface targetSurface = holder != null ? holder.getSurface() : null;
+        if (targetSurface == null || !targetSurface.isValid()) {
+            log("PREVIEW error=surface_not_ready");
+            return;
+        }
+        final HandlerThread bgThread = new HandlerThread("cameraprobe-preview");
+        bgThread.start();
+        final Handler bgHandler = new Handler(bgThread.getLooper());
+        final List<Long> completedFrames = new ArrayList<>();
+        final List<Long> completedTimestamps = new ArrayList<>();
+        final AtomicBoolean stopping = new AtomicBoolean(false);
+        final CameraDevice[] deviceRef = new CameraDevice[1];
+        final CameraCaptureSession[] sessionRef = new CameraCaptureSession[1];
+
+        final Runnable maybeFinish = () -> {
+            if (completedFrames.size() >= PREVIEW_TARGET_FRAMES
+                    && stopping.compareAndSet(false, true)) {
+                boolean framesInc = true;
+                boolean tsInc = true;
+                for (int i = 1; i < PREVIEW_TARGET_FRAMES; i++) {
+                    if (completedFrames.get(i) <= completedFrames.get(i - 1)) {
+                        framesInc = false;
+                    }
+                    if (completedTimestamps.get(i) <= completedTimestamps.get(i - 1)) {
+                        tsInc = false;
+                    }
+                }
+                log("PREVIEW ok count=" + PREVIEW_TARGET_FRAMES
+                        + " frames=" + completedFrames.subList(0, PREVIEW_TARGET_FRAMES)
+                        + " frames_inc=" + framesInc
+                        + " ts_inc=" + tsInc);
+                CameraCaptureSession s = sessionRef[0];
+                if (s != null) {
+                    try {
+                        s.stopRepeating();
+                    } catch (Throwable ignored) {
+                    }
+                    try {
+                        s.close();
+                    } catch (Throwable ignored) {
+                    }
+                }
+                CameraDevice d = deviceRef[0];
+                if (d != null) {
+                    d.close();
+                }
+            }
+        };
+
+        try {
+            cameraManager.openCamera("0", new CameraDevice.StateCallback() {
+                @Override
+                public void onOpened(CameraDevice camera) {
+                    deviceRef[0] = camera;
+                    log("PREVIEW opened id=" + camera.getId());
+                    try {
+                        camera.createCaptureSession(
+                                Collections.singletonList(targetSurface),
+                                new CameraCaptureSession.StateCallback() {
+                                    @Override
+                                    public void onConfigured(CameraCaptureSession session) {
+                                        sessionRef[0] = session;
+                                        try {
+                                            CaptureRequest.Builder req = camera.createCaptureRequest(
+                                                    CameraDevice.TEMPLATE_PREVIEW);
+                                            req.addTarget(targetSurface);
+                                            session.setRepeatingRequest(
+                                                    req.build(),
+                                                    new CameraCaptureSession.CaptureCallback() {
+                                                        @Override
+                                                        public void onCaptureCompleted(
+                                                                CameraCaptureSession s,
+                                                                CaptureRequest request,
+                                                                TotalCaptureResult result) {
+                                                            if (completedFrames.size() < PREVIEW_TARGET_FRAMES) {
+                                                                long fn = result.getFrameNumber();
+                                                                Long ts = result.get(
+                                                                        TotalCaptureResult.SENSOR_TIMESTAMP);
+                                                                completedFrames.add(fn);
+                                                                completedTimestamps.add(ts != null ? ts : -1L);
+                                                                maybeFinish.run();
+                                                            }
+                                                        }
+
+                                                        @Override
+                                                        public void onCaptureFailed(
+                                                                CameraCaptureSession s,
+                                                                CaptureRequest request,
+                                                                CaptureFailure failure) {
+                                                            log("PREVIEW failed reason=" + failure.getReason());
+                                                            camera.close();
+                                                        }
+                                                    },
+                                                    bgHandler);
+                                        } catch (Throwable t) {
+                                            log("PREVIEW submit_error="
+                                                    + t.getClass().getSimpleName() + ": "
+                                                    + t.getMessage());
+                                            camera.close();
+                                        }
+                                    }
+
+                                    @Override
+                                    public void onConfigureFailed(CameraCaptureSession session) {
+                                        log("PREVIEW configure_failed");
+                                        camera.close();
+                                    }
+                                },
+                                bgHandler);
+                    } catch (Throwable t) {
+                        log("PREVIEW session_error="
+                                + t.getClass().getSimpleName() + ": " + t.getMessage());
+                        camera.close();
+                    }
+                }
+
+                @Override
+                public void onClosed(CameraDevice camera) {
+                    bgThread.quitSafely();
+                    previewSeq++;
+                    log("PREVIEW closed id=" + camera.getId() + " seq=" + previewSeq);
+                }
+
+                @Override
+                public void onDisconnected(CameraDevice camera) {
+                    log("PREVIEW disconnected");
+                    camera.close();
+                }
+
+                @Override
+                public void onError(CameraDevice camera, int error) {
+                    log("PREVIEW device_error=" + error);
+                    camera.close();
+                }
+            }, bgHandler);
+        } catch (Throwable t) {
+            bgThread.quitSafely();
+            log("PREVIEW error=" + t.getClass().getSimpleName() + ": " + t.getMessage());
         }
     }
 

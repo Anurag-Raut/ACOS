@@ -1,0 +1,60 @@
+# CAMERA4 (Slice 3) negative control: SurfaceView renders the real Red bar
+# (255,0,0) at x=440..480, while the scenario asserts the Green bar's SHA-256
+# hash at that rect. Must fail with ASSERTION_FAILED.
+version: 1
+name: camera-preview-wrong-color
+description: >-
+  CAMERA4 negative: camera-probe streams repeating preview frames into a
+  SurfaceView on ART, then asserts the Green bar hash at the Red bar location
+  so it must fail with ASSERTION_FAILED.
+app: fixtures/build/apps/camera-probe.apk
+api_level: 34
+isolation: process
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+capabilities:
+  - ui.offscreen
+  - ui.text
+  - ui.screenshot
+  - input
+services:
+  - id: system.permissions
+    profile: real
+  - id: hw.camera
+    profile: stub
+expectation: fail
+expect_error: {code: ASSERTION_FAILED}
+budgets:
+  memory_mib: 640
+  wall_ms: 180000
+steps:
+  - launch:
+      activity: dev.acos.fixtures.cameraprobe/.MainActivity
+      clear_state: true
+  - wait_for:
+      selector: {text: {contains: "READY mgr=present feat_cam=true feat_any=true"}}
+      timeout_ms: 20000
+
+  - service_ctl:
+      module: system.permissions
+      op: grant
+      args: {permission: "android.permission.CAMERA"}
+      expect:
+        ok: true
+
+  - tap:
+      selector: {text: {exact: "Preview"}}
+  - wait_for:
+      selector: {text: {contains: "PREVIEW closed id=0 seq=1"}}
+      timeout_ms: 30000
+
+  # Red bar really is (255,0,0) at (440,420); asserting Green bar hash must fail.
+  - assert_region:
+      x: 440
+      y: 420
+      w: 40
+      h: 40
+      hash: "b3fd49b07c4a70f28f309cb5185c5d57bba95d7d6df5e71e2099520d26143158"

@@ -1,0 +1,91 @@
+{
+  "backend": "acos-native",
+  "capabilities_used": [
+    "input",
+    "lifecycle",
+    "screenshot",
+    "static-manifest",
+    "ui.tree"
+  ],
+  "error": {
+    "class": "assertion",
+    "code": "ASSERTION_FAILED",
+    "hint": "Compare expected vs actual in the assertion diff, inspect the linked frame/tree, then fix the app or the expectation. Rerun the scenario.",
+    "message": "hash 3efc49dcdedd05fc035960e947a03d4fad1b7904eeb5389b37ed72767cf55f60 != b3fd49b07c4a70f28f309cb5185c5d57bba95d7d6df5e71e2099520d26143158",
+    "retryable": false
+  },
+  "evidence": {
+    "events": "events.jsonl",
+    "log": "logs/logcat.txt",
+    "verdict": "verdict.json"
+  },
+  "fidelity": "art-reference",
+  "isolation": "process",
+  "metrics": {
+    "peak_rss_bytes": 57217024,
+    "wall_ms": 3069
+  },
+  "ok": false,
+  "request_id": "req_348f1_18ea480fe8db2171",
+  "result": {
+    "artifacts_dir": ".cache/verify-neg-camera-preview-wrong-color",
+    "cap_bytes": 20480,
+    "evidence_provenance": {
+      "binder_transactions": "host-observed",
+      "crash_reports": "guest-asserted",
+      "frames": "host-observed",
+      "host_input": "host-observed",
+      "input_acks": "guest-asserted",
+      "launch_markers": "guest-asserted",
+      "lifecycle_markers": "guest-asserted",
+      "logs": "guest-asserted",
+      "static_manifest": "host-observed",
+      "tree": "guest-asserted"
+    },
+    "failed_step": {
+      "failure_index": 5,
+      "index": 5,
+      "kind": "assert_region",
+      "message": "hash 3efc49dcdedd05fc035960e947a03d4fad1b7904eeb5389b37ed72767cf55f60 != b3fd49b07c4a70f28f309cb5185c5d57bba95d7d6df5e71e2099520d26143158",
+      "status": "fail"
+    },
+    "failure": {
+      "code": "ASSERTION_FAILED",
+      "error": {
+        "class": "assertion",
+        "code": "ASSERTION_FAILED",
+        "hint": "Compare expected vs actual in the assertion diff, inspect the linked frame/tree, then fix the app or the expectation. Rerun the scenario.",
+        "message": "hash 3efc49dcdedd05fc035960e947a03d4fad1b7904eeb5389b37ed72767cf55f60 != b3fd49b07c4a70f28f309cb5185c5d57bba95d7d6df5e71e2099520d26143158",
+        "retryable": false
+      },
+      "step_index": 5,
+      "summary": "step 5 (assert_region) fail"
+    },
+    "note": "this result was larger than the reply cap; only the bulk (tree, steps, logs) was dropped and the full evidence is in the artifacts paths named here",
+    "provenance": {
+      "apk": {
+        "mtime_ns": 1795326435852741616,
+        "path": "/home/Qui/.t3/worktrees/acos/t3-a779be14-64f50f3729c53ac4/fixtures/build/apps/camera-probe.apk",
+        "sha256": "b003e40f22315077500a8b84ddb8b06a6e167a7280b1d9a8bfa5d660f7eec12d",
+        "sha256_12": "b003e40f2231",
+        "size_bytes": 24979
+      },
+      "engine": "art",
+      "fidelity": "art-reference",
+      "scenario": {
+        "mtime_ns": 1795326540146780238,
+        "path": "/home/Qui/.t3/worktrees/acos/t3-a779be14-64f50f3729c53ac4/scenarios/negative/camera-preview-wrong-color.yaml",
+        "sha256": "6eb7c83a15462ce7d2b4a9e7753369f8dacf26547b12f995ad6619b125581404",
+        "sha256_12": "6eb7c83a1546",
+        "size_bytes": 1636
+      },
+      "scenario_engine": "art",
+      "warnings": []
+    },
+    "reply_capped": true,
+    "verdict_path": ".cache/verify-neg-camera-preview-wrong-color/verdict.json",
+    "verdict_status": "fail"
+  },
+  "session_id": "s_art_camera-probe",
+  "status": "fail"
+}
