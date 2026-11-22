@@ -659,4 +659,62 @@ mod tests {
             .expect("present text and absent text both hold");
         host.shutdown();
     }
+
+    #[test]
+    fn process_group_teardown_kills_descendant_workers_on_drop() {
+        let copy = scratch("pgroup");
+        let worker_pid_file = copy.join("worker.pid");
+        let mut cmd = Command::new("sh");
+        cmd.arg("-c")
+            .arg(format!(
+                "sleep 60 & echo $! > '{}'; wait",
+                worker_pid_file.display()
+            ))
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null());
+        std::os::unix::process::CommandExt::process_group(&mut cmd, 0);
+        let child = cmd.spawn().unwrap();
+        let leader_pid = child.id();
+
+        let deadline = Instant::now() + Duration::from_secs(5);
+        let worker_pid: u32 = loop {
+            if let Ok(text) = fs::read_to_string(&worker_pid_file) {
+                if let Ok(pid) = text.trim().parse::<u32>() {
+                    break pid;
+                }
+            }
+            assert!(Instant::now() < deadline, "worker pid was never written");
+            std::thread::sleep(Duration::from_millis(20));
+        };
+        assert!(Path::new(&format!("/proc/{worker_pid}")).exists());
+
+        {
+            let mut host = DevServerHost::default();
+            host.inner = Some(Running {
+                child,
+                port: 1,
+                root: copy.clone(),
+                project: copy.clone(),
+                log: copy.join("metro.log"),
+            });
+        }
+
+        let gone = |pid: u32| {
+            !Path::new(&format!("/proc/{pid}")).exists()
+                || fs::read_to_string(format!("/proc/{pid}/stat"))
+                    .map(|s| s.contains(") Z"))
+                    .unwrap_or(true)
+        };
+        let wait_deadline = Instant::now() + Duration::from_secs(3);
+        while Instant::now() < wait_deadline && (!gone(leader_pid) || !gone(worker_pid)) {
+            std::thread::sleep(Duration::from_millis(25));
+        }
+        assert!(gone(leader_pid), "leader pid {leader_pid} survived drop");
+        assert!(
+            gone(worker_pid),
+            "descendant worker pid {worker_pid} survived process-group teardown"
+        );
+        assert!(!copy.exists(), "scratch dir was not cleaned up");
+    }
 }

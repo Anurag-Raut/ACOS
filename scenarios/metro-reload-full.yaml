@@ -10,7 +10,7 @@ description: >-
   ones: a doubled tree, an old copy or a missing new text is a FAIL, never a pass.
   The verdict is whatever happened; this file is not part of any gate.
 app: fixtures/build/apps/rn-debug.apk
-engine: native-preferred
+engine: art
 fallback: report-and-escalate
 api_level: 34
 isolation: process

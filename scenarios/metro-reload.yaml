@@ -7,7 +7,7 @@ description: >-
   reload sent), and the app shows the new text once, no copy of the old text, and
   a tree no larger than before.
 app: fixtures/build/apps/rn-debug.apk
-engine: native-preferred
+engine: art
 fallback: report-and-escalate
 api_level: 34
 isolation: process

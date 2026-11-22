@@ -499,6 +499,8 @@ A step is a **one-key map**. Valid keys:
 | `set_permission` | `permission`, `state: grant\|deny\|revoke\|reset` |
 | `set_locale` / `set_density` / `set_theme` / `set_time` | `locale` / `density_dpi` / `theme` / `timestamp` |
 | `service_ctl` | `module`, `op` (`attach`/`detach`/a module control op), optional `profile`+`config` (attach), `args` (control arguments), `expect` (a JSON subset the reply must contain — this is what makes the op an assertion) |
+| `dev_server` | `op` (`start`\|`edit`\|`wait_serves`\|`fast_refresh`\|`reload`\|`stop`) — drives a run-owned host Metro server for a React Native dev loop (`needs_env: [pasta, metro]`); `start` copies `project`, opens the relay host-loopback opt-in (`expose_to_guest`, default `true`), and waits for `/status`; `edit` edits only the copy; `fast_refresh` (default) waits for Metro to serve the edit for `/hot` delivery; `reload` sends best-effort `POST /reload`; `stop` terminates Metro and deletes the copy (also enforced automatically on every exit path, failure, or timeout) |
+| `assert_tree` | `record: <label>` (remember the UI tree node count) or `not_grown_since: <label>` (assert node count `<=` the recorded count so a stale/doubled root fails), optional `timeout_ms`, `settle` |
 | `call_activity_method` | only for debuggable, source-owned builds with an injected hook |
 
 There is no `sleep` step and no polling: `wait_for` and the assertions are
@@ -912,6 +914,60 @@ same offset the input channel applies. `screenshot: true` lands under the
 session's artifacts (`<artifacts>/screenshots/`), so it is reachable from any cwd.
 On a placeholder frame (window exists, app content never mounted) the answer is
 `NO_FRESH_FRAME`, never a splash PNG presented as the app.
+
+### React Native Metro dev loop (`dev_server`, `assert_tree`)
+
+A scenario can drive a **run-owned** host Metro server alongside a debug React
+Native APK (`services: [{id: network, profile: real}]`, `needs_env: [pasta, metro]`):
+
+```yaml
+services:
+  - id: network
+    profile: real
+needs_env: [pasta, metro]
+steps:
+  - dev_server: {op: start, project: fixtures/apps/rn-hello-dev, port: 8081, timeout_ms: 180000}
+  - launch: {activity: dev.acos.fixtures.rnhello/.MainActivity, clear_state: true, settle_timeout_ms: 120000}
+  - assert_text: {selector: {text: {exact: "Hello ACOS"}}, text: {exact: "Hello ACOS"}, timeout_ms: 120000}
+  - assert_tree: {record: before, timeout_ms: 10000}
+  - dev_server: {op: edit, file: App.js, find: "'Hello ACOS'", replace: "'Hello Metro'"}
+  - dev_server: {op: wait_serves, contains: "Hello Metro", absent: "Hello ACOS", timeout_ms: 120000}
+  - dev_server: {op: fast_refresh, timeout_ms: 120000}
+  - assert_text: {selector: {text: {exact: "Hello Metro"}}, text: {exact: "Hello Metro"}, timeout_ms: 60000}
+  - assert_not_visible: {selector: {text: {exact: "Hello ACOS"}}, timeout_ms: 10000}
+  - assert_tree: {not_grown_since: before, timeout_ms: 10000}
+  - dev_server: {op: stop}
+  - assert_no_crash: {}
+```
+
+Rules and lifecycle guarantees:
+
+* **Owned copy, never the source tree.** `op: start` copies `project` into run
+  scratch, hard-links `node_modules` (from `node_modules:`, `$ACOS_METRO_NODE_MODULES`,
+  or `.cache/rn-0.81.4/jsproject/node_modules`), refuses an already-busy `port`,
+  opens the relay's host-loopback opt-in (`expose_to_guest`, default `true` — the
+  `adb reverse` equivalent) before the ART guest starts, and waits until
+  `GET /status` answers `packager-status:running`. `op: edit` edits only the copy
+  via atomic rename and fails if `find` is absent (never a silent no-op) or if
+  `file` escapes the project / touches `node_modules`.
+* **Fast Refresh is the default dev loop (`op: fast_refresh`).** The update
+  reaches the running app over Metro's `/hot` websocket in the same JS context
+  without restarting the React root; `assert_tree: {not_grown_since: before}`
+  proves the single-root invariant.
+* **Full `/reload` (`op: reload`) is best-effort on RN 0.81's legacy architecture.**
+  `POST /reload` only reports broadcast delivery; on the legacy architecture,
+  fast context recreation can race the old root's unmount and leave a doubled
+  tree (`scenarios/metro-reload-full.yaml` keeps strict assertions and is
+  excluded from gate matrices).
+* **No orphan `node` processes.** Metro runs in its own process group
+  (`process_group(0)`). `op: stop`, scenario completion, step failure, timeout,
+  and `Drop` all signal the entire process group (`SIGTERM` then `SIGKILL`),
+  save the log tail to `dev-server/metro.log`, and delete the scratch copy.
+* **Host preflight.** `acos doctor` includes a `metro` check using the same
+  rule as `dev_server: start` (Node.js on `PATH` plus a `node_modules` containing
+  `react-native/cli.js` and `metro/`). Missing Node or Metro is reported clearly
+  as a warning with a `fix:` hint, and `tools/run-matrix.sh` skips
+  `needs_env: [metro]` scenarios cleanly rather than failing mysteriously.
 
 <!-- /topic:scenarios -->
 

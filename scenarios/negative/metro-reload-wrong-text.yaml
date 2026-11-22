@@ -4,7 +4,7 @@ description: >-
   NEGATIVE CONTROL for `metro-reload`: the same Fast Refresh run, but the scenario
   expects text the edit never produced. It must FAIL, never pass.
 app: fixtures/build/apps/rn-debug.apk
-engine: native-preferred
+engine: art
 fallback: report-and-escalate
 api_level: 34
 isolation: process
