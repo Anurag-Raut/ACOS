@@ -57,9 +57,14 @@ fn run(args: &[String]) -> Result<i32, ProtoError> {
         "forward" => {
             let listen = flag_value(rest, "--listen").ok_or_else(|| invalid("--listen"))?;
             let target = flag_value(rest, "--target").ok_or_else(|| invalid("--target"))?;
-            acos_netd::forward::serve(&listen, &target)
-                .map(|()| 0)
-                .map_err(io)
+            let ready = flag_value(rest, "--ready");
+            acos_netd::forward::serve_ready(
+                &listen,
+                &target,
+                ready.as_deref().map(std::path::Path::new),
+            )
+            .map(|()| 0)
+            .map_err(io)
         }
         "up" => {
             let pasta = flag_value(rest, "--pasta");

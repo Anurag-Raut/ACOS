@@ -1621,10 +1621,10 @@ impl Backend for EngineBackend {
                     ),
                 };
                 let mut client = acos_netd::client::Client::ensure_up()
-                    .map_err(|error| relay_error(error.to_string()))?;
+                    .map_err(|error| relay_error(format!("{:?}: {}", error.code, error.message)))?;
                 let status = client
                     .host_port(port, true, None)
-                    .map_err(|error| relay_error(error.to_string()))?;
+                    .map_err(|error| relay_error(format!("{:?}: {}", error.code, error.message)))?;
                 Ok(serde_json::json!({
                     "port": port,
                     "host_ports": status.host_ports,
