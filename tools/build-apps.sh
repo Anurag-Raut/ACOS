@@ -198,6 +198,8 @@ if [ -n "${ACOS_APP_ONLY:-}" ]; then
             # WV6: the probe serves its page from its own APK assets through
             # the broker's request interception.
             build_apk "$app" "$APPS_DIR/webview-probe/assets:assets"
+        elif [ "$app" = "camerax-probe" ]; then
+            "$ROOT/tools/build-camerax-probe.sh"
         else
             build_apk "$app"
         fi
@@ -338,6 +340,18 @@ build_apk media-probe
 # updates from a scripted track and the geocoder state on screen, so a scenario
 # can assert what the app really received (fixtures/apps/location-probe).
 build_apk location-probe
+
+# camera-probe is the CAMERA2 Slice 1 fixture: queries CameraManager
+# (getCameraIdList, getCameraCharacteristics + StreamConfigurationMap, unknown
+# id, openCamera permission/refusal) and tests the `hw.camera` off tombstone.
+build_apk camera-probe
+if [ "${ACOS_BUILD_ONLY:-}" = "camerax-probe" ]; then
+    "$ROOT/tools/build-camerax-probe.sh"
+elif [ -z "${ACOS_BUILD_ONLY:-}" ] && [ -d "$ROOT/.cache/maven-camerax" ]; then
+    "$ROOT/tools/build-camerax-probe.sh"
+elif [ -z "${ACOS_BUILD_ONLY:-}" ]; then
+    echo "build-apps: skipping camerax-probe (.cache/maven-camerax not present; run tools/fetch-camerax-deps.sh)"
+fi
 # MPROC4: the two-process pair (proc-a starts/binds components of proc-b).
 build_apk proc-a
 build_apk proc-b

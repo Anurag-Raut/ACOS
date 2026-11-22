@@ -199,6 +199,9 @@ static int32_t release_handle(const nh_t *h) {
 
 /* ----------------------------------------------------------------- misc ---- */
 
+#define HAL_PIXEL_FORMAT_BLOB 0x21
+#define HAL_PIXEL_FORMAT_YCBCR_420_888 0x23
+
 static int bpp_for(int format) {
     switch (format) {
         case 1:    /* RGBA_8888 */
@@ -210,6 +213,9 @@ static int bpp_for(int format) {
         case 0x16: /* RGBA_F16 */
         case 0x2b: /* RGBA_1010108 */
             return 4;
+        case HAL_PIXEL_FORMAT_BLOB:
+        case HAL_PIXEL_FORMAT_YCBCR_420_888:
+            return 1;
         default:
             /* Unknown formats are not a reason to fail the whole frame path:
              * 4 B/px is what every format the framework actually asks for in
@@ -221,11 +227,34 @@ static int bpp_for(int format) {
 }
 
 /* stride in pixels, padded to 16 B like a real gralloc (keeps 1080 and 1440
- * rows device-shaped; never wider than what lock() reports). */
-static uint32_t stride_px(uint32_t w, int bpp) {
+ * rows device-shaped; never wider than what lock() reports). BLOB buffers are
+ * raw byte arrays and keep exact width. */
+static uint32_t stride_px(uint32_t w, int format, int bpp) {
+    if (format == HAL_PIXEL_FORMAT_BLOB) return w;
     uint32_t align_px = (uint32_t)(16 / (bpp > 0 ? bpp : 4));
     if (align_px < 1) align_px = 1;
     return (w + align_px - 1) / align_px * align_px;
+}
+
+/* Planar I420 layout for HAL_PIXEL_FORMAT_YCbCr_420_888:
+ *   Y  : ystride * h
+ *   Cb : cstride * ceil(h / 2)
+ *   Cr : cstride * ceil(h / 2)
+ * with chroma_step = 1 and 16-byte aligned row strides. */
+static void ycbcr_layout(uint32_t w, uint32_t h, uint32_t ystride_hint,
+                         size_t *out_ystride, size_t *out_cstride,
+                         size_t *out_cb_off, size_t *out_cr_off, size_t *out_total) {
+    size_t ystride = ystride_hint ? (size_t)ystride_hint : (size_t)stride_px(w, HAL_PIXEL_FORMAT_YCBCR_420_888, 1);
+    size_t cw = ((size_t)w + 1) / 2;
+    size_t ch = ((size_t)h + 1) / 2;
+    size_t cstride = (cw + 15) & ~(size_t)15;
+    size_t y_bytes = ystride * (size_t)h;
+    size_t c_bytes = cstride * ch;
+    if (out_ystride) *out_ystride = ystride;
+    if (out_cstride) *out_cstride = cstride;
+    if (out_cb_off) *out_cb_off = y_bytes;
+    if (out_cr_off) *out_cr_off = y_bytes + c_bytes;
+    if (out_total) *out_total = y_bytes + 2 * c_bytes;
 }
 
 static nh_t *make_handle(uint32_t w, uint32_t h, uint32_t stride, int format, uint64_t usage,
@@ -254,8 +283,14 @@ static const int *handle_ints(const nh_t *nh) { return nh->data + nh->numFds; }
 
 static size_t handle_bytes(const nh_t *nh) {
     const int *in = handle_ints(nh);
-    int bpp = in[NH_BPP] > 0 ? in[NH_BPP] : 4;
     size_t layers = in[NH_LAYERS] > 0 ? (size_t)in[NH_LAYERS] : 1;
+    if (in[NH_FORMAT] == HAL_PIXEL_FORMAT_YCBCR_420_888) {
+        size_t total = 0;
+        ycbcr_layout((uint32_t)in[NH_W], (uint32_t)in[NH_H], (uint32_t)in[NH_STRIDE],
+                     NULL, NULL, NULL, NULL, &total);
+        return total * layers;
+    }
+    int bpp = in[NH_BPP] > 0 ? in[NH_BPP] : 4;
     return (size_t)in[NH_STRIDE] * (size_t)in[NH_H] * (size_t)bpp * layers;
 }
 
@@ -294,8 +329,16 @@ static int32_t do_allocate(uint32_t w, uint32_t h, int32_t format, uint32_t laye
     if (!outHandle) return -22 /* -EINVAL */;
     if (w == 0 || h == 0) return -22;
     int bpp = bpp_for(format);
-    uint32_t stride = stride_px(w, bpp);
-    size_t size = (size_t)stride * h * (size_t)bpp * (layers ? layers : 1);
+    uint32_t stride = stride_px(w, format, bpp);
+    size_t layer_count = layers ? (size_t)layers : 1;
+    size_t size;
+    if (format == HAL_PIXEL_FORMAT_YCBCR_420_888) {
+        size_t total = 0;
+        ycbcr_layout(w, h, stride, NULL, NULL, NULL, NULL, &total);
+        size = total * layer_count;
+    } else {
+        size = (size_t)stride * h * (size_t)bpp * layer_count;
+    }
     if (size < 1) size = 1;
 
     int fd = memfd_create("acos-gralloc", MFD_CLOEXEC);
@@ -324,8 +367,8 @@ static int32_t do_allocate(uint32_t w, uint32_t h, int32_t format, uint32_t laye
     pthread_mutex_unlock(&g_lock);
     *outHandle = nh;
     if (outStride) *outStride = stride;
-    LOG("allocate: %ux%u fmt=%d layers=%u %zu B (%zu B/row)", w, h, format,
-        layers ? layers : 1, size, (size_t)stride * (size_t)bpp);
+    LOG("allocate: %ux%u fmt=%d layers=%u %zu B (stride=%u)", w, h, format,
+        layers ? layers : 1, size, stride);
     return 0;
 }
 
@@ -458,6 +501,72 @@ int32_t mapper_lock_async64(void *self, const nh_t *nh, uint64_t producerUsage,
     (void)self; (void)producerUsage; (void)consumerUsage; (void)rect;
     if (fenceFd >= 0) close(fenceFd);
     return do_lock(nh, vaddr, outBpp, outStride);
+}
+
+/* Matches AOSP system/core/libsystem/include/system/graphics.h `struct android_ycbcr`. */
+typedef struct {
+    void *y;
+    void *cb;
+    void *cr;
+    size_t ystride;
+    size_t cstride;
+    size_t chroma_step;
+    uint32_t reserved[8];
+} acos_android_ycbcr_t;
+
+static int32_t do_lock_ycbcr(const nh_t *nh, acos_android_ycbcr_t *ycbcr) {
+    if (!nh || !ycbcr) return -22;
+    const int *in = handle_ints(nh);
+    if (in[NH_FORMAT] != HAL_PIXEL_FORMAT_YCBCR_420_888) {
+        LOGE("lockYCbCr: unsupported format 0x%x (expected YCbCr_420_888 = 0x23)", in[NH_FORMAT]);
+        return -22;
+    }
+    void *base = NULL;
+    int32_t rc = do_lock(nh, &base, NULL, NULL);
+    if (rc != 0) return rc;
+    size_t ystride = 0, cstride = 0, cb_off = 0, cr_off = 0;
+    ycbcr_layout((uint32_t)in[NH_W], (uint32_t)in[NH_H], (uint32_t)in[NH_STRIDE],
+                 &ystride, &cstride, &cb_off, &cr_off, NULL);
+    memset(ycbcr, 0, sizeof(*ycbcr));
+    uint8_t *p = (uint8_t *)base;
+    ycbcr->y = p;
+    ycbcr->cb = p + cb_off;
+    ycbcr->cr = p + cr_off;
+    ycbcr->ystride = ystride;
+    ycbcr->cstride = cstride;
+    ycbcr->chroma_step = 1;
+    LOG("lockYCbCr: %dx%d ystride=%zu cstride=%zu chroma_step=1",
+        in[NH_W], in[NH_H], ystride, cstride);
+    return 0;
+}
+
+int32_t mapper_lock_ycbcr(void *self, const nh_t *nh, uint32_t usage, const void *rect,
+                          acos_android_ycbcr_t *ycbcr)
+    __asm__("_ZN7android19GraphicBufferMapper9lockYCbCrEPK13native_handlejRKNS_4RectEP13android_ycbcr");
+int32_t mapper_lock_ycbcr(void *self, const nh_t *nh, uint32_t usage, const void *rect,
+                          acos_android_ycbcr_t *ycbcr) {
+    (void)self; (void)usage; (void)rect;
+    return do_lock_ycbcr(nh, ycbcr);
+}
+
+int32_t mapper_lock_async_ycbcr(void *self, const nh_t *nh, uint32_t usage, const void *rect,
+                                acos_android_ycbcr_t *ycbcr, int fenceFd)
+    __asm__("_ZN7android19GraphicBufferMapper14lockAsyncYCbCrEPK13native_handlejRKNS_4RectEP13android_ycbcri");
+int32_t mapper_lock_async_ycbcr(void *self, const nh_t *nh, uint32_t usage, const void *rect,
+                                acos_android_ycbcr_t *ycbcr, int fenceFd) {
+    (void)self; (void)usage; (void)rect;
+    if (fenceFd >= 0) close(fenceFd);
+    return do_lock_ycbcr(nh, ycbcr);
+}
+
+int32_t mapper_get_pixel_format_requested(void *self, const nh_t *nh, int32_t *outFormat)
+    __asm__("_ZN7android19GraphicBufferMapper23getPixelFormatRequestedEPK13native_handlePNS_8hardware8graphics6common4V1_211PixelFormatE");
+int32_t mapper_get_pixel_format_requested(void *self, const nh_t *nh, int32_t *outFormat) {
+    (void)self;
+    if (!nh || !outFormat) return -22;
+    const int *in = handle_ints(nh);
+    *outFormat = in[NH_FORMAT];
+    return 0;
 }
 
 static int32_t do_unlock(const nh_t *nh) {

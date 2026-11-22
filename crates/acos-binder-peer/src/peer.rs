@@ -1693,6 +1693,7 @@ impl Peer {
                     }
                     let id = java_binder_id(tag, wire);
                     self.host.set_binder_owner(id, tag);
+                    self.host.register_guest_service(tag, name.clone(), id);
                     if let Some(conn) = self.conns.get_mut(tag as usize).and_then(Option::as_mut) {
                         conn.java_binders.insert(wire, name.clone());
                     }

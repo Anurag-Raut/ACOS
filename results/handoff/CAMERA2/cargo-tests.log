@@ -1,0 +1,58 @@
+
+running 20 tests
+test the_module_is_registered_with_the_manifest_the_kit_expects ... ok
+test add_listener_answers_one_present_camera_status_with_typed_array_wire_format ... ok
+test supports_camera_api_answers_camera2_and_refuses_api_1 ... ok
+test an_unknown_transaction_is_a_structured_refusal ... ok
+test get_camera_characteristics_writes_valid_native_metadata_blob_and_rejects_unknown_id ... ok
+test auxiliary_listing_and_notification_transactions_match_proxy_wire_format ... ok
+test get_camera_info_writes_camera_info_s_parcel_field_order ... ok
+test connect_device_enforces_camera_permission_then_opens_device_user ... ok
+test vendor_tag_descriptor_and_cache_write_non_null_empty_parcelables ... ok
+test an_unknown_camera_index_is_a_structured_refusal_not_a_second_camera ... ok
+test get_number_of_cameras_answers_one_and_records_the_type ... ok
+test detach_restores_the_off_node_and_reattach_serves_cleanly ... ok
+test off_mode_returns_empty_list_and_refuses_open_with_stub_attach_hint ... ok
+test the_control_ops_report_the_served_camera_characteristics_and_transactions ... ok
+test the_profiles_it_does_not_implement_are_refused_by_name ... ok
+test the_config_describes_the_one_camera_and_unknown_keys_are_refused ... ok
+test slice2_full_capture_and_repeating_lifecycle_delivers_sink_frames_and_validated_results ... ok
+test test_pattern_colorbars_v1_crc32_is_deterministic_and_frame_tagged ... ok
+test every_device_user_and_callback_code_matches_framework_dex ... ok
+test every_icameraservice_transaction_code_and_constant_matches_framework_dex ... ok
+
+test result: ok. 20 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.44s
+
+
+running 21 tests
+test quiet_process_child ... ok
+test a_live_attach_of_an_at_launch_module_is_refused_with_the_launch_call ... ok
+test a_gap_name_answers_a_structured_tombstone_naming_the_module_and_the_attach_call ... ok
+test attaching_the_vibrator_serves_the_name_and_the_report_says_which_profile ... ok
+test the_standard_install_attaches_core_and_tombstones_the_gaps ... ok
+test every_gap_name_is_reported_with_its_decision ... ok
+test detaching_core_removes_its_registrations ... ok
+test a_null_decided_name_keeps_android_s_missing_path_and_is_reported_off ... ok
+test the_vibrator_module_passes_the_conformance_kit ... ok
+test the_location_module_passes_the_conformance_kit ... ok
+test the_webview_module_passes_the_conformance_kit ... ok
+test the_telephony_module_passes_the_conformance_kit ... ok
+test every_registered_module_is_a_verdict_row_and_honours_its_attach_mode ... ok
+test the_camera_module_passes_the_conformance_kit ... ok
+test the_notifications_module_passes_the_conformance_kit ... ok
+test the_permissions_module_passes_the_conformance_kit ... ok
+test the_network_module_passes_the_conformance_kit ... ok
+test the_accessibility_module_passes_the_conformance_kit ... ok
+test core_passes_the_conformance_kit ... ok
+test the_bluetooth_and_biometric_modules_pass_the_conformance_kit ... ok
+test every_registered_module_passes_the_conformance_kit ... ok
+
+test result: ok. 21 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.12s
+
+
+running 2 tests
+test docs_modules_md_matches_the_registry ... ok
+test docs_modules_md_lists_every_module_and_gap ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

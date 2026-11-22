@@ -1,0 +1,7 @@
+{
+  "request_id": "req_19bb6_18ea0f118d0cb3e6",
+  "started_at": "2026-11-21T12:26:09.515Z",
+  "scenario": "scenarios/camera-probe.yaml",
+  "apk": "",
+  "acos_version": "0.4.0"
+}

@@ -1,0 +1,63 @@
+# CAMERA4 (Slice 3) negative control: scripted PNG capture runs on real ART
+# (yielding crc32=0xb106af65), while the scenario asserts the test-pattern
+# checksum (0xdead8870). Must fail with ASSERTION_FAILED.
+version: 1
+name: camera-scripted-wrong-checksum
+description: >-
+  CAMERA4 negative: camera-probe captures the injected test-frame.png under
+  hw.camera:scripted, then asserts the wrong CRC32 checksum so it must fail
+  with ASSERTION_FAILED.
+app: fixtures/build/apps/camera-probe.apk
+api_level: 34
+isolation: process
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+capabilities:
+  - ui.offscreen
+  - ui.text
+  - input
+services:
+  - id: system.permissions
+    profile: real
+  - id: hw.camera
+    profile: scripted
+expectation: fail
+expect_error: {code: ASSERTION_FAILED}
+budgets:
+  memory_mib: 640
+  wall_ms: 180000
+steps:
+  - launch:
+      activity: dev.acos.fixtures.cameraprobe/.MainActivity
+      clear_state: true
+  - wait_for:
+      selector: {text: {contains: "READY mgr=present feat_cam=true feat_any=true"}}
+      timeout_ms: 20000
+
+  - service_ctl:
+      module: system.permissions
+      op: grant
+      args: {permission: "android.permission.CAMERA"}
+      expect:
+        ok: true
+
+  - service_ctl:
+      module: hw.camera
+      op: set_frame
+      args: {path: "fixtures/camera/test-frame.png"}
+      expect:
+        ok: true
+
+  - tap:
+      selector: {text: {exact: "Capture"}}
+  - wait_for:
+      selector: {text: {contains: "CAPTURE closed id=0 seq=1"}}
+      timeout_ms: 30000
+
+  # Captured frame really has crc32=0xb106af65; asserting 0xdead8870 must fail.
+  - assert_text:
+      selector: {id: status}
+      text: {contains: "crc32=0xdead8870"}

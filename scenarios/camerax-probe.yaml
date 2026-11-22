@@ -1,0 +1,134 @@
+# CAMERAX1: end-to-end AndroidX CameraX verification on real ART against hw.camera.
+#
+# Binds ProcessCameraProvider with Preview (PreviewView), ImageAnalysis
+# (YUV_420_888, 640x480 target), and ImageCapture (JPEG, 640x480 target) to
+# AppCompatActivity's LifecycleOwner, then verifies:
+#   1. ImageAnalysis receives strictly increasing frames & timestamps with exact
+#      ACOS_PATTERN_COLORBARS_V1 CRC32s ([0xdead8870, 0xdfefda95, 0xdc292dba]) and
+#      sampled YUV pixels.
+#   2. PreviewView (PERFORMANCE / SurfaceView) enters STREAMING and composites
+#      the 8-bar color pattern onto the display (verified by host assert_region).
+#   3. ImageCapture produces a real JPEG decoded by BitmapFactory (640x480) with
+#      color-bar RGB samples within <= 4/channel lossy JPEG tolerance.
+#   4. Unbind cleanly closes the camera session (open_devices == 0).
+version: 1
+name: camerax-probe
+description: >-
+  CAMERAX1 on ART: ProcessCameraProvider with PreviewView, ImageAnalysis
+  (YUV_420_888 640x480), and ImageCapture (JPEG) against hw.camera stub.
+app: fixtures/build/apps/camerax-probe.apk
+api_level: 34
+isolation: process
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+capabilities:
+  - ui.offscreen
+  - ui.text
+  - ui.screenshot
+  - input
+services:
+  - id: system.permissions
+    profile: real
+  - id: hw.camera
+    profile: stub
+expectation: pass
+budgets:
+  memory_mib: 640
+  wall_ms: 180000
+steps:
+  - launch:
+      activity: dev.acos.fixtures.cameraxprobe/.MainActivity
+      clear_state: true
+  - wait_for:
+      selector: {text: {contains: "READY feat_cam=true feat_any=true"}}
+      timeout_ms: 20000
+
+  - service_ctl:
+      module: system.permissions
+      op: grant
+      args: {permission: "android.permission.CAMERA"}
+      expect:
+        ok: true
+
+  - tap:
+      selector: {text: {exact: "Bind Preview"}}
+  - wait_for:
+      selector: {text: {contains: "ANALYSIS ok count=3"}}
+      timeout_ms: 30000
+  - wait_for:
+      selector: {text: {contains: "PREVIEW_STATE state=STREAMING impl=PERFORMANCE"}}
+      timeout_ms: 30000
+
+  - assert_text:
+      selector: {id: status}
+      text: {contains: "PROVIDER ok cameras=1 has_back=true"}
+  - assert_text:
+      selector: {id: status}
+      text: {contains: "BIND_PREVIEW ok impl=PERFORMANCE cam=90"}
+  - assert_text:
+      selector: {id: status}
+      text: {contains: "ANALYSIS frame=1 w=640 h=480 fmt=35 planes=3 rot=90 ts=1000000000 crc32=0xdead8870 white=(235,128,128) green=(145,54,34) red=(81,90,240) black=(16,128,128) tag=(160,0,0,90) ramp=(127,128,128)"}
+  - assert_text:
+      selector: {id: status}
+      text: {contains: "frames_inc=true ts_inc=true crcs=[0xdead8870, 0xdfefda95, 0xdc292dba] tags=[160, 161, 162]"}
+
+  # Host-observed screenshot verification of PreviewView's composited BLAST layer.
+  - assert_region:
+      x: 24
+      y: 240
+      w: 640
+      h: 140
+      min_distinct_colors: 8
+      hash: "9b1213a39b180dbbd095ec1e2ffe1fb2bb97ce3aa2d1db8617f32cc6caa0c441"
+  - assert_region:
+      x: 40
+      y: 260
+      w: 40
+      h: 40
+      hash: "e202c0cf84a7cd41ca821495e47ca8ebdc68b32b8c6f4ea1724e6b64fcda46c2"
+  - assert_region:
+      x: 280
+      y: 260
+      w: 40
+      h: 40
+      hash: "b3fd49b07c4a70f28f309cb5185c5d57bba95d7d6df5e71e2099520d26143158"
+  - assert_region:
+      x: 440
+      y: 260
+      w: 40
+      h: 40
+      hash: "3efc49dcdedd05fc035960e947a03d4fad1b7904eeb5389b37ed72767cf55f60"
+
+  - tap:
+      selector: {text: {exact: "Capture"}}
+  - wait_for:
+      selector: {text: {contains: "CAPTURE image"}}
+      timeout_ms: 30000
+  - assert_text:
+      selector: {id: status}
+      text: {contains: "fmt=256"}
+  - assert_text:
+      selector: {id: status}
+      text: {contains: "soi=true bmp=640x480 white=(255,255,255) green=(0,255,1) red=(254,0,0) black=(0,0,0) max_err=1 tol4=true"}
+
+  - tap:
+      selector: {text: {exact: "Unbind"}}
+  - wait_for:
+      selector: {text: {contains: "UNBIND ok"}}
+      timeout_ms: 20000
+
+  - service_ctl:
+      module: hw.camera
+      op: status
+      expect:
+        ok: true
+        op: status
+        value:
+          pattern: ACOS_PATTERN_COLORBARS_V1
+          calls:
+            open_devices: 0
+            devices_opened: 1
+            streams_created: 3

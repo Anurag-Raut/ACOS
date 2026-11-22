@@ -1,0 +1,56 @@
+# CAMERAX1 negative control: real CameraX ImageAnalysis + ImageCapture runs on
+# ART (yielding crc32=0xdead8870 and bmp=640x480), while the scenario asserts a
+# wrong ImageAnalysis CRC32 checksum. Must fail with ASSERTION_FAILED.
+version: 1
+name: camerax-probe-wrong
+description: >-
+  CAMERAX1 negative: camerax-probe binds ProcessCameraProvider on ART, captures
+  ImageAnalysis + ImageCapture frames, then asserts a wrong CRC32 checksum so
+  it must fail with ASSERTION_FAILED.
+app: fixtures/build/apps/camerax-probe.apk
+api_level: 34
+isolation: process
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+capabilities:
+  - ui.offscreen
+  - ui.text
+  - input
+services:
+  - id: system.permissions
+    profile: real
+  - id: hw.camera
+    profile: stub
+expectation: fail
+expect_error: {code: ASSERTION_FAILED}
+budgets:
+  memory_mib: 640
+  wall_ms: 180000
+steps:
+  - launch:
+      activity: dev.acos.fixtures.cameraxprobe/.MainActivity
+      clear_state: true
+  - wait_for:
+      selector: {text: {contains: "READY feat_cam=true feat_any=true"}}
+      timeout_ms: 20000
+
+  - service_ctl:
+      module: system.permissions
+      op: grant
+      args: {permission: "android.permission.CAMERA"}
+      expect:
+        ok: true
+
+  - tap:
+      selector: {text: {exact: "Bind"}}
+  - wait_for:
+      selector: {text: {contains: "ANALYSIS ok count=3"}}
+      timeout_ms: 30000
+
+  # Frame 1 really has crc32=0xdead8870; asserting a wrong checksum must fail.
+  - assert_text:
+      selector: {id: status}
+      text: {contains: "crc32=0x00000000"}

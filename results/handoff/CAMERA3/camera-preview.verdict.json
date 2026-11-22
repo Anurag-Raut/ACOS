@@ -1,0 +1,65 @@
+{
+  "backend": "acos-native",
+  "capabilities_used": [
+    "input",
+    "lifecycle",
+    "screenshot",
+    "static-manifest",
+    "ui.tree"
+  ],
+  "evidence": {
+    "events": "events.jsonl",
+    "log": "logs/logcat.txt",
+    "verdict": "verdict.json"
+  },
+  "fidelity": "art-reference",
+  "isolation": "process",
+  "metrics": {
+    "peak_rss_bytes": 59097088,
+    "wall_ms": 4390
+  },
+  "ok": true,
+  "request_id": "req_34726_18ea480c9d9c44af",
+  "result": {
+    "artifacts_dir": "results/handoff/CAMERA3/camera-preview",
+    "cap_bytes": 20480,
+    "evidence_provenance": {
+      "binder_transactions": "host-observed",
+      "crash_reports": "guest-asserted",
+      "frames": "host-observed",
+      "host_input": "host-observed",
+      "input_acks": "guest-asserted",
+      "launch_markers": "guest-asserted",
+      "lifecycle_markers": "guest-asserted",
+      "logs": "guest-asserted",
+      "static_manifest": "host-observed",
+      "tree": "guest-asserted"
+    },
+    "note": "this result was larger than the reply cap; only the bulk (tree, steps, logs) was dropped and the full evidence is in the artifacts paths named here",
+    "provenance": {
+      "apk": {
+        "mtime_ns": 1795326435852741616,
+        "path": "/home/Qui/.t3/worktrees/acos/t3-a779be14-64f50f3729c53ac4/fixtures/build/apps/camera-probe.apk",
+        "sha256": "b003e40f22315077500a8b84ddb8b06a6e167a7280b1d9a8bfa5d660f7eec12d",
+        "sha256_12": "b003e40f2231",
+        "size_bytes": 24979
+      },
+      "engine": "art",
+      "fidelity": "art-reference",
+      "scenario": {
+        "mtime_ns": 1795326540146665532,
+        "path": "/home/Qui/.t3/worktrees/acos/t3-a779be14-64f50f3729c53ac4/scenarios/camera-preview.yaml",
+        "sha256": "da0497e308ae8df93c0d75aff4633f1e8055cec0a2d3213744b82619617e7562",
+        "sha256_12": "da0497e308ae",
+        "size_bytes": 2963
+      },
+      "scenario_engine": "art",
+      "warnings": []
+    },
+    "reply_capped": true,
+    "verdict_path": "results/handoff/CAMERA3/camera-preview/verdict.json",
+    "verdict_status": "pass"
+  },
+  "session_id": "s_art_camera-probe",
+  "status": "pass"
+}

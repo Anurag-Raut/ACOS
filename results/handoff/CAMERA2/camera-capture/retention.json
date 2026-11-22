@@ -1,0 +1,35 @@
+{
+  "mode": "referenced",
+  "decision": "prune-unreferenced",
+  "reason": "passing run (mode `referenced`): declared evidence plus the first and last frame kept, intermediate frames and mirrored captures pruned",
+  "kept_files": 38,
+  "kept_bytes": 2759180,
+  "pruned_files": 6,
+  "pruned_bytes": 1425968,
+  "pruned": [
+    {
+      "path": "art-frames/live-frames/acos-c1-layer3-frame-134-g134-c7.png",
+      "bytes": 376293
+    },
+    {
+      "path": "art-frames/live-frames/acos-c1-layer3-frame-62-g62-c3.png",
+      "bytes": 162928
+    },
+    {
+      "path": "art-frames/live-frames/acos-c1-layer3-frame-62-g62-c4.png",
+      "bytes": 162928
+    },
+    {
+      "path": "art-frames/live-frames/acos-c1-layer3-frame-7-g7-c2.png",
+      "bytes": 119867
+    },
+    {
+      "path": "art-frames/live-frames/acos-c1-layer3-frame-97-g97-c5.png",
+      "bytes": 301976
+    },
+    {
+      "path": "art-frames/live-frames/acos-c1-layer3-frame-97-g97-c6.png",
+      "bytes": 301976
+    }
+  ]
+}

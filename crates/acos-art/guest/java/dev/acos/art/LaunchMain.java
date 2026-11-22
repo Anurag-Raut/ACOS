@@ -437,6 +437,7 @@ public final class LaunchMain {
         int looper = Nat.startBinderLooper();
         if (looper != 1) throw new IllegalStateException("startBinderLooper -> " + looper);
         System.out.println("ACOSLAUNCH MARK binder-looper started");
+        registerCameraFrameSink();
 
         Class<?> at = Class.forName("android.app.ActivityThread");
         Constructor<?> ctor = at.getDeclaredConstructor();
@@ -4120,6 +4121,7 @@ public final class LaunchMain {
                 // `Surface` natives were never registered either, so registering
                 // `SurfaceControl` alone is not enough (W4).
                 "register_android_view_Surface",
+                "register_android_graphics_BLASTBufferQueue",
                 // `ViewRootImpl.<init>` (line 724 on API 34) constructs a
                 // `SurfaceSession`, whose Java constructor calls
                 // `nativeCreate()` immediately.
@@ -4228,6 +4230,13 @@ public final class LaunchMain {
                 // with no broker is the honest ENOENT/ECONNREFUSED, never a
                 // fabricated transport.
                 "register_android_net_LocalSocketImpl",
+                // CAMERA2/3: `CameraManagerGlobal.connectCameraServiceLocked()` calls
+                // `CameraMetadataNative.setupGlobalVendorTagDescriptor()`,
+                // `getCameraCharacteristics` unparcels `CameraMetadataNative` via
+                // `libcamera_client.so` + `libcamera_metadata.so`, and
+                // `OutputConfiguration(Surface)` calls `SurfaceUtils.getSurface*`.
+                "register_android_hardware_camera2_CameraMetadata",
+                "register_android_hardware_camera2_utils_SurfaceUtils",
         };
         String[] graphics = {"register_android_graphics_classes"};
         StringBuilder missing = new StringBuilder();
@@ -5858,5 +5867,121 @@ public final class LaunchMain {
             return;
         }
         Nat.crashTest(mode.equals("abort") ? 1 : 0);
+    }
+
+    /**
+     * CAMERA3 Option A: guest-side frame-sink binder registered once per app
+     * process under {@code acos.camera.frame_sink}. The host {@code hw.camera}
+     * Session Controller drives stream registration, frame delivery, and stream
+     * teardown over ordered oneway deliveries while pixels are written directly
+     * into the app's own local {@code Surface} ({@code ANativeWindow}).
+     */
+    private static final String CAMERA_SINK_SERVICE = "acos.camera.frame_sink";
+    private static final String CAMERA_SINK_DESCRIPTOR = "dev.acos.camera.ICameraFrameSink";
+    private static final int CAMERA_SINK_OP_REGISTER = 1;
+    private static final int CAMERA_SINK_OP_DELIVER = 2;
+    private static final int CAMERA_SINK_OP_RELEASE = 3;
+    private static final int CAMERA_SINK_OP_DELIVER_FD = 4;
+    private static android.os.Binder sCameraFrameSink;
+    private static final java.util.HashMap<Integer, android.view.Surface> sCameraSinkSurfaces =
+            new java.util.HashMap<Integer, android.view.Surface>();
+
+    static void registerCameraFrameSink() {
+        try {
+            sCameraFrameSink = new android.os.Binder() {
+                @Override
+                protected boolean onTransact(int code, Parcel data, Parcel reply, int flags)
+                        throws android.os.RemoteException {
+                    if (code == CAMERA_SINK_OP_REGISTER) {
+                        data.enforceInterface(CAMERA_SINK_DESCRIPTOR);
+                        int streamId = data.readInt();
+                        android.view.Surface surface =
+                                android.view.Surface.CREATOR.createFromParcel(data);
+                        int width = data.readInt();
+                        int height = data.readInt();
+                        int rc = RenderNat.cameraSinkRegister(streamId, surface, width, height);
+                        if (rc != 0) {
+                            System.out.println("ACOSLAUNCH WARN camera-sink register stream="
+                                    + streamId + " rc=" + rc);
+                        }
+                        if (surface != null) {
+                            synchronized (sCameraSinkSurfaces) {
+                                android.view.Surface prev =
+                                        sCameraSinkSurfaces.put(streamId, surface);
+                                if (prev != null) prev.release();
+                            }
+                        }
+                        return true;
+                    }
+                    if (code == CAMERA_SINK_OP_DELIVER) {
+                        data.enforceInterface(CAMERA_SINK_DESCRIPTOR);
+                        int streamId = data.readInt();
+                        int width = data.readInt();
+                        int height = data.readInt();
+                        long frameNumber = data.readLong();
+                        long timestampNs = data.readLong();
+                        int patternId = data.readInt();
+                        int rc = RenderNat.cameraSinkDeliver(
+                                streamId, width, height, frameNumber, timestampNs, patternId);
+                        if (rc != 0) {
+                            System.out.println("ACOSLAUNCH WARN camera-sink deliver stream="
+                                    + streamId + " frame=" + frameNumber + " rc=" + rc);
+                        }
+                        return true;
+                    }
+                    if (code == CAMERA_SINK_OP_DELIVER_FD) {
+                        data.enforceInterface(CAMERA_SINK_DESCRIPTOR);
+                        int streamId = data.readInt();
+                        int width = data.readInt();
+                        int height = data.readInt();
+                        long frameNumber = data.readLong();
+                        long timestampNs = data.readLong();
+                        int patternId = data.readInt();
+                        android.os.ParcelFileDescriptor pfd = data.readFileDescriptor();
+                        int rc = -1;
+                        try {
+                            int fd = pfd != null ? pfd.getFd() : -1;
+                            rc = RenderNat.cameraSinkDeliverFd(
+                                    streamId, width, height, frameNumber, timestampNs, patternId, fd);
+                        } finally {
+                            if (pfd != null) {
+                                try {
+                                    pfd.close();
+                                } catch (Throwable ignored) {
+                                }
+                            }
+                        }
+                        if (rc != 0) {
+                            System.out.println("ACOSLAUNCH WARN camera-sink deliverFd stream="
+                                    + streamId + " frame=" + frameNumber + " rc=" + rc);
+                        }
+                        return true;
+                    }
+                    if (code == CAMERA_SINK_OP_RELEASE) {
+                        data.enforceInterface(CAMERA_SINK_DESCRIPTOR);
+                        int streamId = data.readInt();
+                        RenderNat.cameraSinkRelease(streamId);
+                        synchronized (sCameraSinkSurfaces) {
+                            if (streamId < 0) {
+                                for (android.view.Surface s : sCameraSinkSurfaces.values()) {
+                                    if (s != null) s.release();
+                                }
+                                sCameraSinkSurfaces.clear();
+                            } else {
+                                android.view.Surface s = sCameraSinkSurfaces.remove(streamId);
+                                if (s != null) s.release();
+                            }
+                        }
+                        return true;
+                    }
+                    return super.onTransact(code, data, reply, flags);
+                }
+            };
+            Class<?> sm = Class.forName("android.os.ServiceManager");
+            Method add = sm.getMethod("addService", String.class, IBinder.class);
+            add.invoke(null, CAMERA_SINK_SERVICE, sCameraFrameSink);
+        } catch (Throwable t) {
+            System.out.println("ACOSLAUNCH WARN camera-sink register failed: " + t);
+        }
     }
 }

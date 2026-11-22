@@ -317,6 +317,7 @@ dependencies = [
  "acos-sfgeom",
  "acos-test-support",
  "acos-wm",
+ "image",
  "proptest",
  "rustix",
  "serde",
