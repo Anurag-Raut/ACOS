@@ -1,0 +1,4 @@
+arm v040 root /home/Qui/.t3/worktrees/acos/t3-8432ccd8-1d58d051095d020b/.cache/rg5-v040/src binary /home/Qui/.t3/worktrees/acos/t3-8432ccd8-1d58d051095d020b/.cache/rg5-v040/target/release/acos sha256 3af2b0022f17b37c1d9a349e1f5b7ad45a0c3900f2d0a03bba0fe1427a8d4568
+arm v041 root /home/Qui/.t3/worktrees/acos/t3-8432ccd8-1d58d051095d020b binary /home/Qui/.t3/worktrees/acos/t3-8432ccd8-1d58d051095d020b/.cache/rg5-target/release/acos sha256 236db1a5407f632a7d326f5d509dac5708798c4d2837bf6fd3a0c1b099dc1be6
+acos 0.4.0
+acos 0.4.0
