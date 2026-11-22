@@ -695,6 +695,48 @@ impl WmsState {
         Some(dropped)
     }
 
+    /// Update a window's WM visibility (`View.VISIBLE` vs `INVISIBLE`/`GONE`)
+    /// on `session`, refresh input window records (since stack order and
+    /// visibility govern focus and hit-testing), and return whether visibility
+    /// changed.
+    pub fn set_window_visible_for(
+        &mut self,
+        session: SessionId,
+        window: WindowId,
+        visible: bool,
+    ) -> WmResult<()> {
+        self.check_session_window(session, window)?;
+        self.wm.set_window_visible(window, visible)?;
+        let ids: Vec<WindowId> = self.wm.windows.keys().copied().collect();
+        for id in ids {
+            if let Some(record) = self.wm.windows.get(&id) {
+                self.input.refresh_window(record);
+            }
+        }
+        Ok(())
+    }
+
+    /// Re-publish every bound compositor layer placement so z-order shifts
+    /// (e.g. bringing a stopped window back to front) reach C1 immediately.
+    pub fn refresh_bound_layer_placements(
+        &self,
+        compositor: &Arc<Mutex<crate::surface_client::SurfaceState>>,
+    ) {
+        let entries: Vec<(WindowId, SurfaceLayerBinding)> = self
+            .wm
+            .windows
+            .iter()
+            .filter_map(|(&id, rec)| {
+                let handle = rec.surface_handle?;
+                let binding = self.surface_layers.get(&handle).copied()?;
+                Some((id, binding))
+            })
+            .collect();
+        for (id, binding) in entries {
+            let _ = self.publish_layer_placement(binding, id, compositor);
+        }
+    }
+
     /// Hide or show a window's layer (`eLayerHidden`), for a `relayout` whose
     /// `viewVisibility` is `GONE`/`VISIBLE` (**W42**). `false` when the window
     /// has no bound layer.

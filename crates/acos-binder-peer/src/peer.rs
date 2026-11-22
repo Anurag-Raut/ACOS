@@ -2238,6 +2238,8 @@ impl Peer {
                     // ActivityInfo.FLAG_HARDWARE_ACCELERATED, the API default.
                     flags: 0x200,
                     theme: 0,
+                    label_res: 0,
+                    non_localized_label: None,
                     exported: true,
                     parent_activity_name: String::new(),
                     meta_data: Vec::new(),
@@ -2315,6 +2317,14 @@ impl Peer {
     /// bind.
     fn take_host_transactions(&mut self) -> Vec<(u32, Frame)> {
         let mut out = Vec::new();
+        if let Some(lifecycle) = self
+            .atms_service_mut()
+            .map(|atms| atms.take_lifecycle_deliveries())
+        {
+            if !lifecycle.is_empty() {
+                out.extend(self.frames_for_deliveries(lifecycle));
+            }
+        }
         let tags: Vec<u32> = self
             .conns
             .iter()

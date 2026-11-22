@@ -1,0 +1,29 @@
+# LAUNCHER2 negative: unhandled ACTION_LOCATION_SOURCE_SETTINGS must not open Settings.
+version: 1
+name: negative-settings-intents-wrong
+description: Trigger unhandled location settings action and falsely assert Settings UI opened.
+app: fixtures/build/apps/settings-probe.apk
+engine: art
+fallback: forbid
+api_level: 34
+isolation: process
+display: {mode: offscreen, width: 1080, height: 2400, density_dpi: 420}
+services:
+  - id: system.settings
+    profile: real
+expectation: fail
+budgets:
+  memory_mib: 1024
+  wall_ms: 120000
+steps:
+  - launch:
+      activity: dev.acos.fixtures.settingsprobe/.MainActivity
+      clear_state: true
+  - wait_for:
+      selector: {id: btn_location}
+      timeout_ms: 20000
+  - tap:
+      selector: {id: btn_location}
+  - assert_text:
+      selector: {id: settings_title}
+      text: {exact: "Settings"}

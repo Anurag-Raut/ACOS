@@ -1017,7 +1017,7 @@ pub const TOMBSTONES: &[Tombstone] = &[
     Tombstone {
         name: "launcherapps",
         descriptor: "android.content.pm.ILauncherApps",
-        module: "system.launcher",
+        module: "system.launcherapps",
         reason: "no launcher and no launcher-apps service",
         reaction: AospReaction::Tombstone,
         evidence: "LauncherApps.java:672-675 stores the proxy (`this(context, Stub.asInterface(getService(...)))`) and never transacts in the constructor; a null binder is a silent NPE later",
@@ -1298,6 +1298,8 @@ impl ModuleRegistry {
             Box::new(crate::modules::webview::WebviewModule::new()),
             Box::new(crate::modules::wifi::WifiModule::new()),
             Box::new(crate::modules::media_session::MediaSessionModule::new()),
+            Box::new(crate::modules::launcher::LauncherModule::new()),
+            Box::new(crate::modules::settings::SettingsModule::new()),
         ]
         .into_iter()
         .chain(crate::modules::tail_stubs::modules())

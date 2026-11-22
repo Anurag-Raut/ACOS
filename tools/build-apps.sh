@@ -25,6 +25,9 @@
 #   fixtures/build/apps/perm-probe.apk   (SYSUI1: requestPermissions -> the dialog)
 #   fixtures/build/apps/net-check.apk  (NET3/NET4: the relay fetch fixture)
 #   fixtures/build/apps/systemui.apk   (SYSUI2: the notification shade system app)
+#   fixtures/build/apps/launcher.apk   (LAUNCHER2: minimal HOME launcher system app)
+#   fixtures/build/apps/settings.apk   (LAUNCHER2: minimal Settings stub system app)
+#   fixtures/build/apps/settings-probe.apk (LAUNCHER2: Settings intent probe)
 #
 #
 # `tools/run-matrix.sh` calls this script with ACOS_APP_ONLY for any scenario
@@ -284,7 +287,7 @@ build_apk native-hostile "$HOSTILE_JNI_WORK:lib"
 for app in counter todo-list multi-activity finish-start form-validation settle-lab \
            thread-heavy svg-viewbox offscreen-pager looper-wake sensor-probe \
            notif-perm-probe permissioncontroller perm-probe systemui \
-           launch-extras-probe; do
+           launcher settings settings-probe launch-extras-probe; do
     build_apk "$app"
 done
 

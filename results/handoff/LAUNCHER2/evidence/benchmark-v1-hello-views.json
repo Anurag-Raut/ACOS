@@ -1,0 +1,59 @@
+{
+  "scenario": "scenarios/v1-hello-views.yaml",
+  "baseline": {
+    "source": "pre-change out/v1-hello-views + prior baseline",
+    "runs": [
+      {
+        "label": "pre_change_checkout",
+        "session_start_ms": 167,
+        "launch_ms": 359,
+        "wall_ms": 2930
+      },
+      {
+        "label": "prior_baseline_a",
+        "launch_ms": 373,
+        "wall_ms": 2952.5
+      },
+      {
+        "label": "prior_baseline_b",
+        "launch_ms": 372,
+        "wall_ms": 2954
+      }
+    ]
+  },
+  "after": [
+    {
+      "run": 1,
+      "session_start_ms": 159,
+      "launch_ms": 404,
+      "wall_ms": 3090,
+      "verdict": "pass"
+    },
+    {
+      "run": 2,
+      "session_start_ms": 164,
+      "launch_ms": 384,
+      "wall_ms": 3082,
+      "verdict": "pass"
+    },
+    {
+      "run": 3,
+      "session_start_ms": 171,
+      "launch_ms": 366,
+      "wall_ms": 3045,
+      "verdict": "pass"
+    },
+    {
+      "run": 4,
+      "session_start_ms": 162,
+      "launch_ms": 402,
+      "wall_ms": 3090,
+      "verdict": "pass"
+    }
+  ],
+  "after_medians": {
+    "session_start_ms": 163.0,
+    "launch_ms": 393.0,
+    "wall_ms": 3086.0
+  }
+}

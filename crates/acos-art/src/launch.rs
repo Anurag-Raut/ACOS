@@ -671,6 +671,10 @@ struct SecondaryShared {
     animations: &'static str,
     /// Run this guest's live probe (interactive sessions only).
     live_probe: bool,
+    /// Primary + extra session APKs (`(staged_host_path, guest_path)`) so any
+    /// secondary process (e.g. Launcher resolving `ResolveInfo.loadLabel`) can
+    /// read other installed packages' resources.
+    session_apks: Vec<(PathBuf, String)>,
 }
 
 impl SecondaryShared {
@@ -727,6 +731,11 @@ impl SecondaryShared {
         );
         sb.ro_bind(&self.substrate, "/data/app/libacosart.so");
         sb.ro_bind(&spec.staged, &spec.guest_apk);
+        for (host_apk, guest_apk) in &self.session_apks {
+            if guest_apk != &spec.guest_apk {
+                sb.ro_bind(host_apk, guest_apk);
+            }
+        }
         sb.ro_bind(&spec.lib_root, &spec.guest_lib_root);
         sb.ro_bind(&self.gralloc, "/data/libacoshw.so");
         sb.ro_bind(&self.driver, "/data/lib/libacos_binder_driver.so");
@@ -1066,6 +1075,7 @@ impl SecondaryPool {
                 .unwrap_or(0);
             state.seq_offsets.insert(spec.tag, highest);
             state.by_process.remove(&spec.tag);
+            state.last_raw_seq.remove(&spec.tag);
         }
         let stderr = Arc::new(std::sync::Mutex::new(TailBuffer::with_cap(1 << 16)));
         match spawn_secondary(
@@ -1829,6 +1839,10 @@ pub(crate) fn launch_session(
                 "acos-art: launch: the activity service did not take the primary package {package}"
             );
         }
+        if let Ok(l) = acos_services::manifest_resolve::launcher_activity(&opts.apk) {
+            let cls = l.target.unwrap_or(l.component);
+            let _ = host.seed_primary_activity(&package, &cls);
+        }
         // K3d: the PMS publishes the APK path the **guest** can open
         // (`/data/app/<name>.apk`, read-only bound by the sandbox), not the host
         // file. `PackageManager.getResourcesForApplication` builds `Resources`
@@ -2383,6 +2397,9 @@ pub(crate) fn launch_session(
         screen_layout: acos_services::wms::REFERENCE_SCREEN_LAYOUT.max(0) as u32,
         animations: opts.animations.as_str(),
         live_probe: interactive,
+        session_apks: std::iter::once((apk.clone(), guest_apk.clone()))
+            .chain(extras.iter().map(|e| (e.staged.clone(), e.guest_path.clone())))
+            .collect(),
     };
     let mut secondary_pool =
         SecondaryPool::new(
@@ -3686,6 +3703,11 @@ struct ProbeState {
     /// is spawned, its entries are cleared and this base is set to the session's
     /// current maximum, so its samples continue monotonically.
     seq_offsets: std::collections::BTreeMap<u32, u64>,
+    /// Last raw guest `seq` observed per process tag (so stale check stays
+    /// per-process while published `seq` advances monotonically across switches).
+    last_raw_seq: std::collections::BTreeMap<u32, u64>,
+    /// Highest `seq` published across all processes in this session.
+    highest_seq: u64,
     /// H15: the last `anim_callbacks` set traced, so the trace names each
     /// distinct animation callback once instead of once per sample.
     anim_traced: String,
@@ -4672,13 +4694,18 @@ fn drain_tee_lines<R: std::io::Read>(
                     let mut state = state.lock().unwrap_or_else(|e| e.into_inner());
                     // MPROC7: rebase a (re)spawned process's own counter so the
                     // session's probe sequence stays monotonic across a respawn.
-                    let seq = seq.saturating_add(state.seq_offsets.get(&tag).copied().unwrap_or(0));
+                    let raw_seq = seq;
                     let newer = state
-                        .by_process
+                        .last_raw_seq
                         .get(&tag)
-                        .map(|p| p.seq < seq)
+                        .map(|&prev| prev < raw_seq)
                         .unwrap_or(true);
                     if newer {
+                        state.last_raw_seq.insert(tag, raw_seq);
+                        let seq = raw_seq
+                            .saturating_add(state.seq_offsets.get(&tag).copied().unwrap_or(0))
+                            .max(state.highest_seq.saturating_add(1));
+                        state.highest_seq = seq;
                         let at_ms = host_ms();
                         // SETTLE5 diagnostic: the host's own receipt time and
                         // the guest's build time, so a stalled probe can be
@@ -5877,6 +5904,29 @@ enum SettleEnd {
 /// the deadline returns `bound:"timeout"` with the guest's reason; it is never
 /// reported as settled.
 #[allow(clippy::too_many_arguments)]
+fn drain_pending_spawns(
+    spawner: Option<(
+        &Arc<std::sync::Mutex<std::collections::VecDeque<acos_services::ams::ProcessSpawnRequest>>>,
+        &mut SecondaryPool,
+    )>,
+    probe_state: &Arc<std::sync::Mutex<ProbeState>>,
+    compositor: &Arc<std::sync::Mutex<acos_services::surface_client::SurfaceState>>,
+) {
+    let Some((queue, secondary)) = spawner else {
+        return;
+    };
+    loop {
+        let next = queue
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .pop_front();
+        let Some(request) = next else {
+            break;
+        };
+        secondary.spawn(&request, probe_state, Arc::clone(compositor));
+    }
+}
+
 fn wait_for_event_settled(
     child: &mut std::process::Child,
     cgroup: &mut crate::cgroup::RunCgroup,
@@ -5924,6 +5974,10 @@ fn wait_for_event_settled(
     // away from that baseline may settle the step as `window_reshown` (see
     // [`WindowReshownGate`]). `None` keeps every other caller byte-identical.
     window_reshown: Option<WindowForest>,
+    mut spawner: Option<(
+        &Arc<std::sync::Mutex<std::collections::VecDeque<acos_services::ams::ProcessSpawnRequest>>>,
+        &mut SecondaryPool,
+    )>,
 ) -> SettleEnd {
     let confirm = Duration::from_millis(env_u64("ACOS_STRICT_SETTLE_CONFIRM_MS", 24));
     // Owner decision (2026-11-12): the pixel-unchanged guard is OFF by default.
@@ -6028,6 +6082,11 @@ fn wait_for_event_settled(
         ),
     );
     loop {
+        drain_pending_spawns(
+            spawner.as_mut().map(|(q, s)| (*q, &mut **s)),
+            probe_state,
+            &live.compositor,
+        );
         let (unsupported_seq, marker) = latest_unsupported(probe_state);
         if unsupported_seq > unsupported_baseline {
             return SettleEnd::Unsupported(marker.unwrap_or(serde_json::Value::Null));
@@ -6577,6 +6636,10 @@ fn wait_for_settled_observation(
     window_removal: Option<(acos_parcel::BinderId, u64)>,
     // BACKSETTLE: see [`wait_for_event_settled`].
     window_reshown: Option<WindowForest>,
+    mut spawner: Option<(
+        &Arc<std::sync::Mutex<std::collections::VecDeque<acos_services::ams::ProcessSpawnRequest>>>,
+        &mut SecondaryPool,
+    )>,
 ) -> SettleEnd {
     if mode == SettleMode::Strict {
         return wait_for_event_settled(
@@ -6595,6 +6658,7 @@ fn wait_for_settled_observation(
             entry_fnv,
             window_removal,
             window_reshown,
+            spawner,
         );
     }
     // ---- fast (P1): first probe tree that differs from the pre-action baseline.
@@ -6616,6 +6680,11 @@ fn wait_for_settled_observation(
     let wake = settle_wake(probe_state);
     let mut seen = 0u64;
     loop {
+        drain_pending_spawns(
+            spawner.as_mut().map(|(q, s)| (*q, &mut **s)),
+            probe_state,
+            &live.compositor,
+        );
         // A structured guest marker is more informative than the generic
         // "no fresh frame" timeout, and it is the only honest result for an
         // Android API the launcher does not implement yet.
@@ -7202,7 +7271,7 @@ enum ServeEvent {
     /// MPROC4 step 3b: the peer resolved a component of a package that needs a
     /// process. The launcher owns the processes, so the request is handled on
     /// this thread like any other session event.
-    Spawn(acos_services::ams::ProcessSpawnRequest),
+    SpawnWake,
 }
 
 /// VIEW1a: the live-view frame source.
@@ -7567,11 +7636,21 @@ fn interactive_serve(
     // MPROC4 step 3b: spawn requests arrive on their own channel; forwarding
     // them into the session's event channel keeps one event loop (no second
     // poll path, no ordering question between a spawn and the next command).
+    let pending_spawns: Arc<
+        std::sync::Mutex<std::collections::VecDeque<acos_services::ams::ProcessSpawnRequest>>,
+    > = Arc::default();
     {
         let spawn_ctx = ctx.clone();
+        let spawn_queue = Arc::clone(&pending_spawns);
+        let spawn_wake = settle_wake(probe_state);
         std::thread::spawn(move || {
             while let Ok(request) = spawn_rx.recv() {
-                if spawn_ctx.send(ServeEvent::Spawn(request)).is_err() {
+                spawn_queue
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .push_back(request);
+                spawn_wake.notify();
+                if spawn_ctx.send(ServeEvent::SpawnWake).is_err() {
                     return;
                 }
             }
@@ -7634,8 +7713,12 @@ fn interactive_serve(
             }
         }
         let line = match crx.recv_timeout(wait) {
-            Ok(ServeEvent::Spawn(request)) => {
-                secondary.spawn(&request, probe_state, Arc::clone(&live.compositor));
+            Ok(ServeEvent::SpawnWake) => {
+                drain_pending_spawns(
+                    Some((&pending_spawns, secondary)),
+                    probe_state,
+                    &live.compositor,
+                );
                 continue;
             }
             Ok(ServeEvent::Line(line)) => line,
@@ -7856,6 +7939,7 @@ fn interactive_serve(
                         None,
                         None,
                         None,
+                        Some((&pending_spawns, secondary)),
                     );
                     match settled {
                         SettleEnd::Settled(settled) => {
@@ -8442,29 +8526,58 @@ fn interactive_serve(
                 // 8.7-9.2 ms per tap (`diagnosis/tap-split-*.txt`), the entire
                 // v0.3.0 M8 regression. See `unhandled_entry_fnv` below for where
                 // the value is taken now and why moving it changes nothing.
-                let injected = match (cmd, key_code) {
-                    // WVTAP: one input routing rule, owned by `InputHost`:
-                    //   * touch (tap, swipe) goes to the window **under the
-                    //     point** (`InputDispatcher::findTouchedWindowAt`: the
-                    //     topmost touchable window containing it), and the
-                    //     point is converted into that window's space;
-                    //   * keys/text go to the **focused** window
-                    //     (`dispatchKeyLocked`).
-                    // The request carries **display** coordinates (the same
-                    // space the UI tree reports). Choosing the target here as
-                    // well would be a second implementation of the rule; this
-                    // arm used to be a dead duplicate of the `hit_test` one
-                    // below it, and `swipe` went to the focused window (a
-                    // touch routed by focus).
-                    ("tap", _) => live.input.tap(x, y, ack_wait),
-                    ("swipe", _) => live
-                        .input
-                        .swipe(swipe_from, swipe_to, swipe_duration, ack_wait),
-                    ("type_text", _) => live
-                        .input
-                        .type_text(text_arg.as_deref().unwrap_or_default(), ack_wait),
-                    (_, Some(code)) => live.input.key(code, ack_wait),
-                    _ => unreachable!(),
+                let is_home_key = cmd == "key" && key_code == Some(3);
+                let injected = if is_home_key {
+                    match control.submit(
+                        serde_json::json!({"cmd": "services", "op": "launch_home"}),
+                        Duration::from_secs(10),
+                    ) {
+                        None => {
+                            let reply = serde_json::json!({
+                                "ok": false, "cmd": cmd, "code": "SERVICE_CONTROL_TIMEOUT",
+                                "error": "the peer thread did not answer launch_home within 10 s",
+                            });
+                            protocol_write(&reply);
+                            evidence.push(reply);
+                            continue;
+                        }
+                        Some(home_reply) => {
+                            if home_reply.get("ok").and_then(|v| v.as_bool()) != Some(true) {
+                                let code_str = home_reply
+                                    .get("code")
+                                    .and_then(|v| v.as_str())
+                                    .unwrap_or("HOME_UNAVAILABLE");
+                                let err_str = home_reply
+                                    .get("error")
+                                    .and_then(|v| v.as_str())
+                                    .unwrap_or("no HOME activity installed");
+                                let reply = serde_json::json!({
+                                    "ok": false, "cmd": cmd, "code": code_str,
+                                    "error": err_str,
+                                });
+                                protocol_write(&reply);
+                                evidence.push(reply);
+                                continue;
+                            }
+                            Ok(acos_services::window_session::input_dispatch::InjectedGesture {
+                                token: acos_parcel::BinderId(0),
+                                seqs: Vec::new(),
+                                acks: Vec::new(),
+                            })
+                        }
+                    }
+                } else {
+                    match (cmd, key_code) {
+                        ("tap", _) => live.input.tap(x, y, ack_wait),
+                        ("swipe", _) => live
+                            .input
+                            .swipe(swipe_from, swipe_to, swipe_duration, ack_wait),
+                        ("type_text", _) => live
+                            .input
+                            .type_text(text_arg.as_deref().unwrap_or_default(), ack_wait),
+                        (_, Some(code)) => live.input.key(code, ack_wait),
+                        _ => unreachable!(),
+                    }
                 };
                 let injected = match injected {
                     Ok(injected) => {
@@ -8570,8 +8683,9 @@ fn interactive_serve(
                     None,
                     unhandled_ack_floor,
                     entry_fnv,
-                    Some((injected.token, removal_mark)),
+                    (!is_home_key).then_some((injected.token, removal_mark)),
                     window_reshown,
+                    Some((&pending_spawns, secondary)),
                 );
                 let (settled_probe, g1, p1, settle_timing) = match settled {
                     SettleEnd::Settled(settled) => (
@@ -9657,6 +9771,18 @@ fn service_request(
                 })
             })
         }
+        "launch_home" => match peer.host_mut().launch_home() {
+            Ok(code) => Ok(serde_json::json!({ "start_result": code })),
+            Err(acos_services::ServiceError::IllegalState { detail, .. }) => {
+                return serde_json::json!({
+                    "ok": false,
+                    "cmd": "services",
+                    "code": "HOME_UNAVAILABLE",
+                    "error": detail,
+                });
+            }
+            Err(error) => Err(error),
+        },
         "ctl" => {
             // `acos_service_ctl` (MCP) / a scenario `service_ctl` step: a
             // module's own control op (`sensors.set_value`, `telephony.sms`, ...).
@@ -10156,6 +10282,8 @@ mod probe_line_tests {
                 latest: self.latest.clone(),
                 by_process: self.by_process.clone(),
                 seq_offsets: self.seq_offsets.clone(),
+                last_raw_seq: self.last_raw_seq.clone(),
+                highest_seq: self.highest_seq,
                 top_process: Arc::clone(&self.top_process),
                 unsupported: self.unsupported.clone(),
                 unsupported_seq: self.unsupported_seq,

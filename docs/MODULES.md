@@ -23,6 +23,8 @@ A module is a set of Android system pieces attached to a session. `off` is alway
 | `webview` | `off`, `real`, needs `acos-webview`, `chrome-headless-shell` | `at-launch` | `host-tool` | 4 | 11 | a real WebView: the `com.android.webview` provider package installed in the session plus the shared host Chromium behind the session's gate socket (one broker per host, ~130-140 MiB once, started on the first connect); `off` is Android's own no-provider path, and there is no stub/scripted profile | app `com.android.webview` | `status` |
 | `net.wifi` | `off`, `stub`, `scripted` | `hot` | `in-process` | 1 | 5 | Wi-Fi client radio: stub (one SSID from config) / scripted (connect, disconnect, rssi, scan -> WIFI_STATE_CHANGED, NETWORK_STATE_CHANGED, RSSI_CHANGED, SCAN_RESULTS, NetworkCallback loss/availability); no real radio, no hotspot/P2P/configured networks | `wifi`, feature `android.hardware.wifi`, broadcast `android.net.wifi.WIFI_STATE_CHANGED`, broadcast `android.net.wifi.STATE_CHANGE`, broadcast `android.net.wifi.RSSI_CHANGED`, broadcast `android.net.wifi.SCAN_RESULTS` | `state`, `enable`, `connect`, `disconnect`, `rssi`, `scan`, `reset` |
 | `media.session` | `off`, `stub`, `scripted` | `hot` | `in-process` | 1 | 5 | media sessions: stub (record what apps publish) / scripted (agent play, pause, next, seek reach MediaSession.Callback); no media-key routing, queue, volume, remote sessions or router | `media_session`, `media_router` | `sessions`, `play`, `pause`, `stop`, `next`, `previous`, `fast_forward`, `rewind`, `seek`, `skip_to_item`, `custom_action`, `reset` |
+| `system.launcher` | `off`, `real` | `at-launch` | `in-process` | 1 | 1 | guest Launcher system app (`com.acos.launcher`) answering ACTION_MAIN / CATEGORY_HOME and listing MAIN/LAUNCHER apps from PackageManager | app `com.acos.launcher` | `status` |
+| `system.settings` | `off`, `real` | `at-launch` | `in-process` | 1 | 1 | guest Settings stub system app (`com.android.settings`) answering ACTION_SETTINGS, ACTION_APPLICATION_DETAILS_SETTINGS, and ACTION_WIFI_SETTINGS | app `com.android.settings` | `status` |
 | `hw.usb` | `off`, `stub` | `hot` | `in-process` | 1 | 2 | USB host: stub (no USB hardware), empty device list and no configured functions | `usb` | — |
 | `system.dropbox` | `off`, `stub` | `hot` | `in-process` | 1 | 2 | DropBox: stub (no system DropBox), no entries and no enabled tags | `dropbox` | — |
 | `hw.nfc` | `off` | `hot` | `in-process` | 1 | 1 | NFC: off (no NFC hardware) | `nfc` | — |
@@ -117,6 +119,8 @@ A module is a set of Android system pieces attached to a session. `off` is alway
 | `media.session` | `skip_to_item` | {session?, id} (scripted) — onSkipToQueueItem(id) |
 | `media.session` | `custom_action` | {session?, action} (scripted) — onCustomAction(action, null) |
 | `media.session` | `reset` | none — clear the recorded `unsupported` calls |
+| `system.launcher` | `status` | none — whether com.acos.launcher is staged for HOME and app launching |
+| `system.settings` | `status` | none — whether com.android.settings is staged for settings intents |
 
 ## Names with no module attached
 
@@ -128,7 +132,7 @@ A name a phone publishes that this build does not. Each row says what the app ob
 | `vibrator` | `feedback.vibrator` | Android's missing path (`null`) | no vibrator hardware model |
 | `usb` | `hw.usb` | structured `UNSUPPORTED_ANDROID_API` | no USB host/device model |
 | `midi` | `hw.midi` | structured `UNSUPPORTED_ANDROID_API` | no MIDI device model |
-| `launcherapps` | `system.launcher` | structured `UNSUPPORTED_ANDROID_API` | no launcher and no launcher-apps service |
+| `launcherapps` | `system.launcherapps` | structured `UNSUPPORTED_ANDROID_API` | no launcher and no launcher-apps service |
 | `usagestats` | `system.usage` | structured `UNSUPPORTED_ANDROID_API` | no usage-stats service (nothing records app usage) |
 | `dropbox` | `system.dropbox` | structured `UNSUPPORTED_ANDROID_API` | no DropBox service |
 | `device_policy` | `system.dpm` | structured `UNSUPPORTED_ANDROID_API` | no device-policy manager (no managed device/profile) |

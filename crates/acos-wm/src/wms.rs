@@ -596,6 +596,38 @@ impl WindowManager {
         })
     }
 
+    /// Toggle a window's visibility (`View.VISIBLE` vs `INVISIBLE`/`GONE`)
+    /// from `relayout` / `relayoutAsync`.
+    ///
+    /// Hidden windows leave the visible layer stack (`layer_stack()` skips
+    /// `!record.visible`) and cannot hold focus; re-showing an existing
+    /// window allocates a fresh sequence number so it rises to the top of its
+    /// band and takes focus, matching AOSP task-to-front ordering.
+    pub fn set_window_visible(&mut self, window: WindowId, visible: bool) -> Result<()> {
+        let changed = {
+            let record = self
+                .windows
+                .get_mut(&window)
+                .ok_or(WmError::UnknownWindow(window))?;
+            if record.visible == visible {
+                false
+            } else {
+                if visible {
+                    let seq = self.next_window_seq;
+                    self.next_window_seq += 1;
+                    record.seq = seq;
+                }
+                record.visible = visible;
+                true
+            }
+        };
+        if changed {
+            self.renumber_z();
+            self.publish_focus_transition();
+        }
+        Ok(())
+    }
+
     /// Session death (stock `Session.kill` / process death): drop the session
     /// and every window it owns, returning the window ids that went with it.
     ///
@@ -866,6 +898,9 @@ impl WindowManager {
     pub fn layer_stack(&self) -> crate::layers::WindowLayerStack {
         let mut stack = crate::layers::WindowLayerStack::new();
         for record in self.windows.values() {
+            if !record.visible {
+                continue;
+            }
             // A sub-window's `LayoutParams.token` is the window it is attached
             // to; only a token that names a live window becomes the parent.
             let parent = record
@@ -2095,5 +2130,43 @@ mod tests {
             }
         }
         assert_eq!(after, vec![(dialog, true)]);
+    }
+
+    #[test]
+    fn set_window_visible_hides_and_reshows_top_window_and_focus() {
+        let mut wm = WindowManager::new(DisplaySpec::reference_with_insets(InsetsMode::Carve));
+        let (s1, _) = wm.open_session(None);
+        let (s2, _) = wm.open_session(None);
+
+        let a = wm
+            .add_to_display_as_user(s1, BinderId(0x01), app_params(), 0)
+            .unwrap()
+            .window;
+        let b = wm
+            .add_to_display_as_user(s2, BinderId(0x02), app_params(), 0)
+            .unwrap()
+            .window;
+        assert_eq!(wm.focus, Some(b));
+
+        // Hiding B removes it from the visible layer stack and shifts focus to A.
+        wm.set_window_visible(b, false).unwrap();
+        assert_eq!(wm.focus, Some(a));
+        assert_eq!(wm.layer_stack().ordered().len(), 1);
+        assert_eq!(wm.layer_stack().ordered()[0].window, a);
+
+        // Hiding A leaves no visible focusable window.
+        wm.set_window_visible(a, false).unwrap();
+        assert_eq!(wm.focus, None);
+        assert!(wm.layer_stack().ordered().is_empty());
+
+        // Re-showing A gives it a fresh sequence number and restores focus; then
+        // re-showing B puts B above A again.
+        wm.set_window_visible(a, true).unwrap();
+        assert_eq!(wm.focus, Some(a));
+        let seq_a = wm.windows[&a].seq;
+        wm.set_window_visible(b, true).unwrap();
+        assert_eq!(wm.focus, Some(b));
+        assert!(wm.windows[&b].seq > seq_a);
+        assert!(wm.windows[&b].z > wm.windows[&a].z);
     }
 }

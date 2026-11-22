@@ -1,0 +1,103 @@
+# LAUNCHER2: guest Launcher system app (MAIN/HOME) + key home + app launch.
+version: 1
+name: launcher-home
+description: >-
+  Launch Hello Views, press HOME to switch to the com.acos.launcher guest
+  system app, verify real PackageManager labels for installed apps (Counter,
+  Hello Views), tap Counter to launch it, press HOME again, and tap Hello Views
+  to resume the original task.
+app: fixtures/build/apps/hello-views.apk
+extra_apks:
+  - fixtures/build/apps/counter.apk
+engine: art
+fallback: report-and-escalate
+api_level: 34
+isolation: process
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+capabilities:
+  - lifecycle
+  - ui.offscreen
+  - ui.text
+services:
+  - id: system.launcher
+    profile: real
+expectation: pass
+budgets:
+  memory_mib: 1024
+  wall_ms: 240000
+steps:
+  - launch:
+      activity: dev.acos.fixtures.helloviews/.MainActivity
+      clear_state: true
+
+  - wait_for:
+      selector: {id: title}
+      timeout_ms: 20000
+  - assert_text:
+      selector: {id: title}
+      text: {exact: "Hello ACOS"}
+
+  # HOME routes through ATMS ACTION_MAIN + CATEGORY_HOME -> com.acos.launcher.
+  - key:
+      key: home
+
+  - wait_for:
+      selector: {id: launcher_title}
+      timeout_ms: 30000
+  - assert_windows:
+      order: [application]
+      focus: application
+      focus_type: TYPE_BASE_APPLICATION
+  - assert_text:
+      selector: {id: launcher_title}
+      text: {exact: "ACOS Home"}
+  - assert_text:
+      selector: {id: app_row_0}
+      text: {exact: "Counter"}
+  - assert_text:
+      selector: {id: app_row_1}
+      text: {exact: "Hello Views"}
+
+  # Tap Counter row: spawns/launches Counter and brings its UI to front.
+  - tap:
+      selector: {id: app_row_0}
+  - wait_for:
+      selector: {id: inc}
+      timeout_ms: 30000
+  - assert_text:
+      selector: {id: count}
+      text: {exact: "0"}
+  - assert_text:
+      selector: {id: inc}
+      text: {exact: "Increment"}
+
+  # Tap Increment to prove Counter is live and focused.
+  - tap:
+      selector: {id: inc}
+  - assert_text:
+      selector: {id: count}
+      text: {exact: "1"}
+
+  # Press HOME from Counter -> brings existing Launcher task back to front.
+  - key:
+      key: home
+  - wait_for:
+      selector: {id: launcher_title}
+      timeout_ms: 30000
+  - assert_text:
+      selector: {id: launcher_title}
+      text: {exact: "ACOS Home"}
+
+  # Tap Hello Views -> brings primary task back to front.
+  - tap:
+      selector: {id: app_row_1}
+  - wait_for:
+      selector: {id: title}
+      timeout_ms: 30000
+  - assert_text:
+      selector: {id: title}
+      text: {exact: "Hello ACOS"}

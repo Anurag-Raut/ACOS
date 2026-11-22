@@ -66,7 +66,7 @@ pub fn map_art_code(code: &str) -> ErrorCode {
         // asked for something the session cannot do, so it is INVALID_ARGUMENT.
         "SERVICE_MODULE_REJECTED" => ErrorCode::InvalidArgument,
         // A tombstoned name: the interface exists but its module is off.
-        "SERVICE_MODULE_UNAVAILABLE" => ErrorCode::UnsupportedAndroidApi,
+        "SERVICE_MODULE_UNAVAILABLE" | "HOME_UNAVAILABLE" => ErrorCode::UnsupportedAndroidApi,
         // Genuine harness/protocol defects: the session could not form or
         // deliver the binder transaction, or reported an explicit INTERNAL.
         "NO_BIND_REQUEST" | "BIND_NOT_DELIVERED" | "NO_APPLICATION" | "STARTUP_FAILED"
@@ -543,6 +543,7 @@ mod tests {
             ("NO_FRESH_FRAME", ErrorCode::NoFreshFrame),
             ("ART_FATAL_CHECK", ErrorCode::AppCrashed),
             ("BAD_REQUEST", ErrorCode::InvalidArgument),
+            ("HOME_UNAVAILABLE", ErrorCode::UnsupportedAndroidApi),
             // ABIGATE: the launcher's pre-guest ABI gate is its own code, not a
             // guest death.
             ("UNSUPPORTED_ABI", ErrorCode::UnsupportedAbi),
