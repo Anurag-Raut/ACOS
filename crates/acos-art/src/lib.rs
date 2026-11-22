@@ -571,6 +571,9 @@ impl ArtRoot {
                 Err(e) => eprintln!("acos-art: janitor could not remove {}: {e}", path.display()),
             }
         }
+        let _ = crate::webview_socket::sweep_stale_session_dirs(
+            &crate::webview_socket::runtime_root(),
+        );
         Ok(removed)
     }
 
@@ -1353,6 +1356,7 @@ impl Drop for RunDir {
         if self.keep {
             return;
         }
+        crate::webview_socket::cleanup_session_dir(&self.path);
         match fs::remove_dir_all(&self.path) {
             Ok(()) => {}
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}

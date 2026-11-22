@@ -283,8 +283,6 @@ impl Gate {
 impl Drop for Gate {
     fn drop(&mut self) {
         self.shared.stop.store(true, Ordering::SeqCst);
-        // Nudge accept() so the thread sees the flag.
-        let _ = UnixStream::connect(&self.socket);
         if let Ok(mut threads) = self.threads.lock() {
             for t in threads.drain(..) {
                 let _ = t.join();
@@ -462,6 +460,111 @@ pub fn build_private_endpoint(canonical: &Path) -> PathBuf {
     }
 }
 
+/// Timeout for one attach handshake line round trip. Bounded so a wedged old
+/// daemon cannot burn the launcher's 12 s first-frame budget.
+const ATTACH_IO_TIMEOUT: Duration = Duration::from_secs(3);
+
+/// Grace period for an idle mismatched daemon that promised `exiting: true` to
+/// finish tearing down and exit before we escalate to `SIGTERM`.
+const IDLE_GRACE_WAIT: Duration = Duration::from_millis(1500);
+
+/// Bounded wait after sending `SIGTERM` to a verified idle mismatched broker.
+const SIGTERM_EXIT_WAIT: Duration = Duration::from_millis(1500);
+
+/// Bounded wait after escalating to `SIGKILL` if `SIGTERM` did not finish it.
+const SIGKILL_EXIT_WAIT: Duration = Duration::from_millis(500);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct PeerCred {
+    pid: i32,
+    uid: u32,
+    start_ticks: Option<u64>,
+}
+
+fn proc_stat_state_and_start(pid: i32) -> std::io::Result<(char, Option<u64>)> {
+    let text = std::fs::read_to_string(format!("/proc/{pid}/stat"))?;
+    let (_, rest) = text
+        .rsplit_once(')')
+        .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::InvalidData, "bad stat"))?;
+    let mut fields = rest.split_whitespace();
+    let state = fields
+        .next()
+        .and_then(|s| s.chars().next())
+        .unwrap_or('?');
+    let start_ticks = fields.nth(18).and_then(|s| s.parse::<u64>().ok());
+    Ok((state, start_ticks))
+}
+
+fn read_peer_cred(stream: &UnixStream) -> Option<PeerCred> {
+    use std::os::unix::io::AsRawFd;
+    let mut cred = libc::ucred {
+        pid: 0,
+        uid: u32::MAX,
+        gid: u32::MAX,
+    };
+    let mut len = std::mem::size_of::<libc::ucred>() as libc::socklen_t;
+    // SAFETY: `cred` and `len` are valid initialized out-parameters for SO_PEERCRED.
+    let rc = unsafe {
+        libc::getsockopt(
+            stream.as_raw_fd(),
+            libc::SOL_SOCKET,
+            libc::SO_PEERCRED,
+            (&mut cred as *mut libc::ucred).cast(),
+            &mut len,
+        )
+    };
+    if rc != 0 || cred.pid <= 1 {
+        return None;
+    }
+    let start_ticks = proc_stat_state_and_start(cred.pid)
+        .ok()
+        .and_then(|(_, start)| start);
+    Some(PeerCred {
+        pid: cred.pid,
+        uid: cred.uid,
+        start_ticks,
+    })
+}
+
+fn peer_pid_alive(peer: PeerCred) -> bool {
+    match proc_stat_state_and_start(peer.pid) {
+        Ok((state, now_start)) => {
+            if matches!(state, 'Z' | 'X') {
+                return false;
+            }
+            if let (Some(expected), Some(actual)) = (peer.start_ticks, now_start) {
+                if expected != actual {
+                    return false;
+                }
+            }
+            true
+        }
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => false,
+        Err(_) => {
+            // SAFETY: signal 0 is a pure liveness probe for `peer.pid`.
+            let rc = unsafe { libc::kill(peer.pid, 0) };
+            if rc == 0 {
+                true
+            } else {
+                std::io::Error::last_os_error().raw_os_error() != Some(libc::ESRCH)
+            }
+        }
+    }
+}
+
+fn wait_for_pid_exit(peer: PeerCred, limit: Duration) -> bool {
+    let deadline = Instant::now() + limit;
+    loop {
+        if !peer_pid_alive(peer) {
+            return true;
+        }
+        if Instant::now() >= deadline {
+            return false;
+        }
+        std::thread::sleep(Duration::from_millis(25));
+    }
+}
+
 /// Wait (bounded) for a stale daemon that promised to exit to actually stop
 /// answering on `endpoint`. Returns whether it did.
 fn wait_for_stale_exit(endpoint: &Path, limit: Duration) -> bool {
@@ -471,6 +574,73 @@ fn wait_for_stale_exit(endpoint: &Path, limit: Duration) -> bool {
             return true;
         }
         std::thread::sleep(Duration::from_millis(25));
+    }
+    false
+}
+
+/// Replace an **idle** mismatched broker (`sessions == Some(0)`).
+///
+/// Waits for the verified `SO_PEERCRED` peer process to exit completely (not
+/// just drop its listener — unpatched older builds run `ServerHandle::drop`
+/// *after* `wv-accept` exits and unlink `broker.sock` if still alive!), then
+/// escalates to `SIGTERM` → `SIGKILL` after bounded waits if it fails to exit.
+fn replace_idle_mismatched_broker(
+    endpoint: &Path,
+    peer: Option<PeerCred>,
+    exiting: bool,
+    can_spawn: bool,
+) -> bool {
+    let own_pid = std::process::id() as i32;
+    // SAFETY: `getuid` is a pure query.
+    let my_uid = unsafe { libc::getuid() };
+
+    if let Some(p) = peer.filter(|p| p.pid != own_pid && p.uid == my_uid) {
+        if exiting && wait_for_pid_exit(p, IDLE_GRACE_WAIT) {
+            return true;
+        }
+        if !can_spawn {
+            return false;
+        }
+        eprintln!(
+            "acos-webview-gate: idle mismatched broker pid={} on {} {}; sending SIGTERM",
+            p.pid,
+            endpoint.display(),
+            if exiting {
+                format!("did not exit within {}ms", IDLE_GRACE_WAIT.as_millis())
+            } else {
+                "is not exiting on its own".to_string()
+            }
+        );
+        if peer_pid_alive(p) {
+            // SAFETY: `p.pid` was obtained from kernel `SO_PEERCRED` on `endpoint`,
+            // verified `uid == getuid()`, `pid > 1 && pid != self`, `start_ticks`
+            // matched, and confirmed `sessions == 0`.
+            unsafe {
+                let _ = libc::kill(p.pid, libc::SIGTERM);
+            }
+        }
+        if wait_for_pid_exit(p, SIGTERM_EXIT_WAIT) {
+            return true;
+        }
+        eprintln!(
+            "acos-webview-gate: idle mismatched broker pid={} ignored SIGTERM for {}ms; \
+             sending SIGKILL",
+            p.pid,
+            SIGTERM_EXIT_WAIT.as_millis()
+        );
+        if peer_pid_alive(p) {
+            // SAFETY: bounded escalation after verified `SIGTERM` timeout.
+            unsafe {
+                let _ = libc::kill(p.pid, libc::SIGKILL);
+            }
+        }
+        return wait_for_pid_exit(p, SIGKILL_EXIT_WAIT);
+    }
+
+    // In-process test stub (`p.pid == own_pid`) or unavailable peer cred: cannot
+    // signal ourselves; wait bounded for the listener to close if it promised to.
+    if exiting && peer.map(|p| p.uid == my_uid).unwrap_or(true) {
+        return wait_for_stale_exit(endpoint, STALE_EXIT_WAIT);
     }
     false
 }
@@ -510,6 +680,18 @@ fn use_build_private_endpoint(
     Ok(own)
 }
 
+fn attach_deadline_error(shared: &Arc<Shared>, last: &str) -> Error {
+    Error::proto(
+        code::ENGINE_UNAVAILABLE,
+        format!(
+            "the WebView broker is not reachable at {} ({}); start `acos-webview \
+             --shared` or check {BROKER_SOCKET_ENV}",
+            shared.endpoint.lock().expect("gate endpoint").display(),
+            last
+        ),
+    )
+}
+
 /// Connect to the shared daemon (spawning it when absent), then attach.
 fn attach(cfg: &GateConfig, shared: &Arc<Shared>) -> Result<UnixStream> {
     let deadline = Instant::now() + cfg.spawn_wait;
@@ -519,63 +701,122 @@ fn attach(cfg: &GateConfig, shared: &Arc<Shared>) -> Result<UnixStream> {
     loop {
         let endpoint = shared.endpoint.lock().expect("gate endpoint").clone();
         match UnixStream::connect(&endpoint) {
-            Ok(mut stream) => match write_attach(&mut stream, &cfg.session_id) {
-                Ok(AttachAnswer::Accepted { build: _ }) => return Ok(stream),
-                Ok(AttachAnswer::Mismatch {
-                    daemon,
-                    sessions,
-                    exiting,
-                    reason,
-                }) => {
-                    last = format!(
-                        "{} refused this build ({reason}; daemon build {}, sessions {})",
-                        endpoint.display(),
-                        daemon.as_deref().unwrap_or("unknown"),
-                        sessions.map(|n| n.to_string()).unwrap_or_else(|| "?".into()),
-                    );
-                    drop(stream);
-                    bump(shared, |s| s.build_mismatches += 1);
-                    let busy = sessions.unwrap_or(u64::MAX) > 0;
-                    if exiting && !busy {
-                        // It has no session to lose, so it stops itself and the
-                        // endpoint becomes this build's: never a second daemon
-                        // beside a dying one.
-                        bump(shared, |s| s.stale_exits += 1);
-                        eprintln!(
-                            "acos-webview-gate: the broker on {} was built from other code \
-                             (daemon {}, this build {}); it has no live session and is exiting, \
-                             waiting for it",
+            Ok(mut stream) => {
+                let peer = read_peer_cred(&stream);
+                match write_attach(&mut stream, &cfg.session_id) {
+                    Ok(AttachAnswer::Accepted { build: _ }) => return Ok(stream),
+                    Ok(AttachAnswer::Mismatch {
+                        daemon,
+                        sessions,
+                        exiting,
+                        reason,
+                    }) => {
+                        last = format!(
+                            "{} refused this build ({reason}; daemon build {}, sessions {})",
                             endpoint.display(),
                             daemon.as_deref().unwrap_or("unknown"),
-                            crate::build_id()
+                            sessions.map(|n| n.to_string()).unwrap_or_else(|| "?".into()),
                         );
-                        if !wait_for_stale_exit(&endpoint, STALE_EXIT_WAIT) {
+                        drop(stream);
+                        bump(shared, |s| s.build_mismatches += 1);
+                        if sessions == Some(0) {
+                            // Idle broker from another build: wait for full process
+                            // exit (and SIGTERM/SIGKILL if it refuses or hangs),
+                            // then re-enter the loop to attach or spawn on canonical.
+                            bump(shared, |s| s.stale_exits += 1);
+                            eprintln!(
+                                "acos-webview-gate: the broker on {} was built from other code \
+                                 (daemon {}, this build {}); it has no live session{}, replacing it",
+                                endpoint.display(),
+                                daemon.as_deref().unwrap_or("unknown"),
+                                crate::build_id(),
+                                if exiting { " and is exiting" } else { "" }
+                            );
+                            let can_spawn = matches!(cfg.broker, BrokerSource::Binary(_));
+                            if !replace_idle_mismatched_broker(&endpoint, peer, exiting, can_spawn) {
+                                use_build_private_endpoint(cfg, shared, &endpoint, &reason)?;
+                            }
+                        } else {
+                            // Sessions are live (or unknown): never kill another
+                            // session's engine; use this build's own endpoint.
                             use_build_private_endpoint(cfg, shared, &endpoint, &reason)?;
                         }
-                    } else {
-                        // Sessions are live on it: leaving them alone and using
-                        // this build's own endpoint is the only honest choice.
-                        use_build_private_endpoint(cfg, shared, &endpoint, &reason)?;
+                        if Instant::now() >= deadline {
+                            return Err(attach_deadline_error(shared, &last));
+                        }
+                        continue;
+                    }
+                    Ok(AttachAnswer::Refused { reason }) => {
+                        last = format!("{} refused the attach: {reason}", endpoint.display());
+                        drop(stream);
+                        if reason.contains("version") {
+                            // A daemon that does not speak this attach version
+                            // predates it: another build by construction (unknown
+                            // session count -> never kill, use build-private).
+                            bump(shared, |s| s.build_mismatches += 1);
+                            use_build_private_endpoint(cfg, shared, &endpoint, &reason)?;
+                            if Instant::now() >= deadline {
+                                return Err(attach_deadline_error(shared, &last));
+                            }
+                            continue;
+                        }
+                        // Anything else (a half-closed socket, a daemon shutting
+                        // down) is transient: retry until the deadline reports it.
+                    }
+                    Err(e) => {
+                        last = format!("attach to {}: {e}", endpoint.display());
+                        drop(stream);
+                        if matches!(
+                            e.kind(),
+                            std::io::ErrorKind::TimedOut | std::io::ErrorKind::WouldBlock
+                        ) && endpoint != build_private_endpoint(&cfg.broker_socket)
+                        {
+                            // Unresponsive accept loop on canonical socket (e.g.
+                            // an already-wedged older broker); session count is
+                            // unknown so never kill it — switch to build-private.
+                            bump(shared, |s| s.build_mismatches += 1);
+                            use_build_private_endpoint(
+                                cfg,
+                                shared,
+                                &endpoint,
+                                "attach handshake timed out",
+                            )?;
+                            if Instant::now() >= deadline {
+                                return Err(attach_deadline_error(shared, &last));
+                            }
+                            continue;
+                        }
+                        if matches!(
+                            e.kind(),
+                            std::io::ErrorKind::UnexpectedEof
+                                | std::io::ErrorKind::ConnectionReset
+                                | std::io::ErrorKind::BrokenPipe
+                        ) {
+                            // Peer closed mid-handshake (possibly tearing down from a
+                            // concurrent mismatch). Wait for that peer process to finish
+                            // exiting if it stopped listening, so its Drop cannot
+                            // clobber a newly spawned broker.
+                            let own_pid = std::process::id() as i32;
+                            // SAFETY: `getuid` is a pure query.
+                            let my_uid = unsafe { libc::getuid() };
+                            if let Some(p) =
+                                peer.filter(|p| p.pid != own_pid && p.uid == my_uid)
+                            {
+                                std::thread::sleep(Duration::from_millis(25));
+                                if UnixStream::connect(&endpoint).is_err() {
+                                    let _ = wait_for_pid_exit(p, IDLE_GRACE_WAIT);
+                                    if Instant::now() >= deadline {
+                                        return Err(attach_deadline_error(shared, &last));
+                                    }
+                                    continue;
+                                }
+                            }
+                        }
                     }
                 }
-                Ok(AttachAnswer::Refused { reason }) => {
-                    last = format!("{} refused the attach: {reason}", endpoint.display());
-                    drop(stream);
-                    if reason.contains("version") {
-                        // A daemon that does not speak this attach version
-                        // predates it: another build by construction.
-                        bump(shared, |s| s.build_mismatches += 1);
-                        use_build_private_endpoint(cfg, shared, &endpoint, &reason)?;
-                    }
-                    // Anything else (a half-closed socket, a daemon shutting
-                    // down) is transient: retry until the deadline reports it.
-                }
-                Err(e) => {
-                    last = format!("attach to {}: {e}", endpoint.display());
-                }
-            },
+            }
             Err(e) => {
-                last = format!("connect {}: {e}", endpoint.display())
+                last = format!("connect {}: {e}", endpoint.display());
             }
         }
         let spawn_endpoint = shared.endpoint.lock().expect("gate endpoint").clone();
@@ -611,15 +852,7 @@ fn attach(cfg: &GateConfig, shared: &Arc<Shared>) -> Result<UnixStream> {
             }
         }
         if Instant::now() >= deadline {
-            return Err(Error::proto(
-                code::ENGINE_UNAVAILABLE,
-                format!(
-                    "the WebView broker is not reachable at {} ({}); start `acos-webview \
-                     --shared` or check {BROKER_SOCKET_ENV}",
-                    shared.endpoint.lock().expect("gate endpoint").display(),
-                    last
-                ),
-            ));
+            return Err(attach_deadline_error(shared, &last));
         }
         std::thread::sleep(Duration::from_millis(25));
     }
@@ -629,7 +862,8 @@ fn attach(cfg: &GateConfig, shared: &Arc<Shared>) -> Result<UnixStream> {
 /// in flight yet (the guest speaks only after this returns), so no buffered
 /// reader is involved and no wire byte is ever swallowed here.
 fn write_attach(stream: &mut UnixStream, session_id: &str) -> std::io::Result<AttachAnswer> {
-    stream.set_read_timeout(Some(Duration::from_secs(10)))?;
+    stream.set_read_timeout(Some(ATTACH_IO_TIMEOUT))?;
+    stream.set_write_timeout(Some(ATTACH_IO_TIMEOUT))?;
     stream.write_all(&encode_attach(session_id, crate::build_id()))?;
     stream.flush()?;
     let mut answer = Vec::new();
@@ -638,11 +872,17 @@ fn write_attach(stream: &mut UnixStream, session_id: &str) -> std::io::Result<At
         match stream.read(&mut byte) {
             Ok(1) if byte[0] == b'\n' => break,
             Ok(1) => answer.push(byte[0]),
-            Ok(_) => {}
+            Ok(_) => {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::UnexpectedEof,
+                    "broker closed before answering attach",
+                ))
+            }
             Err(e) => return Err(e),
         }
     }
     stream.set_read_timeout(None)?;
+    stream.set_write_timeout(None)?;
     Ok(classify_attach(parse_attach_answer(&answer)))
 }
 
@@ -688,16 +928,18 @@ fn endpoint_tag(endpoint: &Path) -> String {
 /// Build the spawn command. `scope` decides *who* runs the daemon; the daemon's
 /// own arguments are the same either way.
 pub fn spawn_plan(bin: &Path, cfg: &GateConfig, endpoint: &Path, scope: SpawnScope) -> BrokerSpawn {
+    static UNIT_SEQ: AtomicU64 = AtomicU64::new(1);
     let mut args: Vec<OsString> = Vec::new();
     let program = match scope {
         SpawnScope::TransientScope => {
-            // The unit is per endpoint + per spawn attempt: two gates racing for
-            // one endpoint must not collide on a unit name (the broker's own bind
-            // race decides who serves), and `--collect` unloads it when the daemon
-            // exits on its idle timer.
+            // The unit is per endpoint + sequence + pid: neither concurrent
+            // processes nor a retry/reconnect inside one process can collide on
+            // a systemd unit name. Ends with `<pid>`.
+            let seq = UNIT_SEQ.fetch_add(1, Ordering::Relaxed);
             let unit = format!(
-                "acos-webview-{}-{}",
+                "acos-webview-{}-{}-{}",
                 endpoint_tag(endpoint),
+                seq,
                 std::process::id()
             );
             args.push("--user".into());
@@ -1105,4 +1347,45 @@ mod tests {
             "12 hex chars"
         );
     }
+
+    #[test]
+    fn write_attach_returns_unexpected_eof_without_spinning() {
+        let (mut client, server) = UnixStream::pair().expect("pair");
+        drop(server);
+        let started = Instant::now();
+        let err = write_attach(&mut client, "s1").expect_err("closed peer must fail immediately");
+        assert!(
+            matches!(
+                err.kind(),
+                std::io::ErrorKind::UnexpectedEof
+                    | std::io::ErrorKind::BrokenPipe
+                    | std::io::ErrorKind::ConnectionReset
+            ),
+            "unexpected error: {err}"
+        );
+        assert!(
+            started.elapsed() < Duration::from_millis(200),
+            "write_attach spun instead of failing immediately"
+        );
+    }
+
+    #[test]
+    fn read_peer_cred_reads_local_socket_credentials() {
+        let (a, _b) = UnixStream::pair().expect("pair");
+        let cred = read_peer_cred(&a).expect("SO_PEERCRED on UnixStream pair");
+        assert_eq!(cred.pid, std::process::id() as i32);
+        // SAFETY: `getuid` is a pure query.
+        assert_eq!(cred.uid, unsafe { libc::getuid() });
+        assert!(peer_pid_alive(cred));
+    }
+
+    #[test]
+    fn repeated_spawn_plans_produce_distinct_scope_units() {
+        let tmp = PathBuf::from("/run/user/1000/acos-wv");
+        let cfg = cfg(&tmp);
+        let a = plan(SpawnScope::TransientScope, &cfg).unit().expect("unit a");
+        let b = plan(SpawnScope::TransientScope, &cfg).unit().expect("unit b");
+        assert_ne!(a, b, "repeated spawns in one process must not share a unit");
+    }
 }
+
