@@ -1,0 +1,912 @@
+ACOS_ART_WARM_DATA=/home/Qui/.t3/worktrees/acos/t3-8432ccd8-1d58d051095d020b/.cache/rg5-clean-warm-data
+warning: variable does not need to be mutable
+   --> crates/acos-netd-ctl/src/client.rs:574:13
+    |
+574 |         let mut r = self.request(&Request::KillPasta { hold })?;
+    |             ----^
+    |             |
+    |             help: remove this `mut`
+    |
+    = note: `#[warn(unused_mut)]` on by default
+
+warning: variable does not need to be mutable
+   --> crates/acos-netd-ctl/src/client.rs:584:13
+    |
+584 |         let mut r = self.request(&Request::Shutdown)?;
+    |             ----^
+    |             |
+    |             help: remove this `mut`
+
+warning: unreachable pattern
+   --> crates/acos-services/src/intents.rs:151:21
+    |
+146 |                     Extra::Short(number) => serde_json::json!(number),
+    |                     -------------------- matches all the relevant values
+...
+151 |                     Extra::Short(short) => serde_json::json!(short),
+    |                     ^^^^^^^^^^^^^^^^^^^ no value can reach this
+    |
+    = note: `#[warn(unreachable_patterns)]` on by default
+
+warning: variable does not need to be mutable
+   --> crates/acos-services/src/modules/notifications.rs:341:13
+    |
+341 |         let mut store = store
+    |             ----^^^^^
+    |             |
+    |             help: remove this `mut`
+    |
+    = note: `#[warn(unused_mut)]` on by default
+
+warning: unreachable pattern
+    --> crates/acos-services/src/parcelable.rs:2909:9
+     |
+2889 |         FieldOp::BoolCond(fields) => {
+     |         ------------------------- matches all the relevant values
+...
+2909 |         FieldOp::BoolCond(fields) => {
+     |         ^^^^^^^^^^^^^^^^^^^^^^^^^ no value can reach this
+
+warning: unreachable pattern
+    --> crates/acos-services/src/parcelable.rs:3335:9
+     |
+3273 |         FieldOp::BoolCond(fields) => {
+     |         ------------------------- matches all the relevant values
+...
+3335 |         FieldOp::BoolCond(fields) => {
+     |         ^^^^^^^^^^^^^^^^^^^^^^^^^ no value can reach this
+
+warning: unreachable pattern
+    --> crates/acos-services/src/parcelable.rs:3414:9
+     |
+3397 |         FieldOp::Icon => {
+     |         ------------- matches all the relevant values
+...
+3414 |         FieldOp::Icon => {
+     |         ^^^^^^^^^^^^^ no value can reach this
+
+warning: unreachable pattern
+    --> crates/acos-services/src/parcelable.rs:3418:9
+     |
+3401 |         FieldOp::ArraySet => match value {
+     |         ----------------- matches all the relevant values
+...
+3418 |         FieldOp::ArraySet => match value {
+     |         ^^^^^^^^^^^^^^^^^ no value can reach this
+
+warning: unreachable pattern
+    --> crates/acos-services/src/parcelable.rs:5363:9
+     |
+5309 |         FieldOp::BoolCond(_) => call == "writeBoolean",
+     |         -------------------- matches all the relevant values
+...
+5363 |         FieldOp::BoolCond(_) => call == "writeBoolean",
+     |         ^^^^^^^^^^^^^^^^^^^^ no value can reach this
+
+warning: unreachable pattern
+    --> crates/acos-services/src/parcelable.rs:5446:9
+     |
+5404 |         FieldOp::BoolCond(inner) => {
+     |         ------------------------ matches all the relevant values
+...
+5446 |         FieldOp::BoolCond(inner) => {
+     |         ^^^^^^^^^^^^^^^^^^^^^^^^ no value can reach this
+
+warning: unused variable: `intent`
+   --> crates/acos-services/src/service_bind.rs:292:13
+    |
+292 |         let intent = bind_intent(package, class);
+    |             ^^^^^^ help: if this is intentional, prefix it with an underscore: `_intent`
+    |
+    = note: `#[warn(unused_variables)]` on by default
+
+warning: constant `ACTION_MASK` is never used
+   --> crates/acos-services/src/a11y_native.rs:102:7
+    |
+102 | const ACTION_MASK: i32 = 0xff;
+    |       ^^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` on by default
+
+warning: constant `RESTRICTIONS_GET_APPLICATION_PER_ADMIN` is never used
+   --> crates/acos-services/src/extras.rs:693:7
+    |
+693 | const RESTRICTIONS_GET_APPLICATION_PER_ADMIN: u32 = 2;
+    |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: constant `SERVICE_MANAGER_DESCRIPTOR` is never used
+  --> crates/acos-services/src/host.rs:82:7
+   |
+82 | const SERVICE_MANAGER_DESCRIPTOR: &str = "android.os.IServiceManager";
+   |       ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: field `session_binder` is never read
+   --> crates/acos-services/src/modules/media_session.rs:161:5
+    |
+155 | struct SessionRecord {
+    |        ------------- field in this struct
+...
+161 |     session_binder: u64,
+    |     ^^^^^^^^^^^^^^
+    |
+    = note: `SessionRecord` has a derived impl for the trait `Debug`, but this is intentionally ignored during dead code analysis
+
+warning: method `session_mut` is never used
+   --> crates/acos-services/src/modules/media_session.rs:205:8
+    |
+187 | impl MediaState {
+    | --------------- method in this implementation
+...
+205 |     fn session_mut(&mut self, id: u32) -> Option<&mut SessionRecord> {
+    |        ^^^^^^^^^^^
+
+warning: unused variable: `net`
+   --> crates/acos-netd/src/plan.rs:274:29
+    |
+274 | pub fn session_offline_cmds(net: &SessionNet, netns_pid: u32) -> Vec<String> {
+    |                             ^^^ help: if this is intentional, prefix it with an underscore: `_net`
+    |
+    = note: `#[warn(unused_variables)]` on by default
+
+warning: variable does not need to be mutable
+  --> crates/acos-netd/src/lib.rs:99:16
+   |
+99 |         let Ok(mut conn) = conn else { continue };
+   |                ----^^^^
+   |                |
+   |                help: remove this `mut`
+   |
+   = note: `#[warn(unused_mut)]` on by default
+
+warning: function `handle` is never used
+   --> crates/acos-netd/src/lib.rs:215:4
+    |
+215 | fn handle(relay: &Arc<Mutex<supervisor::Relay>>, req: Request) -> Reply {
+    |    ^^^^^^
+    |
+    = note: `#[warn(dead_code)]` on by default
+
+warning: field `cgroup` is never read
+  --> crates/acos-netd/src/supervisor.rs:69:5
+   |
+49 | struct Session {
+   |        ------- field in this struct
+...
+69 |     cgroup: Option<String>,
+   |     ^^^^^^
+
+warning: method `restart_pasta` is never used
+   --> crates/acos-netd/src/supervisor.rs:972:8
+    |
+127 | impl Relay {
+    | ---------- method in this implementation
+...
+972 |     fn restart_pasta(&mut self) -> Result<(), ProtoError> {
+    |        ^^^^^^^^^^^^^
+
+warning: unused imports: `F_DEATH` and `RSP_DEAD`
+  --> crates/acos-binder-peer/src/peer.rs:44:12
+   |
+44 |     Frame, F_DEATH, F_HELLO, F_REF, F_REP, F_REQ, F_RSP, F_TXN, INTERFACE_TRANSACTION,
+   |            ^^^^^^^
+45 |     PING_TRANSACTION, PROTOCOL_VERSION, REF_RELEASE, RSP_DEAD, TF_ONE_WAY, TF_STATUS_CODE,
+   |                                                      ^^^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` on by default
+
+warning: unused variable: `objects`
+    --> crates/acos-binder-peer/src/peer.rs:2678:13
+     |
+2678 |     let mut objects: Vec<usize> = Vec::new();
+     |             ^^^^^^^ help: if this is intentional, prefix it with an underscore: `_objects`
+     |
+     = note: `#[warn(unused_variables)]` on by default
+
+warning: variable does not need to be mutable
+    --> crates/acos-binder-peer/src/peer.rs:2678:9
+     |
+2678 |     let mut objects: Vec<usize> = Vec::new();
+     |         ----^^^^^^^
+     |         |
+     |         help: remove this `mut`
+     |
+     = note: `#[warn(unused_mut)]` on by default
+
+warning: value assigned to `unsettled` is never read
+    --> crates/acos-verify/src/executor.rs:1292:21
+     |
+1292 |             let mut unsettled: Option<BackendError> = None;
+     |                     ^^^^^^^^^
+     |
+     = help: maybe it is overwritten before being read?
+     = note: `#[warn(unused_assignments)]` on by default
+
+warning: value assigned to `unsettled` is never read
+    --> crates/acos-verify/src/executor.rs:2646:13
+     |
+2646 |     let mut unsettled: Option<BackendError> = None;
+     |             ^^^^^^^^^
+     |
+     = help: maybe it is overwritten before being read?
+
+warning: field `view` is never read
+   --> crates/acos-webview/src/fair.rs:177:5
+    |
+176 | struct Running {
+    |        ------- field in this struct
+177 |     view: u64,
+    |     ^^^^
+    |
+    = note: `#[warn(dead_code)]` on by default
+
+warning: unused variable: `started`
+   --> crates/acos-art/src/boot_image.rs:919:13
+    |
+919 |         let started = Instant::now();
+    |             ^^^^^^^ help: if this is intentional, prefix it with an underscore: `_started`
+    |
+    = note: `#[warn(unused_variables)]` on by default
+
+warning: variable does not need to be mutable
+   --> crates/acos-art/src/launch.rs:819:9
+    |
+819 |     let mut cmd = shared.command(spec, app_meta, providers)?;
+    |         ----^^^
+    |         |
+    |         help: remove this `mut`
+    |
+    = note: `#[warn(unused_mut)]` on by default
+
+warning: unused variable: `webview_gate`
+    --> crates/acos-art/src/launch.rs:3367:9
+     |
+3367 |     let webview_gate = webview_gate;
+     |         ^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_webview_gate`
+
+warning: method `cache_str` is never used
+   --> crates/acos-art/src/boot_image.rs:598:8
+    |
+597 | impl CacheOutcome {
+    | ----------------- method in this implementation
+598 |     fn cache_str(&self) -> &'static str {
+    |        ^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` on by default
+
+warning: function `hex` is never used
+   --> crates/acos-art/src/build_cache.rs:179:4
+    |
+179 | fn hex(bytes: &[u8]) -> String {
+    |    ^^^
+
+warning: field `guest_lib_dir` is never read
+   --> crates/acos-art/src/launch.rs:596:5
+    |
+582 | struct SecondarySpec {
+    |        ------------- field in this struct
+...
+596 |     guest_lib_dir: String,
+    |     ^^^^^^^^^^^^^
+    |
+    = note: `SecondarySpec` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: field `argv` is never read
+   --> crates/acos-art/src/launch.rs:638:5
+    |
+630 | struct SecondaryGuest {
+    |        -------------- field in this struct
+...
+638 |     argv: Vec<String>,
+    |     ^^^^
+
+warning: field `animations_on` is never read
+    --> crates/acos-art/src/launch.rs:3603:5
+     |
+3580 | struct ProbeSample {
+     |        ----------- field in this struct
+...
+3603 |     animations_on: Option<bool>,
+     |     ^^^^^^^^^^^^^
+     |
+     = note: `ProbeSample` has a derived impl for the trait `Clone`, but this is intentionally ignored during dead code analysis
+
+warning: function `adler32` is never used
+    --> crates/acos-art/src/launch.rs:9665:4
+     |
+9665 | fn adler32(data: &[u8]) -> u32 {
+     |    ^^^^^^^
+
+warning: field `spawn_requests` is never read
+    --> crates/acos-art/src/launch.rs:9820:5
+     |
+9815 | struct PeerSummary {
+     |        ----------- field in this struct
+...
+9820 |     spawn_requests: u64,
+     |     ^^^^^^^^^^^^^^
+
+warning: function `write_out` is never used
+     --> crates/acos-art/src/launch.rs:10031:4
+      |
+10031 | fn write_out(fd: RawFd, outs: Vec<Frame>, context: &str) -> std::io::Result<()> {
+      |    ^^^^^^^^^
+
+warning: hiding a lifetime that's elided elsewhere is confusing
+    --> crates/acos-art/src/lib.rs:1104:20
+     |
+1104 |     pub fn sandbox(&self) -> Sandbox {
+     |                    ^^^^^     ------- the same lifetime is hidden here
+     |                    |
+     |                    the lifetime is elided here
+     |
+     = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+     = note: `#[warn(mismatched_lifetime_syntaxes)]` on by default
+help: use `'_` for type paths
+     |
+1104 |     pub fn sandbox(&self) -> Sandbox<'_> {
+     |                                     ++++
+
+warning: value assigned to `tap_target` is never read
+    --> crates/acos-cli/src/engine/mod.rs:1296:25
+     |
+1296 |                 let mut tap_target: Option<serde_json::Value> = None;
+     |                         ^^^^^^^^^^
+     |
+     = help: maybe it is overwritten before being read?
+     = note: `#[warn(unused_assignments)]` on by default
+
+warning: variable does not need to be mutable
+   --> crates/acos-cli/src/serve.rs:837:16
+    |
+837 |             Ok(mut client) => match client.mismatch() {
+    |                ----^^^^^^
+    |                |
+    |                help: remove this `mut`
+    |
+    = note: `#[warn(unused_mut)]` on by default
+
+warning: method `label` is never used
+   --> crates/acos-cli/src/engine/mod.rs:268:12
+    |
+261 | impl FrameEvidence {
+    | ------------------ method in this implementation
+...
+268 |     pub fn label(&self) -> String {
+    |            ^^^^^
+    |
+    = note: `#[warn(dead_code)]` on by default
+
+warning: multiple associated items are never used
+    --> crates/acos-cli/src/engine/art.rs:1590:12
+     |
+1572 | impl ArtSession {
+     | --------------- associated items in this implementation
+...
+1590 |     pub fn start(apk: &Path, artifacts: &Path) -> Result<ArtSession, BackendError> {
+     |            ^^^^^
+...
+1598 |     pub fn start_with_animations(
+     |            ^^^^^^^^^^^^^^^^^^^^^
+...
+1612 |     pub fn start_with_options(
+     |            ^^^^^^^^^^^^^^^^^^
+...
+1627 |     pub fn start_with_apks(
+     |            ^^^^^^^^^^^^^^^
+...
+1660 |     pub fn start_with_zygote(
+     |            ^^^^^^^^^^^^^^^^^
+...
+1681 |     pub fn start_with_session(
+     |            ^^^^^^^^^^^^^^^^^^
+...
+2390 |     pub fn zygote_facts(&self) -> Option<&ZygoteFacts> {
+     |            ^^^^^^^^^^^^
+...
+2395 |     pub fn zygote_previous_child_pid(&self) -> Option<u32> {
+     |            ^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+2424 |     pub fn services(&self) -> &[serde_json::Value] {
+     |            ^^^^^^^^
+...
+2645 |     pub fn observation_settle(&self) -> &'static str {
+     |            ^^^^^^^^^^^^^^^^^^
+
+warning: method `first_frame_bound` is never used
+    --> crates/acos-cli/src/engine/art.rs:4649:19
+     |
+4315 | impl ArtSession {
+     | --------------- method in this implementation
+...
+4649 |     pub(crate) fn first_frame_bound(&self) -> Option<(bool, Option<String>)> {
+     |                   ^^^^^^^^^^^^^^^^^
+
+warning: function `read_png` is never used
+    --> crates/acos-cli/src/engine/art.rs:6722:4
+     |
+6722 | fn read_png(path: &Path) -> Result<Vec<u8>, BackendError> {
+     |    ^^^^^^^^
+
+warning: function `kill_group_signals` is never used
+    --> crates/acos-cli/src/engine/art.rs:6841:15
+     |
+6841 | pub(crate) fn kill_group_signals() -> usize {
+     |               ^^^^^^^^^^^^^^^^^^
+
+warning: associated function `new` is never used
+   --> crates/acos-cli/src/engine/serve.rs:196:12
+    |
+190 | impl ServeEngine {
+    | ---------------- associated function in this implementation
+...
+196 |     pub fn new(
+    |            ^^^
+
+warning: function `flat_text` is never used
+    --> crates/acos-cli/src/engine/serve.rs:4144:4
+     |
+4144 | fn flat_text(tree: &UiTree) -> String {
+     |    ^^^^^^^^^
+
+warning: associated items `disabled`, `keeper_count`, and `keeper_pids` are never used
+   --> crates/acos-cli/src/engine/zygote_host.rs:164:12
+    |
+ 93 | impl ZygoteHost {
+    | --------------- associated items in this implementation
+...
+164 |     pub fn disabled() -> Self {
+    |            ^^^^^^^^
+...
+179 |     pub fn keeper_count(&self) -> usize {
+    |            ^^^^^^^^^^^^
+...
+184 |     pub fn keeper_pids(&self) -> Vec<u32> {
+    |            ^^^^^^^^^^^
+
+warning: associated function `at` is never used
+   --> crates/acos-cli/src/live_registry.rs:123:12
+    |
+ 95 | impl LiveRegistry {
+    | ----------------- associated function in this implementation
+...
+123 |     pub fn at(dir: PathBuf) -> Self {
+    |            ^^
+
+    Finished `release` profile [optimized] target(s) in 0.03s
+     Running unittests src/lib.rs (.cache/rg5-target/release/deps/acos_vm-396a8338bf19f434)
+
+running 140 tests
+test format::tests::integer_radix_and_parse ... ok
+test format::tests::float_string_matches_jvm_reference ... ok
+test interp::tests::integer_division_edge_semantics ... ok
+test javabridge::tests::descriptors_are_normalised ... ok
+test interp::tests::shift_masking_matches_java ... ok
+test javabridge::tests::the_rooting_trace_names_the_native_root ... ok
+test javabridge::tests::value_kinds_are_reported ... ok
+test limits::tests::disabled_guard_never_trips ... ok
+test limits::tests::expired_wall_budget_reports_timeout ... ok
+test limits::tests::parse_bytes_accepts_suffixes_and_plain ... ok
+test natives::binder::tests::fallback_sink_round_trips ... ok
+test natives::fwk_conscrypt::tests::cipher_names_round_trip ... ok
+test limits::tests::zero_rss_budget_reports_host_memory_limit ... ok
+test natives::fwk_conscrypt::tests::digest_names_round_trip ... ok
+test natives::fwk_conscrypt::tests::ecb_matches_fips197_vector ... ok
+test natives::fwk_conscrypt::tests::ctr_keystream_matches_nist_vector ... ok
+test natives::fwk_fonts::tests::face_score_prefers_style_on_a_weight_tie ... ok
+test natives::fwk_fonts::tests::face_score_selects_the_requested_weight ... ok
+test natives::fwk_input::tests::compute_scales_and_clamps_to_max_velocity ... ok
+test natives::fwk_input::tests::stationary_or_single_sample_is_zero ... ok
+test natives::fwk_input::tests::velocity_is_pixels_per_second ... ok
+test natives::fwk_surface::tests::ops_round_trip_is_byte_stable ... ok
+test natives::gfx_handles::tests::forged_handle_is_stale ... ok
+test natives::gfx_handles::tests::insert_get_round_trip ... ok
+test natives::gfx_handles::tests::jlong_round_trip_preserves_generation ... ok
+test natives::gfx_handles::tests::null_never_resolves ... ok
+test natives::gfx_handles::tests::remove_twice_is_stale_the_second_time ... ok
+test natives::gfx_handles::tests::stale_handle_is_rejected_not_reused ... ok
+test natives::gfx_path::approximate_tests::approximation_is_fraction_x_y_triples_from_origin_to_unit ... ok
+test natives::gfx_vector::tests::full_path_properties_round_trip_layout ... ok
+test natives::gfx_vector::tests::group_matrix_rotates_around_pivot ... ok
+test natives::gfx_vector::tests::parses_all_command_letters ... ok
+test natives::gfx_vector::tests::parses_the_ic_ab_back_material_path ... ok
+test natives::gfx_vector::tests::parses_the_progress_bar_arc_path ... ok
+test natives::icu_regex::tests::anchors_multiline ... ok
+test natives::icu_regex::tests::backreference ... ok
+test natives::icu_regex::tests::capture_groups ... ok
+test natives::icu_regex::tests::capturing_groups_numbered_outer_first ... ok
+test natives::icu_regex::tests::bounded_variable_lookbehind_uses_alternation ... ok
+test natives::icu_regex::tests::case_folding_is_not_simple_lowercase ... ok
+test natives::icu_regex::tests::case_insensitive_classes_and_negation ... ok
+test natives::icu_regex::tests::full_case_folding_expands_pattern ... ok
+test natives::icu_regex::tests::empty_loop_cannot_spin_forever ... ok
+test natives::icu_regex::tests::class_intersection ... ok
+test natives::icu_regex::tests::full_case_folding_expands_input ... ok
+test natives::icu_regex::tests::inline_case_insensitive ... ok
+test natives::icu_regex::tests::general_categories ... ok
+test natives::icu_regex::tests::lazy_vs_greedy ... ok
+test natives::icu_regex::tests::java_whitespace_differs_from_unicode_white_space ... ok
+test natives::icu_regex::tests::literal_and_star ... ok
+test natives::icu_regex::tests::literal_flag ... ok
+test natives::icu_regex::tests::lookbehind ... ok
+test natives::icu_regex::tests::lookahead ... ok
+test natives::icu_regex::tests::named_group ... ok
+test natives::icu_regex::tests::posix_classes ... ok
+test natives::icu_regex::tests::possessive ... ok
+test natives::icu_regex::tests::unbounded_lookbehind_is_rejected ... ok
+test natives::icu_regex::tests::script_properties ... ok
+test natives::icu_regex::tests::unicode_digit_is_decimal_only ... ok
+test natives::icu_regex::tests::unknown_inline_flag_is_a_syntax_error ... ok
+test natives::io::tests::guest_environment_is_seeded_and_never_the_host ... ok
+test natives::io::tests::guest_setenv_round_trips_and_respects_overwrite ... ok
+test natives::jni_glue::tests::signature_widths_are_accepted ... ok
+test natives::kcm::tests::key_names_map_to_android_keycodes ... ok
+test javabridge::tests::bridge_roots_are_deduplicated ... ok
+test javabridge::tests::the_native_root_trace_reaches_the_vm_log_sink ... ok
+test natives::native_mem::tests::cap_is_enforced ... ok
+test natives::kcm::tests::generic_layout_parses_and_maps_characters ... ok
+test natives::memintarray::tests::create_size_get_set_round_trip ... ok
+test natives::native_mem::tests::file_backed_region_records_source_without_embedding_bytes ... ok
+test natives::native_mem::tests::readonly_and_null_errors ... ok
+test natives::kcm::tests::labels_numbers_and_fallbacks ... ok
+test natives::native_mem::tests::realloc_preserves_prefix ... ok
+test natives::kcm::tests::match_char_prefers_the_matching_variation ... ok
+test natives::kcm::tests::reverse_lookup_builds_key_events ... ok
+test natives::native_mem::tests::region_roundtrip_and_bounds ... ok
+test natives::native_mem::tests::snapshot_and_restore_regions_round_trip ... ok
+test natives::os_clock::tests::current_time_micros_tracks_the_wall_clock ... ok
+test natives::os_clock::tests::uptime_is_monotonic_and_boot_anchored ... ok
+test natives::os_clock::tests::parses_proc_thread_stat_ticks_with_a_hostile_comm ... ok
+test natives::os_clock::tests::virtual_clock_advances_forward_only ... ok
+test natives::os_log::tests::dates_render_in_utc_with_millisecond_padding ... ok
+test natives::os_log::tests::parse_priority_accepts_letters_and_numbers ... ok
+test natives::os_log::tests::payload_is_truncated_to_the_logger_limit ... ok
+test natives::os_log::tests::priority_letters_cover_the_log_levels ... ok
+test natives::os_log::tests::is_loggable_defaults_to_info ... ok
+test natives::os_misc::tests::debuggable_follows_the_image_build_type ... ok
+test natives::os_log::tests::threadtime_layout_matches_the_art_reference_capture ... ok
+test natives::os_misc::tests::thread_priorities_are_vm_side_and_default_to_zero ... ok
+test natives::os_misc::tests::trace_reports_disabled ... ok
+test natives::os_misc::tests::pid_and_tid_are_real ... ok
+test natives::os_props::tests::derives_init_computed_properties ... ok
+test natives::os_misc::tests::uid_and_name_table_match_android_aids ... ok
+test natives::os_props::tests::process_table_is_seeded_from_a_real_source ... ok
+test natives::os_props::tests::explicit_value_beats_derivation ... ok
+test natives::os_props::tests::handle_ids_are_stable_and_survive_writes ... ok
+test natives::os_props::tests::numeric_and_boolean_parsing_is_strict ... ok
+test natives::os_props::tests::parses_build_prop_and_skips_comments_and_junk ... ok
+test natives::zip::tests::adler32_known_vector ... ok
+test natives::parcel::tests::compare_bytes_matches_memcmp_order ... ok
+test natives::os_props::tests::unknown_key_semantics_match_art ... ok
+test natives::zip::tests::crc32_continuation_matches_one_shot ... ok
+test natives::os_props::tests::real_build_prop_matches_the_reference_image ... ok
+test vfs::tests::pipe_and_poll_round_trip ... ok
+test vfs::tests::lenient_canonicalize_accepts_a_missing_leaf ... ok
+test vfs::tests::proc_self_status_is_synthesised ... ok
+test vfs::tests::normalize_rejects_escape_above_root ... ok
+test natives::zip::tests::crc32_known_vector ... ok
+test natives::zip::tests::parse_zip_rejects_non_zip ... ok
+test vfs::tests::dropping_the_vfs_releases_fds_and_temp_files ... ok
+test natives::parcel::tests::default_sink_round_trips_handles ... ok
+test vfs::tests::lexical_traversal_is_rejected ... ok
+test natives::os_props::tests::readonly_properties_cannot_be_written ... ok
+test vfs::tests::reads_i18n_apex_icu_data_under_the_real_device_path ... ok
+test vm::boot_dir_tests::installed_home_without_a_boot_dir_does_not_fall_through ... ok
+test vm::boot_dir_tests::installed_home_wins_over_the_checkout ... ok
+test vfs::tests::reads_system_fonts_xml_via_file_stream_contract ... ok
+test vfs::tests::unknown_roots_are_enoent ... ok
+test vm::tests::unsupported_api_reports_exact_site ... ok
+test vfs::tests::dup_shares_the_file_offset ... ok
+test vm::boot_dir_tests::unset_keeps_the_developer_walk ... ok
+test vfs::tests::write_read_back_in_app_files_dir ... ok
+test vfs::tests::write_byte_quota_is_enforced ... ok
+test vfs::tests::dev_null_writes_are_not_quota_limited ... ok
+test vfs::tests::realpath_returns_the_guest_path ... ok
+test vfs::tests::system_mount_is_read_only ... ok
+test vfs::tests::read_mapped_region_round_trips_the_map0_source ... ok
+test vfs::tests::symlink_escape_fails_closed ... ok
+test natives::zip::tests::parse_zip_reads_real_entry_metadata ... ok
+test vfs::tests::open_fd_quota_is_enforced ... ok
+test natives::parcel::tests::a_written_callback_is_mapped_and_rooted_by_the_transport ... ok
+test vm::tests::out_of_memory_throws_java_error ... ok
+test vm::tests::native_roots_survive_collection ... ok
+test vm::tests::gc_collects_unreachable_cycles ... ok
+test natives::os_log::tests::sink_is_a_ring_buffer ... ok
+test natives::os_log::tests::sink_is_per_thread_and_drains ... ok
+test natives::ndk_substrate::tests::assets_bitmap_and_frame_come_from_real_substrates ... ok
+test natives::os_clock::tests::current_thread_time_is_readable_on_this_host ... ok
+test natives::os_clock::tests::uptime_advances_with_the_host_monotonic_clock ... ok
+test natives::icu_regex::tests::backtracking_step_budget_is_bounded ... ok
+
+test result: ok. 140 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s
+
+     Running tests/conscrypt_natives.rs (.cache/rg5-target/release/deps/conscrypt_natives-bc8af65f8f82b719)
+
+running 3 tests
+test extension_lines_are_published_vectors ... ok
+test security_digest_matches_art_reference ... ok
+test security_digest_matches_art_reference_under_gc_stress ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.50s
+
+     Running tests/dexprogs.rs (.cache/rg5-target/release/deps/dexprogs-8d45723f6510ffc0)
+
+running 2 tests
+test dexprogs_pass_gc_stress ... ok
+test dexprogs_match_jvm_reference ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+
+     Running tests/fast_path_equivalence.rs (.cache/rg5-target/release/deps/fast_path_equivalence-19ccad5916f2ae2f)
+
+running 2 tests
+test fast_path_equals_general_path_gc_stress ... ok
+test fast_path_equals_general_path ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.08s
+
+     Running tests/file_io.rs (.cache/rg5-target/release/deps/file_io-3373c6ee3fc6070e)
+
+running 1 test
+test file_io_on_the_real_framework ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running tests/fixtures_required.rs (.cache/rg5-target/release/deps/fixtures_required-f19a5156845383ca)
+
+running 1 test
+test required_fixtures_are_present_when_requested ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/font_natives.rs (.cache/rg5-target/release/deps/font_natives-cbbaeef9cb30aea9)
+
+running 1 test
+test font_natives_typeface_and_measure_on_the_real_framework ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.48s
+
+     Running tests/gfx_canvas.rs (.cache/rg5-target/release/deps/gfx_canvas-25b24bb4f4482bdb)
+
+running 2 tests
+test stale_graphics_handle_is_structured_not_a_panic ... ok
+test gfx_canvas_records_renders_and_round_trips ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.13s
+
+     Running tests/gfx_natives.rs (.cache/rg5-target/release/deps/gfx_natives-9c4eccf3b319ff6c)
+
+running 3 tests
+test stale_handle_is_a_structured_error_not_a_panic ... ok
+test paint_text_measurement_agrees_with_acos_render ... ok
+test gfx_natives_on_the_real_framework ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.12s
+
+     Running tests/host_limits.rs (.cache/rg5-target/release/deps/host_limits-9de26be0ca64ee71)
+
+running 2 tests
+test host_rss_ceiling_aborts_allocation ... ok
+test wall_watchdog_aborts_infinite_loop ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.00s
+
+     Running tests/inflate_layout.rs (.cache/rg5-target/release/deps/inflate_layout-b33e9d261728414e)
+
+running 1 test
+Note: /home/Qui/.t3/worktrees/acos/t3-8432ccd8-1d58d051095d020b/crates/acos-vm/../../crates/acos-vm/tests/java/inflate_stubs/android/test/mock/MockContext.java uses or overrides a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+/home/Qui/.t3/worktrees/acos/t3-8432ccd8-1d58d051095d020b/crates/acos-vm/../../crates/acos-vm/tests/java/InflateMain.java:106: error: method does not override or implement a method from a supertype
+        @Override
+        ^
+Note: /home/Qui/.t3/worktrees/acos/t3-8432ccd8-1d58d051095d020b/crates/acos-vm/../../crates/acos-vm/tests/java/InflateMain.java uses or overrides a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+1 error
+test inflate_layout_through_real_layoutinflater ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.56s
+
+     Running tests/input_natives.rs (.cache/rg5-target/release/deps/input_natives-94c0ce8f142c7972)
+
+running 4 tests
+test input_channel_round_trips_through_a_parcel ... ok
+test motion_event_round_trips_and_receiver_finishes ... ok
+test sixteen_motion_event_natives_exercised ... ok
+test thousand_events_leak_no_handles_or_fds ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.18s
+
+     Running tests/io_file.rs (.cache/rg5-target/release/deps/io_file-74619628fbb83dbc)
+
+running 1 test
+test unix_file_system_matches_real_java ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s
+
+     Running tests/ir_equivalence.rs (.cache/rg5-target/release/deps/ir_equivalence-dde6004c7f3ac55d)
+
+running 2 tests
+test ir_equals_general_path_gc_stress ... ok
+test ir_equals_general_path ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.14s
+
+     Running tests/java_cases.rs (.cache/rg5-target/release/deps/java_cases-2e3a1dc4cb5e243a)
+
+running 7 tests
+test unsupported_java_api_is_structured ... ok
+test exception_floor_rethrows_at_the_rust_call_base ... ok
+test stack_overflow_is_catchable ... ok
+test out_of_memory_is_catchable_with_small_heap ... ok
+test thread_stack_traces_are_non_empty_under_real_corelib ... ok
+test reflection_static_set_survives_compiled_getstatic ... ok
+test atomic_reference_varhandle_surface_under_real_corelib ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+
+     Running tests/javabridge.rs (.cache/rg5-target/release/deps/javabridge-5819fd48c3574df4)
+
+running 8 tests
+test arrays_and_strings_round_trip ... ok
+test hashmap_round_trips ... ok
+test arraylist_round_trips ... ok
+test rect_round_trips ... ok
+test static_fields_and_static_calls_round_trip ... ok
+test application_info_round_trips ... ok
+test bridge_errors_are_hard ... ok
+test all_scenarios_pass_under_gc_stress ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.10s
+
+     Running tests/loader_stress.rs (.cache/rg5-target/release/deps/loader_stress-5b9af0915cdb86b4)
+
+running 4 tests
+test build_version_first_then_build ... ok
+test repeated_nested_init_stays_complete ... ok
+test build_first_then_build_version ... ok
+test varied_load_orders_are_atomic ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.23s
+
+     Running tests/looper.rs (.cache/rg5-target/release/deps/looper-c4e6c2fa14a84aca)
+
+running 4 tests
+test looper_wait_timeout_returns_false ... ok
+test looper_handle_wakes_from_host_thread ... ok
+test virtual_looper_advances_clock_to_future_deadline ... ok
+test real_looper_delayed_and_green_thread_wake ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.18s
+
+     Running tests/looper_cpu.rs (.cache/rg5-target/release/deps/looper_cpu-1a766a4d82883fbc)
+
+running 1 test
+test real_looper_without_messages_burns_no_cpu ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 8.01s
+
+     Running tests/looper_cpu_mt.rs (.cache/rg5-target/release/deps/looper_cpu_mt-1c524ac025a2d4f4)
+
+running 1 test
+test parked_looper_with_second_thread_burns_no_cpu ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 8.02s
+
+     Running tests/looper_fds.rs (.cache/rg5-target/release/deps/looper_fds-21447e85fe722f49)
+
+running 1 test
+test looper_create_destroy_leaks_no_fds ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/native_mem.rs (.cache/rg5-target/release/deps/native_mem-05fa2ba5c1028935)
+
+running 1 test
+test native_memory_round_trips_on_the_real_framework ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+
+     Running tests/nio_fs.rs (.cache/rg5-target/release/deps/nio_fs-a43a5cfe2eed8f5e)
+
+running 1 test
+test nio_fs_on_the_real_framework ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+
+     Running tests/os_constants.rs (.cache/rg5-target/release/deps/os_constants-01209b46f12fdfb6)
+
+running 1 test
+test os_constants_on_the_real_framework ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.69s
+
+     Running tests/os_natives.rs (.cache/rg5-target/release/deps/os_natives-6ecd1050a613a114)
+
+running 1 test
+test core_os_natives_on_the_real_framework ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.12s
+
+     Running tests/parcel_natives.rs (.cache/rg5-target/release/deps/parcel_natives-8300b5fc7c9741d1)
+
+running 1 test
+test parcel_round_trips_on_the_real_framework ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.12s
+
+     Running tests/render_views.rs (.cache/rg5-target/release/deps/render_views-1619ef50576205b2)
+
+running 1 test
+Note: /home/Qui/.t3/worktrees/acos/t3-8432ccd8-1d58d051095d020b/crates/acos-vm/../../crates/acos-vm/tests/java/inflate_stubs/android/test/mock/MockContext.java uses or overrides a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+Note: /home/Qui/.t3/worktrees/acos/t3-8432ccd8-1d58d051095d020b/crates/acos-vm/../../crates/acos-vm/tests/java/RenderViewsMain.java uses or overrides a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+Note: /home/Qui/.t3/worktrees/acos/t3-8432ccd8-1d58d051095d020b/crates/acos-vm/../../crates/acos-vm/tests/java/inflate_stubs/android/test/mock/MockContext.java uses or overrides a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+Note: /home/Qui/.t3/worktrees/acos/t3-8432ccd8-1d58d051095d020b/crates/acos-vm/../../crates/acos-vm/tests/java/RenderViewsMain.java uses or overrides a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+Note: /home/Qui/.t3/worktrees/acos/t3-8432ccd8-1d58d051095d020b/crates/acos-vm/../../crates/acos-vm/tests/java/inflate_stubs/android/test/mock/MockContext.java uses or overrides a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+Note: /home/Qui/.t3/worktrees/acos/t3-8432ccd8-1d58d051095d020b/crates/acos-vm/../../crates/acos-vm/tests/java/RenderViewsMain.java uses or overrides a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+Note: /home/Qui/.t3/worktrees/acos/t3-8432ccd8-1d58d051095d020b/crates/acos-vm/../../crates/acos-vm/tests/java/inflate_stubs/android/test/mock/MockContext.java uses or overrides a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+Note: /home/Qui/.t3/worktrees/acos/t3-8432ccd8-1d58d051095d020b/crates/acos-vm/../../crates/acos-vm/tests/java/RenderViewsMain.java uses or overrides a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+Note: /home/Qui/.t3/worktrees/acos/t3-8432ccd8-1d58d051095d020b/crates/acos-vm/../../crates/acos-vm/tests/java/inflate_stubs/android/test/mock/MockContext.java uses or overrides a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+Note: /home/Qui/.t3/worktrees/acos/t3-8432ccd8-1d58d051095d020b/crates/acos-vm/../../crates/acos-vm/tests/java/RenderViewsMain.java uses or overrides a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+test pipeline_generated_layouts_match_art_reference ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 9.74s
+
+     Running tests/res_natives.rs (.cache/rg5-target/release/deps/res_natives-81173ccca23ad0c1)
+
+running 2 tests
+test res_natives_on_the_real_framework ... ok
+test res_natives_gc_stress ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.77s
+
+     Running tests/snapshot.rs (.cache/rg5-target/release/deps/snapshot-0b811eb63a07a483)
+
+running 16 tests
+test snapshot_header_round_trips ... ok
+test snapshot_refuses_app_dex ... ok
+test snapshot_refuses_extra_live_thread ... ok
+test snapshot_refuses_bad_magic_and_version ... ok
+test snapshot_refuses_fingerprint_mismatch ... ok
+test snapshot_refuses_held_monitor ... ok
+test snapshot_refuses_open_fd ... ok
+test snapshot_refuses_pending_exception ... ok
+test restored_vm_runs_a_second_program_after_the_first ... ok
+test snapshot_is_deterministic_and_idempotent ... ok
+test snapshot_restore_bootstrap_dexprogs_gc_stress ... ok
+test snapshot_restore_100_cycles_is_stable ... ok
+test snapshot_restore_bootstrap_dexprogs_normal ... ok
+test snapshot_restore_real_regex ... ok
+test snapshot_restore_real_all_dexprogs ... ok
+test snapshot_restore_real_dexprogs_gc_stress ... ok
+
+test result: ok. 16 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.77s
+
+     Running tests/surface_natives.rs (.cache/rg5-target/release/deps/surface_natives-1b0bca8f99ac9c8d)
+
+running 1 test
+test surface_control_natives_on_the_real_framework ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.12s
+
+     Running tests/varhandle_poly.rs (.cache/rg5-target/release/deps/varhandle_poly-ec34c124cde4d741)
+
+running 1 test
+test varhandle_polymorphic_matches_jvm_both_tiers ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.07s
+
+   Doc-tests acos_vm
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
