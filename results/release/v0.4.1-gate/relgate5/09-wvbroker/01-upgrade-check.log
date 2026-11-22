@@ -1,0 +1,60 @@
+=== Step 9: Shared WebView broker upgrade check (v0.4.0 -> v0.4.1 RC) ===
+WV_ROOT=/tmp/acos-wv-1000 (canonical fallback with XDG_RUNTIME_DIR unset)
+SOCK=/tmp/acos-wv-1000/broker.sock
+v040 broker sha256: a2568df60d4a6359d253cd7b2b3c270b5c593b5c1ba08360df2dd5613b63d792
+rc   broker sha256: d8a0ed65c23aaf7d39d5a28ad047388054488579f29cfc71f26261e0503727ac
+=== WV_ROOT before start (stale dirs check) ===
+total 0
+drwxr-xr-x   8 Qui  users  160 Nov 22 21:40 .
+drwxrwxrwt 140 root root  3620 Nov 22 21:42 ..
+drwx------   2 Qui  users   40 Nov 22 19:41 184045-default
+drwx------   2 Qui  users   60 Nov 22 19:41 184045-no-broker
+drwx------   2 Qui  users   60 Nov 22 19:41 184045-roundtrip
+drwx------   2 Qui  users   40 Nov 22 19:49 229781-default
+drwx------   2 Qui  users   60 Nov 22 19:49 229781-no-broker
+drwx------   2 Qui  users   60 Nov 22 19:49 229781-roundtrip
+started v0.4.0 broker PID=529232
+total 0
+drwxr-xr-x   8 Qui  users  180 Nov 22 21:42 .
+drwxrwxrwt 140 root root  3620 Nov 22 21:42 ..
+drwx------   2 Qui  users   40 Nov 22 19:41 184045-default
+drwx------   2 Qui  users   60 Nov 22 19:41 184045-no-broker
+drwx------   2 Qui  users   60 Nov 22 19:41 184045-roundtrip
+drwx------   2 Qui  users   40 Nov 22 19:49 229781-default
+drwx------   2 Qui  users   60 Nov 22 19:49 229781-no-broker
+drwx------   2 Qui  users   60 Nov 22 19:49 229781-roundtrip
+srw-------   1 Qui  users    0 Nov 22 21:42 broker.sock
+v0.4.0 broker exe: /home/Qui/.t3/worktrees/acos/t3-8432ccd8-1d58d051095d020b/.cache/rg5-v040/target/release/acos-webview
+acos-webview: shared broker on /tmp/acos-wv-1000/broker.sock (engine=157.0.8103.78, idle=300s, pid=529232)
+run r1: rc=0 status=pass wall=2s old_v040_pid=529232(exited)
+run r2: rc=0 status=pass wall=1s old_v040_pid=529232(exited)
+run r3: rc=0 status=pass wall=2s old_v040_pid=529232(exited)
+run r4: rc=0 status=pass wall=1s old_v040_pid=529232(exited)
+run r5: rc=0 status=pass wall=1s old_v040_pid=529232(exited)
+=== SUMMARY: PASS=5/5 FAIL=0/5 ===
+=== v0.4.0 broker log ===
+acos-webview: shared broker on /tmp/acos-wv-1000/broker.sock (engine=157.0.8103.78, idle=300s, pid=529232)
+acos-webview: BUILD_MISMATCH: client build 0.4.0+g46b622999b74.54343f3c48b2f388-dirty != broker build 0.4.0+gbf943b4fd245.4a5f107cee2d0b2c-dirty (0 session(s) attached; exiting, nothing is left to serve)
+=== WV_ROOT after 5 runs (verify canonical broker.sock + stale dir sweep) ===
+total 4
+drwxr-xr-x   8 Qui  users  200 Nov 22 21:42 .
+drwxrwxrwt 140 root root  3620 Nov 22 21:42 ..
+drwx------   2 Qui  users   40 Nov 22 19:41 184045-default
+drwx------   2 Qui  users   60 Nov 22 19:41 184045-no-broker
+drwx------   2 Qui  users   60 Nov 22 19:41 184045-roundtrip
+drwx------   2 Qui  users   40 Nov 22 19:49 229781-default
+drwx------   2 Qui  users   60 Nov 22 19:49 229781-no-broker
+drwx------   2 Qui  users   60 Nov 22 19:49 229781-roundtrip
+-rw-r--r--   1 Qui  users  105 Nov 22 21:42 broker.log
+srw-------   1 Qui  users    0 Nov 22 21:42 broker.sock
+PASS: no build-private fallback socket — canonical broker.sock was taken over cleanly
+=== inspect active brokers owned by our worktree ===
+FOUND our acos-webview PID=529317 exe=/home/Qui/.t3/worktrees/acos/t3-8432ccd8-1d58d051095d020b/.cache/rg5-target/release/acos-webview cmd=/home/Qui/.t3/worktrees/acos/t3-8432ccd8-1d58d051095d020b/.cache/rg5-target/release/acos-webview --shared --socket /tmp/acos-wv-1000/broker.sock 
+=== copy RC broker.log if present ===
+acos-webview: shared broker on /tmp/acos-wv-1000/broker.sock (engine=157.0.8103.78, idle=0s, pid=529317)
+=== stopping ONLY our Step 9 broker PIDs ===
+killing our PID=529317 (/home/Qui/.t3/worktrees/acos/t3-8432ccd8-1d58d051095d020b/.cache/rg5-target/release/acos-webview)
+=== verify 0 our acos-webview brokers remain ===
+remaining_our_brokers=0
+=== verify unrelated PID 132225 untouched ===
+lrwxrwxrwx 1 Qui users 0 Nov 22 20:33 /proc/132225/exe -> /home/Qui/.t3/worktrees/acos/t3-a5431e22-0441099ae29a98e2/.cache/target/debug/acos-webview

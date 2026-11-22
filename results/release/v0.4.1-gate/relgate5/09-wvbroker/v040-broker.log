@@ -1,0 +1,2 @@
+acos-webview: shared broker on /tmp/acos-wv-1000/broker.sock (engine=157.0.8103.78, idle=300s, pid=529232)
+acos-webview: BUILD_MISMATCH: client build 0.4.0+g46b622999b74.54343f3c48b2f388-dirty != broker build 0.4.0+gbf943b4fd245.4a5f107cee2d0b2c-dirty (0 session(s) attached; exiting, nothing is left to serve)
