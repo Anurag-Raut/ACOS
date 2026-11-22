@@ -172,6 +172,11 @@ fn the_camera_module_passes_the_conformance_kit() {
 }
 
 #[test]
+fn the_multiwindow_module_passes_the_conformance_kit() {
+    run_in_quiet_process("multiwindow");
+}
+
+#[test]
 fn a_gap_name_answers_a_structured_tombstone_naming_the_module_and_the_attach_call() {
     let mut host = ServiceHost::new();
     let mut registry = ModuleRegistry::standard();
@@ -395,7 +400,7 @@ fn detaching_core_removes_its_registrations() {
 #[test]
 fn the_standard_install_attaches_core_and_tombstones_the_gaps() {
     let mut host = ServiceHost::new();
-    let mut registry = module::install_standard(&mut host);
+    let registry = module::install_standard(&mut host);
     assert_eq!(registry.profile("core"), Some(Profile::Real));
     // Core registrations are exactly today's: the NAMES table resolves.
     for (name, _) in acos_services::registry::NAMES

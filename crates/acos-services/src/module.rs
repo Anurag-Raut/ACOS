@@ -1303,6 +1303,7 @@ impl ModuleRegistry {
             Box::new(crate::modules::wifi::WifiModule::new()),
             Box::new(crate::modules::media_session::MediaSessionModule::new()),
             Box::new(crate::modules::camera::CameraModule::new()),
+            Box::new(crate::modules::multiwindow::MultiwindowModule::new()),
         ]
         .into_iter()
         .chain(crate::modules::tail_stubs::modules())

@@ -1,0 +1,51 @@
+# NEGATIVE: while in top 50% split, assert the fullscreen bounds [42, 612, 1038, 2295].
+# Must produce status=fail (ASSERTION_FAILED), proving the tree really shrunk.
+version: 1
+name: negative-multiwindow-split-wrong
+description: >-
+  Enter top 50% split and assert fullscreen layout bounds; must fail with
+  ASSERTION_FAILED because the split layout actually shrank to [42, 612, 1038, 1158].
+app: fixtures/build/apps/two-activity.apk
+engine: art
+fallback: forbid
+api_level: 34
+isolation: process
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+capabilities:
+  - lifecycle
+  - ui.offscreen
+  - ui.text
+services:
+  - id: multiwindow
+    profile: real
+expectation: fail
+budgets:
+  memory_mib: 1024
+  wall_ms: 120000
+steps:
+  - launch:
+      activity: dev.acos.fixtures.twoactivity/.MainActivity
+      clear_state: true
+
+  - wait_for:
+      selector: {id: mw_state}
+      timeout_ms: 15000
+
+  - service_ctl:
+      module: multiwindow
+      op: enter_split
+      args: {position: top, ratio: 0.5}
+
+  - capture:
+      name: after-enter-split
+      format: png
+      fresh: true
+
+  - assert_text:
+      selector: {id: mw_state}
+      text: {exact: "mw=true isInMW=true dp=411x408 mw_cb=1"}
+      bounds: [42, 612, 1038, 2295]

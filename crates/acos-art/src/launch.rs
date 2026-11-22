@@ -1944,8 +1944,15 @@ pub(crate) fn launch_session(
                 let mut frames: Vec<(u32, Frame)> = Vec::new();
                 while let Some((id, request)) = peer_control.take() {
                     let reply = service_request(peer, &mut peer_registry, &request);
+                    let guest_commands = peer.host_mut().drain_guest_commands();
                     let debug_reply = reply.to_string();
-                    peer_control.reply(id, reply);
+                    peer_control.reply(
+                        id,
+                        ServiceControlReply {
+                            reply,
+                            guest_commands,
+                        },
+                    );
                     for spawn in peer.take_spawn_requests() {
                         eprintln!(
                             "acos-binder-peer: control op: {} needs a process for {} ({})",
@@ -8283,12 +8290,131 @@ fn interactive_serve(
                 }
             }
             "services" => {
-                // ADR-0029 item 4: list/status/attach/detach on the live
-                // session. The peer thread owns the host, so the request is
-                // handed to it and its answer is forwarded verbatim (a refusal
-                // for an `at-launch` module is the peer's structured error).
+                // ADR-0029 item 4 + 2026-11-18 amendment (option A): list/status/
+                // attach/detach/ctl on the live session. The peer thread owns the
+                // host and returns both the module's reply and any typed guest
+                // commands queued onto `ServiceHost`'s outbox. The launcher writes
+                // each command to the owning guest process, waits for a fresh
+                // probe sample, and returns the settled UI tree in the same reply.
                 let reply = match control.submit(request.clone(), Duration::from_secs(10)) {
-                    Some(reply) => reply,
+                    Some(ServiceControlReply {
+                        mut reply,
+                        guest_commands,
+                    }) => {
+                        let reply_ok = reply
+                            .get("ok")
+                            .and_then(|v| v.as_bool())
+                            .unwrap_or(false);
+                        if reply_ok && !guest_commands.is_empty() {
+                            let before = latest_probe(probe_state).map(|p| p.seq).unwrap_or(0);
+                            let mut dispatch_err: Option<serde_json::Value> = None;
+                            for command in &guest_commands {
+                                match *command {
+                                    acos_services::GuestCommand::Window {
+                                        task,
+                                        process,
+                                        rect,
+                                        app_bounds,
+                                        windowing_mode,
+                                    } => {
+                                        if process != 0 {
+                                            dispatch_err = Some(serde_json::json!({
+                                                "ok": false,
+                                                "cmd": "services",
+                                                "code": "UNSUPPORTED_ANDROID_API",
+                                                "error": format!(
+                                                    "GuestCommand::Window for task {task} targets \
+                                                     secondary process {process}; multi-process \
+                                                     window-command routing requires multiwindow slice 2"
+                                                ),
+                                            }));
+                                            break;
+                                        }
+                                        let Some(writer) = guest_stdin.as_mut() else {
+                                            dispatch_err = Some(serde_json::json!({
+                                                "ok": false,
+                                                "cmd": "services",
+                                                "code": "NO_GUEST_CONTROL",
+                                                "error": "the guest has no stdin control pipe for GuestCommand::Window",
+                                            }));
+                                            break;
+                                        };
+                                        use std::io::Write;
+                                        if let Err(err) = writeln!(
+                                            writer,
+                                            "WINDOW {windowing_mode} {} {} {} {} {} {} {} {}",
+                                            rect.left,
+                                            rect.top,
+                                            rect.right,
+                                            rect.bottom,
+                                            app_bounds.left,
+                                            app_bounds.top,
+                                            app_bounds.right,
+                                            app_bounds.bottom
+                                        )
+                                        .and_then(|()| writer.flush())
+                                        {
+                                            dispatch_err = Some(serde_json::json!({
+                                                "ok": false,
+                                                "cmd": "services",
+                                                "code": "GUEST_IO",
+                                                "error": format!("failed writing WINDOW command to guest: {err}"),
+                                            }));
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+                            if let Some(err_reply) = dispatch_err {
+                                err_reply
+                            } else {
+                                let deadline = Instant::now() + frame_wait;
+                                let mut fresh = None;
+                                let mut exited: Option<serde_json::Value> = None;
+                                while Instant::now() < deadline {
+                                    if let Some(sample) = latest_probe(probe_state) {
+                                        if sample.seq > before {
+                                            fresh = Some(sample);
+                                            break;
+                                        }
+                                    }
+                                    if let Ok(Some(status)) = child.try_wait() {
+                                        exited = Some(serde_json::json!({
+                                            "ok": false,
+                                            "cmd": "services",
+                                            "code": "GUEST_EXITED",
+                                            "error": format!(
+                                                "the guest exited before it published a probe after GuestCommand::Window: {status}"
+                                            ),
+                                        }));
+                                        break;
+                                    }
+                                    std::thread::sleep(Duration::from_millis(10));
+                                }
+                                if let Some(exit_reply) = exited {
+                                    exit_reply
+                                } else if let Some(sample) = fresh {
+                                    if let Some(obj) = reply.as_object_mut() {
+                                        obj.insert(
+                                            "probe_seq".to_string(),
+                                            serde_json::json!(sample.seq),
+                                        );
+                                        obj.insert("tree".to_string(), sample.tree);
+                                    }
+                                    reply
+                                } else {
+                                    serde_json::json!({
+                                        "ok": false,
+                                        "cmd": "services",
+                                        "code": "NO_FRESH_TREE",
+                                        "error": "the guest published no probe sample after GuestCommand::Window",
+                                    })
+                                }
+                            }
+                        } else {
+                            reply
+                        }
+                    }
                     None => serde_json::json!({
                         "ok": false, "cmd": "services", "code": "SERVICE_CONTROL_TIMEOUT",
                         "error": "the peer thread did not answer the module request within 10 s",
@@ -9483,15 +9609,20 @@ fn meta_spec(entries: &[acos_services::pms::MetaDataEntry]) -> String {
         .join(";")
 }
 
-/// ADR-0029 item 4: live module attach/detach crosses from the interactive
-/// command loop (the thread that answers the caller) to the peer thread (the
-/// only owner of the `ServiceHost`). One request/reply pair per call, bounded
-/// by a deadline; a peer that cannot answer in time is a structured error, never
-/// a silent success.
+struct ServiceControlReply {
+    reply: serde_json::Value,
+    guest_commands: Vec<acos_services::GuestCommand>,
+}
+
+/// ADR-0029 item 4 + 2026-11-18 amendment: live module attach/detach/ctl
+/// crosses from the interactive command loop (the thread that answers the
+/// caller and owns the guest pipes) to the peer thread (the only owner of
+/// `ServiceHost`). Each reply carries both the module's JSON result and any
+/// typed [`acos_services::GuestCommand`]s queued onto `ServiceHost`'s outbox.
 #[derive(Default)]
 struct ServiceControl {
     requests: Mutex<Vec<(u64, serde_json::Value)>>,
-    replies: Mutex<HashMap<u64, serde_json::Value>>,
+    replies: Mutex<HashMap<u64, ServiceControlReply>>,
     next_id: AtomicU64,
     reply_cv: Condvar,
     /// The peer's wake-pipe write end (`-1` until the launcher installs it). A
@@ -9508,7 +9639,11 @@ impl ServiceControl {
 }
 
 impl ServiceControl {
-    fn submit(&self, request: serde_json::Value, timeout: Duration) -> Option<serde_json::Value> {
+    fn submit(
+        &self,
+        request: serde_json::Value,
+        timeout: Duration,
+    ) -> Option<ServiceControlReply> {
         let id = self.next_id.fetch_add(1, Ordering::Relaxed) + 1;
         self.requests
             .lock()
@@ -9550,7 +9685,7 @@ impl ServiceControl {
     }
 
     /// Peer-thread side: publish the answer and wake the caller.
-    fn reply(&self, id: u64, value: serde_json::Value) {
+    fn reply(&self, id: u64, value: ServiceControlReply) {
         self.replies
             .lock()
             .unwrap_or_else(|e| e.into_inner())
