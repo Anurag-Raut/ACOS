@@ -93,6 +93,7 @@ excl_pending() {
 }
 
 slot=-1
+lock_fds=()
 if [ "$exclusive" = 1 ]; then
   marker="$lockdir/excl-pending.$$"
   : > "$marker"
@@ -100,6 +101,7 @@ if [ "$exclusive" = 1 ]; then
   for ((i = 0; i < slots; i++)); do
     exec {fd}>"$(slot_file "$i")"
     flock "$fd"
+    lock_fds+=("$fd")
   done
   rm -f "$marker"; trap - EXIT
   slot=all
@@ -108,12 +110,12 @@ else
     # A pending exclusive run goes first (no starvation by a stream of shared runs).
     if excl_pending; then sleep 2; continue; fi
     exec {fd}>"$(slot_file 0)"
-    if flock -n "$fd"; then slot=0; break; fi
+    if flock -n "$fd"; then slot=0; lock_fds+=("$fd"); break; fi
     exec {fd}>&-
     if [ "$slots" -gt 1 ] && ! slot0_holder_is_bench && fits; then
       for ((i = 1; i < slots; i++)); do
         exec {fd}>"$(slot_file "$i")"
-        if flock -n "$fd"; then slot=$i; break 2; fi
+        if flock -n "$fd"; then slot=$i; lock_fds+=("$fd"); break 2; fi
         exec {fd}>&-
       done
     fi
@@ -131,7 +133,15 @@ export ACOS_ART_DATA="$lockdir/data-$task-$$"; mkdir -p "$ACOS_ART_DATA"
 # `crates/acos-test-support::prereq` reads it and fails loudly when it is gone.
 export ACOS_ART_WARM_DATA="${ACOS_ART_WARM_DATA:-$PWD/.cache/art/data}"
 export ACOS_ART_LOCK_SLOT=$slot
-rc=0; "$@" || rc=$?
+# FIX041: bash `exec {fd}>...` opens the lock descriptor(s) without O_CLOEXEC.
+# Close every lock fd in the wrapped child before exec so long-lived daemons
+# started lazily during a scenario (e.g. `acos-netd`, `acos-webview`) never
+# inherit `art.lock` and keep the flock held after this script exits.
+close_redirs=""
+for lfd in "${lock_fds[@]}"; do
+  close_redirs+=" ${lfd}>&-"
+done
+rc=0; eval '"$@"'"$close_redirs" || rc=$?
 t2=$(date +%s)
 echo "task=$task started_utc=$u0 finished_utc=$(date -u +%FT%TZ) elapsed_s=$((t2-t0)) queue_wait_s=$((t1-t0)) slot=$slot rc=$rc cmd=$*" >> "$log"
 rm -rf "$ACOS_ART_DATA"
