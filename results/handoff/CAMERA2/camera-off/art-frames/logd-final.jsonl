@@ -1,0 +1,195 @@
+{"message":"Error opening trace file: Permission denied (13)","prio":6,"seq":1,"tag":"cutils-trace","ts_ms":1795323711907}
+{"message":"Using CollectorTypeCC GC.","prio":4,"seq":2,"tag":"","ts_ms":1795323711907}
+{"message":"InitDefaultPublicLibraries for_preload=1: libandroid.so:libaaudio.so:libamidi.so:libbinder_ndk.so:libc.so:libcamera2ndk.so:libdl.so:libEGL.so:libGLESv1_CM.so:libGLESv2.so:libGLESv3.so:libicu.so:libicui18n.so:libicuuc.so:libjnigraphics.so:liblog.so:libmediandk.so:libm.so:libnativehelper.so:libnativewindow.so:libOpenMAXAL.so:libOpenSLES.so:libRS.so:libstdc++.so:libsync.so:libvulkan.so:libwebviewchromium_plat_support.so:libz.so","prio":3,"seq":3,"tag":"nativeloader","ts_ms":1795323711923}
+{"message":"I18n APEX ICU file found: /apex/com.android.i18n/etc/icu/icudt72l.dat","prio":3,"seq":4,"tag":"","ts_ms":1795323711927}
+{"message":"Found user/group name 'root' in '/etc/passwd' without required prefix 'system_'","prio":6,"seq":5,"tag":"logdw","ts_ms":1795323711929}
+{"message":"Found user/group name 'bin' in '/etc/passwd' without required prefix 'system_'","prio":6,"seq":6,"tag":"logdw","ts_ms":1795323711929}
+{"message":"Found user/group name 'daemon' in '/etc/passwd' without required prefix 'system_'","prio":6,"seq":7,"tag":"logdw","ts_ms":1795323711929}
+{"message":"Found user/group name 'mail' in '/etc/passwd' without required prefix 'system_'","prio":6,"seq":8,"tag":"logdw","ts_ms":1795323711929}
+{"message":"Found user/group name 'ftp' in '/etc/passwd' without required prefix 'system_'","prio":6,"seq":9,"tag":"logdw","ts_ms":1795323711929}
+{"message":"Found user/group name 'http' in '/etc/passwd' without required prefix 'system_'","prio":6,"seq":10,"tag":"logdw","ts_ms":1795323711929}
+{"message":"Found user/group name 'nobody' in '/etc/passwd' without required prefix 'system_'","prio":6,"seq":11,"tag":"logdw","ts_ms":1795323711929}
+{"message":"Found user/group name 'dbus' in '/etc/passwd' without required prefix 'system_'","prio":6,"seq":12,"tag":"logdw","ts_ms":1795323711929}
+{"message":"Found user/group name 'systemd-coredump' in '/etc/passwd' without required prefix 'system_'","prio":6,"seq":13,"tag":"logdw","ts_ms":1795323711929}
+{"message":"Found user/group name 'systemd-network' in '/etc/passwd' without required prefix 'system_'","prio":6,"seq":14,"tag":"logdw","ts_ms":1795323711929}
+{"message":"Found user/group name 'systemd-oom' in '/etc/passwd' without required prefix 'system_'","prio":6,"seq":15,"tag":"logdw","ts_ms":1795323711929}
+{"message":"Found user/group name 'systemd-journal-remote' in '/etc/passwd' without required prefix 'system_'","prio":6,"seq":16,"tag":"logdw","ts_ms":1795323711929}
+{"message":"Found user/group name 'systemd-resolve' in '/etc/passwd' without required prefix 'system_'","prio":6,"seq":17,"tag":"logdw","ts_ms":1795323711929}
+{"message":"Found user/group name 'systemd-timesync' in '/etc/passwd' without required prefix 'system_'","prio":6,"seq":18,"tag":"logdw","ts_ms":1795323711929}
+{"message":"Found user/group name 'tss' in '/etc/passwd' without required prefix 'system_'","prio":6,"seq":19,"tag":"logdw","ts_ms":1795323711929}
+{"message":"Found user/group name 'uuidd' in '/etc/passwd' without required prefix 'system_'","prio":6,"seq":20,"tag":"logdw","ts_ms":1795323711929}
+{"message":"Found user/group name 'alpm' in '/etc/passwd' without required prefix 'system_'","prio":6,"seq":21,"tag":"logdw","ts_ms":1795323711929}
+{"message":"Found user/group name 'git' in '/etc/passwd' without required prefix 'system_'","prio":6,"seq":22,"tag":"logdw","ts_ms":1795323711929}
+{"message":"Found user/group name 'polkitd' in '/etc/passwd' without required prefix 'system_'","prio":6,"seq":23,"tag":"logdw","ts_ms":1795323711929}
+{"message":"Found user/group name 'Qui' in '/etc/passwd' without required prefix 'system_'","prio":6,"seq":24,"tag":"logdw","ts_ms":1795323711929}
+{"message":"Found user/group name 'avahi' in '/etc/passwd' without required prefix 'system_'","prio":6,"seq":25,"tag":"logdw","ts_ms":1795323711929}
+{"message":"Found user/group name 'brltty' in '/etc/passwd' without required prefix 'system_'","prio":6,"seq":26,"tag":"logdw","ts_ms":1795323711929}
+{"message":"Found user/group name 'colord' in '/etc/passwd' without required prefix 'system_'","prio":6,"seq":27,"tag":"logdw","ts_ms":1795323711929}
+{"message":"Found user/group name 'flatpak' in '/etc/passwd' without required prefix 'system_'","prio":6,"seq":28,"tag":"logdw","ts_ms":1795323711929}
+{"message":"Found user/group name 'gdm' in '/etc/passwd' without required prefix 'system_'","prio":6,"seq":29,"tag":"logdw","ts_ms":1795323711929}
+{"message":"Found user/group name 'geoclue' in '/etc/passwd' without required prefix 'system_'","prio":6,"seq":30,"tag":"logdw","ts_ms":1795323711929}
+{"message":"Found user/group name 'gnome-remote-desktop' in '/etc/passwd' without required prefix 'system_'","prio":6,"seq":31,"tag":"logdw","ts_ms":1795323711929}
+{"message":"Found user/group name 'libvirt-qemu' in '/etc/passwd' without required prefix 'system_'","prio":6,"seq":32,"tag":"logdw","ts_ms":1795323711929}
+{"message":"Found user/group name 'qemu' in '/etc/passwd' without required prefix 'system_'","prio":6,"seq":33,"tag":"logdw","ts_ms":1795323711929}
+{"message":"Found user/group name 'rtkit' in '/etc/passwd' without required prefix 'system_'","prio":6,"seq":34,"tag":"logdw","ts_ms":1795323711929}
+{"message":"Found user/group name 'saned' in '/etc/passwd' without required prefix 'system_'","prio":6,"seq":35,"tag":"logdw","ts_ms":1795323711929}
+{"message":"Found user/group name 'usbmux' in '/etc/passwd' without required prefix 'system_'","prio":6,"seq":36,"tag":"logdw","ts_ms":1795323711929}
+{"message":"Found user/group name 'nvidia-persistenced' in '/etc/passwd' without required prefix 'system_'","prio":6,"seq":37,"tag":"logdw","ts_ms":1795323711929}
+{"message":"Found user/group name 'ollama' in '/etc/passwd' without required prefix 'system_'","prio":6,"seq":38,"tag":"logdw","ts_ms":1795323711929}
+{"message":"Found user/group name 'named' in '/etc/passwd' without required prefix 'system_'","prio":6,"seq":39,"tag":"logdw","ts_ms":1795323711929}
+{"message":"Found user/group name 'pcscd' in '/etc/passwd' without required prefix 'system_'","prio":6,"seq":40,"tag":"logdw","ts_ms":1795323711929}
+{"message":"Found user/group name 'mongodb' in '/etc/passwd' without required prefix 'system_'","prio":6,"seq":41,"tag":"logdw","ts_ms":1795323711929}
+{"message":"Found user/group name 'malcontent-timer-ext-agent' in '/etc/passwd' without required prefix 'system_'","prio":6,"seq":42,"tag":"logdw","ts_ms":1795323711929}
+{"message":"Found user/group name 'malcontent-timerd' in '/etc/passwd' without required prefix 'system_'","prio":6,"seq":43,"tag":"logdw","ts_ms":1795323711929}
+{"message":"Found user/group name 'malcontent-webd' in '/etc/passwd' without required prefix 'system_'","prio":6,"seq":44,"tag":"logdw","ts_ms":1795323711929}
+{"message":"Found user/group name 'systemd-imds' in '/etc/passwd' without required prefix 'system_'","prio":6,"seq":45,"tag":"logdw","ts_ms":1795323711929}
+{"message":"Found user/group name 'clamav' in '/etc/passwd' without required prefix 'system_'","prio":6,"seq":46,"tag":"logdw","ts_ms":1795323711929}
+{"message":"Found user/group name 'dnsmasq' in '/etc/passwd' without required prefix 'system_'","prio":6,"seq":47,"tag":"logdw","ts_ms":1795323711929}
+{"message":"Unable to open '/data/app/launch-guest/classes.dm': No such file or directory","prio":5,"seq":48,"tag":"ziparchive","ts_ms":1795323711929}
+{"message":"Unable to open '/data/app/launch-guest/classes.dm': No such file or directory","prio":5,"seq":49,"tag":"ziparchive","ts_ms":1795323711929}
+{"message":"InitApexLibraries:\n  ","prio":3,"seq":50,"tag":"nativeloader","ts_ms":1795323711933}
+{"message":"InitDefaultPublicLibraries for_preload=0: libandroid.so:libaaudio.so:libamidi.so:libbinder_ndk.so:libc.so:libcamera2ndk.so:libclang_rt.hwasan-aarch64-android.so:libdl.so:libEGL.so:libGLESv1_CM.so:libGLESv2.so:libGLESv3.so:libicu.so:libicui18n.so:libicuuc.so:libjnigraphics.so:liblog.so:libmediandk.so:libm.so:libnativehelper.so:libnativewindow.so:libneuralnetworks.so:libOpenMAXAL.so:libOpenSLES.so:libRS.so:libstdc++.so:libsync.so:libvulkan.so:libwebviewchromium_plat_support.so:libz.so","prio":3,"seq":51,"tag":"nativeloader","ts_ms":1795323711933}
+{"message":"Configuring clns-1 for other apk . target_sdk_version=0, uses_libraries=ALL, library_path=/system/lib64:/vendor/lib64, permitted_path=/data:/mnt/expand","prio":3,"seq":52,"tag":"nativeloader","ts_ms":1795323711933}
+{"message":"InitExtendedPublicLibraries: ","prio":3,"seq":53,"tag":"nativeloader","ts_ms":1795323711933}
+{"message":"InitVendorPublicLibraries skipped: No such file or directory","prio":4,"seq":54,"tag":"nativeloader","ts_ms":1795323711933}
+{"message":"InitProductPublicLibraries: ","prio":3,"seq":55,"tag":"nativeloader","ts_ms":1795323711933}
+{"message":"Binder driver /dev/binder is unavailable. Using /dev/binder instead.","prio":6,"seq":56,"tag":"ProcessState","ts_ms":1795323711943}
+{"message":"Compat change id reported: 171979766; UID 10192; state: ENABLED","prio":3,"seq":57,"tag":"CompatibilityChangeReporter","ts_ms":1795323711948}
+{"message":"Compat change id reported: 242716250; UID 10192; state: ENABLED","prio":3,"seq":58,"tag":"CompatibilityChangeReporter","ts_ms":1795323711948}
+{"message":"Preloading /system/fonts/Roboto-Regular.ttf","prio":4,"seq":59,"tag":"Typeface","ts_ms":1795323711948}
+{"message":"Preloading /system/fonts/RobotoStatic-Regular.ttf","prio":4,"seq":60,"tag":"Typeface","ts_ms":1795323711948}
+{"message":"Compat change id reported: 247079863; UID 10192; state: ENABLED","prio":3,"seq":61,"tag":"CompatibilityChangeReporter","ts_ms":1795323711949}
+{"message":"Unable to open '/data/app/camera-probe.dm': No such file or directory","prio":5,"seq":62,"tag":"ziparchive","ts_ms":1795323711976}
+{"message":"Unable to open '/data/app/camera-probe.dm': No such file or directory","prio":5,"seq":63,"tag":"ziparchive","ts_ms":1795323711976}
+{"message":"Configuring clns-2 for other apk /data/app/camera-probe.apk. target_sdk_version=34, uses_libraries=, library_path=/data/app-lib/x86_64, permitted_path=/data:/mnt/expand:/data/app-data/dev.acos.fixtures.cameraprobe","prio":3,"seq":64,"tag":"nativeloader","ts_ms":1795323711976}
+{"message":"Failed to ensure /data/app-data/dev.acos.fixtures.cameraprobe/cache: chown failed: EINVAL (Invalid argument)","prio":5,"seq":65,"tag":"ContextImpl","ts_ms":1795323711977}
+{"message":"Failed to ensure /data/app-data/dev.acos.fixtures.cameraprobe/code_cache: chown failed: EINVAL (Invalid argument)","prio":5,"seq":66,"tag":"ContextImpl","ts_ms":1795323711977}
+{"message":"Currently set values for:","prio":2,"seq":67,"tag":"GraphicsEnvironment","ts_ms":1795323711978}
+{"message":"  angle_gl_driver_selection_pkgs=[]","prio":2,"seq":68,"tag":"GraphicsEnvironment","ts_ms":1795323711978}
+{"message":"  angle_gl_driver_selection_values=[]","prio":2,"seq":69,"tag":"GraphicsEnvironment","ts_ms":1795323711978}
+{"message":"ANGLE GameManagerService for dev.acos.fixtures.cameraprobe: false","prio":2,"seq":70,"tag":"GraphicsEnvironment","ts_ms":1795323711978}
+{"message":"dev.acos.fixtures.cameraprobe is not listed in per-application setting","prio":2,"seq":71,"tag":"GraphicsEnvironment","ts_ms":1795323711978}
+{"message":"Neither updatable production driver nor prerelease driver is supported.","prio":2,"seq":72,"tag":"GraphicsEnvironment","ts_ms":1795323711978}
+{"message":"No service published for: netstats","prio":5,"seq":73,"tag":"SystemServiceRegistry","ts_ms":1795323711978}
+{"message":"TrafficStats not initialized, uid=10192","prio":6,"seq":74,"tag":"TrafficStats","ts_ms":1795323711978}
+{"message":"ACOSLAUNCH MARK top-finish-watcher-started","prio":4,"seq":75,"tag":"AcosRot6","ts_ms":1795323711985}
+{"message":"Compat change id reported: 210923482; UID 10192; state: ENABLED","prio":3,"seq":76,"tag":"CompatibilityChangeReporter","ts_ms":1795323711988}
+{"message":"Compat change id reported: 171228096; UID 10192; state: ENABLED","prio":3,"seq":77,"tag":"CompatibilityChangeReporter","ts_ms":1795323711990}
+{"message":"READY mgr=present feat_cam=false feat_any=false","prio":4,"seq":78,"tag":"cameraprobe","ts_ms":1795323711992}
+{"message":"dev.acos.fixtures.cameraprobe.MainActivity","prio":6,"seq":79,"tag":"logdw","ts_ms":1795323711992}
+{"message":"dev.acos.fixtures.cameraprobe.MainActivity","prio":6,"seq":80,"tag":"logdw","ts_ms":1795323711992}
+{"message":"dev.acos.fixtures.cameraprobe.MainActivity","prio":6,"seq":81,"tag":"logdw","ts_ms":1795323711993}
+{"message":"Compat change id reported: 237531167; UID 10192; state: ENABLED","prio":3,"seq":82,"tag":"CompatibilityChangeReporter","ts_ms":1795323711993}
+{"message":"The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.","prio":6,"seq":83,"tag":"RippleDrawable","ts_ms":1795323712700}
+{"message":"Connecting to camera service","prio":4,"seq":84,"tag":"CameraManagerGlobal","ts_ms":1795323712700}
+{"message":"LIST count=0 ids=[]","prio":4,"seq":85,"tag":"cameraprobe","ts_ms":1795323712700}
+{"message":"The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.","prio":6,"seq":86,"tag":"RippleDrawable","ts_ms":1795323712715}
+{"message":"The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.","prio":6,"seq":87,"tag":"RippleDrawable","ts_ms":1795323712731}
+{"message":"The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.","prio":6,"seq":88,"tag":"RippleDrawable","ts_ms":1795323712748}
+{"message":"The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.","prio":6,"seq":89,"tag":"RippleDrawable","ts_ms":1795323712765}
+{"message":"The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.","prio":6,"seq":90,"tag":"RippleDrawable","ts_ms":1795323712781}
+{"message":"The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.","prio":6,"seq":91,"tag":"RippleDrawable","ts_ms":1795323712799}
+{"message":"The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.","prio":6,"seq":92,"tag":"RippleDrawable","ts_ms":1795323712816}
+{"message":"The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.","prio":6,"seq":93,"tag":"RippleDrawable","ts_ms":1795323712848}
+{"message":"The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.","prio":6,"seq":94,"tag":"RippleDrawable","ts_ms":1795323712865}
+{"message":"The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.","prio":6,"seq":95,"tag":"RippleDrawable","ts_ms":1795323712915}
+{"message":"The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.","prio":6,"seq":96,"tag":"RippleDrawable","ts_ms":1795323712932}
+{"message":"The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.","prio":6,"seq":97,"tag":"RippleDrawable","ts_ms":1795323712965}
+{"message":"The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.","prio":6,"seq":98,"tag":"RippleDrawable","ts_ms":1795323712982}
+{"message":"The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.","prio":6,"seq":99,"tag":"RippleDrawable","ts_ms":1795323712998}
+{"message":"The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.","prio":6,"seq":100,"tag":"RippleDrawable","ts_ms":1795323713048}
+{"message":"The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.","prio":6,"seq":101,"tag":"RippleDrawable","ts_ms":1795323713065}
+{"message":"The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.","prio":6,"seq":102,"tag":"RippleDrawable","ts_ms":1795323713098}
+{"message":"The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.","prio":6,"seq":103,"tag":"RippleDrawable","ts_ms":1795323713115}
+{"message":"The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.","prio":6,"seq":104,"tag":"RippleDrawable","ts_ms":1795323713132}
+{"message":"The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.","prio":6,"seq":105,"tag":"RippleDrawable","ts_ms":1795323713182}
+{"message":"The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.","prio":6,"seq":106,"tag":"RippleDrawable","ts_ms":1795323713198}
+{"message":"The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.","prio":6,"seq":107,"tag":"RippleDrawable","ts_ms":1795323713231}
+{"message":"The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.","prio":6,"seq":108,"tag":"RippleDrawable","ts_ms":1795323713248}
+{"message":"The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.","prio":6,"seq":109,"tag":"RippleDrawable","ts_ms":1795323713266}
+{"message":"The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.","prio":6,"seq":110,"tag":"RippleDrawable","ts_ms":1795323713315}
+{"message":"The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.","prio":6,"seq":111,"tag":"RippleDrawable","ts_ms":1795323713331}
+{"message":"The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.","prio":6,"seq":112,"tag":"RippleDrawable","ts_ms":1795323713365}
+{"message":"The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.","prio":6,"seq":113,"tag":"RippleDrawable","ts_ms":1795323713382}
+{"message":"The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.","prio":6,"seq":114,"tag":"RippleDrawable","ts_ms":1795323713399}
+{"message":"The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.","prio":6,"seq":115,"tag":"RippleDrawable","ts_ms":1795323713449}
+{"message":"The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.","prio":6,"seq":116,"tag":"RippleDrawable","ts_ms":1795323713465}
+{"message":"The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.","prio":6,"seq":117,"tag":"RippleDrawable","ts_ms":1795323713498}
+{"message":"The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.","prio":6,"seq":118,"tag":"RippleDrawable","ts_ms":1795323713515}
+{"message":"The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.","prio":6,"seq":119,"tag":"RippleDrawable","ts_ms":1795323713532}
+{"message":"The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.","prio":6,"seq":120,"tag":"RippleDrawable","ts_ms":1795323714549}
+{"message":"OPEN error=UnsupportedOperationException: \"media.camera\" is provided by service module \"hw.camera\", which is not attached — attach it: acos_launch {\"services\": [{\"id\": \"hw.camera\", \"profile\": \"stub\"}]}","prio":4,"seq":121,"tag":"cameraprobe","ts_ms":1795323714550}
+{"message":"The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.","prio":6,"seq":122,"tag":"RippleDrawable","ts_ms":1795323714565}
+{"message":"The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.","prio":6,"seq":123,"tag":"RippleDrawable","ts_ms":1795323714581}
+{"message":"The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.","prio":6,"seq":124,"tag":"RippleDrawable","ts_ms":1795323714598}
+{"message":"The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.","prio":6,"seq":125,"tag":"RippleDrawable","ts_ms":1795323714615}
+{"message":"The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.","prio":6,"seq":126,"tag":"RippleDrawable","ts_ms":1795323714632}
+{"message":"The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.","prio":6,"seq":127,"tag":"RippleDrawable","ts_ms":1795323714648}
+{"message":"The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.","prio":6,"seq":128,"tag":"RippleDrawable","ts_ms":1795323714682}
+{"message":"The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.","prio":6,"seq":129,"tag":"RippleDrawable","ts_ms":1795323714698}
+{"message":"The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.","prio":6,"seq":130,"tag":"RippleDrawable","ts_ms":1795323714748}
+{"message":"The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.","prio":6,"seq":131,"tag":"RippleDrawable","ts_ms":1795323714765}
+{"message":"The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.","prio":6,"seq":132,"tag":"RippleDrawable","ts_ms":1795323714798}
+{"message":"The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.","prio":6,"seq":133,"tag":"RippleDrawable","ts_ms":1795323714815}
+{"message":"The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.","prio":6,"seq":134,"tag":"RippleDrawable","ts_ms":1795323714832}
+{"message":"The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.","prio":6,"seq":135,"tag":"RippleDrawable","ts_ms":1795323714882}
+{"message":"The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.","prio":6,"seq":136,"tag":"RippleDrawable","ts_ms":1795323714898}
+{"message":"The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.","prio":6,"seq":137,"tag":"RippleDrawable","ts_ms":1795323714932}
+{"message":"The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.","prio":6,"seq":138,"tag":"RippleDrawable","ts_ms":1795323714948}
+{"message":"The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.","prio":6,"seq":139,"tag":"RippleDrawable","ts_ms":1795323714965}
+{"message":"The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.","prio":6,"seq":140,"tag":"RippleDrawable","ts_ms":1795323715015}
+{"message":"The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.","prio":6,"seq":141,"tag":"RippleDrawable","ts_ms":1795323715031}
+{"message":"The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.","prio":6,"seq":142,"tag":"RippleDrawable","ts_ms":1795323715065}
+{"message":"The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.","prio":6,"seq":143,"tag":"RippleDrawable","ts_ms":1795323715081}
+{"message":"The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.","prio":6,"seq":144,"tag":"RippleDrawable","ts_ms":1795323715098}
+{"message":"The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.","prio":6,"seq":145,"tag":"RippleDrawable","ts_ms":1795323715115}
+{"message":"The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.","prio":6,"seq":146,"tag":"RippleDrawable","ts_ms":1795323715131}
+{"message":"The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.","prio":6,"seq":147,"tag":"RippleDrawable","ts_ms":1795323715148}
+{"message":"The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.","prio":6,"seq":148,"tag":"RippleDrawable","ts_ms":1795323715182}
+{"message":"The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.","prio":6,"seq":149,"tag":"RippleDrawable","ts_ms":1795323715198}
+{"message":"The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.","prio":6,"seq":150,"tag":"RippleDrawable","ts_ms":1795323715215}
+{"message":"The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.","prio":6,"seq":151,"tag":"RippleDrawable","ts_ms":1795323715231}
+{"message":"The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.","prio":6,"seq":152,"tag":"RippleDrawable","ts_ms":1795323715248}
+{"message":"The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.","prio":6,"seq":153,"tag":"RippleDrawable","ts_ms":1795323715281}
+{"message":"The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.","prio":6,"seq":154,"tag":"RippleDrawable","ts_ms":1795323715298}
+{"message":"The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.","prio":6,"seq":155,"tag":"RippleDrawable","ts_ms":1795323715315}
+{"message":"The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.","prio":6,"seq":156,"tag":"RippleDrawable","ts_ms":1795323715365}
+{"message":"The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.","prio":6,"seq":157,"tag":"RippleDrawable","ts_ms":1795323715381}
+{"message":"The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.","prio":6,"seq":158,"tag":"RippleDrawable","ts_ms":1795323716116}
+{"message":"register_android_mtp_MtpDevice\n","prio":3,"seq":159,"tag":"MtpDeviceJNI","ts_ms":1795323716118}
+{"message":"Compat change id reported: 236825255; UID 10192; state: ENABLED","prio":3,"seq":160,"tag":"CompatibilityChangeReporter","ts_ms":1795323716119}
+{"message":"CAPTURE error=UnsupportedOperationException: \"media.camera\" is provided by service module \"hw.camera\", which is not attached — attach it: acos_launch {\"services\": [{\"id\": \"hw.camera\", \"profile\": \"stub\"}]}","prio":4,"seq":161,"tag":"cameraprobe","ts_ms":1795323716119}
+{"message":"The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.","prio":6,"seq":162,"tag":"RippleDrawable","ts_ms":1795323716132}
+{"message":"The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.","prio":6,"seq":163,"tag":"RippleDrawable","ts_ms":1795323716148}
+{"message":"The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.","prio":6,"seq":164,"tag":"RippleDrawable","ts_ms":1795323716165}
+{"message":"The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.","prio":6,"seq":165,"tag":"RippleDrawable","ts_ms":1795323716181}
+{"message":"The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.","prio":6,"seq":166,"tag":"RippleDrawable","ts_ms":1795323716198}
+{"message":"The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.","prio":6,"seq":167,"tag":"RippleDrawable","ts_ms":1795323716215}
+{"message":"The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.","prio":6,"seq":168,"tag":"RippleDrawable","ts_ms":1795323716248}
+{"message":"The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.","prio":6,"seq":169,"tag":"RippleDrawable","ts_ms":1795323716265}
+{"message":"The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.","prio":6,"seq":170,"tag":"RippleDrawable","ts_ms":1795323716282}
+{"message":"The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.","prio":6,"seq":171,"tag":"RippleDrawable","ts_ms":1795323716315}
+{"message":"The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.","prio":6,"seq":172,"tag":"RippleDrawable","ts_ms":1795323716331}
+{"message":"The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.","prio":6,"seq":173,"tag":"RippleDrawable","ts_ms":1795323716348}
+{"message":"The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.","prio":6,"seq":174,"tag":"RippleDrawable","ts_ms":1795323716365}
+{"message":"The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.","prio":6,"seq":175,"tag":"RippleDrawable","ts_ms":1795323716382}
+{"message":"The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.","prio":6,"seq":176,"tag":"RippleDrawable","ts_ms":1795323716432}
+{"message":"The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.","prio":6,"seq":177,"tag":"RippleDrawable","ts_ms":1795323716448}
+{"message":"The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.","prio":6,"seq":178,"tag":"RippleDrawable","ts_ms":1795323716482}
+{"message":"The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.","prio":6,"seq":179,"tag":"RippleDrawable","ts_ms":1795323716498}
+{"message":"The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.","prio":6,"seq":180,"tag":"RippleDrawable","ts_ms":1795323716515}
+{"message":"The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.","prio":6,"seq":181,"tag":"RippleDrawable","ts_ms":1795323716565}
+{"message":"The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.","prio":6,"seq":182,"tag":"RippleDrawable","ts_ms":1795323716582}
+{"message":"The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.","prio":6,"seq":183,"tag":"RippleDrawable","ts_ms":1795323716615}
+{"message":"The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.","prio":6,"seq":184,"tag":"RippleDrawable","ts_ms":1795323716632}
+{"message":"The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.","prio":6,"seq":185,"tag":"RippleDrawable","ts_ms":1795323716648}
+{"message":"The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.","prio":6,"seq":186,"tag":"RippleDrawable","ts_ms":1795323716698}
+{"message":"The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.","prio":6,"seq":187,"tag":"RippleDrawable","ts_ms":1795323716715}
+{"message":"The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.","prio":6,"seq":188,"tag":"RippleDrawable","ts_ms":1795323716748}
+{"message":"The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.","prio":6,"seq":189,"tag":"RippleDrawable","ts_ms":1795323716765}
+{"message":"The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.","prio":6,"seq":190,"tag":"RippleDrawable","ts_ms":1795323716782}
+{"message":"The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.","prio":6,"seq":191,"tag":"RippleDrawable","ts_ms":1795323716832}
+{"message":"The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.","prio":6,"seq":192,"tag":"RippleDrawable","ts_ms":1795323716848}
+{"message":"The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.","prio":6,"seq":193,"tag":"RippleDrawable","ts_ms":1795323716881}
+{"message":"The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.","prio":6,"seq":194,"tag":"RippleDrawable","ts_ms":1795323716898}
+{"message":"The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.","prio":6,"seq":195,"tag":"RippleDrawable","ts_ms":1795323716916}

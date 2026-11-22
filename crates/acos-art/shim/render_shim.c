@@ -307,8 +307,8 @@ typedef int (*fn_ANW_perform)(ANativeWindow*, int, ...);
 
 /* Verified against this image's libnativewindow.so and libgui.so (Surface::perform). */
 #define ACOS_ANW_PERFORM_OFFSET 0x98
-#define ACOS_NATIVE_WINDOW_API_CONNECT 14
-#define ACOS_NATIVE_WINDOW_API_DISCONNECT 15
+#define ACOS_NATIVE_WINDOW_API_CONNECT 13
+#define ACOS_NATIVE_WINDOW_API_DISCONNECT 14
 #define ACOS_NATIVE_WINDOW_API_CAMERA 4
 #define ACOS_AHB_USAGE_CPU_WRITE_OFTEN 0x30ULL
 #define ACOS_FMT_BLOB 0x21u

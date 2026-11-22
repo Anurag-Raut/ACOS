@@ -1,0 +1,17 @@
+{
+  "acos_version": "0.4.0",
+  "apk_path": "/home/Qui/.t3/worktrees/acos/t3-a779be14-64f50f3729c53ac4/fixtures/build/apps/camera-probe.apk",
+  "apk_sha256": "0fb61410b584a0fbbd5533da1e05779f679e5a64edfb3380510a488fb5b82b64",
+  "scenario_path": "/home/Qui/.t3/worktrees/acos/t3-a779be14-64f50f3729c53ac4/scenarios/camera-probe.yaml",
+  "scenario_sha256": "0de8d160daa3f9bff6cba8dfa6c7b57eb40e034790f0f6f30081cde86e3978ab",
+  "flags": [],
+  "isolation": "process",
+  "display": {
+    "mode": "offscreen",
+    "width": 1080,
+    "height": 2400,
+    "density_dpi": 420
+  },
+  "fidelity": "art-reference",
+  "backend": "acos-native"
+}
