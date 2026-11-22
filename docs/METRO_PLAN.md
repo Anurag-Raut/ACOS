@@ -105,6 +105,25 @@ component body arrives as an HMR update and does not reset state.
   (that is METRO2's symptom, and it must be reported as `unsupported`, not
   `pass`).
 
+#### METRO3b outcome (2026-11-22)
+
+Evidence: `results/handoff/METRO3/README.md`.
+
+- Scenario step `dev_server` (`start` / `edit` / `wait_serves` / `fast_refresh`
+  / `reload` / `stop`) and `assert_tree` (`record` / `not_grown_since`) are
+  wired in `acos-protocol`, `acos-verify`, `acos-cli`, and documented in
+  `crates/acos-protocol/schema/scenario.json` + `docs/AGENT_GUIDE.md`.
+- `DeferredArtSession` defers ART guest spawn until `launch` when a scenario
+  starts `dev_server` first, so `acos-netd`'s host-port forwarder and Metro are
+  live before `Application.onCreate` fetches the initial bundle.
+- `scenarios/metro-reload.yaml` (Fast Refresh default) passes **5/5** on real
+  ART (`29 → 18` nodes, single root, zero orphan `node` processes);
+  `scenarios/negative/metro-reload-wrong-text.yaml` **FAILS** cleanly at
+  `assert_text` (`ELEMENT_NOT_FOUND`) with automatic Metro teardown;
+  `scenarios/metro-reload-full.yaml` stays marked **best-effort** and excluded
+  from gate matrices per Owner Decision (A) (passed 5/5 in METRO3b's 5-run
+  sample with strict assertions unchanged).
+
 ### METRO4 — the redbox as agent-readable data
 An error overlay an agent can assert on, not a picture of a red screen.
 

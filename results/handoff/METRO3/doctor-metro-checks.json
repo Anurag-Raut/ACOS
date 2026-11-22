@@ -1,0 +1,46 @@
+[
+  {
+    "label": "present",
+    "exit_code": 0,
+    "metro": {
+      "detail": "node v24.19.0 (/home/Qui/.nvm/versions/node/v24.19.0/bin/node), node_modules /home/Qui/.t3/worktrees/acos/t3-a5431e22-0441099ae29a98e2/.cache/rn-0.81.4/jsproject/node_modules",
+      "name": "metro",
+      "status": "ok"
+    },
+    "pasta": {
+      "detail": "2026_10_02.cba3570 (/home/Qui/.t3/worktrees/acos/t3-a5431e22-0441099ae29a98e2/libexec/pasta [runtime_root])",
+      "name": "pasta",
+      "status": "ok"
+    }
+  },
+  {
+    "label": "missing_node_modules",
+    "exit_code": 0,
+    "metro": {
+      "detail": "no React Native node_modules with Metro (set ACOS_METRO_NODE_MODULES, or run `tools/build-rn-hello.sh fetch` for .cache/rn-0.81.4)",
+      "fix": "`needs_env: [metro]` scenarios (the React Native dev loop) cannot run without node and a React Native node_modules; `tools/build-rn-hello.sh fetch` populates .cache/rn-0.81.4, or set ACOS_METRO_NODE_MODULES.",
+      "name": "metro",
+      "status": "warn"
+    },
+    "pasta": {
+      "detail": "2026_10_02.cba3570 (/home/Qui/.t3/worktrees/acos/t3-a5431e22-0441099ae29a98e2/libexec/pasta [runtime_root])",
+      "name": "pasta",
+      "status": "ok"
+    }
+  },
+  {
+    "label": "missing_node",
+    "exit_code": 1,
+    "metro": {
+      "detail": "`node` is not runnable (No such file or directory (os error 2)); install Node.js",
+      "fix": "`needs_env: [metro]` scenarios (the React Native dev loop) cannot run without node and a React Native node_modules; `tools/build-rn-hello.sh fetch` populates .cache/rn-0.81.4, or set ACOS_METRO_NODE_MODULES.",
+      "name": "metro",
+      "status": "warn"
+    },
+    "pasta": {
+      "detail": "2026_10_02.cba3570 (/home/Qui/.t3/worktrees/acos/t3-a5431e22-0441099ae29a98e2/libexec/pasta [runtime_root])",
+      "name": "pasta",
+      "status": "ok"
+    }
+  }
+]

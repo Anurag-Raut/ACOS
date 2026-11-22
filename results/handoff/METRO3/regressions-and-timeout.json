@@ -1,0 +1,95 @@
+{
+  "timeout_cleanup_probe": {
+    "tag": "timeout-cleanup-probe",
+    "scenario": "/home/Qui/.t3/worktrees/acos/t3-a5431e22-0441099ae29a98e2/.cache/runs/metro3b-regress/timeout-cleanup-probe.yaml",
+    "exit_code": 1,
+    "status": "fail",
+    "error_code": "TIMEOUT",
+    "wall_ms": 1978,
+    "metro_pid": 123559,
+    "metro_pid_alive_after": false,
+    "orphan_node_metro_procs": []
+  },
+  "regressions": [
+    {
+      "tag": "v1-hello-views",
+      "scenario": "scenarios/v1-hello-views.yaml",
+      "exit_code": 0,
+      "status": "pass",
+      "error_code": null,
+      "wall_ms": 2964,
+      "metro_pid": null,
+      "metro_pid_alive_after": false,
+      "orphan_node_metro_procs": []
+    },
+    {
+      "tag": "w15-rn-hello",
+      "scenario": "scenarios/w15-rn-hello.yaml",
+      "exit_code": 0,
+      "status": "pass",
+      "error_code": null,
+      "wall_ms": 276,
+      "metro_pid": null,
+      "metro_pid_alive_after": false,
+      "orphan_node_metro_procs": []
+    },
+    {
+      "tag": "w19-rn-wait-timeout",
+      "scenario": "scenarios/w19-rn-wait-timeout.yaml",
+      "exit_code": 0,
+      "status": "pass",
+      "error_code": null,
+      "wall_ms": 551,
+      "metro_pid": null,
+      "metro_pid_alive_after": false,
+      "orphan_node_metro_procs": []
+    },
+    {
+      "tag": "w21-rn-hello",
+      "scenario": "scenarios/w21-rn-hello.yaml",
+      "exit_code": 0,
+      "status": "pass",
+      "error_code": null,
+      "wall_ms": 844,
+      "metro_pid": null,
+      "metro_pid_alive_after": false,
+      "orphan_node_metro_procs": []
+    },
+    {
+      "tag": "w23-rn-hello-tap",
+      "scenario": "scenarios/w23-rn-hello-tap.yaml",
+      "exit_code": 0,
+      "status": "pass",
+      "error_code": null,
+      "wall_ms": 1488,
+      "metro_pid": null,
+      "metro_pid_alive_after": false,
+      "orphan_node_metro_procs": []
+    },
+    {
+      "tag": "net-network-off",
+      "scenario": "scenarios/net-network-off.yaml",
+      "exit_code": 0,
+      "status": "pass",
+      "error_code": null,
+      "wall_ms": 687,
+      "metro_pid": null,
+      "metro_pid_alive_after": false,
+      "orphan_node_metro_procs": []
+    },
+    {
+      "tag": "modfill-wifi",
+      "scenario": "scenarios/modfill-wifi.yaml",
+      "exit_code": 0,
+      "status": "pass",
+      "error_code": null,
+      "wall_ms": 24626,
+      "metro_pid": null,
+      "metro_pid_alive_after": false,
+      "orphan_node_metro_procs": []
+    }
+  ],
+  "regressions_passed": 7,
+  "regressions_total": 7,
+  "remaining_node_metro_processes": []
+}
