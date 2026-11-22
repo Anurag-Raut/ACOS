@@ -1,0 +1,90 @@
+{
+  "backend": "acos-native",
+  "capabilities_used": [
+    "input",
+    "lifecycle",
+    "static-manifest",
+    "ui.tree"
+  ],
+  "error": {
+    "class": "assertion",
+    "code": "ASSERTION_FAILED",
+    "hint": "Compare expected vs actual in the assertion diff, inspect the linked frame/tree, then fix the app or the expectation. Rerun the scenario.",
+    "message": "expected text containing \"crc32=0xdead8870\", got text \"READY mgr=present feat_cam=true feat_any=true\\nCAPTURE opened id=0\\nCAPTURE image w=640 h=480 fmt=35 planes=3 ts=10… [ACOS: result.error.message bounded for size — 460 bytes total, keeping the first 170 and the last 85 bytes; the full text is in the run's artifacts] …8,128)\\nCAPTURE completed frame=0 ts=1000000000\\nCAPTURE closed id=0 seq=1\" / hint \"\"",
+    "retryable": false
+  },
+  "evidence": {
+    "events": "events.jsonl",
+    "log": "logs/logcat.txt",
+    "verdict": "verdict.json"
+  },
+  "fidelity": "art-reference",
+  "isolation": "process",
+  "metrics": {
+    "peak_rss_bytes": 38629376,
+    "wall_ms": 2549
+  },
+  "ok": false,
+  "request_id": "req_4e6cf_18ea49a2619032ac",
+  "result": {
+    "artifacts_dir": ".cache/camerax1-verify/camera-scripted-wrong-checksum",
+    "cap_bytes": 20480,
+    "evidence_provenance": {
+      "binder_transactions": "host-observed",
+      "crash_reports": "guest-asserted",
+      "frames": "host-observed",
+      "host_input": "host-observed",
+      "input_acks": "guest-asserted",
+      "launch_markers": "guest-asserted",
+      "lifecycle_markers": "guest-asserted",
+      "logs": "guest-asserted",
+      "static_manifest": "host-observed",
+      "tree": "guest-asserted"
+    },
+    "failed_step": {
+      "failure_index": 6,
+      "index": 6,
+      "kind": "assert_text",
+      "message": "… [ACOS: identical to result.error.message (460 bytes), not repeated; it begins: expected text containing \"crc32=0xdead8870\", got text \"READY mgr=present feat_cam=true feat_any=true\\nCAPTURE opened id=0\\nCAPTURE image w=640 h=480 fmt=35 planes=3 ts=1000000000 crc32=0xb106af65 white=(82,90,240) green=(82,90,240) red=(144,54,34) black=(144,54,34) tag=(82,82,82,82) ramp=(210,16,146) tl=(82,90,240) tr=(144,54,34) bl=(41,240,110) br=(210,16,146) ctr=(235,128,128)\\nCAPTURE completed frame=0 ts=1000000000\\nCAPTURE closed id=0 seq=1\" / hint \"\"] …",
+      "status": "fail"
+    },
+    "failure": {
+      "code": "ASSERTION_FAILED",
+      "error": {
+        "class": "assertion",
+        "code": "ASSERTION_FAILED",
+        "hint": "Compare expected vs actual in the assertion diff, inspect the linked frame/tree, then fix the app or the expectation. Rerun the scenario.",
+        "message": "… [ACOS: identical to result.error.message (460 bytes), not repeated; it begins: expected text containing \"crc32=0xdead8870\", got text \"READY mgr=present feat_cam=true feat_any=true\\nCAPTURE opened id=0\\nCAPTURE image w=640 h=480 fmt=35 planes=3 ts=1000000000 crc32=0xb106af65 white=(82,90,240) green=(82,90,240) red=(144,54,34) black=(144,54,34) tag=(82,82,82,82) ramp=(210,16,146) tl=(82,90,240) tr=(144,54,34) bl=(41,240,110) br=(210,16,146) ctr=(235,128,128)\\nCAPTURE completed frame=0 ts=1000000000\\nCAPTURE closed id=0 seq=1\" / hint \"\"] …",
+        "retryable": false
+      },
+      "step_index": 6,
+      "summary": "step 6 (assert_text) fail"
+    },
+    "note": "this result was larger than the reply cap; only the bulk (tree, steps, logs) was dropped and the full evidence is in the artifacts paths named here",
+    "provenance": {
+      "apk": {
+        "mtime_ns": 1795326435852741616,
+        "path": "/home/Qui/.t3/worktrees/acos/t3-a779be14-64f50f3729c53ac4/fixtures/build/apps/camera-probe.apk",
+        "sha256": "b003e40f22315077500a8b84ddb8b06a6e167a7280b1d9a8bfa5d660f7eec12d",
+        "sha256_12": "b003e40f2231",
+        "size_bytes": 24979
+      },
+      "engine": "art",
+      "fidelity": "art-reference",
+      "scenario": {
+        "mtime_ns": 1795325925426911484,
+        "path": "/home/Qui/.t3/worktrees/acos/t3-a779be14-64f50f3729c53ac4/scenarios/negative/camera-scripted-wrong-checksum.yaml",
+        "sha256": "5993f43404c8a9dce8f2d3248a5471bec7671a4cfefcce6291b8577eefad3755",
+        "sha256_12": "5993f43404c8",
+        "size_bytes": 1698
+      },
+      "scenario_engine": "art",
+      "warnings": []
+    },
+    "reply_capped": true,
+    "verdict_path": ".cache/camerax1-verify/camera-scripted-wrong-checksum/verdict.json",
+    "verdict_status": "fail"
+  },
+  "session_id": "s_art_camera-probe",
+  "status": "fail"
+}

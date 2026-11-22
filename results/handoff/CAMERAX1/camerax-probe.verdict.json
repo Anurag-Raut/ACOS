@@ -1,0 +1,65 @@
+{
+  "backend": "acos-native",
+  "capabilities_used": [
+    "input",
+    "lifecycle",
+    "screenshot",
+    "static-manifest",
+    "ui.tree"
+  ],
+  "evidence": {
+    "events": "events.jsonl",
+    "log": "logs/logcat.txt",
+    "verdict": "verdict.json"
+  },
+  "fidelity": "art-reference",
+  "isolation": "process",
+  "metrics": {
+    "peak_rss_bytes": 57937920,
+    "wall_ms": 9691
+  },
+  "ok": true,
+  "request_id": "req_4d84d_18ea499d9bece47c",
+  "result": {
+    "artifacts_dir": ".cache/camerax1-verify/camerax-probe",
+    "cap_bytes": 20480,
+    "evidence_provenance": {
+      "binder_transactions": "host-observed",
+      "crash_reports": "guest-asserted",
+      "frames": "host-observed",
+      "host_input": "host-observed",
+      "input_acks": "guest-asserted",
+      "launch_markers": "guest-asserted",
+      "lifecycle_markers": "guest-asserted",
+      "logs": "guest-asserted",
+      "static_manifest": "host-observed",
+      "tree": "guest-asserted"
+    },
+    "note": "this result was larger than the reply cap; only the bulk (tree, steps, logs) was dropped and the full evidence is in the artifacts paths named here",
+    "provenance": {
+      "apk": {
+        "mtime_ns": 1795328245757433046,
+        "path": "/home/Qui/.t3/worktrees/acos/t3-a779be14-64f50f3729c53ac4/fixtures/build/apps/camerax-probe.apk",
+        "sha256": "e9999aca2aafe5a93383b609c1ff2bdf4269d132d64c9176ce38cc555f8487ad",
+        "sha256_12": "e9999aca2aaf",
+        "size_bytes": 2734663
+      },
+      "engine": "art",
+      "fidelity": "art-reference",
+      "scenario": {
+        "mtime_ns": 1795328267456306273,
+        "path": "/home/Qui/.t3/worktrees/acos/t3-a779be14-64f50f3729c53ac4/scenarios/camerax-probe.yaml",
+        "sha256": "5ba16643d6e2c45932fd2a9634dcd924453fff3718742de9e0c3681b794184c0",
+        "sha256_12": "5ba16643d6e2",
+        "size_bytes": 4238
+      },
+      "scenario_engine": "art",
+      "warnings": []
+    },
+    "reply_capped": true,
+    "verdict_path": ".cache/camerax1-verify/camerax-probe/verdict.json",
+    "verdict_status": "pass"
+  },
+  "session_id": "s_art_camerax-probe",
+  "status": "pass"
+}

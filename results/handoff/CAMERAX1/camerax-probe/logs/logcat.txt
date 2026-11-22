@@ -1,0 +1,306 @@
+--------- beginning of main
+1795328342966      1  E cutils-trace: Error opening trace file: Permission denied (13)
+1795328342967      2  I : Using CollectorTypeCC GC.
+1795328342980      3  D nativeloader: InitDefaultPublicLibraries for_preload=1: libandroid.so:libaaudio.so:libamidi.so:libbinder_ndk.so:libc.so:libcamera2ndk.so:libdl.so:libEGL.so:libGLESv1_CM.so:libGLESv2.so:libGLESv3.so:libicu.so:libicui18n.so:libicuuc.so:libjnigraphics.so:liblog.so:libmediandk.so:libm.so:libnativehelper.so:libnativewindow.so:libOpenMAXAL.so:libOpenSLES.so:libRS.so:libstdc++.so:libsync.so:libvulkan.so:libwebviewchromium_plat_support.so:libz.so
+1795328342983      4  D : I18n APEX ICU file found: /apex/com.android.i18n/etc/icu/icudt72l.dat
+1795328342985      5  E logdw: Found user/group name 'root' in '/etc/passwd' without required prefix 'system_'
+1795328342985      6  E logdw: Found user/group name 'bin' in '/etc/passwd' without required prefix 'system_'
+1795328342985      7  E logdw: Found user/group name 'daemon' in '/etc/passwd' without required prefix 'system_'
+1795328342985      8  E logdw: Found user/group name 'mail' in '/etc/passwd' without required prefix 'system_'
+1795328342985      9  E logdw: Found user/group name 'ftp' in '/etc/passwd' without required prefix 'system_'
+1795328342985     10  E logdw: Found user/group name 'http' in '/etc/passwd' without required prefix 'system_'
+1795328342985     11  E logdw: Found user/group name 'nobody' in '/etc/passwd' without required prefix 'system_'
+1795328342985     12  E logdw: Found user/group name 'dbus' in '/etc/passwd' without required prefix 'system_'
+1795328342985     13  E logdw: Found user/group name 'systemd-coredump' in '/etc/passwd' without required prefix 'system_'
+1795328342985     14  E logdw: Found user/group name 'systemd-network' in '/etc/passwd' without required prefix 'system_'
+1795328342985     15  E logdw: Found user/group name 'systemd-oom' in '/etc/passwd' without required prefix 'system_'
+1795328342985     16  E logdw: Found user/group name 'systemd-journal-remote' in '/etc/passwd' without required prefix 'system_'
+1795328342985     17  E logdw: Found user/group name 'systemd-resolve' in '/etc/passwd' without required prefix 'system_'
+1795328342985     18  E logdw: Found user/group name 'systemd-timesync' in '/etc/passwd' without required prefix 'system_'
+1795328342985     19  E logdw: Found user/group name 'tss' in '/etc/passwd' without required prefix 'system_'
+1795328342985     20  E logdw: Found user/group name 'uuidd' in '/etc/passwd' without required prefix 'system_'
+1795328342985     21  E logdw: Found user/group name 'alpm' in '/etc/passwd' without required prefix 'system_'
+1795328342985     22  E logdw: Found user/group name 'git' in '/etc/passwd' without required prefix 'system_'
+1795328342985     23  E logdw: Found user/group name 'polkitd' in '/etc/passwd' without required prefix 'system_'
+1795328342985     24  E logdw: Found user/group name 'Qui' in '/etc/passwd' without required prefix 'system_'
+1795328342985     25  E logdw: Found user/group name 'avahi' in '/etc/passwd' without required prefix 'system_'
+1795328342985     26  E logdw: Found user/group name 'brltty' in '/etc/passwd' without required prefix 'system_'
+1795328342985     27  E logdw: Found user/group name 'colord' in '/etc/passwd' without required prefix 'system_'
+1795328342985     28  E logdw: Found user/group name 'flatpak' in '/etc/passwd' without required prefix 'system_'
+1795328342985     29  E logdw: Found user/group name 'gdm' in '/etc/passwd' without required prefix 'system_'
+1795328342985     30  E logdw: Found user/group name 'geoclue' in '/etc/passwd' without required prefix 'system_'
+1795328342985     31  E logdw: Found user/group name 'gnome-remote-desktop' in '/etc/passwd' without required prefix 'system_'
+1795328342985     32  E logdw: Found user/group name 'libvirt-qemu' in '/etc/passwd' without required prefix 'system_'
+1795328342985     33  E logdw: Found user/group name 'qemu' in '/etc/passwd' without required prefix 'system_'
+1795328342985     34  E logdw: Found user/group name 'rtkit' in '/etc/passwd' without required prefix 'system_'
+1795328342985     35  E logdw: Found user/group name 'saned' in '/etc/passwd' without required prefix 'system_'
+1795328342985     36  E logdw: Found user/group name 'usbmux' in '/etc/passwd' without required prefix 'system_'
+1795328342985     37  E logdw: Found user/group name 'nvidia-persistenced' in '/etc/passwd' without required prefix 'system_'
+1795328342985     38  E logdw: Found user/group name 'ollama' in '/etc/passwd' without required prefix 'system_'
+1795328342985     39  E logdw: Found user/group name 'named' in '/etc/passwd' without required prefix 'system_'
+1795328342985     40  E logdw: Found user/group name 'pcscd' in '/etc/passwd' without required prefix 'system_'
+1795328342985     41  E logdw: Found user/group name 'mongodb' in '/etc/passwd' without required prefix 'system_'
+1795328342985     42  E logdw: Found user/group name 'malcontent-timer-ext-agent' in '/etc/passwd' without required prefix 'system_'
+1795328342985     43  E logdw: Found user/group name 'malcontent-timerd' in '/etc/passwd' without required prefix 'system_'
+1795328342985     44  E logdw: Found user/group name 'malcontent-webd' in '/etc/passwd' without required prefix 'system_'
+1795328342985     45  E logdw: Found user/group name 'systemd-imds' in '/etc/passwd' without required prefix 'system_'
+1795328342985     46  E logdw: Found user/group name 'clamav' in '/etc/passwd' without required prefix 'system_'
+1795328342985     47  E logdw: Found user/group name 'dnsmasq' in '/etc/passwd' without required prefix 'system_'
+1795328342985     48  W ziparchive: Unable to open '/data/app/launch-guest/classes.dm': No such file or directory
+1795328342985     49  W ziparchive: Unable to open '/data/app/launch-guest/classes.dm': No such file or directory
+1795328342990     50  D nativeloader: InitApexLibraries:
+  
+1795328342990     51  D nativeloader: InitDefaultPublicLibraries for_preload=0: libandroid.so:libaaudio.so:libamidi.so:libbinder_ndk.so:libc.so:libcamera2ndk.so:libclang_rt.hwasan-aarch64-android.so:libdl.so:libEGL.so:libGLESv1_CM.so:libGLESv2.so:libGLESv3.so:libicu.so:libicui18n.so:libicuuc.so:libjnigraphics.so:liblog.so:libmediandk.so:libm.so:libnativehelper.so:libnativewindow.so:libneuralnetworks.so:libOpenMAXAL.so:libOpenSLES.so:libRS.so:libstdc++.so:libsync.so:libvulkan.so:libwebviewchromium_plat_support.so:libz.so
+1795328342990     52  D nativeloader: Configuring clns-1 for other apk . target_sdk_version=0, uses_libraries=ALL, library_path=/system/lib64:/vendor/lib64, permitted_path=/data:/mnt/expand
+1795328342990     53  D nativeloader: InitExtendedPublicLibraries: 
+1795328342990     54  I nativeloader: InitVendorPublicLibraries skipped: No such file or directory
+1795328342990     55  D nativeloader: InitProductPublicLibraries: 
+1795328342997     56  E ProcessState: Binder driver /dev/binder is unavailable. Using /dev/binder instead.
+1795328343002     57  D CompatibilityChangeReporter: Compat change id reported: 171979766; UID 10192; state: ENABLED
+1795328343002     58  D CompatibilityChangeReporter: Compat change id reported: 242716250; UID 10192; state: ENABLED
+1795328343002     59  I Typeface: Preloading /system/fonts/Roboto-Regular.ttf
+1795328343002     60  I Typeface: Preloading /system/fonts/RobotoStatic-Regular.ttf
+1795328343002     61  D CompatibilityChangeReporter: Compat change id reported: 247079863; UID 10192; state: ENABLED
+1795328343022     62  W ziparchive: Unable to open '/data/app/camerax-probe.dm': No such file or directory
+1795328343022     63  W ziparchive: Unable to open '/data/app/camerax-probe.dm': No such file or directory
+1795328343044     64  D nativeloader: Configuring clns-2 for other apk /data/app/camerax-probe.apk. target_sdk_version=34, uses_libraries=, library_path=/data/app-lib/x86_64, permitted_path=/data:/mnt/expand:/data/app-data/dev.acos.fixtures.cameraxprobe
+1795328343044     65  W ContextImpl: Failed to ensure /data/app-data/dev.acos.fixtures.cameraxprobe/cache: chown failed: EINVAL (Invalid argument)
+1795328343045     66  W ContextImpl: Failed to ensure /data/app-data/dev.acos.fixtures.cameraxprobe/code_cache: chown failed: EINVAL (Invalid argument)
+1795328343045     67  V GraphicsEnvironment: Currently set values for:
+1795328343045     68  V GraphicsEnvironment:   angle_gl_driver_selection_pkgs=[]
+1795328343045     69  V GraphicsEnvironment:   angle_gl_driver_selection_values=[]
+1795328343045     70  V GraphicsEnvironment: ANGLE GameManagerService for dev.acos.fixtures.cameraxprobe: false
+1795328343045     71  V GraphicsEnvironment: dev.acos.fixtures.cameraxprobe is not listed in per-application setting
+1795328343045     72  V GraphicsEnvironment: Neither updatable production driver nor prerelease driver is supported.
+1795328343045     73  W SystemServiceRegistry: No service published for: netstats
+1795328343045     74  E TrafficStats: TrafficStats not initialized, uid=10192
+1795328343048     75  I AcosRot6: ACOSLAUNCH MARK top-finish-watcher-started
+1795328343059     76  D CompatibilityChangeReporter: Compat change id reported: 210923482; UID 10192; state: ENABLED
+1795328343062     77  D CompatibilityChangeReporter: Compat change id reported: 171228096; UID 10192; state: ENABLED
+1795328343064     78  I cameraxprobe: READY feat_cam=true feat_any=true
+1795328343064     79  E logdw: dev.acos.fixtures.cameraxprobe.MainActivity
+1795328343064     80  E logdw: dev.acos.fixtures.cameraxprobe.MainActivity
+1795328343064     81  I cameraxprobe: PREVIEW_STATE state=IDLE impl=PERFORMANCE
+1795328343064     82  E logdw: dev.acos.fixtures.cameraxprobe.MainActivity
+1795328343064     83  D CompatibilityChangeReporter: Compat change id reported: 237531167; UID 10192; state: ENABLED
+1795328343799     84  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795328343803     85  I CameraManagerGlobal: Connecting to camera service
+1795328343805     86  V CameraManagerGlobal: Failed to register device state listener!
+1795328343805     87  V CameraManagerGlobal: Device state dependent characteristics updates will not befunctional!
+1795328343808     88  D MtpDeviceJNI: register_android_mtp_MtpDevice
+
+1795328343808     89  W MediaProfiles: Could not find a validated xml file. Using the default instance instead.
+1795328343809     90  D CameraRepository: Added camera: 0
+1795328343812     91  I Camera2CameraInfo: Device Level: INFO_SUPPORTED_HARDWARE_LEVEL_LIMITED
+1795328343812     92  D CameraValidator: Verifying camera lens facing on acos, lensFacingInteger: null
+1795328343815     93  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795328343816     94  I cameraxprobe: PROVIDER ok cameras=1 has_back=true
+1795328343820     95  D CameraOrientationUtil: getRelativeImageRotation: destRotationDegrees=0, sourceRotationDegrees=90, isOppositeFacing=true, result=90
+1795328343820     96  D CameraOrientationUtil: getRelativeImageRotation: destRotationDegrees=0, sourceRotationDegrees=90, isOppositeFacing=true, result=90
+1795328343820     97  D DynamicRangeResolver: Resolved dynamic range for use case androidx.camera.core.Preview-08fab84e-bdc9-4074-9fb1-7292102f9638 to no compatible HDR dynamic ranges.
+DynamicRange@54a685e{encoding=UNSPECIFIED, bitDepth=0}
+->
+DynamicRange@8f1d99{encoding=SDR, bitDepth=8}
+1795328343821     98  D CameraOrientationUtil: getRelativeImageRotation: destRotationDegrees=0, sourceRotationDegrees=90, isOppositeFacing=true, result=90
+1795328343821     99  D DeferrableSurface: Surface created[total_surfaces=1, used_surfaces=0](androidx.camera.core.processing.SurfaceEdge$SettableSurface@50ac6a}
+1795328343821    100  D DeferrableSurface: Surface created[total_surfaces=2, used_surfaces=0](androidx.camera.core.SurfaceRequest$2@7c52536}
+1795328343821    101  D DeferrableSurface: New surface in use[total_surfaces=2, used_surfaces=1](androidx.camera.core.SurfaceRequest$2@7c52536}
+1795328343821    102  D DeferrableSurface: use count+1, useCount=1 androidx.camera.core.SurfaceRequest$2@7c52536
+1795328343821    103  D CameraOrientationUtil: getRelativeImageRotation: destRotationDegrees=0, sourceRotationDegrees=90, isOppositeFacing=true, result=90
+1795328343822    104  D CompatibilityChangeReporter: Compat change id reported: 236825255; UID 10192; state: ENABLED
+1795328343822    105  D CameraOrientationUtil: getRelativeImageRotation: destRotationDegrees=0, sourceRotationDegrees=90, isOppositeFacing=true, result=90
+1795328343822    106  D CameraOrientationUtil: getRelativeImageRotation: destRotationDegrees=0, sourceRotationDegrees=90, isOppositeFacing=true, result=90
+1795328343822    107  D DeferrableSurface: Surface created[total_surfaces=3, used_surfaces=1](androidx.camera.core.impl.ImmediateSurface@311a4d3}
+1795328343822    108  D ImageCapture: createPipeline(cameraId: 0, streamSpec: StreamSpec{resolution=640x480, dynamicRange=DynamicRange@8f1d99{encoding=SDR, bitDepth=8}, expectedFrameRateRange=[0, 0], implementationOptions=androidx.camera.camera2.impl.Camera2ImplConfig@28fa50e})
+1795328343823    109  D DeferrableSurface: Surface created[total_surfaces=4, used_surfaces=1](androidx.camera.core.impl.ImmediateSurface@247bb2f}
+1795328343823    110  D Camera2CameraImpl: {Camera@9bd8103[id=0]} Use case androidx.camera.core.ImageCapture-d4a30839-9b9f-4fbd-8898-11c3a3823e6c41235271 ACTIVE
+
+1795328343823    111  D CameraOrientationUtil: getRelativeImageRotation: destRotationDegrees=0, sourceRotationDegrees=90, isOppositeFacing=true, result=90
+1795328343823    112  I cameraxprobe: BIND_PREVIEW ok impl=PERFORMANCE cam=90
+1795328343823    113  D UseCaseAttachState: Active and attached use case: [] for camera: 0
+1795328343823    114  D Camera2CameraImpl: {Camera@9bd8103[id=0]} Use case androidx.camera.core.Preview-08fab84e-bdc9-4074-9fb1-7292102f9638240542561 ACTIVE
+
+1795328343823    115  D UseCaseAttachState: Active and attached use case: [] for camera: 0
+1795328343823    116  D Camera2CameraImpl: {Camera@9bd8103[id=0]} Use case androidx.camera.core.ImageAnalysis-16102609-519a-4e24-bffc-ddf286f7b5cc185994886 ACTIVE
+
+1795328343823    117  D UseCaseAttachState: Active and attached use case: [] for camera: 0
+1795328343823    118  D Camera2CameraImpl: {Camera@9bd8103[id=0]} Use case androidx.camera.core.ImageCapture-d4a30839-9b9f-4fbd-8898-11c3a3823e6c41235271 ACTIVE
+
+1795328343823    119  D UseCaseAttachState: Active and attached use case: [] for camera: 0
+1795328343823    120  D UseCaseAttachState: Active and attached use case: [] for camera: 0
+1795328343824    121  D Camera2CameraImpl: {Camera@9bd8103[id=0]} Use cases [androidx.camera.core.Preview-08fab84e-bdc9-4074-9fb1-7292102f9638240542561, androidx.camera.core.ImageAnalysis-16102609-519a-4e24-bffc-ddf286f7b5cc185994886, androidx.camera.core.ImageCapture-d4a30839-9b9f-4fbd-8898-11c3a3823e6c41235271] now ATTACHED
+
+1795328343824    122  D UseCaseAttachState: All use case: [androidx.camera.core.ImageCapture-d4a30839-9b9f-4fbd-8898-11c3a3823e6c41235271, androidx.camera.core.Preview-08fab84e-bdc9-4074-9fb1-7292102f9638240542561, androidx.camera.core.ImageAnalysis-16102609-519a-4e24-bffc-ddf286f7b5cc185994886] for camera: 0
+1795328343824    123  D UseCaseAttachState: Active and attached use case: [androidx.camera.core.ImageCapture-d4a30839-9b9f-4fbd-8898-11c3a3823e6c41235271, androidx.camera.core.Preview-08fab84e-bdc9-4074-9fb1-7292102f9638240542561, androidx.camera.core.ImageAnalysis-16102609-519a-4e24-bffc-ddf286f7b5cc185994886] for camera: 0
+1795328343824    124  D Camera2CameraImpl: {Camera@9bd8103[id=0]} Resetting Capture Session
+
+1795328343824    125  D Camera2CameraImpl: {Camera@9bd8103[id=0]} Releasing session in state INITIALIZED
+
+1795328343824    126  D Camera2CameraImpl: {Camera@9bd8103[id=0]} Attempting to force open the camera.
+
+1795328343824    127  D CameraStateRegistry: tryOpenCamera(Camera@9bd8103[id=0]) [Available Cameras: 1, Already Open: false (Previous state: null)] --> SUCCESS
+1795328343824    128  D CameraStateRegistry: Recalculating open cameras:
+Camera                                       State                 
+-------------------------------------------------------------------
+Camera@9bd8103[id=0]                         OPENING               
+-------------------------------------------------------------------
+Open count: 1 (Max allowed: 1)
+1795328343824    129  D Camera2CameraImpl: {Camera@9bd8103[id=0]} Opening camera.
+
+1795328343824    130  D Camera2CameraImpl: {Camera@9bd8103[id=0]} Transitioning camera internal state: INITIALIZED --> OPENING
+
+1795328343824    131  D CameraStateMachine: New public camera state CameraState{type=OPENING, error=null} from OPENING and null
+1795328343824    132  D CameraStateMachine: Publishing new public camera state CameraState{type=OPENING, error=null}
+1795328343824    133  D UseCaseAttachState: All use case: [androidx.camera.core.ImageCapture-d4a30839-9b9f-4fbd-8898-11c3a3823e6c41235271, androidx.camera.core.Preview-08fab84e-bdc9-4074-9fb1-7292102f9638240542561, androidx.camera.core.ImageAnalysis-16102609-519a-4e24-bffc-ddf286f7b5cc185994886] for camera: 0
+1795328343824    134  V CameraManagerGlobal: Failed to register device state listener!
+1795328343824    135  V CameraManagerGlobal: Device state dependent characteristics updates will not befunctional!
+1795328343825    136  D Camera2CameraImpl: {Camera@9bd8103[id=0]} Use case androidx.camera.core.Preview-08fab84e-bdc9-4074-9fb1-7292102f9638240542561 ACTIVE
+
+1795328343825    137  D UseCaseAttachState: Active and attached use case: [androidx.camera.core.ImageCapture-d4a30839-9b9f-4fbd-8898-11c3a3823e6c41235271, androidx.camera.core.Preview-08fab84e-bdc9-4074-9fb1-7292102f9638240542561, androidx.camera.core.ImageAnalysis-16102609-519a-4e24-bffc-ddf286f7b5cc185994886] for camera: 0
+1795328343826    138  D Camera2CameraImpl: {Camera@9bd8103[id=0]} Use case androidx.camera.core.ImageAnalysis-16102609-519a-4e24-bffc-ddf286f7b5cc185994886 ACTIVE
+
+1795328343826    139  D UseCaseAttachState: Active and attached use case: [androidx.camera.core.ImageCapture-d4a30839-9b9f-4fbd-8898-11c3a3823e6c41235271, androidx.camera.core.Preview-08fab84e-bdc9-4074-9fb1-7292102f9638240542561, androidx.camera.core.ImageAnalysis-16102609-519a-4e24-bffc-ddf286f7b5cc185994886] for camera: 0
+1795328343826    140  D Camera2CameraImpl: {Camera@9bd8103[id=0]} Use case androidx.camera.core.ImageCapture-d4a30839-9b9f-4fbd-8898-11c3a3823e6c41235271 ACTIVE
+
+1795328343826    141  D UseCaseAttachState: Active and attached use case: [androidx.camera.core.ImageCapture-d4a30839-9b9f-4fbd-8898-11c3a3823e6c41235271, androidx.camera.core.Preview-08fab84e-bdc9-4074-9fb1-7292102f9638240542561, androidx.camera.core.ImageAnalysis-16102609-519a-4e24-bffc-ddf286f7b5cc185994886] for camera: 0
+1795328343826    142  D Camera2CameraImpl: {Camera@9bd8103[id=0]} CameraDevice.onOpened()
+
+1795328343826    143  D Camera2CameraImpl: {Camera@9bd8103[id=0]} Transitioning camera internal state: OPENING --> OPENED
+
+1795328343826    144  D CameraStateRegistry: Recalculating open cameras:
+Camera                                       State                 
+-------------------------------------------------------------------
+Camera@9bd8103[id=0]                         OPEN                  
+-------------------------------------------------------------------
+Open count: 1 (Max allowed: 1)
+1795328343826    145  D CameraStateMachine: New public camera state CameraState{type=OPEN, error=null} from OPEN and null
+1795328343826    146  D CameraStateMachine: Publishing new public camera state CameraState{type=OPEN, error=null}
+1795328343826    147  D UseCaseAttachState: All use case: [androidx.camera.core.ImageCapture-d4a30839-9b9f-4fbd-8898-11c3a3823e6c41235271, androidx.camera.core.Preview-08fab84e-bdc9-4074-9fb1-7292102f9638240542561, androidx.camera.core.ImageAnalysis-16102609-519a-4e24-bffc-ddf286f7b5cc185994886] for camera: 0
+1795328343827    148  D UseCaseAttachState: Active and attached use case: [androidx.camera.core.ImageCapture-d4a30839-9b9f-4fbd-8898-11c3a3823e6c41235271, androidx.camera.core.Preview-08fab84e-bdc9-4074-9fb1-7292102f9638240542561, androidx.camera.core.ImageAnalysis-16102609-519a-4e24-bffc-ddf286f7b5cc185994886] for camera: 0
+1795328343832    149  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795328343832    150  D PreviewView: Surface requested by Preview.
+1795328343833    151  D PreviewView: Preview transformation info updated. TransformationInfo{getCropRect=Rect(0, 0 - 640, 480), getRotationDegrees=90, getTargetRotation=-1, hasCameraTransform=true, getSensorToBufferTransform=Matrix{[1.0, 0.0, 0.0][0.0, 1.0, 0.0][0.0, 0.0, 1.0]}, getMirroring=false}
+1795328343833    152  D PreviewTransform: Transformation info set: TransformationInfo{getCropRect=Rect(0, 0 - 640, 480), getRotationDegrees=90, getTargetRotation=-1, hasCameraTransform=true, getSensorToBufferTransform=Matrix{[1.0, 0.0, 0.0][0.0, 1.0, 0.0][0.0, 0.0, 1.0]}, getMirroring=false} 640x480 false
+1795328343833    153  D CameraOrientationUtil: getRelativeImageRotation: destRotationDegrees=0, sourceRotationDegrees=90, isOppositeFacing=true, result=90
+1795328343847    154  D SurfaceViewImpl: Surface created.
+1795328343847    155  D SurfaceViewImpl: Surface changed. Size: 640x480
+1795328343850    156  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795328343851    157  D SurfaceViewImpl: Surface set on Preview.
+1795328343851    158  D SyncCaptureSessionBase: [androidx.camera.camera2.internal.SynchronizedCaptureSessionBaseImpl@4cb55e9] getSurface...done
+1795328343851    159  D CaptureSession: Opening capture session.
+1795328343852    160  D DeferrableSurface: use count+1, useCount=2 androidx.camera.core.SurfaceRequest$2@7c52536
+1795328343852    161  D DeferrableSurface: New surface in use[total_surfaces=4, used_surfaces=2](androidx.camera.core.impl.ImmediateSurface@247bb2f}
+1795328343852    162  D DeferrableSurface: use count+1, useCount=1 androidx.camera.core.impl.ImmediateSurface@247bb2f
+1795328343852    163  D DeferrableSurface: New surface in use[total_surfaces=4, used_surfaces=3](androidx.camera.core.impl.ImmediateSurface@311a4d3}
+1795328343852    164  D DeferrableSurface: use count+1, useCount=1 androidx.camera.core.impl.ImmediateSurface@311a4d3
+1795328343852    165  D CaptureSession: Attempting to send capture request onConfigured
+1795328343852    166  D CaptureSession: Issuing request for session.
+1795328343852    167  D Camera2CaptureRequestBuilder: createCaptureRequest
+1795328343924    168  D CaptureSession: CameraCaptureSession.onConfigured() mState=OPENED
+1795328343924    169  D CaptureSession: CameraCaptureSession.onReady() OPENED
+1795328343925    170  D StreamStateObserver: Update Preview stream state to STREAMING
+1795328343927    171  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795328343928    172  I cameraxprobe: PREVIEW_STATE state=STREAMING impl=PERFORMANCE
+1795328343928    173  W AcosPriority: setpriority(-8) clamped to 0 (host RLIMIT_NICE is below stock init.rc's 40; guest-only adapter, W21)
+1795328343929    174  I cameraxprobe: ANALYSIS frame=1 w=640 h=480 fmt=35 planes=3 rot=90 ts=1000000000 crc32=0xdead8870 white=(235,128,128) green=(145,54,34) red=(81,90,240) black=(16,128,128) tag=(160,0,0,90) ramp=(127,128,128)
+1795328343932    175  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795328343949    176  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795328343966    177  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795328344116    178  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795328344277    179  I cameraxprobe: ANALYSIS ok count=3 total=3 frames_inc=true ts_inc=true crcs=[0xdead8870, 0xdfefda95, 0xdc292dba] tags=[160, 161, 162]
+1795328344283    180  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795328344465    181  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795328344632    182  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795328348566    183  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795328348566    184  D ImageCapture: takePictureInternal
+1795328348566    185  D CameraOrientationUtil: getRelativeImageRotation: destRotationDegrees=0, sourceRotationDegrees=90, isOppositeFacing=true, result=90
+1795328348566    186  D TakePictureManager: Issue the next TakePictureRequest.
+1795328348567    187  D Camera2CameraImpl: {Camera@9bd8103[id=0]} Issue capture request
+
+1795328348567    188  D CaptureSession: Issuing capture request.
+1795328348567    189  D Camera2CaptureRequestBuilder: createCaptureRequest
+1795328348632    190  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795328348765    191  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795328348766    192  D TakePictureManager: Issue the next TakePictureRequest.
+1795328348766    193  D TakePictureManager: No new request.
+1795328348772    194  I cameraxprobe: CAPTURE image w=480 h=640 fmt=256 ts=2466666652 bytes=13897 soi=true bmp=640x480 white=(255,255,255) green=(0,255,1) red=(254,0,0) black=(0,0,0) max_err=1 tol4=true
+1795328348849    195  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795328349016    196  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795328349182    197  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795328349349    198  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795328349515    199  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795328350915    200  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795328350916    201  D DeferrableSurface: surface closed,  useCount=2 closed=true androidx.camera.core.SurfaceRequest$2@7c52536
+1795328350916    202  D DeferrableSurface: surface closed,  useCount=0 closed=true androidx.camera.core.processing.SurfaceEdge$SettableSurface@50ac6a
+1795328350916    203  D DeferrableSurface: Surface terminated[total_surfaces=3, used_surfaces=3](androidx.camera.core.processing.SurfaceEdge$SettableSurface@50ac6a}
+1795328350916    204  D DeferrableSurface: use count-1,  useCount=1 closed=true androidx.camera.core.SurfaceRequest$2@7c52536
+1795328350916    205  D DeferrableSurface: surface closed,  useCount=1 closed=true androidx.camera.core.impl.ImmediateSurface@311a4d3
+1795328350916    206  D ImageCapture: clearPipeline
+1795328350916    207  D DeferrableSurface: surface closed,  useCount=1 closed=true androidx.camera.core.impl.ImmediateSurface@247bb2f
+1795328350916    208  I cameraxprobe: UNBIND ok
+1795328350916    209  D Camera2CameraImpl: {Camera@9bd8103[id=0]} Use cases [androidx.camera.core.Preview-08fab84e-bdc9-4074-9fb1-7292102f9638240542561, androidx.camera.core.ImageAnalysis-16102609-519a-4e24-bffc-ddf286f7b5cc185994886, androidx.camera.core.ImageCapture-d4a30839-9b9f-4fbd-8898-11c3a3823e6c41235271] now DETACHED for camera
+
+1795328350916    210  D UseCaseAttachState: All use case: [] for camera: 0
+1795328350916    211  D Camera2CameraImpl: {Camera@9bd8103[id=0]} Resetting Capture Session
+
+1795328350983    212  D Camera2CameraImpl: {Camera@9bd8103[id=0]} Releasing session in state OPENED
+
+1795328350983    213  D UseCaseAttachState: Active and attached use case: [] for camera: 0
+1795328350983    214  D UseCaseAttachState: Active and attached use case: [] for camera: 0
+1795328350983    215  D Camera2CameraImpl: {Camera@9bd8103[id=0]} Closing camera.
+
+1795328350983    216  D Camera2CameraImpl: {Camera@9bd8103[id=0]} Transitioning camera internal state: OPENED --> CLOSING
+
+1795328350983    217  D CameraStateRegistry: Recalculating open cameras:
+Camera                                       State                 
+-------------------------------------------------------------------
+Camera@9bd8103[id=0]                         CLOSING               
+-------------------------------------------------------------------
+Open count: 1 (Max allowed: 1)
+1795328350983    218  D CameraStateMachine: New public camera state CameraState{type=CLOSING, error=null} from CLOSING and null
+1795328350983    219  D CameraStateMachine: Publishing new public camera state CameraState{type=CLOSING, error=null}
+1795328350983    220  D Camera2CameraImpl: {Camera@9bd8103[id=0]} Resetting Capture Session
+
+1795328350983    221  D Camera2CameraImpl: {Camera@9bd8103[id=0]} Releasing session in state CLOSING
+
+1795328350983    222  D CaptureSession: onSessionFinished()
+1795328350984    223  D UseCaseAttachState: Active and attached use case: [] for camera: 0
+1795328350984    224  D DeferrableSurface: use count-1,  useCount=0 closed=true androidx.camera.core.SurfaceRequest$2@7c52536
+1795328350984    225  D DeferrableSurface: Surface no longer in use[total_surfaces=3, used_surfaces=2](androidx.camera.core.SurfaceRequest$2@7c52536}
+1795328350984    226  D DeferrableSurface: Surface terminated[total_surfaces=2, used_surfaces=2](androidx.camera.core.SurfaceRequest$2@7c52536}
+1795328350984    227  D DeferrableSurface: use count-1,  useCount=0 closed=true androidx.camera.core.impl.ImmediateSurface@247bb2f
+1795328350984    228  D DeferrableSurface: Surface no longer in use[total_surfaces=2, used_surfaces=1](androidx.camera.core.impl.ImmediateSurface@247bb2f}
+1795328350984    229  D DeferrableSurface: Surface terminated[total_surfaces=1, used_surfaces=1](androidx.camera.core.impl.ImmediateSurface@247bb2f}
+1795328350984    230  D DeferrableSurface: use count-1,  useCount=0 closed=true androidx.camera.core.impl.ImmediateSurface@311a4d3
+1795328350984    231  D DeferrableSurface: Surface no longer in use[total_surfaces=1, used_surfaces=0](androidx.camera.core.impl.ImmediateSurface@311a4d3}
+1795328350984    232  D DeferrableSurface: Surface terminated[total_surfaces=0, used_surfaces=0](androidx.camera.core.impl.ImmediateSurface@311a4d3}
+1795328350984    233  D Camera2CameraImpl: {Camera@9bd8103[id=0]} CameraDevice.onClosed()
+
+1795328350984    234  D Camera2CameraImpl: {Camera@9bd8103[id=0]} Transitioning camera internal state: CLOSING --> INITIALIZED
+
+1795328350984    235  D CameraStateRegistry: Recalculating open cameras:
+Camera                                       State                 
+-------------------------------------------------------------------
+Camera@9bd8103[id=0]                         CLOSED                
+-------------------------------------------------------------------
+Open count: 0 (Max allowed: 1)
+1795328350984    236  D CameraStateMachine: New public camera state CameraState{type=CLOSED, error=null} from CLOSED and null
+1795328350984    237  D CameraStateMachine: Publishing new public camera state CameraState{type=CLOSED, error=null}
+1795328350999    238  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795328351000    239  D StreamStateObserver: Update Preview stream state to IDLE
+1795328351000    240  D SurfaceViewImpl: Safe to release surface.
+1795328351000    241  I cameraxprobe: PREVIEW_STATE state=IDLE impl=PERFORMANCE
+1795328351016    242  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795328351032    243  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795328351049    244  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795328351199    245  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795328351215    246  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795328351232    247  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795328351365    248  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795328351382    249  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795328351515    250  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795328351532    251  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795328351549    252  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795328351682    253  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795328351699    254  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
+1795328351715    255  E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not supported for a non-hardware accelerated Canvas. Skipping animation.
