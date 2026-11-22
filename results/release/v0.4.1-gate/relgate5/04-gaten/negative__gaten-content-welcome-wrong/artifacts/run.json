@@ -1,0 +1,7 @@
+{
+  "request_id": "req_42568_18ea648ff68e34b9",
+  "started_at": "2026-11-22T14:32:50.940Z",
+  "scenario": "scenarios/negative/gaten-content-welcome-wrong.yaml",
+  "apk": "",
+  "acos_version": "0.4.0"
+}

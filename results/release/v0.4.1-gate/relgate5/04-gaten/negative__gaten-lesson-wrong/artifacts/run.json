@@ -1,0 +1,7 @@
+{
+  "request_id": "req_4188c_18ea64885b2769cc",
+  "started_at": "2026-11-22T14:32:18.268Z",
+  "scenario": "scenarios/negative/gaten-lesson-wrong.yaml",
+  "apk": "",
+  "acos_version": "0.4.0"
+}

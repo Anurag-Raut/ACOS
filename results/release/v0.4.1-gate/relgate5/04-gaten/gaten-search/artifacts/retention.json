@@ -1,0 +1,71 @@
+{
+  "mode": "referenced",
+  "decision": "prune-unreferenced",
+  "reason": "passing run (mode `referenced`): declared evidence plus the first and last frame kept, intermediate frames and mirrored captures pruned",
+  "kept_files": 68,
+  "kept_bytes": 19468944,
+  "pruned_files": 15,
+  "pruned_bytes": 3214602,
+  "pruned": [
+    {
+      "path": "art-frames/live-frames/acos-c1-layer6-frame-408-g412-c3.png",
+      "bytes": 226943
+    },
+    {
+      "path": "art-frames/live-frames/acos-c1-layer6-frame-410-g414-c4.png",
+      "bytes": 171661
+    },
+    {
+      "path": "art-frames/live-frames/acos-c1-layer6-frame-412-g416-c5.png",
+      "bytes": 133345
+    },
+    {
+      "path": "art-frames/live-frames/acos-c1-layer6-frame-414-g418-c6.png",
+      "bytes": 176638
+    },
+    {
+      "path": "art-frames/live-frames/acos-c1-layer6-frame-422-g426-c7.png",
+      "bytes": 194342
+    },
+    {
+      "path": "art-frames/live-frames/acos-c1-layer6-frame-422-g426-c8.png",
+      "bytes": 194342
+    },
+    {
+      "path": "art-frames/live-frames/acos-c1-layer7-frame-119-g545-c15.png",
+      "bytes": 219567
+    },
+    {
+      "path": "art-frames/live-frames/acos-c1-layer7-frame-119-g545-c16.png",
+      "bytes": 219567
+    },
+    {
+      "path": "art-frames/live-frames/acos-c1-layer7-frame-119-g545-c17.png",
+      "bytes": 219567
+    },
+    {
+      "path": "art-frames/live-frames/acos-c1-layer7-frame-147-g573-c18.png",
+      "bytes": 293841
+    },
+    {
+      "path": "art-frames/live-frames/acos-c1-layer7-frame-147-g573-c19.png",
+      "bytes": 293841
+    },
+    {
+      "path": "art-frames/live-frames/acos-c1-layer7-frame-40-g466-c10.png",
+      "bytes": 153310
+    },
+    {
+      "path": "art-frames/live-frames/acos-c1-layer7-frame-42-g468-c11.png",
+      "bytes": 148402
+    },
+    {
+      "path": "art-frames/live-frames/acos-c1-layer7-frame-91-g517-c12.png",
+      "bytes": 284618
+    },
+    {
+      "path": "art-frames/live-frames/acos-c1-layer7-frame-91-g517-c13.png",
+      "bytes": 284618
+    }
+  ]
+}
