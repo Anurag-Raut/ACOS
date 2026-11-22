@@ -1,0 +1,17 @@
+build-negative-apps: [broken-wrong-text] compiling resources
+build-negative-apps: [broken-wrong-text] compiling java
+build-negative-apps: [broken-wrong-text] dexing
+build-negative-apps: [broken-wrong-text] aligning + signing
+build-negative-apps: [broken-wrong-text] -> /home/Qui/.t3/worktrees/acos/t3-8432ccd8-1d58d051095d020b/fixtures/build/apps/broken-wrong-text.apk (12756 bytes)
+build-negative-apps: [broken-crash] compiling resources
+build-negative-apps: [broken-crash] compiling java
+build-negative-apps: [broken-crash] dexing
+build-negative-apps: [broken-crash] aligning + signing
+build-negative-apps: [broken-crash] -> /home/Qui/.t3/worktrees/acos/t3-8432ccd8-1d58d051095d020b/fixtures/build/apps/broken-crash.apk (12756 bytes)
+build-negative-apps: [broken-missing-symbol] compiling resources
+build-negative-apps: [broken-missing-symbol] compiling java
+build-negative-apps: [broken-missing-symbol] dexing
+build-negative-apps: [broken-missing-symbol] aligning + signing
+build-negative-apps: [broken-missing-symbol] -> /home/Qui/.t3/worktrees/acos/t3-8432ccd8-1d58d051095d020b/fixtures/build/apps/broken-missing-symbol.apk (16932 bytes)
+build-negative-apps: done -> /home/Qui/.t3/worktrees/acos/t3-8432ccd8-1d58d051095d020b/fixtures/build/apps/broken-*.apk
+BUILD_NEGATIVE_RC=0

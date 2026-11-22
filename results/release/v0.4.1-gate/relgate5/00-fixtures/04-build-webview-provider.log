@@ -1,0 +1,24 @@
+[build-webview-provider] generating hidden-API stubs + provider surface
+[build-webview-provider] compiling hidden-API stubs (compile-time only, never dexed)
+Note: /home/Qui/.t3/worktrees/acos/t3-8432ccd8-1d58d051095d020b/fixtures/apps/webview-provider/hidden-stubs/WebViewFactoryProvider.java uses or overrides a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+[build-webview-provider] linking manifest
+[build-webview-provider] compiling java (stubs first: they own the hidden names)
+Note: Some input files use or override a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+Note: /home/Qui/.t3/worktrees/acos/t3-8432ccd8-1d58d051095d020b/fixtures/apps/webview-provider/src/com/android/webview/chromium/WebViewChromium.java uses unchecked or unsafe operations.
+Note: Recompile with -Xlint:unchecked for details.
+[build-webview-provider] dexing (provider classes only, never the stubs)
+[build-webview-provider] aligning
+[build-webview-provider] signing
+[build-webview-provider] verifying
+    package: name='com.android.webview' versionCode='1' versionName='1.0' platformBuildVersionName='14' platformBuildVersionCode='34' compileSdkVersion='34' compileSdkVersionCodename='14'
+    minSdkVersion:'26'
+    targetSdkVersion:'34'
+    uses-permission: name='android.permission.INTERNET'
+    application: label='Android System WebView' icon=''
+    feature-group: label=''
+      uses-feature: name='android.hardware.faketouch'
+      uses-implied-feature: name='android.hardware.faketouch' reason='default feature for all apps'
+[build-webview-provider] -> /home/Qui/.t3/worktrees/acos/t3-8432ccd8-1d58d051095d020b/fixtures/build/apps/webview-provider.apk (49555 bytes)
+BUILD_WV_RC=0

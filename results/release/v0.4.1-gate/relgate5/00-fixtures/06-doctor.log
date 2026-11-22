@@ -1,0 +1,25 @@
+[ok  ] android_sdk        /home/Qui/Android/Sdk
+[ok  ] build_tools        /home/Qui/Android/Sdk/build-tools/35.0.0
+[ok  ] aapt2              /home/Qui/Android/Sdk/build-tools/35.0.0/aapt2
+[ok  ] d8                 /home/Qui/Android/Sdk/build-tools/35.0.0/d8
+[ok  ] zipalign           /home/Qui/Android/Sdk/build-tools/35.0.0/zipalign
+[ok  ] apksigner          /home/Qui/Android/Sdk/build-tools/35.0.0/apksigner
+[ok  ] android_jar        /home/Qui/Android/Sdk/platforms/android-34/android.jar
+[ok  ] java               openjdk version "17.0.21.0.2" 2026-10-22
+[ok  ] javac              javac 17.0.21.0.2
+[ok  ] keytool            /usr/bin/keytool
+[ok  ] ndk_clang          /home/Qui/Android/Sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/linux-x86_64/bin
+[ok  ] bwrap              /usr/bin/bwrap
+[ok  ] systemd-run        /usr/bin/systemd-run
+[ok  ] pasta              2026_10_02.cba3570 (/home/Qui/.t3/worktrees/acos/t3-8432ccd8-1d58d051095d020b/libexec/pasta [runtime_root])
+[ok  ] metro              node v24.19.0 (/home/Qui/.nvm/versions/node/v24.19.0/bin/node), node_modules /home/Qui/.t3/worktrees/acos/t3-8432ccd8-1d58d051095d020b/.cache/rn-0.81.4/jsproject/node_modules
+[ok  ] workspace          /home/Qui/.t3/worktrees/acos/t3-8432ccd8-1d58d051095d020b
+[ok  ] apk_append         /home/Qui/.t3/worktrees/acos/t3-8432ccd8-1d58d051095d020b/tools/apk_append.py
+[ok  ] debug_keystore     /home/Qui/.t3/worktrees/acos/t3-8432ccd8-1d58d051095d020b/fixtures/build/apps/debug.keystore
+[ok  ] boot_classpath     /home/Qui/.t3/worktrees/acos/t3-8432ccd8-1d58d051095d020b/.cache/boot/android-34
+[ok  ] gles               angle-swiftshader (default; installed at /home/Qui/.t3/worktrees/acos/t3-8432ccd8-1d58d051095d020b/.cache/art/sysroot/gles/angle-swiftshader)
+[ok  ] session_daemon     no daemon running (/tmp/acos-1000/session.sock absent); cli 36859df75342+dirty.54343f3c.8f760cef
+[ok  ] host_memory        14% used (52768 MiB available of 61908 MiB)
+
+acos doctor: healthy (0 failure(s))
+DOCTOR_RC=0
