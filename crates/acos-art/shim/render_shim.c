@@ -514,9 +514,17 @@ JNIEXPORT jint JNICALL Java_dev_acos_art_RenderNat_cameraSinkRegister(
     int w = g_cam_api.getWidth ? g_cam_api.getWidth(anw) : (int)width;
     int h = g_cam_api.getHeight ? g_cam_api.getHeight(anw) : (int)height;
     int fmt = g_cam_api.getFormat ? g_cam_api.getFormat(anw) : (int)ACOS_FMT_YUV_420_888;
-    /* HAL_PIXEL_FORMAT_BLOB (0x21) uses (maxJpegSize, 1) on the BufferQueue;
-     * never overwrite it with (width, height), or ImageReader.getLockedImageInfo asserts height == 1. */
-    if (fmt != (int)ACOS_FMT_BLOB && width > 0 && height > 0 && (w != width || h != height) && g_cam_api.setDims) {
+    /* HAL_PIXEL_FORMAT_BLOB (0x21) buffers MUST have height == 1 on BufferQueue
+     * (ImageReader.getLockedImageInfo asserts buffer->height == 1), with width = maxBlobBytes. */
+    if (fmt == (int)ACOS_FMT_BLOB) {
+        int32_t max_blob = (width > 0 && height > 0) ? (width * height * 2) : (256 * 1024);
+        if (max_blob < 262144) max_blob = 262144;
+        if (g_cam_api.setDims) {
+            (void)g_cam_api.setDims(anw, max_blob, 1);
+            w = max_blob;
+            h = 1;
+        }
+    } else if (width > 0 && height > 0 && (w != width || h != height) && g_cam_api.setDims) {
         (void)g_cam_api.setDims(anw, width, height);
         w = width;
         h = height;

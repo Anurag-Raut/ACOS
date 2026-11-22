@@ -3,6 +3,9 @@ package dev.acos.fixtures.cameraprobe;
 import android.app.Activity;
 import android.content.Context;
 import android.content.pm.PackageManager;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+import android.graphics.Color;
 import android.graphics.ImageFormat;
 import android.graphics.Rect;
 import android.hardware.camera2.CameraCaptureSession;
@@ -61,6 +64,7 @@ public final class MainActivity extends Activity {
     private TextView status;
     private CameraManager cameraManager;
     private int captureSeq = 0;
+    private int jpegSeq = 0;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -82,6 +86,7 @@ public final class MainActivity extends Activity {
         root.addView(button("Unknown", v -> queryUnknown()));
         root.addView(button("Open", v -> openCamera()));
         root.addView(button("Capture", v -> runSingleCapture()));
+        root.addView(button("Capture JPEG", v -> runJpegCapture()));
         root.addView(button("Repeat", v -> runRepeatingCapture()));
 
         status = new TextView(this);
@@ -509,6 +514,193 @@ public final class MainActivity extends Activity {
     }
 
     @SuppressWarnings("deprecation")
+
+    private static String formatRgb(int px) {
+        return "(" + Color.red(px) + "," + Color.green(px) + "," + Color.blue(px) + ")";
+    }
+
+    private static int channelMaxDiff(int px, int er, int eg, int eb) {
+        int dr = Math.abs(Color.red(px) - er);
+        int dg = Math.abs(Color.green(px) - eg);
+        int db = Math.abs(Color.blue(px) - eb);
+        return Math.max(dr, Math.max(dg, db));
+    }
+
+    @SuppressWarnings("deprecation")
+    private void runJpegCapture() {
+        final HandlerThread bgThread = new HandlerThread("cameraprobe-jpeg");
+        bgThread.start();
+        final Handler bgHandler = new Handler(bgThread.getLooper());
+        final ImageReader reader = ImageReader.newInstance(
+                CAPTURE_WIDTH, CAPTURE_HEIGHT, ImageFormat.JPEG, 2);
+
+        final AtomicBoolean gotImage = new AtomicBoolean(false);
+        final AtomicBoolean gotCompleted = new AtomicBoolean(false);
+        final AtomicBoolean closing = new AtomicBoolean(false);
+        final CameraDevice[] deviceRef = new CameraDevice[1];
+        final CameraCaptureSession[] sessionRef = new CameraCaptureSession[1];
+
+        final Runnable maybeClose = () -> {
+            if (gotImage.get() && gotCompleted.get() && closing.compareAndSet(false, true)) {
+                CameraCaptureSession s = sessionRef[0];
+                if (s != null) {
+                    try {
+                        s.close();
+                    } catch (Throwable ignored) {
+                    }
+                }
+                CameraDevice d = deviceRef[0];
+                if (d != null) {
+                    d.close();
+                }
+            }
+        };
+
+        reader.setOnImageAvailableListener(r -> {
+            Image img = null;
+            try {
+                img = r.acquireNextImage();
+                if (img == null) {
+                    return;
+                }
+                int w = img.getWidth();
+                int h = img.getHeight();
+                int fmt = img.getFormat();
+                long ts = img.getTimestamp();
+                Image.Plane[] planes = img.getPlanes();
+                ByteBuffer buf = planes[0].getBuffer();
+                byte[] jpegBytes = new byte[buf.remaining()];
+                buf.get(jpegBytes);
+                boolean soi = jpegBytes.length >= 2
+                        && (jpegBytes[0] & 0xFF) == 0xFF
+                        && (jpegBytes[1] & 0xFF) == 0xD8;
+                Bitmap bmp = BitmapFactory.decodeByteArray(jpegBytes, 0, jpegBytes.length);
+                if (bmp == null) {
+                    StringBuilder hx = new StringBuilder(); for (int i = 0; i < Math.min(16, jpegBytes.length); i++) hx.append(String.format(Locale.US, "%02x", jpegBytes[i] & 0xFF)); log("JPEG decode_error bytes=" + jpegBytes.length + " soi=" + soi + " head=" + hx);
+                } else {
+                    int bw = bmp.getWidth();
+                    int bh = bmp.getHeight();
+                    int pWhite = bmp.getPixel(40, 100);
+                    int pGreen = bmp.getPixel(280, 100);
+                    int pRed = bmp.getPixel(440, 100);
+                    int pBlack = bmp.getPixel(600, 100);
+                    int err = 0;
+                    err = Math.max(err, channelMaxDiff(pWhite, 255, 255, 255));
+                    err = Math.max(err, channelMaxDiff(pGreen, 0, 255, 0));
+                    err = Math.max(err, channelMaxDiff(pRed, 255, 0, 0));
+                    err = Math.max(err, channelMaxDiff(pBlack, 0, 0, 0));
+                    log(String.format(
+                            Locale.US,
+                            "JPEG image w=%d h=%d fmt=%d ts=%d bytes=%d soi=%s bmp=%dx%d white=%s green=%s red=%s black=%s max_err=%d tol4=%s",
+                            w, h, fmt, ts, jpegBytes.length, soi, bw, bh,
+                            formatRgb(pWhite), formatRgb(pGreen), formatRgb(pRed), formatRgb(pBlack),
+                            err, (err <= 4)));
+                    bmp.recycle();
+                }
+                gotImage.set(true);
+                maybeClose.run();
+            } catch (Throwable t) {
+                log("JPEG image_error=" + t.getClass().getSimpleName() + ": " + t.getMessage());
+            } finally {
+                if (img != null) {
+                    img.close();
+                }
+            }
+        }, bgHandler);
+
+        try {
+            cameraManager.openCamera("0", new CameraDevice.StateCallback() {
+                @Override
+                public void onOpened(CameraDevice camera) {
+                    deviceRef[0] = camera;
+                    log("JPEG opened id=" + camera.getId());
+                    try {
+                        camera.createCaptureSession(
+                                Collections.singletonList(reader.getSurface()),
+                                new CameraCaptureSession.StateCallback() {
+                                    @Override
+                                    public void onConfigured(CameraCaptureSession session) {
+                                        sessionRef[0] = session;
+                                        try {
+                                            CaptureRequest.Builder req = camera.createCaptureRequest(
+                                                    CameraDevice.TEMPLATE_STILL_CAPTURE);
+                                            req.addTarget(reader.getSurface());
+                                            session.capture(
+                                                    req.build(),
+                                                    new CameraCaptureSession.CaptureCallback() {
+                                                        @Override
+                                                        public void onCaptureCompleted(
+                                                                CameraCaptureSession s,
+                                                                CaptureRequest request,
+                                                                TotalCaptureResult result) {
+                                                            Long ts = result.get(
+                                                                    TotalCaptureResult.SENSOR_TIMESTAMP);
+                                                            log("JPEG completed frame="
+                                                                    + result.getFrameNumber()
+                                                                    + " ts=" + ts);
+                                                            gotCompleted.set(true);
+                                                            maybeClose.run();
+                                                        }
+
+                                                        @Override
+                                                        public void onCaptureFailed(
+                                                                CameraCaptureSession s,
+                                                                CaptureRequest request,
+                                                                CaptureFailure failure) {
+                                                            log("JPEG failed reason="
+                                                                    + failure.getReason());
+                                                            camera.close();
+                                                        }
+                                                    },
+                                                    bgHandler);
+                                        } catch (Throwable t) {
+                                            log("JPEG submit_error="
+                                                    + t.getClass().getSimpleName() + ": "
+                                                    + t.getMessage());
+                                            camera.close();
+                                        }
+                                    }
+
+                                    @Override
+                                    public void onConfigureFailed(CameraCaptureSession session) {
+                                        log("JPEG configure_failed");
+                                        camera.close();
+                                    }
+                                },
+                                bgHandler);
+                    } catch (Throwable t) {
+                        log("JPEG session_error=" + t.getClass().getSimpleName() + ": " + t.getMessage());
+                        camera.close();
+                    }
+                }
+
+                @Override
+                public void onClosed(CameraDevice camera) {
+                    reader.close();
+                    bgThread.quitSafely();
+                    jpegSeq++;
+                    log("JPEG closed id=" + camera.getId() + " seq=" + jpegSeq);
+                }
+
+                @Override
+                public void onDisconnected(CameraDevice camera) {
+                    log("JPEG disconnected");
+                    camera.close();
+                }
+
+                @Override
+                public void onError(CameraDevice camera, int error) {
+                    log("JPEG device_error=" + error);
+                    camera.close();
+                }
+            }, bgHandler);
+        } catch (Throwable t) {
+            reader.close();
+            bgThread.quitSafely();
+            log("JPEG error=" + t.getClass().getSimpleName() + ": " + t.getMessage());
+        }
+    }
+
     private void runRepeatingCapture() {
         final HandlerThread bgThread = new HandlerThread("cameraprobe-repeat");
         bgThread.start();

@@ -283,21 +283,15 @@ pub const TEST_PATTERN_BARS: [(u8, u8, u8); 8] = [
 ///
 /// Must match `render_shim.c::fill_yuv420_colorbars` and `camera-probe`'s
 /// `java.util.zip.CRC32` readout bit-for-bit.
+/// Generate exact planar `I420` (`YUV_420_888`) bytes for `ACOS_PATTERN_COLORBARS_V1`
+/// (exact mirror of `render_shim.c::fill_yuv420_colorbars`).
 #[must_use]
-pub fn test_pattern_yuv420_crc32(width: u32, height: u32, frame_number: u64) -> u32 {
-    fn crc_update(mut crc: u32, byte: u8) -> u32 {
-        crc ^= u32::from(byte);
-        for _ in 0..8 {
-            if (crc & 1) != 0 {
-                crc = (crc >> 1) ^ 0xEDB8_8320;
-            } else {
-                crc >>= 1;
-            }
-        }
-        crc
-    }
-
-    let mut crc = 0xFFFF_FFFFu32;
+pub fn test_pattern_yuv420_bytes(width: u32, height: u32, frame_number: u64) -> Vec<u8> {
+    let cw = width.div_ceil(2);
+    let ch = height.div_ceil(2);
+    let y_len = (width as usize) * (height as usize);
+    let c_len = (cw as usize) * (ch as usize);
+    let mut out = vec![0u8; y_len + 2 * c_len];
     let ramp_y0 = (height * 3) / 4;
     for y in 0..height {
         for x in 0..width {
@@ -318,35 +312,31 @@ pub fn test_pattern_yuv420_crc32(width: u32, height: u32, frame_number: u64) -> 
                 let bar = ((x * 8) / width).min(7) as usize;
                 TEST_PATTERN_BARS[bar].0
             };
-            crc = crc_update(crc, val);
+            out[(y * width + x) as usize] = val;
         }
     }
-    let cw = width.div_ceil(2);
-    let ch = height.div_ceil(2);
+    let u_off = y_len;
+    let v_off = y_len + c_len;
     let ramp_cy0 = ramp_y0 / 2;
     for cy in 0..ch {
         for cx in 0..cw {
-            let u = if cy >= ramp_cy0 {
-                128
+            let (u, v) = if cy >= ramp_cy0 {
+                (128, 128)
             } else {
                 let bar = (((cx * 2) * 8) / width).min(7) as usize;
-                TEST_PATTERN_BARS[bar].1
+                (TEST_PATTERN_BARS[bar].1, TEST_PATTERN_BARS[bar].2)
             };
-            crc = crc_update(crc, u);
+            let idx = (cy * cw + cx) as usize;
+            out[u_off + idx] = u;
+            out[v_off + idx] = v;
         }
     }
-    for cy in 0..ch {
-        for cx in 0..cw {
-            let v = if cy >= ramp_cy0 {
-                128
-            } else {
-                let bar = (((cx * 2) * 8) / width).min(7) as usize;
-                TEST_PATTERN_BARS[bar].2
-            };
-            crc = crc_update(crc, v);
-        }
-    }
-    !crc
+    out
+}
+
+#[must_use]
+pub fn test_pattern_yuv420_crc32(width: u32, height: u32, frame_number: u64) -> u32 {
+    ieee_crc32(&test_pattern_yuv420_bytes(width, height, frame_number))
 }
 
 /// IEEE CRC32 over an arbitrary byte slice.
@@ -785,12 +775,13 @@ impl CameraState {
         if let Some(fd) = self.frame_memfds.get(&key) {
             return Ok((Arc::clone(fd), pattern_id));
         }
-        let owned_rgba: Cow<'_, RgbaImage> = match &self.active_frame {
-            ActiveFrame::TestPattern => {
-                Cow::Owned(test_pattern_rgba(width, height, frame_number as u64))
-            }
+        let (owned_rgba, yuv): (Cow<'_, RgbaImage>, Vec<u8>) = match &self.active_frame {
+            ActiveFrame::TestPattern => (
+                Cow::Owned(test_pattern_rgba(width, height, frame_number as u64)),
+                test_pattern_yuv420_bytes(width, height, frame_number as u64),
+            ),
             ActiveFrame::Image { rgba, .. } => {
-                if rgba.dimensions() == (width, height) {
+                let r = if rgba.dimensions() == (width, height) {
                     Cow::Borrowed(rgba.as_ref())
                 } else {
                     Cow::Owned(image::imageops::resize(
@@ -799,10 +790,11 @@ impl CameraState {
                         height,
                         FilterType::Triangle,
                     ))
-                }
+                };
+                let y = rgba_to_yuv420_i420(&r);
+                (r, y)
             }
         };
-        let yuv = rgba_to_yuv420_i420(&owned_rgba);
         let crc32_yuv = ieee_crc32(&yuv);
         let jpeg = encode_jpeg_from_rgba(&owned_rgba, 95)?;
         let memfd = Arc::new(build_frame_blob_memfd(&owned_rgba, &yuv, &jpeg, crc32_yuv)?);
@@ -1438,22 +1430,17 @@ impl CameraDeviceUser {
         stream_id: i32,
         width: i32,
         height: i32,
-        is_blob: bool,
+        _is_blob: bool,
         frame_number: i64,
         timestamp_ns: i64,
     ) {
         let Some(sink) = self.frame_sink() else {
             return;
         };
-        let maybe_fd = {
-            let mut st = self.state();
-            match &st.active_frame {
-                ActiveFrame::TestPattern if !is_blob => None,
-                _ => st
-                    .get_or_build_memfd(width.max(16) as u32, height.max(16) as u32, frame_number)
-                    .ok(),
-            }
-        };
+        let maybe_fd = self
+            .state()
+            .get_or_build_memfd(width.max(16) as u32, height.max(16) as u32, frame_number)
+            .ok();
         if let Some((memfd, pattern_id)) = maybe_fd {
             let mut data = Parcel::new();
             let _ = data.write_interface_token(FRAME_SINK_DESCRIPTOR);

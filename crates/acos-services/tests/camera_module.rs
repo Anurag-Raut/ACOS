@@ -1183,7 +1183,7 @@ fn slice2_full_capture_and_repeating_lifecycle_delivers_sink_frames_and_validate
     let d = host.take_deliveries();
     assert_eq!(d.len(), 5, "single capture emits 5 oneway deliveries");
     assert_eq!(d[0].target, sink_binder);
-    assert_eq!(d[0].code, sink_code::DELIVER_FRAME);
+    assert_eq!(d[0].code, sink_code::DELIVER_FRAME_FD);
     let mut dp = d[0].data.clone();
     dp.set_data_position(0);
     dp.enforce_interface(FRAME_SINK_DESCRIPTOR).expect("iface");
@@ -1193,6 +1193,28 @@ fn slice2_full_capture_and_repeating_lifecycle_delivers_sink_frames_and_validate
     assert_eq!(dp.read_int64().unwrap(), 0); // frame 0
     assert_eq!(dp.read_int64().unwrap(), INITIAL_TIMESTAMP_NS);
     assert_eq!(dp.read_int32().unwrap(), 1); // ACOS_PATTERN_COLORBARS_V1
+    let raw_fd = dp.read_file_descriptor().unwrap().expect("memfd for frame 0");
+    {
+        use std::io::{Read, Seek, SeekFrom};
+        use std::os::fd::FromRawFd;
+        use acos_services::modules::camera::{ACOS_FRAME_BLOB_MAGIC, ACOS_FRAME_BLOB_VERSION};
+        let mut f = unsafe { std::fs::File::from_raw_fd(raw_fd) };
+        f.seek(SeekFrom::Start(0)).unwrap();
+        let mut hdr = [0u8; 48];
+        f.read_exact(&mut hdr).expect("read header");
+        assert_eq!(u32::from_le_bytes(hdr[0..4].try_into().unwrap()), ACOS_FRAME_BLOB_MAGIC);
+        assert_eq!(u32::from_le_bytes(hdr[4..8].try_into().unwrap()), ACOS_FRAME_BLOB_VERSION);
+        let jpeg_off = u32::from_le_bytes(hdr[36..40].try_into().unwrap());
+        let jpeg_size = u32::from_le_bytes(hdr[40..44].try_into().unwrap());
+        let crc = u32::from_le_bytes(hdr[44..48].try_into().unwrap());
+        assert_eq!(crc, test_pattern_yuv420_crc32(640, 480, 0));
+        assert!(jpeg_size > 100);
+        f.seek(SeekFrom::Start(u64::from(jpeg_off))).unwrap();
+        let mut soi = [0u8; 2];
+        f.read_exact(&mut soi).unwrap();
+        assert_eq!(soi, [0xFF, 0xD8], "frame memfd JPEG SOI");
+        std::mem::forget(f);
+    }
 
     // onCaptureStarted
     assert_eq!(d[1].target, cb_binder);
