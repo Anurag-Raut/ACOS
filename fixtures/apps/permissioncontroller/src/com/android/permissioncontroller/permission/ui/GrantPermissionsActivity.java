@@ -87,6 +87,11 @@ public class GrantPermissionsActivity extends Activity {
         // controller grants and finishes without drawing anything.
         if (!hasOpenQuestion()) {
             Log.i(TAG, "nothing to ask, returning results " + describe(auto));
+            // CR1FIX2 #3: a splash/trampoline does a little work between
+            // `super.onCreate()` and `finish()`. Keep that window real (tens of
+            // ms) so a launch watcher that selects the Activity as soon as
+            // `super.onCreate()` set `mCalled` is exercised, not just lucky.
+            android.os.SystemClock.sleep(40);
             answer(auto, false);
             return;
         }

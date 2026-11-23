@@ -40,56 +40,61 @@ fn host_scheduled_finish_in_oncreate_reports_launch_not_timeout() {
         "perm-probe.apk and permissioncontroller.apk must be built"
     );
 
-    let artifacts = root
-        .join(".cache")
-        .join(format!("cr1fix-11-test-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&artifacts);
+    // The controller does a little work between `super.onCreate()` and
+    // `finish()` (fixture sleep), so the host-scheduled watcher can select the
+    // Activity before it has finished. Launch repeatedly: any one launch that
+    // ends in a timeout or never reports the final outcome fails the test.
+    const LAUNCHES: usize = 10;
+    for i in 0..LAUNCHES {
+        let artifacts = root
+            .join(".cache")
+            .join(format!("cr1fix-11-test-{}-{i}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&artifacts);
 
-    let out = Command::new(acos_bin())
-        .current_dir(&root)
-        .env("ACOS_ART_BIN", art_bin())
-        .env("ACOSLAUNCH_RESUME_MS", "1000")
-        .args([
-            "verify",
-            "scenarios/sysui1-permission-pregranted.yaml",
-            "--engine",
-            "art",
-            "--keep-artifacts",
-            "all",
-            "--artifacts",
-        ])
-        .arg(&artifacts)
-        .args(["--overwrite", "--json"])
-        .output()
-        .expect("run acos verify");
+        let out = Command::new(acos_bin())
+            .current_dir(&root)
+            .env("ACOS_ART_BIN", art_bin())
+            .env("ACOSLAUNCH_RESUME_MS", "1000")
+            .args([
+                "verify",
+                "scenarios/sysui1-permission-pregranted.yaml",
+                "--engine",
+                "art",
+                "--keep-artifacts",
+                "all",
+                "--artifacts",
+            ])
+            .arg(&artifacts)
+            .args(["--overwrite", "--json"])
+            .output()
+            .expect("run acos verify");
 
-    let stdout = String::from_utf8_lossy(&out.stdout);
-    let stderr = String::from_utf8_lossy(&out.stderr);
-    assert!(
-        out.status.success(),
-        "sysui1-permission-pregranted failed: rc={:?}\nstdout={stdout}\nstderr={stderr}",
-        out.status.code()
-    );
+        let stdout = String::from_utf8_lossy(&out.stdout);
+        let stderr = String::from_utf8_lossy(&out.stderr);
+        assert!(
+            out.status.success(),
+            "launch {i}: sysui1-permission-pregranted failed: rc={:?}\nstdout={stdout}\nstderr={stderr}",
+            out.status.code()
+        );
 
-    let proc1_stdout = artifacts.join("art-frames/process-1/stdout.log");
-    let log = std::fs::read_to_string(&proc1_stdout)
-        .unwrap_or_else(|e| panic!("read {}: {e}", proc1_stdout.display()));
+        let proc1_stdout = artifacts.join("art-frames/process-1/stdout.log");
+        let log = std::fs::read_to_string(&proc1_stdout)
+            .unwrap_or_else(|e| panic!("read {}: {e}", proc1_stdout.display()));
 
-    let _ = std::fs::remove_dir_all(&artifacts);
+        let _ = std::fs::remove_dir_all(&artifacts);
 
-    assert!(
-        !log.contains("HOST_TRANSACTION_TIMEOUT") && !log.contains("host-transaction-timeout"),
-        "secondary process hit HOST_TRANSACTION_TIMEOUT:\n{log}"
-    );
-    // The launch must have been OBSERVED. Which marker says so depends on which
-    // side of `finish()` the watcher's poll lands on: `finish_during_create=true`
-    // when the activity had already finished, `host-transaction-resumed` when it
-    // had not yet (the deferred teardown then runs after the launch is observed).
-    // Both are a successful launch; only the timeout above is the bug.
-    assert!(
-        (log.contains("ACOSLAUNCH MARK activity-resumed")
-            && log.contains("finish_during_create=true"))
-            || log.contains("ACOSLAUNCH MARK host-transaction-resumed"),
-        "secondary process must report the launch as observed:\n{log}"
-    );
+        assert!(
+            !log.contains("HOST_TRANSACTION_TIMEOUT")
+                && !log.contains("host-transaction-timeout")
+                && !log.contains("watchdog: activity not resumed"),
+            "launch {i}: secondary process hit a launch timeout:\n{log}"
+        );
+        // The FINAL successful outcome, not the intermediate
+        // `host-transaction-resumed` marker.
+        assert!(
+            log.contains("ACOSLAUNCH MARK activity-resumed")
+                && log.contains("finish_during_create=true"),
+            "launch {i}: secondary process must report finish_during_create=true:\n{log}"
+        );
+    }
 }
