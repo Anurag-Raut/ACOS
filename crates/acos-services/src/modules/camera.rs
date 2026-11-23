@@ -283,6 +283,67 @@ pub const TEST_PATTERN_BARS: [(u8, u8, u8); 8] = [
 ///
 /// Must match `render_shim.c::fill_yuv420_colorbars` and `camera-probe`'s
 /// `java.util.zip.CRC32` readout bit-for-bit.
+/// Width/height of the scripted-profile test frame (`ACOS_TEST_FRAME_QUADRANTS_V1`).
+pub const TEST_FRAME_SIZE: (u32, u32) = (640, 480);
+
+/// The scripted-profile test frame `ACOS_TEST_FRAME_QUADRANTS_V1`, generated instead of
+/// committed: 640x480 RGB, quadrants red (top-left), green (top-right), blue
+/// (bottom-left), yellow (bottom-right), and a white box over x 240..=399, y 180..=299.
+/// `camera-scripted` scenarios and `camera_module` tests read it as PNG and JPEG.
+#[must_use]
+pub fn test_frame_rgb() -> image::RgbImage {
+    let (w, h) = TEST_FRAME_SIZE;
+    image::RgbImage::from_fn(w, h, |x, y| {
+        if (240..=399).contains(&x) && (180..=299).contains(&y) {
+            return image::Rgb([255, 255, 255]);
+        }
+        match (x >= w / 2, y >= h / 2) {
+            (false, false) => image::Rgb([255, 0, 0]),
+            (true, false) => image::Rgb([0, 255, 0]),
+            (false, true) => image::Rgb([0, 0, 255]),
+            (true, true) => image::Rgb([255, 255, 0]),
+        }
+    })
+}
+
+/// [`test_frame_rgb`] as PNG bytes (lossless).
+pub fn test_frame_png_bytes() -> std::result::Result<Vec<u8>, image::ImageError> {
+    let img = test_frame_rgb();
+    let mut out = Vec::new();
+    image::codecs::png::PngEncoder::new(&mut out).write_image(
+        img.as_raw(),
+        img.width(),
+        img.height(),
+        image::ExtendedColorType::Rgb8,
+    )?;
+    Ok(out)
+}
+
+/// [`test_frame_rgb`] as baseline JPEG bytes, quality 95, from the `image` crate pinned in
+/// `Cargo.lock` (so the bytes, and the decoded `crc32_yuv`, are reproducible).
+pub fn test_frame_jpeg_bytes() -> std::result::Result<Vec<u8>, image::ImageError> {
+    let img = test_frame_rgb();
+    let mut out = Vec::new();
+    JpegEncoder::new_with_quality(&mut out, 95).write_image(
+        img.as_raw(),
+        img.width(),
+        img.height(),
+        image::ExtendedColorType::Rgb8,
+    )?;
+    Ok(out)
+}
+
+/// Write `test-frame.png` and `test-frame.jpg` into `dir` (created if missing). Used by
+/// `tools/build/build-apps.sh` (into `fixtures/build/camera/`) via the
+/// `gen_camera_frames` example.
+pub fn write_test_frames(dir: &Path) -> std::io::Result<()> {
+    let io = |e: image::ImageError| std::io::Error::other(e.to_string());
+    std::fs::create_dir_all(dir)?;
+    std::fs::write(dir.join("test-frame.png"), test_frame_png_bytes().map_err(io)?)?;
+    std::fs::write(dir.join("test-frame.jpg"), test_frame_jpeg_bytes().map_err(io)?)?;
+    Ok(())
+}
+
 /// Generate exact planar `I420` (`YUV_420_888`) bytes for `ACOS_PATTERN_COLORBARS_V1`
 /// (exact mirror of `render_shim.c::fill_yuv420_colorbars`).
 #[must_use]

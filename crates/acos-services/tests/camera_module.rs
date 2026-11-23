@@ -1372,7 +1372,7 @@ fn scripted_profile_set_frame_delivers_memfd_yuv_and_jpeg() {
                 &mut host,
                 MODULE_ID,
                 "set_frame",
-                &serde_json::json!({"path": "fixtures/camera/test-frame.png"}),
+                &serde_json::json!({"path": "fixtures/build/camera/test-frame.png"}),
             )
             .expect_err("stub must refuse set_frame");
         assert!(err.to_string().contains("scripted"), "got {err}");
@@ -1396,13 +1396,17 @@ fn scripted_profile_set_frame_delivers_memfd_yuv_and_jpeg() {
         .expect_err("missing file must be rejected");
     assert!(err_missing.to_string().contains("not found"), "got {err_missing}");
 
-    // 3. Inject PNG fixture via `path`.
+    // 3. Inject the generated PNG test frame via `path` (frames are generated, not
+    //    committed: `acos_services::modules::camera::write_test_frames`).
+    let frames_dir = std::env::temp_dir().join(format!("acos-camera-frames-{}", std::process::id()));
+    acos_services::modules::camera::write_test_frames(&frames_dir).expect("write test frames");
+    let png_path = frames_dir.join("test-frame.png");
     let res_png = registry
         .control(
             &mut host,
             MODULE_ID,
             "set_frame",
-            &serde_json::json!({"path": "fixtures/camera/test-frame.png"}),
+            &serde_json::json!({"path": png_path.to_str().expect("utf-8 temp path")}),
         )
         .expect("set_frame png");
     assert_eq!(res_png["source"], "image");
@@ -1485,10 +1489,8 @@ fn scripted_profile_set_frame_delivers_memfd_yuv_and_jpeg() {
     assert_eq!(&blob[jpeg_off + jpeg_size - 2..jpeg_off + jpeg_size], &[0xFF, 0xD9]);
 
     // 4. Switch to JPEG fixture via base64, then back to test_pattern.
-    let jpg_bytes = std::fs::read(
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/camera/test-frame.jpg"),
-    )
-    .unwrap();
+    let jpg_bytes = std::fs::read(frames_dir.join("test-frame.jpg")).unwrap();
+    let _ = std::fs::remove_dir_all(&frames_dir);
     let b64 = encode_test_base64(&jpg_bytes);
     let res_jpg = registry
         .control(

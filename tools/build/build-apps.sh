@@ -348,6 +348,8 @@ build_apk location-probe
 # (getCameraIdList, getCameraCharacteristics + StreamConfigurationMap, unknown
 # id, openCamera permission/refusal) and tests the `hw.camera` off tombstone.
 build_apk camera-probe
+# Scripted-camera test frames (`camera-scripted` scenarios): generated, never committed.
+cargo run --offline -q --manifest-path "$ROOT/Cargo.toml" -p acos-services --example gen_camera_frames -- "$ROOT/fixtures/build/camera"
 if [ "${ACOS_BUILD_ONLY:-}" = "camerax-probe" ]; then
     "$ROOT/tools/build/build-camerax-probe.sh"
 elif [ -z "${ACOS_BUILD_ONLY:-}" ] && [ -d "$ROOT/.cache/maven-camerax" ]; then
