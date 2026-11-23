@@ -1,0 +1,4 @@
+arm v040 root /home/Qui/.t3/worktrees/acos/timing-base-8e020 binary /home/Qui/.t3/worktrees/acos/timing-base-8e020/.cache/target/release/acos sha256 2b78191f895035454bb6d7d59eb0f4a7bc457d429bd64c689368d83f74dbc78b
+arm v041 root /home/Qui/.t3/worktrees/acos/t3-30ef7cb0-4a8f6f576a950a8e binary /home/Qui/.t3/worktrees/acos/t3-30ef7cb0-4a8f6f576a950a8e/.cache/target/release/acos sha256 76be852263dc869895b99c16bb5bd80ff59476ea1531ee2191a3dc7036c0a6eb
+acos 0.4.0
+acos 0.4.0
