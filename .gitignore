@@ -12,3 +12,9 @@ replay_pid*.log
 hs_err_pid*.log
 core.[0-9]*
 /libexec/
+
+# Local/generated, never tracked
+__pycache__/
+*.pyc
+/off/
+/research/.cache/
