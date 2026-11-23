@@ -108,7 +108,7 @@ pub enum Expectation {
 /// One registry, validated at load time: a typo'd capability name would
 /// otherwise disable a scenario forever with no error, which is the same
 /// silent-skip failure the corpus is meant to prevent.
-pub const KNOWN_NEEDS_ENV: &[&str] = &["pasta"];
+pub const KNOWN_NEEDS_ENV: &[&str] = &["pasta", "metro"];
 
 /// A scenario step.
 ///
@@ -218,6 +218,20 @@ pub struct Step {
     /// launch.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub service_ctl: Option<ServiceCtlStep>,
+    /// METRO3: one operation on a **host dev server** (Metro) the executor owns:
+    /// `start`, `edit`, `wait_serves`, `fast_refresh`, `reload`, `stop`.
+    ///
+    /// The scenario spelling of a developer's loop (save a file, wait for the
+    /// bundler, let Fast Refresh or a reload reach the app) between guest
+    /// assertions. The server is started and stopped by the run; it is always
+    /// stopped at the end of the scenario, even when a step failed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dev_server: Option<DevServerStep>,
+    /// METRO3: assert the UI tree's node count against a count recorded earlier
+    /// in the same run (`record`/`not_grown_since`). A reload that leaves a stale
+    /// second root doubles the tree; this is the named check for it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub assert_tree: Option<TreeSizeAssertion>,
     /// ADR-0029 item 4/5: module ids this step needs attached (`feedback.vibrator`).
     ///
     /// A step whose module is `off` is `unsupported`, never `pass`: the executor
@@ -287,6 +301,10 @@ pub enum StepRef<'a> {
     CallActivityMethod(&'a CallActivityMethodStep),
     /// See [`Step::service_ctl`].
     ServiceCtl(&'a ServiceCtlStep),
+    /// See [`Step::dev_server`].
+    DevServer(&'a DevServerStep),
+    /// See [`Step::assert_tree`].
+    AssertTree(&'a TreeSizeAssertion),
 }
 
 impl StepRef<'_> {
@@ -322,6 +340,8 @@ impl StepRef<'_> {
             StepRef::SetTime(_) => "set_time",
             StepRef::CallActivityMethod(_) => "call_activity_method",
             StepRef::ServiceCtl(_) => "service_ctl",
+            StepRef::DevServer(_) => "dev_server",
+            StepRef::AssertTree(_) => "assert_tree",
         }
     }
 }
@@ -359,6 +379,8 @@ impl Step {
             self.set_time.is_some(),
             self.call_activity_method.is_some(),
             self.service_ctl.is_some(),
+            self.dev_server.is_some(),
+            self.assert_tree.is_some(),
         ]
         .into_iter()
         .filter(|present| *present)
@@ -462,6 +484,12 @@ impl Step {
         }
         if self.service_ctl.is_some() {
             return self.service_ctl.as_ref().map(StepRef::ServiceCtl);
+        }
+        if self.dev_server.is_some() {
+            return self.dev_server.as_ref().map(StepRef::DevServer);
+        }
+        if self.assert_tree.is_some() {
+            return self.assert_tree.as_ref().map(StepRef::AssertTree);
         }
         None
     }
@@ -1046,6 +1074,93 @@ pub struct ServiceCtlStep {
     pub timeout_ms: Option<u64>,
 }
 
+/// One operation of the `dev_server` step family (METRO3).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum DevServerOp {
+    /// Copy `project` into run scratch and start Metro there on `port`.
+    Start,
+    /// Edit one file of the **project copy** (`find`/`replace`, or `contents`).
+    Edit,
+    /// Wait until the bundle Metro serves contains `contains`.
+    WaitServes,
+    /// Fast Refresh: the edit reaches the running app over Metro's `/hot`
+    /// websocket by itself (file watcher -> HMR update); this step waits until
+    /// Metro has rebuilt and serves the edit, so the app-side effect can be
+    /// asserted next. It sends **no** reload and says so in its evidence.
+    FastRefresh,
+    /// Full reload: `POST /reload` (the CLI's `r` key). Best-effort on RN's
+    /// legacy architecture (see `docs/METRO_PLAN.md`): the steps after it
+    /// decide the verdict; this step only reports delivery.
+    Reload,
+    /// Stop Metro and delete the project copy (also done at scenario end).
+    Stop,
+}
+
+/// `dev_server` (METRO3): one operation on the host dev server the run owns.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct DevServerStep {
+    /// What to do.
+    pub op: DevServerOp,
+    /// `start`: source project directory (relative to the working directory).
+    /// It is **copied**; the original is never edited or served.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub project: Option<String>,
+    /// `start`: directory hard-linked into the copy as `node_modules`
+    /// (default: the host's React Native cache; see `acos doctor`, check `metro`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub node_modules: Option<String>,
+    /// `start`: Metro's TCP port on the host (1024..=65535).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub port: Option<u16>,
+    /// `start`: open the relay's **host-loopback opt-in** for `port` before the
+    /// guest exists (what `adb reverse` is on a phone). Default `true`: a debug
+    /// app fetches its bundle during `Application.onCreate`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub expose_to_guest: Option<bool>,
+    /// `edit`: file inside the project copy (relative, no `..`, not `node_modules`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub file: Option<String>,
+    /// `edit`: text to find; it must occur, otherwise the step fails (no silent no-op edit).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub find: Option<String>,
+    /// `edit`: replacement for every occurrence of `find`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub replace: Option<String>,
+    /// `edit`: replace the whole file instead.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub contents: Option<String>,
+    /// `wait_serves`: a string the served bundle must contain.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub contains: Option<String>,
+    /// `wait_serves`: a string the served bundle must NOT contain.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub absent: Option<String>,
+    /// `start`/`wait_serves`/`fast_refresh`: how long to wait (1..=300000 ms).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub timeout_ms: Option<u64>,
+}
+
+/// `assert_tree` (METRO3): the UI tree's node count against an earlier record.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct TreeSizeAssertion {
+    /// Remember the current node count under this label (the step passes when the tree is non-empty).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub record: Option<String>,
+    /// Pass only when the node count is `<=` the one recorded under this label
+    /// (a reload that left a stale root doubles the tree and fails).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub not_grown_since: Option<String>,
+    /// Event-driven wait for the condition.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub timeout_ms: Option<u64>,
+    /// Settle rule for the backing observation (see `assert_text`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub settle: Option<StepSettle>,
+}
+
 /// `call_activity_method` (optional; debug/source-owned builds only).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct CallActivityMethodStep {
@@ -1383,6 +1498,175 @@ fn validate_bounds(validation: &mut ScenarioValidation, path: &str, bounds: Boun
             path,
             format!("bounds must satisfy left<=right and top<=bottom: {bounds}"),
         );
+    }
+}
+
+/// A `dev_server` project-relative path: inside the copy, never `node_modules`.
+fn dev_server_relative_path_problem(file: &str) -> Option<&'static str> {
+    let p = std::path::Path::new(file);
+    if file.trim().is_empty() {
+        return Some("file must not be empty");
+    }
+    if p.is_absolute() {
+        return Some("file must be relative to the project copy");
+    }
+    let mut first = true;
+    for component in p.components() {
+        match component {
+            std::path::Component::Normal(name) => {
+                if first && name == "node_modules" {
+                    return Some("node_modules is shared with the host cache and is not editable");
+                }
+                first = false;
+            }
+            std::path::Component::CurDir => {}
+            _ => return Some("file must stay inside the project copy (no `..`)"),
+        }
+    }
+    None
+}
+
+fn validate_dev_server(
+    v: &mut ScenarioValidation,
+    path: &str,
+    dev: &DevServerStep,
+    scenario: &Scenario,
+    index: usize,
+) {
+    if !scenario.needs_env.iter().any(|name| name.trim() == "metro") {
+        v.push(
+            path,
+            "a `dev_server` step needs `needs_env: [metro]` (the host must have node and Metro; the runner skips the file when it does not)",
+        );
+    }
+    let stray = |v: &mut ScenarioValidation, field: &str, present: bool, ops: &str| {
+        if present {
+            v.push(
+                format!("{path}.{field}"),
+                format!("`{field}` only applies to {ops}"),
+            );
+        }
+    };
+    let is = |op: DevServerOp| dev.op == op;
+    stray(v, "project", dev.project.is_some() && !is(DevServerOp::Start), "op `start`");
+    stray(v, "node_modules", dev.node_modules.is_some() && !is(DevServerOp::Start), "op `start`");
+    stray(v, "port", dev.port.is_some() && !is(DevServerOp::Start), "op `start`");
+    stray(
+        v,
+        "expose_to_guest",
+        dev.expose_to_guest.is_some() && !is(DevServerOp::Start),
+        "op `start`",
+    );
+    stray(
+        v,
+        "file",
+        dev.file.is_some() && !is(DevServerOp::Edit),
+        "op `edit`",
+    );
+    stray(
+        v,
+        "find",
+        dev.find.is_some() && !is(DevServerOp::Edit),
+        "op `edit`",
+    );
+    stray(
+        v,
+        "replace",
+        dev.replace.is_some() && !is(DevServerOp::Edit),
+        "op `edit`",
+    );
+    stray(
+        v,
+        "contents",
+        dev.contents.is_some() && !is(DevServerOp::Edit),
+        "op `edit`",
+    );
+    stray(
+        v,
+        "contains",
+        dev.contains.is_some() && !is(DevServerOp::WaitServes),
+        "op `wait_serves`",
+    );
+    stray(
+        v,
+        "absent",
+        dev.absent.is_some() && !is(DevServerOp::WaitServes),
+        "op `wait_serves`",
+    );
+    if let Some(timeout) = dev.timeout_ms {
+        if !(1..=300_000).contains(&timeout) {
+            v.push(
+                format!("{path}.timeout_ms"),
+                "timeout_ms must be between 1 and 300000",
+            );
+        }
+        if matches!(dev.op, DevServerOp::Edit | DevServerOp::Reload | DevServerOp::Stop) {
+            v.push(
+                format!("{path}.timeout_ms"),
+                "`timeout_ms` only applies to `start`, `wait_serves` and `fast_refresh`",
+            );
+        }
+    }
+    // the server's life: `start` ... `stop`, one at a time
+    let mut running = false;
+    for earlier in &scenario.steps[..index] {
+        if let Some(step) = &earlier.dev_server {
+            match step.op {
+                DevServerOp::Start => running = true,
+                DevServerOp::Stop => running = false,
+                _ => {}
+            }
+        }
+    }
+    match dev.op {
+        DevServerOp::Start => {
+            if running {
+                v.push(path, "a dev server is already running; `stop` it first");
+            }
+            match &dev.project {
+                None => v.push(format!("{path}.project"), "`start` needs `project`"),
+                Some(project) if project.trim().is_empty() => {
+                    v.push(format!("{path}.project"), "project must not be empty")
+                }
+                _ => {}
+            }
+            match dev.port {
+                None => v.push(format!("{path}.port"), "`start` needs `port`"),
+                Some(port) if port < 1024 => {
+                    v.push(format!("{path}.port"), "port must be 1024..=65535")
+                }
+                _ => {}
+            }
+        }
+        op => {
+            if !running {
+                v.push(
+                    path,
+                    "no dev server is running at this step (an earlier `dev_server: {op: start}` is required)",
+                );
+            }
+            if op == DevServerOp::Edit {
+                match &dev.file {
+                    None => v.push(format!("{path}.file"), "`edit` needs `file`"),
+                    Some(file) => {
+                        if let Some(problem) = dev_server_relative_path_problem(file) {
+                            v.push(format!("{path}.file"), problem);
+                        }
+                    }
+                }
+                match (&dev.find, &dev.replace, &dev.contents) {
+                    (Some(find), Some(_), None) if !find.is_empty() => {}
+                    (None, None, Some(_)) => {}
+                    _ => v.push(
+                        path,
+                        "`edit` needs either `find` + `replace` (find non-empty) or `contents`",
+                    ),
+                }
+            }
+            if op == DevServerOp::WaitServes && dev.contains.is_none() && dev.absent.is_none() {
+                v.push(path, "`wait_serves` needs `contains` and/or `absent`");
+            }
+        }
     }
 }
 
@@ -2189,6 +2473,35 @@ pub fn validate_scenario(scenario: &Scenario) -> ScenarioValidation {
                     "optional step: only valid for debuggable/source-owned builds with an injected test hook",
                 );
             }
+            StepRef::DevServer(dev) => validate_dev_server(&mut v, &path, dev, scenario, index),
+            StepRef::AssertTree(tree) => {
+                match (&tree.record, &tree.not_grown_since) {
+                    (Some(_), Some(_)) | (None, None) => v.push(
+                        &path,
+                        "assert_tree needs exactly one of `record` and `not_grown_since`",
+                    ),
+                    (Some(label), None) if label.trim().is_empty() => {
+                        v.push(format!("{path}.record"), "label must not be empty")
+                    }
+                    (None, Some(label)) => {
+                        if label.trim().is_empty() {
+                            v.push(format!("{path}.not_grown_since"), "label must not be empty");
+                        } else if !scenario.steps[..index].iter().any(|step| {
+                            step.assert_tree
+                                .as_ref()
+                                .is_some_and(|earlier| earlier.record.as_ref() == Some(label))
+                        }) {
+                            v.push(
+                                format!("{path}.not_grown_since"),
+                                format!("no earlier `assert_tree: {{record: {label}}}` step"),
+                            );
+                        }
+                    }
+                    _ => {}
+                }
+                validate_timeout(&mut v, &format!("{path}.timeout_ms"), tree.timeout_ms);
+                validate_observation_settle(&mut v, &format!("{path}.settle"), tree.settle);
+            }
             StepRef::ServiceCtl(ctl) => {
                 if ctl.module.trim().is_empty() {
                     v.push(format!("{path}.module"), "module id must not be empty");
@@ -2451,6 +2764,44 @@ steps:
         let yaml = "version: 1\nname: x\napp: y\nisolation: process\ndisplay: {mode: offscreen, width: 8, height: 8, density_dpi: 420}\nsteps:\n  - tap: {x: 1, y: 2, settle: fast, expect_change: true}\n";
         let scenario = Scenario::from_yaml_str_unvalidated(yaml).expect("parses");
         assert!(!scenario.validate().is_ok());
+    }
+
+    /// METRO3: `dev_server` and `assert_tree` have the rules a dev loop needs.
+    #[test]
+    fn metro3_dev_server_and_assert_tree_rules() {
+        let head = "version: 1\nname: m\napp: a.apk\nisolation: process\ndisplay: {mode: offscreen, width: 1080, height: 2400, density_dpi: 420}\nneeds_env: [metro]\nexpectation_reason: host needs node and Metro\nsteps:\n";
+        let check = |body: &str| -> Vec<String> {
+            match Scenario::from_yaml_str(&format!("{head}{body}")) {
+                Ok(_) => Vec::new(),
+                Err(error) => error.errors.iter().map(|e| e.message.clone()).collect(),
+            }
+        };
+        let start = "  - dev_server: {op: start, project: p, port: 8081}\n";
+        let ok = format!(
+            "{start}  - dev_server: {{op: edit, file: App.js, find: a, replace: b}}\n  - dev_server: {{op: wait_serves, contains: b, timeout_ms: 1000}}\n  - dev_server: {{op: fast_refresh}}\n  - dev_server: {{op: reload}}\n  - dev_server: {{op: stop}}\n"
+        );
+        assert!(check(&ok).is_empty(), "{:?}", check(&ok));
+        // order: nothing before `start`
+        assert!(check("  - dev_server: {op: reload}\n").iter().any(|m| m.contains("no dev server is running")));
+        // the original tree and node_modules are never editable
+        for bad in ["../x.js", "/etc/passwd", "node_modules/react/index.js"] {
+            let body = format!("{start}  - dev_server: {{op: edit, file: {bad}, contents: x}}\n");
+            assert!(!check(&body).is_empty(), "{bad} must be refused");
+        }
+        // an edit says what to change: both forms or neither is an error
+        assert!(!check(&format!("{start}  - dev_server: {{op: edit, file: a.js}}\n")).is_empty());
+        assert!(!check(&format!("{start}  - dev_server: {{op: edit, file: a.js, find: x, replace: y, contents: z}}\n")).is_empty());
+        // a wait_serves with nothing to wait for would be a sleep
+        assert!(!check(&format!("{start}  - dev_server: {{op: wait_serves}}\n")).is_empty());
+        // `metro` must be declared
+        let undeclared = format!("{head}{start}").replace("needs_env: [metro]\n", "");
+        let scenario = Scenario::from_yaml_str_unvalidated(&undeclared).unwrap();
+        assert!(scenario.validate().errors.iter().any(|e| e.message.contains("needs_env: [metro]")));
+        // assert_tree: exactly one mode, and a recorded label to compare with
+        assert!(!check("  - assert_tree: {}\n").is_empty());
+        assert!(!check("  - assert_tree: {not_grown_since: never}\n").is_empty());
+        assert!(check("  - assert_tree: {record: before}\n  - assert_tree: {not_grown_since: before}\n").is_empty());
+        assert!(KNOWN_NEEDS_ENV.contains(&"metro"));
     }
 
     /// GATENE2E: `service_ctl.timeout_ms` is a wait for `expect`, so it needs one,

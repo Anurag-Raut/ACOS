@@ -203,6 +203,11 @@ public final class SessionMain {
                 // gralloc shim (which owns the memfd), so no substitute native
                 // is needed.
                 "register_android_hardware_HardwareBuffer",
+                // CAMERA2/3: `CameraMetadataNative` and `SurfaceUtils` JNI backed by
+                // the image's own `libcamera_client.so` + `libcamera_metadata.so` +
+                // `libgui.so` (same as LaunchMain).
+                "register_android_hardware_camera2_CameraMetadata",
+                "register_android_hardware_camera2_utils_SurfaceUtils",
         };
         int ok = 0, miss = 0;
         for (String n : extra) {

@@ -28,7 +28,20 @@ public class MainActivity extends Activity {
 
     private EditText name;
     private TextView state;
+    private TextView mwState;
     private int configChanges = 0;
+    private int mwCallbacks = 0;
+    private boolean lastMwCallback = false;
+
+    private void updateMwState(Configuration cfg) {
+        if (mwState == null) return;
+        int wDp = cfg == null ? 0 : cfg.screenWidthDp;
+        int hDp = cfg == null ? 0 : cfg.screenHeightDp;
+        mwState.setText("mw=" + lastMwCallback
+                + " isInMW=" + isInMultiWindowMode()
+                + " dp=" + wDp + "x" + hDp
+                + " mw_cb=" + mwCallbacks);
+    }
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -37,6 +50,8 @@ public class MainActivity extends Activity {
         setContentView(R.layout.main);
         name = (EditText) findViewById(R.id.name);
         state = (TextView) findViewById(R.id.main_state);
+        mwState = (TextView) findViewById(R.id.mw_state);
+        updateMwState(getResources().getConfiguration());
         if (savedInstanceState != null) {
             String restored = savedInstanceState.getString(KEY_NAME, "");
             name.setText(restored);
@@ -56,12 +71,26 @@ public class MainActivity extends Activity {
     }
 
     @Override
+    public void onMultiWindowModeChanged(boolean isInMultiWindowMode, Configuration newConfig) {
+        super.onMultiWindowModeChanged(isInMultiWindowMode, newConfig);
+        mwCallbacks++;
+        lastMwCallback = isInMultiWindowMode;
+        Log.i(TAG, "Main.onMultiWindowModeChanged inMW=" + isInMultiWindowMode
+                + " isInMW=" + isInMultiWindowMode()
+                + " cb=" + mwCallbacks
+                + " dp=" + newConfig.screenWidthDp + "x" + newConfig.screenHeightDp);
+        updateMwState(newConfig);
+    }
+
+    @Override
     public void onConfigurationChanged(Configuration newConfig) {
         super.onConfigurationChanged(newConfig);
         configChanges++;
         Log.i(TAG, "Main.onConfigurationChanged count=" + configChanges
-                + " orientation=" + newConfig.orientation);
+                + " orientation=" + newConfig.orientation
+                + " dp=" + newConfig.screenWidthDp + "x" + newConfig.screenHeightDp);
         state.setText("config changes=" + configChanges);
+        updateMwState(newConfig);
     }
 
     @Override

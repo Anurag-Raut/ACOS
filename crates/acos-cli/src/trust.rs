@@ -389,6 +389,10 @@ impl Backend for TrustGuard {
         self.inner.service_ctl(request)
     }
 
+    fn expose_host_port(&mut self, port: u16) -> Result<serde_json::Value, BackendError> {
+        self.inner.expose_host_port(port)
+    }
+
     fn capture(&mut self) -> Result<SessionObservation, BackendError> {
         self.inner.capture()
     }

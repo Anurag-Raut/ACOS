@@ -115,6 +115,152 @@
       ],
       "type": "object"
     },
+    "DevServerOp": {
+      "description": "One operation of the `dev_server` step family (METRO3).",
+      "oneOf": [
+        {
+          "description": "Copy `project` into run scratch and start Metro there on `port`.",
+          "enum": [
+            "start"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Edit one file of the **project copy** (`find`/`replace`, or `contents`).",
+          "enum": [
+            "edit"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Wait until the bundle Metro serves contains `contains`.",
+          "enum": [
+            "wait_serves"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Fast Refresh: the edit reaches the running app over Metro's `/hot` websocket by itself (file watcher -> HMR update); this step waits until Metro has rebuilt and serves the edit, so the app-side effect can be asserted next. It sends **no** reload and says so in its evidence.",
+          "enum": [
+            "fast_refresh"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Full reload: `POST /reload` (the CLI's `r` key). Best-effort on RN's legacy architecture (see `docs/METRO_PLAN.md`): the steps after it decide the verdict; this step only reports delivery.",
+          "enum": [
+            "reload"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Stop Metro and delete the project copy (also done at scenario end).",
+          "enum": [
+            "stop"
+          ],
+          "type": "string"
+        }
+      ]
+    },
+    "DevServerStep": {
+      "additionalProperties": false,
+      "description": "`dev_server` (METRO3): one operation on the host dev server the run owns.",
+      "properties": {
+        "absent": {
+          "description": "`wait_serves`: a string the served bundle must NOT contain.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "contains": {
+          "description": "`wait_serves`: a string the served bundle must contain.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "contents": {
+          "description": "`edit`: replace the whole file instead.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "expose_to_guest": {
+          "description": "`start`: open the relay's **host-loopback opt-in** for `port` before the guest exists (what `adb reverse` is on a phone). Default `true`: a debug app fetches its bundle during `Application.onCreate`.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "file": {
+          "description": "`edit`: file inside the project copy (relative, no `..`, not `node_modules`).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "find": {
+          "description": "`edit`: text to find; it must occur, otherwise the step fails (no silent no-op edit).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "node_modules": {
+          "description": "`start`: directory hard-linked into the copy as `node_modules` (default: the host's React Native cache; see `acos doctor`, check `metro`).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "op": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/DevServerOp"
+            }
+          ],
+          "description": "What to do."
+        },
+        "port": {
+          "description": "`start`: Metro's TCP port on the host (1024..=65535).",
+          "format": "uint16",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "project": {
+          "description": "`start`: source project directory (relative to the working directory). It is **copied**; the original is never edited or served.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "replace": {
+          "description": "`edit`: replacement for every occurrence of `find`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "timeout_ms": {
+          "description": "`start`/`wait_serves`/`fast_refresh`: how long to wait (1..=300000 ms).",
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "op"
+      ],
+      "type": "object"
+    },
     "DisplaySpec": {
       "description": "The display a session renders to.\n\n`none` is headless: capture/observe must return `NO_DISPLAY` instead of silently allocating a surface.",
       "oneOf": [
@@ -1488,6 +1634,17 @@
           ],
           "description": "Assert node text/bounds."
         },
+        "assert_tree": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/TreeSizeAssertion"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "METRO3: assert the UI tree's node count against a count recorded earlier in the same run (`record`/`not_grown_since`). A reload that leaves a stale second root doubles the tree; this is the named check for it."
+        },
         "assert_visible": {
           "anyOf": [
             {
@@ -1542,6 +1699,17 @@
             }
           ],
           "description": "Capture a frame into the artifacts directory."
+        },
+        "dev_server": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/DevServerStep"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "METRO3: one operation on a **host dev server** (Metro) the executor owns: `start`, `edit`, `wait_serves`, `fast_refresh`, `reload`, `stop`.\n\nThe scenario spelling of a developer's loop (save a file, wait for the bundler, let Fast Refresh or a reload reach the app) between guest assertions. The server is started and stopped by the run; it is always stopped at the end of the scenario, even when a step failed."
         },
         "key": {
           "anyOf": [
@@ -2112,6 +2280,47 @@
       "required": [
         "timestamp"
       ],
+      "type": "object"
+    },
+    "TreeSizeAssertion": {
+      "additionalProperties": false,
+      "description": "`assert_tree` (METRO3): the UI tree's node count against an earlier record.",
+      "properties": {
+        "not_grown_since": {
+          "description": "Pass only when the node count is `<=` the one recorded under this label (a reload that left a stale root doubles the tree and fails).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "record": {
+          "description": "Remember the current node count under this label (the step passes when the tree is non-empty).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "settle": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/StepSettle"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Settle rule for the backing observation (see `assert_text`)."
+        },
+        "timeout_ms": {
+          "description": "Event-driven wait for the condition.",
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
       "type": "object"
     },
     "TypeStep": {

@@ -1,0 +1,114 @@
+# LAUNCHER2: guest Settings stub system app + honest ActivityNotFoundException.
+version: 1
+name: settings-intents
+description: >-
+  From settings-probe, resolve ACTION_SETTINGS, ACTION_APPLICATION_DETAILS_SETTINGS
+  (package URI), and ACTION_WIFI_SETTINGS to com.android.settings/.SettingsActivity,
+  while unhandled ACTION_LOCATION_SOURCE_SETTINGS keeps throwing honest
+  ActivityNotFoundException.
+app: fixtures/build/apps/settings-probe.apk
+engine: art
+fallback: report-and-escalate
+api_level: 34
+isolation: process
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+capabilities:
+  - lifecycle
+  - ui.offscreen
+  - ui.text
+services:
+  - id: system.settings
+    profile: real
+expectation: pass
+budgets:
+  memory_mib: 1024
+  wall_ms: 240000
+steps:
+  - launch:
+      activity: dev.acos.fixtures.settingsprobe/.MainActivity
+      clear_state: true
+
+  - wait_for:
+      selector: {id: btn_settings}
+      timeout_ms: 20000
+
+  # 1. ACTION_SETTINGS
+  - tap:
+      selector: {id: btn_settings}
+  - wait_for:
+      selector: {id: settings_action}
+      timeout_ms: 30000
+  - assert_text:
+      selector: {id: settings_title}
+      text: {exact: "Settings"}
+  - assert_text:
+      selector: {id: settings_action}
+      text: {exact: "android.settings.SETTINGS"}
+  - assert_text:
+      selector: {id: settings_detail}
+      text: {exact: "System settings"}
+
+  - tap:
+      selector: {id: settings_back}
+  - wait_for:
+      selector: {id: btn_app_details}
+      timeout_ms: 20000
+
+  # 2. ACTION_APPLICATION_DETAILS_SETTINGS with package: URI
+  - tap:
+      selector: {id: btn_app_details}
+  - wait_for:
+      selector: {id: settings_action}
+      timeout_ms: 30000
+  - assert_text:
+      selector: {id: settings_title}
+      text: {exact: "App Info"}
+  - assert_text:
+      selector: {id: settings_action}
+      text: {exact: "android.settings.APPLICATION_DETAILS_SETTINGS"}
+  - assert_text:
+      selector: {id: settings_detail}
+      text: {exact: "Package: dev.acos.fixtures.settingsprobe"}
+
+  - tap:
+      selector: {id: settings_back}
+  - wait_for:
+      selector: {id: btn_wifi}
+      timeout_ms: 20000
+
+  # 3. ACTION_WIFI_SETTINGS
+  - tap:
+      selector: {id: btn_wifi}
+  - wait_for:
+      selector: {id: settings_action}
+      timeout_ms: 30000
+  - assert_text:
+      selector: {id: settings_title}
+      text: {exact: "Wi-Fi Settings"}
+  - assert_text:
+      selector: {id: settings_action}
+      text: {exact: "android.settings.WIFI_SETTINGS"}
+
+  - tap:
+      selector: {id: settings_back}
+  - wait_for:
+      selector: {id: btn_location}
+      timeout_ms: 20000
+
+  # 4. Unhandled ACTION_LOCATION_SOURCE_SETTINGS -> honest ActivityNotFoundException.
+  - tap:
+      selector: {id: btn_location}
+  - assert_text:
+      selector: {id: status}
+      text: {exact: "ActivityNotFoundException: android.settings.LOCATION_SOURCE_SETTINGS"}
+      timeout_ms: 10000
+  - assert_log:
+      tag: AcosSettingsProbe
+      since_previous_step: false
+      timeout_ms: 10000
+      patterns:
+        - "^ACOSPROBE settings-probe not-found action=android\\.settings\\.LOCATION_SOURCE_SETTINGS err=android\\.content\\.ActivityNotFoundException$"

@@ -675,6 +675,31 @@ fn pasta_check(
     }
 }
 
+/// METRO3: what a `needs_env: [metro]` scenario needs — `node`, and a
+/// `node_modules` holding Metro + React Native. The rule lives in
+/// `acos_verify::dev_server::metro_environment`, the same one `dev_server start`
+/// uses, so a skipped scenario and a failing step cannot disagree. Optional at run
+/// time (only the dev-loop scenarios need it), so a miss is a `warn`.
+fn check_metro() -> Check {
+    match acos_verify::dev_server::metro_environment() {
+        Ok(env) => Check::ok(
+            "metro",
+            format!(
+                "node {} ({}), node_modules {}",
+                env.node_version,
+                env.node.display(),
+                env.node_modules.display()
+            ),
+        ),
+        Err(reason) => Check::warn(
+            "metro",
+            reason,
+            "`needs_env: [metro]` scenarios (the React Native dev loop) cannot run without node and a \
+             React Native node_modules; `tools/build/build-rn-hello.sh fetch` populates .cache/rn-0.81.4, or set ACOS_METRO_NODE_MODULES.",
+        ),
+    }
+}
+
 fn check_pasta() -> Check {
     let (found, looked) = acos_netd::pasta::resolve();
     let version = found
@@ -821,6 +846,7 @@ pub fn diagnose(args: &DoctorArgs) -> DoctorReport {
     checks.push(check_ndk(args));
     checks.extend(check_sandbox_helpers());
     checks.push(check_pasta());
+    checks.push(check_metro());
     checks.extend(check_workspace(installed));
     checks.push(check_gles());
     checks.push(check_session_daemon());

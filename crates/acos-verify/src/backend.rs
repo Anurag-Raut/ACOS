@@ -1307,6 +1307,17 @@ pub trait Backend {
         ))
     }
 
+    /// METRO3: open the relay's host-loopback opt-in for `port`, **before** the
+    /// guest exists (`dev_server: {op: start}` with `expose_to_guest`): a debug app
+    /// fetches its bundle during `Application.onCreate`. The default is a
+    /// structured `unsupported`; a scenario that asked for it is never a pass.
+    fn expose_host_port(&mut self, port: u16) -> Result<serde_json::Value, BackendError> {
+        Err(BackendError::unsupported(
+            Capability::Environment,
+            format!("this backend cannot open host port {port} to the guest"),
+        ))
+    }
+
     /// Capture the current frame.
     fn capture(&mut self) -> Result<SessionObservation, BackendError> {
         Err(BackendError::unsupported(

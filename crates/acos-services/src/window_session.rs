@@ -1016,6 +1016,18 @@ impl ServiceObject for WindowSessionService {
                         seq,
                     )
                     .map_err(werr)?;
+                let visibility = match view_visibility {
+                    0 => Some(true),
+                    4 | 8 => Some(false),
+                    _ => None,
+                };
+                let visibility_changed = if let Some(visible) = visibility {
+                    state
+                        .set_window_visible_for(self.session, window.0, visible)
+                        .map_err(werr)?
+                } else {
+                    false
+                };
                 if trace {
                     eprintln!(
                         "ACOSWMS relayout-done window={:#x} result={:#x} frame={:?} surface={}x{}",
@@ -1042,15 +1054,13 @@ impl ServiceObject for WindowSessionService {
                             let drawn =
                                 state.publish_layer_placement(binding, window.0, &compositor);
                             // W42: `relayout` carries the client root's
-                            // `View.getVisibility()`. A `GONE` window surface is
-                            // hidden in the same transaction, a `VISIBLE` one is
-                            // shown again (stock `WMS.relayoutWindow` keeps
+                            // `View.getVisibility()`. An `INVISIBLE`/`GONE` window
+                            // surface is hidden in the same transaction, a `VISIBLE`
+                            // one is shown again (stock `WMS.relayoutWindow` keeps
                             // `mWinAnimator`'s visibility in step).
-                            let visibility = match view_visibility {
-                                0 => Some(true),
-                                8 => Some(false),
-                                _ => None,
-                            };
+                            if visibility_changed {
+                                state.refresh_bound_layer_placements(&compositor);
+                            }
                             if drawn {
                                 if let Some(visible) = visibility {
                                     state.set_surface_visible(window.0, visible, &compositor);
@@ -1111,12 +1121,30 @@ impl ServiceObject for WindowSessionService {
                         .map_err(werr)?;
                 }
                 // W42: the async form carries the same `viewVisibility`; honour
-                // a `GONE`/`VISIBLE` toggle on an already-bound window layer.
-                if let (Some(compositor), true) = (
-                    self.compositor.clone(),
-                    view_visibility == 0 || view_visibility == 8,
-                ) {
-                    state.set_surface_visible(window.0, view_visibility == 0, &compositor);
+                // a `VISIBLE`/`INVISIBLE`/`GONE` toggle on the WM window & layer.
+                let async_visibility = match view_visibility {
+                    0 => Some(true),
+                    4 | 8 => Some(false),
+                    _ => None,
+                };
+                if let Some(visible) = async_visibility {
+                    if let Ok(changed) =
+                        state.set_window_visible_for(self.session, window.0, visible)
+                    {
+                        if let Some(compositor) = self.compositor.clone() {
+                            if changed {
+                                state.refresh_bound_layer_placements(&compositor);
+                            }
+                            state.set_surface_visible(window.0, visible, &compositor);
+                        }
+                        if changed {
+                            if let Some(input) = &self.input {
+                                if let Ok(mut dispatch) = input.state().lock() {
+                                    let _ = dispatch.set_focus(state.wm.focus.map(BinderId));
+                                }
+                            }
+                        }
+                    }
                 }
             }
             codes::OUT_OF_MEMORY => {
@@ -1385,5 +1413,223 @@ mod tests {
         assert_eq!(codes::SET_ON_BACK_INVOKED_CALLBACK_INFO, 39);
         assert_eq!(codes::CLEAR_TOUCHABLE_REGION, 40);
         assert_eq!(codes::CANCEL_DRAW, 41);
+    }
+
+    fn test_transact(
+        host: &mut crate::host::ServiceHost,
+        binder: BinderId,
+        code: u32,
+        data: &mut Parcel,
+    ) -> Parcel {
+        let mut reply = Parcel::new();
+        host.transact(binder, code, data, &mut reply, 0)
+            .expect("transaction");
+        reply.set_data_position(0);
+        reply
+    }
+
+    fn test_open_session(host: &mut crate::host::ServiceHost) -> BinderId {
+        let wm = host
+            .binder_for_descriptor("android.view.IWindowManager")
+            .expect("window service");
+        let mut data = Parcel::new();
+        data.write_interface_token("android.view.IWindowManager")
+            .expect("token");
+        data.write_strong_binder_opt(None);
+        data.set_data_position(0);
+        let mut reply = test_transact(host, wm, 4, &mut data);
+        assert_eq!(
+            reply.read_int32().expect("exception"),
+            crate::exception::NO_EXCEPTION
+        );
+        reply
+            .read_strong_binder()
+            .expect("session binder")
+            .expect("non-null IWindowSession")
+    }
+
+    fn test_add_to_display(
+        host: &mut crate::host::ServiceHost,
+        session: BinderId,
+        window: BinderId,
+    ) -> Parcel {
+        let mut data = Parcel::new();
+        data.write_interface_token(DESCRIPTOR).expect("token");
+        data.write_strong_binder_opt(Some(window));
+        data.write_int32(1);
+        LayoutParams::application("dev.acos.fixtures.counter", "MainActivity")
+            .write_to_parcel(&mut data)
+            .expect("LayoutParams");
+        data.write_int32(0); // viewVisibility
+        data.write_int32(-1); // layerStackId
+        data.write_int32(0); // userId
+        data.write_int32(0); // requestedVisibleTypes
+        data.write_int32(0); // out float[] length
+        data.set_data_position(0);
+        let mut reply = test_transact(host, session, codes::ADD_TO_DISPLAY_AS_USER, &mut data);
+        assert_eq!(
+            reply.read_int32().expect("exception"),
+            crate::exception::NO_EXCEPTION
+        );
+        reply
+    }
+
+    fn test_relayout_parcel(window: BinderId, view_visibility: i32) -> Parcel {
+        let mut data = Parcel::new();
+        data.write_interface_token(DESCRIPTOR).expect("token");
+        data.write_strong_binder_opt(Some(window));
+        data.write_int32(0); // attrs null
+        data.write_int32(-1); // requestedWidth
+        data.write_int32(-1); // requestedHeight
+        data.write_int32(view_visibility);
+        data.write_int32(0); // flags
+        data.write_int32(0); // seq
+        data.write_int32(-1); // lastSyncSeqId
+        data.set_data_position(0);
+        data
+    }
+
+    fn test_read_relayout_layer(reply: &mut Parcel) -> BinderId {
+        assert_eq!(
+            reply.read_int32().expect("exception"),
+            crate::exception::NO_EXCEPTION
+        );
+        let _result = reply.read_int32().expect("result");
+        assert_eq!(reply.read_int32().expect("frames present"), 1);
+        let _ = acos_wm::codec::ClientWindowFrames::read_from_parcel(reply).expect("frames");
+        assert_eq!(reply.read_int32().expect("configuration present"), 1);
+        let _ = acos_wm::codec::MergedConfiguration::read_from_parcel(reply).expect("config");
+        assert_eq!(reply.read_int32().expect("surface present"), 1);
+        let surface = acos_wm::codec::SurfaceControlInfo::read_from_parcel(reply).expect("surface");
+        surface.layer_binder.expect("bound compositor layer")
+    }
+
+    #[test]
+    fn relayout_async_visible_after_initial_gone_restores_compositor_visibility() {
+        let mut host = crate::host::ServiceHost::new();
+        let handles = crate::registry::install_with_handles_and_insets(&mut host, None);
+        let session = test_open_session(&mut host);
+        let window = BinderId(0x5701);
+
+        let _add_reply = test_add_to_display(&mut host, session, window);
+
+        // Initial synchronous GONE (View.GONE = 8) hides the compositor layer,
+        // while WM ignores pre-visibility GONE so `visible` stays true.
+        let mut reply = test_transact(
+            &mut host,
+            session,
+            codes::RELAYOUT,
+            &mut test_relayout_parcel(window, 8),
+        );
+        let layer = test_read_relayout_layer(&mut reply);
+        assert!(
+            handles.compositor.lock().unwrap().layer(layer).unwrap().hidden,
+            "initial sync GONE hides the bound compositor layer"
+        );
+        {
+            let wms = handles.wms.lock().unwrap();
+            let rec = &wms.wm.windows[&window.0];
+            assert!(rec.visible);
+            assert!(!rec.ever_visible);
+        }
+
+        // Plant a sentinel placement and clear input focus so we can verify
+        // that a no-change async VISIBLE restores layer visibility without
+        // refreshing placements or republishing focus.
+        {
+            let mut comp = handles.compositor.lock().unwrap();
+            let mut placement = comp.layer(layer).unwrap().placement.unwrap();
+            placement.x = 123;
+            assert!(comp.set_layer_placement(layer, placement));
+        }
+        handles.input.state().lock().unwrap().set_focus(None).unwrap();
+
+        // Async VISIBLE (0) sets ever_visible = true but WM returns changed = false.
+        let _ = test_transact(
+            &mut host,
+            session,
+            codes::RELAYOUT_ASYNC,
+            &mut test_relayout_parcel(window, 0),
+        );
+
+        let comp = handles.compositor.lock().unwrap();
+        let rec = comp.layer(layer).unwrap();
+        assert!(
+            !rec.hidden,
+            "async VISIBLE must restore compositor layer visibility even when WM visibility did not change"
+        );
+        assert_eq!(
+            rec.placement.unwrap().x,
+            123,
+            "async VISIBLE with no WM visibility change must not refresh placements"
+        );
+        drop(comp);
+        assert_eq!(
+            handles.input.state().lock().unwrap().focused(),
+            None,
+            "async VISIBLE with no WM visibility change must not republish focus"
+        );
+    }
+
+    #[test]
+    fn relayout_async_checks_ownership_and_refreshes_on_visibility_change() {
+        let mut host = crate::host::ServiceHost::new();
+        let handles = crate::registry::install_with_handles_and_insets(&mut host, None);
+        let session_a = test_open_session(&mut host);
+        let session_b = test_open_session(&mut host);
+        let window = BinderId(0x5702);
+
+        let _add_reply = test_add_to_display(&mut host, session_a, window);
+        let mut reply = test_transact(
+            &mut host,
+            session_a,
+            codes::RELAYOUT,
+            &mut test_relayout_parcel(window, 0),
+        );
+        let layer = test_read_relayout_layer(&mut reply);
+        assert!(!handles.compositor.lock().unwrap().layer(layer).unwrap().hidden);
+        assert_eq!(handles.input.state().lock().unwrap().focused(), Some(window));
+
+        // Wrong session must not hide the layer or touch focus.
+        let _ = test_transact(
+            &mut host,
+            session_b,
+            codes::RELAYOUT_ASYNC,
+            &mut test_relayout_parcel(window, 8),
+        );
+        assert!(!handles.compositor.lock().unwrap().layer(layer).unwrap().hidden);
+        assert_eq!(handles.input.state().lock().unwrap().focused(), Some(window));
+
+        // Owner hiding via async GONE (8) triggers a real WM visibility change,
+        // refreshing placements, hiding the layer, and updating focus.
+        {
+            let mut comp = handles.compositor.lock().unwrap();
+            let mut placement = comp.layer(layer).unwrap().placement.unwrap();
+            placement.x = 123;
+            assert!(comp.set_layer_placement(layer, placement));
+        }
+        let _ = test_transact(
+            &mut host,
+            session_a,
+            codes::RELAYOUT_ASYNC,
+            &mut test_relayout_parcel(window, 8),
+        );
+        {
+            let comp = handles.compositor.lock().unwrap();
+            let rec = comp.layer(layer).unwrap();
+            assert!(rec.hidden);
+            assert_eq!(rec.placement.unwrap().x, 0, "real change refreshes placements");
+        }
+        assert_eq!(handles.input.state().lock().unwrap().focused(), None);
+
+        // Owner showing again via async VISIBLE (0) restores layer and focus.
+        let _ = test_transact(
+            &mut host,
+            session_a,
+            codes::RELAYOUT_ASYNC,
+            &mut test_relayout_parcel(window, 0),
+        );
+        assert!(!handles.compositor.lock().unwrap().layer(layer).unwrap().hidden);
+        assert_eq!(handles.input.state().lock().unwrap().focused(), Some(window));
     }
 }

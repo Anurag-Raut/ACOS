@@ -1603,6 +1603,36 @@ impl Backend for EngineBackend {
         }
     }
 
+    /// METRO3: the relay-level host-loopback opt-in (`acos-netd hostport add PORT`),
+    /// applied to every session the relay attaches. Only the ART engine has a
+    /// network relay; the Rust VM has no session network at all.
+    fn expose_host_port(&mut self, port: u16) -> Result<serde_json::Value, BackendError> {
+        match self {
+            EngineBackend::Native(_) => Err(BackendError::unsupported(
+                "environment",
+                format!("the Rust VM backend has no session network (asked to open host port {port})"),
+            )),
+            EngineBackend::Session { .. } => {
+                let relay_error = |error: String| BackendError::Failed {
+                    code: acos_protocol::ErrorCode::NetworkUnavailable,
+                    detail: format!(
+                        "could not open host port {port} on the network relay: {error} \
+                         (the `network` module needs the pinned pasta: `acos doctor`)"
+                    ),
+                };
+                let mut client = acos_netd::client::Client::ensure_up()
+                    .map_err(|error| relay_error(format!("{:?}: {}", error.code, error.message)))?;
+                let status = client
+                    .host_port(port, true, None)
+                    .map_err(|error| relay_error(format!("{:?}: {}", error.code, error.message)))?;
+                Ok(serde_json::json!({
+                    "port": port,
+                    "host_ports": status.host_ports,
+                }))
+            }
+        }
+    }
+
     fn capture(&mut self) -> Result<SessionObservation, BackendError> {
         match self {
             EngineBackend::Native(backend) => backend.capture(),

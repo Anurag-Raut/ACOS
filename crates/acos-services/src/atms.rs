@@ -595,6 +595,10 @@ pub struct AtmsState {
     /// this process?" (`Peer::package_of` -> `pending_launch_for`), which is how
     /// a `startActivity` into the already-running primary was undeliverable.
     pub primary_package: Option<String>,
+    /// Primary launcher `(package, class)` seeded by the host before boot, so
+    /// adopting tag-0's initial guest activity token also registers it in AMS's
+    /// task stack for later `NEW_TASK` / Launcher switches.
+    pub primary_activity: Option<(String, String)>,
 }
 
 impl AtmsState {
@@ -625,6 +629,7 @@ impl AtmsState {
             provider_registry: crate::provider::ProviderRegistry::new(),
             refs: crate::refs::GuestRefs::new(),
             primary_package: None,
+            primary_activity: None,
         }
     }
 
@@ -1268,7 +1273,28 @@ impl AtmsState {
         let guest_binder = token & GUEST_JAVA_BINDER_TAG != 0;
         let (name, placeholder) = match self.ams.adopt_launch_token(token) {
             Some((old, class)) => (class, Some(old)),
-            None if guest_binder => ("activity".to_string(), None),
+            None if guest_binder => {
+                let mut adopted_name = "activity".to_string();
+                if process_tag_of(token) == PRIMARY_PROCESS_TAG
+                    && !self
+                        .activities
+                        .iter()
+                        .any(|a| {
+                            // The synthetic fixture record is not a real activity.
+                            a.token != FIXTURE_ACTIVITY_TOKEN
+                                && self.activity_tag(a.token) == PRIMARY_PROCESS_TAG
+                                && !a.finished
+                        })
+                {
+                    if let Some((pkg, cls)) = self.primary_activity.clone() {
+                        if !cls.is_empty() {
+                            adopted_name = cls.clone();
+                        }
+                        self.ams.register_adopted_activity(token, &pkg, &cls);
+                    }
+                }
+                (adopted_name, None)
+            }
             None => {
                 atms_trace(format!(
                     "adopt-rejected token={token:#x} (not guest-tagged, no recorded launch)"
@@ -1432,6 +1458,17 @@ impl AtmsState {
             .unwrap_or_else(|| process_tag_of(token))
     }
 
+    /// Queue `ResumeActivityItem` for any existing stopped/paused tasks brought
+    /// to front by `NEW_TASK` / `launch_home`.
+    pub fn enqueue_pending_resumes(&mut self) {
+        let resumes = self.ams.take_pending_resumes();
+        for token in resumes {
+            let tag = self.activity_tag(token);
+            self.withdraw_pending_pause_stop(tag, token);
+            self.queue_lifecycle(tag, token, ClientTransactionItem::ResumeActivity);
+        }
+    }
+
     /// Queue one lifecycle item for process `tag`'s `IApplicationThread`.
     fn queue_lifecycle(&mut self, tag: u32, token: u64, item: ClientTransactionItem) {
         let Some(transaction) = ClientTransaction::lifecycle_parcelable(&item, token) else {
@@ -1469,6 +1506,7 @@ impl AtmsState {
             .ams
             .tasks
             .iter()
+            .rev()
             .filter_map(|t| t.activities.last().copied())
             .find(|t| *t != finished)
             // MPROC5: the primary launched Activity is not created by a
@@ -1492,6 +1530,7 @@ impl AtmsState {
         if !alive {
             return;
         }
+        self.withdraw_pending_pause_stop(next_tag, next);
         self.queue_lifecycle(next_tag, next, ClientTransactionItem::ResumeActivity);
         self.tops.insert(next_tag, next);
         self.publish_top(next_tag);
@@ -1927,7 +1966,7 @@ impl AtmsState {
     /// `ResumeActivityItem` in one transaction. ACOS queues the pause/stop when
     /// the dialog becomes top; when the dialog finishes before those were
     /// delivered they are stale and must not pause the caller after its result.
-    fn withdraw_pending_pause_stop(&mut self, tag: u32, token: u64) {
+    pub(crate) fn withdraw_pending_pause_stop(&mut self, tag: u32, token: u64) {
         let is_superseded = |call: &PendingLifecycleCall| {
             call.tag == tag
                 && call.token == token
@@ -2029,6 +2068,15 @@ impl AtmsState {
         }
     }
 
+    /// Name the session's primary `(package, class)` (for tag-0 adoption).
+    pub fn set_primary_activity(&mut self, package: &str, class: &str) -> bool {
+        let ok = self.set_primary_package(package);
+        if self.primary_activity.is_none() && !package.is_empty() && !class.is_empty() {
+            self.primary_activity = Some((package.to_string(), class.to_string()));
+        }
+        ok
+    }
+
     /// The primary package the launcher seeded, if any.
     #[must_use]
     pub fn primary_package(&self) -> Option<&str> {
@@ -2036,7 +2084,6 @@ impl AtmsState {
     }
 
     /// `checkPermission`: the shared runtime table first, then install-time.
-    #[must_use]
     /// `IActivityManager.checkPermission`'s answer for one **uid**
     /// (BINDERPID): AOSP asks the permission state for the calling uid, so two
     /// apps in one session with different uids get different answers.
@@ -2340,6 +2387,31 @@ impl AtmsService {
             .unwrap_or(false)
     }
 
+    /// Name the session's primary launcher `(package, class)` for tag-0 task tracking.
+    pub fn set_primary_activity(&mut self, package: &str, class: &str) -> bool {
+        self.state
+            .lock()
+            .map(|mut s| s.set_primary_activity(package, class))
+            .unwrap_or(false)
+    }
+
+    /// Host-initiated HOME launch (`ACTION_MAIN` + `CATEGORY_HOME`).
+    /// Fails honestly (`IllegalState`) when no HOME activity is installed.
+    pub fn launch_home(&mut self) -> Result<i32> {
+        let mut state = self.state.lock().unwrap();
+        let intent = crate::ams::IntentFacts {
+            action: Some("android.intent.action.MAIN".into()),
+            categories: vec!["android.intent.category.HOME".into()],
+            ..Default::default()
+        };
+        // FLAG_ACTIVITY_NEW_TASK | FLAG_ACTIVITY_RESET_TASK_IF_NEEDED
+        let code = state
+            .ams
+            .start_activity_from_host(&intent, 0x1020_0000, 0, 0)?;
+        state.enqueue_pending_resumes();
+        Ok(code)
+    }
+
     /// The seeded primary package (tests/inspection).
     #[must_use]
     pub fn primary_package(&self) -> Option<String> {
@@ -2439,6 +2511,14 @@ impl AtmsService {
         take_receiver_deliveries(&mut state)
     }
 
+    /// Drain queued `IApplicationThread.scheduleTransaction` lifecycle
+    /// deliveries (pause/stop/resume), including any queued by host control
+    /// ops (`launch_home`).
+    pub fn take_lifecycle_deliveries(&mut self) -> Vec<crate::host::PendingDelivery> {
+        let mut state = self.state.lock().unwrap();
+        drain_lifecycle_deliveries(&mut state)
+    }
+
     /// Drain the manifest-receiver matches.
     ///
     /// A manifest `<receiver>` is not an `IIntentReceiver`: stock
@@ -2476,6 +2556,65 @@ impl AtmsService {
 
 /// Convert the AMS state's queued receiver matches into `system -> app`
 /// deliveries, logging the ones that cannot be delivered.
+fn drain_lifecycle_deliveries(state: &mut AtmsState) -> Vec<crate::host::PendingDelivery> {
+    let lifecycle = std::mem::take(&mut state.pending_lifecycle_calls);
+    let trace_lifecycle = std::env::var_os("ACOS_ATMS_TRACE").is_some();
+    let mut deliveries = Vec::new();
+    for PendingLifecycleCall {
+        tag,
+        method: name,
+        args: values,
+        ..
+    } in lifecycle
+    {
+        if trace_lifecycle {
+            eprintln!(
+                "ACOSATMS deliver tag={tag} method={name} app_thread={:?}",
+                state
+                    .processes
+                    .iter()
+                    .find(|p| p.tag == tag)
+                    .and_then(|p| p.app_thread)
+            );
+        }
+        let Some(app_thread) = state
+            .processes
+            .iter()
+            .find(|p| p.tag == tag)
+            .and_then(|p| p.app_thread)
+        else {
+            state.log_event(
+                "ActivityManagerLifecycle",
+                acos_protocol::LogLevel::Warn,
+                format!("tag={tag} has no IApplicationThread; {name} not delivered"),
+            );
+            continue;
+        };
+        let Some(info) = acos_aidl::lookup_by_name("android.app.IApplicationThread", &name)
+        else {
+            continue;
+        };
+        let Ok(data) =
+            crate::codec::build_request("android.app.IApplicationThread", info, &values)
+        else {
+            state.log_event(
+                "ActivityManagerLifecycle",
+                acos_protocol::LogLevel::Warn,
+                format!("tag={tag} {name} could not be encoded"),
+            );
+            continue;
+        };
+        deliveries.push(PendingDelivery {
+            target: acos_parcel::BinderId(app_thread),
+            interface: "android.app.IApplicationThread".into(),
+            code: info.code,
+            method: name,
+            data,
+        });
+    }
+    deliveries
+}
+
 fn take_receiver_deliveries(state: &mut AtmsState) -> Vec<crate::host::PendingDelivery> {
     let queued = state.ams.take_pending_receivers();
     let mut deliveries = Vec::new();
@@ -2849,7 +2988,18 @@ impl ServiceObject for AtmsService {
                 vec![Value::Bool(true)]
             }
             _ => {
-                let Some(result) = crate::ams::dispatch(&mut state.ams, interface, method, args)?
+                let caller_tag = args
+                    .first()
+                    .and_then(Value::as_binder)
+                    .map(|b| process_tag_of(b.0))
+                    .or(Some(PRIMARY_PROCESS_TAG));
+                let Some(result) = crate::ams::dispatch_with_caller(
+                    &mut state.ams,
+                    interface,
+                    method,
+                    args,
+                    caller_tag,
+                )?
                 else {
                     return Err(ServiceError::UnsupportedAndroidApi {
                         interface: interface.to_string(),
@@ -2857,6 +3007,7 @@ impl ServiceObject for AtmsService {
                         method: method.name.clone(),
                     });
                 };
+                state.enqueue_pending_resumes();
                 // `broadcastIntent` reaches the app's dynamic receivers: the
                 // host materialises each `IIntentReceiver.performReceive` from
                 // the queued match (ADR-0029 late modules need this for
@@ -2892,6 +3043,7 @@ impl ServiceObject for AtmsService {
                     );
                 }
                 deliveries.extend(take_receiver_deliveries(&mut state));
+                deliveries.extend(drain_lifecycle_deliveries(&mut state));
                 return Ok(CallResult {
                     reply: result.reply,
                     deliveries,
@@ -2905,60 +3057,7 @@ impl ServiceObject for AtmsService {
         // queued with the tag they belong to, because on a device every one of
         // them goes to **that** activity's own app thread, never to "the"
         // attached process.
-        let lifecycle = std::mem::take(&mut state.pending_lifecycle_calls);
-        let trace_lifecycle = std::env::var_os("ACOS_ATMS_TRACE").is_some();
-        for PendingLifecycleCall {
-            tag,
-            method: name,
-            args: values,
-            ..
-        } in lifecycle
-        {
-            if trace_lifecycle {
-                eprintln!(
-                    "ACOSATMS deliver tag={tag} method={name} app_thread={:?}",
-                    state
-                        .processes
-                        .iter()
-                        .find(|p| p.tag == tag)
-                        .and_then(|p| p.app_thread)
-                );
-            }
-            let Some(app_thread) = state
-                .processes
-                .iter()
-                .find(|p| p.tag == tag)
-                .and_then(|p| p.app_thread)
-            else {
-                state.log_event(
-                    "ActivityManagerLifecycle",
-                    acos_protocol::LogLevel::Warn,
-                    format!("tag={tag} has no IApplicationThread; {name} not delivered"),
-                );
-                continue;
-            };
-            let Some(info) = acos_aidl::lookup_by_name("android.app.IApplicationThread", &name)
-            else {
-                continue;
-            };
-            let Ok(data) =
-                crate::codec::build_request("android.app.IApplicationThread", info, &values)
-            else {
-                state.log_event(
-                    "ActivityManagerLifecycle",
-                    acos_protocol::LogLevel::Warn,
-                    format!("tag={tag} {name} could not be encoded"),
-                );
-                continue;
-            };
-            deliveries.push(PendingDelivery {
-                target: acos_parcel::BinderId(app_thread),
-                interface: "android.app.IApplicationThread".into(),
-                code: info.code,
-                method: name,
-                data,
-            });
-        }
+        deliveries.extend(drain_lifecycle_deliveries(&mut state));
         if let Some(app_thread) = state
             .processes
             .iter()

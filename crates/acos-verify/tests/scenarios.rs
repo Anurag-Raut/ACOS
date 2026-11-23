@@ -2839,3 +2839,71 @@ fn service_ctl_timeout_never_turns_a_miss_into_a_pass() {
         .unwrap_or_default();
     assert!(message.contains("after waiting 300 ms"), "{message}");
 }
+
+// ---------------------------------------------------------------------------
+// METRO3: `dev_server` steps and `assert_tree`
+// ---------------------------------------------------------------------------
+
+/// A backend that cannot open a host port for the guest is `unsupported` at the
+/// `dev_server start` step (the default `expose_host_port`), never a pass, and no
+/// later step runs: the Metro the guest could not reach is not started either.
+#[test]
+fn dev_server_start_without_a_relay_is_unsupported_not_a_pass() {
+    let yaml = r#"
+version: 1
+name: dev-server-unsupported
+app: fixtures/build/apps/hello-views.apk
+isolation: process
+display: {mode: offscreen, width: 1080, height: 2400, density_dpi: 420}
+needs_env: [metro]
+expectation_reason: host needs node and Metro
+expectation: pass
+steps:
+  - dev_server: {op: start, project: fixtures/apps/rn-hello-dev, port: 18081}
+  - launch: {activity: dev.acos.fixtures.helloviews/.MainActivity}
+"#;
+    let scenario = Scenario::from_yaml_str(yaml).expect("valid scenario");
+    let artifacts = scratch("dev-server-unsupported");
+    let mut backend = CtlBackend {
+        manifest: None,
+        ready_at: 0,
+        reads: 0,
+    };
+    let outcome = run_log_scenario(&scenario, &artifacts, &mut backend);
+    let _ = std::fs::remove_dir_all(&artifacts);
+    assert_eq!(outcome.verdict.verdict, Status::Unsupported);
+    assert_eq!(outcome.verdict.steps.len(), 1, "stopped at the dev_server step");
+    assert!(
+        std::net::TcpStream::connect(("127.0.0.1", 18081)).is_err(),
+        "no Metro was started"
+    );
+}
+
+/// `start` against a project that does not exist fails with a structured error
+/// (no relay needed: `expose_to_guest: false`) and leaves nothing running.
+#[test]
+fn dev_server_start_of_a_missing_project_fails_closed() {
+    let yaml = r#"
+version: 1
+name: dev-server-missing-project
+app: fixtures/build/apps/hello-views.apk
+isolation: process
+display: {mode: offscreen, width: 1080, height: 2400, density_dpi: 420}
+needs_env: [metro]
+expectation_reason: host needs node and Metro
+expectation: pass
+steps:
+  - dev_server: {op: start, project: fixtures/apps/does-not-exist, port: 18082, expose_to_guest: false}
+"#;
+    let scenario = Scenario::from_yaml_str(yaml).expect("valid scenario");
+    let artifacts = scratch("dev-server-missing");
+    let mut backend = CtlBackend {
+        manifest: None,
+        ready_at: 0,
+        reads: 0,
+    };
+    let outcome = run_log_scenario(&scenario, &artifacts, &mut backend);
+    let _ = std::fs::remove_dir_all(&artifacts);
+    assert_ne!(outcome.verdict.verdict, Status::Pass);
+    assert!(std::net::TcpStream::connect(("127.0.0.1", 18082)).is_err());
+}

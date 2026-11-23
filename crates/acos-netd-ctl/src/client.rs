@@ -330,8 +330,15 @@ impl Client {
         unsafe {
             // `setsid`: the supervisor outlives the session that started it (the
             // relay is per host, not per session).
+            // FIX041: also mark every inherited fd >= 3 close-on-exec so a
+            // caller's lock fd (such as `run-exclusive.sh`'s `art.lock` on fd 10)
+            // is never inherited by the long-lived daemon. Using
+            // `CLOSE_RANGE_CLOEXEC` / `FD_CLOEXEC` (rather than closing eagerly)
+            // keeps Rust's internal `Command::spawn` exec-error pipe working
+            // until `execve`.
             cmd.pre_exec(|| {
                 libc::setsid();
+                mark_fds_cloexec_from(3);
                 Ok(())
             });
         }
@@ -712,5 +719,114 @@ fn no_payload(r: &Reply) -> ProtoError {
         }
     } else {
         payload_error(r)
+    }
+}
+
+/// Mark every open file descriptor `>= first_fd` close-on-exec.
+///
+/// Async-signal-safe: safe to call inside `CommandExt::pre_exec` after `fork`
+/// and before `execve`. Uses `close_range(first_fd, u32::MAX, CLOSE_RANGE_CLOEXEC)`
+/// when available (Linux >= 5.11), falling back to `fcntl(fd, F_SETFD, FD_CLOEXEC)`
+/// up to `RLIMIT_NOFILE`.
+pub fn mark_fds_cloexec_from(first_fd: libc::c_int) {
+    const CLOSE_RANGE_CLOEXEC: libc::c_uint = 1 << 2;
+    let start = first_fd.max(0) as libc::c_uint;
+    let rc = unsafe {
+        libc::syscall(
+            libc::SYS_close_range,
+            start,
+            libc::c_uint::MAX,
+            CLOSE_RANGE_CLOEXEC,
+        )
+    };
+    if rc == 0 {
+        return;
+    }
+    let mut lim = libc::rlimit {
+        rlim_cur: 4096,
+        rlim_max: 4096,
+    };
+    let max_fd = if unsafe { libc::getrlimit(libc::RLIMIT_NOFILE, &mut lim) } == 0 {
+        (lim.rlim_cur as libc::c_int).clamp(first_fd, 65536)
+    } else {
+        4096
+    };
+    for fd in first_fd..max_fd {
+        unsafe {
+            let flags = libc::fcntl(fd, libc::F_GETFD);
+            if flags >= 0 {
+                libc::fcntl(fd, libc::F_SETFD, flags | libc::FD_CLOEXEC);
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::os::unix::io::AsRawFd;
+    use std::os::unix::process::CommandExt;
+    use std::process::{Command, Stdio};
+
+    #[test]
+    fn daemonize_pre_exec_does_not_inherit_non_cloexec_flock_fd() {
+        let dir = std::env::temp_dir().join(format!("acos-netd-cloexec-{}", std::process::id()));
+        let _ = std::fs::create_dir_all(&dir);
+        let lock_path = dir.join("art.lock");
+        let lock_file = std::fs::OpenOptions::new()
+            .create(true)
+            .write(true)
+            .truncate(false)
+            .open(&lock_path)
+            .expect("open lock file");
+        let raw_fd = lock_file.as_raw_fd();
+        // Simulate bash `exec {fd}>art.lock`: clear FD_CLOEXEC and take an exclusive flock.
+        unsafe {
+            let flags = libc::fcntl(raw_fd, libc::F_GETFD);
+            assert!(flags >= 0);
+            assert_eq!(
+                libc::fcntl(raw_fd, libc::F_SETFD, flags & !libc::FD_CLOEXEC),
+                0
+            );
+            assert_eq!(libc::flock(raw_fd, libc::LOCK_EX | libc::LOCK_NB), 0);
+        }
+
+        // Spawn a long-lived setsid child using the same pre_exec hook as
+        // Client::start_supervisor().
+        let mut cmd = Command::new("/bin/sh");
+        cmd.args(["-c", "sleep 30"])
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null());
+        unsafe {
+            cmd.pre_exec(|| {
+                libc::setsid();
+                mark_fds_cloexec_from(3);
+                Ok(())
+            });
+        }
+        let mut child = cmd.spawn().expect("spawn setsid child");
+        // Give the child a moment to complete execve.
+        std::thread::sleep(Duration::from_millis(50));
+
+        // Release our own lock fd; if the child inherited it without CLOEXEC,
+        // the non-blocking flock below will fail with EWOULDBLOCK.
+        drop(lock_file);
+
+        let check = std::fs::OpenOptions::new()
+            .write(true)
+            .open(&lock_path)
+            .expect("reopen lock file");
+        let rc = unsafe { libc::flock(check.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) };
+        let err = std::io::Error::last_os_error();
+
+        let _ = child.kill();
+        let _ = child.wait();
+        let _ = std::fs::remove_dir_all(&dir);
+
+        assert_eq!(
+            rc, 0,
+            "lock must be released after parent drops fd (child must not inherit it): {err}"
+        );
     }
 }

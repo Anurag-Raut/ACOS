@@ -442,6 +442,45 @@ impl WmsState {
         display
     }
 
+    /// Current display geometry owned by this WMS.
+    #[must_use]
+    pub const fn display(&self) -> DisplaySpec {
+        self.wm.display
+    }
+
+    /// Set or update the multi-window bounds and windowing mode of `task_id`
+    /// (`docs/MULTIWINDOW_PLAN.md` §4.1).
+    pub fn set_task_bounds(
+        &mut self,
+        task_id: i32,
+        bounds: acos_wm::RectI,
+        windowing_mode: i32,
+    ) -> acos_wm::TaskRecord {
+        self.wm.set_task_bounds(task_id, bounds, windowing_mode)
+    }
+
+    /// Clear any multi-window bounds override for `task_id`, restoring fullscreen.
+    pub fn clear_task_bounds(&mut self, task_id: i32) -> Option<acos_wm::TaskRecord> {
+        self.wm.clear_task_bounds(task_id)
+    }
+
+    /// Clear every task bounds override.
+    pub fn clear_all_task_bounds(&mut self) {
+        self.wm.clear_all_task_bounds();
+    }
+
+    /// Current task bounds override for `task_id`, if any.
+    #[must_use]
+    pub fn task_bounds(&self, task_id: i32) -> Option<acos_wm::TaskRecord> {
+        self.wm.task_bounds(task_id)
+    }
+
+    /// All tasks that currently have a multi-window bounds override.
+    #[must_use]
+    pub fn tasks(&self) -> Vec<acos_wm::TaskRecord> {
+        self.wm.tasks.values().copied().collect()
+    }
+
     /// Bind `surface` to a real layer in the compositor-client registry and
     /// rewrite the control so the guest's `SurfaceControl` carries that
     /// compositor's client binder, layer-handle binder and layer id (W5).
@@ -693,6 +732,50 @@ impl WmsState {
             );
         }
         Some(dropped)
+    }
+
+    /// Update a window's WM visibility (`View.VISIBLE` vs `INVISIBLE`/`GONE`)
+    /// on `session`, refresh input window records (since stack order and
+    /// visibility govern focus and hit-testing), and return whether visibility
+    /// changed.
+    pub fn set_window_visible_for(
+        &mut self,
+        session: SessionId,
+        window: WindowId,
+        visible: bool,
+    ) -> WmResult<bool> {
+        self.check_session_window(session, window)?;
+        let changed = self.wm.set_relayout_window_visible(window, visible)?;
+        if changed {
+            let ids: Vec<WindowId> = self.wm.windows.keys().copied().collect();
+            for id in ids {
+                if let Some(record) = self.wm.windows.get(&id) {
+                    self.input.refresh_window(record);
+                }
+            }
+        }
+        Ok(changed)
+    }
+
+    /// Re-publish every bound compositor layer placement so z-order shifts
+    /// (e.g. bringing a stopped window back to front) reach C1 immediately.
+    pub fn refresh_bound_layer_placements(
+        &self,
+        compositor: &Arc<Mutex<crate::surface_client::SurfaceState>>,
+    ) {
+        let entries: Vec<(WindowId, SurfaceLayerBinding)> = self
+            .wm
+            .windows
+            .iter()
+            .filter_map(|(&id, rec)| {
+                let handle = rec.surface_handle?;
+                let binding = self.surface_layers.get(&handle).copied()?;
+                Some((id, binding))
+            })
+            .collect();
+        for (id, binding) in entries {
+            let _ = self.publish_layer_placement(binding, id, compositor);
+        }
     }
 
     /// Hide or show a window's layer (`eLayerHidden`), for a `relayout` whose

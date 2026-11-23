@@ -671,6 +671,10 @@ struct SecondaryShared {
     animations: &'static str,
     /// Run this guest's live probe (interactive sessions only).
     live_probe: bool,
+    /// Primary + extra session APKs (`(staged_host_path, guest_path)`) so any
+    /// secondary process (e.g. Launcher resolving `ResolveInfo.loadLabel`) can
+    /// read other installed packages' resources.
+    session_apks: Vec<(PathBuf, String)>,
 }
 
 impl SecondaryShared {
@@ -727,6 +731,11 @@ impl SecondaryShared {
         );
         sb.ro_bind(&self.substrate, "/data/app/libacosart.so");
         sb.ro_bind(&spec.staged, &spec.guest_apk);
+        for (host_apk, guest_apk) in &self.session_apks {
+            if guest_apk != &spec.guest_apk {
+                sb.ro_bind(host_apk, guest_apk);
+            }
+        }
         sb.ro_bind(&spec.lib_root, &spec.guest_lib_root);
         sb.ro_bind(&self.gralloc, "/data/libacoshw.so");
         sb.ro_bind(&self.driver, "/data/lib/libacos_binder_driver.so");
@@ -746,6 +755,11 @@ impl SecondaryShared {
         // delivery to it (and only to it).
         sb.env("ACOS_PROCESS_TAG", &spec.tag.to_string());
         sb.env("ACOS_PROCESS_NAME", &spec.package);
+        // CR1FIX2 #3: test-only seam, a splash-style fixture waits this long between
+        // `super.onCreate()` and `finish()`. Unset in normal runs (no delay).
+        if let Ok(v) = std::env::var("ACOS_TEST_FINISH_DELAY_MS") {
+            sb.env("ACOS_TEST_FINISH_DELAY_MS", &v);
+        }
         sb.env("ACOSLAUNCH_RESUME_MS", &self.resume_ms.to_string());
         // MPROC7 (ADR-0029 amendment): this process's first launch is a
         // host-built `ClientTransaction` (system_server owns the activity
@@ -1066,6 +1080,7 @@ impl SecondaryPool {
                 .unwrap_or(0);
             state.seq_offsets.insert(spec.tag, highest);
             state.by_process.remove(&spec.tag);
+            state.last_raw_seq.remove(&spec.tag);
         }
         let stderr = Arc::new(std::sync::Mutex::new(TailBuffer::with_cap(1 << 16)));
         match spawn_secondary(
@@ -1829,6 +1844,10 @@ pub(crate) fn launch_session(
                 "acos-art: launch: the activity service did not take the primary package {package}"
             );
         }
+        if let Ok(l) = acos_services::manifest_resolve::launcher_activity(&opts.apk) {
+            let cls = l.target.unwrap_or(l.component);
+            let _ = host.seed_primary_activity(&package, &cls);
+        }
         // K3d: the PMS publishes the APK path the **guest** can open
         // (`/data/app/<name>.apk`, read-only bound by the sandbox), not the host
         // file. `PackageManager.getResourcesForApplication` builds `Resources`
@@ -1944,8 +1963,15 @@ pub(crate) fn launch_session(
                 let mut frames: Vec<(u32, Frame)> = Vec::new();
                 while let Some((id, request)) = peer_control.take() {
                     let reply = service_request(peer, &mut peer_registry, &request);
+                    let guest_commands = peer.host_mut().drain_guest_commands();
                     let debug_reply = reply.to_string();
-                    peer_control.reply(id, reply);
+                    peer_control.reply(
+                        id,
+                        ServiceControlReply {
+                            reply,
+                            guest_commands,
+                        },
+                    );
                     for spawn in peer.take_spawn_requests() {
                         eprintln!(
                             "acos-binder-peer: control op: {} needs a process for {} ({})",
@@ -2383,6 +2409,9 @@ pub(crate) fn launch_session(
         screen_layout: acos_services::wms::REFERENCE_SCREEN_LAYOUT.max(0) as u32,
         animations: opts.animations.as_str(),
         live_probe: interactive,
+        session_apks: std::iter::once((apk.clone(), guest_apk.clone()))
+            .chain(extras.iter().map(|e| (e.staged.clone(), e.guest_path.clone())))
+            .collect(),
     };
     let mut secondary_pool =
         SecondaryPool::new(
@@ -2713,6 +2742,15 @@ pub(crate) fn launch_session(
     // dump's off switch. Diagnostic only; nothing else reads either name.
     if let Ok(mode) = std::env::var("ACOSLAUNCH_CRASH_TEST") {
         sb.env("ACOSLAUNCH_CRASH_TEST", &mode);
+    }
+    // CR1FIX2 #1: diagnostic seam, the decor reports no attached root.
+    if std::env::var_os("ACOSLAUNCH_TEST_WINDOW_NO_ROOT").is_some() {
+        sb.env("ACOSLAUNCH_TEST_WINDOW_NO_ROOT", "1");
+    }
+    // CR1FIX2 #3: test-only seam, a splash-style fixture waits this long between
+    // `super.onCreate()` and `finish()`. Unset in normal runs (no delay).
+    if let Ok(v) = std::env::var("ACOS_TEST_FINISH_DELAY_MS") {
+        sb.env("ACOS_TEST_FINISH_DELAY_MS", &v);
     }
     if let Ok(v) = std::env::var("ACOSART_CRASH_DUMP") {
         sb.env("ACOSART_CRASH_DUMP", &v);
@@ -3577,6 +3615,45 @@ struct ProbeSample {
     window_gone: bool,
     /// P12: the guest's applied animation state (`None` if it did not report).
     animations_on: Option<bool>,
+    /// CR1FIX #20: the guest's `window_cmd` counters at the START of this
+    /// sample's tree walk: host WINDOW commands it has finished processing, and
+    /// how many of those failed. `None` when the guest did not report.
+    window_cmd: Option<WindowCmdCounters>,
+}
+
+/// CR1FIX #20: the guest's count of finished (and failed) WINDOW commands.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct WindowCmdCounters {
+    done: u64,
+    failed: u64,
+}
+
+/// CR1FIX #20: whether a probe sample proves the guest applied the first
+/// `sent` WINDOW commands before it walked its tree. A sequence increase proves
+/// nothing (an unread line the guest emitted before it saw the command is
+/// published with a higher host sequence); only the guest's own command-specific
+/// counter does.
+#[derive(Debug, PartialEq, Eq)]
+enum WindowAck {
+    /// The sample predates the commands (or carries no counter): keep waiting.
+    Pending,
+    /// Every sent command was processed and none failed since `failed_seen`.
+    Applied,
+    /// The guest reports a command failed (its own `window-failed` mark).
+    Failed,
+}
+
+fn window_ack(sample: &ProbeSample, sent: u64, failed_seen: u64) -> WindowAck {
+    match sample.window_cmd {
+        Some(c) if c.done >= sent => {
+            if c.failed > failed_seen {
+                WindowAck::Failed
+            } else {
+                WindowAck::Applied
+            }
+        }
+        _ => WindowAck::Pending,
+    }
 }
 
 /// P9: the launcher's event-driven wake channel for the startup loop.
@@ -3686,6 +3763,11 @@ struct ProbeState {
     /// is spawned, its entries are cleared and this base is set to the session's
     /// current maximum, so its samples continue monotonically.
     seq_offsets: std::collections::BTreeMap<u32, u64>,
+    /// Last raw guest `seq` observed per process tag (so stale check stays
+    /// per-process while published `seq` advances monotonically across switches).
+    last_raw_seq: std::collections::BTreeMap<u32, u64>,
+    /// Highest `seq` published across all processes in this session.
+    highest_seq: u64,
     /// H15: the last `anim_callbacks` set traced, so the trace names each
     /// distinct animation callback once instead of once per sample.
     anim_traced: String,
@@ -4666,19 +4748,30 @@ fn drain_tee_lines<R: std::io::Read>(
                         .get("animations")
                         .and_then(|v| v.get("on"))
                         .and_then(|v| v.as_bool());
+                    let window_cmd = value.get("window_cmd").and_then(|c| {
+                        Some(WindowCmdCounters {
+                            done: c.get("done")?.as_u64()?,
+                            failed: c.get("failed")?.as_u64()?,
+                        })
+                    });
                     if let Some(on) = animations_on {
                         set_animations_state(on);
                     }
                     let mut state = state.lock().unwrap_or_else(|e| e.into_inner());
                     // MPROC7: rebase a (re)spawned process's own counter so the
                     // session's probe sequence stays monotonic across a respawn.
-                    let seq = seq.saturating_add(state.seq_offsets.get(&tag).copied().unwrap_or(0));
+                    let raw_seq = seq;
                     let newer = state
-                        .by_process
+                        .last_raw_seq
                         .get(&tag)
-                        .map(|p| p.seq < seq)
+                        .map(|&prev| prev < raw_seq)
                         .unwrap_or(true);
                     if newer {
+                        state.last_raw_seq.insert(tag, raw_seq);
+                        let seq = raw_seq
+                            .saturating_add(state.seq_offsets.get(&tag).copied().unwrap_or(0))
+                            .max(state.highest_seq.saturating_add(1));
+                        state.highest_seq = seq;
                         let at_ms = host_ms();
                         // SETTLE5 diagnostic: the host's own receipt time and
                         // the guest's build time, so a stalled probe can be
@@ -4714,6 +4807,7 @@ fn drain_tee_lines<R: std::io::Read>(
                             pending,
                             window_gone,
                             animations_on,
+                            window_cmd,
                         };
                         state.by_process.insert(tag, sample.clone());
                         // `latest` stays the newest sample of **any** process; it
@@ -5877,6 +5971,29 @@ enum SettleEnd {
 /// the deadline returns `bound:"timeout"` with the guest's reason; it is never
 /// reported as settled.
 #[allow(clippy::too_many_arguments)]
+fn drain_pending_spawns(
+    spawner: Option<(
+        &Arc<std::sync::Mutex<std::collections::VecDeque<acos_services::ams::ProcessSpawnRequest>>>,
+        &mut SecondaryPool,
+    )>,
+    probe_state: &Arc<std::sync::Mutex<ProbeState>>,
+    compositor: &Arc<std::sync::Mutex<acos_services::surface_client::SurfaceState>>,
+) {
+    let Some((queue, secondary)) = spawner else {
+        return;
+    };
+    loop {
+        let next = queue
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .pop_front();
+        let Some(request) = next else {
+            break;
+        };
+        secondary.spawn(&request, probe_state, Arc::clone(compositor));
+    }
+}
+
 fn wait_for_event_settled(
     child: &mut std::process::Child,
     cgroup: &mut crate::cgroup::RunCgroup,
@@ -5924,6 +6041,10 @@ fn wait_for_event_settled(
     // away from that baseline may settle the step as `window_reshown` (see
     // [`WindowReshownGate`]). `None` keeps every other caller byte-identical.
     window_reshown: Option<WindowForest>,
+    mut spawner: Option<(
+        &Arc<std::sync::Mutex<std::collections::VecDeque<acos_services::ams::ProcessSpawnRequest>>>,
+        &mut SecondaryPool,
+    )>,
 ) -> SettleEnd {
     let confirm = Duration::from_millis(env_u64("ACOS_STRICT_SETTLE_CONFIRM_MS", 24));
     // Owner decision (2026-11-12): the pixel-unchanged guard is OFF by default.
@@ -6028,6 +6149,11 @@ fn wait_for_event_settled(
         ),
     );
     loop {
+        drain_pending_spawns(
+            spawner.as_mut().map(|(q, s)| (*q, &mut **s)),
+            probe_state,
+            &live.compositor,
+        );
         let (unsupported_seq, marker) = latest_unsupported(probe_state);
         if unsupported_seq > unsupported_baseline {
             return SettleEnd::Unsupported(marker.unwrap_or(serde_json::Value::Null));
@@ -6577,6 +6703,10 @@ fn wait_for_settled_observation(
     window_removal: Option<(acos_parcel::BinderId, u64)>,
     // BACKSETTLE: see [`wait_for_event_settled`].
     window_reshown: Option<WindowForest>,
+    mut spawner: Option<(
+        &Arc<std::sync::Mutex<std::collections::VecDeque<acos_services::ams::ProcessSpawnRequest>>>,
+        &mut SecondaryPool,
+    )>,
 ) -> SettleEnd {
     if mode == SettleMode::Strict {
         return wait_for_event_settled(
@@ -6595,6 +6725,7 @@ fn wait_for_settled_observation(
             entry_fnv,
             window_removal,
             window_reshown,
+            spawner,
         );
     }
     // ---- fast (P1): first probe tree that differs from the pre-action baseline.
@@ -6616,6 +6747,11 @@ fn wait_for_settled_observation(
     let wake = settle_wake(probe_state);
     let mut seen = 0u64;
     loop {
+        drain_pending_spawns(
+            spawner.as_mut().map(|(q, s)| (*q, &mut **s)),
+            probe_state,
+            &live.compositor,
+        );
         // A structured guest marker is more informative than the generic
         // "no fresh frame" timeout, and it is the only honest result for an
         // Android API the launcher does not implement yet.
@@ -7202,7 +7338,7 @@ enum ServeEvent {
     /// MPROC4 step 3b: the peer resolved a component of a package that needs a
     /// process. The launcher owns the processes, so the request is handled on
     /// this thread like any other session event.
-    Spawn(acos_services::ams::ProcessSpawnRequest),
+    SpawnWake,
 }
 
 /// VIEW1a: the live-view frame source.
@@ -7328,6 +7464,10 @@ fn interactive_serve(
         Some(fifo) => Some(GuestProbeChannel::Fifo(fifo)),
         None => child.stdin.take().map(GuestProbeChannel::Pipe),
     };
+    // CR1FIX #20: WINDOW commands written to the guest so far, and the guest's
+    // failed-command count already reported to the host.
+    let mut window_cmds_sent: u64 = 0;
+    let mut window_failed_seen: u64 = 0;
     let startup_deadline = started + startup_budget;
     // P9: the drain thread signals this on every parsed probe sample, so the
     // loop below is woken by the guest instead of polling on a fixed 10 ms
@@ -7567,11 +7707,21 @@ fn interactive_serve(
     // MPROC4 step 3b: spawn requests arrive on their own channel; forwarding
     // them into the session's event channel keeps one event loop (no second
     // poll path, no ordering question between a spawn and the next command).
+    let pending_spawns: Arc<
+        std::sync::Mutex<std::collections::VecDeque<acos_services::ams::ProcessSpawnRequest>>,
+    > = Arc::default();
     {
         let spawn_ctx = ctx.clone();
+        let spawn_queue = Arc::clone(&pending_spawns);
+        let spawn_wake = settle_wake(probe_state);
         std::thread::spawn(move || {
             while let Ok(request) = spawn_rx.recv() {
-                if spawn_ctx.send(ServeEvent::Spawn(request)).is_err() {
+                spawn_queue
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .push_back(request);
+                spawn_wake.notify();
+                if spawn_ctx.send(ServeEvent::SpawnWake).is_err() {
                     return;
                 }
             }
@@ -7634,8 +7784,12 @@ fn interactive_serve(
             }
         }
         let line = match crx.recv_timeout(wait) {
-            Ok(ServeEvent::Spawn(request)) => {
-                secondary.spawn(&request, probe_state, Arc::clone(&live.compositor));
+            Ok(ServeEvent::SpawnWake) => {
+                drain_pending_spawns(
+                    Some((&pending_spawns, secondary)),
+                    probe_state,
+                    &live.compositor,
+                );
                 continue;
             }
             Ok(ServeEvent::Line(line)) => line,
@@ -7856,6 +8010,7 @@ fn interactive_serve(
                         None,
                         None,
                         None,
+                        Some((&pending_spawns, secondary)),
                     );
                     match settled {
                         SettleEnd::Settled(settled) => {
@@ -8283,12 +8438,158 @@ fn interactive_serve(
                 }
             }
             "services" => {
-                // ADR-0029 item 4: list/status/attach/detach on the live
-                // session. The peer thread owns the host, so the request is
-                // handed to it and its answer is forwarded verbatim (a refusal
-                // for an `at-launch` module is the peer's structured error).
+                // ADR-0029 item 4 + 2026-11-18 amendment (option A): list/status/
+                // attach/detach/ctl on the live session. The peer thread owns the
+                // host and returns both the module's reply and any typed guest
+                // commands queued onto `ServiceHost`'s outbox. The launcher writes
+                // each command to the owning guest process, waits for a fresh
+                // probe sample, and returns the settled UI tree in the same reply.
                 let reply = match control.submit(request.clone(), Duration::from_secs(10)) {
-                    Some(reply) => reply,
+                    Some(ServiceControlReply {
+                        mut reply,
+                        guest_commands,
+                    }) => {
+                        let reply_ok = reply
+                            .get("ok")
+                            .and_then(|v| v.as_bool())
+                            .unwrap_or(false);
+                        if reply_ok && !guest_commands.is_empty() {
+                            let mut dispatch_err: Option<serde_json::Value> = None;
+                            for command in &guest_commands {
+                                match *command {
+                                    acos_services::GuestCommand::Window {
+                                        task,
+                                        process,
+                                        rect,
+                                        app_bounds,
+                                        windowing_mode,
+                                    } => {
+                                        if process != 0 {
+                                            dispatch_err = Some(serde_json::json!({
+                                                "ok": false,
+                                                "cmd": "services",
+                                                "code": "UNSUPPORTED_ANDROID_API",
+                                                "error": format!(
+                                                    "GuestCommand::Window for task {task} targets \
+                                                     secondary process {process}; multi-process \
+                                                     window-command routing requires multiwindow slice 2"
+                                                ),
+                                            }));
+                                            break;
+                                        }
+                                        let Some(writer) = guest_stdin.as_mut() else {
+                                            dispatch_err = Some(serde_json::json!({
+                                                "ok": false,
+                                                "cmd": "services",
+                                                "code": "NO_GUEST_CONTROL",
+                                                "error": "the guest has no stdin control pipe for GuestCommand::Window",
+                                            }));
+                                            break;
+                                        };
+                                        use std::io::Write;
+                                        if let Err(err) = writeln!(
+                                            writer,
+                                            "WINDOW {windowing_mode} {} {} {} {} {} {} {} {}",
+                                            rect.left,
+                                            rect.top,
+                                            rect.right,
+                                            rect.bottom,
+                                            app_bounds.left,
+                                            app_bounds.top,
+                                            app_bounds.right,
+                                            app_bounds.bottom
+                                        )
+                                        .and_then(|()| writer.flush())
+                                        {
+                                            dispatch_err = Some(serde_json::json!({
+                                                "ok": false,
+                                                "cmd": "services",
+                                                "code": "GUEST_IO",
+                                                "error": format!("failed writing WINDOW command to guest: {err}"),
+                                            }));
+                                            break;
+                                        }
+                                        window_cmds_sent += 1;
+                                    }
+                                }
+                            }
+                            if let Some(err_reply) = dispatch_err {
+                                err_reply
+                            } else {
+                                let deadline = Instant::now() + frame_wait;
+                                let mut fresh = None;
+                                let mut exited: Option<serde_json::Value> = None;
+                                let mut cmd_failed: Option<serde_json::Value> = None;
+                                while Instant::now() < deadline {
+                                    if let Some(sample) = latest_probe(probe_state) {
+                                        // CR1FIX #20: only the guest's own
+                                        // command-specific counter proves the
+                                        // tree was walked after the WINDOW
+                                        // command was applied.
+                                        match window_ack(
+                                            &sample,
+                                            window_cmds_sent,
+                                            window_failed_seen,
+                                        ) {
+                                            WindowAck::Applied => {
+                                                fresh = Some(sample);
+                                                break;
+                                            }
+                                            WindowAck::Failed => {
+                                                window_failed_seen = sample
+                                                    .window_cmd
+                                                    .map(|c| c.failed)
+                                                    .unwrap_or(window_failed_seen);
+                                                cmd_failed = Some(serde_json::json!({
+                                                    "ok": false,
+                                                    "cmd": "services",
+                                                    "code": "GUEST_WINDOW_FAILED",
+                                                    "error": "the guest failed to apply GuestCommand::Window (see its `ACOSLAUNCH MARK window-failed` line)",
+                                                }));
+                                                break;
+                                            }
+                                            WindowAck::Pending => {}
+                                        }
+                                    }
+                                    if let Ok(Some(status)) = child.try_wait() {
+                                        exited = Some(serde_json::json!({
+                                            "ok": false,
+                                            "cmd": "services",
+                                            "code": "GUEST_EXITED",
+                                            "error": format!(
+                                                "the guest exited before it published a probe after GuestCommand::Window: {status}"
+                                            ),
+                                        }));
+                                        break;
+                                    }
+                                    std::thread::sleep(Duration::from_millis(10));
+                                }
+                                if let Some(exit_reply) = exited {
+                                    exit_reply
+                                } else if let Some(failed_reply) = cmd_failed {
+                                    failed_reply
+                                } else if let Some(sample) = fresh {
+                                    if let Some(obj) = reply.as_object_mut() {
+                                        obj.insert(
+                                            "probe_seq".to_string(),
+                                            serde_json::json!(sample.seq),
+                                        );
+                                        obj.insert("tree".to_string(), sample.tree);
+                                    }
+                                    reply
+                                } else {
+                                    serde_json::json!({
+                                        "ok": false,
+                                        "cmd": "services",
+                                        "code": "NO_FRESH_TREE",
+                                        "error": "the guest published no probe sample proving it applied GuestCommand::Window",
+                                    })
+                                }
+                            }
+                        } else {
+                            reply
+                        }
+                    }
                     None => serde_json::json!({
                         "ok": false, "cmd": "services", "code": "SERVICE_CONTROL_TIMEOUT",
                         "error": "the peer thread did not answer the module request within 10 s",
@@ -8442,29 +8743,61 @@ fn interactive_serve(
                 // 8.7-9.2 ms per tap (`diagnosis/tap-split-*.txt`), the entire
                 // v0.3.0 M8 regression. See `unhandled_entry_fnv` below for where
                 // the value is taken now and why moving it changes nothing.
-                let injected = match (cmd, key_code) {
-                    // WVTAP: one input routing rule, owned by `InputHost`:
-                    //   * touch (tap, swipe) goes to the window **under the
-                    //     point** (`InputDispatcher::findTouchedWindowAt`: the
-                    //     topmost touchable window containing it), and the
-                    //     point is converted into that window's space;
-                    //   * keys/text go to the **focused** window
-                    //     (`dispatchKeyLocked`).
-                    // The request carries **display** coordinates (the same
-                    // space the UI tree reports). Choosing the target here as
-                    // well would be a second implementation of the rule; this
-                    // arm used to be a dead duplicate of the `hit_test` one
-                    // below it, and `swipe` went to the focused window (a
-                    // touch routed by focus).
-                    ("tap", _) => live.input.tap(x, y, ack_wait),
-                    ("swipe", _) => live
-                        .input
-                        .swipe(swipe_from, swipe_to, swipe_duration, ack_wait),
-                    ("type_text", _) => live
-                        .input
-                        .type_text(text_arg.as_deref().unwrap_or_default(), ack_wait),
-                    (_, Some(code)) => live.input.key(code, ack_wait),
-                    _ => unreachable!(),
+                let is_home_key = cmd == "key" && key_code == Some(3);
+                let injected = if is_home_key {
+                    match control.submit(
+                        serde_json::json!({"cmd": "services", "op": "launch_home"}),
+                        Duration::from_secs(10),
+                    ) {
+                        None => {
+                            let reply = serde_json::json!({
+                                "ok": false, "cmd": cmd, "code": "SERVICE_CONTROL_TIMEOUT",
+                                "error": "the peer thread did not answer launch_home within 10 s",
+                            });
+                            protocol_write(&reply);
+                            evidence.push(reply);
+                            continue;
+                        }
+                        Some(ServiceControlReply {
+                            reply: home_reply,
+                            ..
+                        }) => {
+                            if home_reply.get("ok").and_then(|v| v.as_bool()) != Some(true) {
+                                let code_str = home_reply
+                                    .get("code")
+                                    .and_then(|v| v.as_str())
+                                    .unwrap_or("HOME_UNAVAILABLE");
+                                let err_str = home_reply
+                                    .get("error")
+                                    .and_then(|v| v.as_str())
+                                    .unwrap_or("no HOME activity installed");
+                                let reply = serde_json::json!({
+                                    "ok": false, "cmd": cmd, "code": code_str,
+                                    "error": err_str,
+                                });
+                                protocol_write(&reply);
+                                evidence.push(reply);
+                                continue;
+                            }
+                            Ok(acos_services::window_session::input_dispatch::InjectedGesture {
+                                token: acos_parcel::BinderId(0),
+                                seqs: Vec::new(),
+                                acks: Vec::new(),
+                            })
+                        }
+                    }
+                } else {
+                    match (cmd, key_code) {
+                        ("tap", _) => live.input.tap(x, y, ack_wait),
+                        ("swipe", _) => live
+                            .input
+                            .swipe(swipe_from, swipe_to, swipe_duration, ack_wait),
+                        ("type_text", _) => live
+                            .input
+                            .type_text(text_arg.as_deref().unwrap_or_default(), ack_wait),
+                        (_, Some(code)) => live.input.key(code, ack_wait),
+                        _ => unreachable!(),
+                    }
                 };
                 let injected = match injected {
                     Ok(injected) => {
@@ -8570,8 +8903,9 @@ fn interactive_serve(
                     None,
                     unhandled_ack_floor,
                     entry_fnv,
-                    Some((injected.token, removal_mark)),
+                    (!is_home_key).then_some((injected.token, removal_mark)),
                     window_reshown,
+                    Some((&pending_spawns, secondary)),
                 );
                 let (settled_probe, g1, p1, settle_timing) = match settled {
                     SettleEnd::Settled(settled) => (
@@ -9483,15 +9817,20 @@ fn meta_spec(entries: &[acos_services::pms::MetaDataEntry]) -> String {
         .join(";")
 }
 
-/// ADR-0029 item 4: live module attach/detach crosses from the interactive
-/// command loop (the thread that answers the caller) to the peer thread (the
-/// only owner of the `ServiceHost`). One request/reply pair per call, bounded
-/// by a deadline; a peer that cannot answer in time is a structured error, never
-/// a silent success.
+struct ServiceControlReply {
+    reply: serde_json::Value,
+    guest_commands: Vec<acos_services::GuestCommand>,
+}
+
+/// ADR-0029 item 4 + 2026-11-18 amendment: live module attach/detach/ctl
+/// crosses from the interactive command loop (the thread that answers the
+/// caller and owns the guest pipes) to the peer thread (the only owner of
+/// `ServiceHost`). Each reply carries both the module's JSON result and any
+/// typed [`acos_services::GuestCommand`]s queued onto `ServiceHost`'s outbox.
 #[derive(Default)]
 struct ServiceControl {
     requests: Mutex<Vec<(u64, serde_json::Value)>>,
-    replies: Mutex<HashMap<u64, serde_json::Value>>,
+    replies: Mutex<HashMap<u64, ServiceControlReply>>,
     next_id: AtomicU64,
     reply_cv: Condvar,
     /// The peer's wake-pipe write end (`-1` until the launcher installs it). A
@@ -9508,7 +9847,11 @@ impl ServiceControl {
 }
 
 impl ServiceControl {
-    fn submit(&self, request: serde_json::Value, timeout: Duration) -> Option<serde_json::Value> {
+    fn submit(
+        &self,
+        request: serde_json::Value,
+        timeout: Duration,
+    ) -> Option<ServiceControlReply> {
         let id = self.next_id.fetch_add(1, Ordering::Relaxed) + 1;
         self.requests
             .lock()
@@ -9550,7 +9893,7 @@ impl ServiceControl {
     }
 
     /// Peer-thread side: publish the answer and wake the caller.
-    fn reply(&self, id: u64, value: serde_json::Value) {
+    fn reply(&self, id: u64, value: ServiceControlReply) {
         self.replies
             .lock()
             .unwrap_or_else(|e| e.into_inner())
@@ -9657,6 +10000,18 @@ fn service_request(
                 })
             })
         }
+        "launch_home" => match peer.host_mut().launch_home() {
+            Ok(code) => Ok(serde_json::json!({ "start_result": code })),
+            Err(acos_services::ServiceError::IllegalState { detail, .. }) => {
+                return serde_json::json!({
+                    "ok": false,
+                    "cmd": "services",
+                    "code": "HOME_UNAVAILABLE",
+                    "error": detail,
+                });
+            }
+            Err(error) => Err(error),
+        },
         "ctl" => {
             // `acos_service_ctl` (MCP) / a scenario `service_ctl` step: a
             // module's own control op (`sensors.set_value`, `telephony.sms`, ...).
@@ -10156,6 +10511,8 @@ mod probe_line_tests {
                 latest: self.latest.clone(),
                 by_process: self.by_process.clone(),
                 seq_offsets: self.seq_offsets.clone(),
+                last_raw_seq: self.last_raw_seq.clone(),
+                highest_seq: self.highest_seq,
                 top_process: Arc::clone(&self.top_process),
                 unsupported: self.unsupported.clone(),
                 unsupported_seq: self.unsupported_seq,
@@ -10265,6 +10622,47 @@ mod probe_line_tests {
         assert_eq!(state.oversized_lines, 0);
     }
 
+    /// CR1FIX #20: a probe line the guest emitted BEFORE it applied WINDOW can
+    /// still be unread when the host writes the command; the drain publishes it
+    /// with a host sequence above the pre-command one. Only the guest's own
+    /// `window_cmd` counter may acknowledge the command.
+    #[test]
+    fn a_stale_probe_with_a_higher_seq_does_not_ack_a_window_command() {
+        // The host read seq 4 before writing WINDOW (command 1)...
+        let before = drain(
+            "ACOSPROBE {\"seq\":4,\"window_cmd\":{\"done\":0,\"failed\":0},\"tree\":{\"nodes\":[]}}\n",
+        );
+        let before_seq = before.latest.expect("baseline sample").seq;
+        // ...then the unread pre-command line (seq 5, done=0) is drained.
+        let stale = drain(
+            "ACOSPROBE {\"seq\":5,\"window_cmd\":{\"done\":0,\"failed\":0},\"tree\":{\"nodes\":[\"old\"]}}\n",
+        )
+        .latest
+        .expect("stale sample");
+        assert!(stale.seq > before_seq, "the old sequence rule would accept it");
+        assert_eq!(window_ack(&stale, 1, 0), WindowAck::Pending);
+        // A sample walked after the guest applied the command acknowledges it.
+        let applied = drain(
+            "ACOSPROBE {\"seq\":6,\"window_cmd\":{\"done\":1,\"failed\":0},\"tree\":{\"nodes\":[\"new\"]}}\n",
+        )
+        .latest
+        .expect("applied sample");
+        assert_eq!(window_ack(&applied, 1, 0), WindowAck::Applied);
+        // A guest that predates the counter (no field) can never ack.
+        let legacy = drain("ACOSPROBE {\"seq\":9,\"tree\":{\"nodes\":[]}}\n")
+            .latest
+            .expect("legacy sample");
+        assert_eq!(window_ack(&legacy, 1, 0), WindowAck::Pending);
+        // The guest's own failure is surfaced, not turned into a tree.
+        let failed = drain(
+            "ACOSPROBE {\"seq\":7,\"window_cmd\":{\"done\":2,\"failed\":1},\"tree\":{\"nodes\":[]}}\n",
+        )
+        .latest
+        .expect("failed sample");
+        assert_eq!(window_ack(&failed, 2, 0), WindowAck::Failed);
+        assert_eq!(window_ack(&failed, 2, 1), WindowAck::Applied);
+    }
+
     /// A guest probe throw must reach the host with its payload, never be
     /// swallowed (W32's only visible symptom was a frozen `seq`).
     #[test]
@@ -10305,6 +10703,7 @@ mod probe_line_tests {
             pending: Vec::new(),
             window_gone: false,
             animations_on: None,
+            window_cmd: None,
         }
     }
 
@@ -11517,6 +11916,7 @@ mod backsettle_tests {
                 pending: if settled { Vec::new() } else { vec!["traversal".into()] },
                 window_gone: false,
                 animations_on: None,
+                window_cmd: None,
             }
         }
         let bind = Some(ReshownOutcome::Bind(0x10, 3));

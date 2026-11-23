@@ -58,12 +58,16 @@ pub mod wms;
 pub use acos_protocol::Orientation;
 pub use callbacks::{PendingCallback, WmCallback};
 pub use clock::{Clock, RealClock, VirtualClock};
-pub use display::{DisplaySpec, RotationRelaunch, SystemBars};
+pub use display::{
+    in_multi_window_mode, DisplaySpec, RotationRelaunch, SplitPosition, SystemBars, TaskRecord,
+    WINDOWING_MODE_FREEFORM, WINDOWING_MODE_FULLSCREEN, WINDOWING_MODE_MULTI_WINDOW,
+    WINDOWING_MODE_PINNED, WINDOWING_MODE_UNDEFINED,
+};
 pub use error::{Result, WmError};
 pub use facade::{FrameView, InputOutcome, SessionWm};
 pub use geom::{InsetsI, PointI, RectI};
 pub use layers::{LayerEntry, WindowKind, WindowLayerStack};
-pub use wms::{AddWindowResult, RelayoutResult, WindowRecord, WindowState};
+pub use wms::{AddWindowResult, RelayoutResult, WindowRecord, WindowState, DEFAULT_TASK_ID};
 
 /// Version of the derived WMS layouts, surfaced in evidence metadata.
 pub const ACOS_WM_VERSION: &str = env!("CARGO_PKG_VERSION");

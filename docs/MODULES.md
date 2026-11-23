@@ -23,6 +23,10 @@ A module is a set of Android system pieces attached to a session. `off` is alway
 | `webview` | `off`, `real`, needs `acos-webview`, `chrome-headless-shell` | `at-launch` | `host-tool` | 4 | 11 | a real WebView: the `com.android.webview` provider package installed in the session plus the shared host Chromium behind the session's gate socket (one broker per host, ~130-140 MiB once, started on the first connect); `off` is Android's own no-provider path, and there is no stub/scripted profile | app `com.android.webview` | `status` |
 | `net.wifi` | `off`, `stub`, `scripted` | `hot` | `in-process` | 1 | 5 | Wi-Fi client radio: stub (one SSID from config) / scripted (connect, disconnect, rssi, scan -> WIFI_STATE_CHANGED, NETWORK_STATE_CHANGED, RSSI_CHANGED, SCAN_RESULTS, NetworkCallback loss/availability); no real radio, no hotspot/P2P/configured networks | `wifi`, feature `android.hardware.wifi`, broadcast `android.net.wifi.WIFI_STATE_CHANGED`, broadcast `android.net.wifi.STATE_CHANGE`, broadcast `android.net.wifi.RSSI_CHANGED`, broadcast `android.net.wifi.SCAN_RESULTS` | `state`, `enable`, `connect`, `disconnect`, `rssi`, `scan`, `reset` |
 | `media.session` | `off`, `stub`, `scripted` | `hot` | `in-process` | 1 | 5 | media sessions: stub (record what apps publish) / scripted (agent play, pause, next, seek reach MediaSession.Callback); no media-key routing, queue, volume, remote sessions or router | `media_session`, `media_router` | `sessions`, `play`, `pause`, `stop`, `next`, `previous`, `fast_forward`, `rewind`, `seek`, `skip_to_item`, `custom_action`, `reset` |
+| `hw.camera` | `off`, `stub`, `scripted` | `hot` | `in-process` | 1 | 5 | camera service (`media.camera`): one camera (id, facing, orientation, sensor size from the config) with real CameraCharacteristics, Camera2 device/session lifecycle (`ICameraDeviceUser` + `ICameraDeviceCallbacks`), deterministic `ACOS_PATTERN_COLORBARS_V1` frames (`stub`) and host-injected PNG/JPEG frames via `set_frame` (`scripted`) into `ImageReader`/`Surface` (`YUV_420_888`, `BLOB`, `RGBA_8888`); no `real` profile (ACOS has no camera HAL) | `media.camera`, feature `android.hardware.camera`, feature `android.hardware.camera.any` | `status`, `camera`, `characteristics`, `calls`, `set_frame`, `reset` |
+| `multiwindow` | `off`, `real` | `hot` | `in-process` | 1 | 5 | real multi-window task bounds and windowing-mode transitions on the live WMS (slice 1: single-task split enter_split/resize/exit via the ServiceHost guest-command outbox; `off` keeps fullscreen and refuses control ops, no stub/scripted profile) | window `TYPE_APPLICATION` | `enter_split`, `resize`, `exit`, `status` |
+| `system.launcher` | `off`, `real` | `at-launch` | `in-process` | 1 | 1 | guest Launcher system app (`com.acos.launcher`) answering ACTION_MAIN / CATEGORY_HOME and listing MAIN/LAUNCHER apps from PackageManager | app `com.acos.launcher` | `status` |
+| `system.settings` | `off`, `real` | `at-launch` | `in-process` | 1 | 1 | guest Settings stub system app (`com.android.settings`) answering ACTION_SETTINGS, ACTION_APPLICATION_DETAILS_SETTINGS, and ACTION_WIFI_SETTINGS | app `com.android.settings` | `status` |
 | `hw.usb` | `off`, `stub` | `hot` | `in-process` | 1 | 2 | USB host: stub (no USB hardware), empty device list and no configured functions | `usb` | — |
 | `system.dropbox` | `off`, `stub` | `hot` | `in-process` | 1 | 2 | DropBox: stub (no system DropBox), no entries and no enabled tags | `dropbox` | — |
 | `hw.nfc` | `off` | `hot` | `in-process` | 1 | 1 | NFC: off (no NFC hardware) | `nfc` | — |
@@ -117,6 +121,18 @@ A module is a set of Android system pieces attached to a session. `off` is alway
 | `media.session` | `skip_to_item` | {session?, id} (scripted) — onSkipToQueueItem(id) |
 | `media.session` | `custom_action` | {session?, action} (scripted) — onCustomAction(action, null) |
 | `media.session` | `reset` | none — clear the recorded `unsupported` calls |
+| `hw.camera` | `status` | none — the served camera table, active frame source, open devices/frames, and the transaction log |
+| `hw.camera` | `camera` | none — the single camera's fixed description (what `getCameraInfo` answers) |
+| `hw.camera` | `characteristics` | none — the `CameraCharacteristics` the camera serves (hardware level, sensor, every metadata tag id/type/count), exactly what `getCameraCharacteristics` writes |
+| `hw.camera` | `calls` | none — every transaction the app made (`{code, method, camera_id}`) |
+| `hw.camera` | `set_frame` | {"path": "..."} | {"base64": "..."} | {"source": "test_pattern"} — inject a PNG/JPEG frame or restore `ACOS_PATTERN_COLORBARS_V1` (`scripted` profile) |
+| `hw.camera` | `reset` | none — clear the transaction log and counters |
+| `multiwindow` | `enter_split` | {position?: "top"|"bottom"|"left"|"right" (default "top"), ratio?: 0.2..=0.8 (default 0.5), task?: i32} — put the foreground task in multi-window bounds and push the activity override Configuration to the owning guest (`bottom` two-activity split is refused until slice 2) |
+| `multiwindow` | `resize` | {ratio: 0.2..=0.8, position?: "top"|"bottom"|"left"|"right", task?: i32} — resize the active split pane and deliver the new activity override Configuration |
+| `multiwindow` | `exit` | {task?: i32} (or empty) — clear task bounds, restore WINDOWING_MODE_FULLSCREEN and deliver the full-screen activity override Configuration |
+| `multiwindow` | `status` | none — current multi-window state, active task bounds and transition count |
+| `system.launcher` | `status` | none — whether com.acos.launcher is staged for HOME and app launching |
+| `system.settings` | `status` | none — whether com.android.settings is staged for settings intents |
 
 ## Names with no module attached
 
@@ -128,7 +144,7 @@ A name a phone publishes that this build does not. Each row says what the app ob
 | `vibrator` | `feedback.vibrator` | Android's missing path (`null`) | no vibrator hardware model |
 | `usb` | `hw.usb` | structured `UNSUPPORTED_ANDROID_API` | no USB host/device model |
 | `midi` | `hw.midi` | structured `UNSUPPORTED_ANDROID_API` | no MIDI device model |
-| `launcherapps` | `system.launcher` | structured `UNSUPPORTED_ANDROID_API` | no launcher and no launcher-apps service |
+| `launcherapps` | `system.launcherapps` | structured `UNSUPPORTED_ANDROID_API` | no launcher and no launcher-apps service |
 | `usagestats` | `system.usage` | structured `UNSUPPORTED_ANDROID_API` | no usage-stats service (nothing records app usage) |
 | `dropbox` | `system.dropbox` | structured `UNSUPPORTED_ANDROID_API` | no DropBox service |
 | `device_policy` | `system.dpm` | structured `UNSUPPORTED_ANDROID_API` | no device-policy manager (no managed device/profile) |
@@ -143,7 +159,7 @@ A name a phone publishes that this build does not. Each row says what the app ob
 | `bluetooth` | `hw.bluetooth` | Android's missing path (`null`) | no Bluetooth stack |
 | `bluetooth_manager` | `hw.bluetooth` | Android's missing path (`null`) | no Bluetooth stack |
 | `nfc` | `hw.nfc` | Android's missing path (`null`) | no NFC stack |
-| `media.camera` | `hw.camera` | Android's missing path (`null`) | no camera HAL |
+| `media.camera` | `hw.camera` | structured `UNSUPPORTED_ANDROID_API` | no camera attached (module `hw.camera` is off; getCameraIdList returns [], openCamera/connectDevice answers UNSUPPORTED_ANDROID_API) |
 | `media_session` | `media.session` | structured `UNSUPPORTED_ANDROID_API` | no media-session service |
 | `media_router` | `media.session` | structured `UNSUPPORTED_ANDROID_API` | no media-router service |
 | `search` | `system.search` | structured `UNSUPPORTED_ANDROID_API` | no search service |

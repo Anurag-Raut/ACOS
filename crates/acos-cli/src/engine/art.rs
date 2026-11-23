@@ -5961,6 +5961,389 @@ impl SessionBackend for ArtSession {
         self.last_tree_settle.clone()
     }
 }
+
+/// Parameters required to start an [`ArtSession`] on demand (METRO3b: when a
+/// scenario runs `dev_server: {op: start}` before `launch`, the host dev server
+/// and its `acos-netd` host-port opt-in must be live *before* the guest boots
+/// and executes `Application.onCreate`).
+pub struct DeferredArtStart {
+    pub apk: PathBuf,
+    pub extra_apks: Vec<PathBuf>,
+    pub artifacts: PathBuf,
+    pub animations: String,
+    pub insets: String,
+    pub idle_kill_seconds: Option<u64>,
+    pub zygote: Option<Arc<ZygoteHost>>,
+    pub session_id: Option<String>,
+    pub services: Vec<serde_json::Value>,
+    pub intent: acos_protocol::LaunchIntent,
+}
+
+/// Session metadata populated once a [`DeferredArtSession`] actually boots,
+/// read by `verify` after the run finishes to annotate the verdict.
+#[derive(Default)]
+pub struct DeferredArtMeta {
+    pub session_id: Option<String>,
+    pub session_boot_ms: Option<u64>,
+    pub session_animations: Option<&'static str>,
+    pub session_insets: Option<&'static str>,
+    pub session_extra_apks: Vec<PathBuf>,
+    pub session_boot_image: Option<serde_json::Value>,
+    pub module_rows: Option<Arc<std::sync::Mutex<Vec<serde_json::Value>>>>,
+}
+
+/// Lazy [`ArtSession`] wrapper for scenarios that run host-side setup steps
+/// (`dev_server: {op: start}`) before the first `launch`.
+///
+/// The guest process is spawned on the first `launch` (or any live guest
+/// operation), by which time the host-port relay opt-in and Metro dev server
+/// are already ready. If a pre-launch step fails, no guest is ever started.
+pub struct DeferredArtSession {
+    start: Option<DeferredArtStart>,
+    intent: acos_protocol::LaunchIntent,
+    session: Option<ArtSession>,
+    meta: Arc<std::sync::Mutex<DeferredArtMeta>>,
+    pending_settle_timeout: Option<Option<u64>>,
+    pending_launch_settle_mode: Option<&'static str>,
+    pending_input_settle_fast: Option<bool>,
+    pending_input_content_settle: Option<bool>,
+    pending_observation_settle: Option<acos_verify::settle::ObservationSettle>,
+}
+
+impl DeferredArtSession {
+    pub fn new(start: DeferredArtStart) -> (Self, Arc<std::sync::Mutex<DeferredArtMeta>>) {
+        let intent = start.intent.clone();
+        let meta = Arc::new(std::sync::Mutex::new(DeferredArtMeta::default()));
+        (
+            Self {
+                start: Some(start),
+                intent,
+                session: None,
+                meta: Arc::clone(&meta),
+                pending_settle_timeout: None,
+                pending_launch_settle_mode: None,
+                pending_input_settle_fast: None,
+                pending_input_content_settle: None,
+                pending_observation_settle: None,
+            },
+            meta,
+        )
+    }
+
+    fn ensure_started(&mut self) -> Result<&mut ArtSession, BackendError> {
+        if self.session.is_none() {
+            let cfg = self.start.take().ok_or_else(|| BackendError::Failed {
+                code: ErrorCode::Internal,
+                detail: "deferred ART session start parameters already consumed".to_string(),
+            })?;
+            let mut session = ArtSession::start_with_apks_and_session(
+                &cfg.apk,
+                &cfg.extra_apks,
+                &cfg.artifacts,
+                &cfg.animations,
+                &cfg.insets,
+                cfg.idle_kill_seconds,
+                cfg.zygote,
+                cfg.session_id.as_deref(),
+                &cfg.services,
+                &cfg.intent,
+            )?;
+            if let Ok(mut meta) = self.meta.lock() {
+                meta.session_id = Some(session.session_id().to_string());
+                meta.session_boot_ms = Some(session.session_start_ms());
+                meta.session_animations = Some(session.animations());
+                meta.session_insets = Some(session.insets());
+                meta.session_extra_apks = session.extra_apks().to_vec();
+                meta.session_boot_image = session.boot_image().cloned();
+                meta.module_rows = Some(session.module_rows());
+            }
+            if let Some(timeout) = self.pending_settle_timeout.take() {
+                SessionBackend::set_settle_timeout(&mut session, timeout);
+            }
+            if let Some(mode) = self.pending_launch_settle_mode.take() {
+                SessionBackend::set_launch_settle_mode(&mut session, mode);
+            }
+            if let Some(fast) = self.pending_input_settle_fast.take() {
+                SessionBackend::set_input_settle_mode(&mut session, fast);
+            }
+            if let Some(content) = self.pending_input_content_settle.take() {
+                SessionBackend::set_input_content_settle(&mut session, content);
+            }
+            if let Some(mode) = self.pending_observation_settle.take() {
+                SessionBackend::set_observation_settle(&mut session, mode);
+            }
+            self.session = Some(session);
+        }
+        Ok(self.session.as_mut().expect("session started"))
+    }
+
+    fn default_capabilities() -> SessionCapabilities {
+        SessionCapabilities {
+            launch: true,
+            tree: true,
+            screenshot: true,
+            tap: true,
+            tap_text: true,
+            type_text: true,
+            key: true,
+            swipe: true,
+            rotate: true,
+            reset: true,
+            close: true,
+            logs: true,
+            environment: false,
+            crash_reports: true,
+            services: true,
+        }
+    }
+}
+
+impl SessionBackend for DeferredArtSession {
+    fn launch_intent(&self) -> Option<&acos_protocol::LaunchIntent> {
+        self.session
+            .as_ref()
+            .and_then(|s| s.launch_intent())
+            .or(Some(&self.intent))
+    }
+
+    fn engine(&self) -> Engine {
+        Engine::Art
+    }
+
+    fn modules(&self) -> Vec<serde_json::Value> {
+        self.session
+            .as_ref()
+            .map(SessionBackend::modules)
+            .unwrap_or_default()
+    }
+
+    fn service_op(
+        &mut self,
+        request: serde_json::Value,
+    ) -> Result<serde_json::Value, BackendError> {
+        self.ensure_started()?.service_op(request)
+    }
+
+    fn module_rows_handle(
+        &self,
+    ) -> Option<std::sync::Arc<std::sync::Mutex<Vec<serde_json::Value>>>> {
+        self.session
+            .as_ref()
+            .and_then(SessionBackend::module_rows_handle)
+    }
+
+    fn bound_tree(&self) -> Option<UiTree> {
+        self.session.as_ref().and_then(SessionBackend::bound_tree)
+    }
+
+    fn attach_input_target(&mut self, target: serde_json::Value) {
+        if let Some(session) = self.session.as_mut() {
+            SessionBackend::attach_input_target(session, target);
+        }
+    }
+
+    fn mode(&self) -> Mode {
+        Mode::Live
+    }
+
+    fn display_size(&self) -> Option<(u32, u32)> {
+        self.session
+            .as_ref()
+            .and_then(SessionBackend::display_size)
+    }
+
+    fn capabilities(&self) -> SessionCapabilities {
+        self.session
+            .as_ref()
+            .map(SessionBackend::capabilities)
+            .unwrap_or_else(Self::default_capabilities)
+    }
+
+    fn launch(&mut self, apk: &Path) -> Result<LaunchOutcome, BackendError> {
+        self.ensure_started()?.launch(apk)
+    }
+
+    fn tree(&mut self) -> Result<UiTree, BackendError> {
+        self.ensure_started()?.tree()
+    }
+
+    fn set_settle_timeout(&mut self, timeout_ms: Option<u64>) {
+        if let Some(session) = self.session.as_mut() {
+            SessionBackend::set_settle_timeout(session, timeout_ms);
+        } else {
+            self.pending_settle_timeout = Some(timeout_ms);
+        }
+    }
+
+    fn set_input_settle_mode(&mut self, fast: bool) {
+        if let Some(session) = self.session.as_mut() {
+            SessionBackend::set_input_settle_mode(session, fast);
+        } else {
+            self.pending_input_settle_fast = Some(fast);
+        }
+    }
+
+    fn input_settle_mode(&self) -> &'static str {
+        self.session
+            .as_ref()
+            .map(SessionBackend::input_settle_mode)
+            .unwrap_or("strict")
+    }
+
+    fn fresh_input_tree(&mut self) -> Result<UiTree, BackendError> {
+        self.ensure_started()?.fresh_input_tree()
+    }
+
+    fn set_input_content_settle(&mut self, content: bool) {
+        if let Some(session) = self.session.as_mut() {
+            SessionBackend::set_input_content_settle(session, content);
+        } else {
+            self.pending_input_content_settle = Some(content);
+        }
+    }
+
+    fn set_launch_settle_mode(&mut self, mode: &'static str) {
+        if let Some(session) = self.session.as_mut() {
+            SessionBackend::set_launch_settle_mode(session, mode);
+        } else {
+            self.pending_launch_settle_mode = Some(mode);
+        }
+    }
+
+    fn set_observation_settle(&mut self, mode: acos_verify::settle::ObservationSettle) {
+        if let Some(session) = self.session.as_mut() {
+            SessionBackend::set_observation_settle(session, mode);
+        } else {
+            self.pending_observation_settle = Some(mode);
+        }
+    }
+
+    fn bound_settle(&self) -> Option<&serde_json::Value> {
+        self.session
+            .as_ref()
+            .and_then(SessionBackend::bound_settle)
+    }
+
+    fn frame(&mut self) -> Result<ObservedFrame, BackendError> {
+        self.ensure_started()?.frame()
+    }
+
+    fn capture(&mut self) -> Result<ObservedFrame, BackendError> {
+        self.ensure_started()?.capture()
+    }
+
+    fn last_frame(&self) -> Option<ObservedFrame> {
+        self.session.as_ref().and_then(SessionBackend::last_frame)
+    }
+
+    fn last_input_delivery(&self) -> Option<InputDelivery> {
+        self.session
+            .as_ref()
+            .and_then(SessionBackend::last_input_delivery)
+    }
+
+    fn last_crash(&self) -> Option<CrashRecord> {
+        self.session.as_ref().and_then(SessionBackend::last_crash)
+    }
+
+    fn logs_since(&mut self, since: u64) -> Result<Vec<LogRecord>, BackendError> {
+        match self.session.as_mut() {
+            Some(session) => session.logs_since(since),
+            None => Ok(Vec::new()),
+        }
+    }
+
+    fn last_frame_seq(&self) -> u64 {
+        self.session
+            .as_ref()
+            .map(SessionBackend::last_frame_seq)
+            .unwrap_or(0)
+    }
+
+    fn screenshot(&mut self) -> Result<FrameEvidence, BackendError> {
+        self.ensure_started()?.screenshot()
+    }
+
+    fn begin_input(&mut self) {
+        if let Some(session) = self.session.as_mut() {
+            SessionBackend::begin_input(session);
+        }
+    }
+
+    fn tap(&mut self, x: i32, y: i32) -> Result<(), BackendError> {
+        self.ensure_started()?.tap(x, y)
+    }
+
+    fn tap_in_window(&mut self, window: &str, x: i32, y: i32) -> Result<(), BackendError> {
+        self.ensure_started()?.tap_in_window(window, x, y)
+    }
+
+    fn swipe(
+        &mut self,
+        from: (f32, f32),
+        to: (f32, f32),
+        duration_ms: u64,
+        fling: bool,
+    ) -> Result<(), BackendError> {
+        self.ensure_started()?.swipe(from, to, duration_ms, fling)
+    }
+
+    fn tap_text(&mut self, text: &str) -> Result<(), BackendError> {
+        self.ensure_started()?.tap_text(text)
+    }
+
+    fn type_text(&mut self, text: &str) -> Result<(), BackendError> {
+        self.ensure_started()?.type_text(text)
+    }
+
+    fn rotate(&mut self, rotation: u8) -> Result<(), BackendError> {
+        self.ensure_started()?.rotate(rotation)
+    }
+
+    fn key(&mut self, key: &str) -> Result<(), BackendError> {
+        self.ensure_started()?.key(key)
+    }
+
+    fn reset(&mut self) -> Result<(), BackendError> {
+        self.ensure_started()?.reset()
+    }
+
+    fn close(&mut self) -> Result<(), BackendError> {
+        match self.session.as_mut() {
+            Some(session) => session.close(),
+            None => Ok(()),
+        }
+    }
+
+    fn teardown(&mut self) -> Result<TeardownReport, BackendError> {
+        match self.session.as_mut() {
+            Some(session) => session.teardown(),
+            None => Ok(TeardownReport {
+                process_group: None,
+                survivors: Vec::new(),
+                verified: true,
+            }),
+        }
+    }
+
+    fn input_settle_timeout(&self) -> Option<serde_json::Value> {
+        self.session
+            .as_ref()
+            .and_then(SessionBackend::input_settle_timeout)
+    }
+
+    fn tree_settle_timeout(&self) -> Option<serde_json::Value> {
+        self.session
+            .as_ref()
+            .and_then(SessionBackend::tree_settle_timeout)
+    }
+
+    fn tree_settle_record(&self) -> Option<serde_json::Value> {
+        self.session
+            .as_ref()
+            .and_then(SessionBackend::tree_settle_record)
+    }
+}
 /// P12b: did this reply's settle block time out?
 ///
 /// Only the structured timeout shape counts (`settled:false` with

@@ -1,0 +1,97 @@
+version: 1
+name: metro-reload-full
+description: >-
+  BEST-EFFORT arm (METRO3, owner decision: Fast Refresh is the dev-loop default).
+  The same edit as `metro-reload`, but delivered by an explicit full `/reload`.
+  On React Native 0.81's legacy architecture a full reload races the old tree's
+  unmount against the new context's addRootView on the same ReactRootView
+  (results/handoff/METRO2/REPORT.md, section 2); ACOS creates the new context in a
+  few ms, so a stale second root is common. The assertions are the same strict
+  ones: a doubled tree, an old copy or a missing new text is a FAIL, never a pass.
+  The verdict is whatever happened; this file is not part of any gate.
+app: fixtures/build/apps/rn-debug.apk
+engine: art
+fallback: report-and-escalate
+api_level: 34
+isolation: process
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+capabilities:
+  - lifecycle
+  - ui.offscreen
+  - ui.text
+services:
+  - id: network
+    profile: real
+# BEST-EFFORT: expectation `pass` is the *intent*; on the legacy architecture the
+# race is lost on a large share of reloads (METRO2: ~80 %), so a red row here is
+# the documented RN behaviour, not an ACOS regression, and a green row is a real
+# clean reload. Nothing here may be weakened to make it green.
+expectation: pass
+needs_env: [pasta, metro]
+expectation_reason: >-
+  Needs the host Metro (node) and the network:real relay (pasta). Best-effort:
+  RN 0.81 legacy-architecture reload is racy (see docs/METRO_PLAN.md, METRO3).
+budgets:
+  memory_mib: 512
+  wall_ms: 600000
+steps:
+  # The Metro this run owns: a COPY of fixtures/apps/rn-hello-dev (the source tree
+  # is never edited), started before the guest exists, with the relay's
+  # host-loopback opt-in for its port (the `adb reverse` equivalent): the debug
+  # app fetches its bundle during Application.onCreate.
+  - dev_server:
+      op: start
+      project: fixtures/apps/rn-hello-dev
+      port: 8081
+      timeout_ms: 180000
+
+  - launch:
+      activity: dev.acos.fixtures.rnhello/.MainActivity
+      clear_state: true
+      settle_timeout_ms: 120000
+
+  # What Metro served at launch, rendered once.
+  - assert_text:
+      selector: {text: {exact: "Hello ACOS"}}
+      text: {exact: "Hello ACOS"}
+      timeout_ms: 120000
+
+  - assert_tree: {record: before, timeout_ms: 10000}
+
+  # The developer's edit, to the COPY of the project.
+  - dev_server:
+      op: edit
+      file: App.js
+      find: "'Hello ACOS'"
+      replace: "'Hello Metro'"
+
+  # Metro rebuilt: the bundle it serves has the new string and not the old one.
+  - dev_server:
+      op: wait_serves
+      contains: "Hello Metro"
+      absent: "Hello ACOS"
+      timeout_ms: 120000
+
+  # Explicit full reload (the CLI's `r` key = POST /reload). It only reports
+  # delivery; the assertions after it decide the verdict.
+  - dev_server: {op: reload}
+
+  - assert_text:
+      selector: {text: {exact: "Hello Metro"}}
+      text: {exact: "Hello Metro"}
+      timeout_ms: 60000
+
+  # exactly the one new copy, no stale copy of the old text, no extra root
+  - assert_not_visible:
+      selector: {text: {exact: "Hello ACOS"}}
+      timeout_ms: 10000
+
+  - assert_tree: {not_grown_since: before, timeout_ms: 10000}
+
+  - dev_server: {op: stop}
+
+  - assert_no_crash: {}

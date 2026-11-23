@@ -2,13 +2,18 @@
 
 pub mod accessibility;
 pub mod biometric;
+pub mod camera;
+pub mod camera_metadata;
 pub mod bluetooth;
+pub mod launcher;
 pub mod location;
 pub mod media_session;
+pub mod multiwindow;
 pub mod network;
 pub mod notifications;
 pub mod permissions;
 pub mod sensors;
+pub mod settings;
 pub mod tail_stubs;
 pub mod telephony;
 pub mod vibrator;
@@ -30,4 +35,6 @@ pub fn system_app_apk(
     webview::system_app_apk(module, app, config)
         .or_else(|| permissions::system_app_apk(module, app, config))
         .or_else(|| notifications::system_app_apk(module, app, config))
+        .or_else(|| launcher::system_app_apk(module, app, config))
+        .or_else(|| settings::system_app_apk(module, app, config))
 }

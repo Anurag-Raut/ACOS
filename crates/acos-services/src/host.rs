@@ -369,6 +369,7 @@ pub struct PendingNode {
 pub struct NodeRegistrar {
     registry: Arc<BinderRegistry>,
     owners: Arc<Mutex<std::collections::HashMap<u64, u32>>>,
+    guest_services: Arc<Mutex<std::collections::HashMap<(u32, String), BinderId>>>,
     pending: Arc<Mutex<Vec<PendingNode>>>,
 }
 
@@ -415,6 +416,24 @@ impl NodeRegistrar {
             .get(&binder.0)
             .copied()
     }
+
+    /// Look up a guest-registered service (`IServiceManager.addService`) owned
+    /// by process `tag`, or any process when `tag` is `None`.
+    #[must_use]
+    pub fn guest_service(&self, tag: Option<u32>, name: &str) -> Option<BinderId> {
+        let map = self
+            .guest_services
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if let Some(t) = tag {
+            if let Some(id) = map.get(&(t, name.to_string())).copied() {
+                return Some(id);
+            }
+        }
+        map.iter()
+            .find(|((_, n), _)| n == name)
+            .map(|(_, id)| *id)
+    }
 }
 
 /// Wiring handed to a lazily-constructed service.
@@ -444,6 +463,7 @@ impl Default for Wiring {
             nodes: NodeRegistrar {
                 registry: Arc::new(BinderRegistry::new()),
                 owners: Arc::new(Mutex::new(std::collections::HashMap::new())),
+                guest_services: Arc::new(Mutex::new(std::collections::HashMap::new())),
                 pending: Arc::new(Mutex::new(Vec::new())),
             },
         }
@@ -610,6 +630,9 @@ pub struct ServiceHost {
     /// recorded the first time its process hands it to the service layer
     /// (`addService`, `attachApplication`, any request parcel).
     binder_owners: Arc<Mutex<HashMap<u64, u32>>>,
+    /// Guest-registered per-process services (`IServiceManager.addService`),
+    /// keyed by `(process_tag, service_name)` -> guest `BinderId`.
+    guest_services: Arc<Mutex<HashMap<(u32, String), BinderId>>>,
     /// Binder records refused because the table was full (never a silent drop).
     binder_owner_drops: u64,
     /// Nodes services parked during a transaction ([`NodeRegistrar`]).
@@ -692,6 +715,39 @@ pub struct ServiceHost {
     /// no transaction to ride (see [`DeliveryWake`]). `None` keeps the host
     /// synchronous-only: the VM transport never has an idle peer to wake.
     delivery_wake: Option<Arc<DeliveryWake>>,
+    /// MULTIWIN3 (ADR-0029, 2026-11-18 amendment): the session's live window
+    /// manager state (`WmsState`), published by `registry::install_*` just like
+    /// `atms`, so modules such as `multiwindow` mutate the real WMS state.
+    wms: Option<std::sync::Arc<std::sync::Mutex<crate::wms::WmsState>>>,
+    /// MULTIWIN3 (ADR-0029, 2026-11-18 amendment — option A): typed host → guest
+    /// commands queued by a module's `control` op. The launcher loop drains this
+    /// outbox after each `services` request, writes each command to the owning
+    /// guest process, waits for a fresh probe sample, and returns the settled
+    /// UI tree in the same control reply.
+    guest_commands: Vec<GuestCommand>,
+}
+
+/// One typed host → guest command queued via [`ServiceHost::push_guest_command`]
+/// (ADR-0029, 2026-11-18 amendment — option A outbox).
+///
+/// Reusable across windowing/configuration modules (`multiwindow` now; rotation
+/// and PiP later).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum GuestCommand {
+    /// Deliver a task windowing-mode / bounds update to the guest process that
+    /// owns `task` (`WINDOW <mode> <l> <t> <r> <b> <al> <at> <ar> <ab>`).
+    Window {
+        /// Task id (matches `ActivityRecord.task_id`, default `10`).
+        task: i32,
+        /// Owning guest process tag (`0` = primary process).
+        process: u32,
+        /// Task bounds in display pixels.
+        rect: acos_wm::RectI,
+        /// Task app bounds in display pixels (bounds minus overlapping system bars).
+        app_bounds: acos_wm::RectI,
+        /// `WindowConfiguration.WINDOWING_MODE_*` (`1` = fullscreen, `6` = multi-window, …).
+        windowing_mode: i32,
+    },
 }
 
 /// The host endpoints the launcher bound for a session's WebView (ADR-0031).
@@ -715,6 +771,7 @@ impl core::fmt::Debug for ServiceHost {
             .field("aux", &self.aux.len())
             .field("constructions", &self.constructions)
             .field("deliveries", &self.deliveries.len())
+            .field("guest_commands", &self.guest_commands.len())
             .field("trace", &self.trace.is_some())
             .finish()
     }
@@ -733,14 +790,17 @@ impl ServiceHost {
     pub fn new() -> Self {
         let registry = Arc::new(BinderRegistry::new());
         let binder_owners = Arc::new(Mutex::new(HashMap::new()));
+        let guest_services = Arc::new(Mutex::new(HashMap::new()));
         let pending_nodes: Arc<Mutex<Vec<PendingNode>>> = Arc::new(Mutex::new(Vec::new()));
         Self {
             registry: Arc::clone(&registry),
             binder_owners: Arc::clone(&binder_owners),
+            guest_services: Arc::clone(&guest_services),
             pending_nodes: Arc::clone(&pending_nodes),
             nodes: NodeRegistrar {
                 registry,
                 owners: binder_owners,
+                guest_services,
                 pending: pending_nodes,
             },
             entries: HashMap::new(),
@@ -772,6 +832,8 @@ impl ServiceHost {
             webview_gate: None,
             overwrites: Vec::new(),
             delivery_wake: None,
+            wms: None,
+            guest_commands: Vec::new(),
         }
     }
 
@@ -1045,11 +1107,28 @@ impl ServiceHost {
         v
     }
 
+    /// Record a guest-registered service (`IServiceManager.addService`) so host
+    /// modules (e.g. `hw.camera`'s Option A frame-sink delivery) can target the
+    /// guest helper binder living in process `tag`.
+    pub fn register_guest_service(&mut self, tag: u32, name: String, binder: BinderId) {
+        if binder.is_null() {
+            return;
+        }
+        self.guest_services
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .insert((tag, name), binder);
+    }
+
     /// Drop every binder record owned by process `tag` (the process exited).
     ///
     /// Returns how many records were dropped. A later delivery to one of those
     /// ids fails structurally instead of reaching a stale handle.
     pub fn drop_process_binders(&mut self, tag: u32) -> usize {
+        self.guest_services
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .retain(|(owner, _), _| *owner != tag);
         let mut owners = self
             .binder_owners
             .lock()
@@ -1877,6 +1956,36 @@ impl ServiceHost {
         self.atms.as_ref().map(std::sync::Arc::clone)
     }
 
+    /// Publish the session's live window manager state (called by
+    /// [`crate::registry::install_with_handles_and_insets`]).
+    pub fn set_wms(&mut self, wms: std::sync::Arc<std::sync::Mutex<crate::wms::WmsState>>) {
+        self.wms = Some(wms);
+    }
+
+    /// The session's live window manager state, when a standard set published one.
+    #[must_use]
+    pub fn wms(&self) -> Option<std::sync::Arc<std::sync::Mutex<crate::wms::WmsState>>> {
+        self.wms.as_ref().map(std::sync::Arc::clone)
+    }
+
+    /// Queue a typed host → guest command for the launcher loop to write to the
+    /// owning guest process and settle to a fresh probe sample (ADR-0029,
+    /// 2026-11-18 amendment — option A).
+    pub fn push_guest_command(&mut self, command: GuestCommand) {
+        self.guest_commands.push(command);
+    }
+
+    /// Drain all queued host → guest commands in FIFO order.
+    pub fn drain_guest_commands(&mut self) -> Vec<GuestCommand> {
+        std::mem::take(&mut self.guest_commands)
+    }
+
+    /// Inspect queued host → guest commands without draining them.
+    #[must_use]
+    pub fn pending_guest_commands(&self) -> &[GuestCommand] {
+        &self.guest_commands
+    }
+
     /// Publish this session's WebView endpoints (WV8: the launcher binds the
     /// gate socket, so it is the one that knows the paths).
     pub fn set_webview_gate(&mut self, gate: WebviewGate) {
@@ -2169,6 +2278,34 @@ impl ServiceHost {
             .and_then(|any| any.downcast_mut::<crate::atms::AtmsService>())
             .map(|service| service.set_primary_package(package))
             .unwrap_or(false)
+    }
+
+    /// Name the session's primary launcher activity `(package, class)` so an
+    /// adopted tag-0 activity token can be registered in AMS's task stack for
+    /// later `NEW_TASK` / Launcher resume switches.
+    pub fn seed_primary_activity(&mut self, package: &str, class: &str) -> bool {
+        let Ok(object) = self.ensure("android.app.IActivityTaskManager") else {
+            return false;
+        };
+        object
+            .as_any_mut()
+            .and_then(|any| any.downcast_mut::<crate::atms::AtmsService>())
+            .map(|service| service.set_primary_activity(package, class))
+            .unwrap_or(false)
+    }
+
+    /// Host-initiated HOME key launch (`ACTION_MAIN` + `CATEGORY_HOME` with
+    /// `FLAG_ACTIVITY_NEW_TASK | FLAG_ACTIVITY_RESET_TASK_IF_NEEDED`).
+    /// Fails honestly when no installed activity answers `CATEGORY_HOME`.
+    pub fn launch_home(&mut self) -> Result<i32> {
+        let object = self.ensure("android.app.IActivityTaskManager")?;
+        let atms = object
+            .as_any_mut()
+            .and_then(|any| any.downcast_mut::<crate::atms::AtmsService>())
+            .ok_or(ServiceError::Internal(
+                "IActivityTaskManager is not AtmsService".into(),
+            ))?;
+        atms.launch_home()
     }
 
     /// The dynamic receiver registrations `IActivityManager`
@@ -3199,6 +3336,8 @@ impl ServiceHost {
                 launch_mode: 0,
                 flags: 0,
                 theme: 0,
+                label_res: 0,
+                non_localized_label: None,
                 exported: true,
                 parent_activity_name: String::new(),
                 meta_data: Vec::new(),

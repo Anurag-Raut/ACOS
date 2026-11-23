@@ -25,6 +25,9 @@
 #   fixtures/build/apps/perm-probe.apk   (SYSUI1: requestPermissions -> the dialog)
 #   fixtures/build/apps/net-check.apk  (NET3/NET4: the relay fetch fixture)
 #   fixtures/build/apps/systemui.apk   (SYSUI2: the notification shade system app)
+#   fixtures/build/apps/launcher.apk   (LAUNCHER2: minimal HOME launcher system app)
+#   fixtures/build/apps/settings.apk   (LAUNCHER2: minimal Settings stub system app)
+#   fixtures/build/apps/settings-probe.apk (LAUNCHER2: Settings intent probe)
 #
 #
 # `tools/verify/run-matrix.sh` calls this script with ACOS_APP_ONLY for any scenario
@@ -198,6 +201,8 @@ if [ -n "${ACOS_APP_ONLY:-}" ]; then
             # WV6: the probe serves its page from its own APK assets through
             # the broker's request interception.
             build_apk "$app" "$APPS_DIR/webview-probe/assets:assets"
+        elif [ "$app" = "camerax-probe" ]; then
+            "$ROOT/tools/build/build-camerax-probe.sh"
         else
             build_apk "$app"
         fi
@@ -281,10 +286,10 @@ build_apk native-hostile "$HOSTILE_JNI_WORK:lib"
 # sensor-probe (MODSENS), notif-perm-probe (MODNOTIF5),
 # permissioncontroller + perm-probe (SYSUI1), systemui (SYSUI2),
 # launch-extras-probe (LAUNCHEXTRAS).
-for app in counter todo-list multi-activity finish-start form-validation settle-lab \
+for app in counter todo-list multi-activity two-activity finish-start form-validation settle-lab \
            thread-heavy svg-viewbox offscreen-pager looper-wake sensor-probe \
            notif-perm-probe permissioncontroller perm-probe systemui \
-           launch-extras-probe; do
+           launcher settings settings-probe launch-extras-probe; do
     build_apk "$app"
 done
 
@@ -338,6 +343,20 @@ build_apk media-probe
 # updates from a scripted track and the geocoder state on screen, so a scenario
 # can assert what the app really received (fixtures/apps/location-probe).
 build_apk location-probe
+
+# camera-probe is the CAMERA2 Slice 1 fixture: queries CameraManager
+# (getCameraIdList, getCameraCharacteristics + StreamConfigurationMap, unknown
+# id, openCamera permission/refusal) and tests the `hw.camera` off tombstone.
+build_apk camera-probe
+# Scripted-camera test frames (`camera-scripted` scenarios): generated, never committed.
+cargo run --offline -q --manifest-path "$ROOT/Cargo.toml" -p acos-services --example gen_camera_frames -- "$ROOT/fixtures/build/camera"
+if [ "${ACOS_BUILD_ONLY:-}" = "camerax-probe" ]; then
+    "$ROOT/tools/build/build-camerax-probe.sh"
+elif [ -z "${ACOS_BUILD_ONLY:-}" ] && [ -d "$ROOT/.cache/maven-camerax" ]; then
+    "$ROOT/tools/build/build-camerax-probe.sh"
+elif [ -z "${ACOS_BUILD_ONLY:-}" ]; then
+    echo "build-apps: skipping camerax-probe (.cache/maven-camerax not present; run tools/fetch/fetch-camerax-deps.sh)"
+fi
 # MPROC4: the two-process pair (proc-a starts/binds components of proc-b).
 build_apk proc-a
 build_apk proc-b

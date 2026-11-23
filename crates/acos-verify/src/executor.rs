@@ -352,6 +352,12 @@ pub fn run_scenario(
     // structured error instead of a misleading "no matching line".
     let mut log_failure: Option<BackendError> = None;
 
+    // METRO3: the host dev server this run owns (stopped below, and by `Drop` if
+    // the run unwinds) and the `assert_tree` node counts recorded so far.
+    let mut dev_host = crate::dev_server::DevServerHost::default();
+    dev_host.set_log_dir(options.artifacts_dir.join("dev-server"));
+    let mut tree_marks: BTreeMap<String, usize> = BTreeMap::new();
+
     for (index, step) in scenario.steps.iter().enumerate() {
         // Flush any logs the previous step produced.
         if caps.logs {
@@ -491,6 +497,8 @@ pub fn run_scenario(
                 bound_frame_seq,
                 last_frame_seq,
                 &mut capabilities_used,
+                &mut dev_host,
+                &mut tree_marks,
             )
         };
         // ---- SE2: a requested content settle must be honoured ----------------
@@ -719,6 +727,12 @@ pub fn run_scenario(
             break;
         }
     }
+
+    // METRO3: the dev server never outlives the scenario, pass or fail.
+    if dev_host.is_running() {
+        notes.push("dev server still running at scenario end; stopped by the runner".to_string());
+    }
+    dev_host.shutdown();
 
     // ---- expectation handling --------------------------------------------
     apply_expectation(
@@ -1167,6 +1181,8 @@ fn execute_step(
     bound_frame_seq: Option<u64>,
     last_frame_seq: Option<u64>,
     capabilities_used: &mut BTreeSet<String>,
+    dev_host: &mut crate::dev_server::DevServerHost,
+    tree_marks: &mut BTreeMap<String, usize>,
 ) -> StepExec {
     let Some(step_ref) = step.as_step() else {
         return StepExec::unsupported(Capability::StaticManifest, "step has no recognised kind");
@@ -1902,6 +1918,199 @@ fn execute_step(
             "call_activity_method requires an injected debug hook that this build does not provide",
         ),
         StepRef::ServiceCtl(ctl) => service_ctl_step(backend, ctl),
+        StepRef::DevServer(dev) => dev_server_step(backend, dev_host, dev),
+        StepRef::AssertTree(assertion) => {
+            capabilities_used.insert(Capability::UiTree.as_str().to_string());
+            if !caps.ui_tree {
+                return StepExec::unsupported(
+                    Capability::UiTree,
+                    "the backend cannot observe a UI tree",
+                );
+            }
+            backend.set_settle_timeout(None);
+            let seen = std::cell::Cell::new(0usize);
+            let baseline = assertion
+                .not_grown_since
+                .as_ref()
+                .map(|label| (label.clone(), tree_marks.get(label).copied()));
+            let exec = observation_assertion(
+                backend,
+                |observation| {
+                    let nodes = tree_node_count(&observation.tree);
+                    seen.set(nodes);
+                    eval_tree_size(nodes, baseline.as_ref())
+                },
+                "assert_tree",
+                bound_frame_seq,
+                assertion.timeout_ms,
+                assertion.settle,
+            );
+            if exec.status == Status::Pass {
+                if let Some(label) = &assertion.record {
+                    tree_marks.insert(label.clone(), seen.get());
+                }
+            }
+            exec
+        }
+    }
+}
+
+/// METRO3: `assert_tree` — a node count against the one recorded under a label.
+fn eval_tree_size(nodes: usize, baseline: Option<&(String, Option<usize>)>) -> Evaluated {
+    use acos_protocol::assertion::AssertionDiff;
+    match baseline {
+        // `record`: the tree must exist (an empty tree is no baseline).
+        None if nodes > 0 => Evaluated::pass(
+            "tree_size",
+            Vec::new(),
+            Some(format!("recorded {nodes} nodes")),
+            serde_json::json!({"record": true}),
+            serde_json::json!({"nodes": nodes}),
+        ),
+        None => Evaluated::fail(
+            "tree_size",
+            Vec::new(),
+            AssertionDiff {
+                expected: serde_json::json!({"nodes": ">0"}),
+                actual: serde_json::json!({"nodes": 0}),
+                path: None,
+                detail: Some("the UI tree is empty; there is nothing to record".to_string()),
+            },
+            BackendError::Failed {
+                code: ErrorCode::AssertionFailed,
+                detail: "the UI tree is empty".to_string(),
+            },
+        ),
+        Some((label, Some(before))) if nodes <= *before => Evaluated::pass(
+            "tree_size",
+            Vec::new(),
+            Some(format!("{nodes} nodes <= {before} recorded as `{label}`")),
+            serde_json::json!({"nodes_at_most": before, "since": label}),
+            serde_json::json!({"nodes": nodes}),
+        ),
+        Some((label, recorded)) => Evaluated::fail(
+            "tree_size",
+            Vec::new(),
+            AssertionDiff {
+                expected: serde_json::json!({"nodes_at_most": recorded, "since": label}),
+                actual: serde_json::json!({"nodes": nodes}),
+                path: None,
+                detail: Some(match recorded {
+                    Some(before) => format!(
+                        "the tree grew from {before} to {nodes} nodes since `{label}` (a stale or doubled root view)"
+                    ),
+                    None => format!("no node count was recorded under `{label}`"),
+                }),
+            },
+            BackendError::Failed {
+                code: ErrorCode::AssertionFailed,
+                detail: format!("the tree is larger than at `{label}`"),
+            },
+        ),
+    }
+}
+
+/// METRO3: one `dev_server` step. Metro is host-side and run-owned, so the
+/// executor drives it directly; only the host-port opt-in goes through the backend.
+fn dev_server_step(
+    backend: &mut dyn Backend,
+    host: &mut crate::dev_server::DevServerHost,
+    dev: &acos_protocol::scenario::DevServerStep,
+) -> StepExec {
+    use acos_protocol::scenario::DevServerOp;
+    let timeout = |default_ms: u64| Duration::from_millis(dev.timeout_ms.unwrap_or(default_ms));
+    let mut extra = serde_json::Map::new();
+    let outcome = match dev.op {
+        DevServerOp::Start => {
+            // The relay opt-in comes first and its refusal is the step's failure:
+            // a Metro the guest cannot reach would otherwise surface as a
+            // redbox 90 s later, far from the cause.
+            let expose = dev.expose_to_guest.unwrap_or(true);
+            let port = dev.port.unwrap_or(8081);
+            let exposed = if expose {
+                match backend.expose_host_port(port) {
+                    Ok(reply) => Some(reply),
+                    Err(error) => return StepExec::backend_error(&error, backend.id(), "dev_server start"),
+                }
+            } else {
+                None
+            };
+            let started = host.start(
+                std::path::Path::new(dev.project.as_deref().unwrap_or("")),
+                dev.node_modules.as_deref().map(std::path::Path::new),
+                port,
+                timeout(180_000),
+            );
+            if let Some(reply) = exposed {
+                extra.insert("host_port_opt_in".into(), reply);
+            }
+            started
+        }
+        DevServerOp::Edit => host.edit(
+            dev.file.as_deref().unwrap_or(""),
+            dev.find.as_deref(),
+            dev.replace.as_deref(),
+            dev.contents.as_deref(),
+        ),
+        DevServerOp::WaitServes => {
+            host.wait_serves(dev.contains.as_deref(), dev.absent.as_deref(), timeout(120_000))
+        }
+        DevServerOp::FastRefresh => host.fast_refresh(timeout(120_000)),
+        DevServerOp::Reload => host.reload(),
+        DevServerOp::Stop => host.stop(),
+    };
+    match outcome {
+        Ok(mut reply) => {
+            if let serde_json::Value::Object(map) = &mut reply {
+                map.extend(extra);
+            }
+            let mut exec = StepExec::pass();
+            exec.assertions.push(acos_protocol::assertion::AssertionResult {
+                kind: "dev_server".to_string(),
+                passed: true,
+                expected: Some(serde_json::json!({"op": dev.op})),
+                actual: Some(reply.clone()),
+                diff: None,
+                matched_node_ids: Vec::new(),
+                message: Some(summarize_reply(&reply)),
+            });
+            exec
+        }
+        Err(error) => {
+            let detail = format!("dev_server {:?}: {}", dev.op, error.message);
+            if error.unsupported {
+                let mut exec = StepExec::unsupported(Capability::Environment, detail);
+                if let Some(protocol) = exec.error.as_mut() {
+                    protocol.details = Some(serde_json::json!({
+                        "capability": "host.metro",
+                        "detail": error.message,
+                    }));
+                }
+                return exec;
+            }
+            let code = if error.message.contains("did not reach") || error.message.contains("did not answer") {
+                ErrorCode::Timeout
+            } else {
+                ErrorCode::InvalidArgument
+            };
+            let mut exec = StepExec::pass();
+            exec.status = Status::Fail;
+            exec.error = Some(
+                ProtocolError::new(code, detail)
+                    .with_hint("The dev server is host-side; read `dev-server/metro.log` in the artifacts and the step's details.")
+                    .with_details(error.details.clone()),
+            );
+            exec.assertions.push(acos_protocol::assertion::AssertionResult {
+                kind: "dev_server".to_string(),
+                passed: false,
+                expected: Some(serde_json::json!({"op": dev.op})),
+                actual: Some(error.details),
+                diff: None,
+                matched_node_ids: Vec::new(),
+                message: Some(error.message),
+            });
+            exec
+        }
     }
 }
 
@@ -3233,6 +3442,7 @@ fn rebinds_bound_frame(step: &Step, bound: Option<u64>, observed: u64) -> bool {
             assertion.timeout_ms.is_some()
         }
         Some(StepRef::AssertState(assertion)) => assertion.timeout_ms.is_some(),
+        Some(StepRef::AssertTree(assertion)) => assertion.timeout_ms.is_some(),
         _ => false,
     }
 }
@@ -3247,7 +3457,8 @@ fn binds_to_bound_frame(step: &Step) -> bool {
             StepRef::AssertText(_)
             | StepRef::AssertVisible(_)
             | StepRef::AssertNotVisible(_)
-            | StepRef::AssertState(_),
+            | StepRef::AssertState(_)
+            | StepRef::AssertTree(_),
         ) => true,
         Some(StepRef::Capture(capture)) => !capture.fresh,
         _ => false,
@@ -6571,5 +6782,29 @@ mod rel3a_settle_tests {
             "{HEADER}steps:\n  - wait_for: {{selector: {{id: title}}, timeout_ms: 1000, settle: content}}\n  - assert_text: {{selector: {{id: title}}, text: {{contains: Welcome}}, settle: content, timeout_ms: 2000}}\n"
         ));
         assert_eq!(parsed.validate().errors, Vec::new());
+    }
+}
+
+#[cfg(test)]
+mod metro3_tests {
+    use super::*;
+
+    #[test]
+    fn tree_size_records_then_fails_when_the_tree_grew() {
+        assert!(eval_tree_size(8, None).result.passed, "record a non-empty tree");
+        assert!(!eval_tree_size(0, None).result.passed, "an empty tree is no baseline");
+        let base = ("before".to_string(), Some(8usize));
+        assert!(eval_tree_size(8, Some(&base)).result.passed);
+        assert!(eval_tree_size(5, Some(&base)).result.passed, "fewer nodes is fine");
+        let doubled = eval_tree_size(16, Some(&base));
+        assert!(!doubled.result.passed, "a doubled tree (stale root) must fail");
+        assert!(doubled
+            .result
+            .diff
+            .and_then(|d| d.detail)
+            .unwrap()
+            .contains("stale or doubled root"));
+        let unknown = ("nope".to_string(), None);
+        assert!(!eval_tree_size(1, Some(&unknown)).result.passed);
     }
 }

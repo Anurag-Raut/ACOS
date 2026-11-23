@@ -1,0 +1,158 @@
+# MULTIWIN3 (slice 1): real multi-window single-task split on the ART engine.
+#
+# Drives `two-activity.apk` (declares `configChanges="orientation|screenSize|keyboardHidden"`):
+#   1. Starts fullscreen (`isInMultiWindowMode() == false`, DecorView [0,0,1080,2400],
+#      `mw_state` fills to bottom of content [42, 612, 1038, 2295]).
+#   2. `service_ctl` `multiwindow.enter_split {position: "top", ratio: 0.5}`:
+#      host WMS sets task bounds [0, 0, 1080, 1200] / app_bounds [0, 128, 1080, 1200],
+#      queues `GuestCommand::Window` on the ServiceHost outbox, launcher drains it
+#      to the guest, guest delivers the activity override Configuration in-place
+#      (`onMultiWindowModeChanged(true)` + `onConfigurationChanged` with 411x408dp),
+#      `isInMultiWindowMode() == true`, and relays out inside the smaller rect
+#      (`mw_state` shrinks to [42, 612, 1038, 1158], DecorView [0, 0, 1080, 1200]).
+#   3. `service_ctl` `multiwindow.resize {ratio: 0.35}`:
+#      shrinks task bounds to [0, 0, 1080, 840] / app_bounds [0, 128, 1080, 840],
+#      delivers 411x271dp without firing a second multi-window mode transition
+#      (`mw_cb` stays 1), and relays out inside the 840px pane
+#      (`mw_state` shrinks to [42, 612, 1038, 798], DecorView [0, 0, 1080, 840]).
+#   4. `service_ctl` `multiwindow.exit`:
+#      clears task bounds, restores `WINDOWING_MODE_FULLSCREEN`, delivers
+#      `onMultiWindowModeChanged(false)` (`mw_cb=2`, `isInMW=false`) + 411x914dp
+#      (exactly one `onConfigurationChanged`, `config changes=4`), and restores the
+#      full-screen layout bounds (`mw_state` [42, 612, 1038, 2295]).
+version: 1
+name: multiwindow-split
+description: >-
+  Enter top 50% split, resize to 35%, and exit back to fullscreen on two-activity
+  via the real multiwindow module and ServiceHost guest-command outbox.
+app: fixtures/build/apps/two-activity.apk
+engine: art
+fallback: report-and-escalate
+api_level: 34
+isolation: process
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+capabilities:
+  - lifecycle
+  - ui.offscreen
+  - ui.text
+  - input
+services:
+  - id: multiwindow
+    profile: real
+expectation: pass
+budgets:
+  memory_mib: 1024
+  wall_ms: 180000
+steps:
+  - launch:
+      activity: dev.acos.fixtures.twoactivity/.MainActivity
+      clear_state: true
+
+  - wait_for:
+      selector: {id: mw_state}
+      timeout_ms: 15000
+
+  - assert_text:
+      selector: {id: main_state}
+      text: {exact: "config changes=1"}
+
+  - assert_text:
+      selector: {id: mw_state}
+      text: {exact: "mw=false isInMW=false dp=411x914 mw_cb=0"}
+      bounds: [42, 612, 1038, 2295]
+
+  # ---- enter_split top 0.5 ----------------------------------------------
+  - service_ctl:
+      module: multiwindow
+      op: enter_split
+      args: {position: top, ratio: 0.5}
+      expect:
+        ok: true
+        value:
+          position: top
+          windowing_mode: 6
+          in_multi_window_mode: true
+          bounds: [0, 0, 1080, 1200]
+          app_bounds: [0, 128, 1080, 1200]
+          width_dp: 411
+          height_dp: 408
+
+  - capture:
+      name: after-enter-split
+      format: png
+      fresh: true
+
+  - assert_text:
+      selector: {id: main_state}
+      text: {exact: "config changes=2"}
+
+  - assert_text:
+      selector: {id: mw_state}
+      text: {exact: "mw=true isInMW=true dp=411x408 mw_cb=1"}
+      bounds: [42, 612, 1038, 1158]
+
+  # ---- resize 0.35 ------------------------------------------------------
+  - service_ctl:
+      module: multiwindow
+      op: resize
+      args: {ratio: 0.35}
+      expect:
+        ok: true
+        value:
+          position: top
+          windowing_mode: 6
+          in_multi_window_mode: true
+          bounds: [0, 0, 1080, 840]
+          app_bounds: [0, 128, 1080, 840]
+          width_dp: 411
+          height_dp: 271
+
+  - capture:
+      name: after-resize
+      format: png
+      fresh: true
+
+  - assert_text:
+      selector: {id: main_state}
+      text: {exact: "config changes=3"}
+
+  - assert_text:
+      selector: {id: mw_state}
+      text: {exact: "mw=true isInMW=true dp=411x271 mw_cb=1"}
+      bounds: [42, 612, 1038, 798]
+
+  # ---- exit -> fullscreen -----------------------------------------------
+  - service_ctl:
+      module: multiwindow
+      op: exit
+      args: {}
+      expect:
+        ok: true
+        value:
+          windowing_mode: 1
+          in_multi_window_mode: false
+          bounds: [0, 0, 1080, 2400]
+          app_bounds: [0, 0, 1080, 2400]
+          width_dp: 411
+          height_dp: 914
+
+  - capture:
+      name: after-exit
+      format: png
+      fresh: true
+
+  - assert_text:
+      selector: {id: main_state}
+      text: {exact: "config changes=4"}
+
+  - assert_text:
+      selector: {id: mw_state}
+      text: {exact: "mw=false isInMW=false dp=411x914 mw_cb=2"}
+      bounds: [42, 612, 1038, 2295]
+
+  - assert_no_crash:
+      allow_anr: false

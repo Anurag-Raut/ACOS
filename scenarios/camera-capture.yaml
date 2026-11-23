@@ -1,0 +1,111 @@
+# CAMERA3 (Slice 2) end-to-end capture proof: `hw.camera` at `stub` on real ART.
+#
+# Exercises the complete Camera2 capture pipeline on unmodified Android framework
+# Java (CameraManager, CameraDeviceImpl, CameraCaptureSessionImpl, ImageReader,
+# BufferQueue) + host Session Controller (hw.camera) + Option A guest frame-sink
+# (acos.camera.frame_sink + gralloc_shim.c YUV_420_888):
+#   1. Negative proof: Capture before CAMERA permission -> SecurityException.
+#   2. Grant CAMERA via system.permissions.
+#   3. Single-shot YUV_420_888 640x480 capture (TEMPLATE_STILL_CAPTURE):
+#      - onCaptureCompleted (frame=0, validated TotalCaptureResult metadata)
+#      - onImageAvailable with exact IEEE CRC32 (0xdead8870) and sampled YUV
+#        pixels of ACOS_PATTERN_COLORBARS_V1 (White/Green/Red/Black bars,
+#        frame tag (160,0,0,90), bottom ramp (127,128,128))
+#      - clean close (onClosed id=0).
+#   4. Repeating YUV_420_888 640x480 capture (TEMPLATE_PREVIEW, 3 frames):
+#      - strictly increasing frame numbers [0, 1, 2], sensor timestamps, and
+#        ImageReader buffer timestamps
+#      - exact per-frame CRC32s [0xdead8870, 0xdfefda95, 0xdc292dba] and frame
+#        tags [160, 161, 162]
+#      - stopRepeating + clean close (onClosed id=0).
+#   5. Host control status confirms zero open_devices (no leaked sessions).
+version: 1
+name: camera-capture
+description: >-
+  hw.camera Slice 2 capture on ART: pre-permission SecurityException, single-shot
+  640x480 YUV_420_888 capture with exact ACOS_PATTERN_COLORBARS_V1 CRC32 and pixel
+  samples, 3-frame repeating capture with increasing frame numbers and timestamps,
+  and clean close with zero leaked sessions.
+app: fixtures/build/apps/camera-probe.apk
+api_level: 34
+isolation: process
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+capabilities:
+  - ui.offscreen
+  - ui.text
+  - input
+services:
+  - id: system.permissions
+    profile: real
+  - id: hw.camera
+    profile: stub
+expectation: pass
+budgets:
+  memory_mib: 640
+  wall_ms: 180000
+steps:
+  - launch:
+      activity: dev.acos.fixtures.cameraprobe/.MainActivity
+      clear_state: true
+  - wait_for:
+      selector: {text: {contains: "READY mgr=present feat_cam=true feat_any=true"}}
+      timeout_ms: 20000
+
+  # Negative proof: capture before CAMERA permission is granted -> SecurityException.
+  - tap:
+      selector: {text: {exact: "Capture"}}
+  - wait_for:
+      selector: {text: {contains: "CAPTURE error=SecurityException"}}
+      timeout_ms: 20000
+
+  # Grant CAMERA permission.
+  - service_ctl:
+      module: system.permissions
+      op: grant
+      args: {permission: "android.permission.CAMERA"}
+      expect:
+        ok: true
+
+  # Single-shot YUV_420_888 640x480 capture.
+  - tap:
+      selector: {text: {exact: "Capture"}}
+  - wait_for:
+      selector: {text: {contains: "CAPTURE closed id=0"}}
+      timeout_ms: 30000
+  - assert_text:
+      selector: {id: status}
+      text: {contains: "CAPTURE completed frame=0 ts="}
+  - assert_text:
+      selector: {id: status}
+      text: {contains: "CAPTURE image w=640 h=480 fmt=35 planes=3"}
+  - assert_text:
+      selector: {id: status}
+      text: {contains: "crc32=0xdead8870 white=(235,128,128) green=(145,54,34) red=(81,90,240) black=(16,128,128) tag=(160,0,0,90) ramp=(127,128,128)"}
+
+  # Repeating YUV_420_888 640x480 capture (3 frames).
+  - tap:
+      selector: {text: {exact: "Repeat"}}
+  - wait_for:
+      selector: {text: {contains: "REPEAT closed id=0"}}
+      timeout_ms: 30000
+  - assert_text:
+      selector: {id: status}
+      text: {contains: "REPEAT ok count=3 frames=[0, 1, 2] frames_inc=true ts_inc=true img_ts_inc=true crcs=[0xdead8870, 0xdfefda95, 0xdc292dba] tags=[160, 161, 162]"}
+
+  # Host module status confirms clean close (zero open devices).
+  - service_ctl:
+      module: hw.camera
+      op: status
+      expect:
+        ok: true
+        op: status
+        value:
+          pattern: ACOS_PATTERN_COLORBARS_V1
+          calls:
+            open_devices: 0
+            devices_opened: 2
+            streams_created: 2

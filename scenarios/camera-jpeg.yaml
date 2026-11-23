@@ -1,0 +1,71 @@
+# CAMERA4 (Slice 3) JPEG / BLOB capture proof on real ART.
+#
+# Captures ImageFormat.JPEG (256, HAL_PIXEL_FORMAT_BLOB 0x21) at 640x480 via
+# ImageReader, verifies JPEG SOI marker, decodes with Android BitmapFactory,
+# and asserts exact decoded dimensions (640x480) and color-bar RGB samples
+# within a documented tight <= 4 per-channel JPEG lossy decode tolerance.
+version: 1
+name: camera-jpeg
+description: >-
+  hw.camera Slice 3 JPEG/BLOB capture on ART: captures ImageFormat.JPEG via
+  ImageReader, decodes with BitmapFactory, asserts 640x480 and bar pixel
+  colors within documented <= 4/channel lossy JPEG tolerance.
+app: fixtures/build/apps/camera-probe.apk
+api_level: 34
+isolation: process
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+capabilities:
+  - ui.offscreen
+  - ui.text
+  - input
+services:
+  - id: system.permissions
+    profile: real
+  - id: hw.camera
+    profile: stub
+expectation: pass
+budgets:
+  memory_mib: 640
+  wall_ms: 180000
+steps:
+  - launch:
+      activity: dev.acos.fixtures.cameraprobe/.MainActivity
+      clear_state: true
+  - wait_for:
+      selector: {text: {contains: "READY mgr=present feat_cam=true feat_any=true"}}
+      timeout_ms: 20000
+
+  - service_ctl:
+      module: system.permissions
+      op: grant
+      args: {permission: "android.permission.CAMERA"}
+      expect:
+        ok: true
+
+  - tap:
+      selector: {text: {exact: "Capture JPEG"}}
+  - wait_for:
+      selector: {text: {contains: "JPEG closed id=0 seq=1"}}
+      timeout_ms: 30000
+  - assert_text:
+      selector: {id: status}
+      text: {contains: "JPEG completed frame=0 ts="}
+  - assert_text:
+      selector: {id: status}
+      text: {contains: "JPEG image w=640 h=480 fmt=256 ts=1000000000 bytes=13896 soi=true bmp=640x480 white=(255,255,255) green=(0,255,1) red=(254,0,0) black=(0,0,0) max_err=1 tol4=true"}
+
+  - service_ctl:
+      module: hw.camera
+      op: status
+      expect:
+        ok: true
+        op: status
+        value:
+          calls:
+            open_devices: 0
+            devices_opened: 1
+            streams_created: 1

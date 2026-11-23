@@ -1,0 +1,131 @@
+# CAMERA4 (Slice 3) scripted frame injection proof on real ART.
+#
+# Attaches hw.camera at `scripted` profile, injects a PNG fixture and a JPEG
+# fixture via `service_ctl set_frame`, verifies that each captured YUV_420_888
+# frame in camera-probe matches the injected image (exact host-computed YUV
+# CRC32 and sampled quadrant/center YUV pixels), then restores `test_pattern`
+# and confirms ACOS_PATTERN_COLORBARS_V1 (0xdead8870) resumes cleanly.
+version: 1
+name: camera-scripted
+description: >-
+  hw.camera Slice 3 scripted profile on ART: set_frame with PNG and JPEG
+  fixtures, exact YUV_420_888 CRC32 and pixel verification in camera-probe,
+  and restoration of test_pattern with zero leaked sessions.
+app: fixtures/build/apps/camera-probe.apk
+api_level: 34
+isolation: process
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+capabilities:
+  - ui.offscreen
+  - ui.text
+  - input
+services:
+  - id: system.permissions
+    profile: real
+  - id: hw.camera
+    profile: scripted
+expectation: pass
+budgets:
+  memory_mib: 640
+  wall_ms: 180000
+steps:
+  - launch:
+      activity: dev.acos.fixtures.cameraprobe/.MainActivity
+      clear_state: true
+  - wait_for:
+      selector: {text: {contains: "READY mgr=present feat_cam=true feat_any=true"}}
+      timeout_ms: 20000
+
+  - service_ctl:
+      module: system.permissions
+      op: grant
+      args: {permission: "android.permission.CAMERA"}
+      expect:
+        ok: true
+
+  # 1. Inject PNG fixture (640x480: TL=Red, TR=Green, BL=Blue, BR=Yellow, CTR=White).
+  - service_ctl:
+      module: hw.camera
+      op: set_frame
+      args: {path: "fixtures/build/camera/test-frame.png"}
+      expect:
+        ok: true
+        op: set_frame
+        value:
+          source: image
+          width: 640
+          height: 480
+          crc32_yuv: "0xb106af65"
+
+  - tap:
+      selector: {text: {exact: "Capture"}}
+  - wait_for:
+      selector: {text: {contains: "CAPTURE closed id=0 seq=1"}}
+      timeout_ms: 30000
+  - assert_text:
+      selector: {id: status}
+      text: {contains: "crc32=0xb106af65"}
+  - assert_text:
+      selector: {id: status}
+      text: {contains: "tl=(82,90,240) tr=(144,54,34) bl=(41,240,110) br=(210,16,146) ctr=(235,128,128)"}
+
+  # 2. Inject JPEG fixture and verify the next captured YUV frame matches it.
+  - service_ctl:
+      module: hw.camera
+      op: set_frame
+      args: {path: "fixtures/build/camera/test-frame.jpg"}
+      expect:
+        ok: true
+        op: set_frame
+        value:
+          source: image
+          width: 640
+          height: 480
+          crc32_yuv: "0xa2408da5"
+
+  - tap:
+      selector: {text: {exact: "Capture"}}
+  - wait_for:
+      selector: {text: {contains: "CAPTURE closed id=0 seq=2"}}
+      timeout_ms: 30000
+  - assert_text:
+      selector: {id: status}
+      text: {contains: "crc32=0xa2408da5"}
+
+  # 3. Restore deterministic test_pattern and verify CRC32 resumes at 0xdead8870.
+  - service_ctl:
+      module: hw.camera
+      op: set_frame
+      args: {source: "test_pattern"}
+      expect:
+        ok: true
+        op: set_frame
+        value:
+          source: test_pattern
+          pattern: ACOS_PATTERN_COLORBARS_V1
+
+  - tap:
+      selector: {text: {exact: "Capture"}}
+  - wait_for:
+      selector: {text: {contains: "CAPTURE closed id=0 seq=3"}}
+      timeout_ms: 30000
+  - assert_text:
+      selector: {id: status}
+      text: {contains: "crc32=0xdead8870"}
+
+  - service_ctl:
+      module: hw.camera
+      op: status
+      expect:
+        ok: true
+        op: status
+        value:
+          pattern: ACOS_PATTERN_COLORBARS_V1
+          calls:
+            open_devices: 0
+            devices_opened: 3
+            streams_created: 3

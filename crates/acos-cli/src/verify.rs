@@ -591,6 +591,9 @@ pub fn run(args: VerifyArgs) -> ExitCode {
     // session's — the id is published in the engine report instead of dying with
     // the process.
     let mut session_id: Option<String> = None;
+    let mut deferred_art_meta: Option<
+        Arc<std::sync::Mutex<crate::engine::art::DeferredArtMeta>>,
+    > = None;
     let backend: EngineBackend = match engine {
         // The default route is forwarded verbatim: engine selection does not
         // change Rust VM behaviour.
@@ -681,45 +684,68 @@ pub fn run(args: VerifyArgs) -> ExitCode {
             let zygote = Arc::new(crate::engine::zygote_host::ZygoteHost::for_artifacts(
                 &artifacts,
             ));
-            match crate::engine::art::ArtSession::start_with_apks_and_session(
-                &apk,
-                &extra_apks,
-                &artifacts,
-                animations,
-                &insets_owned,
-                idle_kill_seconds,
-                Some(zygote),
-                // NET4: one-shot runs are named by an id too (the engine
-                // generates `verify-<pid>`): the relay session is `acos-<id>`,
-                // so this run's network is addressable exactly like a serve
-                // session's, and the id is reported in `engine.json`.
-                None,
-                &validated_services,
-                &launch_intent,
-            ) {
-                Ok(session) => {
-                    session_id = Some(session.session_id().to_string());
-                    session_boot_ms = Some(session.session_start_ms());
-                    session_animations = Some(session.animations());
-                    session_insets = Some(session.insets());
-                    session_extra_apks = session.extra_apks().to_vec();
-                    session_boot_image = session.boot_image().cloned();
-                    EngineBackend::session(Box::new(session))
-                }
-                Err(error) => {
-                    let mut protocol = error.to_protocol_error();
-                    // W46: a session that refused to start still leaves its own
-                    // record (full disk, seccomp, panic). Put those facts in the
-                    // envelope instead of only a detail string.
-                    crate::failure::attach_session_exit(&mut protocol, &artifacts);
-                    let envelope = Envelope::failure(
-                        request_id,
-                        ProtocolBackend::AcosNative,
-                        Fidelity::StaticAnalysis,
-                        protocol,
-                        Metrics::wall_ms(0),
-                    );
-                    return finish_run(&envelope, &args, &artifacts, Some(trust));
+            // METRO3b: when a scenario starts a host dev server before its first
+            // `launch`, defer spawning the ART guest until `launch` runs so the
+            // relay's host-port opt-in and Metro itself are already up before
+            // the debug app executes `Application.onCreate`.
+            if scenario_starts_dev_server_before_launch(&scenario) {
+                let (deferred, meta) = crate::engine::art::DeferredArtSession::new(
+                    crate::engine::art::DeferredArtStart {
+                        apk,
+                        extra_apks,
+                        artifacts: artifacts.clone(),
+                        animations: animations.to_string(),
+                        insets: insets_owned.clone(),
+                        idle_kill_seconds,
+                        zygote: Some(zygote),
+                        session_id: None,
+                        services: validated_services.clone(),
+                        intent: launch_intent,
+                    },
+                );
+                deferred_art_meta = Some(meta);
+                EngineBackend::session(Box::new(deferred))
+            } else {
+                match crate::engine::art::ArtSession::start_with_apks_and_session(
+                    &apk,
+                    &extra_apks,
+                    &artifacts,
+                    animations,
+                    &insets_owned,
+                    idle_kill_seconds,
+                    Some(zygote),
+                    // NET4: one-shot runs are named by an id too (the engine
+                    // generates `verify-<pid>`): the relay session is `acos-<id>`,
+                    // so this run's network is addressable exactly like a serve
+                    // session's, and the id is reported in `engine.json`.
+                    None,
+                    &validated_services,
+                    &launch_intent,
+                ) {
+                    Ok(session) => {
+                        session_id = Some(session.session_id().to_string());
+                        session_boot_ms = Some(session.session_start_ms());
+                        session_animations = Some(session.animations());
+                        session_insets = Some(session.insets());
+                        session_extra_apks = session.extra_apks().to_vec();
+                        session_boot_image = session.boot_image().cloned();
+                        EngineBackend::session(Box::new(session))
+                    }
+                    Err(error) => {
+                        let mut protocol = error.to_protocol_error();
+                        // W46: a session that refused to start still leaves its own
+                        // record (full disk, seccomp, panic). Put those facts in the
+                        // envelope instead of only a detail string.
+                        crate::failure::attach_session_exit(&mut protocol, &artifacts);
+                        let envelope = Envelope::failure(
+                            request_id,
+                            ProtocolBackend::AcosNative,
+                            Fidelity::StaticAnalysis,
+                            protocol,
+                            Metrics::wall_ms(0),
+                        );
+                        return finish_run(&envelope, &args, &artifacts, Some(trust));
+                    }
                 }
             }
         }
@@ -733,7 +759,7 @@ pub fn run(args: VerifyArgs) -> ExitCode {
     // ADR-0029: the rows a verdict cites must be the session's *final* module
     // state (every delivered fix is recorded in them), so keep the live handle
     // and read it after the teardown asked the launcher once more.
-    let live_module_rows = backend.module_rows();
+    let mut live_module_rows = backend.module_rows();
     let mut guarded = crate::trust::TrustGuard::new(Box::new(backend), trust);
     let mut envelope = acos_verify::verify(&request, &mut guarded);
     // W46: tear the session down *before* annotating, so the launcher's own
@@ -741,6 +767,27 @@ pub fn run(args: VerifyArgs) -> ExitCode {
     // record is evidence for a pass as well as for a failure (a clean run ends
     // with guest_exit=0), and a caller that keeps only the artifacts keeps it.
     drop(guarded);
+    if let Some(meta) = deferred_art_meta.and_then(|m| m.lock().ok().map(|g| {
+        (
+            g.session_id.clone(),
+            g.session_boot_ms,
+            g.session_animations,
+            g.session_insets,
+            g.session_extra_apks.clone(),
+            g.session_boot_image.clone(),
+            g.module_rows.clone(),
+        )
+    })) {
+        session_id = meta.0;
+        session_boot_ms = meta.1;
+        session_animations = meta.2;
+        session_insets = meta.3;
+        session_extra_apks = meta.4;
+        session_boot_image = meta.5;
+        if meta.6.is_some() {
+            live_module_rows = meta.6;
+        }
+    }
     if trust == crate::trust::Trust::Trusted {
         merge_final_logd(&artifacts);
     }
@@ -765,6 +812,25 @@ pub fn run(args: VerifyArgs) -> ExitCode {
         session_id.clone(),
     );
     finish_run(&envelope, &args, &artifacts, Some(trust))
+}
+
+/// METRO3b: true when the scenario starts a host dev server before its first
+/// `launch` step. Used to defer ART session boot until `launch` runs.
+fn scenario_starts_dev_server_before_launch(scenario_path: &Path) -> bool {
+    let Ok(parsed) = acos_protocol::scenario::Scenario::load(scenario_path) else {
+        return false;
+    };
+    for step in &parsed.steps {
+        if let Some(dev) = &step.dev_server {
+            if dev.op == acos_protocol::scenario::DevServerOp::Start {
+                return true;
+            }
+        }
+        if step.launch.is_some() {
+            return false;
+        }
+    }
+    false
 }
 
 /// The verifier reads the guest's log **between steps**, so the entries the
@@ -1564,6 +1630,54 @@ mod final_logd_merge_tests {
         assert_eq!(text.matches("assertion failed: boom").count(), 1);
         assert!(text.contains("  1234      3  E x: assertion failed: boom"));
         assert!(text.contains("  9999      4  I x: unstamped tail"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn detects_dev_server_start_before_launch() {
+        let dir = std::env::temp_dir().join(format!("dev-server-before-launch-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+
+        let base = concat!(
+            "version: 1\n",
+            "name: test\n",
+            "description: test deferred art start\n",
+            "app: a.apk\n",
+            "engine: art\n",
+            "fallback: report-and-escalate\n",
+            "api_level: 34\n",
+            "isolation: process\n",
+            "display: {mode: offscreen, width: 1080, height: 2400, density_dpi: 420}\n",
+            "capabilities: [lifecycle]\n",
+            "needs_env: [metro]\n",
+            "expectation_reason: needs metro\n",
+            "budgets: {memory_mib: 512, wall_ms: 60000}\n",
+            "steps:\n",
+        );
+
+        let before = dir.join("before.yaml");
+        std::fs::write(
+            &before,
+            format!(
+                "{base}  - dev_server: {{op: start, project: p, port: 8081}}\n  - launch: {{activity: a/.Main}}\n"
+            ),
+        )
+        .unwrap();
+        acos_protocol::scenario::Scenario::load(&before).expect("valid before scenario");
+        assert!(super::scenario_starts_dev_server_before_launch(&before));
+
+        let after = dir.join("after.yaml");
+        std::fs::write(
+            &after,
+            format!(
+                "{base}  - launch: {{activity: a/.Main}}\n  - dev_server: {{op: start, project: p, port: 8081}}\n"
+            ),
+        )
+        .unwrap();
+        acos_protocol::scenario::Scenario::load(&after).expect("valid after scenario");
+        assert!(!super::scenario_starts_dev_server_before_launch(&after));
+
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

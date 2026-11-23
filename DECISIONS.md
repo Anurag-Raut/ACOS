@@ -1228,6 +1228,14 @@ step; the installer carries it and the module resolves it from the image first.
    wire is unchanged (`hello.broker.build` / `engineStatus.build` are additive). Normative copy:
    `results/handoff/WVB/WIRE.md` §0.1; byte-level test: `gate::tests::the_attach_line_is_exactly_the_documented_bytes`.
 
+**ADR-0031 amendment (2026-11-22, WVBROKER1).** Bounded handoff and stale-session cleanup for shared WebView brokers across builds:
+
+1. **EOF probes no longer spin `wv-accept` or `write_attach`.** `server::read_line` and `gate::write_attach` previously ignored `Ok(0)` on `UnixStream::read` (infinite 100% CPU loop whenever a peer connected and closed without `\n`, e.g., `ServerHandle::stop`, `bind_socket`, or `main`'s race probe). Both now fail closed immediately on EOF.
+2. **An exiting broker cannot clobber its replacement.** `ServerHandle::stop` no longer calls `UnixStream::connect(&self.socket)` (the listener is nonblocking and `wv-watch` wakes via condvar), and `ServerHandle::drop` only unlinks `&self.socket` if `(st_dev, st_ino)` matches the socket it bound.
+3. **Idle mismatched brokers (`sessions == Some(0)`) are replaced within a bounded window using `SO_PEERCRED`.** When a shared daemon refuses `attach:2` with `BUILD_MISMATCH` and `sessions == 0`, the gate records `(pid, uid, starttime)` from `SO_PEERCRED` + `/proc/<pid>/stat`, waits up to `1500ms` for the peer **process** to exit completely (preventing an older unpatched daemon's delayed `ServerHandle::drop` from unlinking the newly spawned broker's socket), then sends `SIGTERM` (1500 ms wait) → `SIGKILL` (500 ms wait) to the verified same-UID peer PID if still alive before respawning on `broker.sock`.
+4. **Busy or unknown-session mismatched brokers are never killed.** When `sessions > 0`, `sessions` is unknown (`attach` refusal/timeout on a wedged listener), or the endpoint is `BrokerSource::External`, the gate leaves the existing daemon untouched and switches to the build-private socket (`<dir>/broker-<source8>.sock`), bounded by a 3 s attach I/O timeout so even a wedged old canonical daemon falls back inside the 12 s launch budget. Transient scope unit names add a monotonic sequence (`acos-webview-<tag>-<seq>-<pid>`) so retries/multi-gate processes never collide.
+5. **Per-session runtime dirs (`<runtime>/acos-wv/<pid>-<n>`) are cleaned on drop and swept when stale.** `RunDir::drop` cleans `<runtime>/acos-wv/<pid>-<n>` (covering `webview: off` and non-gate sessions where no `Gate::drop` runs), and `ArtRoot::sweep_stale_runs` sweeps leftover `<pid>-<n>` directories whose owner PID has exited.
+
 ## ADR-0032 — Settle is not a pixel rule: content stability for every wait and assertion (REL3A, 2026-11-17)
 
 **Context.** v0.3.0 agent feedback (two independent agents) showed the settle model still leaked into
@@ -1589,3 +1597,15 @@ Three rules the WebView track had to settle, each measured first
    dropped. The known cause of a *cross-session* restart is the WebView daemon
    living in its spawner's cgroup (a session's scope ending kills the host's
    engine); moving it out is a process-model decision for the owner.
+
+**ADR-0029 amendment (owner, 2026-11-18, MULTIWIN3): module control seam is option A — a `ServiceHost` guest-command outbox.**
+
+Modules live in `acos-services` and run on the binder peer thread (`Module::control`), while the guest process's stdin command channel (`ROTATE`, `WINDOW`, …) and probe wait live in `acos-art`'s launcher loop. A module control op that changes window or configuration state (`multiwindow.enter_split`, `multiwindow.resize`, `multiwindow.exit`, and later rotation and PiP) needs both host-side `WmsState` mutation and guest-side delivery settled to a fresh UI probe sample in the same control reply.
+
+**Decision.** `ServiceHost` owns a typed guest-command outbox (`GuestCommand`, starting with `GuestCommand::Window { task, process, rect, app_bounds, windowing_mode }`). During `Module::control`, the module mutates `WmsState` (via `ServiceHost::wms()`) and pushes one or more `GuestCommand`s onto the host outbox (`ServiceHost::push_guest_command`). When the peer thread finishes handling a `services` control request, it drains the outbox (`ServiceHost::drain_guest_commands`) and returns the commands alongside the control reply to the launcher loop. The launcher loop writes each command to the stdin of the guest process that owns the task, waits for a fresh probe sample (`sample.seq > before`, failing closed with `NO_FRESH_TREE` / `GUEST_EXITED`), and attaches the settled `probe_seq` and `tree` to the same control reply.
+
+**Consequences.**
+- One reusable seam for all host-driven window/config transitions (`multiwindow` now; rotation and PiP later — `rotate` stays on its existing launcher path until migrated).
+- `acos-services` stays decoupled from `acos-art` process handles and probe loops; unit tests in `acos-services` can inspect the queued `GuestCommand`s directly via `ServiceHost::drain_guest_commands`.
+- The module itself never computes or fabricates guest layout; host-computed geometry flows from `WmsState` through `GuestCommand` to the guest's activity override `Configuration` and `relayout`.
+

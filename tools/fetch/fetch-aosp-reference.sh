@@ -49,4 +49,9 @@ clone connectivity $B/packages/modules/Connectivity framework/src/android/net
 clone wifi $B/packages/modules/Wifi framework/java/android/net/wifi
 clone bluetooth $B/packages/modules/Bluetooth framework/java/android/bluetooth
 clone permission $B/packages/modules/Permission framework-s/java/android/app/role
+# CAMERA1: the camera service client/server (`frameworks/av`) and the camera_metadata
+# format + tags (`system/media`), for the `hw.camera` module's `CameraMetadata` codec
+# and the ICameraService AIDL. Clone-or-widen: safe on an existing cache.
+clone av $B/frameworks/av camera/aidl camera/include camera/camera2 camera/CameraMetadata.cpp camera/CameraBase.cpp camera/ndk services/camera/libcameraservice/api2 camera/cameraserver
+clone media $B/system/media camera
 du -sh "$ROOT"/*

@@ -17,7 +17,23 @@ use std::net::{Shutdown, TcpListener, TcpStream};
 
 /// Serve `listen` until killed: accept, dial `target`, copy both ways.
 pub fn serve(listen: &str, target: &str) -> std::io::Result<()> {
+    serve_ready(listen, target, None)
+}
+
+/// Serve `listen` until killed, writing `ready` atomically right after
+/// `TcpListener::bind` succeeds so the supervisor knows `127.0.0.1:<port>` is
+/// listening before returning from `host_port`.
+pub fn serve_ready(
+    listen: &str,
+    target: &str,
+    ready: Option<&std::path::Path>,
+) -> std::io::Result<()> {
     let listener = TcpListener::bind(listen)?;
+    if let Some(path) = ready {
+        let tmp = path.with_extension("tmp");
+        std::fs::write(&tmp, format!("{}\n", std::process::id()))?;
+        std::fs::rename(&tmp, path)?;
+    }
     eprintln!("acos-netd: forward {listen} -> {target}");
     for conn in listener.incoming() {
         let Ok(client) = conn else { continue };
@@ -78,20 +94,22 @@ mod tests {
         let probe = TcpListener::bind("127.0.0.1:0").unwrap();
         let listen = probe.local_addr().unwrap();
         drop(probe);
+        let ready = std::env::temp_dir().join(format!(
+            "acos-netd-forward-ready-{}.ready",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_file(&ready);
         let l = listen.to_string();
         let t = target_addr.to_string();
-        std::thread::spawn(move || serve(&l, &t).unwrap());
-        let mut c = None;
-        for _ in 0..100 {
-            match TcpStream::connect(listen) {
-                Ok(s) => {
-                    c = Some(s);
-                    break;
-                }
-                Err(_) => std::thread::sleep(std::time::Duration::from_millis(10)),
-            }
+        let r = ready.clone();
+        std::thread::spawn(move || serve_ready(&l, &t, Some(&r)).unwrap());
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        while !ready.is_file() && std::time::Instant::now() < deadline {
+            std::thread::sleep(std::time::Duration::from_millis(2));
         }
-        let mut c = c.expect("forwarder accepts");
+        assert!(ready.is_file(), "ready file was not created after bind");
+        let _ = std::fs::remove_file(&ready);
+        let mut c = TcpStream::connect(listen).expect("forwarder accepts as soon as ready exists");
         c.write_all(b"ping").unwrap();
         let mut buf = [0u8; 4];
         c.read_exact(&mut buf).unwrap();

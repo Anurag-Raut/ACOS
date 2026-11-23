@@ -195,6 +195,9 @@ pub struct AppInfo {
     pub theme: i32,
     /// label resource id.
     pub label_res: i32,
+    /// literal `PackageItemInfo.nonLocalizedLabel`, when the manifest gave text
+    /// rather than a `@string/` resource id.
+    pub non_localized_label: Option<String>,
     /// `PackageItemInfo.icon` resource id.
     pub icon: i32,
     /// `ApplicationInfo.resourceDirs`.
@@ -239,7 +242,12 @@ impl AppInfo {
             .unwrap_or_else(|| package.clone());
         let class_name = manifest.application.name.clone().unwrap_or_default();
         let theme = manifest.application.theme.unwrap_or(0) as i32;
-        let label_res = manifest.application.label_ref.unwrap_or(0) as i32;
+        let app_label = LabelSpec::from_parts(
+            manifest.application.label.as_ref(),
+            manifest.application.label_ref,
+        );
+        let label_res = app_label.res;
+        let non_localized_label = app_label.literal;
         let target_sdk = manifest.target_sdk.unwrap_or(34) as i32;
         // W36 (W31 R1): the flag derivation lives in `acos-apk`, transcribed
         // from the image's `PackageParser.parseBaseApplication`
@@ -269,6 +277,7 @@ impl AppInfo {
             process_name,
             theme,
             label_res,
+            non_localized_label,
             icon: 0,
             resource_dirs: Vec::new(),
             split_names: Vec::new(),
@@ -300,6 +309,7 @@ impl AppInfo {
             process_name: "dev.acos.fixtures.helloviews".into(),
             theme: 0,
             label_res: 0,
+            non_localized_label: None,
             icon: 0,
             resource_dirs: Vec::new(),
             split_names: Vec::new(),
@@ -330,7 +340,7 @@ impl AppInfo {
                 Value::Str8(Some(self.name.clone())),
                 Value::Str8(Some(self.package_name.clone())),
                 Value::Int(self.label_res),              // labelRes
-                Value::Str(None),                        // label (TextUtils.writeToParcel)
+                Value::Str(self.non_localized_label.clone()), // label (TextUtils.writeToParcel)
                 Value::Int(self.icon),                   // icon
                 Value::Int(0),                           // logo
                 meta_data_value(&self.meta_data, flags), // metaData
@@ -429,8 +439,9 @@ impl AppInfo {
         Some(Self {
             name: f.get(1)?.as_str()?.to_string(),
             package_name: f.get(2)?.as_str()?.to_string(),
+            label_res: f.get(3)?.as_int()?,
+            non_localized_label: f.get(4)?.as_str().map(str::to_string),
             icon: f.get(5)?.as_int()?,
-            label_res: f.get(6)?.as_int()?,
             process_name: f.get(12)?.as_str()?.to_string(),
             class_name: f.get(13)?.as_str().unwrap_or_default().to_string(),
             theme: f.get(14)?.as_int()?,
@@ -467,6 +478,10 @@ pub struct ActivityInfo {
     pub flags: i32,
     /// theme resource id.
     pub theme: i32,
+    /// `PackageItemInfo.labelRes`.
+    pub label_res: i32,
+    /// `PackageItemInfo.nonLocalizedLabel`.
+    pub non_localized_label: Option<String>,
     /// `exported`.
     pub exported: bool,
     /// Parent activity (empty when none).
@@ -486,8 +501,8 @@ impl ActivityInfo {
             vec![
                 Value::Str8(Some(self.name.clone())),
                 Value::Str8(Some(self.package_name.clone())),
-                Value::Int(0),    // labelRes (the activity declares no label)
-                Value::Str(None), // label
+                Value::Int(self.label_res),
+                Value::Str(self.non_localized_label.clone()),
                 Value::Int(0),    // icon
                 Value::Int(0),    // logo
                 meta_data_value(&self.meta_data, flags),
@@ -1162,15 +1177,20 @@ impl InstalledPackage {
         let activities = manifest
             .activities
             .iter()
-            .map(|c| ActivityInfo {
-                name: acos_apk::manifest::fq_name(&manifest.package, &c.name),
-                package_name: manifest.package.clone(),
-                launch_mode: launch_mode_code(c.launch_mode.as_deref()),
-                flags: 0x200, // ActivityInfo.FLAG_HARDWARE_ACCELERATED (API default, targetSdk >= 14)
-                theme: 0,
-                exported: c.exported.unwrap_or(false),
-                parent_activity_name: String::new(),
-                meta_data: c.meta_data.clone(),
+            .map(|c| {
+                let label = LabelSpec::from_parts(c.label.as_ref(), c.label_ref);
+                ActivityInfo {
+                    name: acos_apk::manifest::fq_name(&manifest.package, &c.name),
+                    package_name: manifest.package.clone(),
+                    launch_mode: launch_mode_code(c.launch_mode.as_deref()),
+                    flags: 0x200, // ActivityInfo.FLAG_HARDWARE_ACCELERATED (API default, targetSdk >= 14)
+                    theme: 0,
+                    label_res: label.res,
+                    non_localized_label: label.literal,
+                    exported: c.exported.unwrap_or(false),
+                    parent_activity_name: String::new(),
+                    meta_data: c.meta_data.clone(),
+                }
             })
             .collect();
         let requested_permissions: Vec<String> = manifest
@@ -1333,6 +1353,8 @@ impl PmsState {
                 launch_mode: 0,
                 flags: 0,
                 theme: 0,
+                label_res: 0,
+                non_localized_label: None,
                 exported: true,
                 parent_activity_name: String::new(),
                 meta_data: Vec::new(),
@@ -2290,13 +2312,16 @@ impl ServiceObject for PmsService {
                 // userId)` / `queryIntentActivities(Intent, String, long, int)`.
                 // A session installs more than one package, so the intent is
                 // matched against every package's declared filters (`ManifestDb`
-                // is the same table ATMS resolves `startActivity` with) and the
-                // matches are materialised by `pms_java`.
+                // is the same table ATMS resolves `startActivity` with). We keep
+                // caching for `pms_java` (VM path) and also build real
+                // `ResolveInfo` / `ParceledListSlice<ResolveInfo>` parcelables
+                // for real ART.
                 let intent = args
                     .first()
                     .and_then(Value::as_parcelable)
                     .map(crate::ams::IntentFacts::from_parcelable)
                     .unwrap_or_default();
+                let flags = args.get(2).and_then(Value::as_long).unwrap_or(0);
                 let db = crate::ams::ManifestDb {
                     packages: state.packages.iter().map(|r| r.manifest.clone()).collect(),
                 };
@@ -2320,10 +2345,53 @@ impl ServiceObject for PmsService {
                         declared,
                     });
                 }
-                cache_intent_activities(resolved);
-                // The generic reply is a placeholder: `pms_java` writes the real
-                // `ResolveInfo`/`ParceledListSlice<ResolveInfo>`.
-                vec![Value::TypedObject(Parcelable::Null)]
+                cache_intent_activities(resolved.clone());
+                let to_resolve_info = |m: &ResolvedActivity| -> Parcelable {
+                    let system = i32::from((m.app.flags & 1) != 0);
+                    Parcelable::ordered(
+                        "android.content.pm.ResolveInfo",
+                        vec![
+                            Value::Cond {
+                                present: true,
+                                values: vec![Value::Parcelable(
+                                    m.activity.to_parcelable_with_flags(&m.app, flags),
+                                )],
+                            },
+                            Value::Cond {
+                                present: false,
+                                values: Vec::new(),
+                            },
+                            Value::Int(0),         // priority
+                            Value::Int(0),         // preferredOrder
+                            Value::Int(0x10_0000), // match (MATCH_CATEGORY_EMPTY)
+                            Value::Int(-1),        // specificIndex
+                            Value::Int(0),         // labelRes (defer to ActivityInfo/AppInfo)
+                            Value::Str(None),      // nonLocalizedLabel
+                            Value::Int(0),         // icon
+                            Value::Str8(None),     // resolvePackageName
+                            Value::Int(0),         // targetUserId
+                            Value::Int(system),    // system
+                            Value::Int(0),         // noResourceId
+                            Value::Int(0),         // iconResourceId
+                            Value::Int(0),         // handleAllWebDataURI
+                            Value::Int(0),         // mAutoResolutionAllowed
+                            Value::Int(0),         // isInstantAppAvailable
+                            Value::Int(-2),        // userHandle (USER_CURRENT)
+                        ],
+                    )
+                };
+                if method.name == "resolveIntent" {
+                    match resolved.first() {
+                        Some(first) => vec![Value::TypedObject(to_resolve_info(first))],
+                        None => vec![Value::TypedObject(Parcelable::Null)],
+                    }
+                } else {
+                    let items: Vec<Value> = resolved
+                        .iter()
+                        .map(|m| Value::Parcelable(to_resolve_info(m)))
+                        .collect();
+                    vec![Value::TypedObject(parcelable::parceled_list_of(items))]
+                }
             }
             // A service `ResolveInfo` uses the component marker `2` and a
             // `ParceledListSlice` for `queryIntentServices`; neither is modelled
@@ -2611,5 +2679,54 @@ mod tests {
             labels.activity("pkg.NotDeclared").is_unset(),
             "an unknown activity must not inherit another component's label"
         );
+    }
+
+    #[test]
+    fn query_intent_activities_returns_resolve_info_slice_with_labels() {
+        let launcher_apk = crate::workspace_path("fixtures/build/apps/launcher.apk")
+            .expect("launcher.apk path");
+        let hello_apk = crate::workspace_path("fixtures/build/apps/hello-views.apk")
+            .expect("hello-views.apk path");
+        assert!(launcher_apk.exists(), "launcher.apk built by build-apps.sh");
+        assert!(hello_apk.exists(), "hello-views.apk built by build-apps.sh");
+
+        let mut pms = PmsState::from_apk(&hello_apk).expect("hello-views");
+        pms.install_extra(&launcher_apk, Some("/data/app/launcher.apk"))
+            .expect("launcher");
+
+        let mut svc = PmsService::new(
+            std::sync::Arc::new(std::sync::Mutex::new(pms)),
+            crate::host::Wiring::default(),
+        );
+        let method = acos_aidl::interfaces().iter().find(|i| i.descriptor == "android.content.pm.IPackageManager").unwrap()
+            .methods
+            .iter()
+            .find(|m| m.name == "queryIntentActivities")
+            .unwrap()
+            .clone();
+        let intent = crate::ams::IntentFacts::action("android.intent.action.MAIN")
+            .with_category("android.intent.category.LAUNCHER")
+            .to_parcelable();
+        let reply = svc
+            .call(
+                "android.content.pm.IPackageManager",
+                &method,
+                &[
+                    Value::TypedObject(intent),
+                    Value::Str(None),
+                    Value::Long(0),
+                    Value::Int(0),
+                ],
+            )
+            .expect("queryIntentActivities");
+        let Some(Value::TypedObject(slice)) = reply.reply.first() else {
+            panic!("expected ParceledListSlice, got {reply:?}");
+        };
+        assert_eq!(slice.class(), Some("android.content.pm.ParceledListSlice"));
+        let fields = slice.fields().expect("slice fields");
+        // ParceledListSlice<ResolveInfo> must contain Hello Views and NOT LauncherActivity.
+        let text = format!("{fields:?}");
+        assert!(text.contains("dev.acos.fixtures.helloviews"), "missing hello-views: {text}");
+        assert!(!text.contains("com.acos.launcher"), "HOME-only launcher must not match CATEGORY_LAUNCHER: {text}");
     }
 }

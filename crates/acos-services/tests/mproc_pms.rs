@@ -200,6 +200,29 @@ fn uids_are_per_package() {
     );
 }
 
+/// Extract the `ActivityInfo` parcelable from a `ResolveInfo` wire parcelable
+/// returned by `IPackageManager.queryIntentActivities` / `resolveIntent`.
+fn resolve_info_activity(ri: &Parcelable) -> &Parcelable {
+    assert_eq!(ri.class(), Some("android.content.pm.ResolveInfo"));
+    // ResolveInfo field 0 is the activityInfo branch (`writeInt(1)` + ActivityInfo).
+    let Some(Value::Cond { present: true, values }) = ri.field(0) else {
+        panic!("expected ResolveInfo with present activityInfo: {ri:?}");
+    };
+    let Some(Value::Parcelable(ai)) = values.first() else {
+        panic!("expected ActivityInfo inside ResolveInfo branch: {values:?}");
+    };
+    assert_eq!(ai.class(), Some("android.content.pm.ActivityInfo"));
+    ai
+}
+
+fn activity_app_info(ai: &Parcelable) -> &Parcelable {
+    let Some(Value::Parcelable(app)) = ai.field(9) else {
+        panic!("expected ApplicationInfo in ActivityInfo field 9: {ai:?}");
+    };
+    assert_eq!(app.class(), Some("android.content.pm.ApplicationInfo"));
+    app
+}
+
 #[test]
 fn query_intent_activities_matches_every_installed_package() {
     let mut pms = pms(state());
@@ -216,9 +239,62 @@ fn query_intent_activities_matches_every_installed_package() {
             Value::Int(0),
         ],
     );
-    let Value::TypedObject(Parcelable::Null) = &reply[0] else {
-        panic!("the generic reply is a placeholder for the materialiser");
+    // AOSP `IPackageManager.queryIntentActivities` returns a
+    // `ParceledListSlice<ResolveInfo>` containing every matching activity across
+    // installed packages.
+    let Value::TypedObject(slice) = &reply[0] else {
+        panic!("expected TypedObject(ParceledListSlice), got {:?}", reply[0]);
     };
+    let items = acos_services::parcelable::parceled_list_items(slice)
+        .expect("queryIntentActivities must return a ParceledListSlice");
+    assert_eq!(
+        items.len(),
+        2,
+        "expected exactly the primary and extra launcher activities, got {items:?}"
+    );
+
+    let mut wire_matches = Vec::new();
+    for item in items {
+        let Value::Parcelable(ri) = item else {
+            panic!("expected ResolveInfo parcelable in slice, got {item:?}");
+        };
+        let ai = resolve_info_activity(ri);
+        let app = activity_app_info(ai);
+        let pkg = ai.field(1).and_then(Value::as_str).expect("activity packageName");
+        let name = ai.field(0).and_then(Value::as_str).expect("activity name");
+        let exported = ai.field(15).and_then(Value::as_int).expect("exported");
+        let app_pkg = app.field(2).and_then(Value::as_str).expect("app packageName");
+        let app_label_res = app.field(3).and_then(Value::as_int).expect("app labelRes");
+        let app_label_lit = app.field(4).and_then(Value::as_str);
+        let source_dir = app.field(24).and_then(Value::as_str).expect("app sourceDir");
+        let uid = app.field(45).and_then(Value::as_int).expect("app uid");
+        assert_eq!(pkg, app_pkg);
+        assert_eq!(exported, 1, "{pkg}/{name} must be exported");
+        assert!(
+            app_label_res != 0 || app_label_lit.is_some(),
+            "{pkg} must carry its manifest application label"
+        );
+        wire_matches.push((pkg, name, source_dir, uid, app_label_res));
+    }
+
+    let primary = wire_matches
+        .iter()
+        .find(|m| m.0 == "dev.acos.fixtures.helloviews")
+        .expect("primary package hello-views in ParceledListSlice");
+    assert_eq!(primary.1, "dev.acos.fixtures.helloviews.MainActivity");
+    assert_eq!(primary.3, FIXTURE_UID);
+    assert_ne!(primary.4, 0, "hello-views declares @string/app_name");
+
+    let extra_wire = wire_matches
+        .iter()
+        .find(|m| m.0 == "dev.acos.fixtures.counter")
+        .expect("extra package counter in ParceledListSlice");
+    assert_eq!(extra_wire.1, "dev.acos.fixtures.counter.MainActivity");
+    assert_eq!(extra_wire.2, "/data/app/counter.apk");
+    assert_ne!(extra_wire.3, FIXTURE_UID, "extra package has its own uid");
+    assert_ne!(extra_wire.4, 0, "counter declares @string/app_name");
+
+    // The VM-path cache stays in sync with the wire reply.
     let matches = cached_intent_activities();
     let packages: Vec<&str> = matches
         .iter()
@@ -258,11 +334,34 @@ fn query_intent_activities_honours_the_intent() {
         fields[INTENT_PACKAGE] = Value::Str(Some("dev.acos.fixtures.counter".into()));
         *p = Parcelable::ordered("android.content.Intent", fields);
     }
-    call(
+    let reply = call(
         &mut pms,
         "queryIntentActivities",
         &[filtered, Value::Str(None), Value::Long(0), Value::Int(0)],
     );
+    let Value::TypedObject(slice) = &reply[0] else {
+        panic!("expected ParceledListSlice, got {:?}", reply[0]);
+    };
+    let items = acos_services::parcelable::parceled_list_items(slice)
+        .expect("filtered queryIntentActivities returns ParceledListSlice");
+    assert_eq!(items.len(), 1);
+    let Value::Parcelable(ri) = &items[0] else {
+        panic!("expected ResolveInfo item");
+    };
+    let ai = resolve_info_activity(ri);
+    assert_eq!(
+        ai.field(1).and_then(Value::as_str),
+        Some("dev.acos.fixtures.counter")
+    );
+    assert_eq!(
+        ai.field(0).and_then(Value::as_str),
+        Some("dev.acos.fixtures.counter.MainActivity")
+    );
+    assert_eq!(
+        activity_app_info(ai).field(24).and_then(Value::as_str),
+        Some("/data/app/counter.apk")
+    );
+
     let matches = cached_intent_activities();
     assert_eq!(
         matches.len(),
@@ -278,8 +377,9 @@ fn query_intent_activities_honours_the_intent() {
         "dev.acos.fixtures.counter"
     );
 
-    // An action nobody declares is a genuine no-match (empty, not the launcher).
-    call(
+    // An action nobody declares is a genuine no-match (empty slice, not null
+    // and not the launcher).
+    let empty_reply = call(
         &mut pms,
         "queryIntentActivities",
         &[
@@ -288,6 +388,14 @@ fn query_intent_activities_honours_the_intent() {
             Value::Long(0),
             Value::Int(0),
         ],
+    );
+    let Value::TypedObject(empty_slice) = &empty_reply[0] else {
+        panic!("expected empty ParceledListSlice, got {:?}", empty_reply[0]);
+    };
+    assert!(
+        acos_services::parcelable::parceled_list_items(empty_slice)
+            .expect("no-match returns empty ParceledListSlice")
+            .is_empty()
     );
     assert!(cached_intent_activities().is_empty());
 }
@@ -309,7 +417,7 @@ fn resolve_intent_returns_one_match_for_an_explicit_component() {
     fields[8] = Value::StringArray(None);
     fields[11] = Value::Int(-1);
     fields[12] = Value::Parcelable(Parcelable::Null);
-    call(
+    let reply = call(
         &mut pms,
         "resolveIntent",
         &[
@@ -319,6 +427,19 @@ fn resolve_intent_returns_one_match_for_an_explicit_component() {
             Value::Int(0),
         ],
     );
+    let Value::TypedObject(ri) = &reply[0] else {
+        panic!("expected ResolveInfo, got {:?}", reply[0]);
+    };
+    let ai = resolve_info_activity(ri);
+    assert_eq!(
+        ai.field(1).and_then(Value::as_str),
+        Some("dev.acos.fixtures.counter")
+    );
+    assert_eq!(
+        ai.field(0).and_then(Value::as_str),
+        Some("dev.acos.fixtures.counter.MainActivity")
+    );
+
     let matches = cached_intent_activities();
     assert_eq!(matches.len(), 1);
     assert_eq!(

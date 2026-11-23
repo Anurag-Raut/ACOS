@@ -928,14 +928,15 @@ impl Relay {
             // the session netns (a separate borrow: `start_forwarder` needs
             // `&self.state_dir` too).
             let exe = std::env::current_exe().map_err(io_err)?;
+            let state_dir = self.state_dir.clone();
             let log = std::fs::OpenOptions::new()
                 .create(true)
                 .append(true)
-                .open(self.state_dir.join("forwarder.log"))
+                .open(state_dir.join("forwarder.log"))
                 .map_err(io_err)?;
             let s = self.session_mut(t)?;
             if on {
-                start_forwarder(s, port, &exe, log)?;
+                start_forwarder(s, port, &exe, &state_dir, log)?;
             } else {
                 stop_forwarder(s, port);
             }
@@ -965,48 +966,6 @@ impl Relay {
                 return Err(error);
             }
         }
-        Ok(())
-    }
-
-    /// Start the session's loopback forwarder for `port` (idempotent).
-    ///
-    /// The forwarder is a child of the supervisor that joins the **session's**
-    /// netns and binds `127.0.0.1:<port>` there, then dials the relay's
-    /// host-loopback map address (the only path to the host's loopback). It lives
-    /// and dies with the session, and it exists only for ports the session
-    /// opted in to.
-    fn start_forwarder(&mut self, s: &mut Session, port: u16) -> Result<(), ProtoError> {
-        if s.forwards.iter().any(|(p, _)| *p == port) {
-            return Ok(());
-        }
-        let pid = s.pid.filter(|p| pid_alive(*p)).ok_or_else(|| ProtoError {
-            code: ErrorCode::NetworkUnavailable,
-            message: format!("session {} has no running guest to join", s.name),
-        })?;
-        let exe = std::env::current_exe().map_err(io_err)?;
-        let log = std::fs::OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(self.state_dir.join("forwarder.log"))
-            .map_err(io_err)?;
-        let mut cmd = Command::new("unshare");
-        cmd.arg(format!("--net=/proc/{pid}/ns/net"))
-            .arg(exe)
-            .args(plan::forwarder_args(port, &plan::forwarder_target(port)))
-            .stdin(Stdio::null())
-            .stdout(log.try_clone().map_err(io_err)?)
-            .stderr(log);
-        let child = cmd.spawn().map_err(|e| ProtoError {
-            code: ErrorCode::Io,
-            message: format!("cannot start the loopback forwarder for {port}: {e}"),
-        })?;
-        self.log(&format!(
-            "session {} forward 127.0.0.1:{port} -> {} pid={}",
-            s.name,
-            plan::forwarder_target(port),
-            child.id()
-        ));
-        s.forwards.push((port, child));
         Ok(())
     }
 
@@ -1132,6 +1091,7 @@ fn start_forwarder(
     s: &mut Session,
     port: u16,
     exe: &Path,
+    state_dir: &Path,
     log: std::fs::File,
 ) -> Result<(), ProtoError> {
     if s.forwards.iter().any(|(p, _)| *p == port) {
@@ -1150,9 +1110,13 @@ fn start_forwarder(
         code: ErrorCode::NetworkUnavailable,
         message: format!("session {}: /proc/{pid}/ns/net: {e}", s.name),
     })?;
+    let ready = state_dir.join(format!("forward-{}-{port}.ready", s.net.idx));
+    let _ = std::fs::remove_file(&ready);
     let ns_fd = ns.as_raw_fd();
     let mut cmd = Command::new(exe);
     cmd.args(plan::forwarder_args(port, &plan::forwarder_target(port)))
+        .arg("--ready")
+        .arg(&ready)
         .stdin(Stdio::null())
         .stdout(log.try_clone().map_err(io_err)?)
         .stderr(log);
@@ -1169,14 +1133,31 @@ fn start_forwarder(
         code: ErrorCode::Io,
         message: format!("cannot start the loopback forwarder for {port}: {e}"),
     })?;
-    // The bind happens in the forwarded process; a forwarder that exits at once
-    // (`unshare` refusing the netns) must not look like a successful opt-in.
-    std::thread::sleep(Duration::from_millis(30));
-    if let Ok(Some(status)) = child.try_wait() {
-        return Err(ProtoError {
-            code: ErrorCode::Io,
-            message: format!("the loopback forwarder for {port} exited: {status}"),
-        });
+    // Wait until `TcpListener::bind` has succeeded inside the session netns
+    // (forwarder writes `ready` right after bind), or fail immediately on exit.
+    let deadline = Instant::now() + Duration::from_secs(5);
+    loop {
+        if ready.is_file() {
+            let _ = std::fs::remove_file(&ready);
+            break;
+        }
+        if let Ok(Some(status)) = child.try_wait() {
+            let _ = std::fs::remove_file(&ready);
+            return Err(ProtoError {
+                code: ErrorCode::Io,
+                message: format!("the loopback forwarder for {port} exited: {status}"),
+            });
+        }
+        if Instant::now() >= deadline {
+            let _ = child.kill();
+            let _ = child.wait();
+            let _ = std::fs::remove_file(&ready);
+            return Err(ProtoError {
+                code: ErrorCode::Io,
+                message: format!("the loopback forwarder for {port} did not bind within 5s"),
+            });
+        }
+        std::thread::sleep(Duration::from_millis(2));
     }
     s.forwards.push((port, child));
     Ok(())
