@@ -8613,6 +8613,31 @@ fn interactive_serve(
                     })),
                 }
             }
+            "panel_ignored" => {
+                let action = request
+                    .get("action")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("panel");
+                let message = request
+                    .get("message")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("panel input ignored: verify run");
+                let mut ev = serde_json::json!({
+                    "ok": false,
+                    "cmd": "panel_ignored",
+                    "action": action,
+                    "code": "VERIFY_WATCH_ONLY",
+                    "message": message,
+                });
+                if let (Some(x), Some(y)) = (
+                    request.get("x").and_then(|v| v.as_i64()),
+                    request.get("y").and_then(|v| v.as_i64()),
+                ) {
+                    ev["x"] = serde_json::json!(x);
+                    ev["y"] = serde_json::json!(y);
+                }
+                protocol_write(&ev);
+            }
             "rotate" => {
                 // ROT3: a display rotation is a WMS operation plus a
                 // configuration change in the guest. The host rotates the

@@ -354,6 +354,9 @@ function addEvent(event, kind) {
   const what = el("div", "what");
   const label = event.cmd || event.kind || kind;
   what.appendChild(el("span", "cmd", label));
+  if (event.source) {
+    what.appendChild(el("span", "pill", event.source));
+  }
   if (event.status) {
     const status = el("span", "st " + (event.status === "ok" ? "ok" : "bad"), " " + event.status);
     what.appendChild(status);
@@ -364,6 +367,7 @@ function addEvent(event, kind) {
   }
   if (event.key) what.appendChild(el("span", "txt", " key " + event.key));
   if (event.text) what.appendChild(el("span", "txt", " “" + event.text + "”"));
+  if (event.message) what.appendChild(el("span", "txt", " " + event.message));
   if (event.activity && event.kind === "activity") what.appendChild(el("span", "txt", " " + event.activity));
   item.appendChild(what);
   eventsList.prepend(item);

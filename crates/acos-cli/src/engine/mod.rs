@@ -767,6 +767,34 @@ pub trait SessionBackend {
         self.close()?;
         Ok(TeardownReport::unverified())
     }
+
+    /// DEVPANEL1: snapshot of live display/package/pid metadata for adb/gRPC.
+    fn adb_snapshot(&self) -> Result<crate::adb::AdbSessionSnapshot, String> {
+        Err("this session engine does not support adb exposure".to_string())
+    }
+
+    /// DEVPANEL1: live-view stream socket path for raw RGB888 frames.
+    fn adb_stream_socket(&self) -> Option<std::path::PathBuf> {
+        None
+    }
+
+    /// DEVPANEL1: UI tree + rotation for `adb shell uiautomator dump`.
+    fn adb_dump_tree(&mut self) -> Result<(UiTree, u8), String> {
+        Err("this session engine does not support adb tree dump".to_string())
+    }
+
+    /// DEVPANEL1: PNG bytes for `adb exec-out screencap -p`.
+    fn adb_screenshot_png(&mut self) -> Result<Vec<u8>, String> {
+        Err("this session engine does not support adb screencap".to_string())
+    }
+
+    /// DEVPANEL1: raw RGB888/RGBA8888 screenshot for `EmulatorController/getScreenshot`.
+    fn adb_raw_screenshot(&mut self, _out_path: &Path, _format: &str) -> Result<(u32, u32, u8), String> {
+        Err("this session engine does not support raw screenshots".to_string())
+    }
+
+    /// DEVPANEL1: emit a watch-only `panel_ignored` event onto LiveView.
+    fn adb_panel_ignored(&mut self, _action: &str, _x: Option<i64>, _y: Option<i64>, _message: &str) {}
 }
 
 /// The verifier backend over one [`SessionBackend`].

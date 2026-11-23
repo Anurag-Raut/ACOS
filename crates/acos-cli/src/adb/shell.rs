@@ -51,6 +51,7 @@ pub trait AdbSessionOps: Send + Sync + 'static {
     fn panel_text(&self, text: &str) -> Result<(), String>;
     fn stream_socket(&self) -> Option<PathBuf>;
     fn is_verify_run(&self) -> bool;
+    fn on_panel_input_ignored(&self, _kind: &str, _x: Option<i64>, _y: Option<i64>, _detail: &str) {}
 }
 
 /// Per-session host-side virtual shell state.

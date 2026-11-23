@@ -339,6 +339,9 @@ pub struct ArtSession {
     /// `<artifacts>/relaunch-retry-1/` and this record is carried in the reset
     /// reply. `None` on every ordinary relaunch.
     relaunch_retry: Option<serde_json::Value>,
+    /// DEVPANEL1: bounded ring of input events (agent, panel, ignored panel)
+    /// exposed by `acos_logs` (`events`) and matching the LiveView `E` stream.
+    input_events: VecDeque<serde_json::Value>,
 }
 
 /// One session's binding to a keeper child (P2, design §3/§4).
@@ -2257,6 +2260,7 @@ impl ArtSession {
             },
             zygote_previous_child_pid: None,
             relaunch_retry: None,
+            input_events: VecDeque::with_capacity(64),
         };
         // The ready line is the protocol's first reply. If the session dies
         // before it, there is no live frame at all: say so by name and keep the
@@ -2929,14 +2933,27 @@ impl ArtSession {
             .iter()
             .map(|&(id, x, y)| serde_json::json!([id, x, y]))
             .collect();
-        self.command(serde_json::json!({
+        let res = self.command(serde_json::json!({
             "cmd": "panel_touch",
             "action": action,
             "down_time": down_time,
             "event_time": event_time,
             "pointers": ptr_json,
-        }))?;
-        Ok(())
+        }));
+        let mut ev = serde_json::json!({
+            "ts_ms": now_unix_ms(),
+            "kind": "action",
+            "cmd": "touch",
+            "source": "panel",
+            "action": action,
+            "status": if res.is_ok() { "ok" } else { "error" },
+        });
+        if let Some(&(_, x, y)) = pointers.first() {
+            ev["x"] = serde_json::json!(x.round() as i64);
+            ev["y"] = serde_json::json!(y.round() as i64);
+        }
+        self.record_input_event(ev);
+        res.map(|_| ())
     }
 
     /// Send a non-blocking panel key event (`down` | `up` | `press`).
@@ -2947,23 +2964,162 @@ impl ArtSession {
         meta_state: i32,
         device_id: i32,
     ) -> Result<(), BackendError> {
-        self.command(serde_json::json!({
+        let res = self.command(serde_json::json!({
             "cmd": "panel_key",
             "code": code,
             "event_type": event_type,
             "meta_state": meta_state,
             "device_id": device_id,
-        }))?;
-        Ok(())
+        }));
+        let masked = !self.cached_proves_non_password_focus();
+        self.record_input_event(serde_json::json!({
+            "ts_ms": now_unix_ms(),
+            "kind": "action",
+            "cmd": "key",
+            "source": "panel",
+            "key": if masked { serde_json::json!("[masked]") } else { serde_json::json!(code) },
+            "status": if res.is_ok() { "ok" } else { "error" },
+        }));
+        res.map(|_| ())
     }
 
     /// Send non-blocking panel text input.
     pub(crate) fn panel_text(&mut self, text: &str) -> Result<(), BackendError> {
-        self.command(serde_json::json!({
+        let res = self.command(serde_json::json!({
             "cmd": "panel_text",
             "text": text,
-        }))?;
-        Ok(())
+        }));
+        let masked = !self.cached_proves_non_password_focus();
+        let display_text = if masked {
+            "[masked]".to_string()
+        } else {
+            truncate_event_text(text)
+        };
+        self.record_input_event(serde_json::json!({
+            "ts_ms": now_unix_ms(),
+            "kind": "action",
+            "cmd": "text",
+            "source": "panel",
+            "text": display_text,
+            "status": if res.is_ok() { "ok" } else { "error" },
+        }));
+        res.map(|_| ())
+    }
+
+    /// Emit a watch-only dropped-panel-input event to both the session's event
+    /// ring and `acos-art`'s LiveView stream (`view.sock`).
+    pub(crate) fn panel_ignored(
+        &mut self,
+        action: &str,
+        x: Option<i64>,
+        y: Option<i64>,
+        message: &str,
+    ) -> Result<(), BackendError> {
+        let mut ev = serde_json::json!({
+            "ts_ms": now_unix_ms(),
+            "kind": "action",
+            "cmd": action,
+            "source": "panel",
+            "status": "VERIFY_WATCH_ONLY",
+            "message": message,
+        });
+        if let (Some(x), Some(y)) = (x, y) {
+            ev["x"] = serde_json::json!(x);
+            ev["y"] = serde_json::json!(y);
+        }
+        self.record_input_event(ev);
+
+        if self.closed || self.stdin.is_none() {
+            return Ok(());
+        }
+        let mut req = serde_json::json!({
+            "cmd": "panel_ignored",
+            "action": action,
+            "message": message,
+        });
+        if let (Some(x), Some(y)) = (x, y) {
+            req["x"] = serde_json::json!(x);
+            req["y"] = serde_json::json!(y);
+        }
+        match self.command_raw(req) {
+            Ok(_) => Ok(()),
+            Err(err) => {
+                let code = err
+                    .details
+                    .as_ref()
+                    .and_then(|d| d.pointer("/reply/code"))
+                    .and_then(|v| v.as_str());
+                if code == Some("VERIFY_WATCH_ONLY") {
+                    Ok(())
+                } else {
+                    Err(BackendError::from_protocol(err))
+                }
+            }
+        }
+    }
+
+    /// Bounded ring of recorded input events (`agent`, `panel`, and watch-only
+    /// ignored `panel` inputs), newest last.
+    pub fn input_events(&self) -> Vec<serde_json::Value> {
+        self.input_events.iter().cloned().collect()
+    }
+
+    fn record_input_event(&mut self, event: serde_json::Value) {
+        const CAP: usize = 256;
+        while self.input_events.len() >= CAP {
+            self.input_events.pop_front();
+        }
+        self.input_events.push_back(event);
+    }
+
+    fn cached_proves_non_password_focus(&self) -> bool {
+        let Some(cached) = self.cached.as_ref() else {
+            return false;
+        };
+        ui_tree_proves_non_password_focus(&cached.tree)
+    }
+
+    fn record_agent_input_event(&mut self, gesture: &serde_json::Value, status: &str) {
+        let raw_cmd = gesture.get("cmd").and_then(|v| v.as_str()).unwrap_or("");
+        let wire_cmd = if raw_cmd == "type_text" { "text" } else { raw_cmd };
+        let masked = !self.cached_proves_non_password_focus();
+        let mut ev = serde_json::json!({
+            "ts_ms": now_unix_ms(),
+            "kind": "action",
+            "cmd": wire_cmd,
+            "source": "agent",
+            "status": status,
+        });
+        for field in ["x", "y", "x2", "y2"] {
+            if let Some(val) = gesture.get(field) {
+                ev[field] = val.clone();
+            }
+        }
+        if !ev.get("x").is_some() {
+            if let Some(x1) = gesture.get("x1") {
+                ev["x"] = x1.clone();
+            }
+        }
+        if !ev.get("y").is_some() {
+            if let Some(y1) = gesture.get("y1") {
+                ev["y"] = y1.clone();
+            }
+        }
+        if let Some(code) = gesture.get("code").or_else(|| gesture.get("key")) {
+            ev["key"] = if masked {
+                serde_json::json!("[masked]")
+            } else {
+                code.clone()
+            };
+        }
+        if let Some(text) = gesture.get("text").and_then(|v| v.as_str()) {
+            ev["text"] = serde_json::json!(if masked {
+                "[masked]".to_string()
+            } else {
+                truncate_event_text(text)
+            });
+        }
+        self.record_input_event(ev);
     }
 
     /// Press a raw Android keycode (the protocol takes integers).
@@ -3226,7 +3382,12 @@ impl ArtSession {
             frame_seq_before: self.cached.as_ref().map(|frame| frame.seq).unwrap_or(0),
             ..InputTiming::default()
         };
+        let event_req = request.clone();
         let outcome = self.input_command_inner(request, context, started, &mut timing);
+        self.record_agent_input_event(
+            &event_req,
+            if outcome.is_ok() { "ok" } else { "error" },
+        );
         timing.frame_seq_after = self.cached.as_ref().map(|frame| frame.seq).unwrap_or(0);
         // The guest's own delivery ack (host-measured round trip, guest-reported
         // latency) is what separates "input delivery" from "settle" in the
@@ -6089,6 +6250,58 @@ impl SessionBackend for ArtSession {
     fn tree_settle_record(&self) -> Option<serde_json::Value> {
         self.last_tree_settle.clone()
     }
+
+    fn adb_snapshot(&self) -> Result<crate::adb::AdbSessionSnapshot, String> {
+        if self.closed {
+            return Err("guest exited".to_string());
+        }
+        Ok(crate::adb::AdbSessionSnapshot {
+            package: self.package().to_string(),
+            activity: self.activity().map(str::to_string),
+            natural_size: self.natural_display_size(),
+            display_size: self.display_size(),
+            rotation: self.rotation(),
+            density: self.density(),
+            animations: self.animations(),
+            guest_pid: self.guest_pid(),
+            launcher_pid: self.launcher_pid(),
+            apk_path: self.apk_path().to_path_buf(),
+        })
+    }
+
+    fn adb_stream_socket(&self) -> Option<PathBuf> {
+        self.stream_socket().map(Path::to_path_buf)
+    }
+
+    fn adb_dump_tree(&mut self) -> Result<(UiTree, u8), String> {
+        if self.closed {
+            return Err("guest exited".to_string());
+        }
+        let tree = self
+            .tree_with_settle_pixels("fast", false)
+            .or_else(|_| self.ensure_bound_tree())
+            .map_err(|e| e.to_string())?;
+        Ok((tree, self.rotation()))
+    }
+
+    fn adb_screenshot_png(&mut self) -> Result<Vec<u8>, String> {
+        if self.closed {
+            return Err("guest exited".to_string());
+        }
+        self.screenshot_png_bytes().map_err(|e| e.to_string())
+    }
+
+    fn adb_raw_screenshot(&mut self, out_path: &Path, format: &str) -> Result<(u32, u32, u8), String> {
+        if self.closed {
+            return Err("guest exited".to_string());
+        }
+        self.raw_screenshot(out_path, format)
+            .map_err(|e| e.to_string())
+    }
+
+    fn adb_panel_ignored(&mut self, action: &str, x: Option<i64>, y: Option<i64>, message: &str) {
+        let _ = self.panel_ignored(action, x, y, message);
+    }
 }
 
 /// Parameters required to start an [`ArtSession`] on demand (METRO3b: when a
@@ -6472,6 +6685,73 @@ impl SessionBackend for DeferredArtSession {
             .as_ref()
             .and_then(SessionBackend::tree_settle_record)
     }
+
+    fn adb_snapshot(&self) -> Result<crate::adb::AdbSessionSnapshot, String> {
+        match self.session.as_ref() {
+            Some(session) => SessionBackend::adb_snapshot(session),
+            None => Err("session starting".to_string()),
+        }
+    }
+
+    fn adb_stream_socket(&self) -> Option<PathBuf> {
+        self.session
+            .as_ref()
+            .and_then(SessionBackend::adb_stream_socket)
+    }
+
+    fn adb_dump_tree(&mut self) -> Result<(UiTree, u8), String> {
+        match self.session.as_mut() {
+            Some(session) => SessionBackend::adb_dump_tree(session),
+            None => Err("session starting".to_string()),
+        }
+    }
+
+    fn adb_screenshot_png(&mut self) -> Result<Vec<u8>, String> {
+        match self.session.as_mut() {
+            Some(session) => SessionBackend::adb_screenshot_png(session),
+            None => Err("session starting".to_string()),
+        }
+    }
+
+    fn adb_raw_screenshot(&mut self, out_path: &Path, format: &str) -> Result<(u32, u32, u8), String> {
+        match self.session.as_mut() {
+            Some(session) => SessionBackend::adb_raw_screenshot(session, out_path, format),
+            None => Err("session starting".to_string()),
+        }
+    }
+
+    fn adb_panel_ignored(&mut self, action: &str, x: Option<i64>, y: Option<i64>, message: &str) {
+        if let Some(session) = self.session.as_mut() {
+            SessionBackend::adb_panel_ignored(session, action, x, y, message);
+        }
+    }
+}
+
+fn ui_tree_proves_non_password_focus(tree: &UiTree) -> bool {
+    fn walk(nodes: &[UiNode], saw_focused: &mut bool, password: &mut bool) {
+        for node in nodes {
+            if node.focused {
+                *saw_focused = true;
+                if node.password {
+                    *password = true;
+                }
+            }
+            walk(&node.children, saw_focused, password);
+        }
+    }
+    let (mut saw_focused, mut password) = (false, false);
+    walk(&tree.nodes, &mut saw_focused, &mut password);
+    saw_focused && !password
+}
+
+fn truncate_event_text(text: &str) -> String {
+    const LIMIT: usize = 64;
+    if text.chars().count() <= LIMIT {
+        return text.to_string();
+    }
+    let mut out: String = text.chars().take(LIMIT).collect();
+    out.push('…');
+    out
 }
 /// P12b: did this reply's settle block time out?
 ///

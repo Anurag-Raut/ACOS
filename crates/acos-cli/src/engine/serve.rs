@@ -1898,7 +1898,7 @@ fn launch_reply(
         "tree_truncated": truncated,
         "tree_path": tree_path,
         "tree_next_cursor": next_cursor,
-        "events": [],
+        "events": session.input_events(),
         // FB5: `ms` is the time from launch start to when this rung's evidence
         // was **observed** — not a guess. `acos-art`'s ready line proves
         // `process`, `activity_resumed` and `first_frame` in one observation,
@@ -3380,6 +3380,7 @@ fn logs(session: &mut ArtSession, artifacts: &Path, args: &Value) -> Result<Valu
             },
         },
         "logs": lines,
+        "events": session.input_events(),
         "log_path": log_path,
         "crash": crash.map(|crash| json!({
             "exception": crash.exception,

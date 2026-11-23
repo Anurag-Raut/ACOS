@@ -164,6 +164,10 @@ pub struct VerifyArgs {
     /// Emit the standard ACOS JSON envelope instead of a text summary.
     #[arg(long)]
     pub json: bool,
+
+    /// Expose this verification run to T3 Code's Device panel in watch-only mode.
+    #[arg(long)]
+    pub adb: bool,
 }
 
 /// Run the `verify` command.
@@ -594,6 +598,7 @@ pub fn run(args: VerifyArgs) -> ExitCode {
     let mut deferred_art_meta: Option<
         Arc<std::sync::Mutex<crate::engine::art::DeferredArtMeta>>,
     > = None;
+    let mut verify_adb_ctx: Option<VerifyAdbContext> = None;
     let backend: EngineBackend = match engine {
         // The default route is forwarded verbatim: engine selection does not
         // change Rust VM behaviour.
@@ -684,11 +689,16 @@ pub fn run(args: VerifyArgs) -> ExitCode {
             let zygote = Arc::new(crate::engine::zygote_host::ZygoteHost::for_artifacts(
                 &artifacts,
             ));
+            let adb_enabled =
+                args.adb || std::env::var("ACOS_ADB").as_deref() == Ok("1");
             // METRO3b: when a scenario starts a host dev server before its first
             // `launch`, defer spawning the ART guest until `launch` runs so the
             // relay's host-port opt-in and Metro itself are already up before
             // the debug app executes `Application.onCreate`.
-            if scenario_starts_dev_server_before_launch(&scenario) {
+            let (session_box, cached_intent): (
+                Box<dyn crate::engine::SessionBackend>,
+                acos_protocol::LaunchIntent,
+            ) = if scenario_starts_dev_server_before_launch(&scenario) {
                 let (deferred, meta) = crate::engine::art::DeferredArtSession::new(
                     crate::engine::art::DeferredArtStart {
                         apk,
@@ -700,11 +710,11 @@ pub fn run(args: VerifyArgs) -> ExitCode {
                         zygote: Some(zygote),
                         session_id: None,
                         services: validated_services.clone(),
-                        intent: launch_intent,
+                        intent: launch_intent.clone(),
                     },
                 );
                 deferred_art_meta = Some(meta);
-                EngineBackend::session(Box::new(deferred))
+                (Box::new(deferred), launch_intent)
             } else {
                 match crate::engine::art::ArtSession::start_with_apks_and_session(
                     &apk,
@@ -729,7 +739,7 @@ pub fn run(args: VerifyArgs) -> ExitCode {
                         session_insets = Some(session.insets());
                         session_extra_apks = session.extra_apks().to_vec();
                         session_boot_image = session.boot_image().cloned();
-                        EngineBackend::session(Box::new(session))
+                        (Box::new(session), launch_intent)
                     }
                     Err(error) => {
                         let mut protocol = error.to_protocol_error();
@@ -747,6 +757,16 @@ pub fn run(args: VerifyArgs) -> ExitCode {
                         return finish_run(&envelope, &args, &artifacts, Some(trust));
                     }
                 }
+            };
+            if adb_enabled {
+                let sid = session_id
+                    .clone()
+                    .unwrap_or_else(|| format!("verify-{}", std::process::id()));
+                let (wrapped, ctx) = wrap_verify_session_for_adb(session_box, cached_intent, &sid);
+                verify_adb_ctx = Some(ctx);
+                EngineBackend::session(wrapped)
+            } else {
+                EngineBackend::session(session_box)
             }
         }
     };
@@ -767,6 +787,13 @@ pub fn run(args: VerifyArgs) -> ExitCode {
     // record is evidence for a pass as well as for a failure (a clean run ends
     // with guest_exit=0), and a caller that keeps only the artifacts keeps it.
     drop(guarded);
+    let (device_panel_info, ignored_panel_events) = if let Some(ctx) = verify_adb_ctx.take() {
+        let info = Some(ctx.device_panel_info.clone());
+        let events = ctx.finish();
+        (info, events)
+    } else {
+        (None, Vec::new())
+    };
     if let Some(meta) = deferred_art_meta.and_then(|m| m.lock().ok().map(|g| {
         (
             g.session_id.clone(),
@@ -791,6 +818,9 @@ pub fn run(args: VerifyArgs) -> ExitCode {
     if trust == crate::trust::Trust::Trusted {
         merge_final_logd(&artifacts);
     }
+    if !ignored_panel_events.is_empty() {
+        append_ignored_panel_events(&artifacts, &ignored_panel_events, session_id.as_deref());
+    }
     let session_modules = live_module_rows
         .and_then(|rows| rows.lock().ok().map(|rows| rows.clone()))
         .filter(|rows| !rows.is_empty())
@@ -811,6 +841,14 @@ pub fn run(args: VerifyArgs) -> ExitCode {
         &session_modules,
         session_id.clone(),
     );
+    if device_panel_info.is_some() || !ignored_panel_events.is_empty() {
+        record_verify_panel_artifacts(
+            &mut envelope,
+            &artifacts,
+            device_panel_info.as_ref(),
+            &ignored_panel_events,
+        );
+    }
     finish_run(&envelope, &args, &artifacts, Some(trust))
 }
 
@@ -1588,6 +1626,643 @@ pub fn resolve_idle_kill_seconds(scenario: &Path) -> Result<Option<u64>, Protoco
         value = Some(secs);
     }
     Ok(value)
+}
+
+struct VerifyAdbState {
+    snapshot: std::sync::RwLock<Option<crate::adb::AdbSessionSnapshot>>,
+    stream_socket: std::sync::Mutex<Option<PathBuf>>,
+    ignored_events: std::sync::Mutex<Vec<serde_json::Value>>,
+    pending_live_ignored: std::sync::Mutex<Vec<(String, Option<i64>, Option<i64>, String)>>,
+    closed: std::sync::atomic::AtomicBool,
+}
+
+impl VerifyAdbState {
+    fn refresh_from(&self, session: &dyn crate::engine::SessionBackend) {
+        if let Ok(snap) = session.adb_snapshot() {
+            if let Ok(mut w) = self.snapshot.write() {
+                *w = Some(snap);
+            }
+        }
+        if let Some(sock) = session.adb_stream_socket() {
+            if let Ok(mut w) = self.stream_socket.lock() {
+                *w = Some(sock);
+            }
+        }
+    }
+
+    fn flush_live_ignored(&self, session: &mut dyn crate::engine::SessionBackend) {
+        if self.closed.load(std::sync::atomic::Ordering::Acquire) {
+            return;
+        }
+        let pending: Vec<(String, Option<i64>, Option<i64>, String)> = {
+            let mut guard = self
+                .pending_live_ignored
+                .lock()
+                .unwrap_or_else(|e| e.into_inner());
+            std::mem::take(&mut *guard)
+        };
+        for (action, x, y, message) in pending {
+            session.adb_panel_ignored(&action, x, y, &message);
+        }
+    }
+}
+
+struct VerifyAdbContext {
+    manager: crate::adb::AdbManager,
+    state: Arc<VerifyAdbState>,
+    device_panel_info: serde_json::Value,
+}
+
+impl VerifyAdbContext {
+    fn finish(self) -> Vec<serde_json::Value> {
+        self.state
+            .closed
+            .store(true, std::sync::atomic::Ordering::Release);
+        self.manager.shutdown_all();
+        self.state
+            .ignored_events
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
+    }
+}
+
+struct VerifySessionHolder {
+    inner: Arc<std::sync::Mutex<Box<dyn crate::engine::SessionBackend>>>,
+    state: Arc<VerifyAdbState>,
+    cached_launch_intent: Option<acos_protocol::LaunchIntent>,
+    last_bound_settle: Option<serde_json::Value>,
+}
+
+impl VerifySessionHolder {
+    fn with_session<T>(
+        &mut self,
+        f: impl FnOnce(&mut dyn crate::engine::SessionBackend) -> T,
+    ) -> T {
+        let mut guard = self.inner.lock().unwrap_or_else(|e| e.into_inner());
+        self.state.flush_live_ignored(&mut **guard);
+        let out = f(&mut **guard);
+        self.state.refresh_from(&**guard);
+        self.state.flush_live_ignored(&mut **guard);
+        self.last_bound_settle = guard.bound_settle().cloned();
+        out
+    }
+}
+
+impl crate::engine::SessionBackend for VerifySessionHolder {
+    fn engine(&self) -> Engine {
+        Engine::Art
+    }
+
+    fn mode(&self) -> Mode {
+        Mode::Live
+    }
+
+    fn capabilities(&self) -> crate::engine::SessionCapabilities {
+        self.inner
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .capabilities()
+    }
+
+    fn modules(&self) -> Vec<serde_json::Value> {
+        self.inner
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .modules()
+    }
+
+    fn service_op(
+        &mut self,
+        request: serde_json::Value,
+    ) -> Result<serde_json::Value, acos_verify::BackendError> {
+        self.with_session(|s| s.service_op(request))
+    }
+
+    fn module_rows_handle(
+        &self,
+    ) -> Option<Arc<std::sync::Mutex<Vec<serde_json::Value>>>> {
+        self.inner
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .module_rows_handle()
+    }
+
+    fn launch_intent(&self) -> Option<&acos_protocol::LaunchIntent> {
+        self.cached_launch_intent.as_ref()
+    }
+
+    fn launch(
+        &mut self,
+        apk: &Path,
+    ) -> Result<acos_verify::LaunchOutcome, acos_verify::BackendError> {
+        self.with_session(|s| s.launch(apk))
+    }
+
+    fn tree(&mut self) -> Result<acos_protocol::ui::UiTree, acos_verify::BackendError> {
+        self.with_session(|s| s.tree())
+    }
+
+    fn fresh_input_tree(&mut self) -> Result<acos_protocol::ui::UiTree, acos_verify::BackendError> {
+        self.with_session(|s| s.fresh_input_tree())
+    }
+
+    fn screenshot(
+        &mut self,
+    ) -> Result<crate::engine::FrameEvidence, acos_verify::BackendError> {
+        self.with_session(|s| s.screenshot())
+    }
+
+    fn frame(
+        &mut self,
+    ) -> Result<crate::engine::ObservedFrame, acos_verify::BackendError> {
+        self.with_session(|s| s.frame())
+    }
+
+    fn last_frame(&self) -> Option<crate::engine::ObservedFrame> {
+        self.inner
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .last_frame()
+    }
+
+    fn last_input_delivery(&self) -> Option<acos_verify::backend::InputDelivery> {
+        self.inner
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .last_input_delivery()
+    }
+
+    fn bound_tree(&self) -> Option<acos_protocol::ui::UiTree> {
+        self.inner
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .bound_tree()
+    }
+
+    fn attach_input_target(&mut self, target: serde_json::Value) {
+        self.with_session(|s| s.attach_input_target(target))
+    }
+
+    fn set_settle_timeout(&mut self, timeout_ms: Option<u64>) {
+        self.with_session(|s| s.set_settle_timeout(timeout_ms))
+    }
+
+    fn set_input_settle_mode(&mut self, fast: bool) {
+        self.with_session(|s| s.set_input_settle_mode(fast))
+    }
+
+    fn set_input_content_settle(&mut self, content: bool) {
+        self.with_session(|s| s.set_input_content_settle(content))
+    }
+
+    fn set_observation_settle(&mut self, mode: acos_verify::settle::ObservationSettle) {
+        self.with_session(|s| s.set_observation_settle(mode))
+    }
+
+    fn input_settle_mode(&self) -> &'static str {
+        self.inner
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .input_settle_mode()
+    }
+
+    fn set_launch_settle_mode(&mut self, mode: &'static str) {
+        self.with_session(|s| s.set_launch_settle_mode(mode))
+    }
+
+    fn bound_settle(&self) -> Option<&serde_json::Value> {
+        self.last_bound_settle.as_ref()
+    }
+
+    fn input_settle_timeout(&self) -> Option<serde_json::Value> {
+        self.inner
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .input_settle_timeout()
+    }
+
+    fn tree_settle_timeout(&self) -> Option<serde_json::Value> {
+        self.inner
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .tree_settle_timeout()
+    }
+
+    fn tree_settle_record(&self) -> Option<serde_json::Value> {
+        self.inner
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .tree_settle_record()
+    }
+
+    fn last_frame_seq(&self) -> u64 {
+        self.inner
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .last_frame_seq()
+    }
+
+    fn capture(
+        &mut self,
+    ) -> Result<crate::engine::ObservedFrame, acos_verify::BackendError> {
+        self.with_session(|s| s.capture())
+    }
+
+    fn begin_input(&mut self) {
+        self.with_session(|s| s.begin_input())
+    }
+
+    fn tap(&mut self, x: i32, y: i32) -> Result<(), acos_verify::BackendError> {
+        self.with_session(|s| s.tap(x, y))
+    }
+
+    fn tap_in_window(
+        &mut self,
+        window: &str,
+        x: i32,
+        y: i32,
+    ) -> Result<(), acos_verify::BackendError> {
+        self.with_session(|s| s.tap_in_window(window, x, y))
+    }
+
+    fn tap_text(&mut self, text: &str) -> Result<(), acos_verify::BackendError> {
+        self.with_session(|s| s.tap_text(text))
+    }
+
+    fn type_text(&mut self, text: &str) -> Result<(), acos_verify::BackendError> {
+        self.with_session(|s| s.type_text(text))
+    }
+
+    fn display_size(&self) -> Option<(u32, u32)> {
+        self.inner
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .display_size()
+    }
+
+    fn swipe(
+        &mut self,
+        from: (f32, f32),
+        to: (f32, f32),
+        duration_ms: u64,
+        fling: bool,
+    ) -> Result<(), acos_verify::BackendError> {
+        self.with_session(|s| s.swipe(from, to, duration_ms, fling))
+    }
+
+    fn scroll_until(
+        &mut self,
+        selector: &acos_protocol::Selector,
+        from: (f32, f32),
+        to: (f32, f32),
+        duration_ms: u64,
+        attempts: usize,
+    ) -> Result<crate::engine::ScrollUntilReport, acos_verify::BackendError> {
+        self.with_session(|s| s.scroll_until(selector, from, to, duration_ms, attempts))
+    }
+
+    fn last_crash(&self) -> Option<acos_verify::backend::CrashRecord> {
+        self.inner
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .last_crash()
+    }
+
+    fn logs_since(
+        &mut self,
+        since: u64,
+    ) -> Result<Vec<acos_verify::LogRecord>, acos_verify::BackendError> {
+        self.with_session(|s| s.logs_since(since))
+    }
+
+    fn key(&mut self, key: &str) -> Result<(), acos_verify::BackendError> {
+        self.with_session(|s| s.key(key))
+    }
+
+    fn rotate(&mut self, rotation: u8) -> Result<(), acos_verify::BackendError> {
+        self.with_session(|s| s.rotate(rotation))
+    }
+
+    fn reset(&mut self) -> Result<(), acos_verify::BackendError> {
+        self.with_session(|s| s.reset())
+    }
+
+    fn close(&mut self) -> Result<(), acos_verify::BackendError> {
+        let mut guard = self.inner.lock().unwrap_or_else(|e| e.into_inner());
+        self.state.flush_live_ignored(&mut **guard);
+        self.state
+            .closed
+            .store(true, std::sync::atomic::Ordering::Release);
+        guard.close()
+    }
+
+    fn teardown(&mut self) -> Result<crate::engine::TeardownReport, acos_verify::BackendError> {
+        let mut guard = self.inner.lock().unwrap_or_else(|e| e.into_inner());
+        self.state.flush_live_ignored(&mut **guard);
+        self.state
+            .closed
+            .store(true, std::sync::atomic::Ordering::Release);
+        guard.teardown()
+    }
+
+    fn adb_snapshot(&self) -> Result<crate::adb::AdbSessionSnapshot, String> {
+        self.inner
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .adb_snapshot()
+    }
+
+    fn adb_stream_socket(&self) -> Option<PathBuf> {
+        self.inner
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .adb_stream_socket()
+    }
+
+    fn adb_dump_tree(&mut self) -> Result<(acos_protocol::ui::UiTree, u8), String> {
+        self.with_session(|s| s.adb_dump_tree())
+    }
+
+    fn adb_screenshot_png(&mut self) -> Result<Vec<u8>, String> {
+        self.with_session(|s| s.adb_screenshot_png())
+    }
+
+    fn adb_raw_screenshot(&mut self, out_path: &Path, format: &str) -> Result<(u32, u32, u8), String> {
+        self.with_session(|s| s.adb_raw_screenshot(out_path, format))
+    }
+
+    fn adb_panel_ignored(&mut self, action: &str, x: Option<i64>, y: Option<i64>, message: &str) {
+        self.with_session(|s| s.adb_panel_ignored(action, x, y, message))
+    }
+}
+
+struct VerifyAdbTarget {
+    session: Arc<std::sync::Mutex<Box<dyn crate::engine::SessionBackend>>>,
+    state: Arc<VerifyAdbState>,
+}
+
+impl crate::adb::AdbSessionOps for VerifyAdbTarget {
+    fn snapshot(&self) -> Result<crate::adb::AdbSessionSnapshot, String> {
+        if self.state.closed.load(std::sync::atomic::Ordering::Acquire) {
+            return Err("guest exited".to_string());
+        }
+        self.state
+            .snapshot
+            .read()
+            .ok()
+            .and_then(|g| g.clone())
+            .ok_or_else(|| "session starting".to_string())
+    }
+
+    fn rotate(&self, _rotation: u8) -> Result<(), String> {
+        self.on_panel_input_ignored("rotate", None, None, "panel input ignored: verify run");
+        Err("panel input ignored: verify run".to_string())
+    }
+
+    fn dump_tree(&self) -> Result<(acos_protocol::ui::UiTree, u8), String> {
+        if self.state.closed.load(std::sync::atomic::Ordering::Acquire) {
+            return Err("guest exited".to_string());
+        }
+        let mut guard = self.session.lock().unwrap_or_else(|e| e.into_inner());
+        guard.adb_dump_tree()
+    }
+
+    fn screenshot_png(&self) -> Result<Vec<u8>, String> {
+        if self.state.closed.load(std::sync::atomic::Ordering::Acquire) {
+            return Err("guest exited".to_string());
+        }
+        let mut guard = self.session.lock().unwrap_or_else(|e| e.into_inner());
+        guard.adb_screenshot_png()
+    }
+
+    fn raw_screenshot(&self, out_path: &Path, format: &str) -> Result<(u32, u32, u8), String> {
+        if self.state.closed.load(std::sync::atomic::Ordering::Acquire) {
+            return Err("guest exited".to_string());
+        }
+        let mut guard = self.session.lock().unwrap_or_else(|e| e.into_inner());
+        guard.adb_raw_screenshot(out_path, format)
+    }
+
+    fn panel_touch(
+        &self,
+        _action: i32,
+        _down_time: i64,
+        _event_time: i64,
+        _pointers: &[(i32, f32, f32)],
+    ) -> Result<(), String> {
+        Err("panel input ignored: verify run".to_string())
+    }
+
+    fn panel_key(
+        &self,
+        _code: i32,
+        _event_type: &str,
+        _meta_state: i32,
+        _device_id: i32,
+    ) -> Result<(), String> {
+        Err("panel input ignored: verify run".to_string())
+    }
+
+    fn panel_text(&self, _text: &str) -> Result<(), String> {
+        Err("panel input ignored: verify run".to_string())
+    }
+
+    fn stream_socket(&self) -> Option<PathBuf> {
+        if self.state.closed.load(std::sync::atomic::Ordering::Acquire) {
+            return None;
+        }
+        self.state
+            .stream_socket
+            .lock()
+            .ok()
+            .and_then(|g| g.clone())
+    }
+
+    fn is_verify_run(&self) -> bool {
+        true
+    }
+
+    fn on_panel_input_ignored(&self, kind: &str, x: Option<i64>, y: Option<i64>, detail: &str) {
+        let ts_ms = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_millis() as u64)
+            .unwrap_or(0);
+        let mut ev = serde_json::json!({
+            "ts_ms": ts_ms,
+            "kind": "action",
+            "cmd": kind,
+            "source": "panel",
+            "status": "VERIFY_WATCH_ONLY",
+            "message": detail,
+        });
+        if let (Some(x), Some(y)) = (x, y) {
+            ev["x"] = serde_json::json!(x);
+            ev["y"] = serde_json::json!(y);
+        }
+        if let Ok(mut guard) = self.state.ignored_events.lock() {
+            guard.push(ev);
+        }
+        if self.state.closed.load(std::sync::atomic::Ordering::Acquire) {
+            return;
+        }
+        if let Ok(mut session) = self.session.try_lock() {
+            self.state.flush_live_ignored(&mut **session);
+            session.adb_panel_ignored(kind, x, y, detail);
+        } else if let Ok(mut pending) = self.state.pending_live_ignored.lock() {
+            pending.push((kind.to_string(), x, y, detail.to_string()));
+        }
+    }
+}
+
+fn wrap_verify_session_for_adb(
+    session: Box<dyn crate::engine::SessionBackend>,
+    intent: acos_protocol::LaunchIntent,
+    session_id: &str,
+) -> (Box<dyn crate::engine::SessionBackend>, VerifyAdbContext) {
+    let state = Arc::new(VerifyAdbState {
+        snapshot: std::sync::RwLock::new(None),
+        stream_socket: std::sync::Mutex::new(None),
+        ignored_events: std::sync::Mutex::new(Vec::new()),
+        pending_live_ignored: std::sync::Mutex::new(Vec::new()),
+        closed: std::sync::atomic::AtomicBool::new(false),
+    });
+    state.refresh_from(&*session);
+    let inner = Arc::new(std::sync::Mutex::new(session));
+    let target: Arc<dyn crate::adb::AdbSessionOps> = Arc::new(VerifyAdbTarget {
+        session: Arc::clone(&inner),
+        state: Arc::clone(&state),
+    });
+    let manager = crate::adb::AdbManager::from_env();
+    let device_panel_info = manager.register(session_id, target);
+    let holder = VerifySessionHolder {
+        inner,
+        state: Arc::clone(&state),
+        cached_launch_intent: Some(intent),
+        last_bound_settle: None,
+    };
+    let ctx = VerifyAdbContext {
+        manager,
+        state,
+        device_panel_info,
+    };
+    (Box::new(holder), ctx)
+}
+
+fn append_ignored_panel_events(
+    artifacts: &Path,
+    ignored_events: &[serde_json::Value],
+    session_id: Option<&str>,
+) {
+    use acos_protocol::events::{Event, EventBody, LogLevel};
+    let events_path = artifacts.join(acos_protocol::artifacts::EVENTS_JSONL);
+    let mut existing = std::fs::read_to_string(&events_path).unwrap_or_default();
+    let mut next_seq = existing
+        .lines()
+        .filter_map(|line| serde_json::from_str::<serde_json::Value>(line).ok())
+        .filter_map(|v| v.get("seq").and_then(serde_json::Value::as_u64))
+        .max()
+        .unwrap_or(0)
+        + 1;
+    if !existing.is_empty() && !existing.ends_with('\n') {
+        existing.push('\n');
+    }
+    for entry in ignored_events {
+        let ts_ms = entry
+            .get("ts_ms")
+            .and_then(serde_json::Value::as_u64)
+            .unwrap_or(0);
+        let cmd = entry
+            .get("cmd")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or("panel");
+        let base_msg = entry
+            .get("message")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or("panel input ignored: verify run");
+        let msg = if let (Some(x), Some(y)) = (
+            entry.get("x").and_then(serde_json::Value::as_i64),
+            entry.get("y").and_then(serde_json::Value::as_i64),
+        ) {
+            format!("{base_msg} ({cmd} at {x},{y})")
+        } else {
+            format!("{base_msg} ({cmd})")
+        };
+        let mut ev = Event::new(
+            next_seq,
+            ts_ms,
+            EventBody::Log {
+                tag: "acos.panel".to_string(),
+                level: LogLevel::Warn,
+                message: msg,
+            },
+        );
+        if let Some(sid) = session_id {
+            ev = ev.with_session_id(sid);
+        }
+        if let Ok(line) = serde_json::to_string(&ev) {
+            existing.push_str(&line);
+            existing.push('\n');
+            next_seq += 1;
+        }
+    }
+    let _ = crate::failure::write_artifact(&events_path, existing.as_bytes());
+}
+
+fn record_verify_panel_artifacts(
+    envelope: &mut Envelope,
+    artifacts: &Path,
+    device_panel_info: Option<&serde_json::Value>,
+    ignored_events: &[serde_json::Value],
+) {
+    let engine_path = artifacts.join("engine.json");
+    if let Ok(text) = std::fs::read_to_string(&engine_path) {
+        if let Ok(mut body) = serde_json::from_str::<serde_json::Value>(&text) {
+            if let Some(engine_obj) = body.get_mut("engine").and_then(|v| v.as_object_mut()) {
+                engine_obj.insert(
+                    "device_panel".to_string(),
+                    serde_json::json!({
+                        "watch_only": true,
+                        "registration": device_panel_info,
+                        "ignored_inputs": ignored_events,
+                    }),
+                );
+            }
+            if let Ok(updated) = serde_json::to_string_pretty(&body) {
+                let _ = crate::failure::write_artifact(&engine_path, updated.as_bytes());
+            }
+        }
+    }
+    if ignored_events.is_empty() {
+        return;
+    }
+    let Some(mut result) = envelope.result().cloned() else {
+        return;
+    };
+    let Some(mut verdict) = result.get("verdict").cloned() else {
+        return;
+    };
+    if let Some(obj) = verdict.as_object_mut() {
+        obj.insert(
+            "panel_events".to_string(),
+            serde_json::json!(ignored_events),
+        );
+        let notes = obj
+            .entry("notes".to_string())
+            .or_insert_with(|| serde_json::json!([]));
+        if let Some(list) = notes.as_array_mut() {
+            list.push(serde_json::json!(format!(
+                "device_panel: watch-only mode dropped {} panel input event(s) (panel input ignored: verify run)",
+                ignored_events.len()
+            )));
+        }
+    }
+    let verdict_path = artifacts.join(acos_protocol::artifacts::VERDICT_JSON);
+    if let Ok(text) = serde_json::to_string_pretty(&verdict) {
+        let _ = crate::failure::write_artifact(&verdict_path, text.as_bytes());
+    }
+    result["verdict"] = verdict;
+    *envelope = envelope.clone().with_value_result(result);
 }
 
 #[cfg(test)]

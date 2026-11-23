@@ -1833,10 +1833,40 @@ pub fn event_from_reply(reply: &serde_json::Value, masked: bool) -> Option<serde
     let mut event = serde_json::json!({"ts_ms": ts_ms, "status": status});
     let map = event.as_object_mut().expect("event is an object");
     match cmd {
-        "tap" | "key" | "type_text" | "swipe" | "tree" | "screenshot" => {
+        "tap" | "key" | "type_text" | "swipe" => {
             map.insert("kind".into(), serde_json::json!("action"));
             let wire_cmd = if cmd == "type_text" { "text" } else { cmd };
             map.insert("cmd".into(), serde_json::json!(wire_cmd));
+            map.insert("source".into(), serde_json::json!("agent"));
+        }
+        "tree" | "screenshot" => {
+            map.insert("kind".into(), serde_json::json!("action"));
+            map.insert("cmd".into(), serde_json::json!(cmd));
+        }
+        "panel_touch" | "panel_key" | "panel_text" => {
+            map.insert("kind".into(), serde_json::json!("action"));
+            let wire_cmd = match cmd {
+                "panel_touch" => "touch",
+                "panel_key" => "key",
+                "panel_text" => "text",
+                _ => cmd,
+            };
+            map.insert("cmd".into(), serde_json::json!(wire_cmd));
+            map.insert("source".into(), serde_json::json!("panel"));
+        }
+        "panel_ignored" => {
+            map.insert("kind".into(), serde_json::json!("action"));
+            let action = reply
+                .get("action")
+                .and_then(|v| v.as_str())
+                .unwrap_or("panel");
+            map.insert("cmd".into(), serde_json::json!(action));
+            map.insert("source".into(), serde_json::json!("panel"));
+            let msg = reply
+                .get("message")
+                .and_then(|v| v.as_str())
+                .unwrap_or("panel input ignored: verify run");
+            map.insert("message".into(), serde_json::json!(msg));
         }
         "ready" => {
             map.insert("kind".into(), serde_json::json!("lifecycle"));
@@ -1859,7 +1889,7 @@ pub fn event_from_reply(reply: &serde_json::Value, masked: bool) -> Option<serde
     }
     if let Some(key) = reply.get("key") {
         map.insert("key".into(), masked_key(key, masked));
-    } else if cmd == "key" {
+    } else if cmd == "key" || cmd == "panel_key" {
         if let Some(code) = reply.get("code").and_then(serde_json::Value::as_i64) {
             map.insert("key".into(), masked_key(&serde_json::json!(code), masked));
         }
@@ -2418,6 +2448,56 @@ mod tests {
         )
         .expect("event");
         assert_eq!(tap["status"], "ELEMENT_OFFSCREEN");
+        assert_eq!(tap["source"], "agent");
+        assert_eq!(key["source"], "agent");
+        assert_eq!(event["source"], "agent");
+
+        let ptouch = event_from_reply(
+            &serde_json::json!({"ok": true, "cmd": "panel_touch", "x": 42, "y": 84}),
+            true,
+        )
+        .expect("panel_touch");
+        assert_eq!(ptouch["kind"], "action");
+        assert_eq!(ptouch["cmd"], "touch");
+        assert_eq!(ptouch["source"], "panel");
+        assert_eq!(ptouch["x"], 42);
+        assert_eq!(ptouch["y"], 84);
+
+        let pkey = event_from_reply(
+            &serde_json::json!({"ok": true, "cmd": "panel_key", "code": 4}),
+            false,
+        )
+        .expect("panel_key");
+        assert_eq!(pkey["cmd"], "key");
+        assert_eq!(pkey["source"], "panel");
+        assert_eq!(pkey["key"], 4);
+
+        let ptext = event_from_reply(
+            &serde_json::json!({"ok": true, "cmd": "panel_text", "text": "secret"}),
+            true,
+        )
+        .expect("panel_text");
+        assert_eq!(ptext["cmd"], "text");
+        assert_eq!(ptext["source"], "panel");
+        assert_eq!(ptext["text"], MASKED_TEXT);
+
+        let pignored = event_from_reply(
+            &serde_json::json!({
+                "ok": false,
+                "cmd": "panel_ignored",
+                "action": "touch",
+                "code": "VERIFY_WATCH_ONLY",
+                "message": "panel input ignored: verify run",
+                "x": 10,
+                "y": 20,
+            }),
+            true,
+        )
+        .expect("panel_ignored");
+        assert_eq!(pignored["cmd"], "touch");
+        assert_eq!(pignored["source"], "panel");
+        assert_eq!(pignored["status"], "VERIFY_WATCH_ONLY");
+        assert_eq!(pignored["message"], "panel input ignored: verify run");
 
         assert!(event_from_reply(&serde_json::json!({"ok": true, "cmd": "logs"}), false).is_none());
     }

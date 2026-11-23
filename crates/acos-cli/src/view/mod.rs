@@ -448,12 +448,15 @@ fn stream_events(mut connection: TcpStream, hub: &Arc<Hub>, session_id: String) 
         let mut failed = false;
         for event in &batch.events {
             cursor = event.index;
-            let payload = json!({
+            let mut payload = json!({
                 "index": event.index,
                 "kind": event.kind,
                 "ts_ms": event.ts_ms,
                 "event": event.value,
             });
+            if let Some(source) = &event.source {
+                payload["source"] = json!(source);
+            }
             if send_event(&mut connection, "ev", &payload.to_string()).is_err() {
                 failed = true;
                 break;

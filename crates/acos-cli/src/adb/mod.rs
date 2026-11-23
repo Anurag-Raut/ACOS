@@ -180,6 +180,12 @@ impl AdbManager {
     }
 }
 
+impl Drop for AdbManager {
+    fn drop(&mut self) {
+        self.shutdown_all();
+    }
+}
+
 /// One active adb listener + slot claim + discovery ini bound to a live ACOS session.
 pub struct ExposedSession {
     slot: SlotInfo,

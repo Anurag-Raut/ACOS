@@ -160,6 +160,7 @@ pub struct Event {
     /// Hub-local monotonic index.
     pub index: u64,
     pub kind: String,
+    pub source: Option<String>,
     pub ts_ms: u64,
     pub value: Value,
 }
@@ -764,6 +765,10 @@ impl Slot {
                 .and_then(Value::as_str)
                 .unwrap_or("event")
                 .to_string(),
+            source: value
+                .get("source")
+                .and_then(Value::as_str)
+                .map(str::to_string),
             ts_ms: value
                 .get("ts_ms")
                 .and_then(Value::as_u64)

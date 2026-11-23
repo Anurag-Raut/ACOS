@@ -641,6 +641,23 @@ fn dispatch_callback(
         }
         "touch" => {
             if target.is_verify_run() {
+                let first_pt = req
+                    .get("pointers")
+                    .and_then(Value::as_array)
+                    .and_then(|arr| arr.first())
+                    .and_then(Value::as_array)
+                    .and_then(|t| {
+                        Some((
+                            t.get(1)?.as_f64()?.round() as i64,
+                            t.get(2)?.as_f64()?.round() as i64,
+                        ))
+                    });
+                target.on_panel_input_ignored(
+                    "touch",
+                    first_pt.map(|p| p.0),
+                    first_pt.map(|p| p.1),
+                    "panel input ignored: verify run",
+                );
                 return json!({
                     "ok": false,
                     "code": "VERIFY_WATCH_ONLY",
@@ -680,6 +697,7 @@ fn dispatch_callback(
         }
         "key" => {
             if target.is_verify_run() {
+                target.on_panel_input_ignored("key", None, None, "panel input ignored: verify run");
                 return json!({
                     "ok": false,
                     "code": "VERIFY_WATCH_ONLY",
@@ -709,6 +727,7 @@ fn dispatch_callback(
         }
         "text" => {
             if target.is_verify_run() {
+                target.on_panel_input_ignored("text", None, None, "panel input ignored: verify run");
                 return json!({
                     "ok": false,
                     "code": "VERIFY_WATCH_ONLY",
