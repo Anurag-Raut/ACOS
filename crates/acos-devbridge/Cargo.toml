@@ -1,0 +1,24 @@
+[package]
+name = "acos-devbridge"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Device-panel gRPC bridge (Android EmulatorController subset) for `acos serve --adb`."
+
+[[bin]]
+name = "acos-devbridge"
+path = "src/main.rs"
+
+[dependencies]
+image = { version = "0.25", default-features = false, features = ["jpeg", "png"] }
+libc = "0.2"
+prost = "0.13"
+serde = { workspace = true }
+serde_json = { workspace = true }
+tokio = { version = "1", features = ["rt-multi-thread", "net", "io-util", "sync", "time", "macros"] }
+tokio-stream = "0.1"
+tonic = "0.12"
+
+[build-dependencies]
+tonic-build = "0.12"

@@ -20,7 +20,8 @@ mod common;
 use common::ShortSocketDir;
 
 fn repo_root() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
+    let raw = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    std::fs::canonicalize(&raw).unwrap_or(raw)
 }
 
 fn acos_bin() -> &'static str {

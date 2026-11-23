@@ -7299,13 +7299,20 @@ enum ServeEvent {
 /// placeholder size, and the `F` header carries `"secure": true`.
 fn live_view_source(
     compositor: Arc<std::sync::Mutex<acos_services::surface_client::SurfaceState>>,
+    attach_epoch: Arc<std::sync::OnceLock<Arc<std::sync::atomic::AtomicU64>>>,
 ) -> Arc<dyn Fn() -> Option<crate::live_view::SourceFrame> + Send + Sync> {
     let last_seq = std::sync::atomic::AtomicU64::new(0);
+    let last_epoch = std::sync::atomic::AtomicU64::new(0);
     Arc::new(move || {
         let state = compositor.lock().unwrap_or_else(|e| e.into_inner());
         let seq = state.latest_generation();
         let previous = last_seq.load(std::sync::atomic::Ordering::Relaxed);
-        if seq == 0 || seq <= previous {
+        let cur_epoch = attach_epoch
+            .get()
+            .map(|a| a.load(std::sync::atomic::Ordering::Acquire))
+            .unwrap_or(0);
+        let prev_epoch = last_epoch.load(std::sync::atomic::Ordering::Relaxed);
+        if seq == 0 || (seq <= previous && cur_epoch == prev_epoch) {
             return None;
         }
         if state.has_secure_window() {
@@ -7317,6 +7324,7 @@ fn live_view_source(
                 .unwrap_or((135, 300));
             let (width, height) = (width.max(1), height.max(1));
             last_seq.store(seq, std::sync::atomic::Ordering::Relaxed);
+            last_epoch.store(cur_epoch, std::sync::atomic::Ordering::Relaxed);
             return Some(crate::live_view::SourceFrame {
                 seq,
                 generation: seq,
@@ -7329,6 +7337,7 @@ fn live_view_source(
         }
         let capture = state.capture_latest()?;
         last_seq.store(seq, std::sync::atomic::Ordering::Relaxed);
+        last_epoch.store(cur_epoch, std::sync::atomic::Ordering::Relaxed);
         Some(crate::live_view::SourceFrame {
             seq,
             generation: capture.generation,
@@ -7555,18 +7564,20 @@ fn interactive_serve(
     // never a failed session, and `stream_socket` is then absent from the ready
     // line. With no subscriber the tap does one atomic load per probe wake and
     // nothing else — no capture, no copy, no encode.
+    let attach_epoch_slot = Arc::new(std::sync::OnceLock::new());
     let view = match crate::live_view::LiveView::bind(
         &sockets.join("view.sock"),
         crate::live_view::LiveViewConfig::from_env(),
         (width, height),
         std::process::id(),
-        live_view_source(Arc::clone(&live.compositor)),
+        live_view_source(Arc::clone(&live.compositor), Arc::clone(&attach_epoch_slot)),
         Arc::new(ProbeTapWake {
             wake: Arc::clone(&wake),
             seen: std::sync::Mutex::new(0),
         }),
     ) {
         Ok(view) => {
+            let _ = attach_epoch_slot.set(view.attach_epoch());
             let _ = LIVE_VIEW.set(Arc::clone(&view));
             Some(view)
         }
@@ -7695,6 +7706,7 @@ fn interactive_serve(
     let frame_wait = Duration::from_secs(env_u64("ACOSLAUNCH_FRAME_WAIT_SECS", 15));
     let clean: bool;
     let mut last_capture_fnv: Option<u64> = None;
+    let mut panel_touch_target: Option<(acos_parcel::BinderId, (i32, i32))> = None;
     loop {
         let deadline_left = session_deadline.saturating_duration_since(Instant::now());
         // A secondary guest that ended by itself is evidence, not a running
@@ -8273,6 +8285,334 @@ fn interactive_serve(
                     evidence.push(reply);
                 }
             },
+            "raw_screenshot" => {
+                let path = request
+                    .get("path")
+                    .and_then(|v| v.as_str())
+                    .map(PathBuf::from);
+                let format = request
+                    .get("format")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("rgb888");
+                let Some(path) = path else {
+                    protocol_write(&serde_json::json!({
+                        "ok": false, "cmd": "raw_screenshot", "code": "BAD_REQUEST",
+                        "error": "raw_screenshot needs a string path",
+                    }));
+                    continue;
+                };
+                if !matches!(format, "rgb888" | "rgba8888" | "png") {
+                    protocol_write(&serde_json::json!({
+                        "ok": false, "cmd": "raw_screenshot", "code": "BAD_REQUEST",
+                        "error": format!("unsupported raw_screenshot format {format}"),
+                    }));
+                    continue;
+                }
+                let captured = {
+                    let state = live.compositor.lock().unwrap_or_else(|e| e.into_inner());
+                    if state.has_secure_window() {
+                        let (w, h) = state
+                            .newest_frame_layer()
+                            .map(|(_, b)| (b.width, b.height))
+                            .unwrap_or((1080, 2400));
+                        Some((w, h, w, vec![0u8; w as usize * h as usize * 4]))
+                    } else {
+                        state
+                            .capture_latest()
+                            .map(|f| (f.width, f.height, f.stride, f.rgba))
+                    }
+                };
+                let Some((w, h, stride, rgba)) = captured else {
+                    protocol_write(&serde_json::json!({
+                        "ok": false, "cmd": "raw_screenshot", "code": "NO_FRESH_FRAME",
+                        "error": "C1 has stored no buffer yet",
+                    }));
+                    continue;
+                };
+                let rotation = live
+                    .wms
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .wm
+                    .display
+                    .rotation;
+                let write_res: std::io::Result<()> = (|| {
+                    use std::io::Write;
+                    if let Some(parent) = path.parent() {
+                        fs::create_dir_all(parent)?;
+                    }
+                    let tmp = PathBuf::from(format!("{}.tmp", path.display()));
+                    {
+                        let file = fs::File::create(&tmp)?;
+                        let mut writer = std::io::BufWriter::new(file);
+                        match format {
+                            "rgb888" => {
+                                let stride_px = stride.max(w) as usize;
+                                let mut row_buf = Vec::with_capacity(w as usize * 3);
+                                for y in 0..h as usize {
+                                    row_buf.clear();
+                                    let row_start = y * stride_px * 4;
+                                    for x in 0..w as usize {
+                                        let off = row_start + x * 4;
+                                        row_buf.extend_from_slice(&rgba[off..off + 3]);
+                                    }
+                                    writer.write_all(&row_buf)?;
+                                }
+                            }
+                            "rgba8888" => {
+                                let stride_px = stride.max(w) as usize;
+                                for y in 0..h as usize {
+                                    let row_start = y * stride_px * 4;
+                                    let row_end = row_start + w as usize * 4;
+                                    writer.write_all(&rgba[row_start..row_end])?;
+                                }
+                            }
+                            "png" => {
+                                let mut io_err: Option<std::io::Error> = None;
+                                encode_png_rgba_stream(w, h, stride, &rgba, |chunk| {
+                                    if io_err.is_none() {
+                                        if let Err(e) = writer.write_all(chunk) {
+                                            io_err = Some(e);
+                                        }
+                                    }
+                                });
+                                if let Some(e) = io_err {
+                                    return Err(e);
+                                }
+                            }
+                            _ => unreachable!(),
+                        }
+                        writer.flush()?;
+                    }
+                    fs::rename(&tmp, &path)?;
+                    Ok(())
+                })();
+                match write_res {
+                    Ok(()) => protocol_write(&serde_json::json!({
+                        "ok": true,
+                        "cmd": "raw_screenshot",
+                        "width": w,
+                        "height": h,
+                        "rotation": rotation,
+                        "format": format,
+                    })),
+                    Err(err) => protocol_write(&serde_json::json!({
+                        "ok": false,
+                        "cmd": "raw_screenshot",
+                        "code": "INTERNAL",
+                        "error": format!("failed writing raw_screenshot: {err}"),
+                    })),
+                }
+            }
+            "panel_touch" => {
+                let Some(action) = request.get("action").and_then(|v| v.as_i64()).map(|v| v as i32)
+                else {
+                    protocol_write(&serde_json::json!({
+                        "ok": false, "cmd": "panel_touch", "code": "BAD_REQUEST",
+                        "error": "panel_touch needs integer action",
+                    }));
+                    continue;
+                };
+                let now_ns = acos_services::input_channel::monotonic_nanos();
+                let down_time = request
+                    .get("down_time")
+                    .and_then(|v| v.as_i64())
+                    .unwrap_or(now_ns);
+                let event_time = request
+                    .get("event_time")
+                    .and_then(|v| v.as_i64())
+                    .unwrap_or(now_ns);
+                let pointers: Option<Vec<(i32, f32, f32)>> = request
+                    .get("pointers")
+                    .and_then(|v| v.as_array())
+                    .map(|arr| {
+                        arr.iter()
+                            .filter_map(|item| {
+                                let pair = item.as_array()?;
+                                if pair.len() != 3 {
+                                    return None;
+                                }
+                                Some((
+                                    pair[0].as_i64()? as i32,
+                                    pair[1].as_f64()? as f32,
+                                    pair[2].as_f64()? as f32,
+                                ))
+                            })
+                            .collect()
+                    });
+                let Some(pointers) = pointers.filter(|p| !p.is_empty()) else {
+                    protocol_write(&serde_json::json!({
+                        "ok": false, "cmd": "panel_touch", "code": "BAD_REQUEST",
+                        "error": "panel_touch needs non-empty pointers [[id, x, y], ...]",
+                    }));
+                    continue;
+                };
+                let masked_action = action & 0xff;
+                if masked_action == acos_services::input_channel::ACTION_DOWN {
+                    panel_touch_target = None;
+                }
+                let touch_wait = if matches!(
+                    masked_action,
+                    acos_services::input_channel::ACTION_MOVE
+                ) {
+                    Duration::ZERO
+                } else {
+                    Duration::from_millis(100)
+                };
+                match live.input.touch_frame(
+                    action,
+                    panel_touch_target,
+                    down_time,
+                    event_time,
+                    &pointers,
+                    touch_wait,
+                ) {
+                    Ok((token, origin, _)) => {
+                        if masked_action == acos_services::input_channel::ACTION_UP
+                            || masked_action
+                                == acos_services::input_channel::ACTION_CANCEL
+                        {
+                            panel_touch_target = None;
+                        } else {
+                            panel_touch_target = Some((token, origin));
+                        }
+                        protocol_write(&serde_json::json!({
+                            "ok": true,
+                            "cmd": "panel_touch",
+                            "x": pointers[0].1.round() as i64,
+                            "y": pointers[0].2.round() as i64,
+                        }));
+                    }
+                    Err(err) => {
+                        panel_touch_target = None;
+                        protocol_write(&serde_json::json!({
+                            "ok": false,
+                            "cmd": "panel_touch",
+                            "code": "INPUT_UNAVAILABLE",
+                            "error": format!("panel_touch failed: {err}"),
+                        }));
+                    }
+                }
+            }
+            "panel_key" => {
+                let Some(code) = request.get("code").and_then(|v| v.as_i64()).map(|v| v as i32) else {
+                    protocol_write(&serde_json::json!({
+                        "ok": false, "cmd": "panel_key", "code": "BAD_REQUEST",
+                        "error": "panel_key needs integer code",
+                    }));
+                    continue;
+                };
+                let event_type = request
+                    .get("event_type")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("press");
+                let meta_state = request
+                    .get("meta_state")
+                    .and_then(|v| v.as_i64())
+                    .unwrap_or(0) as i32;
+                let device_id = request
+                    .get("device_id")
+                    .and_then(|v| v.as_i64())
+                    .unwrap_or(1) as i32;
+                if code == 3 {
+                    if event_type == "up" {
+                        protocol_write(&serde_json::json!({"ok": true, "cmd": "panel_key", "code": code}));
+                        continue;
+                    }
+                    match control.submit(
+                        serde_json::json!({"cmd": "services", "op": "launch_home"}),
+                        Duration::from_secs(10),
+                    ) {
+                        Some(ServiceControlReply { reply: home_reply, .. })
+                            if home_reply.get("ok").and_then(|v| v.as_bool()) == Some(true) =>
+                        {
+                            protocol_write(&serde_json::json!({"ok": true, "cmd": "panel_key", "code": code}));
+                        }
+                        Some(ServiceControlReply { reply: home_reply, .. }) => {
+                            let err_code = home_reply
+                                .get("code")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("HOME_UNAVAILABLE");
+                            let err_msg = home_reply
+                                .get("error")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("no HOME activity installed");
+                            protocol_write(&serde_json::json!({
+                                "ok": false, "cmd": "panel_key", "code": err_code, "error": err_msg,
+                            }));
+                        }
+                        None => protocol_write(&serde_json::json!({
+                            "ok": false, "cmd": "panel_key", "code": "SERVICE_CONTROL_TIMEOUT",
+                            "error": "launch_home timed out",
+                        })),
+                    }
+                    continue;
+                }
+                let now_ns = acos_services::input_channel::monotonic_nanos();
+                let key_wait = Duration::from_millis(250);
+                let res = match event_type {
+                    "down" => live.input.key_event(
+                        acos_services::input_channel::KEY_ACTION_DOWN,
+                        code,
+                        meta_state,
+                        device_id,
+                        now_ns,
+                        now_ns,
+                        key_wait,
+                    ),
+                    "up" => live.input.key_event(
+                        acos_services::input_channel::KEY_ACTION_UP,
+                        code,
+                        meta_state,
+                        device_id,
+                        now_ns,
+                        now_ns,
+                        key_wait,
+                    ),
+                    _ => live.input.key_event(
+                        acos_services::input_channel::KEY_ACTION_DOWN,
+                        code,
+                        meta_state,
+                        device_id,
+                        now_ns,
+                        now_ns,
+                        key_wait,
+                    ).and_then(|_| {
+                        live.input.key_event(
+                            acos_services::input_channel::KEY_ACTION_UP,
+                            code,
+                            meta_state,
+                            device_id,
+                            now_ns,
+                            now_ns + acos_services::input_channel::DEFAULT_TAP_HOLD_NANOS,
+                            key_wait,
+                        )
+                    }),
+                };
+                match res {
+                    Ok(_) => protocol_write(&serde_json::json!({"ok": true, "cmd": "panel_key", "code": code})),
+                    Err(err) => protocol_write(&serde_json::json!({
+                        "ok": false, "cmd": "panel_key", "code": "INPUT_UNAVAILABLE",
+                        "error": format!("panel_key failed: {err}"),
+                    })),
+                }
+            }
+            "panel_text" => {
+                let Some(text) = request.get("text").and_then(|v| v.as_str()) else {
+                    protocol_write(&serde_json::json!({
+                        "ok": false, "cmd": "panel_text", "code": "BAD_REQUEST",
+                        "error": "panel_text needs string text",
+                    }));
+                    continue;
+                };
+                match live.input.type_text(text, ack_wait) {
+                    Ok(_) => protocol_write(&serde_json::json!({"ok": true, "cmd": "panel_text", "text": text})),
+                    Err(err) => protocol_write(&serde_json::json!({
+                        "ok": false, "cmd": "panel_text", "code": "INPUT_UNAVAILABLE",
+                        "error": format!("panel_text failed: {err}"),
+                    })),
+                }
+            }
             "rotate" => {
                 // ROT3: a display rotation is a WMS operation plus a
                 // configuration change in the guest. The host rotates the

@@ -6,6 +6,7 @@
 //! adb commands used by T3 Code's device hub (`expo-device-hub`) against live
 //! session state.
 
+pub mod bridge;
 pub mod shell;
 pub mod slots;
 pub mod wire;
@@ -21,29 +22,40 @@ use std::thread::JoinHandle;
 
 use serde_json::{json, Value};
 
+use bridge::{
+    avd_running_dir_from_env, random_bearer_token, sweep_stale_acos_ini, write_ini_file,
+    BridgeHandle,
+};
 pub use shell::{AdbSessionOps, AdbSessionSnapshot, AdbShellState};
 use slots::{claim_slot, lock_dir_from_env, SlotClaim, SlotInfo};
 
 /// Coordinates all adb-exposed sessions for one `acos serve --adb` daemon.
 pub struct AdbManager {
     lock_dir: PathBuf,
+    avd_dir: PathBuf,
+    bridge: BridgeHandle,
     sessions: Mutex<HashMap<String, Arc<ExposedSession>>>,
 }
 
 impl AdbManager {
-    /// Construct an `AdbManager` reading host paths from environment defaults.
-    /// Does not touch the filesystem until a session is exposed.
+    /// Construct an `AdbManager` reading host paths from environment defaults
+    /// and sweeping any stale ACOS `pid_*.ini` left behind by a dead process.
     #[must_use]
     pub fn from_env() -> Self {
+        let avd_dir = avd_running_dir_from_env();
+        sweep_stale_acos_ini(&avd_dir);
         Self {
             lock_dir: lock_dir_from_env(),
+            avd_dir,
+            bridge: BridgeHandle::new(),
             sessions: Mutex::new(HashMap::new()),
         }
     }
 
-    /// Expose a live session over adb, or return `{exposed: false, reason}`
-    /// if all 16 adb emulator slots are in use. Re-registering an already
-    /// exposed `session_id` returns its existing metadata unchanged.
+    /// Expose a live session over adb and gRPC (`acos-devbridge`), or return
+    /// `{exposed: false, reason}` if all 16 adb emulator slots are in use.
+    /// Re-registering an already exposed `session_id` returns its existing
+    /// metadata unchanged.
     pub fn register(&self, session_id: &str, target: Arc<dyn AdbSessionOps>) -> Value {
         {
             let guard = self.sessions.lock().unwrap_or_else(|e| e.into_inner());
@@ -68,15 +80,56 @@ impl AdbManager {
             }
         };
 
-        let pkg = target
-            .snapshot()
-            .map(|s| s.package)
-            .unwrap_or_else(|_| "unknown".to_string());
+        let snap = target.snapshot();
+        let (pkg, ini_pid) = match &snap {
+            Ok(s) => (
+                s.package.clone(),
+                s.launcher_pid.unwrap_or_else(std::process::id),
+            ),
+            Err(_) => ("unknown".to_string(), std::process::id()),
+        };
         let avd_name = format!("ACOS {pkg} {}", short_session_id(session_id));
+        let token = random_bearer_token();
 
-        let exposed = match ExposedSession::start(claim, avd_name, target) {
+        let grpc_port =
+            match self
+                .bridge
+                .register_session(session_id, &avd_name, &token, Arc::clone(&target))
+            {
+                Ok(port) => port,
+                Err(err) => {
+                    return json!({
+                        "exposed": false,
+                        "reason": format!("cannot start gRPC bridge: {err}"),
+                    });
+                }
+            };
+
+        let ini_path = match write_ini_file(
+            &self.avd_dir,
+            ini_pid,
+            claim.info.console_port,
+            claim.info.adb_port,
+            grpc_port,
+            &token,
+            &avd_name,
+        ) {
+            Ok(p) => p,
+            Err(err) => {
+                self.bridge.unregister_session(session_id);
+                return json!({
+                    "exposed": false,
+                    "reason": format!("cannot write discovery ini: {err}"),
+                });
+            }
+        };
+
+        let exposed = match ExposedSession::start(claim, avd_name, grpc_port, ini_path.clone(), target)
+        {
             Ok(exp) => Arc::new(exp),
             Err(err) => {
+                let _ = std::fs::remove_file(&ini_path);
+                self.bridge.unregister_session(session_id);
                 return json!({
                     "exposed": false,
                     "reason": format!("cannot start adb listener: {err}"),
@@ -111,6 +164,7 @@ impl AdbManager {
         if let Some(exposed) = removed {
             exposed.stop();
         }
+        self.bridge.unregister_session(session_id);
     }
 
     /// Unexpose every session (called on daemon shutdown).
@@ -122,13 +176,16 @@ impl AdbManager {
         for exposed in all {
             exposed.stop();
         }
+        self.bridge.shutdown();
     }
 }
 
-/// One active adb listener + slot claim bound to a live ACOS session.
+/// One active adb listener + slot claim + discovery ini bound to a live ACOS session.
 pub struct ExposedSession {
     slot: SlotInfo,
     avd_name: String,
+    grpc_port: u16,
+    ini_path: PathBuf,
     closing: Arc<AtomicBool>,
     stop_event_fd: OwnedFd,
     active_conns: Arc<Mutex<Vec<TcpStream>>>,
@@ -140,6 +197,8 @@ impl ExposedSession {
     fn start(
         claim: SlotClaim,
         avd_name: String,
+        grpc_port: u16,
+        ini_path: PathBuf,
         target: Arc<dyn AdbSessionOps>,
     ) -> std::io::Result<Self> {
         let efd_raw = unsafe { libc::eventfd(0, libc::EFD_CLOEXEC | libc::EFD_NONBLOCK) };
@@ -174,6 +233,8 @@ impl ExposedSession {
         Ok(Self {
             slot,
             avd_name,
+            grpc_port,
+            ini_path,
             closing,
             stop_event_fd,
             active_conns,
@@ -188,6 +249,7 @@ impl ExposedSession {
             "serial": self.slot.serial,
             "console_port": self.slot.console_port,
             "adb_port": self.slot.adb_port,
+            "grpc_port": self.grpc_port,
             "avd_name": self.avd_name,
         })
     }
@@ -196,6 +258,7 @@ impl ExposedSession {
         if self.closing.swap(true, Ordering::AcqRel) {
             return;
         }
+        let _ = std::fs::remove_file(&self.ini_path);
         // Wake the accept loop poll() with zero delay.
         let one: u64 = 1;
         unsafe {

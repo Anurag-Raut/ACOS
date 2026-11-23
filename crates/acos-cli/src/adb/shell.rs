@@ -6,7 +6,7 @@
 
 use std::collections::HashMap;
 use std::fmt::Write as _;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
 use acos_apk::Apk;
@@ -27,12 +27,28 @@ pub struct AdbSessionSnapshot {
     pub apk_path: PathBuf,
 }
 
-/// Operations an exposed adb endpoint can invoke on its backing session.
+/// Operations an exposed adb endpoint / gRPC bridge can invoke on its backing session.
 pub trait AdbSessionOps: Send + Sync + 'static {
     fn snapshot(&self) -> Result<AdbSessionSnapshot, String>;
     fn rotate(&self, rotation: u8) -> Result<(), String>;
     fn dump_tree(&self) -> Result<(UiTree, u8), String>;
     fn screenshot_png(&self) -> Result<Vec<u8>, String>;
+    fn raw_screenshot(&self, out_path: &Path, format: &str) -> Result<(u32, u32, u8), String>;
+    fn panel_touch(
+        &self,
+        action: i32,
+        down_time: i64,
+        event_time: i64,
+        pointers: &[(i32, f32, f32)],
+    ) -> Result<(), String>;
+    fn panel_key(
+        &self,
+        code: i32,
+        event_type: &str,
+        meta_state: i32,
+        device_id: i32,
+    ) -> Result<(), String>;
+    fn panel_text(&self, text: &str) -> Result<(), String>;
     fn stream_socket(&self) -> Option<PathBuf>;
     fn is_verify_run(&self) -> bool;
 }
@@ -527,6 +543,30 @@ mod tests {
         }
         fn screenshot_png(&self) -> Result<Vec<u8>, String> {
             Ok(vec![0x89, 0x50, 0x4e, 0x47])
+        }
+        fn raw_screenshot(&self, _out_path: &Path, _format: &str) -> Result<(u32, u32, u8), String> {
+            Ok((1080, 2400, 0))
+        }
+        fn panel_touch(
+            &self,
+            _action: i32,
+            _down_time: i64,
+            _event_time: i64,
+            _pointers: &[(i32, f32, f32)],
+        ) -> Result<(), String> {
+            Ok(())
+        }
+        fn panel_key(
+            &self,
+            _code: i32,
+            _event_type: &str,
+            _meta_state: i32,
+            _device_id: i32,
+        ) -> Result<(), String> {
+            Ok(())
+        }
+        fn panel_text(&self, _text: &str) -> Result<(), String> {
+            Ok(())
         }
         fn stream_socket(&self) -> Option<PathBuf> {
             None

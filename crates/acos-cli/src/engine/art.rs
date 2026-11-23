@@ -2887,6 +2887,85 @@ impl ArtSession {
         }
     }
 
+    /// Capture the current C1 composite buffer in `"rgb888"`, `"rgba8888"`, or
+    /// `"png"` straight to `out_path` without creating a `frames/` artifact.
+    pub(crate) fn raw_screenshot(
+        &mut self,
+        out_path: &Path,
+        format: &str,
+    ) -> Result<(u32, u32, u8), BackendError> {
+        let reply = self.command(serde_json::json!({
+            "cmd": "raw_screenshot",
+            "path": out_path.display().to_string(),
+            "format": format,
+        }))?;
+        let width = reply
+            .get("width")
+            .and_then(|v| v.as_u64())
+            .ok_or_else(|| live_frame_unavailable("raw_screenshot missing width"))?
+            as u32;
+        let height = reply
+            .get("height")
+            .and_then(|v| v.as_u64())
+            .ok_or_else(|| live_frame_unavailable("raw_screenshot missing height"))?
+            as u32;
+        let rotation = reply
+            .get("rotation")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(u64::from(self.rotation)) as u8;
+        self.rotation = rotation;
+        Ok((width, height, rotation))
+    }
+
+    /// Send a non-blocking panel touch frame (`action`, `down_time`, `event_time`, `pointers`).
+    pub(crate) fn panel_touch(
+        &mut self,
+        action: i32,
+        down_time: i64,
+        event_time: i64,
+        pointers: &[(i32, f32, f32)],
+    ) -> Result<(), BackendError> {
+        let ptr_json: Vec<serde_json::Value> = pointers
+            .iter()
+            .map(|&(id, x, y)| serde_json::json!([id, x, y]))
+            .collect();
+        self.command(serde_json::json!({
+            "cmd": "panel_touch",
+            "action": action,
+            "down_time": down_time,
+            "event_time": event_time,
+            "pointers": ptr_json,
+        }))?;
+        Ok(())
+    }
+
+    /// Send a non-blocking panel key event (`down` | `up` | `press`).
+    pub(crate) fn panel_key(
+        &mut self,
+        code: i32,
+        event_type: &str,
+        meta_state: i32,
+        device_id: i32,
+    ) -> Result<(), BackendError> {
+        self.command(serde_json::json!({
+            "cmd": "panel_key",
+            "code": code,
+            "event_type": event_type,
+            "meta_state": meta_state,
+            "device_id": device_id,
+        }))?;
+        Ok(())
+    }
+
+    /// Send non-blocking panel text input.
+    pub(crate) fn panel_text(&mut self, text: &str) -> Result<(), BackendError> {
+        self.command(serde_json::json!({
+            "cmd": "panel_text",
+            "text": text,
+        }))?;
+        Ok(())
+    }
+
     /// Press a raw Android keycode (the protocol takes integers).
     ///
     /// `key()` maps symbolic names; a socket caller may send `{"code": 66}`

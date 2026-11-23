@@ -499,6 +499,133 @@ impl InputDispatch {
         Ok(Gesture { dispatches })
     }
 
+    /// Publish a single motion frame (single- or multi-pointer) on `token`'s
+    /// channel. `pointers` are `(id, window_local_x, window_local_y)`.
+    pub fn inject_motion_frame(
+        &mut self,
+        token: BinderId,
+        action: i32,
+        down_time: i64,
+        event_time: i64,
+        pointers: &[(i32, f32, f32)],
+    ) -> Result<Gesture> {
+        if pointers.is_empty() || pointers.len() > crate::input_channel::MAX_POINTERS {
+            return Err(ChannelError::BadPointerCount(pointers.len()));
+        }
+        let Some(publisher) = self.registry.publisher_mut(token) else {
+            let message = format!(
+                "inject_motion_frame: no input channel for token {:#x}",
+                token.0
+            );
+            self.events.push(InputEvent::Error {
+                token,
+                message: message.clone(),
+            });
+            return Err(ChannelError::Io(message));
+        };
+        let event_id = publisher.allocate_event_id();
+        let (lx0, ly0) = (pointers[0].1, pointers[0].2);
+        let mut event = crate::input_channel::MotionEvent::touch(
+            event_id, action, down_time, event_time, 0.0, 0.0,
+        );
+        event.transform.tx = lx0;
+        event.transform.ty = ly0;
+        event.raw_transform.tx = lx0;
+        event.raw_transform.ty = ly0;
+        event.pointers = pointers
+            .iter()
+            .enumerate()
+            .map(|(idx, &(id, lx, ly))| crate::input_channel::Pointer {
+                properties: crate::input_channel::PointerProperties { id, tool_type: 1 },
+                coords: if idx == 0 {
+                    crate::input_channel::PointerCoords::touch(0.0, 0.0)
+                } else {
+                    crate::input_channel::PointerCoords::touch(lx - lx0, ly - ly0)
+                },
+            })
+            .collect();
+        match publisher.publish_motion(&event) {
+            Ok(dispatch) => {
+                self.events.push(InputEvent::Published {
+                    token,
+                    seq: dispatch.seq,
+                    kind: "motion",
+                    detail: format!(
+                        "{:?} action={action} pointers={} x={} y={}",
+                        dispatch.kind,
+                        pointers.len(),
+                        lx0.round() as i64,
+                        ly0.round() as i64
+                    ),
+                });
+                Ok(Gesture {
+                    dispatches: vec![dispatch],
+                })
+            }
+            Err(e) => {
+                self.events.push(InputEvent::Error {
+                    token,
+                    message: format!("inject_motion_frame: {e}"),
+                });
+                Err(e)
+            }
+        }
+    }
+
+    /// Publish a single `KeyEvent` (`KEY_ACTION_DOWN` or `KEY_ACTION_UP`) with
+    /// explicit `meta_state` and `device_id`.
+    pub fn inject_key_event(
+        &mut self,
+        token: BinderId,
+        action: i32,
+        key_code: i32,
+        meta_state: i32,
+        device_id: i32,
+        down_time: i64,
+        event_time: i64,
+    ) -> Result<Gesture> {
+        let Some(publisher) = self.registry.publisher_mut(token) else {
+            let message = format!(
+                "inject_key_event: no input channel for token {:#x}",
+                token.0
+            );
+            self.events.push(InputEvent::Error {
+                token,
+                message: message.clone(),
+            });
+            return Err(ChannelError::Io(message));
+        };
+        let mut ev = crate::input_channel::KeyEvent::new(
+            publisher.allocate_event_id(),
+            action,
+            key_code,
+            down_time,
+            event_time,
+        );
+        ev.meta_state = meta_state;
+        ev.device_id = device_id;
+        match publisher.publish_key(&ev) {
+            Ok(dispatch) => {
+                self.events.push(InputEvent::Published {
+                    token,
+                    seq: dispatch.seq,
+                    kind: "key",
+                    detail: format!("{:?} keyCode={key_code} meta={meta_state}", dispatch.kind),
+                });
+                Ok(Gesture {
+                    dispatches: vec![dispatch],
+                })
+            }
+            Err(e) => {
+                self.events.push(InputEvent::Error {
+                    token,
+                    message: format!("inject_key_event token={:#x}: {e}", token.0),
+                });
+                Err(e)
+            }
+        }
+    }
+
     /// Publish a key press on `token`'s channel.
     pub fn inject_key(&mut self, token: BinderId, key_code: i32) -> Result<Gesture> {
         self.publish_key(token, key_code)
@@ -1052,12 +1179,90 @@ impl InputHost {
         self.collect(&token, &gesture, ack_wait)
     }
 
+    /// Publish one raw multi-pointer touch frame (for live interactive panel
+    /// input). On `ACTION_DOWN` (`pinned_target` is `None`), resolves the window
+    /// under `pointers[0]` and returns the resolved `(token, origin)` so the
+    /// caller can pin subsequent `MOVE`/`UP` frames to the same window.
+    pub fn touch_frame(
+        &self,
+        action: i32,
+        pinned_target: Option<(BinderId, (i32, i32))>,
+        down_time: i64,
+        event_time: i64,
+        pointers: &[(i32, f32, f32)],
+        ack_wait: Duration,
+    ) -> Result<(BinderId, (i32, i32), InjectedGesture)> {
+        if pointers.is_empty() {
+            return Err(ChannelError::BadPointerCount(0));
+        }
+        let ((token, origin), local_pointers, gesture) = if let Some((token, origin)) =
+            pinned_target
+        {
+            let local: Vec<(i32, f32, f32)> = pointers
+                .iter()
+                .map(|&(id, x, y)| (id, x - origin.0 as f32, y - origin.1 as f32))
+                .collect();
+            let gesture = lock(&self.state).inject_motion_frame(
+                token,
+                action,
+                down_time,
+                event_time,
+                &local,
+            )?;
+            ((token, origin), local, gesture)
+        } else if self.stack.is_some() {
+            let Some(target) = self.touch_target(pointers[0].1, pointers[0].2) else {
+                return Err(no_touch_target(pointers[0].1, pointers[0].2));
+            };
+            let local: Vec<(i32, f32, f32)> = pointers
+                .iter()
+                .map(|&(id, x, y)| (id, x - target.origin.0 as f32, y - target.origin.1 as f32))
+                .collect();
+            let gesture = lock(&self.state).inject_motion_frame(
+                target.token,
+                action,
+                down_time,
+                event_time,
+                &local,
+            )?;
+            ((target.token, target.origin), local, gesture)
+        } else {
+            let (token, gesture) = lock(&self.state).publish_on_live(|dispatch, token| {
+                dispatch.inject_motion_frame(token, action, down_time, event_time, pointers)
+            })?;
+            ((token, (0, 0)), pointers.to_vec(), gesture)
+        };
+        let _ = local_pointers;
+        let injected = self.collect(&token, &gesture, ack_wait)?;
+        Ok((token, origin, injected))
+    }
+
     /// Publish one key press on the focused window (delivery only; window
     /// focus still needs the IME `EditorInfo` codec, so the app may drop it —
     /// the ack's `handled` field reports exactly that).
     pub fn key(&self, code: i32, ack_wait: Duration) -> Result<InjectedGesture> {
         let (token, gesture) = lock(&self.state)
             .publish_on_focused(|dispatch, token| dispatch.inject_key(token, code))?;
+        self.collect(&token, &gesture, ack_wait)
+    }
+
+    /// Publish a single `KEY_ACTION_DOWN` or `KEY_ACTION_UP` on the focused
+    /// window with explicit `meta_state` and `device_id`.
+    pub fn key_event(
+        &self,
+        action: i32,
+        code: i32,
+        meta_state: i32,
+        device_id: i32,
+        down_time: i64,
+        event_time: i64,
+        ack_wait: Duration,
+    ) -> Result<InjectedGesture> {
+        let (token, gesture) = lock(&self.state).publish_on_focused(|dispatch, token| {
+            dispatch.inject_key_event(
+                token, action, code, meta_state, device_id, down_time, event_time,
+            )
+        })?;
         self.collect(&token, &gesture, ack_wait)
     }
 
@@ -1093,7 +1298,7 @@ impl InputHost {
         }
         let mut acks: Vec<InjectedAck> = Vec::new();
         let deadline = Instant::now() + ack_wait;
-        while Instant::now() < deadline && acks.len() < seqs.len() {
+        loop {
             // REL3I: when the soft input is shown, the app's `ImeInputStage`
             // offers this key to its `InputMethodManager`, which writes it into
             // the IME channel and blocks on our `FINISHED`. Answer it here, on
@@ -1148,9 +1353,10 @@ impl InputHost {
                     });
                 }
             }
-            if acks.len() < seqs.len() {
-                thread::sleep(Duration::from_millis(5));
+            if acks.len() >= seqs.len() || Instant::now() >= deadline {
+                break;
             }
+            thread::sleep(Duration::from_millis(5));
         }
         Ok(InjectedGesture {
             token: *token,
@@ -2060,5 +2266,83 @@ mod swipe_stream_tests {
             gesture.acks.iter().any(|ack| !ack.handled) && gesture.acks.iter().any(|ack| ack.handled),
             "the mixed handled/unhandled acks are reported per event, not folded away"
         );
+    }
+
+    #[test]
+    fn multi_pointer_touch_frame_and_key_event() {
+        let mut dispatch = InputDispatch::new();
+        dispatch
+            .register_window(TOKEN, "Surface(name=acos-fixture/panel)/@0x31")
+            .expect("register");
+        let fd = dispatch.duplicate_client_fd(TOKEN).expect("client fd");
+        let mut guest = LoopbackConsumer::new(fd);
+        guest.recv().expect("recv").expect("registration");
+        let state = Arc::new(Mutex::new(dispatch));
+        let host = InputHost {
+            state: Arc::clone(&state),
+            relayout_tx: None,
+            stack: None,
+        };
+
+        let down_time = crate::input_channel::monotonic_nanos();
+        let (token, origin, _) = host
+            .touch_frame(
+                crate::input_channel::ACTION_DOWN,
+                None,
+                down_time,
+                down_time,
+                &[(0, 100.0, 200.0)],
+                Duration::ZERO,
+            )
+            .expect("down");
+        assert_eq!(token, TOKEN);
+        let action_p2 = crate::input_channel::ACTION_POINTER_DOWN
+            | (1 << crate::input_channel::ACTION_POINTER_INDEX_SHIFT);
+        host.touch_frame(
+            action_p2,
+            Some((token, origin)),
+            down_time,
+            down_time + 10_000_000,
+            &[(0, 100.0, 200.0), (1, 150.0, 260.0)],
+            Duration::ZERO,
+        )
+        .expect("pointer down");
+        host.key_event(
+            crate::input_channel::KEY_ACTION_DOWN,
+            crate::input_channel::KEYCODE_ENTER,
+            super::META_SHIFT_ON,
+            super::VIRTUAL_KEYBOARD_DEVICE_ID,
+            down_time,
+            down_time + 20_000_000,
+            Duration::ZERO,
+        )
+        .expect("key down");
+
+        let mut msgs = Vec::new();
+        while let Some(msg) = guest.recv().expect("recv") {
+            msgs.push(msg);
+        }
+        assert_eq!(msgs.len(), 3);
+        match &msgs[1] {
+            InputMessage::Motion { event, .. } => {
+                assert_eq!(event.action, action_p2);
+                assert_eq!(event.pointers.len(), 2);
+                assert_eq!(event.transform.tx, 100.0);
+                assert_eq!(event.transform.ty, 200.0);
+                assert_eq!(event.pointers[0].coords.get(crate::input_channel::AXIS_X), 0.0);
+                assert_eq!(event.pointers[1].coords.get(crate::input_channel::AXIS_X), 50.0);
+                assert_eq!(event.pointers[1].coords.get(crate::input_channel::AXIS_Y), 60.0);
+            }
+            other => panic!("expected motion, got {other:?}"),
+        }
+        match &msgs[2] {
+            InputMessage::Key { event, .. } => {
+                assert_eq!(event.action, crate::input_channel::KEY_ACTION_DOWN);
+                assert_eq!(event.key_code, crate::input_channel::KEYCODE_ENTER);
+                assert_eq!(event.meta_state, super::META_SHIFT_ON);
+                assert_eq!(event.device_id, super::VIRTUAL_KEYBOARD_DEVICE_ID);
+            }
+            other => panic!("expected key, got {other:?}"),
+        }
     }
 }

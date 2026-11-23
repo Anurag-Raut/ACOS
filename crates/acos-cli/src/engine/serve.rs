@@ -208,6 +208,56 @@ impl crate::adb::AdbSessionOps for HeldArtSession {
         session.screenshot_png_bytes().map_err(|e| e.to_string())
     }
 
+    fn raw_screenshot(&self, out_path: &Path, format: &str) -> Result<(u32, u32, u8), String> {
+        let mut session = self.session.lock().unwrap_or_else(|e| e.into_inner());
+        if session.liveness().is_some() {
+            return Err("guest exited".to_string());
+        }
+        session
+            .raw_screenshot(out_path, format)
+            .map_err(|e| e.to_string())
+    }
+
+    fn panel_touch(
+        &self,
+        action: i32,
+        down_time: i64,
+        event_time: i64,
+        pointers: &[(i32, f32, f32)],
+    ) -> Result<(), String> {
+        let mut session = self.session.lock().unwrap_or_else(|e| e.into_inner());
+        if session.liveness().is_some() {
+            return Err("guest exited".to_string());
+        }
+        session
+            .panel_touch(action, down_time, event_time, pointers)
+            .map_err(|e| e.to_string())
+    }
+
+    fn panel_key(
+        &self,
+        code: i32,
+        event_type: &str,
+        meta_state: i32,
+        device_id: i32,
+    ) -> Result<(), String> {
+        let mut session = self.session.lock().unwrap_or_else(|e| e.into_inner());
+        if session.liveness().is_some() {
+            return Err("guest exited".to_string());
+        }
+        session
+            .panel_key(code, event_type, meta_state, device_id)
+            .map_err(|e| e.to_string())
+    }
+
+    fn panel_text(&self, text: &str) -> Result<(), String> {
+        let mut session = self.session.lock().unwrap_or_else(|e| e.into_inner());
+        if session.liveness().is_some() {
+            return Err("guest exited".to_string());
+        }
+        session.panel_text(text).map_err(|e| e.to_string())
+    }
+
     fn stream_socket(&self) -> Option<PathBuf> {
         let session = self.session.lock().unwrap_or_else(|e| e.into_inner());
         session.stream_socket().map(Path::to_path_buf)
