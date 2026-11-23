@@ -57,6 +57,17 @@ Use these exact terms across code, docs, and commit messages (see [`docs/interna
   - `python3 tools/build/gen-window-layer-table.py` for `docs/WINDOW_LAYERS.md`
 - **Every `docs/*.md` tool call example is schema-tested.** `crates/acos-mcp/tests/documentation_args.rs` scans top-level `docs/*.md` and rejects any documented `acos_*` argument not accepted by the closed MCP schema.
 
+## Threat model (read before reviewing)
+
+ACOS is a **temporary development tool that coding agents use to build and test their own Android apps**. It is not an operating system, a phone, or a multi-tenant sandbox for untrusted users. Review and design against this model:
+
+- **The guest app is the agent's own app under development, not an attacker.** Do not treat guest-supplied values (stream sizes, parcels, metadata, intents) as hostile input. A buggy app should get an honest error or a dropped frame, not hardening.
+- **Data built by our own host is trusted.** The Session Controller (Rust) builds the frame blobs, camera metadata and service replies that the guest shims and `LaunchMain` read. A malformed blob means an ACOS bug, so it gets a test, not a defensive bounds check in the reader.
+- **Per-app security boundaries are out of scope.** Permissions are one shared store per session. Per-package enforcement, auth between services, and privilege separation inside a session are not goals.
+- **The host machine must stay safe.** The cheap host safeguards stay in place: bwrap confinement, Landlock/seccomp, rlimits, memory watchdogs, 127.0.0.1-only listeners, and same-uid socket checks (see `docs/SECURITY.md`). Flag a problem that lets a session harm the host or other users' processes.
+- **ACOS graphics use software sync.** Every acquire/release/dequeue fence is `-1` by design (`crates/acos-art/shim/gralloc_shim.c`). Do not request fence waits.
+- **What matters most:** correctness of verdicts (never a false pass), never fabricating state (no fake success, no substitute pixels), regressions against the previous release, and the tracked performance metrics (idle CPU, memory, latency).
+
 ## What may be committed
 
 Commit what the product needs to build, run and be understood. Nothing else.

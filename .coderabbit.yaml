@@ -1,0 +1,38 @@
+# CodeRabbit review config. CodeRabbit also reads AGENTS.md (see its "Threat model" section).
+language: en-US
+tone_instructions: "Dev tool for agents, not an OS: guest apps aren't attackers; host-built data is trusted. Focus on false passes, fabricated state, regressions, perf. Skip hardening/fence waits."
+reviews:
+  profile: chill
+  high_level_summary: true
+  path_filters:
+    # results/ holds only one .md report per task; nothing there is code.
+    - "!results/**"
+  path_instructions:
+    - path: "crates/**"
+      instructions: |
+        ACOS is a temporary development tool that coding agents use to test their OWN Android apps.
+        It is not an operating system. Apply the threat model in AGENTS.md:
+        - The guest app is the agent's app under development, not an attacker. Do not report
+          guest-controlled sizes, parcels or metadata as security/DoS issues. Report them only if a
+          normal, well-behaved app would hit a wrong result.
+        - Data produced by the ACOS Session Controller (frame blobs, camera metadata, service
+          replies) is trusted input to the guest shims and LaunchMain. Do not request defensive
+          parsing of it.
+        - Per-app permission/identity enforcement inside a session is out of scope (one shared
+          permission store per session by design).
+        - Graphics fences are always -1 (software sync, see crates/acos-art/shim/gralloc_shim.c).
+          Do not request fence waits.
+        - Host safety IS in scope: anything letting a session harm the host machine or escape
+          bwrap/Landlock/seccomp confinement.
+        Prioritise: false passes in verdicts, fabricated success or substitute data, regressions
+        versus the previous release, deadlocks/hangs a normal app can trigger, and idle CPU /
+        memory / latency regressions (polling loops, busy waits).
+    - path: "scenarios/**"
+      instructions: |
+        Scenarios are acceptance tests. Flag assertions that could pass when the feature is broken
+        (weak or always-true checks), and positive scenarios missing a negative counterpart.
+    - path: "tools/**"
+      instructions: |
+        Developer and release scripts run on a trusted single-user workstation. Focus on
+        correctness, cleanup of processes/temp files, and not touching paths outside the repo
+        unless the script documents it.
