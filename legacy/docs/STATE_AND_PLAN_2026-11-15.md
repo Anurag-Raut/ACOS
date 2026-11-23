@@ -15,7 +15,7 @@ tested.
   OpenCode Go is exhausted until about 2026-11-16 05:00 IST. Sonnet 5.5 medium for
   difficult work (verdict semantics, security, framework internals), Haiku 5.5
   effort high for easier work. Back to pi + DeepSeek after the reset. Max 5 agents.
-- ART runs go through `tools/art-runtime/run-exclusive.sh` + `tools/guarded.sh`;
+- ART runs go through `tools/art-runtime/run-exclusive.sh` + `tools/guard/guarded.sh`;
   RAM < 90%; prune scratch at disk >= 85%; never touch `~/Projects/gaten`, foreign
   `acos serve` / `acos-mcp` processes or the owner's phone data. I install
   releases into `~/.local` myself; agents never do.

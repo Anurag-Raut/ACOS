@@ -25,7 +25,7 @@ for i in $(seq 1 "$N"); do
     DIR="$WT/.cache/sn3-artifacts/lean-$ARM"
     rm -rf "$DIR"
     tools/art-runtime/run-exclusive.sh --task SPIKE-NET -- \
-      tools/guarded.sh --mem 8G --time 300 -- \
+      tools/guard/guarded.sh --mem 8G --time 300 -- \
       "$WT/.cache/sn3-target/release/acos" verify --engine art \
         --apk fixtures/build/apps/hello-views.apk \
         --scenario scenarios/hello-views.yaml \

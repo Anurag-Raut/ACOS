@@ -10,11 +10,11 @@ Every dispatch packet must tell the agent to read this file first. It lists what
 ## 2. Reference sources (use before guessing)
 | Resource | Where | Use for |
 |---|---|---|
-| AOSP source, tag android-14.0.0_r75 (read-only) | `.cache/aosp/` (guide: `docs/AOSP_REFERENCE.md`; recreate: `tools/fetch-aosp-reference.sh`; extend: `git -C .cache/aosp/<dir> sparse-checkout add <path>`) | behaviour, parcel/wire order, binder protocol, JNI registration, BLAST/SurfaceComposerClient, hwui |
-| The API-34 system image (ground truth for what actually runs) | `.cache/art/sysroot/` (built by `tools/art-sysroot.sh`) | exact layouts: `acos-dex dexdump` for Java/AIDL, `nm -D` / `objdump -d` for native. The tag differs from the image: when they disagree the image wins. |
+| AOSP source, tag android-14.0.0_r75 (read-only) | `.cache/aosp/` (guide: `docs/AOSP_REFERENCE.md`; recreate: `tools/fetch/fetch-aosp-reference.sh`; extend: `git -C .cache/aosp/<dir> sparse-checkout add <path>`) | behaviour, parcel/wire order, binder protocol, JNI registration, BLAST/SurfaceComposerClient, hwui |
+| The API-34 system image (ground truth for what actually runs) | `.cache/art/sysroot/` (built by `tools/fetch/art-sysroot.sh`) | exact layouts: `acos-dex dexdump` for Java/AIDL, `nm -D` / `objdump -d` for native. The tag differs from the image: when they disagree the image wins. |
 | Prior findings | `results/art-runtime/`, `research/art-feasibility/`, `docs/FINDINGS.md`, `DECISIONS.md` | known walls, root causes, measured numbers |
-| Real device | moto g35 over adb (`tools/phone-parity.sh`) | parity evidence only, via the `agent-device` tooling, with owner-approved scope |
-| Probes / harness | `tools/art-runtime/{leakcheck.sh,bench-n.sh,bench.sh}`, `tools/guarded.sh`, `tools/ramguard.sh`, `research/art-feasibility/*/scripts` | guarded runs, leak checks, byte-level replays |
+| Real device | moto g35 over adb (`tools/phone/phone-parity.sh`) | parity evidence only, via the `agent-device` tooling, with owner-approved scope |
+| Probes / harness | `tools/art-runtime/{leakcheck.sh,bench-n.sh,bench.sh}`, `tools/guard/guarded.sh`, `tools/guard/ramguard.sh`, `research/art-feasibility/*/scripts` | guarded runs, leak checks, byte-level replays |
 
 Do not copy AOSP source into the repo. Do not rely on memory of Android internals when the source or the image can answer.
 
@@ -22,13 +22,13 @@ Do not copy AOSP source into the repo. Do not rely on memory of Android internal
 - **Evidence before claims.** State a root cause only after a measurement (log line, byte replay, gdb trace). Label anything else "hypothesis". A wrong hypothesis presented as fact has cost whole tasks (W2's "88 bytes late" was disproved by W3's byte replay).
 - **Real time.** Record `date -u` at start and at every checkpoint, and report real elapsed from those timestamps. Self-estimated durations have been inflated 2-3x.
 - **Smallest reproducer first**, then the fix, then a regression test that fails without the fix ("teeth").
-- **Serial ART runs only**, always through `tools/guarded.sh --mem N`, scratch under `.cache/`, never `/tmp`.
+- **Serial ART runs only**, always through `tools/guard/guarded.sh --mem N`, scratch under `.cache/`, never `/tmp`.
 - **Stay in your files.** Edit only the paths your packet lists. If you need another file changed, write the exact request in your report. Never revert or reformat other agents' edits; never `git add -A`; do not commit unless told.
 - **Report format:** changed (files), verified (command + result), not verified, next wall (precise stack/log line), real elapsed.
 - **Stop rules:** at 45 min send status; at 60 min report done / blocking / why hard / smallest next action and wait. Never fake success; unsupported behaviour returns a structured `UNSUPPORTED_*` error.
 
 ## 4. Advisor-derived rules (codex gpt-6.1-sol, 2026-11-11)
-- **ART runs go through the lock:** `tools/art-runtime/run-exclusive.sh --task <name> -- tools/guarded.sh --mem 8G <cmd>`. One ART guest at a time host-wide; each call gets unique `ACOS_ART_DATA`; start/finish/queue-wait are logged to `.cache/art-locks/runs.log`. Intentional N-session benchmarks hold the lock and manage their own concurrency.
+- **ART runs go through the lock:** `tools/art-runtime/run-exclusive.sh --task <name> -- tools/guard/guarded.sh --mem 8G <cmd>`. One ART guest at a time host-wide; each call gets unique `ACOS_ART_DATA`; start/finish/queue-wait are logged to `.cache/art-locks/runs.log`. Intentional N-session benchmarks hold the lock and manage their own concurrency.
 - **Time is recorded by the dispatcher, not by you.** Do not compute elapsed time in prose; report only `date -u` stamps.
 - **Hypothesis ledger** (required in every report that names a cause):
   `Observation (first error, artifact/offset/stack) | Hypothesis | Prediction if true | Cheapest falsifying experiment | Result | Verdict: untested/supported/rejected/confirmed | Remaining alternatives`. Analyse the chronologically FIRST error, including swallowed exceptions and error returns, not the last crash.
@@ -40,12 +40,12 @@ Do not copy AOSP source into the repo. Do not rely on memory of Android internal
 - **Reports are short:** verdict, evidence table, ledger, residuals.
 
 ### Evidence bundles and ownership checks (added 2026-11-11)
-- `tools/accept-bundle.sh --task NAME -- <cmd...>` runs one command and writes `results/bundles/<task>-<UTCstamp>/bundle.txt` (task, base commit, start `git status --porcelain`, source digest before/after, image-manifest digest, command, cwd, exit code, UTC start/finish, run-log path+sha256) plus the combined `run.log`.
+- `tools/verify/accept-bundle.sh --task NAME -- <cmd...>` runs one command and writes `results/bundles/<task>-<UTCstamp>/bundle.txt` (task, base commit, start `git status --porcelain`, source digest before/after, image-manifest digest, command, cwd, exit code, UTC start/finish, run-log path+sha256) plus the combined `run.log`.
 - The source digest hashes `git diff HEAD` for `crates/ tools/ scenarios/ docs/` plus the contents of untracked non-ignored files there; `results/`, `fixtures/`, `research/` and `.cache/` are excluded so command output cannot dirty the evidence.
 - `source_status: SOURCE_CHANGED_DURING_RUN` means the command edited sources mid-run; the tool exits with the command's rc and warns on stderr, so callers must check the marker before trusting a bundle.
 - The image-manifest digest hashes `.cache/art/sysroot/READY` plus the generated `MANIFEST.txt` (sorted path+size+sha256[:16]); it is `none` when no sysroot exists.
-- This tool never launches ART itself: wrap ART callers as `tools/art-runtime/run-exclusive.sh --task NAME -- tools/accept-bundle.sh --task NAME -- tools/guarded.sh ...`.
-- `tools/own-check.sh --own '<glob>'... [--base <commit>]` lists changed and untracked files since `--base` (default HEAD, i.e. the working tree) and exits 1 printing offenders for paths outside every own-glob or in the integrator-owned set.
+- This tool never launches ART itself: wrap ART callers as `tools/art-runtime/run-exclusive.sh --task NAME -- tools/verify/accept-bundle.sh --task NAME -- tools/guard/guarded.sh ...`.
+- `tools/verify/own-check.sh --own '<glob>'... [--base <commit>]` lists changed and untracked files since `--base` (default HEAD, i.e. the working tree) and exits 1 printing offenders for paths outside every own-glob or in the integrator-owned set.
 - Integrator-owned, matched by filename only: `Cargo.toml`, `Cargo.lock`, `STATUS.md`, `docs/OPERATING_DIRECTIVES.md`, `crates/*/Cargo.toml`, `**/lib.rs` (lib.rs contents are never inspected; do not edit mod declarations).
 - Globs use bash pattern semantics (`*` crosses `/`); a wildcard-free glob matches a path or a directory prefix. `ACOS_REPO_ROOT` overrides the repo root for tests only.
 - Tests are plain bash: `tools/tests/test-accept-bundle.sh` and `tools/tests/test-own-check.sh` build throwaway repos under `.cache/tests/` and print PASS/FAIL (negative cases: source changed during a run, out-of-ownership file).

@@ -170,7 +170,7 @@ CA store: the image **has** it — `.cache/art/sysroot/system/etc/security/cacer
 ## 7. What was not measured
 
 * No in-app HTTPS proof (step 6): no fixture APK performs a request, and building one
-  (`tools/build-apps.sh` + a new `fixtures/apps/net-check`) plus a scenario run did not
+  (`tools/build/build-apps.sh` + a new `fixtures/apps/net-check`) plus a scenario run did not
   fit the one-hour budget. The transport, the namespace, the seccomp gate and the DNS
   protocol are proven separately; the app-level round trip is not.
 * No A/B metrics (step 7): cold/warm launch, per-session memory and the N=20 density
@@ -250,7 +250,7 @@ fix (`AF_INET` → EACCES) and fails if `AF_NETLINK` ever becomes reachable.
 shows `HTTP 200` or the exception class name (never a fake success); `id=connectivity` shows
 the `ConnectivityManager`/`NetworkCapabilities`/`LinkProperties` report. Scenario
 `scenarios/net-check.yaml` asserts `HTTP 200`, `internet=true validated=true` and the
-`NetCheck` log line. Built with `ACOS_APP_ONLY=net-check tools/build-apps.sh`
+`NetCheck` log line. Built with `ACOS_APP_ONLY=net-check tools/build/build-apps.sh`
 (`fixtures/build/apps/net-check.apk`, 12 756 bytes). One API mismatch on the way:
 `LinkProperties.getAddresses()` is not in the API-34 stub; `getLinkAddresses()` is.
 

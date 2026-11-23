@@ -297,11 +297,11 @@ Rationale, tied to the measured numbers:
 
 ```bash
 # 1. current renderer + AA fix
-tools/guarded.sh --mem 4G --time 120 -- ./target/debug/examples/render_scene \
+tools/guard/guarded.sh --mem 4G --time 120 -- ./target/debug/examples/render_scene \
   crates/acos-render/tests/scenes/hello-views.json .cache/spike/current_hello_views.png --json
 
 # 2. Skia m157 sweep (prebuilt)
-tools/guarded.sh --mem 8G --time 900 -- bash -c \
+tools/guard/guarded.sh --mem 8G --time 900 -- bash -c \
   'cd research/render-fidelity/poc/skia-text && cargo run --release -- \
    /home/Qui/Projects/acos/.cache/boot/android-34/fonts/Roboto-Regular.ttf \
    /home/Qui/Projects/acos/.cache/spike/skia_out "Hello ACOS"'

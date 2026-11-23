@@ -5,7 +5,7 @@ defined and validated by `acos-protocol` (`cargo test -p acos-protocol` parses
 every file here). The runtime contract is in
 [`docs/AGENT_API.md`](../docs/AGENT_API.md).
 
-Run the two fixtures (build the APKs first with `tools/build-apps.sh`):
+Run the two fixtures (build the APKs first with `tools/build/build-apps.sh`):
 
 ```bash
 acos verify --apk fixtures/build/apps/hello-views.apk \
@@ -19,7 +19,7 @@ acos verify --apk fixtures/build/apps/hello-jni.apk \
 
 The V1 core loop (no rotation yet) is `scenarios/v1-hello-views.yaml` and
 `scenarios/v1-counter.yaml`; the negative fixtures are built with
-`tools/build-negative-apps.sh` and exercised by
+`tools/build/build-negative-apps.sh` and exercised by
 `cargo test -p acos-cli --test negative_verify`. Status and blockers:
 `docs/V1.md` §W180-A.
 

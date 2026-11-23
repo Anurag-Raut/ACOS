@@ -19,6 +19,6 @@ javac -nowarn -source 8 -target 8 -bootclasspath "$AJ" -d "$E2/classes" "$E2"/ja
 cp -f "$E2/classes/classes.dex" "$DATA/dex/e2/classes.dex"
 
 "$HERE/public-libs.sh"          # namespace permission for libhwui/libandroid_runtime
-exec "$ACOS_ROOT/tools/guarded.sh" --mem 6G --time 240 -- \
+exec "$ACOS_ROOT/tools/guard/guarded.sh" --mem 6G --time 240 -- \
     "$ACOS_ROOT/research/art-feasibility/a-dalvikvm/scripts/artroot.sh" \
     dalvikvm -cp /system/framework/framework.jar:/data/dex/e2/classes.dex dev.acos.e2.Main

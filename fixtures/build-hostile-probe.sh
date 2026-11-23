@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # Build the S8/W44 hostile-probe fixture APKs with the same gradle-free
-# toolchain as tools/build-apps.sh (aapt2 + javac + d8 + zipalign + apksigner).
+# toolchain as tools/build/build-apps.sh (aapt2 + javac + d8 + zipalign + apksigner).
 # This fixture is our own code: it forges ACOSPROBE/ACOSLAUNCH lines, forged
 # window forests, hostile binder parcels and draws a red surface that does not
 # match its claims. It is used only by the hostile tests.
@@ -41,7 +41,7 @@ for t in "$AAPT2" "$D8" "$ZIPALIGN" "$APKSIGNER"; do
     [ -x "$t" ] || die "missing tool: $t (set ANDROID_HOME / BUILD_TOOLS_VERSION)"
 done
 [ -f "$ANDROID_JAR" ] || die "android.jar not found: $ANDROID_JAR"
-[ -f "$ROOT/tools/apk_append.py" ] || die "missing tools/apk_append.py"
+[ -f "$ROOT/tools/build/apk_append.py" ] || die "missing tools/build/apk_append.py"
 [ -f "$APP_DIR/AndroidManifest.template.xml" ] || die "missing manifest template"
 
 mkdir -p "$BUILD_DIR"
@@ -116,7 +116,7 @@ for variant in $VARIANTS; do
     rest="${variant#*:}"
     out_name="${rest##*:}"
     out="$BUILD_DIR/$out_name.apk"
-    python3 "$ROOT/tools/apk_append.py" "$WORK/linked/$short.apk" "$WORK/dex/classes.dex"
+    python3 "$ROOT/tools/build/apk_append.py" "$WORK/linked/$short.apk" "$WORK/dex/classes.dex"
     echo "build-hostile-probe: aligning $out_name"
     rm -f "$out" "$WORK/aligned-$short.apk"
     "$ZIPALIGN" -f 4 "$WORK/linked/$short.apk" "$WORK/aligned-$short.apk"

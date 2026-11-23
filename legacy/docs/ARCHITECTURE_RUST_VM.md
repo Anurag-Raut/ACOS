@@ -87,7 +87,7 @@ is not a claim of V1 capability.
 | `acos-vm` | **in progress** (untracked) | DEX interpreter, handle/arena heap, precise mark-sweep GC, class model, **temporary core-library built-ins** (bootstrap only, ADR-0007), cooperative threads. ~8.5k LOC; **0 `#[test]` at time of writing** | `crates/acos-vm/` |
 | `acos-native-loader` | **in progress** (untracked) | ELF (`.so`) reader and dynamic-info scaffolding; incomplete (`lib.rs`/`build.rs` referenced by `Cargo.toml` not yet present) | `crates/acos-native-loader/` |
 | `acos-render` | **in progress** (untracked) | Placeholder `lib.rs`; dependencies declared (`tiny-skia`, `rustybuzz`, `ttf-parser`, `unicode-bidi`, `png`, `jpeg-decoder`, `image-webp`, `roxmltree`, `xxhash-rust`, `sha2`) | `crates/acos-render/` |
-| Oracle tooling | **in progress** (untracked) | `tools/oracle/emulator.sh` (headless ART oracle, ≤2 GiB, one instance); `tools/extract-bootclasspath.sh`; `results/oracle/` captured a single 22 s boot; `fixtures/expected-art/`, `fixtures/reference/` empty | `tools/oracle/`, `results/oracle/`, `.cache/boot/android-34/` |
+| Oracle tooling | **in progress** (untracked) | `tools/oracle/emulator.sh` (headless ART oracle, ≤2 GiB, one instance); `tools/fetch/extract-bootclasspath.sh`; `results/oracle/` captured a single 22 s boot; `fixtures/expected-art/`, `fixtures/reference/` empty | `tools/oracle/`, `results/oracle/`, `.cache/boot/android-34/` |
 | `acos-jni` | **planned** | JNIEnv/JavaVM tables in Rust against the VM (ADR-0014) | — |
 | Rust service layer | **planned** | in-process stubs for the AIDL interfaces on the app path (ADR-0008) | — |
 | verify / scenario runner | **planned** | `acos verify --apk … --scenario … --json --artifacts …` (V1) | — |

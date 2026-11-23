@@ -11,4 +11,4 @@ dependencies into `crates/` are read-only.
 
 Scratch/output policy for this experiment: `CARGO_TARGET_DIR=.cache/target-artexp-b`,
 `CARGO_PROFILE_DEV_DEBUG=0`, `CARGO_BUILD_JOBS=2`, everything through
-`tools/guarded.sh`.
+`tools/guard/guarded.sh`.
