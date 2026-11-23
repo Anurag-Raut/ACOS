@@ -500,6 +500,7 @@ public final class LaunchMain {
         // publishes a structured UNSUPPORTED_ANDROID_API marker naming the call.
         // The app keeps running; no state is fabricated.
         installStartActivityGuard();
+        installTopFinishHook();
 
         // The bindApplication H message is already posted; run the real main
         // looper. The watcher acts as the AMS side of the protocol: it waits for
@@ -3509,7 +3510,11 @@ public final class LaunchMain {
                                 return m.getReturnType() == int.class ? 2 : null;
                             }
                             try {
-                                return m.invoke(delegate, a);
+                                Object res = m.invoke(delegate, a);
+                                if ("getActivityClientController".equals(n) && res != null) {
+                                    return wrapActivityClientController(res);
+                                }
+                                return res;
                             } catch (java.lang.reflect.InvocationTargetException e) {
                                 throw e.getCause() == null ? e : e.getCause();
                             }
@@ -5579,8 +5584,197 @@ public final class LaunchMain {
             java.util.Collections.synchronizedSet(new java.util.HashSet<IBinder>());
     private static final java.util.concurrent.atomic.AtomicBoolean sTopFinishWatcherStarted =
             new java.util.concurrent.atomic.AtomicBoolean(false);
+    private static volatile boolean sTopFinishHookInstalled = false;
+    private static volatile android.os.Handler sMainHandler;
+    private static volatile Object sWrappedControllerProxy;
+    private static volatile Object sWrappedControllerDelegate;
+    private static Class<?> sPauseItemCls;
+    private static Class<?> sStopItemCls;
+    private static Class<?> sDestroyItemCls;
+
+    static void installTopFinishHook() {
+        try {
+            if (sMainHandler == null) {
+                sMainHandler = new android.os.Handler(Looper.getMainLooper());
+            }
+            Class<?> acCls = Class.forName("android.app.ActivityClient");
+            java.lang.reflect.Field fSingleton = acCls.getDeclaredField("INTERFACE_SINGLETON");
+            fSingleton.setAccessible(true);
+            Object singleton = fSingleton.get(null);
+            if (singleton == null) return;
+            java.lang.reflect.Method getMethod =
+                    Class.forName("android.util.Singleton").getMethod("get");
+            getMethod.setAccessible(true);
+            Object real = getMethod.invoke(singleton);
+            if (real == null) {
+                java.lang.reflect.Method gacc = acCls.getDeclaredMethod("getActivityClientController");
+                gacc.setAccessible(true);
+                real = gacc.invoke(null);
+            }
+            if (real == null) return;
+            Object proxy = wrapActivityClientController(real);
+            java.lang.reflect.Field fInstance = findField(singleton.getClass(), "mInstance");
+            fInstance.setAccessible(true);
+            fInstance.set(singleton, proxy);
+            try {
+                java.lang.reflect.Field fKnown = singleton.getClass().getDeclaredField("mKnownInstance");
+                fKnown.setAccessible(true);
+                if (fKnown.get(singleton) != null) {
+                    fKnown.set(singleton, proxy);
+                }
+            } catch (NoSuchFieldException ignored) {
+            }
+            sTopFinishHookInstalled = true;
+            android.util.Log.i("AcosRot6", "ACOSLAUNCH MARK top-finish-hook-installed");
+        } catch (Throwable t) {
+            System.out.println("ACOSLAUNCH MARK top-finish-hook unavailable " + unwrap(t));
+            System.out.flush();
+        }
+    }
+
+    static synchronized Object wrapActivityClientController(final Object delegate)
+            throws ClassNotFoundException {
+        if (delegate == null) return null;
+        if (delegate == sWrappedControllerProxy) return delegate;
+        if (sWrappedControllerProxy != null && delegate == sWrappedControllerDelegate) {
+            return sWrappedControllerProxy;
+        }
+        Class<?> iface = Class.forName("android.app.IActivityClientController");
+        Object proxy = java.lang.reflect.Proxy.newProxyInstance(
+                iface.getClassLoader(), new Class<?>[]{iface},
+                new java.lang.reflect.InvocationHandler() {
+                    @Override
+                    public Object invoke(Object p, java.lang.reflect.Method m, Object[] a)
+                            throws Throwable {
+                        Object result;
+                        try {
+                            result = m.invoke(delegate, a);
+                        } catch (java.lang.reflect.InvocationTargetException e) {
+                            throw e.getCause() == null ? e : e.getCause();
+                        }
+                        String n = m.getName();
+                        if (Boolean.TRUE.equals(result)
+                                && ("finishActivity".equals(n)
+                                        || "finishActivityAffinity".equals(n))) {
+                            final IBinder token = (a != null && a.length > 0 && a[0] instanceof IBinder)
+                                    ? (IBinder) a[0] : null;
+                            final boolean scanAll = "finishActivityAffinity".equals(n);
+                            scheduleTopFinishCheck(token, scanAll, 0);
+                        }
+                        return result;
+                    }
+                });
+        sWrappedControllerDelegate = delegate;
+        sWrappedControllerProxy = proxy;
+        return proxy;
+    }
+
+    static void scheduleTopFinishCheck(final IBinder token, final boolean scanAll, final int attempt) {
+        android.os.Handler h = sMainHandler;
+        if (h == null) {
+            h = new android.os.Handler(Looper.getMainLooper());
+            sMainHandler = h;
+        }
+        Runnable r = new Runnable() {
+            @Override
+            public void run() {
+                dispatchTopFinishes(token, scanAll, attempt);
+            }
+        };
+        if (attempt == 0) {
+            h.post(r);
+        } else {
+            h.postDelayed(r, 5);
+        }
+    }
+
+    static void dispatchTopFinishes(final IBinder token, final boolean scanAll, final int attempt) {
+        try {
+            if (!scanAll && token != null) {
+                if (sLocallyWatchedFinishes.contains(token) || sTopFinishHandled.contains(token)) {
+                    return;
+                }
+                Object activity = activityForToken(token);
+                if (activity == null) return;
+                if (Boolean.TRUE.equals(
+                        activity.getClass().getMethod("isDestroyed").invoke(activity))) {
+                    return;
+                }
+                if (!Boolean.TRUE.equals(get(activity, "mFinished"))) {
+                    // `Activity.finish()` writes `mFinished = true` immediately after
+                    // `finishActivity()` returns true; if called off-main-thread, allow a brief
+                    // bounded retry for that store to become visible.
+                    if (attempt < 10) {
+                        scheduleTopFinishCheck(token, false, attempt + 1);
+                    }
+                    return;
+                }
+                deliverTopFinishTransactions(token);
+                return;
+            }
+            Object activities = sThread == null ? null : get(sThread, "mActivities");
+            boolean retryToken = false;
+            if (activities instanceof java.util.Map) {
+                java.util.List<IBinder> finishedTokens = new java.util.ArrayList<IBinder>();
+                for (java.util.Map.Entry<?, ?> entry :
+                        ((java.util.Map<?, ?>) activities).entrySet()) {
+                    Object key = entry.getKey();
+                    if (!(key instanceof IBinder)) continue;
+                    IBinder tkn = (IBinder) key;
+                    if (sLocallyWatchedFinishes.contains(tkn)
+                            || sTopFinishHandled.contains(tkn)) {
+                        continue;
+                    }
+                    Object rec = entry.getValue();
+                    Object activity = rec == null ? null : get(rec, "activity");
+                    if (activity == null) continue;
+                    if (Boolean.TRUE.equals(
+                            activity.getClass().getMethod("isDestroyed").invoke(activity))) {
+                        continue;
+                    }
+                    if (!Boolean.TRUE.equals(get(activity, "mFinished"))) {
+                        if (tkn == token && attempt < 10) retryToken = true;
+                        continue;
+                    }
+                    finishedTokens.add(tkn);
+                }
+                for (IBinder tkn : finishedTokens) {
+                    deliverTopFinishTransactions(tkn);
+                }
+            }
+            if (retryToken) {
+                scheduleTopFinishCheck(token, true, attempt + 1);
+            }
+        } catch (Throwable x) {
+            android.util.Log.i("AcosRot6", "ACOSLAUNCH MARK top-finish-hook-error " + x);
+            x.printStackTrace(System.out);
+        }
+    }
+
+    static void deliverTopFinishTransactions(IBinder tkn) throws Throwable {
+        if (!sTopFinishHandled.add(tkn)) return;
+        if (sPauseItemCls == null) {
+            sPauseItemCls = Class.forName("android.app.servertransaction.PauseActivityItem");
+            sStopItemCls = Class.forName("android.app.servertransaction.StopActivityItem");
+            sDestroyItemCls = Class.forName("android.app.servertransaction.DestroyActivityItem");
+        }
+        // PauseActivityItem.obtain(finished, userLeaving, configChanges, dontReport)
+        scheduleLocal(lifecycleTransaction(tkn,
+                obtainPrimitiveItem(sPauseItemCls, new boolean[]{true, false, false})));
+        scheduleLocal(lifecycleTransaction(tkn,
+                obtainPrimitiveItem(sStopItemCls, new boolean[]{false})));
+        scheduleLocal(lifecycleTransaction(tkn,
+                obtainPrimitiveItem(sDestroyItemCls, new boolean[]{true, false, false})));
+        android.util.Log.i("AcosRot6",
+                "ACOSLAUNCH MARK activity-destroyed-after-finish token=binder:"
+                        + Integer.toHexString(System.identityHashCode(tkn))
+                        + " order=Pause(finished)->Stop->Destroy");
+    }
 
     static void startTopFinishWatcher(final IBinder token) {
+        if (sTopFinishHookInstalled) {
+            return;
+        }
         if (!sTopFinishWatcherStarted.compareAndSet(false, true)) {
             return;
         }
@@ -5589,9 +5783,6 @@ public final class LaunchMain {
             public void run() {
                 try {
                     android.util.Log.i("AcosRot6", "ACOSLAUNCH MARK top-finish-watcher-started");
-                    Class<?> pauseCls = null;
-                    Class<?> stopCls = null;
-                    Class<?> destroyCls = null;
                     while (true) {
                         java.util.List<IBinder> finishedTokens = new java.util.ArrayList<IBinder>();
                         try {
@@ -5620,24 +5811,8 @@ public final class LaunchMain {
                         } catch (java.util.ConcurrentModificationException ignored) {
                             // `mActivities` is mutated on the main thread; retry on the next poll.
                         }
-                        if (!finishedTokens.isEmpty() && pauseCls == null) {
-                            pauseCls = Class.forName("android.app.servertransaction.PauseActivityItem");
-                            stopCls = Class.forName("android.app.servertransaction.StopActivityItem");
-                            destroyCls = Class.forName("android.app.servertransaction.DestroyActivityItem");
-                        }
                         for (IBinder tkn : finishedTokens) {
-                            if (!sTopFinishHandled.add(tkn)) continue;
-                            // PauseActivityItem.obtain(finished, userLeaving, configChanges, dontReport)
-                            scheduleLocal(lifecycleTransaction(tkn,
-                                    obtainPrimitiveItem(pauseCls, new boolean[]{true, false, false})));
-                            scheduleLocal(lifecycleTransaction(tkn,
-                                    obtainPrimitiveItem(stopCls, new boolean[]{false})));
-                            scheduleLocal(lifecycleTransaction(tkn,
-                                    obtainPrimitiveItem(destroyCls, new boolean[]{true, false, false})));
-                            android.util.Log.i("AcosRot6",
-                                    "ACOSLAUNCH MARK activity-destroyed-after-finish token=binder:"
-                                            + Integer.toHexString(System.identityHashCode(tkn))
-                                            + " order=Pause(finished)->Stop->Destroy");
+                            deliverTopFinishTransactions(tkn);
                         }
                         Thread.sleep(10);
                     }
