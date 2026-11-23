@@ -7,7 +7,7 @@ resolves under that root and no checkout is needed (or touched).
 ## Install
 
 ```bash
-tools/release/install.sh --prefix ~/.local --version 0.4.0
+tools/release/install.sh --prefix ~/.local --version 0.4.1
 # build the five release binaries and install (idempotent; ~1.5 GB)
 ```
 
@@ -18,7 +18,7 @@ tools/release/install.sh --prefix ~/.local --from-target target
 ```
 
 Options: `--prefix DIR` (default `$ACOS_PREFIX`, else `~/.local`), `--version V`
-(default `0.4.0`), `--from-target DIR`, `--pasta PATH`, `--force`,
+(default `0.4.1`), `--from-target DIR`, `--pasta PATH`, `--force`,
 `--register-mcp`. It prints the install size and the next steps. No root, no
 downloads. `--force` is
 required only when the version directory already exists and was not left by this
@@ -36,8 +36,8 @@ re-register after moving the prefix. Other MCP clients get the equivalent
 ```
 <prefix>/bin/acos                 wrapper: exports ACOS_HOME, execs the binary
 <prefix>/bin/acos-mcp             wrapper (same)
-<prefix>/share/acos/current -> 0.4.0
-<prefix>/share/acos/0.4.0/
+<prefix>/share/acos/current -> 0.4.1
+<prefix>/share/acos/0.4.1/
   bin/{acos,acos-art,acos-mcp,acos-netd,acos-webview}
   libexec/pasta                   the pinned static transport (ADR-0030)
   share/doc/acos/pasta/           COPYING (GPL-2.0-or-later), BSD-3-Clause.txt, SOURCE.md
@@ -202,7 +202,7 @@ directory, so installing a new version cannot swap the tree under a running
 session.
 
 ```bash
-tools/release/install.sh --prefix ~/.local --version 0.4.0   # adds 0.4.0, flips current
+tools/release/install.sh --prefix ~/.local --version 0.4.1   # adds 0.4.1, flips current
 ```
 
 ## Uninstall

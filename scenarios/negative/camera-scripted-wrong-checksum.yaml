@@ -47,7 +47,7 @@ steps:
   - service_ctl:
       module: hw.camera
       op: set_frame
-      args: {path: "fixtures/camera/test-frame.png"}
+      args: {path: "fixtures/build/camera/test-frame.png"}
       expect:
         ok: true
 

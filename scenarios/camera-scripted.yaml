@@ -51,7 +51,7 @@ steps:
   - service_ctl:
       module: hw.camera
       op: set_frame
-      args: {path: "fixtures/camera/test-frame.png"}
+      args: {path: "fixtures/build/camera/test-frame.png"}
       expect:
         ok: true
         op: set_frame
@@ -77,7 +77,7 @@ steps:
   - service_ctl:
       module: hw.camera
       op: set_frame
-      args: {path: "fixtures/camera/test-frame.jpg"}
+      args: {path: "fixtures/build/camera/test-frame.jpg"}
       expect:
         ok: true
         op: set_frame
@@ -85,7 +85,7 @@ steps:
           source: image
           width: 640
           height: 480
-          crc32_yuv: "0x83520be7"
+          crc32_yuv: "0xa2408da5"
 
   - tap:
       selector: {text: {exact: "Capture"}}
@@ -94,7 +94,7 @@ steps:
       timeout_ms: 30000
   - assert_text:
       selector: {id: status}
-      text: {contains: "crc32=0x83520be7"}
+      text: {contains: "crc32=0xa2408da5"}
 
   # 3. Restore deterministic test_pattern and verify CRC32 resumes at 0xdead8870.
   - service_ctl:
