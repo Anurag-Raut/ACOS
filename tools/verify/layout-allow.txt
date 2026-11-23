@@ -1,0 +1,3 @@
+# Owner-approved exceptions to check-layout rule 6 (new binaries / run output / non-.md under results/).
+# One shell glob per line, matched against the repo-relative path. Add a line only with owner approval,
+# and say why in a comment above it.
