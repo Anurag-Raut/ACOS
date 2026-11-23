@@ -46,10 +46,7 @@ fn jni_include_dirs() -> Option<Vec<PathBuf>> {
 
 /// Compile the harness once per process; returns the binary.
 fn build_harness(tag: &str) -> Option<PathBuf> {
-    let Some(inc) = jni_include_dirs() else {
-        eprintln!("cam_sink_native: no JDK jni.h on this host; skipping");
-        return None;
-    };
+    let inc = jni_include_dirs()?;
     let src_path = std::env::var_os("CAM_SINK_SHIM_SOURCE")
         .map(PathBuf::from)
         .unwrap_or_else(|| manifest().join("shim/render_shim.c"));
@@ -92,7 +89,15 @@ fn build_harness(tag: &str) -> Option<PathBuf> {
 }
 
 fn run_case(case: &str) {
-    let Some(bin) = build_harness(case) else {
+    // A host without JDK headers must FAIL by default (a counted skip only with
+    // ACOS_ALLOW_ART_SKIP=1 / ACOS_ALLOW_TEST_SKIP=1), never pass without
+    // compiling or running the C harness.
+    let Some(bin) = acos_test_support::require_some(
+        build_harness(case),
+        &format!("cam_sink_native::{case}"),
+        "no JDK include/jni.h under JAVA_HOME or /usr/lib/jvm (install a JDK, e.g. \
+         jdk-openjdk, or set JAVA_HOME)",
+    ) else {
         return;
     };
     let out = Command::new(&bin).arg(case).output().expect("run harness");
