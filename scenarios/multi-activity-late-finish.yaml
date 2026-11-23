@@ -1,0 +1,78 @@
+# multi-activity-late-finish (CR1FIX #10): Activity.finish() from app code LONGER than the
+# 60 s the local finish watcher waits after the second Activity is started. The finished
+# Activity must still be paused, stopped and destroyed, and the first one resumed.
+#
+# Expected values come from fixtures/reference/multi-activity/art-api34-x86_64/
+# (1080x2400 @ 420 dpi). Log tag AcosMulti, prefixed Main./Second.
+version: 1
+name: multi-activity-late-finish
+description: >-
+  Launch multi-activity, send a message to SecondActivity, leave it open for 62 s
+  (past the local finish watcher's 60 s window), then Finish. SecondActivity must
+  be destroyed and MainActivity resumed with its state intact.
+app: fixtures/build/apps/multi-activity.apk
+engine: native-preferred
+fallback: report-and-escalate
+api_level: 34
+isolation: process
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+capabilities:
+  - lifecycle
+  - ui.offscreen
+  - ui.text
+  - input
+  - storage
+expectation: pass
+budgets:
+  memory_mib: 512
+  wall_ms: 150000
+steps:
+  - launch:
+      activity: dev.acos.fixtures.multiactivity/.MainActivity
+      clear_state: true
+
+  - wait_for:
+      selector: {id: message}
+      timeout_ms: 5000
+
+  - tap:
+      selector: {id: message}
+  - type:
+      selector: {id: message}
+      text: Hello
+  - tap:
+      selector: {id: send}
+
+  - assert_log:
+      tag: AcosMulti
+      since_previous_step: true
+      ordered: true
+      patterns:
+        - '^Main.send message=Hello$'
+        - '^Second.onCreate$'
+        - '^Second.received=Hello$'
+
+  # Past the 60 s local finish watcher.
+  - wait: {ms: 62000}
+
+  - tap:
+      selector: {id: finish}
+
+  - assert_log:
+      tag: AcosMulti
+      since_previous_step: true
+      ordered: true
+      patterns:
+        - '^Second.finish$'
+        - '^Second.onPause$'
+        - '^Second.onStop$'
+        - '^Second.onDestroy$'
+
+  - assert_text:
+      selector: {id: message}
+      text: {exact: Hello}
+      bounds: [42, 317, 1038, 435]

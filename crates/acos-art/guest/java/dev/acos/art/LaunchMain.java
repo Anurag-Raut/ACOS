@@ -5623,6 +5623,14 @@ public final class LaunchMain {
      */
     private static final java.util.Set<IBinder> sLocallyWatchedFinishes =
             java.util.Collections.synchronizedSet(new java.util.HashSet<IBinder>());
+    /**
+     * CR1FIX #10: the Activity below each in-guest started Activity, kept while the
+     * local finish watcher may give up (it waits 60 s), so a LATE finish that falls
+     * through to the general dispatcher resumes the previous Activity just like the
+     * local path does.
+     */
+    private static final java.util.Map<IBinder, IBinder> sFinishPrevious =
+            java.util.Collections.synchronizedMap(new java.util.HashMap<IBinder, IBinder>());
     private static final java.util.Set<IBinder> sTopFinishHandled =
             java.util.Collections.synchronizedSet(new java.util.HashSet<IBinder>());
     private static final java.util.concurrent.atomic.AtomicBoolean sTopFinishWatcherStarted =
@@ -5839,8 +5847,28 @@ public final class LaunchMain {
         }
     }
 
-    static void deliverTopFinishTransactions(IBinder tkn) throws Throwable {
+    static void deliverTopFinishTransactions(final IBinder tkn) throws Throwable {
         if (!sTopFinishHandled.add(tkn)) return;
+        final IBinder lateFinishPrevious = sFinishPrevious.remove(tkn);
+        if (lateFinishPrevious != null) {
+            // The local watcher timed out before this finish: run the same
+            // ordered sequence it would have (the previous Activity is resumed
+            // before the finished one is stopped and destroyed).
+            Thread t = new Thread(new Runnable() {
+                @Override
+                public void run() {
+                    try {
+                        runFinishSequence(tkn, lateFinishPrevious, activityForToken(tkn));
+                    } catch (Throwable x) {
+                        System.out.println("ACOSLAUNCH MARK late-finish-error " + x);
+                        x.printStackTrace(System.out);
+                    }
+                }
+            }, "acos-late-finish");
+            t.setDaemon(true);
+            t.start();
+            return;
+        }
         if (sPauseItemCls == null) {
             sPauseItemCls = Class.forName("android.app.servertransaction.PauseActivityItem");
             sStopItemCls = Class.forName("android.app.servertransaction.StopActivityItem");
@@ -5923,6 +5951,7 @@ public final class LaunchMain {
     static void startFinishWatcher(final IBinder token, final IBinder previous) {
         if (token != null) {
             sLocallyWatchedFinishes.add(token);
+            if (previous != null) sFinishPrevious.put(token, previous);
         }
         Thread t = new Thread(new Runnable() {
             @Override
@@ -5937,46 +5966,13 @@ public final class LaunchMain {
                     }
                     if (activity == null || !Boolean.TRUE.equals(get(activity, "mFinished"))) {
                         System.out.println("ACOSLAUNCH MARK finish-watcher-timeout");
+                        // CR1FIX #10: hand a later finish back to the general
+                        // dispatcher (it skips every token in this set).
+                        sLocallyWatchedFinishes.remove(token);
                         return;
                     }
-                    // ROT8: the order stock ATMS uses when a non-last Activity
-                    // finishes (ActivityTaskSupervisor / ActivityRecord.
-                    // completePause + resumeTopActivity + activityStopped):
-                    //   B.onPause -> A.onStart/onResume (A is redrawn)
-                    //   -> B.onStop -> B.onDestroy
-                    // The previous Activity is resumed BEFORE the finished one is
-                    // stopped/destroyed, so the user never sees an empty task and
-                    // A's window is relaid out and drawn while B is still alive.
-                    Class<?> pauseCls = Class.forName("android.app.servertransaction.PauseActivityItem");
-                    Class<?> stopCls = Class.forName("android.app.servertransaction.StopActivityItem");
-                    Class<?> destroyCls = Class.forName("android.app.servertransaction.DestroyActivityItem");
-                    Class<?> resumeCls = Class.forName("android.app.servertransaction.ResumeActivityItem");
-                    scheduleLocal(lifecycleTransaction(token,
-                            obtainPrimitiveItem(pauseCls, new boolean[]{true, false, false})));
-                    long pdl = System.currentTimeMillis() + 5000;
-                    while (System.currentTimeMillis() < pdl
-                            && Boolean.TRUE.equals(get(activity, "mResumed"))) {
-                        Thread.sleep(5);
-                    }
-                    scheduleLocal(lifecycleTransaction(previous, obtainResume(resumeCls)));
-                    sCurrentToken = previous;
-                    System.out.println("ACOSLAUNCH MARK activity-resumed-after-finish token=binder:"
-                            + Integer.toHexString(System.identityHashCode(previous)));
-                    long rdl = System.currentTimeMillis() + 10000;
-                    Object below = null;
-                    while (System.currentTimeMillis() < rdl) {
-                        below = activityForToken(previous);
-                        if (below != null && Boolean.TRUE.equals(get(below, "mResumed"))) break;
-                        Thread.sleep(5);
-                    }
-                    scheduleLocal(lifecycleTransaction(token,
-                            obtainPrimitiveItem(stopCls, new boolean[]{false})));
-                    scheduleLocal(lifecycleTransaction(token,
-                            obtainPrimitiveItem(destroyCls, new boolean[]{true, false, false})));
-                    System.out.println("ACOSLAUNCH MARK activity-destroyed-after-finish token=binder:"
-                            + Integer.toHexString(System.identityHashCode(token))
-                            + " order=Pause(finished)->Resume(previous)->Stop->Destroy");
-                    System.out.flush();
+                    sFinishPrevious.remove(token);
+                    runFinishSequence(token, previous, activity);
                 } catch (Throwable x) {
                     System.out.println("ACOSLAUNCH MARK finish-watcher-error " + x);
                     x.printStackTrace(System.out);
@@ -5985,6 +5981,52 @@ public final class LaunchMain {
         }, "acos-finish-watcher");
         t.setDaemon(true);
         t.start();
+    }
+
+    /**
+     * The ordered teardown for a finished Activity that was started over
+     * `previous`, shared by the local finish watcher and a late finish.
+     */
+    static void runFinishSequence(IBinder token, IBinder previous, Object activity)
+            throws Throwable {
+        // ROT8: the order stock ATMS uses when a non-last Activity
+        // finishes (ActivityTaskSupervisor / ActivityRecord.
+        // completePause + resumeTopActivity + activityStopped):
+        //   B.onPause -> A.onStart/onResume (A is redrawn)
+        //   -> B.onStop -> B.onDestroy
+        // The previous Activity is resumed BEFORE the finished one is
+        // stopped/destroyed, so the user never sees an empty task and
+        // A's window is relaid out and drawn while B is still alive.
+        Class<?> pauseCls = Class.forName("android.app.servertransaction.PauseActivityItem");
+        Class<?> stopCls = Class.forName("android.app.servertransaction.StopActivityItem");
+        Class<?> destroyCls = Class.forName("android.app.servertransaction.DestroyActivityItem");
+        Class<?> resumeCls = Class.forName("android.app.servertransaction.ResumeActivityItem");
+        scheduleLocal(lifecycleTransaction(token,
+                obtainPrimitiveItem(pauseCls, new boolean[]{true, false, false})));
+        long pdl = System.currentTimeMillis() + 5000;
+        while (System.currentTimeMillis() < pdl && activity != null
+                && Boolean.TRUE.equals(get(activity, "mResumed"))) {
+            Thread.sleep(5);
+        }
+        scheduleLocal(lifecycleTransaction(previous, obtainResume(resumeCls)));
+        sCurrentToken = previous;
+        System.out.println("ACOSLAUNCH MARK activity-resumed-after-finish token=binder:"
+                + Integer.toHexString(System.identityHashCode(previous)));
+        long rdl = System.currentTimeMillis() + 10000;
+        Object below = null;
+        while (System.currentTimeMillis() < rdl) {
+            below = activityForToken(previous);
+            if (below != null && Boolean.TRUE.equals(get(below, "mResumed"))) break;
+            Thread.sleep(5);
+        }
+        scheduleLocal(lifecycleTransaction(token,
+                obtainPrimitiveItem(stopCls, new boolean[]{false})));
+        scheduleLocal(lifecycleTransaction(token,
+                obtainPrimitiveItem(destroyCls, new boolean[]{true, false, false})));
+        System.out.println("ACOSLAUNCH MARK activity-destroyed-after-finish token=binder:"
+                + Integer.toHexString(System.identityHashCode(token))
+                + " order=Pause(finished)->Resume(previous)->Stop->Destroy");
+        System.out.flush();
     }
 
     /**
