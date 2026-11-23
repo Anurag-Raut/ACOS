@@ -21,6 +21,11 @@ fn manifest() -> PathBuf {
 }
 
 fn jni_include_dirs() -> Option<Vec<PathBuf>> {
+    // Test seam: behave as a host with no JDK headers (used to prove that a
+    // missing `jni.h` fails the tests instead of passing them silently).
+    if std::env::var_os("CAM_SINK_NO_JDK").is_some() {
+        return None;
+    }
     let mut roots: Vec<PathBuf> = Vec::new();
     if let Some(h) = std::env::var_os("JAVA_HOME") {
         roots.push(PathBuf::from(h));
