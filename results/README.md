@@ -4,14 +4,17 @@ Run reports and measurement records. **Only reports and inputs are tracked.**
 
 ## Tracked
 
-* `*.md` reports (the narrative verdicts that docs and the ledgers cite),
-* harness code (`*.py`, `*.sh`, `*.rs`),
+* `*.md` reports (the narrative verdicts that docs and the ledgers cite) — **new work adds
+  exactly one `.md` report per task** (see AGENTS.md "What may be committed"),
+* harness code (`*.py`, `*.sh`, `*.rs`) that was already tracked before 2026-11-23; new scripts
+  go in `tools/<topic>/`, not here,
 * the few data files that code or tests read:
   `aidl/`, `wm/`, `res/`, `render/corpus/`, `bench/BASELINE.json`, `bench/schema/`,
   `art-runtime/evidence/W31-artifacts/gaten-release-evidence/`,
   `parity/w193a/counter.{png,tree.json}`, `oracle/dexprogs-nondeterminism.txt`.
 
-The exact rules live at the bottom of `/.gitignore`; `tools/verify/check-layout.sh` enforces them.
+The exact rules live at the bottom of `/.gitignore`; `tools/verify/check-layout.sh` enforces them
+(rule 6 checks every file a branch adds; the `repo layout` GitHub check runs it on each PR).
 
 ## Local-only (gitignored)
 

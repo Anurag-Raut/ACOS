@@ -1,0 +1,23 @@
+name: repo layout
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  check-layout:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: tools/verify/check-layout.sh
+        env:
+          # PRs: judge only files the PR adds on top of its base branch.
+          # Pushes to main: judge the files the push added.
+          ACOS_LAYOUT_BASE: ${{ github.event_name == 'pull_request' && format('origin/{0}', github.base_ref) || github.event.before }}
+        run: bash tools/verify/check-layout.sh

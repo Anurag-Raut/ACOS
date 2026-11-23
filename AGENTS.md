@@ -57,6 +57,18 @@ Use these exact terms across code, docs, and commit messages (see [`docs/interna
   - `python3 tools/build/gen-window-layer-table.py` for `docs/WINDOW_LAYERS.md`
 - **Every `docs/*.md` tool call example is schema-tested.** `crates/acos-mcp/tests/documentation_args.rs` scans top-level `docs/*.md` and rejects any documented `acos_*` argument not accepted by the closed MCP schema.
 
+## What may be committed
+
+Commit what the product needs to build, run and be understood. Nothing else.
+
+- **Yes:** source code, build scripts, test code, scenarios, fixture app **sources**, docs, and **one `.md` report per task** under `results/` (e.g. `results/handoff/<TASK>/REPORT.md`, release notes, gate READMEs).
+- **No binaries or images.** Generate them at build or test time instead (example: the camera test frames come from `acos_services::modules::camera::write_test_frames`, written to `fixtures/build/` by `tools/build/build-apps.sh`). APKs, jars, `.so`, zips and fonts are build output.
+- **No run output.** `repro.sh`, `artifacts/` folders, `verdict.json`, logcat/log/JSON/TXT captures, frames, screenshots and generated benchmark tables stay local. Summarise what matters in the task's `.md` report, quote the key numbers, and archive raw evidence outside git (the lead keeps `~/acos-evidence/`).
+- **No one-off scripts under `results/`.** If a script is worth keeping, it belongs in `tools/<topic>/` with a README line.
+- **Exceptions** need the owner's approval and a line in `tools/verify/layout-allow.txt`.
+
+`tools/verify/check-layout.sh` enforces this for every file a branch adds (rule 6), and the `repo layout` GitHub check runs it on every PR. Run it before you push.
+
 ## Working rules & verification
 
 1. **AOSP-first reuse ladder ([`docs/ENGINEERING_POLICY.md`](docs/ENGINEERING_POLICY.md)):** Reuse stock AOSP binaries and libraries by default. Before guessing Android wire formats or behavior, read the local read-only AOSP reference checkout ([`docs/AOSP_REFERENCE.md`](docs/AOSP_REFERENCE.md)) and [`docs/IMAGE_ABI_NOTEBOOK.md`](docs/IMAGE_ABI_NOTEBOOK.md).
