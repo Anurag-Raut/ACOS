@@ -735,6 +735,28 @@ public final class LaunchMain {
     static final Object sProbeWake = new Object();
     static boolean sProbeRequested = false;
     /**
+     * CR1FIX #20: count of host WINDOW commands the guest has finished
+     * processing, and how many of those failed. Bumped only AFTER the new bounds
+     * were applied and the relayout choreography ran (or the command failed), then
+     * a probe is requested; every sample reports the pair as it was when its tree
+     * walk started, so a host can tell a post-apply tree from an older one.
+     */
+    static final java.util.concurrent.atomic.AtomicLong sWindowCmdDone =
+            new java.util.concurrent.atomic.AtomicLong();
+    static final java.util.concurrent.atomic.AtomicLong sWindowCmdFailed =
+            new java.util.concurrent.atomic.AtomicLong();
+
+    static void windowCmdFinished(boolean failed) {
+        if (failed) sWindowCmdFailed.incrementAndGet();
+        sWindowCmdDone.incrementAndGet();
+        sDirtyAtMs = 0;
+        sTreeDirty.set(true);
+        synchronized (sProbeWake) {
+            sProbeRequested = true;
+            sProbeWake.notifyAll();
+        }
+    }
+    /**
      * SETTLE5: the probe channel's own liveness facts, so a host that waits for
      * a sample can never be left guessing whether its wake reached the guest.
      * `sProbePostedMs` is when the probe thread handed a sample to the main
@@ -1859,12 +1881,7 @@ public final class LaunchMain {
         final Runnable wakeProbe = new Runnable() {
             @Override
             public void run() {
-                sDirtyAtMs = 0;
-                sTreeDirty.set(true);
-                synchronized (sProbeWake) {
-                    sProbeRequested = true;
-                    sProbeWake.notifyAll();
-                }
+                windowCmdFinished(false);
                 System.out.println("ACOSLAUNCH MARK window mode=" + windowingMode
                         + " bounds=[" + l + "," + t + "," + r + "," + b + "]"
                         + " relaunch=" + relaunch + " via=" + rung
@@ -2059,6 +2076,7 @@ public final class LaunchMain {
                     + " " + unwrap(err));
             err.printStackTrace(System.out);
             System.out.flush();
+            windowCmdFinished(true);
         }
     }
 
@@ -2135,6 +2153,7 @@ public final class LaunchMain {
                             if (parts.length != 10) {
                                 System.out.println("ACOSLAUNCH MARK window-bad-arg line=" + word);
                                 System.out.flush();
+                                windowCmdFinished(true);
                                 continue;
                             }
                             final int mode, l, t, r, b, al, atPx, ar, ab;
@@ -2151,6 +2170,7 @@ public final class LaunchMain {
                             } catch (Throwable bad) {
                                 System.out.println("ACOSLAUNCH MARK window-bad-arg line=" + word);
                                 System.out.flush();
+                                windowCmdFinished(true);
                                 continue;
                             }
                             main.post(new Runnable() {
@@ -2445,6 +2465,10 @@ public final class LaunchMain {
 
     static void emitProbe(Object activity, long seq, String cause) throws Throwable {
         long probeStart = System.nanoTime();
+        // CR1FIX #20: snapshot before the tree walk, so a sample that reports
+        // `done >= N` was walked after WINDOW command N had been applied.
+        final long windowCmdDone = sWindowCmdDone.get();
+        final long windowCmdFailed = sWindowCmdFailed.get();
         Object window = activity.getClass().getMethod("getWindow").invoke(activity);
         Object decor = window.getClass().getMethod("getDecorView").invoke(window);
         if (!(decor instanceof View)) return;
@@ -2553,6 +2577,8 @@ public final class LaunchMain {
                 .append(",\"time\":").append(System.currentTimeMillis())
                 .append(",\"cause\":\"").append(cause).append('"')
                 .append(",\"view_generation\":").append(sViewGeneration)
+                .append(",\"window_cmd\":{\"done\":").append(windowCmdDone)
+                .append(",\"failed\":").append(windowCmdFailed).append('}')
                 .append(",\"windows\":[").append(windows).append("]")
                 .append(",\"tree\":{\"nodes\":[").append(nodes).append(']')
                 .append(",\"window_count\":").append(z)
