@@ -125,3 +125,15 @@ Notes:
 - Round-2 #2 (counter snapshot), #4, #5, #6, #7, #9 and #11 were not in the owner-approved list for this round and were not changed.
 - The `ACOSLAUNCH_TEST_WINDOW_NO_ROOT` and `CAM_SINK_NO_JDK` seams are diagnostic only. The no-JDK case is shown by hand (default fail, opt-out skip), not by a nested test run.
 - Item 6 has no fail-before/pass-after test. A stale frame needs a precise queue state, so the evidence is the `stale_or_unmatched_images` log of the real scenario.
+
+### Round 2: lead verification and one correction (`f6035c0cd`)
+
+- **Correction.** The #3 repro had added an unconditional 40 ms sleep to `GrantPermissionsActivity`. That fixture is the shipped `com.android.permissioncontroller` system app (`modules/permissions.rs`), so every pre-granted permission request in a real session would have paid 40 ms.
+  - The sleep is now gated by the test-only `ACOS_TEST_FINISH_DELAY_MS`. `acos-art` forwards it to the primary and secondary guests, and only `cr1fix_finish_in_oncreate` sets it (40). Normal sessions have no delay.
+- **The gate still widens the window.** With `46e88c0bb` reverted, the test fails at `launch 0: secondary process hit a launch timeout`. With the fix, it passes 4/4.
+- **Lead re-run on the corrected head:**
+  - lib + `cam_sink_native` + `camera_module` + `cr1fix_primary_adopt`: **510 passed, 0 failed**.
+  - `acos-services`: **780 passed, 0 failed**.
+  - `cr1fix_window_relayout`: 2/2 pass.
+  - 17 scenarios pass. That includes `sysui1-permission-pregranted`, `camera-rebind-same-surface` and `multi-activity-late-finish`.
+  - The 3 negatives fail with `ASSERTION_FAILED`.
