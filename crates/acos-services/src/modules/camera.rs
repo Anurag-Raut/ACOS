@@ -221,6 +221,9 @@ pub mod device_code {
 pub mod callback_code {
     /// `onDeviceError(int errorCode, CaptureResultExtras)`.
     pub const ON_DEVICE_ERROR: u32 = 1;
+    /// `ICameraDeviceCallbacks.ERROR_CAMERA_REQUEST`: one capture request failed
+    /// (the app sees `CaptureCallback.onCaptureFailed(REASON_ERROR)`).
+    pub const ERROR_CAMERA_REQUEST: i32 = 3;
     /// `onDeviceIdle()`.
     pub const ON_DEVICE_IDLE: u32 = 2;
     /// `onCaptureStarted(CaptureResultExtras, long timestamp)`.
@@ -785,6 +788,8 @@ pub struct CameraState {
     pub streams_created: u32,
     /// Total frames delivered (single-shot + repeating).
     pub frames_delivered: u64,
+    /// Capture requests failed because their (scripted) frame could not be delivered.
+    pub frames_failed: u64,
     /// Active frame source (`TestPattern` by default, or `Image` via `set_frame`).
     pub active_frame: ActiveFrame,
     /// Monotonic generation bumped on every `set_frame`.
@@ -892,6 +897,7 @@ impl CameraState {
             "open_devices": self.open_devices,
             "streams_created": self.streams_created,
             "frames_delivered": self.frames_delivered,
+            "frames_failed": self.frames_failed,
         })
     }
 }
@@ -1494,9 +1500,9 @@ impl CameraDeviceUser {
         _is_blob: bool,
         frame_number: i64,
         timestamp_ns: i64,
-    ) {
+    ) -> bool {
         let Some(sink) = self.frame_sink() else {
-            return;
+            return true;
         };
         let maybe_fd = self
             .state()
@@ -1519,8 +1525,14 @@ impl CameraDeviceUser {
                     method: "deliverFrameFd".to_string(),
                     data,
                 });
-                return;
+                return true;
             }
+        }
+        // The pixel blob could not be built or handed over. The colour bars are
+        // the answer for the `test_pattern` source only; an injected image that
+        // cannot be delivered is a failed capture, never different pixels.
+        if matches!(self.state().active_frame, ActiveFrame::Image { .. }) {
+            return false;
         }
         let mut data = Parcel::new();
         let _ = data.write_interface_token(FRAME_SINK_DESCRIPTOR);
@@ -1537,6 +1549,7 @@ impl CameraDeviceUser {
             method: "deliverFrame".to_string(),
             data,
         });
+        true
     }
 
     fn queue_sink_release(&mut self, stream_id: i32) {
@@ -1626,15 +1639,47 @@ impl CameraDeviceUser {
         let prev_completed = self.last_completed_regular_frame;
 
         let targets = self.resolve_target_streams(req);
+        let mut undeliverable = false;
         for (stream_id, width, height, is_blob) in targets {
-            self.queue_sink_deliver(
+            if !self.queue_sink_deliver(
                 stream_id,
                 width,
                 height,
                 is_blob,
                 frame_number,
                 timestamp_ns,
-            );
+            ) {
+                undeliverable = true;
+            }
+        }
+        if undeliverable {
+            // CR1FIX #4: report the failure the way the camera service does
+            // (`onDeviceError(ERROR_CAMERA_REQUEST, extras)` instead of
+            // started/result) and do not count the frame as delivered.
+            if !self.callbacks.is_null() {
+                let mut err = Parcel::new();
+                let _ = err.write_interface_token(DEVICE_CALLBACKS_DESCRIPTOR);
+                err.write_int32(callback_code::ERROR_CAMERA_REQUEST);
+                err.write_int32(1); // typed object present
+                write_capture_result_extras(
+                    &mut err,
+                    request_id,
+                    subsequence_id,
+                    frame_number,
+                    1,
+                    prev_completed,
+                );
+                self.pending_deliveries.push(PendingDelivery {
+                    target: self.callbacks,
+                    interface: DEVICE_CALLBACKS_DESCRIPTOR.to_string(),
+                    code: callback_code::ON_DEVICE_ERROR,
+                    method: "onDeviceError".to_string(),
+                    data: err,
+                });
+            }
+            self.last_completed_regular_frame = frame_number;
+            self.state().frames_failed += 1;
+            return frame_number;
         }
 
         if !self.callbacks.is_null() {
@@ -1980,9 +2025,20 @@ impl ServiceObject for CameraDeviceUser {
                 write_no_exception(reply);
                 Ok(true)
             }
-            device_code::TEAR_DOWN
-            | device_code::UPDATE_OUTPUT_CONFIGURATION
-            | device_code::FINALIZE_OUTPUT_CONFIGURATIONS => {
+            device_code::FINALIZE_OUTPUT_CONFIGURATIONS => {
+                // CR1FIX #5: a deferred output has no Surface at `createStream`, so
+                // the sink never registered one. Acknowledging the finalize would
+                // promise images the app will never get.
+                let method = "finalizeOutputConfigurations (deferred outputs unsupported)";
+                self.record(code, "device.finalizeOutputConfigurations");
+                self.state().unsupported.push(format!("{code}: {method}"));
+                Err(ServiceError::UnsupportedAndroidApi {
+                    interface: DEVICE_USER_DESCRIPTOR.to_string(),
+                    code,
+                    method: format!("{MODULE_ID}: {method}"),
+                })
+            }
+            device_code::TEAR_DOWN | device_code::UPDATE_OUTPUT_CONFIGURATION => {
                 self.record(code, "device.streamOp");
                 write_no_exception(reply);
                 Ok(true)
