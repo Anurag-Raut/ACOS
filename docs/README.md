@@ -37,6 +37,7 @@ Start here to understand how ACOS works, what is shared on the Host vs private p
 - **[Window Layers](WINDOW_LAYERS.md)** — Generated AOSP window z-order table used by the C1 compositor.
 - **[Findings Log](FINDINGS.md)** — Append-only record of verified low-level findings and intentional AOSP deviations.
 - **[React Native Metro Plan](METRO_PLAN.md)** — v0.5.0 RN dev-loop & Fast Refresh architecture.
+- **[Device Panel Spec](DEVICE_PANEL_SPEC.md)** — next after v0.4.1: ACOS sessions in T3 Code's Device panel (adb emulator mode + gRPC bridge), human input.
 
 ## Root Logs & Ledgers
 
