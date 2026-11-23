@@ -39,6 +39,9 @@ pub fn enabled() -> bool {
 /// Run the supervisor until killed: bind the control socket, supervise `pasta`
 /// in the background, answer one request per connection.
 pub fn serve() -> std::io::Result<()> {
+    // FIX041: drop any non-stdio fds inherited from the spawner (e.g. a
+    // caller's flock descriptor when `acos-netd serve` is invoked directly).
+    close_inherited_fds_from(3);
     let dir = client::state_dir();
     let sock = client::socket_path();
     // Never clobber a live supervisor's socket: two supervisors would mean two
@@ -338,4 +341,32 @@ pub fn wait_ready(timeout: Duration) -> Result<client::Client, proto::ProtoError
         code: ErrorCode::SupervisorGone,
         message: last.unwrap_or_else(|| "no supervisor".into()),
     })
+}
+
+/// Close every open file descriptor `>= first_fd`.
+///
+/// Called at `serve()` startup before opening any daemon-owned descriptors so
+/// stray non-CLOEXEC descriptors inherited from a caller (such as a shell
+/// wrapper's flock fd) are never held for the lifetime of the supervisor.
+fn close_inherited_fds_from(first_fd: libc::c_int) {
+    let start = first_fd.max(0) as libc::c_uint;
+    let rc = unsafe { libc::syscall(libc::SYS_close_range, start, libc::c_uint::MAX, 0u32) };
+    if rc == 0 {
+        return;
+    }
+    let mut fds = Vec::new();
+    if let Ok(entries) = std::fs::read_dir("/proc/self/fd") {
+        for entry in entries.flatten() {
+            if let Ok(fd) = entry.file_name().to_string_lossy().parse::<libc::c_int>() {
+                if fd >= first_fd {
+                    fds.push(fd);
+                }
+            }
+        }
+    }
+    for fd in fds {
+        unsafe {
+            libc::close(fd);
+        }
+    }
 }
