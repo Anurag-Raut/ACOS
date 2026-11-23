@@ -81,9 +81,15 @@ fn host_scheduled_finish_in_oncreate_reports_launch_not_timeout() {
         !log.contains("HOST_TRANSACTION_TIMEOUT") && !log.contains("host-transaction-timeout"),
         "secondary process hit HOST_TRANSACTION_TIMEOUT:\n{log}"
     );
+    // The launch must have been OBSERVED. Which marker says so depends on which
+    // side of `finish()` the watcher's poll lands on: `finish_during_create=true`
+    // when the activity had already finished, `host-transaction-resumed` when it
+    // had not yet (the deferred teardown then runs after the launch is observed).
+    // Both are a successful launch; only the timeout above is the bug.
     assert!(
-        log.contains("ACOSLAUNCH MARK activity-resumed")
-            && log.contains("finish_during_create=true"),
-        "secondary process must report activity-resumed with finish_during_create=true:\n{log}"
+        (log.contains("ACOSLAUNCH MARK activity-resumed")
+            && log.contains("finish_during_create=true"))
+            || log.contains("ACOSLAUNCH MARK host-transaction-resumed"),
+        "secondary process must report the launch as observed:\n{log}"
     );
 }
