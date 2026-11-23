@@ -19,6 +19,20 @@ mod common;
 
 use common::ShortSocketDir;
 
+/// The vendored hub parsers: `ACOS_HUB_DIST`, this checkout's `.cache/ref`, or
+/// the shared cache of the main checkout (worktrees do not copy `.cache/ref`).
+fn hub_dist_dir() -> PathBuf {
+    if let Ok(p) = std::env::var("ACOS_HUB_DIST") {
+        return PathBuf::from(p);
+    }
+    let rel = ".cache/ref/expo-device-hub-0.22.1/serve-emu-dist";
+    let local = repo_root().join(rel);
+    if local.join("adb.js").is_file() {
+        return local;
+    }
+    PathBuf::from("/home/Qui/Projects/acos").join(rel)
+}
+
 fn repo_root() -> PathBuf {
     let raw = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     std::fs::canonicalize(&raw).unwrap_or(raw)
@@ -236,7 +250,7 @@ fn cp1_live_art_adb_and_hub_parsers() {
     let Some(apk) = find_counter_apk() else {
         panic!("counter.apk not found; set ACOS_TEST_APK or build fixtures");
     };
-    let hub_dist = repo_root().join(".cache/ref/expo-device-hub-0.22.1/serve-emu-dist");
+    let hub_dist = hub_dist_dir();
     assert!(
         hub_dist.join("adb.js").is_file(),
         "vendored expo-device-hub missing at {}",

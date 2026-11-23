@@ -20,6 +20,20 @@ mod common;
 
 use common::ShortSocketDir;
 
+/// The vendored hub parsers: `ACOS_HUB_DIST`, this checkout's `.cache/ref`, or
+/// the shared cache of the main checkout (worktrees do not copy `.cache/ref`).
+fn hub_dist_dir() -> PathBuf {
+    if let Ok(p) = std::env::var("ACOS_HUB_DIST") {
+        return PathBuf::from(p);
+    }
+    let rel = ".cache/ref/expo-device-hub-0.22.1/serve-emu-dist";
+    let local = repo_root().join(rel);
+    if local.join("adb.js").is_file() {
+        return local;
+    }
+    PathBuf::from("/home/Qui/Projects/acos").join(rel)
+}
+
 fn repo_root() -> PathBuf {
     let raw = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     std::fs::canonicalize(&raw).unwrap_or(raw)
@@ -290,7 +304,7 @@ fn serve_with_adb_writes_no_ini_without_sessions() {
 fn cp2_live_grpc_stream_touch_key_and_auth() {
     let counter_apk = find_fixture_apk("counter.apk").expect("counter.apk not found");
     let text_apk = find_fixture_apk("text-input.apk").expect("text-input.apk not found");
-    let hub_dist = repo_root().join(".cache/ref/expo-device-hub-0.22.1/serve-emu-dist");
+    let hub_dist = hub_dist_dir();
     assert!(hub_dist.join("emulator-grpc.js").is_file());
 
     let adb_srv = PrivateAdbServer::start();
