@@ -8,7 +8,7 @@ The work was done by Hydrogen (#11, #21, #19), then Sonnet 5.5 (#22, #20, #17, #
 
 | # | Finding | Reproduced? (test) | Fix commit | Verified |
 |---|---|---|---|---|
-| 11 | finish-in-`onCreate` teardown races the launch watcher (`HOST_TRANSACTION_TIMEOUT`) | Yes. The race is timing-dependent: `crates/acos-cli/tests/cr1fix_finish_in_oncreate.rs` failed 2/3 runs with the fix disabled | `4e70512b9`, test `f19de0686` | Passes about 60 runs with the fix. The test accepts either success marker (`host-transaction-resumed` or the finish marker); the timeout assertion is unchanged. Lead: 3/3 pass |
+| 11 | finish-in-`onCreate` teardown races the launch watcher (`HOST_TRANSACTION_TIMEOUT`) | Yes. The race is timing-dependent: `crates/acos-cli/tests/cr1fix_finish_in_oncreate.rs` failed 2/3 runs with the fix disabled | `4e70512b9`, test `f19de0686` | **Completed in round 2** (see [Round 2](#round-2)). Round 1 fixed only the teardown ordering and then weakened the test to accept the intermediate `host-transaction-resumed` marker, which hid a remaining timeout. The weakening is reverted in round 2: the test again requires the final `finish_during_create=true` outcome |
 | 21 | async `VISIBLE` after an ignored early `GONE` left the layer hidden | Yes: `relayout_async_visible_after_initial_gone_restores_compositor_visibility` | `41f3571ef` | Fails with the fix reverted, passes with it |
 | 19 | rotated (180°) status bar fitted as a top inset, giving a zero-height frame | Yes: `fit_insets_fits_rotated_status_bar_on_its_actual_edge` | `8ae9c0a97` | Fails with the fix reverted, passes with it |
 | 22 | fixture activity counted by the primary-activity adoption guard | Yes: `crates/acos-services/tests/cr1fix_primary_adopt.rs` | `390654bf2` | Fails with the guard reverted, passes with it |
@@ -30,7 +30,7 @@ The work was done by Hydrogen (#11, #21, #19), then Sonnet 5.5 (#22, #20, #17, #
 
 ### #4 design
 
-- A scripted frame that cannot be built or delivered is reported as `onDeviceError(ERROR_CAMERA_REQUEST = 3)`, checked against the framework dex.
+- A scripted frame that the host cannot build or enqueue is reported as `onDeviceError(ERROR_CAMERA_REQUEST = 3)`, checked against the framework dex. `ERROR_CAMERA_REQUEST` covers failures detected **before the host enqueues `deliverFrameFd`**. Once the host has enqueued that call it counts the frame as delivered and queues the success callbacks. A later drop or error in the guest JNI is not revised by the host, so this is not a guest delivery guarantee.
 - It is counted in the new `frames_failed`, never in `frames_delivered`.
 - The test makes a frame unbuildable with a 70000×16 stream, because JPEG cannot encode a side above 65535. If stream sizes are ever bounded below that (declined finding #7), the test needs a different unbuildable frame.
 - A scripted source with no frame sink still answers with metadata only. That behaviour is unchanged.
