@@ -18,3 +18,26 @@ __pycache__/
 *.pyc
 /off/
 /research/.cache/
+
+# results/ and out/: only reports (*.md), harness code (*.py *.sh *.rs) and the
+# few inputs that code reads are tracked. All other run evidence (frames, logs,
+# JSON captures, ...) is local-only; see results/README.md. `out/` is the default
+# `acos` run-output directory and is never tracked.
+/out/
+/results/**
+!/results/**/
+!/results/**/*.md
+!/results/**/*.py
+!/results/**/*.sh
+!/results/**/*.rs
+!/results/aidl/**
+!/results/wm/**
+!/results/res/**
+!/results/render/corpus/**
+!/results/bench/BASELINE.json
+!/results/bench/schema/**
+!/results/art-runtime/evidence/W31-artifacts/gaten-release-evidence/**
+!/results/parity/w193a/counter.png
+!/results/parity/w193a/counter.tree.json
+!/results/oracle/dexprogs-nondeterminism.txt
+/results/aidl/all_interfaces.json

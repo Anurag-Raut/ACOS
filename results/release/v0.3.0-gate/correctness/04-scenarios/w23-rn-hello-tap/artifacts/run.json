@@ -1,7 +1,0 @@
-{
-  "request_id": "req_3383b1_18e87bce183695aa",
-  "started_at": "2026-11-16T09:16:16.606Z",
-  "scenario": "scenarios/w23-rn-hello-tap.yaml",
-  "apk": "",
-  "acos_version": "0.3.0"
-}

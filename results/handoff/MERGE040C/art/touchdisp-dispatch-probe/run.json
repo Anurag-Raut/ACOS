@@ -1,7 +1,0 @@
-{
-  "request_id": "req_1565b0_18e90f04c425388e",
-  "started_at": "2026-11-18T06:13:59.628Z",
-  "scenario": "scenarios/touchdisp-dispatch-probe.yaml",
-  "apk": "",
-  "acos_version": "0.3.0"
-}

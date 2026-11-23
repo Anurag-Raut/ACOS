@@ -1,7 +1,0 @@
-{
-  "request_id": "req_3380fa_18e87bcd67f03374",
-  "started_at": "2026-11-16T09:16:13.649Z",
-  "scenario": "scenarios/w22-counter-reset.yaml",
-  "apk": "",
-  "acos_version": "0.3.0"
-}

@@ -1,7 +1,0 @@
-{
-  "request_id": "req_160f6_18e8d974401709c7",
-  "started_at": "2026-11-17T13:52:24.821Z",
-  "scenario": "scenarios/negative/gaten-tabs-wrong.yaml",
-  "apk": "",
-  "acos_version": "0.3.0"
-}

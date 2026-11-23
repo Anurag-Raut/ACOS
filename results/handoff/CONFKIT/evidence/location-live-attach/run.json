@@ -1,7 +1,0 @@
-{
-  "request_id": "req_1a923_18e91600c2d9d069",
-  "started_at": "2026-11-18T08:21:59.008Z",
-  "scenario": "scenarios/location-live-attach.yaml",
-  "apk": "",
-  "acos_version": "0.3.0"
-}

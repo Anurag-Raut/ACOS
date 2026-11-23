@@ -1,8 +1,0 @@
-     Running unittests src/main.rs (.cache/s3ab-target/release/deps/acos-e5719e4eab2329a0)
-
-running 2 tests
-test engine::art::tests::reset_relaunches_a_fresh_guest_and_keeps_frames_and_logs_monotonic ... ok
-test engine::art::tests::reset_retries_a_host_transport_relaunch_once_and_preserves_the_first_failure ... ok
-
-test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 87 filtered out; finished in 0.02s
-

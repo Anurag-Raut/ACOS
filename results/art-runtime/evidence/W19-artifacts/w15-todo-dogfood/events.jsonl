@@ -1,4 +1,0 @@
-{"seq":1,"timestamp_ms":1000,"session_id":"s_art_todo-dogfood","kind":"frame","frame_seq":1,"cause_id":"art","meaningful":true,"content_hash":"d84f6f1d756539106879d17474483c3e"}
-{"seq":2,"timestamp_ms":2000,"session_id":"s_art_todo-dogfood","kind":"frame","frame_seq":1,"cause_id":"art","meaningful":true,"content_hash":"d84f6f1d756539106879d17474483c3e"}
-{"seq":3,"timestamp_ms":3000,"session_id":"s_art_todo-dogfood","kind":"frame","frame_seq":3,"cause_id":"art","meaningful":true,"content_hash":"f3bfdeec807eef76fc9f254153283be0"}
-{"seq":4,"timestamp_ms":4000,"session_id":"s_art_todo-dogfood","kind":"frame","frame_seq":3,"cause_id":"art","meaningful":true,"content_hash":"f3bfdeec807eef76fc9f254153283be0"}

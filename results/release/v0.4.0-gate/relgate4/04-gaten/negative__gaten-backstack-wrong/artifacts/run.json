@@ -1,7 +1,0 @@
-{
-  "request_id": "req_5d4d0_18e9ac8bd4ab293e",
-  "started_at": "2026-11-20T06:20:43.052Z",
-  "scenario": "scenarios/negative/gaten-backstack-wrong.yaml",
-  "apk": "",
-  "acos_version": "0.3.0"
-}

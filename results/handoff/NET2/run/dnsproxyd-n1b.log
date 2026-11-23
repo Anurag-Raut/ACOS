@@ -1,1 +1,0 @@
-req="getaddrinfo example.com ^ 1024 0 1 0 0" -> 222 answers=3

@@ -1,1 +1,0 @@
-verify: ELEMENT_NOT_FOUND (assertion): selector id=="ghost" matched no node [class=assertion, retryable=false]

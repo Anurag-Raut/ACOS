@@ -1,3 +1,0 @@
-apk=/home/Qui/.t3/worktrees/acos/t3-2d2bb735-60949492e8cb8af5/fixtures/build/apps/form-validation.apk
-apk_sha256=31c53df694f4773e8f6db742529091e7903e0645911e4dc80222a80b40caed9d
-engine=art

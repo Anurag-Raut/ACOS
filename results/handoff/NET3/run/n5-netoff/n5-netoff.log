@@ -1,6 +1,0 @@
-rep1 net-off: steps10=0/5
-s1 steps=4 error: ASSERTION_FAILED: expected text exactly "HTTP 200", got text "java.lang.SecurityException" / hint ""
-s2 steps=4 error: ASSERTION_FAILED: expected text exactly "HTTP 200", got text "java.lang.SecurityException" / hint ""
-s3 steps=4 error: ASSERTION_FAILED: expected text exactly "HTTP 200", got text "java.lang.SecurityException" / hint ""
-s4 steps=4 error: ASSERTION_FAILED: expected text exactly "HTTP 200", got text "java.lang.SecurityException" / hint ""
-s5 steps=4 error: ASSERTION_FAILED: expected text exactly "HTTP 200", got text "java.lang.SecurityException" / hint ""

@@ -1,3 +1,0 @@
-# W39 A/B after the D2 failure window: 10 fresh verify sessions mode on, 10 off
-on: 10/10  1:pass 2:pass 3:pass 4:pass 5:pass 6:pass 7:pass 8:pass 9:pass 10:pass
-off: 10/10  1:pass 2:pass 3:pass 4:pass 5:pass 6:pass 7:pass 8:pass 9:pass 10:pass

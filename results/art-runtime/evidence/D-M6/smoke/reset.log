@@ -1,8 +1,0 @@
-{"event":"spawn","pid":1028135,"unix_ms":1794467711714}
-{"buffer_generation":7,"event":"ready","pid":1028135,"probe_seq":1,"spawn_to_ready_ms":350,"unix_ms":1794467712064}
-{"event":"spawn","pid":1028255,"unix_ms":1794467713480}
-{"buffer_generation":7,"event":"ready","pid":1028255,"probe_seq":1,"spawn_to_ready_ms":353,"unix_ms":1794467713834}
-{"bind_ms":253,"end_unix_ms":1794467714087,"engine_total_ms":663,"event":"reset","handler_unix_ms":1794467713424,"log_flush_ms":0,"new_pid":1028255,"old_pid":1028135,"start_ms":353,"stop_ms":55}
-{"event":"spawn","pid":1028334,"unix_ms":1794467715565}
-{"buffer_generation":7,"event":"ready","pid":1028334,"probe_seq":1,"spawn_to_ready_ms":360,"unix_ms":1794467715926}
-{"bind_ms":236,"end_unix_ms":1794467716162,"engine_total_ms":704,"event":"reset","handler_unix_ms":1794467715458,"log_flush_ms":0,"new_pid":1028334,"old_pid":1028255,"start_ms":361,"stop_ms":106}

@@ -1,7 +1,0 @@
-{
-  "request_id": "req_249e71_18e87563b12b8181",
-  "started_at": "2026-11-16T07:18:42.541Z",
-  "scenario": "results/handoff/MODTAIL/tail-biometric.yaml",
-  "apk": "fixtures/build/apps/tail-probe.apk",
-  "acos_version": "0.2.2"
-}

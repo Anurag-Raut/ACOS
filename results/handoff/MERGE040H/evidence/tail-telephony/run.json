@@ -1,7 +1,0 @@
-{
-  "request_id": "req_136c10_18e91b9f5a641f00",
-  "started_at": "2026-11-18T10:04:57.714Z",
-  "scenario": "scenarios/tail-telephony.yaml",
-  "apk": "",
-  "acos_version": "0.3.0"
-}

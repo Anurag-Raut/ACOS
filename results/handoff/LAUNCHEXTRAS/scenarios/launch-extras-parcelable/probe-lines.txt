@@ -1,3 +1,0 @@
-ACOSPROBE launch-extras action=android.intent.action.MAIN
-ACOSPROBE launch-extras data=null
-ACOSPROBE launch-extras extras=null

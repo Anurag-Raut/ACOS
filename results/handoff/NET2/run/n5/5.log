@@ -1,4 +1,0 @@
-verify: pass (ok=true, backend=acos-native, fidelity=art-reference)
-  engine: art (mode: live)
-  artifacts: results/handoff/NET2/run/n5/5
-  steps: 10

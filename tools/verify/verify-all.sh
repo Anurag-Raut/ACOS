@@ -23,6 +23,8 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT"
 
+tools/verify/check-layout.sh
+
 BUILD=1
 EXTRA=()
 while [ $# -gt 0 ]; do

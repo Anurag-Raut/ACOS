@@ -1,7 +1,0 @@
-{
-  "request_id": "req_e2af1_18e91a09ce599fdc",
-  "started_at": "2026-11-18T09:35:55.902Z",
-  "scenario": "scenarios/net-network-real.yaml",
-  "apk": "fixtures/build/apps/net-check.apk",
-  "acos_version": "0.3.0"
-}

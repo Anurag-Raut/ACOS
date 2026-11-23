@@ -1,7 +1,0 @@
-{
-  "request_id": "req_5d2b6_18e9ac886fe65cb6",
-  "started_at": "2026-11-20T06:20:28.476Z",
-  "scenario": "scenarios/negative/gaten-kanji-wrong.yaml",
-  "apk": "",
-  "acos_version": "0.3.0"
-}

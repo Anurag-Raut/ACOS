@@ -1,7 +1,0 @@
-{
-  "request_id": "req_1cb3cc_18e872406214e033",
-  "started_at": "2026-11-16T06:21:12.356Z",
-  "scenario": "scenarios/rel3a-content-settle.yaml",
-  "apk": "",
-  "acos_version": "0.2.3"
-}

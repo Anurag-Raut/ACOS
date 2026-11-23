@@ -1,6 +1,0 @@
-verify: pass (ok=true, backend=acos-native, fidelity=art-reference)
-  engine: art (mode: live)
-  services: core:real attached; off: accessibility, system.permissions, system.notifications, sensors, feedback.vibrator, location, net.telephony, hw.bluetooth, hw.biometric, network, webview, hw.usb, system.dropbox, hw.nfc, system.wallpaper, system.print, system.search, system.usage, system.dpm, system.role, geo.country
-  provenance: scenario /home/Qui/.t3/worktrees/acos/t3-2f630078-d1c2107b4b54fe17/scenarios/gaten-lesson.yaml (sha d45dd9f07f7d), apk /home/Qui/Projects/acos/.cache/gaten/gaten-dev-f344272-x86_64-release-unsigned.apk (sha e04c7ffcf012), engine art, fidelity art-reference, warnings: 2 [SCENARIO_ENGINE_MISMATCH, INPUT_UNHANDLED]
-  artifacts: results/handoff/MERGE040C/art/gaten-lesson
-  steps: 29

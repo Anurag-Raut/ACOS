@@ -1,7 +1,0 @@
-{
-  "request_id": "req_33793f_18e87bcc28f21041",
-  "started_at": "2026-11-16T09:16:08.297Z",
-  "scenario": "scenarios/w15-sqlite-crud.yaml",
-  "apk": "",
-  "acos_version": "0.3.0"
-}

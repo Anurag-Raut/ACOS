@@ -1,1 +1,0 @@
-/home/Qui/Projects/acos/.cache/dm2-target/release/acos-art launch --apk /home/Qui/Projects/acos/fixtures/build/apps/counter.apk --until activity-resumed --out .cache/dm2/runs/scratch-n10-rep0/sessions/s_w57_dm2_1/art-frames

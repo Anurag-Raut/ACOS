@@ -1,8 +1,0 @@
-{
-  "request_id": "req_350363_18e87c89f0060597",
-  "started_at": "2026-11-16T09:29:43.386Z",
-  "scenario": "scenarios/location-pending-intent.yaml",
-  "apk": "",
-  "acos_version": "0.2.2",
-  "overwrote_run_id": "req_34f89a_18e87c8648a1077f"
-}

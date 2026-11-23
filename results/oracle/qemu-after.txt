@@ -1,3 +1,0 @@
-=== qemu via bracket trick (expect empty) ===
-(no qemu processes)
-[oracle-emulator] not running (no qemu-system process)

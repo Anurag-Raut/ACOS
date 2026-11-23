@@ -1,9 +1,0 @@
-acos-webview: shared broker on /home/Qui/.t3/worktrees/acos/t3-68b7581e-0ab9e225869634f1/.cache/broker.sock (engine=157.0.8103.78, idle=0s, pid=2156312)
-acos-webview: slow op view.evaluateJavascript view=2 id=g36 took 3854ms
-acos-webview: slow op view.evaluateJavascript view=2 id=g37 took 3854ms
-acos-webview: input touch touchStart on view 2 acked after 3833ms
-acos-webview: slow op input.touch view=2 id=g42 took 5234ms
-acos-webview: slow op ax view=2 id=g35 took 7715ms
-acos-webview: input touch touchEnd on view 2 acked after 1919ms
-acos-webview: slow op input.touch view=2 id=g43 took 3838ms
-acos-webview: slow op render view=2 id=g49 took 1919ms

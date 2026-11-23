@@ -1,5 +1,0 @@
-verify: pass (ok=true, backend=acos-native, fidelity=art-reference)
-  engine: art (mode: live)
-  services: core:real, network:real attached; off: accessibility, system.permissions, system.notifications, sensors, feedback.vibrator, location, net.telephony, hw.bluetooth, hw.biometric, hw.usb, system.dropbox, hw.nfc, system.wallpaper, system.print, system.search, system.usage, system.dpm, system.role, geo.country
-  artifacts: /home/Qui/.t3/worktrees/acos/t3-ba8936f8-e31a438bba670ddc/results/handoff/NET5/run/proof/real
-  steps: 9

@@ -1,4 +1,24 @@
-# ACOS fixture tooling
+# ACOS tooling
+
+## Layout
+
+Scripts live in a topic folder, never loose in `tools/` (only this README does;
+`tools/verify/check-layout.sh` enforces it).
+
+| Folder | What lives there |
+|---|---|
+| `build/` | fixture, app, Flutter, RN, arm64 and WebView-provider builds; generators (`gen-*.py`); `apk_append.py` |
+| `fetch/` | one-time downloads/extracts: AOSP reference, bionic sysroot, qemu, boot classpath |
+| `guard/` | `guarded.sh` (mandatory host memory/wall-clock wrapper) and `ramguard.sh` |
+| `dev/` | developer environment: `agent-env.sh`, `link-worktree-prereqs.sh`, `check-tree-clean.sh` |
+| `verify/` | gates and suites: `verify-all.sh`, `run-suite.sh`, `run-matrix.sh`, `accept-bundle.sh`, `check-layout.sh`, … |
+| `bench/` | benchmark harnesses, A/B drivers and `benchlib.py` |
+| `probes/` | one-off investigation probes and comparison drivers |
+| `phone/`, `parity/`, `oracle/`, `compat/`, `art-runtime/`, `release/`, `view/`, `metro/`, `sccache/`, `wvkill/`, `tests/`, `keystore-k5b/` | as named |
+
+New script? Pick the folder above; if none fits, add a folder and a row here.
+
+## Fixture tooling
 
 Build scripts for the executable fixture corpus. They need the Android SDK
 (`ANDROID_HOME`, default `/home/Qui/Android/Sdk`) and OpenJDK 17. Both are

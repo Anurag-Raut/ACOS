@@ -1,1 +1,0 @@
-verify: TIMEOUT (infra_timeout): back: strict settle timed out (no-draw-after-action); the step is a non-pass because the screen was still changing when the deadline elapsed [class=infra_timeout, retryable=true]

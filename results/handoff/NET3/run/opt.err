@@ -1,5 +1,0 @@
-acos-net: session=1 netns=net:[4026533693] iface=acoss1 addr=10.163.1.2/30 gw=10.163.1.1
-acos-net: session=1 netns=net:[4026533693] iface=acoss1 addr=10.163.1.2/30 gw=10.163.1.1
-acos-net: session=1 netns=net:[4026533693] iface=acoss1 addr=10.163.1.2/30 gw=10.163.1.1
-acos-net: session=1 netns=net:[4026533633] iface=acoss1 addr=10.163.1.2/30 gw=10.163.1.1
-acos-net: session=1 netns=net:[4026533633] iface=acoss1 addr=10.163.1.2/30 gw=10.163.1.1

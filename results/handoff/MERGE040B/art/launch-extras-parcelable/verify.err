@@ -1,1 +1,0 @@
-verify: UNSUPPORTED_ANDROID_API (unsupported): the launch Intent cannot carry the `device` extra: a Parcelable (android.os.Bundle) needs the app's own class loader and a payload a scenario cannot build. Refusing instead of launching an Intent without the declared value. [class=unsupported, retryable=false]

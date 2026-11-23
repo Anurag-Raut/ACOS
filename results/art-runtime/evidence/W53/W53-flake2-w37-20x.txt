@@ -1,9 +1,0 @@
-# W53 evidence: w37/w39 in parallel, 20 back-to-back invocations of both binaries
-date -u: 2026-11-12T05:15:06Z
-bin: w37_build_cache-3d8de4fe76b0ac2e, w39_stage_cache-1ee77e6652e4c8cb
-
-w37_build_cache: 20/20 green (default parallel test threads)
-w39_stage_cache: 20/20 green
-
-test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.12s
-test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s

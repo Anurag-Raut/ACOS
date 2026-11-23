@@ -1,7 +1,0 @@
-{
-  "request_id": "req_acac0_18e90d5516469ce6",
-  "started_at": "2026-11-18T05:43:05.580Z",
-  "scenario": "scenarios/negative/gaten-content-selector-bounds.yaml",
-  "apk": "",
-  "acos_version": "0.3.0"
-}

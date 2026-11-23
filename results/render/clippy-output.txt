@@ -1,5 +1,0 @@
-    Blocking waiting for file lock on build directory
-    Checking acos-aidl v0.1.0 (/home/Qui/Projects/acos/crates/acos-aidl)
-    Checking acos-render v0.1.0 (/home/Qui/Projects/acos/crates/acos-render)
-    Checking acos-wm v0.1.0 (/home/Qui/Projects/acos/crates/acos-wm)
-    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.07s

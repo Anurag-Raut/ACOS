@@ -1,8 +1,0 @@
-launch rc=0
-after-2skips-now [{"text": "猫, ねこ, neko...", "focused": false, "visible": true}] onboarding_ctas= ['Skip']
-tap rc=0 False 110
-focus-sample-after-0s [{"text": "猫, ねこ, neko...", "focused": false, "visible": true}] onboarding_ctas= ['Skip']
-focus-sample-after-1s [{"text": "猫, ねこ, neko...", "focused": false, "visible": true}] onboarding_ctas= ['Skip']
-focus-sample-after-2s [{"text": "猫, ねこ, neko...", "focused": false, "visible": true}] onboarding_ctas= ['Skip']
-focus-sample-after-4s [{"text": "猫, ねこ, neko...", "focused": false, "visible": true}] onboarding_ctas= ['Skip']
-destroy rc=2

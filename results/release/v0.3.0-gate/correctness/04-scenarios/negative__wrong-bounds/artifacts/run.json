@@ -1,7 +1,0 @@
-{
-  "request_id": "req_32ec9b_18e87bbde19ff4cd",
-  "started_at": "2026-11-16T09:15:06.971Z",
-  "scenario": "scenarios/negative/wrong-bounds.yaml",
-  "apk": "",
-  "acos_version": "0.3.0"
-}

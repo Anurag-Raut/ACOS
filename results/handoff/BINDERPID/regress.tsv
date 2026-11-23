@@ -1,6 +1,0 @@
-run_id	scenario	variant	expected	verdict	false_pass	error.class	error.code	wall_ms	first_frame_ms	mem.cgroup_peak_mib	mem.cgroup_gib_min	mem.pss_mib	mem.anon_shmem_settled_mib	host.loadavg1	host.mem_available_mib
-01-mproc3-two-process-r1	scenarios/mproc3-two-process.yaml	good	pass	pass	false			6551.3	None	23.48	0.00128	34.38	None	2.03	38176.7
-02-notif-perm-granted-r1	scenarios/notif-perm-granted.yaml	good	pass	pass	false			422.4	None	8.89	3.7e-05	22.11	None	1.95	38284.9
-03-notif-perm-denied-r1	scenarios/notif-perm-denied.yaml	good	pass	pass	false			422.4	None	18.63	4.5e-05	31.57	None	1.95	38307.5
-04-a11y-probe-r1	scenarios/a11y-probe.yaml	good	pass	pass	false			4950.4	None	34.98	0.001196	41.97	None	1.87	38306.2
-05-location-pending-intent-r1	scenarios/location-pending-intent.yaml	good	pass	pass	false			1628.2	None	21.96	0.000296	32.61	None	1.72	38588.3

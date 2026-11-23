@@ -1,8 +1,0 @@
-# W42 teeth: scenarios/w42-back-frame.yaml against the PRE-W42 binary
-# (.cache/w42/prefix-acos-art, built 03:15Z before the fix; no "ACOSWMS destroy-layer").
-# verdict: fail
-step 14 assert_region fail
-  actual  4e9ed0765cee77c3ae8963c53ef255613d30f714d5f651478a061da6c388eb8b
-  expected hash=dee05db89a0d3856d6bb88f91fa271ef36f7429c496a3a48dc69c2ffb7d0746d
-  (the actual hash is the SECOND Activity's pixels: same value the
-   pre-Back assertion requires, i.e. the destroyed layer is still drawn)

@@ -1,4 +1,0 @@
-    712 /system/lib64/libvulkan.so
-    712 /system/lib64/libEGL.so
-    534 /system/lib64/libGLESv2.so
---- sampled maps (/home/Qui/.t3/worktrees/acos/t3-0a36d654-309dea7bb20cf030/results/handoff/GLSPIKE2/maps-sample.txt):

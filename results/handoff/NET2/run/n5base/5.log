@@ -1,4 +1,0 @@
-verify: error (ok=false, backend=acos-native, fidelity=static-analysis)
-  error: ARTIFACTS_INVALID: cannot write out/net-check/events.jsonl: No such file or directory (os error 2)
-  artifacts: out/net-check
-verify: ARTIFACTS_INVALID (harness): cannot write out/net-check/events.jsonl: No such file or directory (os error 2) [class=harness, retryable=false]

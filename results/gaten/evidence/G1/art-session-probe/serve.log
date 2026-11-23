@@ -1,6 +1,0 @@
-acos serve: listening on /home/Qui/Projects/acos/.cache/gaten-g1/rt-counter3/s.sock (engine=art, idle=1800s, max_sessions=8)
-acos serve: prewarm: warmed 46 files, 63.9 MiB in 3 ms (cap 64.0 MiB, 4 skipped, 4 missing, 0 read errors)
-acos serve: prewarm: skipped /home/Qui/Projects/acos/.cache/art/sysroot/system/framework/services.jar (19.7 MiB, cap reached)
-acos serve: prewarm: skipped /home/Qui/Projects/acos/.cache/art/sysroot/system/etc/fonts.xml (0.1 MiB, cap reached)
-acos serve: prewarm: skipped /home/Qui/Projects/acos/.cache/art/sysroot/system/fonts/fonts.xml (0.1 MiB, cap reached)
-acos serve: prewarm: skipped /home/Qui/Projects/acos/.cache/art/sysroot/system/fonts/Roboto-Regular.ttf (2.3 MiB, cap reached)

@@ -1,8 +1,0 @@
-package=dev.acos.fixtures.hostileprobe
-activity=dev.acos.fixtures.hostileprobe.MainActivity
-lifecycle=onCreate,onStart,onResume
-resumed=true
-called=true
-stopped=false
-window=com.android.internal.policy.PhoneWindow@f71a971
-timeout_ms=12000

@@ -1,5 +1,0 @@
-acos-webview: input touch touchStart on view 8 NOT acked after 502ms
-acos-webview: input touch touchEnd on view 8 NOT acked after 451ms
-acos-webview: slow op view.evaluateJavascript view=2 id=g34 took 3819ms
-acos-webview: slow op view.evaluateJavascript view=2 id=g35 took 3819ms
-acos-webview: slow op render view=2 id=g33 took 3836ms

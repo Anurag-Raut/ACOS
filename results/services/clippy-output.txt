@@ -1,2 +1,0 @@
-    Checking acos-services v0.1.0 (/home/Qui/Projects/acos/crates/acos-services)
-    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.27s

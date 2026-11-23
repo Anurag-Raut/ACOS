@@ -1,6 +1,0 @@
-run_id	scenario	variant	expected	verdict	false_pass	error.class	error.code	wall_ms	first_frame_ms	mem.cgroup_peak_mib	mem.cgroup_gib_min	mem.pss_mib	mem.anon_shmem_settled_mib	host.loadavg1	host.mem_available_mib
-01-gaten-content-assert-screenshot-r1	scenarios/negative/gaten-content-assert-screenshot.yaml	negative	fail	fail	false	assertion	ASSERTION_FAILED	1227.5	None	456.12	0.006151	173.42	None	3.25	45693.9
-02-gaten-content-selector-bounds-r1	scenarios/negative/gaten-content-selector-bounds.yaml	negative	fail	fail	false	assertion	ASSERTION_FAILED	1225.7	None	335.41	0.004107	169.8	None	3.25	46030.1
-03-negative-form-wrong-error-r1	scenarios/negative/form-wrong-error.yaml	negative	fail	fail	false	assertion	ELEMENT_OFFSCREEN	422.2	208.0	8.31	3.6e-05	17.87	None	3.25	46063.3
-04-negative-offscreen-pager-visible-r1	scenarios/negative/offscreen-pager-visible.yaml	negative	fail	fail	false	assertion	ELEMENT_OFFSCREEN	422.4	208.0	8.5	3.7e-05	18.11	None	3.25	46103.1
-05-negative-finish-start-wrong-home-r1	scenarios/negative/finish-start-wrong-home.yaml	negative	fail	fail	false	assertion	ASSERTION_FAILED	623.2	209.0	18.33	7.1e-05	28.28	None	3.25	46063.2

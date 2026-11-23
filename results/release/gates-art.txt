@@ -1,7 +1,0 @@
-# REL3a gates (dev path, --engine art)
-v2-art-counter pass art-reference pass engine=art steps=11
-w22-counter-reset pass art-reference pass engine=art steps=9
-gaten-home pass art-reference pass engine=art steps=14
-
-# arm64-only APK (fixtures/build/apps/flutter-hello-arm64.apk)
-error GUEST_EXITED details keys: ['art_code', 'engine', 'engine_frozen', 'evidence_label', 'session_exit_path', 'stderr_tail', 'trust']

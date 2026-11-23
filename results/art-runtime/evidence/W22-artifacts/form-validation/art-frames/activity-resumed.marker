@@ -1,7 +1,0 @@
-package=dev.acos.fixtures.formvalidation
-activity=dev.acos.fixtures.formvalidation.MainActivity
-lifecycle=onCreate,onStart,onResume
-resumed=true
-called=true
-stopped=false
-window=com.android.internal.policy.PhoneWindow@4b463c6
