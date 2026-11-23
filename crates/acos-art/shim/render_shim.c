@@ -598,7 +598,9 @@ JNIEXPORT jint JNICALL Java_dev_acos_art_RenderNat_cameraSinkDeliver(
     }
     ANativeWindowBuffer* buf = NULL;
     int fence_fd = -1;
+    struct timespec t0_; clock_gettime(CLOCK_MONOTONIC,&t0_);
     int rc = g_cam_api.dequeue(anw, &buf, &fence_fd);
+    {struct timespec t1_; clock_gettime(CLOCK_MONOTONIC,&t1_); if (rc != 0 || 1) LOG("DBG dequeue rc=%d ms=%ld", rc, (long)((t1_.tv_sec-t0_.tv_sec)*1000+(t1_.tv_nsec-t0_.tv_nsec)/1000000));}
     if (fence_fd >= 0) close(fence_fd);
     if (rc != 0 || !buf) {
         pthread_mutex_unlock(&g_cam_lock);
@@ -752,7 +754,9 @@ JNIEXPORT jint JNICALL Java_dev_acos_art_RenderNat_cameraSinkDeliverFd(
     }
     ANativeWindowBuffer* buf = NULL;
     int fence_fd = -1;
+    struct timespec t0_; clock_gettime(CLOCK_MONOTONIC,&t0_);
     int rc = g_cam_api.dequeue(anw, &buf, &fence_fd);
+    {struct timespec t1_; clock_gettime(CLOCK_MONOTONIC,&t1_); if (rc != 0 || 1) LOG("DBG dequeue rc=%d ms=%ld", rc, (long)((t1_.tv_sec-t0_.tv_sec)*1000+(t1_.tv_nsec-t0_.tv_nsec)/1000000));}
     if (fence_fd >= 0) close(fence_fd);
     if (rc != 0 || !buf) {
         pthread_mutex_unlock(&g_cam_lock);

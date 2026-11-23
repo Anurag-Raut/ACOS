@@ -1,0 +1,50 @@
+# CR1FIX #17 repro: held Images + camera close.
+version: 1
+name: camera-hold-images
+description: >-
+  CR1FIX #17: an app that never closes its ImageReader Images must not hang camera
+  close; the producer drops frames when the queue is full instead of blocking
+  while holding the sink lock.
+app: fixtures/build/apps/camera-probe.apk
+api_level: 34
+isolation: process
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+capabilities:
+  - ui.offscreen
+  - ui.text
+  - ui.screenshot
+  - input
+services:
+  - id: system.permissions
+    profile: real
+  - id: hw.camera
+    profile: stub
+expectation: pass
+budgets:
+  memory_mib: 640
+  wall_ms: 180000
+steps:
+  - launch:
+      activity: dev.acos.fixtures.cameraprobe/.MainActivity
+      clear_state: true
+  - wait_for:
+      selector: {text: {contains: "READY mgr=present feat_cam=true feat_any=true"}}
+      timeout_ms: 20000
+  - service_ctl:
+      module: system.permissions
+      op: grant
+      args: {permission: "android.permission.CAMERA"}
+      expect:
+        ok: true
+  - tap:
+      selector: {text: {exact: "Hold"}}
+  - wait_for:
+      selector: {text: {contains: "HOLD held=2"}}
+      timeout_ms: 30000
+  - wait_for:
+      selector: {text: {contains: "HOLD closed id=0 close_ms_under_10000=true"}}
+      timeout_ms: 30000
