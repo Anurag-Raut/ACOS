@@ -41,7 +41,7 @@ log() { printf '[trace-console] %s\n' "$*"; }
 die() { printf '[trace-console] error: %s\n' "$*" >&2; exit 1; }
 
 "$ADB" -s "$SERIAL" get-state >/dev/null 2>&1 || die "no device at $SERIAL"
-[ -f "$BOOT/BOOTCLASSPATH" ] || die "boot classpath not extracted; run tools/extract-bootclasspath.sh"
+[ -f "$BOOT/BOOTCLASSPATH" ] || die "boot classpath not extracted; run tools/fetch/extract-bootclasspath.sh"
 mkdir -p "$DATA_DIR" "$RAW_DIR"
 
 # --- 1. native-method set from the real boot-classpath DEX -------------------
@@ -63,7 +63,7 @@ log "native-method set: $(wc -l <"$NATIVE_SET") methods"
 # --- 2. build fixtures if needed --------------------------------------------
 if [ -z "$(find "$ROOT/fixtures/build/dexprogs" -mindepth 2 -maxdepth 2 -name classes.dex -print -quit 2>/dev/null)" ]; then
     log "building fixtures"
-    bash "$ROOT/tools/build-fixtures.sh"
+    bash "$ROOT/tools/build/build-fixtures.sh"
 fi
 
 "$ADB" -s "$SERIAL" shell "rm -rf $DEVICE_DIR && mkdir -p $DEVICE_DIR" >/dev/null

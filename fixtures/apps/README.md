@@ -1,7 +1,7 @@
 # ACOS real-APK fixtures
 
 Six gradle-free Android APKs built with `aapt2 + javac + d8 + zipalign +
-apksigner` (see `../../tools/build-apps.sh`). They are the first real,
+apksigner` (see `../../tools/build/build-apps.sh`). They are the first real,
 signed APK inputs for the `acos-apk` ingest crate and, later, the Rust
 runtime.
 
@@ -11,7 +11,7 @@ All are debug-signed with a **throwaway** keystore generated under
 
 Build and verify:
 
-    tools/build-apps.sh
+    tools/build/build-apps.sh
 
 Outputs (gitignored): `fixtures/build/apps/hello-views.apk`,
 `hello-jni.apk`, `counter.apk`, `todo-list.apk`, `multi-activity.apk` and
@@ -168,7 +168,7 @@ versionName `1.0`, minSdk `26`, targetSdk `34`, one launcher activity
 
 ## Device verification status
 
-`tools/build-apps.sh` runs `apksigner verify` and `aapt2 dump badging`
+`tools/build/build-apps.sh` runs `apksigner verify` and `aapt2 dump badging`
 for every APK. Installation on an actual device/emulator is attempted
 **only** when a device is already attached (`adb devices` shows one); no
 emulator is started automatically. When no device is present the build

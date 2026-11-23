@@ -6,7 +6,7 @@ host** (AMD Ryzen 9 9950X, Rust 1.90, `--release`), measured with:
 
 * the in-tree driver `cargo run --release -p acos-vm --example vmbench -- <dex> <main> <repeats>`
   (in-process, best-of-N, optional `--ops` opcode histogram), and
-* the headline table with `tools/bench-vm.sh` (process start→exit, p50 of N
+* the headline table with `tools/bench/bench-vm.sh` (process start→exit, p50 of N
   runs, also runs `java` / `java -Xint`).
 
 `perf(1)` is **not installed** on this host, so profiles were read from the
@@ -15,7 +15,7 @@ and GNU `gdb` stack sampling. Comparison target is the **host JVM** (OpenJDK
 17); these are *jvm-reference* numbers, **not** Android/ART.
 
 Benchmark sources live in `crates/acos-vm/benches/java/`; the framework-shaped
-programs are compiled and measured by `tools/bench-vm.sh`.
+programs are compiled and measured by `tools/bench/bench-vm.sh`.
 
 ## Baseline (commit `434f60c`, `results/vm/bench-2026-11-10-141049.json`)
 
@@ -162,7 +162,7 @@ correct GC roots.
 
 ## Final comparison
 
-`tools/bench-vm.sh`, 10 repetitions, host JVM OpenJDK 17. Baseline is the
+`tools/bench/bench-vm.sh`, 10 repetitions, host JVM OpenJDK 17. Baseline is the
 `434f60c` JSON above. New JSON: `results/vm/bench-2026-11-10-160048.json`.
 
 | program | acos before ms | acos after ms | speedup | java -Xint ms | vs -Xint | java JIT ms | vs JIT |
@@ -176,7 +176,7 @@ correct GC roots.
 varies 1496–1700 ms with host load, i.e. up to 3.95x.)
 
 Framework-shaped programs (baseline first measured in-process with `vmbench`;
-final numbers from `tools/bench-vm.sh`):
+final numbers from `tools/bench/bench-vm.sh`):
 
 | program | baseline ms | final ms | speedup | java -Xint ms |
 |---|---:|---:|---:|---:|

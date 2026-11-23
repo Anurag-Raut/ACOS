@@ -27,7 +27,7 @@ python3 scripts/compare.py                    # SSIM/MAE/tree vs ART oracle + AC
 
 The five `isStatic && targetPackage="android"` RROs the image ships, from
 `product/overlay` via `.cache/boot/android-34/overlays` (tool:
-`tools/extract-bootclasspath.sh`, W198A):
+`tools/fetch/extract-bootclasspath.sh`, W198A):
 
 | APK | idmap mappings | idmap bytes |
 |---|---|---|
@@ -69,7 +69,7 @@ difference. `AndroidManifest`-less `AssetManager`s need nothing else.)
 | artefact | what it is |
 |---|---|
 | `java/dev/acos/hov/Main.java` | E4H's ladder + `apkAssets()/apkAssetsOverlay()/assetManagerWithOverlay()` |
-| `scripts/build.sh`, `scripts/run.sh`, `scripts/hroot.sh` | build (javac+d8), run under `tools/guarded.sh`, fonts |
+| `scripts/build.sh`, `scripts/run.sh`, `scripts/hroot.sh` | build (javac+d8), run under `tools/guard/guarded.sh`, fonts |
 | `scripts/compare.py` | SSIM / MAE / exact-pixel / node bounds vs ART oracle **and** ACOS-VM |
 | `artifacts/hov-view.png` | the frame with the overlays applied (md5 `2fc7c91d…`, deterministic) |
 | `artifacts/hov-view-nooverlay.png` | same harness, `HOV_OVERLAY=` (control, `INCREMENT`, 267 px) |

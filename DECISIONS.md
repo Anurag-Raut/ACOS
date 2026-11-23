@@ -433,7 +433,7 @@ distribution**.
 
 **Decision.** ACOS **never bundles or redistributes** Android/OpenJDK bytecode.
 It loads **unmodified jars extracted from the user's own installed SDK system
-image at runtime** (`tools/extract-bootclasspath.sh` → `.cache/boot/android-34`,
+image at runtime** (`tools/fetch/extract-bootclasspath.sh` → `.cache/boot/android-34`,
 gitignored).
 
 **Licence facts (not legal advice).** `framework` is Apache-2.0; `core-oj`
@@ -500,14 +500,14 @@ real boot classpath at all.
 Status: accepted (owner directive, 2026-11-10).
 
 - Host RAM use must never exceed 90% (the host has 62 GB and no swap, so exceeding it can hard-crash the PC). The internal target is 85%; guards act when MemAvailable drops below ~9 GiB.
-- Every VM, test, benchmark and emulator process runs under a memory and wall-clock bound (`tools/guarded.sh`, `tools/ramguard.sh`; VM-side `ACOS_HOST_RSS_MAX` and `ACOS_WALL_MAX_SECS` with structured errors `HOST_MEMORY_LIMIT` / `TIMEOUT`).
+- Every VM, test, benchmark and emulator process runs under a memory and wall-clock bound (`tools/guard/guarded.sh`, `tools/guard/ramguard.sh`; VM-side `ACOS_HOST_RSS_MAX` and `ACOS_WALL_MAX_SECS` with structured errors `HOST_MEMORY_LIMIT` / `TIMEOUT`).
 - Resources are released as soon as they are no longer needed: processes, fds, temp dirs, scratch artifacts, finished agents, merged worktrees.
 - Orchestrator checks `free -m` before dispatching a parallel wave and gives every implementer the bounded-run rule.
 - Incident that motivated this: a debug `acos run-dex` of 01_hello ran for about 2.8 h and reached 45 GB RSS (see docs/FINDINGS.md). It was killed by hand.
 - **Implementation (W12, 2026-11-10).**
   - `acos-vm::limits::HostGuard` enforces `ACOS_HOST_RSS_MAX` (default 2 GiB -> structured `HOST_MEMORY_LIMIT`) and `ACOS_WALL_MAX_SECS` (default 600 -> structured `TIMEOUT`). Sampled on allocation/GC thresholds and once per scheduler turn (RSS read throttled to 100 ms) and on the blocking looper pump, so it holds independently of `ACOS_HEAP_MAX`. Documented in `docs/AGENT_API.md` §16.
   - **Root cause.** The vm-perf merge rewrote `interp.rs::run_batch` and omitted `ThreadStatus::Parked` from its yield condition; `interp::run` then reset the current thread to `Runnable` on its periodic pre-emption. A looper thread parked in `nativePollOnce` was therefore re-run forever at 100% host CPU once the VM held more than one thread, never reaching the blocking `pump`; the VM had no host-side ceiling, so the runaway was unbounded. Fixed by yielding on `Parked` and only pre-empting a thread that is still `Running`. Regression: `acos-vm` `tests/looper_cpu_mt.rs`, `tests/host_limits.rs`, and the `limits.rs` unit tests (the MT CPU test fails 308->808 ticks with the original code).
-  - `tools/guarded.sh` is the mandatory bounded wrapper (`systemd-run` `MemoryMax`/swap-off, `ulimit -v` fallback, `timeout`, process-group kill, scratch cleanup); `tools/diff-dexprogs.sh`, `tools/bench-vm.sh` and `tools/build-*.sh` invoke it; `tools/ramguard.sh` is the host watchdog. See `tools/README.md`.
+  - `tools/guard/guarded.sh` is the mandatory bounded wrapper (`systemd-run` `MemoryMax`/swap-off, `ulimit -v` fallback, `timeout`, process-group kill, scratch cleanup); `tools/verify/diff-dexprogs.sh`, `tools/bench/bench-vm.sh` and `tools/build-*.sh` invoke it; `tools/guard/ramguard.sh` is the host watchdog. See `tools/README.md`.
   - Resources are freed on every exit path: `guarded.sh` kills the whole process group and removes its scratch; `diff-dexprogs.sh` uses `target/tmp/` and traps its removal; `bench-vm.sh` removes `target/tmp/acos-bench`; `ramguard.sh` logs to `results/tmp/ramguard.log`.
 
 ### ADR-0018 note — native loader sandbox gap (W35-A, 2026-11-10)
@@ -675,7 +675,7 @@ Status: accepted (W49-A, 2026-11-10), supersedes no previous decision.
   `AndroidRuntime` and not by `dalvikvm64`):
   `fixtures/expected-art/dexprogs/28_sqlite_basic.stdout` is byte-identical to
   the ACOS run, over three deterministic ART runs.
-  `tools/diff-dexprogs.sh --corelib real` = 28 pass / 0 fail / 0 unsupported.
+  `tools/verify/diff-dexprogs.sh --corelib real` = 28 pass / 0 fail / 0 unsupported.
 
 ## ADR-0021 — JNI native OS-thread attach: process-global slots + owner-bound VM (W54-A)
 
@@ -898,7 +898,7 @@ and make the tier the default execution path, with `ACOS_EXEC=interp` (also
 ¹ Within the 5-15 % run-to-run spread; `BenchFib` has no backward branch, so
 the tier never applies to it (the row is the `enabled()` check alone).
 
-* `tools/diff-dexprogs.sh --corelib real`: 27/27 normal and `--gc-stress`, IR on
+* `tools/verify/diff-dexprogs.sh --corelib real`: 27/27 normal and `--gc-stress`, IR on
   and off.
 * `crates/acos-vm/tests/ir_equivalence.rs`, `cargo test -p acos-vm`,
   `cargo clippy -p acos-vm --lib --tests -- -D warnings`, and
@@ -964,7 +964,7 @@ arena remains the next lever.
 **Consequences.** Fused dispatch and the 4-way cache are on by default; no new
 `unsafe` (crate still `#![forbid(unsafe_code)]`). `cargo test -p acos-vm`,
 clippy `-D warnings --no-deps`, `cargo check --workspace --all-targets`, and
-`tools/diff-dexprogs.sh --corelib real` 27/27 normal + `--gc-stress` are green.
+`tools/verify/diff-dexprogs.sh --corelib real` 27/27 normal + `--gc-stress` are green.
 
 ## ADR-0025 — Software GLES2/EGL substrate inside the guest (`acos-gles`)
 
@@ -1194,7 +1194,7 @@ Measured: a two-view host test (one deliberately slow page) puts the fast view's
 holds a 3 ms tap→page-click. The guest side follows the same rule: `evaluateJavascript` is async
 (Android's contract), and a post-input `ax` read is bounded at 250 ms, so one busy page cannot stall
 the guest's UI thread. The WebView provider APK is now **shipped by the image**
-(`tools/extract-bootclasspath.sh` builds it with `tools/build-webview-provider.sh` and stages
+(`tools/fetch/extract-bootclasspath.sh` builds it with `tools/build/build-webview-provider.sh` and stages
 `.cache/boot/android-34/system-apps/com.android.webview.apk`), so a fresh install needs no separate
 step; the installer carries it and the module resolves it from the image first.
 
@@ -1313,10 +1313,10 @@ a **window plus a guest signal**, never a count of samples.
 reply's `first_frame` block names the window and whether it was spent, so a gate can check the
 evidence instead of trusting the verdict.
 
-`tools/benchlib.py`'s failure taxonomy gained the protocol's assertion outcomes (`ELEMENT_OFFSCREEN`,
+`tools/bench/benchlib.py`'s failure taxonomy gained the protocol's assertion outcomes (`ELEMENT_OFFSCREEN`,
 `AMBIGUOUS_SELECTOR`, `TREE_TRUNCATED`, `END_OF_LIST`, `INPUT_NOT_HANDLED`): a correct negative that
 fails with one of them is a `correct_negative`, never an `unclassified` row (v0.3.0 gate F2). The
-matrix's default fixture set is built on demand (`tools/run-matrix.sh` → `tools/build-apps.sh
+matrix's default fixture set is built on demand (`tools/verify/run-matrix.sh` → `tools/build/build-apps.sh
 ACOS_APP_ONLY=<missing>`) so a stale `fixtures/build` cannot produce an `APK_IO` row (F3).
 ADR-0030 note (SPIKE-NET2): the guest has no path to netfilter at all: `AF_NETLINK`, raw `AF_INET`
 and `SO_MARK` are denied by seccomp, CapEff is 0, and the guest userns is not the netns owner; a
@@ -1564,7 +1564,7 @@ path (`AmsState::adopt_launch_token`) takes only `Guest` launches, so a shade la
 the peer instead of being bound to a token the guest invented.
 
 Consequence: `gaten-*` settle again (the primary's launches are the guest's, one instance each), the
-shade and the permission dialog keep their host-built delivery, and `tools/build-fixtures.sh` no longer
+shade and the permission dialog keep their host-built delivery, and `tools/build/build-fixtures.sh` no longer
 deletes checked-in expectations on a failed `javac` (staged, published only after every program built).
 
 ## ADR-0031 settlement note (WVTAIL, 2026-11-18): input latency is a *frame* rule, and a restart is a restart

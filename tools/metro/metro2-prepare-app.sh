@@ -19,7 +19,7 @@ set -eu
 WT=$(cd "$(dirname "$0")/../.." && pwd)
 SRC=$WT/.cache/rn-0.81.4/jsproject
 DEST=${1:-$WT/.cache/metro1/app2}
-[ -d "$SRC" ] || { echo "missing $SRC (tools/build-rn-hello.sh fetch)" >&2; exit 2; }
+[ -d "$SRC" ] || { echo "missing $SRC (tools/build/build-rn-hello.sh fetch)" >&2; exit 2; }
 rm -rf "$DEST"
 mkdir -p "$(dirname "$DEST")"
 cp -al "$SRC" "$DEST"

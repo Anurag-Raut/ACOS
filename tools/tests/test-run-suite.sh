@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# test-run-suite.sh -- integration tests for tools/run-suite.sh (W45).
+# test-run-suite.sh -- integration tests for tools/verify/run-suite.sh (W45).
 #
 # Runs the real runner (real guarded.sh scope, real benchlib sample-scope
 # sampler) against a fake `acos` binary that writes suit-shaped artifacts, so the
@@ -172,7 +172,7 @@ EOS
 cat >"$TMP/bin/drop-guest-sampler.py" <<EOS
 #!/usr/bin/env python3
 import json, os, subprocess, sys
-REAL = "$ROOT/tools/benchlib.py"
+REAL = "$ROOT/tools/bench/benchlib.py"
 prefix = os.environ.get("DROP_GUEST_LABEL_PREFIX", "T01")
 args = sys.argv[1:]
 out = label = None
@@ -201,7 +201,7 @@ EOS
 
 run_suite() { # run_suite OUT [extra args...]
     local out="$1"; shift
-    bash "$ROOT/tools/run-suite.sh" --only "${ONLY:-T01}" --rounds 1 \
+    bash "$ROOT/tools/verify/run-suite.sh" --only "${ONLY:-T01}" --rounds 1 \
         --acos "$TMP/bin/acos" --acos-art /bin/true \
         --artifacts "$TMP/art" --out "$out" --no-host-gate --mem 2G \
         --timeout 120 "$@"

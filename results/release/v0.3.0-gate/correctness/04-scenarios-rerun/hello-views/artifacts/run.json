@@ -1,7 +1,0 @@
-{
-  "request_id": "req_33cfd0_18e87be1d8a15c38",
-  "started_at": "2026-11-16T09:17:41.439Z",
-  "scenario": "scenarios/hello-views.yaml",
-  "apk": "",
-  "acos_version": "0.3.0"
-}

@@ -11,7 +11,7 @@ The loop is run twice per app; every iteration after one warm-up is a sample.
 The per-verb table, round-trips, payload bytes and gate results are written in
 the BENCHMARKS.md section 11 / ADVISOR item 5 result schema. Statistics,
 provenance, host gate, error classification and JSON writing come from
-``tools/benchlib.py`` (imported, never duplicated).
+``tools/bench/benchlib.py`` (imported, never duplicated).
 
 Honesty rules encoded here:
   * a verb that returns ``ok: false`` is never counted as a successful sample;
@@ -42,7 +42,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parent.parent
-sys.path.insert(0, str(REPO / "tools"))
+sys.path.insert(0, str(REPO / "tools/bench"))
 
 import benchlib  # noqa: E402  (path inserted above)
 

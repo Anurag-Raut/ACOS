@@ -2,7 +2,7 @@
 #
 # bench-d2.sh -- W33: the D2 table (M1-M11) measured on the real ART engine,
 # release binaries only, with the W29 statistics/noise/verdict rules
-# (tools/benchlib.py; BENCHMARKS.md section 11) and the ADVISOR item-1 design
+# (tools/bench/benchlib.py; BENCHMARKS.md section 11) and the ADVISOR item-1 design
 # (results/art-runtime/ADVISOR-benchmarks-top10.md global decisions).
 #
 #   tools/art-runtime/bench-d2.sh [--samples 20] [--mem-reps 5]
@@ -51,7 +51,7 @@
 # Metric states: `cold-process` = no ACOS process alive, page cache warm;
 # `cold` = the legacy cold state category; `warm` = a session/pool already up.
 # Metric types are stated per row; a type/state mismatch is NOT_COMPARABLE
-# (never a win). See BENCHMARKS.md section 11 and tools/benchlib.py.
+# (never a win). See BENCHMARKS.md section 11 and tools/bench/benchlib.py.
 #
 # Host disk (W48; on 2026-11-11/12 this script filled the disk and kept 36 GB of
 # per-rep artifacts):
@@ -173,7 +173,7 @@ if [ -z "$BIN_DIR" ]; then
     BIN_DIR="$TARGET_ROOT/release"
     if [ "$NO_BUILD" -eq 0 ]; then
         echo "bench-d2: building release into $TARGET_DIR (guarded)" >&2
-        if ! CARGO_TARGET_DIR="$TARGET_DIR" "$ROOT/tools/guarded.sh" --mem 12G --time 900 -- \
+        if ! CARGO_TARGET_DIR="$TARGET_DIR" "$ROOT/tools/guard/guarded.sh" --mem 12G --time 900 -- \
                 cargo build --release -p acos-cli -p acos-art >"$OUT/build.log" 2>&1; then
             echo "bench-d2: release build failed; see $OUT/build.log" >&2
             exit 3
@@ -190,7 +190,7 @@ done
 if ! python3 -I - "$ROOT" "$ACOS" "$ACOS_ART" <<'PY'
 import json
 import sys
-sys.path.insert(0, sys.argv[1] + "/tools")
+sys.path.insert(0, sys.argv[1] + "/tools/bench")
 import benchlib
 bins = [benchlib.binary_provenance(sys.argv[2]), benchlib.binary_provenance(sys.argv[3])]
 for b in bins:
@@ -212,7 +212,7 @@ fi
 # ---- host gate (loadavg1 <= 4, MemAvailable >= 30 GiB; lock taken per run) ----
 if ! python3 -I - "$ROOT" <<'PY'
 import sys
-sys.path.insert(0, sys.argv[1] + "/tools")
+sys.path.insert(0, sys.argv[1] + "/tools/bench")
 import benchlib
 g = benchlib.host_gate(sys.argv[1], check_lock=False)
 print("bench-d2: host gate %s (loadavg1 %s, MemAvailable %s GiB)"
@@ -250,7 +250,7 @@ if [ "$MODE" = "warm" ]; then
     while :; do
         if python3 -I - "$ROOT" <<'PY'
 import sys
-sys.path.insert(0, sys.argv[1] + "/tools")
+sys.path.insert(0, sys.argv[1] + "/tools/bench")
 import benchlib
 g = benchlib.host_gate(sys.argv[1], check_lock=False)
 print("bench-d2: warm host gate ok=%s loadavg1=%s mem_available=%s GiB"
@@ -273,7 +273,7 @@ PY
         local n="$1" rep="$2"; shift 2
         echo "bench-d2: warm rep N=$n rep=$rep (UTC $(date -u +%FT%TZ))" >&2
         "$ROOT/tools/art-runtime/run-exclusive.sh" --task "$WARM_TASK" -- \
-            "$ROOT/tools/guarded.sh" --mem 16G --time 1500 -- \
+            "$ROOT/tools/guard/guarded.sh" --mem 16G --time 1500 -- \
             python3 -I "$WARM_DRIVER" --acos "$ACOS" --phase mem --n "$n" --rep "$rep" \
                 --outdir "$WARM_OUT" --settle "$WARM_SETTLE" \
                 --samples "$WARM_SAMPLES" --resets "$WARM_RESETS" "$@"
@@ -318,11 +318,11 @@ SAMPLES = int(sys.argv[5]); MEM_REPS = int(sys.argv[6])
 COHORTS = [int(x) for x in sys.argv[7].split()]
 SUITE_MAX = int(sys.argv[8]); QUICK = sys.argv[9] == "1"
 
-sys.path.insert(0, os.path.join(ROOT, "tools"))
+sys.path.insert(0, os.path.join(ROOT, "tools", "bench"))
 import benchlib  # noqa: E402
 
 RUNEX = os.path.join(ROOT, "tools/art-runtime/run-exclusive.sh")
-GUARD = os.path.join(ROOT, "tools/guarded.sh")
+GUARD = os.path.join(ROOT, "tools/guard/guarded.sh")
 APK = os.path.join(ROOT, "fixtures/build/apps/counter.apk")
 SCEN = os.path.join(ROOT, "scenarios/v2-art-counter.yaml")
 ARTI = os.path.join(OUT, "artifacts")
@@ -512,7 +512,7 @@ import json, os, subprocess, sys, threading, time
 cfg = json.load(open(sys.argv[1]))
 ROOT, ACOS, APK, SCEN, N, OUT = (cfg["root"], cfg["acos"], cfg["apk"],
                                  cfg["scenario"], int(cfg["n"]), cfg["adir"])
-sys.path.insert(0, os.path.join(ROOT, "tools"))
+sys.path.insert(0, os.path.join(ROOT, "tools", "bench"))
 import benchlib
 
 MiB = 1024.0 * 1024.0

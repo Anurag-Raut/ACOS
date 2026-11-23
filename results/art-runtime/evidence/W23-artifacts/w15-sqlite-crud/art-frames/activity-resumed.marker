@@ -1,7 +1,0 @@
-package=dev.acos.fixtures.sqlitecrud
-activity=dev.acos.fixtures.sqlitecrud.MainActivity
-lifecycle=onCreate,onStart,onResume
-resumed=true
-called=true
-stopped=false
-window=com.android.internal.policy.PhoneWindow@d525128

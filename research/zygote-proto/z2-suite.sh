@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Z2 suite: ECHILD diagnostic + three memory snapshots, inside one ART lock hold.
-# Called by tools/art-runtime/run-exclusive.sh + tools/guarded.sh.
+# Called by tools/art-runtime/run-exclusive.sh + tools/guard/guarded.sh.
 set -uo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CACHE="${ACOS_CACHE:-/home/Qui/Projects/acos/.cache}"

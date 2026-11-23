@@ -36,7 +36,7 @@ export ACOS_MCP_QUIET=1
 APK="$ROOT/fixtures/build/apps/hello-views.apk"
 DEX="$ROOT/fixtures/build/dexprogs/01_hello/classes.dex"
 if [ ! -f "$APK" ] || [ ! -f "$DEX" ]; then
-  echo "smoke: fixtures are missing; run tools/build-apps.sh and tools/build-fixtures.sh" >&2
+  echo "smoke: fixtures are missing; run tools/build/build-apps.sh and tools/build/build-fixtures.sh" >&2
   exit 1
 fi
 

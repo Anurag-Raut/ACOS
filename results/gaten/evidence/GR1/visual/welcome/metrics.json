@@ -1,1 +1,0 @@
-{"name": "welcome", "device": "dev/shots/dev-00-welcome.png", "acos": "flow2/01-welcome-settled.png", "size": [1080, 2292], "ssim": 0.84854, "pct_pixels_differing": 38.95, "pct_pixels_differing_gt16": 14.558, "mean_abs_channel_diff": 18.791}

@@ -54,7 +54,7 @@ bytecode, allocates objects, and garbage-collects.
   biggest "replace what Android does underneath" surface.
 - `crates/acos-vm/src/snapshot.rs`: freeze and restore a booted VM. This is how the warm boot cache works.
 
-**Check yourself.** `tools/diff-dexprogs.sh --corelib real` runs 27 small Java programs on both the real
+**Check yourself.** `tools/verify/diff-dexprogs.sh --corelib real` runs 27 small Java programs on both the real
 JVM and our VM and compares the output. It is our most basic correctness test.
 
 **Go deeper.**

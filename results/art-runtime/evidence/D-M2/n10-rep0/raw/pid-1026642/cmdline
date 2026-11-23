@@ -1,1 +1,0 @@
-/system/apex/com.android.art/bin/dalvikvm64 -cp /data/app/launch-guest/classes.dex dev.acos.art.LaunchMain /data/app/counter.apk dev.acos.fixtures.counter /data/out/launch activity-resumed dev.acos.fixtures.counter.MainActivity 0 /data/overlay/PixelConfigOverlayCommon.idmap 2130903040 0 276824134 manifest

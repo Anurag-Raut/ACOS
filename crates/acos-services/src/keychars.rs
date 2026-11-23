@@ -27,7 +27,7 @@
 //! ```
 //!
 //! The map content comes from the stock file shipped in the sysroot
-//! (`tools/art-sysroot.sh` exports `/system/usr/keychars`), parsed with the
+//! (`tools/fetch/art-sysroot.sh` exports `/system/usr/keychars`), parsed with the
 //! semantics of the stock `KeyCharacterMap::Parser` (property modifiers,
 //! `push_front` behaviour order, default `number` derivation). No hand-written
 //! US layout is involved: `/system/usr/keychars/Virtual.kcm` is the map the
@@ -604,7 +604,7 @@ fn load_stock() -> StockMaps {
     let Some(dir) = keychars_dir() else {
         eprintln!(
             "acos-services: keychars: no /system/usr/keychars (guest text input will not resolve); \
-             run tools/art-sysroot.sh"
+             run tools/fetch/art-sysroot.sh"
         );
         return StockMaps {
             virtual_keyboard: None,

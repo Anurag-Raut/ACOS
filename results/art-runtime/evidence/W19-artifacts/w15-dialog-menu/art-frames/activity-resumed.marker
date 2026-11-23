@@ -1,7 +1,0 @@
-package=dev.acos.fixtures.dialogmenu
-activity=dev.acos.fixtures.dialogmenu.MainActivity
-lifecycle=onCreate,onStart,onResume
-resumed=true
-called=true
-stopped=false
-window=com.android.internal.policy.PhoneWindow@4bfa6e8

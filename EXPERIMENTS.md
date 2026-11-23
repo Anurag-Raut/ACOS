@@ -221,7 +221,7 @@ real execution artifact (the E2.1 C1 gate), not a plan.*
 - **Date / commit:** 2026-11-10; through `ced0d70`/`40f075c`.
 - **Question / goal:** execute the real boot-classpath bytecode for the console
   tier and match the ART oracle.
-- **Method:** `tools/diff-dexprogs.sh --corelib real` (normal and
+- **Method:** `tools/verify/diff-dexprogs.sh --corelib real` (normal and
   `ACOS_GC_STRESS=1`), against `fixtures/expected-art/dexprogs/`.
 - **Result:** the original 20-program gate passes byte-identical stdout + exit
   (`results/m1/README.md`); the corpus is now 25 programs, and W25-B records
@@ -281,7 +281,7 @@ real execution artifact (the E2.1 C1 gate), not a plan.*
 - **Date / commit:** 2026-11-10; `7f7b729`…`ced0d70`.
 - **Question / goal:** measure every metric the harness can support vs the
   legacy ACVM baseline.
-- **Method:** `tools/bench-acos.sh` (`>=20` samples, p50/p95), artifacts under
+- **Method:** `tools/bench/bench-acos.sh` (`>=20` samples, p50/p95), artifacts under
   `results/bench/`.
 - **Result (from `results/bench/REPORT.md`):** M1 157.6 MiB vs 206.0 MiB
   (`-23.5%`), M2 N=5 43.032 MiB/session vs 78.7 MiB (`-45.3%`), per-session N=1
@@ -291,7 +291,7 @@ real execution artifact (the E2.1 C1 gate), not a plan.*
 - **Fidelity / evidence:** `native-runtime` (not ART-verified);
   `results/bench/REPORT.md`, `run-2026-11-10-201637.json`,
   `results/bench/MEMORY_PROFILE.md`.
-- **Regression / false pass:** gate `tools/bench-acos.sh --check` against
+- **Regression / false pass:** gate `tools/bench/bench-acos.sh --check` against
   `results/bench/baseline.json`.
 - **Conclusion / next:** measure M3–M11 as the capabilities land.
 
@@ -300,7 +300,7 @@ real execution artifact (the E2.1 C1 gate), not a plan.*
 - **Date / commit:** 2026-11-10; `2563a86` (perf merge).
 - **Question / goal:** close the interpreter gap (ADR-0013 step 1) and hit the
   ≥4×/≥5× speedup targets.
-- **Method:** `tools/bench-vm.sh`, 10 reps, host OpenJDK 17; `crates/acos-vm/PERF.md`.
+- **Method:** `tools/bench/bench-vm.sh`, 10 reps, host OpenJDK 17; `crates/acos-vm/PERF.md`.
 - **Result:** BenchFib 4.17× (528 ms vs 341 ms `-Xint`, 1.55× slower);
   BenchLoop 3.48× (1,696 ms vs 411 ms, 4.13× slower); BenchAlloc 3.58×
   (2,109 ms vs 1,216 ms, 1.73× slower); BenchString 3.30× **faster** than
@@ -344,8 +344,8 @@ real execution artifact (the E2.1 C1 gate), not a plan.*
   `kill -9` on the daemon with a live session. Two binaries from the same tree, one line apart
   (`command.spawn()` on the calling thread vs. `spawner::spawn(command)`), same fixture, same commands.
   Fixtures: `counter`, and a new `thread-heavy` (12 non-daemon threads that never exit), added to
-  `tools/build-apps.sh`. All runs through `tools/art-runtime/run-exclusive.sh --task GL1 --
-  tools/guarded.sh --mem 8G --time N`.
+  `tools/build/build-apps.sh`. All runs through `tools/art-runtime/run-exclusive.sh --task GL1 --
+  tools/guard/guarded.sh --mem 8G --time N`.
 - **Result:** before, every client-B call answered `GUEST_EXITED … exited: signal 9` (the PDEATHSIG fired
   when the launch connection's *thread* ended); after, status/tree/tap/screenshot all pass, `0` → `1`
   with a 9.5 MB PNG, and `destroy` leaves no `acos-art`. Daemon `kill -9`: guests gone in **1 ms**.
@@ -377,7 +377,7 @@ viewBox defect and an insets defect — MEASURED (two defects open)
   *engine* or only of the *route*?
 - **Inputs / method:** Gaten `dev` `f344272` x86_64 release (unsigned,
   sha256 `e04c7ffc…`); `acos-art launch` interactive, one guest per run, all runs
-  under `tools/art-runtime/run-exclusive.sh` + `tools/guarded.sh --mem 8G`.
+  under `tools/art-runtime/run-exclusive.sh` + `tools/guard/guarded.sh --mem 8G`.
   Routing read in `crates/acos-mcp/src/session_backend.rs` and
   `crates/acos-cli/src/engine/serve.rs`. Reference device: moto g35 ZA222WGJPP,
   same source commit rebuilt as `com.gaten.acosref` (arm64, identical JS bundle
@@ -1327,7 +1327,7 @@ PASS (1 documented false pass -> 0; one live Gaten false pass re-measured as a r
   falls back. `acos-art build-image` now shares the same builder. Documented in
   `docs/AGENT_API.md` §16.1 and `docs/SECURITY.md`.
 - **Method.** Every ART arm went through `tools/art-runtime/run-exclusive.sh
-  --task H13 -- tools/guarded.sh ...` (8G; 16G for N=10; scratch under
+  --task H13 -- tools/guard/guarded.sh ...` (8G; 16G for N=10; scratch under
   `.cache/h13/`). M2: `tools/art-runtime/dm2/measure.py` with `--settle 60`,
   N=1/5/10, one held serve per arm, `ΣPss`, private dirty and cgroup
   anon+shmem from `/proc`/`memory.stat`; host load recorded before/after. M3/M4:
@@ -1822,7 +1822,7 @@ semantics vs AOSP, uid escape analysis) before any merge.
 - **Benchmark method + environment + host load:** 24 loop cells (N=1/5/10/20 × animations on/off × 3
   reps, arms interleaved `on,off`/`off,on`/`on,off`), 4 N=30 ceiling reps (3 on, 1 off), 4 compat runs
   (2 × N=5, 2 × N=10), 6 Gaten runs (2 × N=1/5/10), 1 P11/scenarios false-pass group, 2 failure
-  reproductions (11 P5 reps at N=20). One `run-exclusive.sh --task S3 -- tools/guarded.sh --mem 24G`
+  reproductions (11 P5 reps at N=20). One `run-exclusive.sh --task S3 -- tools/guard/guarded.sh --mem 24G`
   acquisition per cell, **lock hold (elapsed − queue) 8–151 s**, every acquisition < 10 min. Host:
   Ryzen 9 9950X, 32 threads, 61,908 MiB; scratch `.cache/s3/**`, `ACOS_FONT_DIR` set, `ACOS_BOOT_DIR`
   unset, no `/tmp`. **Interleaved with other agents** (recorded, not avoided): GR3 51 acquisitions,
@@ -1928,7 +1928,7 @@ semantics vs AOSP, uid escape analysis) before any merge.
   monotone `memory.peak` per scope as a sampling-independent cross-check, and charge Pss **per session
   id** (run-tree path in the guest's cmdline, `<ACOS_SERVE_ARTIFACTS>/<session>/…`) instead of per
   current child. Report coverage and the sampler's own thread CPU beside every number.
-- **Implementation + commits:** `tools/benchlib.py` (`ChurnSampler` + `_pid_chain_hits`, `cgroup_procs`,
+- **Implementation + commits:** `tools/bench/benchlib.py` (`ChurnSampler` + `_pid_chain_hits`, `cgroup_procs`,
   `thread_cpu_seconds`), `tools/bench/acos_bench.py` (`phase_loop` runs it *beside* the legacy sampler
   and records `cohort.memory_s3c`; new metric `loop_n<N>_tasks_per_gib_min_net_s3c`),
   `tools/tests/test-benchlib.py` (+4 tests, 232 pass). Commit on `bench-s3c-sampler`.
@@ -1936,7 +1936,7 @@ semantics vs AOSP, uid escape analysis) before any merge.
   per session, 20 sessions in one `acos serve`, real ART (`acos bench` release binary `7fb5e56064d3…`,
   unchanged main build, so before/after is a **paired sampler** comparison in the *same* cohort window
   rather than two campaigns). Host Ryzen 9 9950X, 32 threads, 61.9 GiB; one
-  `run-exclusive.sh --task s3c -- tools/guarded.sh --mem 8G --time 400` acquisition per rep;
+  `run-exclusive.sh --task s3c -- tools/guard/guarded.sh --mem 8G --time 400` acquisition per rep;
   load1 3.66–8.47, MemAvailable ≥ 44.4 GiB, host CPU 21.9–40.4 % (other agents K5h/S3AB held the lock).
 - **Before/after (N=20; GiB-min anon+shmem, before → after):**
   off **1182.1–1225.6 → 553.5–557.0** tasks/GiB-min (0.0846–0.0816 → 0.1807–0.1795 GiB-min);
@@ -1994,11 +1994,11 @@ semantics vs AOSP, uid escape analysis) before any merge.
   latency, error codes, ChurnSampler, coverage, screenshot cap), `tools/bench/s3_scale.py`
   (ChurnSampler, verified-only launch/tree latency, coverage, non-zero exit on missing APK/worker/
   sampler errors), `tools/art-runtime/{d2_warm,dm2/measure,agent_loop}.py`,
-  `research/zygote-proto/z7/loop.py`, `tools/benchlib.py` (`prune_screens`, ChurnSampler
+  `research/zygote-proto/z7/loop.py`, `tools/bench/benchlib.py` (`prune_screens`, ChurnSampler
   `window`/`extras`), tests `tools/tests/test-benchlib.py` (+2) and new
   `tools/tests/test-bench-harness.py` (9 tests). Commit on `bench-b4-harness`.
 - **Method + environment + host load:** real ART release binary (unchanged main build), one
-  `run-exclusive.sh --task B4 -- tools/guarded.sh --mem 8G --time 300/540` acquisition per proof;
+  `run-exclusive.sh --task B4 -- tools/guard/guarded.sh --mem 8G --time 300/540` acquisition per proof;
   negative run load1 1.83 (MemAvailable 44.8 GiB), positive before load1 2.61 / after 6.76
   (MemAvailable 44.9 / 42.9 GiB; after `noisy=true`, recorded). 5 sessions, 10 loops/agent,
   1 warm-up → 45 measured tasks per arm. Unit tests: **242 + 9 passed, 0 failed**.
@@ -2034,7 +2034,7 @@ semantics vs AOSP, uid escape analysis) before any merge.
   root-cause the `probe-floor` starvation, and propose — not implement — a verification-semantics
   change for screens that animate forever.)
 - **Inputs / method:** the same read-only APK (`f344272`, sha256 `e04c7ffc…`), `.cache/gaten/src-dev`
-  read-only, one scenario per ART-lock invocation, `tools/guarded.sh --mem 8G`, scratch
+  read-only, one scenario per ART-lock invocation, `tools/guard/guarded.sh --mem 8G`, scratch
   `.cache/gr3/`, `animations: off` for functional flows. Five scenarios + five negative controls;
   gates and crate tests under the same lock. No Gaten file was changed.
 - **Screen map (verified in tree/pixels):** onboarding welcome + 1/3 lookup, 2/3 Anki, 3/3
@@ -2196,7 +2196,7 @@ semantics vs AOSP, uid escape analysis) before any merge.
   layer, AOSP reference, bug vs missing feature). No fixes in `crates/`.
 - **Inputs / method:** one scenario file per claim plus one negative twin each; batches under a
   single ART-lock acquisition per group (`tools/art-runtime/run-exclusive.sh --task gr4 --
-  tools/guarded.sh --mem 8G --time …`), `animations: off`, scratch `.cache/gr4/`. Onboarding taps
+  tools/guard/guarded.sh --mem 8G --time …`), `animations: off`, scratch `.cache/gr4/`. Onboarding taps
   are `settle: fast` **navigation only**, exactly as GR3; every claim after them is a strict
   `wait_for`/`assert_*` on a bound capture frame. Gaten source read only (`src-dev`), no file
   changed, no `adb`.
@@ -3204,7 +3204,7 @@ stopped at the window close to release the shared ART queue) — see
 **S3b class A (root-caused, fixed):** the guarded scope's `TasksMax=512` was exhausted by an
 N=20/40 cohort; the hosted vsync thread could not spawn (`EAGAIN`), the guest's
 `DisplayEventReceiver` init returned `-ENODEV`, `Choreographer` threw, the guest exited 1
-(`results/bench/S3ab-evidence/repro-n40-thread-eagain/`). `tools/guarded.sh` now defaults
+(`results/bench/S3ab-evidence/repro-n40-thread-eagain/`). `tools/guard/guarded.sh` now defaults
 `TasksMax=8192` (env-overridable) and `ConnectionClock::new` retries `WouldBlock`/`OutOfMemory`
 20 × 10 ms and names the attempt count instead of leaking a bare `EAGAIN`.
 
@@ -3387,7 +3387,7 @@ headline) and **anon+shmem** (label-matched with M1/M2).
 | Agent loop (animations on) | **1421.9 ms/task; 0.658 tasks/s, 281.6 (page cache) / 891.7 (anon+shmem) tasks/GiB-min at N=1; 1424.6 ms, 2.699 tasks/s, 681.3 / 846.6 at N=5** (H15 binary, 3 reps, verified 1.000); main `4958703` measured 1437.6 / 1441.0 ms in the same H15 window | `perf-h15-reset` (H15) off main `1ce336b`; B2 row for main `4958703` | H15, E2.14 (B2, E3.2) | 2026-11-13 | H15 vs its own interleaved base: **−1.1 % latency at N=1 and N=5**; 0 false passes, verified rate 1.000 |
 | Agent loop (animations off, functional-check mode) | **507–523 ms/task, 1.79 tasks/s, 5239 tasks/GiB-min (anon+shmem) at N=1; 537 ms / 6.28 / 3942 at N=5; 530 ms / 10.22 / 3798 at N=10**; H15 re-measured 490.8 (base) / 501.7 (H15 binary) at N=1 and 518.3 / 516.9 at N=5 | main `4958703`, `--animations off` | H14, E3.3 (H15, E2.14) | 2026-11-13 | 2.71–2.84× latency; the 5.8×/5.0×/8.7× anon+shmem tasks/GiB-min ratios at N=1/5/10 were the S3c denominator bias — corrected (E3.5) the *latency* ratio 2.76–2.79× holds and the cohort GiB-min ratio tracks throughput (1.23–1.30× at N=20); loop becomes reset-bound (48 %); not a default change. H15's Δ is inside noise (±5 % threshold, overlapping rep ranges) |
 | False passes | **0** — P11 0/105, scenarios 0/12 (negative control = honest `timeout`), loop 0; verified 63/63 (N=1) and 75/75 (N=5) | main `4958703` | B2, E3.2 | 2026-11-13 | H6's 1-in-75 strict-assert flake (H16) did not reproduce |
-| Agent loop N=10 reliability | **100 %: 600/600 verified, 30 × 20 first; 60 × 10 after (both animations on)** with `TasksMax=8192`, 0 false passes, **0 unrecovered failures, 1 class-B retry (recovered, first failure preserved)**; before S3ab: 428/450 (95.1 %) for H17 and 599/600 (1 class-B exit 1) | `fix-s3ab-reset` off main `6301c06`, 10/20 sessions / one serve, `tools/bench/s3ab_repro.py` 1-task reps | S3ab, E2.15 | 2026-11-14 | S3b class A was the 512-task scope (vsync thread `EAGAIN`), fixed in `tools/guarded.sh`; class B is a malformed `addToDisplayAsUser` reply and is **mitigated** (one bounded, evidence-preserving retry), root cause open; S3a did not occur in 3 000 resets |
+| Agent loop N=10 reliability | **100 %: 600/600 verified, 30 × 20 first; 60 × 10 after (both animations on)** with `TasksMax=8192`, 0 false passes, **0 unrecovered failures, 1 class-B retry (recovered, first failure preserved)**; before S3ab: 428/450 (95.1 %) for H17 and 599/600 (1 class-B exit 1) | `fix-s3ab-reset` off main `6301c06`, 10/20 sessions / one serve, `tools/bench/s3ab_repro.py` 1-task reps | S3ab, E2.15 | 2026-11-14 | S3b class A was the 512-task scope (vsync thread `EAGAIN`), fixed in `tools/guard/guarded.sh`; class B is a malformed `addToDisplayAsUser` reply and is **mitigated** (one bounded, evidence-preserving retry), root cause open; S3a did not occur in 3 000 resets |
 | Agent loop N=20 reliability | **100 %: 600/600 verified on and 600/600 off**, 0 false passes, **1 class-B retry (recovered)** on the on arm, none off; **600/600 at N=40 on** (class-A stress) | same branch, same harness | S3ab, E2.15 | 2026-11-14 | S3's 298/300 N=20 and its 1/100 reset defects: class A fixed in the harness, class B retried once with the first failure kept; no 60 s `NO_LIVE_FRAME` in 3 000 resets |
 | Compat first-frame rate (K1 corpus, real ART, N=1) | **17/42 (40.5 %)**; tree/screenshot 16/42 (38.1 %); tap 9/42 (21.4 %); `onCreate` completed **20/42** (47.6 %); first frame p50 **808 ms** / p90 **1269 ms** (K3 12/42, tap 7/42, 16/42, 647/1050 ms). Same binary with app providers off: 14/42 first frame, tap 8/42, 18/42, p50 546/p90 1043 ms — ON is >= OFF at every rung with zero per-app regressions, so ON is the default | K4 `compat-k4-metadata` (E5.8 K3d metadata+sourceDir, E5.9 K3e binder-driver refill) | K4/K3d–K3e, E5.8–E5.9 | 2026-11-13 |
 | Compat first-frame rate after K5 (K1 corpus, real ART, N=1) | **15/42 first frame, 15/42 tree, 9/42 tap, 20/42 `onCreate` completed on the final tree (`ed2ff4d`), 2 rounds, identical in both** — vs main `d7dc8e2` 15/15/9 with 21 `onCreate`; per-app rungs identical between rounds; the only delta is `chat.fluffy.fluffychat` (`onCreate` entered vs completed), unresolved and not K5-attributable. First-frame p50/p90 612–626 / 1422–1428 ms | `compat-k5-keystore` (E5.10b) | K5/E5.10 | 2026-11-14 | **not accepted: security/fidelity review pending; one main-side gate red (`w7-insets-report`, fails on `d7dc8e2` too)** |
@@ -3410,7 +3410,7 @@ headline) and **anon+shmem** (label-matched with M1/M2).
 **Hypothesis (T1):** the frozen-VM integration failures are all stale goldens
 (PMS `app.flags`, framework bool) and `render_views` is an unrelated slow test.
 **Method:** one guarded invocation per test binary
-(`tools/guarded.sh --mem 12G --time 240 -- cargo test --release --offline -p
+(`tools/guard/guarded.sh --mem 12G --time 240 -- cargo test --release --offline -p
 <crate> --test <name> --no-fail-fast`), then per crate; a debugger stack for
 the hang (`timeout -s INT gdb --args …`, batch `thread apply all bt`); ART gates
 under one `run-exclusive.sh --task T1` lock.
@@ -4144,7 +4144,7 @@ that `DisplaySpec::rotated` models, which is what the gate pins.
 
 **Branch/tree:** `compat-k5-keystore` after the `--no-ff` merge of `main`
 `3e11d9c` (`43554b0`). Runs under `tools/art-runtime/run-exclusive.sh --task K5B`
-+ `tools/guarded.sh`; driver `tools/keystore-k5b/run.sh`.
++ `tools/guard/guarded.sh`; driver `tools/keystore-k5b/run.sh`.
 
 **Question.** Can a *provider-level* guard enforce AndroidKeyStore key
 characteristics (purposes, validity, randomized IV) the way keystore2 does, given
@@ -4326,7 +4326,7 @@ smallest follow-up.
   `.cache/gaten/gaten-dev-f344272-x86_64-release-unsigned.apk`, release
   `acos`/`acos-art` from `.cache/k5-target/release`, every ART run under
   `/home/Qui/Projects/acos/tools/art-runtime/run-exclusive.sh --task ARTGC --
-  tools/guarded.sh --mem 12G --time …`. Scratch `.cache/artgc/`.
+  tools/guard/guarded.sh --mem 12G --time …`. Scratch `.cache/artgc/`.
 - **Result:**
   - *Measurement (before).* `gaten-home` (pass) wrote 435 MiB: 311 MiB
     `art-frames/live-frames/` (30 mirrored C1 captures), 114 MiB `frames/`
@@ -4366,7 +4366,7 @@ smallest follow-up.
     younger than `--older-than` (default 24h), never a run whose verdict cannot
     be read, and `--dry-run` reports the same freed-byte figure without removing
     anything. Five unit tests build a temp tree with `set_modified` ages.
-  - *No dangling evidence:* `tools/check-artifact-references.py` walks every run
+  - *No dangling evidence:* `tools/verify/check-artifact-references.py` walks every run
     directory, scans every JSON/JSONL for artifact paths (`frames/`, `tree/`,
     `steps/`, `logs/`, `art-frames/`) and resolves each one (including
     cwd-relative paths recorded by the launcher). It skips `retention.json`'s
@@ -4575,7 +4575,7 @@ Host: peak guest cgroup 432 MiB, MemAvailable never below 29 GiB (49 % of 60 GiB
   linked worktree at `$WT/.cache/shotz-base` (`.cache/base-target`). Every ART
   run and every crate test under
   `/home/Qui/Projects/acos/tools/art-runtime/run-exclusive.sh --task SHOTZ --
-  tools/guarded.sh --mem 10G --time …`; builds via `tools/guarded.sh --mem 14G`.
+  tools/guard/guarded.sh --mem 10G --time …`; builds via `tools/guard/guarded.sh --mem 14G`.
   Scratch `$WT/.cache/shotz-*`.
 - **Result:**
   - *Candidate sweep* (deflate time includes the filter; same frames):
@@ -4744,7 +4744,7 @@ nothing in this change is on the tap path).
   the `ctl` op on the launcher's `services` command, plus the `sensor-probe`
   fixture. ART runs under `run-exclusive` + `guarded` (12 GiB).
 - **Inputs:** `fixtures/build/apps/sensor-probe.apk` (built by
-  `tools/build-apps.sh`), `scenarios/sensors-scripted.yaml`,
+  `tools/build/build-apps.sh`), `scenarios/sensors-scripted.yaml`,
   `scenarios/sensors-off.yaml`; API-34 image.
 - **Result:** run 1 (before the padding fix) — the framework sensor list was
   empty even with seven sensors served: the guest logged `Failed to read reply
@@ -5023,7 +5023,7 @@ nothing in this change is on the tap path).
   as an 8 KiB ring buffer, surfaced on errors) to a file sink
   (`ACOS_ATMS_TRACE=<path>`, `…=1` keeps stderr). That alone reversed two ROT6
   readings. Runs: `counter.yaml --engine art` through
-  `tools/art-runtime/run-exclusive.sh --task ROT7` + `tools/guarded.sh`;
+  `tools/art-runtime/run-exclusive.sh --task ROT7` + `tools/guard/guarded.sh`;
   `cargo test -p acos-services`. The AOSP cache
   (`.cache/aosp/base/core/java/android/app/Activity.java`,
   `…/servertransaction/{TransactionExecutor,ResumeActivityItem}.java`,
@@ -5498,7 +5498,7 @@ so a non-clickable listener runs.
   flag any metric where ACOS is worse.
 - **Method:** `tools/art-runtime/emubench/run-emubench.sh` drives four exclusive
   phases (`n1-cold`, `n1-warm`, `n2`, `n4`) through
-  `run-exclusive.sh --exclusive` + `tools/guarded.sh --mem 24G`; the harness
+  `run-exclusive.sh --exclusive` + `tools/guard/guarded.sh --mem 24G`; the harness
   (`emu_bench.py`, `--self-test` 10/0) measures cold boot → first app frame,
   warm launch, tap → settled (counter + form), UI tree read, PNG screenshot,
   install, reset, host PSS/RSS/anon+shmem + guest memory, idle CPU and verified

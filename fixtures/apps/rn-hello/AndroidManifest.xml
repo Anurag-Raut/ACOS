@@ -9,7 +9,7 @@
   assets/index.android.bundle.
 
   Built with the gradle-free fixture toolchain (aapt2 + javac + d8 +
-  zipalign + apksigner) by tools/build-rn-hello.sh. New Architecture is
+  zipalign + apksigner) by tools/build/build-rn-hello.sh. New Architecture is
   deliberately OFF: ReactTextView extends androidx.appcompat.widget's
   AppCompatTextView and the UI goes through the legacy UIManager.
 -->

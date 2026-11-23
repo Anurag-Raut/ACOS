@@ -1,8 +1,0 @@
-{
-  "request_id": "req_14e404_18e86f6ca4f70541",
-  "started_at": "2026-11-16T05:29:23.921Z",
-  "scenario": "scenarios/rel3a-content-sticky.yaml",
-  "apk": "",
-  "acos_version": "0.2.3",
-  "overwrote_run_id": "req_135e8a_18e86ee540519edb"
-}

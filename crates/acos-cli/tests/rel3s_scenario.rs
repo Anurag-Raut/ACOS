@@ -16,9 +16,9 @@
 //! shared lock and the host guard:
 //!
 //! ```text
-//! ACOS_APP_ONLY=scroll-list tools/build-apps.sh
+//! ACOS_APP_ONLY=scroll-list tools/build/build-apps.sh
 //! tools/art-runtime/run-exclusive.sh --task REL3S -- \
-//!   tools/guarded.sh --mem 10G --time 900 -- \
+//!   tools/guard/guarded.sh --mem 10G --time 900 -- \
 //!   cargo test -p acos-cli --release --test rel3s_scenario -- --ignored --test-threads=1
 //! ```
 
@@ -98,7 +98,7 @@ fn run_scenario_for_apk(tag: &str, yaml: &str, app: &str) -> (PathBuf, Value) {
     let apk = repo_root().join(format!("fixtures/build/apps/{app}.apk"));
     assert!(
         apk.is_file(),
-        "build the fixture first: `ACOS_APP_ONLY={app} tools/build-apps.sh` "
+        "build the fixture first: `ACOS_APP_ONLY={app} tools/build/build-apps.sh` "
     );
     let artifacts = dir.join("artifacts");
     let output = std::process::Command::new(acos())
@@ -189,7 +189,7 @@ fn capture_tree_rows(artifacts: &Path, verdict: &Value) -> Vec<u32> {
 }
 
 #[test]
-#[ignore = "boots a real ART guest; run under tools/guarded.sh + run-exclusive.sh"]
+#[ignore = "boots a real ART guest; run under tools/guard/guarded.sh + run-exclusive.sh"]
 fn swipe_reveals_an_offscreen_row_and_scroll_until_taps_a_deep_row() {
     // ---- 1. a plain `swipe` moves the list --------------------------------
     // A slow drag (well under the framework's minimum fling velocity) moves the
@@ -334,7 +334,7 @@ fn swipe_reveals_an_offscreen_row_and_scroll_until_taps_a_deep_row() {
 /// answering `ELEMENT_NOT_FOUND` (which an agent cannot tell from a selector
 /// that never renders). Both are non-passes; only one says *why*.
 #[test]
-#[ignore = "boots a real ART guest; run under tools/guarded.sh + run-exclusive.sh"]
+#[ignore = "boots a real ART guest; run under tools/guard/guarded.sh + run-exclusive.sh"]
 fn scroll_until_stops_at_the_end_of_the_list() {
     let (_, verdict) = run_scenario_yaml(
         "end-of-list",
@@ -425,7 +425,7 @@ steps:
 /// the step must fail with `ELEMENT_NOT_FOUND`, `input.until.end_of_list:
 /// false`, `gesture_consumed: false` and the hint naming the scroller.
 #[test]
-#[ignore = "boots a real ART guest; run under tools/guarded.sh + run-exclusive.sh"]
+#[ignore = "boots a real ART guest; run under tools/guard/guarded.sh + run-exclusive.sh"]
 fn scroll_until_whose_swipe_was_not_consumed_is_a_miss() {
     let (_, verdict) = run_scenario_for_apk(
         "unconsumed-swipe",

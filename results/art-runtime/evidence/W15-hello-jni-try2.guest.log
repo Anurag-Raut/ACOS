@@ -1,2 +1,0 @@
-ACOSART[render]: dlopen(libandroid_runtime.so) ok @0x3132803efe25390f (default namespace, RTLD_GLOBAL)
-ACOSHWC[gralloc]: software gralloc shim loaded (1 fd / 9 ints)

@@ -8,7 +8,7 @@
 //! a rejected parcel is a structured `BadRequest`.
 //!
 //! The tests are unit-level (no ART, no guest process): the same `ServiceHost`
-//! and the same decoder a live BLAST transaction reaches. `tools/guarded.sh`
+//! and the same decoder a live BLAST transaction reaches. `tools/guard/guarded.sh`
 //! still wraps the run; the memory-bomb cases use a *declared* size that the
 //! old code would have allocated, but the assertion is made at decode time, so
 //! the post-fix path allocates nothing.

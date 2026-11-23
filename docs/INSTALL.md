@@ -65,19 +65,19 @@ app**: the framework's `WebViewFactory` loads a provider package, and ACOS's
 provider is `com.android.webview`. That APK is part of the image, so a fresh
 install needs no separate build step:
 
-* the image build, `tools/extract-bootclasspath.sh`, builds the provider with
-  `tools/build-webview-provider.sh` and stages it at
+* the image build, `tools/fetch/extract-bootclasspath.sh`, builds the provider with
+  `tools/build/build-webview-provider.sh` and stages it at
   `.cache/boot/android-34/system-apps/com.android.webview.apk`, listing it in the
   image's `manifest.json` under `system_apps`. An image built before
   `system-apps/` existed is upgraded in place by the same script (no
   re-extraction); `--system-apps-only` forces just that step;
 * the installer copies it with the rest of the image, and if the source image
   does not have it, the installer builds it into the install root (the one build
-  implementation is `tools/build-webview-provider.sh`); its report says which
+  implementation is `tools/build/build-webview-provider.sh`); its report says which
   path it used;
 * the `webview` module resolves the provider as `config.provider_apk` →
   `ACOS_WEBVIEW_PROVIDER_APK` → the image's copy → the fixture build
-  (`fixtures/build/apps/webview-provider.apk`, what `tools/build-apps.sh`
+  (`fixtures/build/apps/webview-provider.apk`, what `tools/build/build-apps.sh`
   produces for a bare checkout), and its `status` control op names the file it
   used — a wrong or missing provider is visible in the reply, never a WebView
   that paints nothing.
@@ -131,7 +131,7 @@ Who reports it:
   `needs_env: [pasta]` with the product's own rule;
 * the relay's `status` names both the version it found and the expected tag
   (`cargo`/`PASTA_TAG`), so a wrong binary is visible, never silently used;
-* `tools/run-matrix.sh` skips a `needs_env: [pasta]` scenario (and says so in
+* `tools/verify/run-matrix.sh` skips a `needs_env: [pasta]` scenario (and says so in
   `skipped_needs_env`) instead of turning it into a red row that is not the
   scenario's fault.
 
@@ -168,7 +168,7 @@ for building fixtures:
 * the `network` module's `real` profile only: the pinned `pasta` (above);
   without it `doctor` says `pasta: missing`, the module refuses to attach with
   `NETWORK_UNAVAILABLE`, and the `needs_env: [pasta]` scenarios are skipped;
-* fixtures only: `zipalign`, `apksigner`, `keytool`, `tools/apk_append.py`.
+* fixtures only: `zipalign`, `apksigner`, `keytool`, `tools/build/apk_append.py`.
 
 With `ACOS_HOME` set, doctor checks the install itself (root, `VERSION`, sysroot,
 fonts, overlays, guest sources, `acos-art`, `install_webview`, writable state)

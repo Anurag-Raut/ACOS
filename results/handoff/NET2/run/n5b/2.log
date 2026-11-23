@@ -1,6 +1,0 @@
-verify: error (ok=false, backend=acos-native, fidelity=art-reference)
-  engine: art (mode: live)
-  error: GUEST_EXITED: acos-art: GUEST_EXITED: the guest ended while binding the tree (status exit status: 1)
-  artifacts: results/handoff/NET2/run/n5b/2
-  steps: 9
-verify: GUEST_EXITED (harness): acos-art: GUEST_EXITED: the guest ended while binding the tree (status exit status: 1) [class=harness, retryable=false]

@@ -1,3 +1,0 @@
-ZP1 child tag=1 pgrp_rc=0 pid_in_ns=2 fork_to_sandbox_ms=4 userns=0 mntns=0 pidns=0 binds_rc=0 binds=9 threads=6
-ZP1 child tag=1 guard_ms=0 seccomp=2
-ZP1 child tag=1 fork_to_ready_ms=6 threads=10

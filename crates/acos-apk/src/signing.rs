@@ -263,7 +263,7 @@ fn push_cert(out: &mut Vec<Vec<u8>>, cert: Vec<u8>) -> Result<()> {
 /// minimum and maximum SDK versions (two little-endian `int32`s) between the
 /// signed data and the signatures (`apksig` `V3SchemeSigner`). Reading those
 /// eight bytes as a length prefix is how every v3-signed APK — which is every
-/// APK `tools/build-apps.sh` produces — got **zero** certificates
+/// APK `tools/build/build-apps.sh` produces — got **zero** certificates
 /// (`APK_SIGNING_MALFORMED: scheme f05368c0: truncated signatures`), so
 /// `PackageInfo.signatures` was always empty under `GET_SIGNATURES`.
 fn scheme_certificates(
@@ -278,7 +278,7 @@ fn scheme_certificates(
     // (`apksig` `V2SchemeSigner`/`V3SchemeSigner`, `generateSignerBlock`). The
     // previous parser read the sequence length as the first signer's length, so
     // `signed_data` swallowed the signatures and public key and the next read
-    // failed with `truncated signatures` — every APK `tools/build-apps.sh`
+    // failed with `truncated signatures` — every APK `tools/build/build-apps.sh`
     // signs (v2 + v3) reported **zero** certificates, so
     // `PackageInfo.signatures` was always an empty `Signature[]`.
     let mut pos = 0;
@@ -641,7 +641,7 @@ mod tests {
         assert_eq!(err.code(), crate::error::APK_SIGNING_MALFORMED);
     }
 
-    /// REL3P: a v3-signed APK (the shape `tools/build-apps.sh` produces) must
+    /// REL3P: a v3-signed APK (the shape `tools/build/build-apps.sh` produces) must
     /// yield its signer certificate; the min/max SDK words are not a length.
     #[test]
     fn v3_signer_reads_the_certificate_after_the_sdk_bounds() {

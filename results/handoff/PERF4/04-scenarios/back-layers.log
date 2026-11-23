@@ -1,5 +1,0 @@
-verify: pass (ok=true, backend=acos-native, fidelity=art-reference)
-  engine: art (mode: live)
-  provenance: scenario /home/Qui/.t3/worktrees/acos/t3-5cf7912d-cec9a432baa8a011/scenarios/back-layers.yaml (sha 6b9ddd57c7fa), apk /home/Qui/.t3/worktrees/acos/t3-5cf7912d-cec9a432baa8a011/fixtures/build/apps/back-layers.apk (sha cb90f5de83e0), engine art, fidelity art-reference, warnings: 1 [SCENARIO_ENGINE_MISMATCH]
-  artifacts: /home/Qui/.t3/worktrees/acos/t3-5cf7912d-cec9a432baa8a011/results/handoff/PERF4/04-scenarios/back-layers
-  steps: 22

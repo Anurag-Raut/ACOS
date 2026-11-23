@@ -15,7 +15,7 @@
 #     `AndroidKeyStore not found` failure.
 #
 # Every phase runs on real ART under `tools/art-runtime/run-exclusive.sh` and
-# `tools/guarded.sh`. Output: <out>/{fidelity,xsession,default-off}/
+# `tools/guard/guarded.sh`. Output: <out>/{fidelity,xsession,default-off}/
 # Exit 0 only when every check passed and nothing leaked.
 set -uo pipefail
 WT=/home/Qui/.paseo/worktrees/3oxa6xao/k5
@@ -198,7 +198,7 @@ run_phase() {
     local name="$1" mem="$2" secs="$3"
     echo "[k5b] === phase $name ==="
     "$WT/tools/art-runtime/run-exclusive.sh" --task K5B -- \
-        "$WT/tools/guarded.sh" --mem "$mem" --time "$secs" -- \
+        "$WT/tools/guard/guarded.sh" --mem "$mem" --time "$secs" -- \
         env ACOS_K5B_INLOCK=1 "$WT/tools/keystore-k5b/run.sh" "$OUT" "$name"
     local rc=$?
     if [ $rc -eq 0 ]; then echo -e "$name\tPASS\t$OUT/$name" >> "$SUMMARY"

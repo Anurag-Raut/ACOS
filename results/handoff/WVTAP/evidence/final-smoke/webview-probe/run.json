@@ -1,7 +1,0 @@
-{
-  "request_id": "req_3db63_18e909e934b5000f",
-  "started_at": "2026-11-18T04:40:23.700Z",
-  "scenario": "scenarios/webview-probe.yaml",
-  "apk": "",
-  "acos_version": "0.3.0"
-}

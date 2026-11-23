@@ -1,8 +1,0 @@
-getApplicationInfo key=dev.acos.fixtures.webview flags=0x80 get_meta_data=true meta_entries=0
-getPackageInfo key=dev.acos.fixtures.webview flags=0x10000000 get_meta_data=false meta_entries=1
-getApplicationInfo key=dev.acos.fixtures.webview flags=0x80 get_meta_data=true meta_entries=0
-getPackageInfo key=dev.acos.fixtures.webview flags=0x100024c0 get_meta_data=true meta_entries=1
-getApplicationInfo key=dev.acos.fixtures.webview flags=0x80 get_meta_data=true meta_entries=0
-getPackageInfo key=dev.acos.fixtures.webview flags=0x10000000 get_meta_data=false meta_entries=1
-getApplicationInfo key=dev.acos.fixtures.webview flags=0x80 get_meta_data=true meta_entries=0
-getPackageInfo key=dev.acos.fixtures.webview flags=0x100024c0 get_meta_data=true meta_entries=1

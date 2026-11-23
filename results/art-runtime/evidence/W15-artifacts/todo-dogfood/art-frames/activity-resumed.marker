@@ -1,7 +1,0 @@
-package=dev.acos.fixtures.tododogfood
-activity=dev.acos.fixtures.tododogfood.MainActivity
-lifecycle=onCreate,onStart,onResume
-resumed=true
-called=true
-stopped=false
-window=com.android.internal.policy.PhoneWindow@d39a1af

@@ -74,7 +74,7 @@ set +e
 ARGS=(--out "$OUT" --json "$JSON")
 [ "$MODE" = smoke ] && ARGS+=(--quick)
 "$ROOT/tools/art-runtime/run-exclusive.sh" --task P6 -- \
-    "$ROOT/tools/guarded.sh" --mem 6G --time 2400 -- \
+    "$ROOT/tools/guard/guarded.sh" --mem 6G --time 2400 -- \
     python3 -I "$PY" "${ARGS[@]}" 2>&1 | tee "$OUT/driver.log"
 rc=${PIPESTATUS[0]}
 set -e

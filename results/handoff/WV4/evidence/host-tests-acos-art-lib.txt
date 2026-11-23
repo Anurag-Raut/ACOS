@@ -1,4 +1,0 @@
-test live_view::tests::subscribe_threads_are_capped_and_a_trickling_peer_is_cut_off_by_one_deadline ... ok
-
-test result: ok. 159 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 10.85s
-

@@ -102,7 +102,7 @@ mod tests {
             apk.is_file(),
             "hello_views_manifest_resolves",
             &format!(
-                "{} is missing — run tools/build-apps.sh (or tools/build-fixtures.sh)",
+                "{} is missing — run tools/build/build-apps.sh (or tools/build/build-fixtures.sh)",
                 apk.display()
             ),
         )

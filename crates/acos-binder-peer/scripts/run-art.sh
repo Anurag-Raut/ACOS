@@ -2,7 +2,7 @@
 # Run the P2d acceptance dex on dalvikvm64 in the E1A/E2D/E3G mini-root:
 # stock libbinder + the userspace driver + the real ServiceHost peer.
 #
-#   scripts/run-art.sh            # under tools/guarded.sh
+#   scripts/run-art.sh            # under tools/guard/guarded.sh
 set -uo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CRATE="$(cd "$HERE/.." && pwd)"
@@ -25,7 +25,7 @@ for i in $(seq 1 50); do [ -S "$SOCK" ] && break; sleep 0.05; done
 unset LD_LIBRARY_PATH
 export E3G_PRELOAD=/data/lib/libacos_binder_driver.so
 export ACOS_GUARD_TIME="${ACOS_GUARD_TIME:-180}"
-"$ACOS_ROOT/tools/guarded.sh" --time "$ACOS_GUARD_TIME" -- \
+"$ACOS_ROOT/tools/guard/guarded.sh" --time "$ACOS_GUARD_TIME" -- \
     "$ACOS_ROOT/research/art-feasibility/g-binder/scripts/e3groot.sh" \
     dalvikvm -cp "$DEX" dev.acos.binderpeer.Main
 RC=$?

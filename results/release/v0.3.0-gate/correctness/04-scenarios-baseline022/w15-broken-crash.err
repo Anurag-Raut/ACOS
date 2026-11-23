@@ -1,1 +1,0 @@
-verify: GUEST_EXITED (harness): acos-art: GUEST_EXITED: the guest ended before its first live frame (status exit status: 1) [class=harness, retryable=false]

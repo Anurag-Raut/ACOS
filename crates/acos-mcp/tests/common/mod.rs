@@ -229,9 +229,9 @@ pub fn fixture(path: &str) -> String {
 /// The build command that produces a gitignored `fixtures/build/...` path.
 fn build_hint(path: &str) -> &'static str {
     if path.starts_with("fixtures/build/apps/") {
-        "tools/build-apps.sh"
+        "tools/build/build-apps.sh"
     } else if path.starts_with("fixtures/build/dexprogs/") {
-        "tools/build-fixtures.sh"
+        "tools/build/build-fixtures.sh"
     } else {
         "the fixture build scripts"
     }

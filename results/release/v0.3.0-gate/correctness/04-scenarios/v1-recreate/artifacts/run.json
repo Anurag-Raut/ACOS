@@ -1,7 +1,0 @@
-{
-  "request_id": "req_3370ba_18e87bca8e8340f4",
-  "started_at": "2026-11-16T09:16:01.411Z",
-  "scenario": "scenarios/v1-recreate.yaml",
-  "apk": "",
-  "acos_version": "0.3.0"
-}

@@ -14,7 +14,7 @@ One command runs **the same scenario** twice and diffs the UI tree after every
 step:
 
 1. **ACOS ART** — `acos verify <scenario> --engine art` under the shared ART
-   lock (`tools/art-runtime/run-exclusive.sh` + `tools/guarded.sh`). The run's
+   lock (`tools/art-runtime/run-exclusive.sh` + `tools/guard/guarded.sh`). The run's
    own artifacts are the ACOS side: `verdict.json` lists each step and the frame
    it bound, `tree/<frame_seq>.json` is the tree at that frame.
 2. **phone** — `tools/phone/replay_scenario.py` replays the same steps on the

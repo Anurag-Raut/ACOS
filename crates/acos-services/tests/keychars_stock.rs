@@ -3,7 +3,7 @@
 //! every character the injector emits.
 //!
 //! The fixture is the real `/system/usr/keychars/{Virtual,Generic}.kcm` under
-//! `.cache/art/sysroot` (exported by `tools/art-sysroot.sh` from the API-34
+//! `.cache/art/sysroot` (exported by `tools/fetch/art-sysroot.sh` from the API-34
 //! image), or the same files from another configured sysroot. A missing sysroot
 //! is a hard failure: guest text input without it is the W13 wall.
 
@@ -26,7 +26,7 @@ fn stock(name: &str) -> KeyMap {
     let dir = sysroot();
     let path = dir.join(name);
     let text = std::fs::read_to_string(&path)
-        .unwrap_or_else(|e| panic!("{}: {e} (run tools/art-sysroot.sh)", path.display()));
+        .unwrap_or_else(|e| panic!("{}: {e} (run tools/fetch/art-sysroot.sh)", path.display()));
     keychars::parse(&text, &format!("/system/usr/keychars/{name}"))
         .unwrap_or_else(|e| panic!("{name}: {e}"))
 }

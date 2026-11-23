@@ -8,8 +8,8 @@ approved** (user-mode only; no `sudo`, no system install).
 The transport now exists as code: `crates/acos-arm64` (discovery, confined
 spawn, structured errors), `crates/acos-seccomp-guard` (the post-`execve`
 seccomp guard), `SeccompMode::DeferredPreload` in `acos-sandbox`, and
-`tools/fetch-bionic-sysroot.sh` / `tools/fetch-qemu-aarch64.sh` /
-`tools/build-arm64-guard.sh`. A **dynamic** aarch64 bionic hello built with the
+`tools/fetch/fetch-bionic-sysroot.sh` / `tools/fetch/fetch-qemu-aarch64.sh` /
+`tools/build/build-arm64-guard.sh`. A **dynamic** aarch64 bionic hello built with the
 NDK and run under `qemu-aarch64 -L .cache/bionic-arm64` inside the sandbox
 passes; see §8. Lifting `UNSUPPORTED_ABI` for arm64-only APKs (W195-A) and the
 cross-built runtime (W193-A/W194-A) are still ahead; the x86_64 path is
@@ -241,7 +241,7 @@ chosen when the APK ships an x86_64 `lib/` directory.
 |---|---|---|
 | **W190-A (this task)** | design doc + confined qemu spike (static bionic hello) | **~45 min** ✅ |
 | W191-A ✅ | qemu discovery + `acos-arm64` transport crate; `SeccompMode::DeferredPreload` in `acos-sandbox`; guard `.so` from the audited filter (`acos-seccomp-guard`) | 1–1.5 days |
-| W192-A ✅ | bionic sysroot from the attached arm64 device (`tools/fetch-bionic-sysroot.sh`); a **dynamic** aarch64 bionic hello runs under `-L` inside the sandbox; `ld.config.txt` gap documented | 1 day |
+| W192-A ✅ | bionic sysroot from the attached arm64 device (`tools/fetch/fetch-bionic-sysroot.sh`); a **dynamic** aarch64 bionic hello runs under `-L` inside the sandbox; `ld.config.txt` gap documented | 1 day |
 | W193-A | cross-build spike: `cargo build -p acos-sandbox -p acos-native-loader -p acos-jni` for `aarch64-unknown-linux-gnu` (or `-linux-android`); enumerate and fix `#[cfg(target_arch)]` sites | 1–2 days |
 | W194-A | run an APK's real `lib/arm64-v8a/*.so` through `acos-native-loader` inside the aarch64 runtime under qemu (start with a small fixture, then Gaten's `libhermesvm.so`) | 2–4 days |
 | W195-A | lift `UNSUPPORTED_ABI` for arm64-only APKs; full `acos launch` of the Gaten v12 arm64 artifact; performance + fidelity report | 2–4 days |
@@ -302,7 +302,7 @@ layer as `LayerStatus::Deferred` (satisfying `required`, but leaving
 `confinement_active()` false until the guard reports). The x86_64 path keeps
 `SeccompMode::Inline` and is byte-for-byte unchanged.
 
-### 8.2 Sysroot (`tools/fetch-bionic-sysroot.sh`)
+### 8.2 Sysroot (`tools/fetch/fetch-bionic-sysroot.sh`)
 
 Read-only `adb pull` from the attached `ZA222WGJPP` (`arm64-v8a`) of
 `/system/bin/linker64` and `/system/lib64/{libc,libm,libdl,liblog,libandroid,

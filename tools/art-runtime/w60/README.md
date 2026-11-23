@@ -12,11 +12,11 @@ Build the logger once:
 Run (always under the host-wide lock and the guard):
 
     tools/art-runtime/run-exclusive.sh --task W60 -- \
-      tools/guarded.sh --mem 8G --time 900 -- \
+      tools/guard/guarded.sh --mem 8G --time 900 -- \
       python3 -I tools/art-runtime/w60/repro.py 0 12
 
     tools/art-runtime/run-exclusive.sh --task W60 -- \
-      tools/guarded.sh --mem 8G --time 900 -- \
+      tools/guard/guarded.sh --mem 8G --time 900 -- \
       python3 -I tools/art-runtime/w60/reset.py 0 3 20
 
 Env: `W60_ACOS`, `W60_ART_BIN` (binary under test), `W60_BARE_SETTLE` (default 10 s,

@@ -1,3 +1,0 @@
-ACOSHWC[gralloc]: allocate: 1080x2209 fmt=1 layers=1 9542880 B (4320 B/row)
-ACOSHWC[gralloc]: allocate: 1080x2209 fmt=1 layers=1 9542880 B (4320 B/row)
-2515

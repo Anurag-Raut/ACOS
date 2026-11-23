@@ -32,7 +32,7 @@ name="$1"
 dex="$ROOT/fixtures/build/dexprogs/$name/classes.dex"
 out_dir="$ROOT/fixtures/expected-art/dexprogs"
 [ -x "$ADB" ] || die "missing $ADB"
-[ -f "$dex" ] || die "missing $dex (run tools/build-fixtures.sh)"
+[ -f "$dex" ] || die "missing $dex (run tools/build/build-fixtures.sh)"
 "$ADB" -s "$SERIAL" get-state >/dev/null 2>&1 \
     || die "no device at $SERIAL (start it: tools/oracle/emulator.sh start)"
 

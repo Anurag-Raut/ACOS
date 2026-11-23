@@ -1,9 +1,0 @@
-{"check":"control.own_alias_readable","ok":true,"detail":"k_b is B's own key"}
-{"check":"control.own_file_readable","ok":true,"detail":"/data/app-data/dev.acos.fixtures.keystoreprobe/files/keystore-probe/private-b.txt"}
-{"check":"xsession.alias_absent","ok":true,"detail":"k_a absent"}
-{"check":"xsession.path_absent[/home/Qui/Projects/acos/.cache/art-locks/data-K5D-1639164/runs/1639378-0/app-data/dev.acos.fixtures.keystoreprobe/files/keystore-probe/private-a.txt]","ok":true,"detail":"refused: FileNotFoundException: /home/Qui/Projects/acos/.cache/art-locks/data-K5D-1639164/runs/1639378-0/app-data/dev.acos.fixtures.keystoreprobe/files/keystore-probe/private-a.txt (absent)"}
-{"check":"xsession.path_absent[/home/Qui/Projects/acos/.cache/art-locks/data-K5D-1639164/runs/1639378-0/app-data/dev.acos.fixtures.keystoreprobe/acos-keystore/entries.properties]","ok":true,"detail":"refused: FileNotFoundException: /home/Qui/Projects/acos/.cache/art-locks/data-K5D-1639164/runs/1639378-0/app-data/dev.acos.fixtures.keystoreprobe/acos-keystore/entries.properties (absent)"}
-{"check":"xsession.path_absent[/data/app-data/dev.acos.fixtures.keystoreprobe/files/keystore-probe/private-a.txt]","ok":true,"detail":"refused: FileNotFoundException: /data/app-data/dev.acos.fixtures.keystoreprobe/files/keystore-probe/private-a.txt (absent)"}
-{"check":"xsession.path_absent[/data/app-data/dev.acos.fixtures.keystoreprobe/acos-keystore/entries.properties]","ok":true,"detail":"readable but without A's material (exists)"}
-{"check":"xsession.host_root_absent","ok":true,"detail":"root=[etc, system_ext, product, vendor, sys, proc, dev, data, linkerconfig, apex, system]"}
-{"activity":"MainActivity","mode":"probe","pass":8,"fail":0}

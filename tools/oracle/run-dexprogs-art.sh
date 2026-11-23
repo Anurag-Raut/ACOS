@@ -36,8 +36,8 @@ die() { printf '[run-dexprogs-art] error: %s\n' "$*" >&2; exit 1; }
 "$ADB" -s "$SERIAL" get-state >/dev/null 2>&1 || die "no device at $SERIAL (start it: tools/oracle/emulator.sh start)"
 
 if [ -z "$(find "$BUILD_DIR" -mindepth 2 -maxdepth 2 -name 'classes.dex' -print -quit 2>/dev/null)" ]; then
-    log "fixtures/build/dexprogs is empty; running tools/build-fixtures.sh"
-    bash "$ROOT/tools/build-fixtures.sh"
+    log "fixtures/build/dexprogs is empty; running tools/build/build-fixtures.sh"
+    bash "$ROOT/tools/build/build-fixtures.sh"
 fi
 [ -d "$BUILD_DIR" ] || die "no built fixtures at $BUILD_DIR"
 

@@ -1,7 +1,0 @@
-package=dev.acos.fixtures.listadapter
-activity=dev.acos.fixtures.listadapter.MainActivity
-lifecycle=onCreate,onStart,onResume
-resumed=true
-called=true
-stopped=false
-window=com.android.internal.policy.PhoneWindow@281acad

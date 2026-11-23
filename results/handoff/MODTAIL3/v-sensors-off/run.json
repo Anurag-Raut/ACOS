@@ -1,7 +1,0 @@
-{
-  "request_id": "req_24b99e_18e8756d9e78f5ff",
-  "started_at": "2026-11-16T07:19:25.177Z",
-  "scenario": "scenarios/sensors-off.yaml",
-  "apk": "fixtures/build/apps/sensor-probe.apk",
-  "acos_version": "0.2.2"
-}

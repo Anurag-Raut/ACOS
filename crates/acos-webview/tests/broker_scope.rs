@@ -25,7 +25,7 @@
 //! `systemd --user` is not usable:
 //!
 //! ```text
-//! tools/art-runtime/run-exclusive.sh --task WVSCOPE -- tools/guarded.sh --mem 8G --time 420 -- \
+//! tools/art-runtime/run-exclusive.sh --task WVSCOPE -- tools/guard/guarded.sh --mem 8G --time 420 -- \
 //!   env ACOS_WEBVIEW_TEST=1 CARGO_TARGET_DIR=$PWD/.cache/wvscope-target \
 //!   cargo test -p acos-webview --test broker_scope -- --nocapture --test-threads=1
 //! ```
@@ -220,7 +220,7 @@ fn a_broker_in_its_own_scope_outlives_the_session_scope_that_spawned_it() {
     if acos_test_support::require_prereq(
         engine_test_enabled(),
         "a_broker_in_its_own_scope_outlives_the_session_scope_that_spawned_it",
-        "set ACOS_WEBVIEW_TEST=1 to run this heavy Chromium test (the release gate runs it with the env set; see tools/test-prereq-optouts.txt)",
+        "set ACOS_WEBVIEW_TEST=1 to run this heavy Chromium test (the release gate runs it with the env set; see tools/verify/test-prereq-optouts.txt)",
     )
     .is_none()
     {

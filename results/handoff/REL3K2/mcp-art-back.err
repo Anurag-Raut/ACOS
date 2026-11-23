@@ -1,5 +1,0 @@
-acos-mcp: acos-mcp 0.2.3 starting (protocol 2025-03-26)
-acos-mcp: acos backend: /home/Qui/.t3/worktrees/acos/t3-4fdffa58-8ad0395b820a231e/.cache/rel3k2-target/release/acos
-acos-mcp: session engine: art (private `/home/Qui/.t3/worktrees/acos/t3-4fdffa58-8ad0395b820a231e/.cache/rel3k2-target/release/acos serve --engine art` daemon on first session call)
-acos-mcp: capability probe: 8 command(s) available [inspect, run-dex, run, observe, action, reset, destroy, verify]
-acos-mcp: private ART session daemon pid 1404417 on /run/user/1000/acos/mcp-1404402-025d1abe0/session.sock (engine art)

@@ -1,7 +1,0 @@
-{
-  "request_id": "req_13167a_18e91b80f18ba36c",
-  "started_at": "2026-11-18T10:02:47.106Z",
-  "scenario": "scenarios/net-network-offline.yaml",
-  "apk": "",
-  "acos_version": "0.3.0"
-}

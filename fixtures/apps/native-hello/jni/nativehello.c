@@ -8,7 +8,7 @@
  *   - an `android.graphics.Bitmap` filled through `AndroidBitmap_lockPixels`.
  *
  * No third-party code is involved; this file is compiled by
- * `tools/build-apps.sh` with the NDK clang.
+ * `tools/build/build-apps.sh` with the NDK clang.
  */
 #include <jni.h>
 #include <android/asset_manager.h>

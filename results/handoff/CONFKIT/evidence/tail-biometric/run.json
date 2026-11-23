@@ -1,7 +1,0 @@
-{
-  "request_id": "req_27108_18e9165b10ea032a",
-  "started_at": "2026-11-18T08:28:26.865Z",
-  "scenario": "scenarios/tail-biometric.yaml",
-  "apk": "",
-  "acos_version": "0.3.0"
-}

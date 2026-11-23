@@ -1,1 +1,0 @@
-verify: ASSERTION_FAILED (assertion): expected text containing "a review or a subscription keeps it going", got text "Gaten is a one-person project. If it has been useful, a review or a coffee helps it keep going." / hint "" [class=assertion, retryable=false]

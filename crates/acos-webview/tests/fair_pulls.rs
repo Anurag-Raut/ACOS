@@ -25,7 +25,7 @@
 //!
 //! ```text
 //! tools/art-runtime/run-exclusive.sh --task WVFAIR -- \
-//!   tools/guarded.sh --mem 8G --time 600 -- \
+//!   tools/guard/guarded.sh --mem 8G --time 600 -- \
 //!   env ACOS_WEBVIEW_TEST=1 ACOS_WEBVIEW_CACHE=/home/Qui/Projects/acos/.cache/webview \
 //!       ACOS_VIEW_TEST_DIR=$PWD/.cache/lv CARGO_TARGET_DIR=$PWD/.cache/wvf-target \
 //!   cargo test -p acos-webview --test fair_pulls -- --nocapture --test-threads=1
@@ -517,7 +517,7 @@ fn frame_pulls_are_fair_between_two_views_one_of_them_slow() {
     if acos_test_support::require_prereq(
         engine_test_enabled(),
         "frame_pulls_are_fair_between_two_views_one_of_them_slow",
-        "set ACOS_WEBVIEW_TEST=1 to run this heavy Chromium test (the release gate runs it with the env set; see tools/test-prereq-optouts.txt)",
+        "set ACOS_WEBVIEW_TEST=1 to run this heavy Chromium test (the release gate runs it with the env set; see tools/verify/test-prereq-optouts.txt)",
     )
     .is_none()
     {

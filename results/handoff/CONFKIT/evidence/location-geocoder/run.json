@@ -1,7 +1,0 @@
-{
-  "request_id": "req_1aaba_18e916015efa1661",
-  "started_at": "2026-11-18T08:22:01.628Z",
-  "scenario": "scenarios/location-geocoder.yaml",
-  "apk": "",
-  "acos_version": "0.3.0"
-}

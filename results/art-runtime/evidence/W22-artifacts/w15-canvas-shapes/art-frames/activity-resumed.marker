@@ -1,7 +1,0 @@
-package=dev.acos.fixtures.canvasshapes
-activity=dev.acos.fixtures.canvasshapes.MainActivity
-lifecycle=onCreate,onStart,onResume
-resumed=true
-called=true
-stopped=false
-window=com.android.internal.policy.PhoneWindow@6a954d2

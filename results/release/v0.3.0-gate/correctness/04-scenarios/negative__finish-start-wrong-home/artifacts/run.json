@@ -1,7 +1,0 @@
-{
-  "request_id": "req_32d44b_18e87bb42a0d7d58",
-  "started_at": "2026-11-16T09:14:25.237Z",
-  "scenario": "scenarios/negative/finish-start-wrong-home.yaml",
-  "apk": "",
-  "acos_version": "0.3.0"
-}

@@ -22,7 +22,7 @@ sets it.
 
 | Knob | Scope | What it changes | Trust requirement / mitigation |
 |---|---|---|---|
-| `ACOS_HOST_RSS_MAX` | `acos-vm` (`limits.rs`) | Host RSS ceiling for the VM guard | Widening raises the ceiling only; the process is still bounded by `tools/guarded.sh` (`--mem`, default 4G) at the cgroup level |
+| `ACOS_HOST_RSS_MAX` | `acos-vm` (`limits.rs`) | Host RSS ceiling for the VM guard | Widening raises the ceiling only; the process is still bounded by `tools/guard/guarded.sh` (`--mem`, default 4G) at the cgroup level |
 | `ACOS_WALL_MAX_SECS` | `acos-vm` | Wall-clock ceiling for one run | Widening lets a slow program run longer; the wrapper's `timeout` still applies |
 | `ACOS_NATIVE_MEM_MAX` | `acos-vm` (`natives/native_mem.rs`) | Total bytes of synthetic native regions (default 256 MiB) | Also the cap `NewDirectByteBuffer` validates a caller's `capacity` against (W172-A), so raising it widens both |
 | `ACOS_HEAP_MAX` | `acos-vm` (`heap`) | Guest heap slot ceiling | Widening only; the RSS guard still applies |

@@ -1,7 +1,0 @@
-{
-  "request_id": "req_24a808_18e875687b3c80dc",
-  "started_at": "2026-11-16T07:19:03.111Z",
-  "scenario": "results/handoff/MODTAIL/tail-detached.yaml",
-  "apk": "fixtures/build/apps/tail-probe.apk",
-  "acos_version": "0.2.2"
-}

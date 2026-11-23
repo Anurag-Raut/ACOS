@@ -52,16 +52,16 @@ fi
 # The documented opt-out list (HYG3): tests whose prerequisite cannot exist on
 # this host. Each one FAILS loudly when run directly (require_prereq); the gate
 # excludes it with libtest `--skip` and prints the list, so it is never a silent
-# green. Format of tools/test-prereq-optouts.txt: `<test-name> <rest of line =
+# green. Format of tools/verify/test-prereq-optouts.txt: `<test-name> <rest of line =
 # prerequisite and why it cannot exist here>`; `#` lines are comments.
 skip_tail=""
-if [ -f tools/test-prereq-optouts.txt ]; then
+if [ -f tools/verify/test-prereq-optouts.txt ]; then
   while read -r name _; do
     case "$name" in ''|'#'*) continue ;; esac
     skip_tail="$skip_tail --skip $name"
-  done < tools/test-prereq-optouts.txt
+  done < tools/verify/test-prereq-optouts.txt
   if [ -n "$skip_tail" ]; then
-    echo "OPT-OUTS (excluded from this gate, see tools/test-prereq-optouts.txt):$skip_tail"
+    echo "OPT-OUTS (excluded from this gate, see tools/verify/test-prereq-optouts.txt):$skip_tail"
     skip_tail="-- $skip_tail"
   fi
 fi
@@ -70,7 +70,7 @@ export ACOS_HYG3_SKIP_TAIL="$skip_tail"
 # The CLI suites (acos-mcp, acos-cli, ...) call the built `acos` binary, which
 # is not a dependency of the crate under test. Build it here, inside the lock.
 tools/art-runtime/run-exclusive.sh --task "$task" -- \
-  tools/guarded.sh --mem "$mem" --time "$time_limit" -- \
+  tools/guard/guarded.sh --mem "$mem" --time "$time_limit" -- \
   bash -c 'export ACOS_ART_WARM_DATA="${ACOS_ART_WARM_DATA:-$PWD/.cache/art/data}"; \
            echo "ACOS_ART_WARM_DATA=$ACOS_ART_WARM_DATA"; \
            cargo build --offline -q -p acos-cli --bin acos || exit 1; \

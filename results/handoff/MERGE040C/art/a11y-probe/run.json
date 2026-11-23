@@ -1,7 +1,0 @@
-{
-  "request_id": "req_1fb413_18e90fda8ac27875",
-  "started_at": "2026-11-18T06:29:17.789Z",
-  "scenario": "scenarios/a11y-probe.yaml",
-  "apk": "",
-  "acos_version": "0.3.0"
-}

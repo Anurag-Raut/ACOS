@@ -36,14 +36,14 @@ if [ ! -x "$BIN" ]; then
     exit 2
 fi
 if [ ! -f "$APK" ]; then
-    echo "parity-live: APK $APK not found; run tools/build-apps.sh first" >&2
+    echo "parity-live: APK $APK not found; run tools/build/build-apps.sh first" >&2
     exit 2
 fi
 
 mkdir -p "$OUT"
 # The parity command enforces the dev.acos.fixtures.* package rule itself.
 set +e
-tools/guarded.sh --mem 8G --time 600 -- "$BIN" parity \
+tools/guard/guarded.sh --mem 8G --time 600 -- "$BIN" parity \
     --device "$SERIAL" "$APK" --output "$OUT" "${KEEP[@]}" --json | tee "$OUT/parity.json"
 status=${PIPESTATUS[0]}
 set -e

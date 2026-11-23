@@ -1,7 +1,0 @@
-{
-  "request_id": "req_16191_18e8d975481e5735",
-  "started_at": "2026-11-17T13:52:29.251Z",
-  "scenario": "scenarios/negative/gaten-settings-wrong.yaml",
-  "apk": "",
-  "acos_version": "0.3.0"
-}

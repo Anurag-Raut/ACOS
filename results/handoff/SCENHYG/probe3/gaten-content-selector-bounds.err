@@ -1,1 +1,0 @@
-verify: ASSERTION_FAILED (assertion): assert_not_visible: the bound frame was settled by `settle: content` (UI tree content stable), which is not geometry evidence - an animating view's reported bounds change every frame [class=assertion, retryable=false]

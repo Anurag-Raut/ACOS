@@ -1,2 +1,0 @@
-{"event":"spawn","pid":2141544,"pidfd":true,"process_group":2141544,"session":"results/handoff/WVKILL/evidence/run1","unix_ms":1794983910987}
-{"event":"stop","exit_ms":32,"foreign_mentions":[],"grace_ms":300,"path":"lifecycle","process_group":2141544,"reaped_before_deadline":true,"session":"results/handoff/WVKILL/evidence/run1","stop_ms":41,"unix_ms":1794983914190,"zygote":false}

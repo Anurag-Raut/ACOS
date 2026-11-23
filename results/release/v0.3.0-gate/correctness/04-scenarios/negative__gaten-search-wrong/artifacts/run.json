@@ -1,7 +1,0 @@
-{
-  "request_id": "req_32d8bc_18e87bb7c9c141ee",
-  "started_at": "2026-11-16T09:14:40.801Z",
-  "scenario": "scenarios/negative/gaten-search-wrong.yaml",
-  "apk": "",
-  "acos_version": "0.3.0"
-}

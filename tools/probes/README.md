@@ -61,7 +61,7 @@ Outputs under `research/ambient-state/`:
 
 `--selftest` builds `tools/probes/selftest/` with `javac` + `d8` into
 `.cache/probes/selftest/classes.dex` (the same toolchain as
-`tools/build-fixtures.sh`; the only hidden-API stub is
+`tools/build/build-fixtures.sh`; the only hidden-API stub is
 `selftest/stub/android/os/SystemProperties.java`) and asserts the known keys,
 defaults, feature names, settings keys, thread name and SDK gate.
 

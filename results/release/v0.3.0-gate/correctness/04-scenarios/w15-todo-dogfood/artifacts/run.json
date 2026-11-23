@@ -1,7 +1,0 @@
-{
-  "request_id": "req_337a16_18e87bcc473751a7",
-  "started_at": "2026-11-16T09:16:08.805Z",
-  "scenario": "scenarios/w15-todo-dogfood.yaml",
-  "apk": "",
-  "acos_version": "0.3.0"
-}

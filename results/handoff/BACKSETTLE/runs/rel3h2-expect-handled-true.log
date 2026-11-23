@@ -1,7 +1,0 @@
-verify: fail (ok=false, backend=acos-native, fidelity=art-reference)
-  engine: art (mode: live)
-  services: core:real attached; off: accessibility, system.permissions, system.notifications, sensors, feedback.vibrator, location, net.telephony, hw.bluetooth, hw.biometric, network, webview, hw.usb, system.dropbox, hw.nfc, system.wallpaper, system.print, system.search, system.usage, system.dpm, system.role, geo.country
-  provenance: scenario /home/Qui/.t3/worktrees/acos/t3-6219a35a-eb2ef407add7c3f9/scenarios/rel3h2-expect-handled-true.yaml (sha f284aedb7510), apk /home/Qui/.t3/worktrees/acos/t3-6219a35a-eb2ef407add7c3f9/fixtures/build/apps/tap-targets.apk (sha 6c8c34bc36e2), engine art, fidelity art-reference
-  error: INPUT_NOT_HANDLED: tap: `expect_handled: true` and the app window acknowledged the gesture `finishInputEvent(handled) = false` (2/2 event(s) acked, every one unhandled) - the input was delivered and nothing consumed it
-  artifacts: /home/Qui/.t3/worktrees/acos/t3-6219a35a-eb2ef407add7c3f9/results/handoff/BACKSETTLE/runs/rel3h2-expect-handled-true
-  steps: 2

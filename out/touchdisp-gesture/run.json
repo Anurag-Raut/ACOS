@@ -1,8 +1,0 @@
-{
-  "request_id": "req_695af_18e8df2ce2bdd599",
-  "started_at": "2026-11-17T15:37:15.382Z",
-  "scenario": "scenarios/touchdisp-gesture.yaml",
-  "apk": "",
-  "acos_version": "0.3.0",
-  "overwrote_run_id": "req_68214_18e8df195e69bc8f"
-}

@@ -5,7 +5,7 @@
 # generated from a live run) twice: once as `acos-art` builds it today (plain),
 # once with the hardening flag set S1 proposed (hard).
 #
-# Everything goes through tools/guarded.sh --mem 2G --time 120. Scratch files
+# Everything goes through tools/guard/guarded.sh --mem 2G --time 120. Scratch files
 # live under .cache/s2probe/. No host file outside the repo is ever read; the
 # `/proc/<pid>/root` probe uses stat/readlink only.
 set -uo pipefail

@@ -1,6 +1,0 @@
-verify: pass (ok=true, backend=acos-native, fidelity=art-reference)
-  engine: art (mode: live)
-  services: core:real attached; off: accessibility, system.permissions, system.notifications, sensors, feedback.vibrator, location, net.telephony, hw.bluetooth, hw.biometric, network, webview, hw.usb, system.dropbox, hw.nfc, system.wallpaper, system.print, system.search, system.usage, system.dpm, system.role, geo.country
-  provenance: scenario /home/Qui/.t3/worktrees/acos/t3-2f630078-d1c2107b4b54fe17/scenarios/gaten-backstack.yaml (sha a3389de15c41), apk /home/Qui/Projects/acos/.cache/gaten/gaten-dev-f344272-x86_64-release-unsigned.apk (sha e04c7ffcf012), engine art, fidelity art-reference, warnings: 1 [SCENARIO_ENGINE_MISMATCH]
-  artifacts: results/handoff/MERGE040C/art/gaten-backstack
-  steps: 25

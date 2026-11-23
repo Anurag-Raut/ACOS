@@ -18,7 +18,7 @@ lockrun() { # TASK TIME MEM CMD...
   local task=$1 time=$2 mem=$3; shift 3
   local rc=0
   tools/art-runtime/run-exclusive.sh --task "$task" -- \
-    tools/guarded.sh --mem "$mem" --time "$time" -- "$@" >> "$LOG" 2>&1 || rc=$?
+    tools/guard/guarded.sh --mem "$mem" --time "$time" -- "$@" >> "$LOG" 2>&1 || rc=$?
   echo "=== $task rc=$rc $(date -u +%FT%TZ)" >> "$LOG"
   return $rc
 }

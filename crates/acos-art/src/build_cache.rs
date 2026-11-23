@@ -675,7 +675,7 @@ fn verify(dir: &Path, files: &[&str]) -> std::result::Result<(), String> {
 /// (`linkerconfig`, `derive_classpath`, the static-RRO idmaps).
 ///
 /// Hashes the sysroot's `READY` stamp and its `MANIFEST.txt` (the file list
-/// with sizes and sha256 prefixes written by `tools/art-sysroot.sh`), so a
+/// with sizes and sha256 prefixes written by `tools/fetch/art-sysroot.sh`), so a
 /// re-extracted or repaired sysroot is a different key and no derived file is
 /// ever reused across images. 248 KB is hashed once per process and memoised:
 /// every launch asks for the same sysroot.

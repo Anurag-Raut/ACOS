@@ -1,9 +1,0 @@
-PASS 2.json: display [0, 0, 1080, 2400], 14 nodes
-PASS 4.json: display [0, 0, 1080, 2400], 14 nodes
-FAIL 5.json: display [0, 0, 2400, 1080], 8 nodes, e.g. [0, 0, 2400, 1080] visible [0, 0, 1080, 1080] want [0, 0, 2400, 1080]
-FAIL 6.json: display [0, 0, 2400, 1080], 8 nodes, e.g. [0, 0, 2400, 1080] visible [0, 0, 1080, 1080] want [0, 0, 2400, 1080]
-FAIL 8.json: display [0, 0, 2400, 1080], 8 nodes, e.g. [0, 0, 2400, 1080] visible [0, 0, 1080, 1080] want [0, 0, 2400, 1080]
-PASS 9.json: display [0, 0, 1080, 2400], 14 nodes
-PASS 10.json: display [0, 0, 1080, 2400], 14 nodes
-FAIL no landscape tree with a node visible past x=1080 (landscape trees 3, wide nodes 0)
-3/7 trees consistent

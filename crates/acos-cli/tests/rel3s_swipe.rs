@@ -14,9 +14,9 @@
 //! shared lock and the host guard:
 //!
 //! ```text
-//! ACOS_APP_ONLY=scroll-list tools/build-apps.sh
+//! ACOS_APP_ONLY=scroll-list tools/build/build-apps.sh
 //! tools/art-runtime/run-exclusive.sh --task REL3S -- \
-//!   tools/guarded.sh --mem 10G --time 900 -- \
+//!   tools/guard/guarded.sh --mem 10G --time 900 -- \
 //!   cargo test -p acos-cli --release --test rel3s_swipe -- --ignored --test-threads=1
 //! ```
 
@@ -236,12 +236,12 @@ fn visible_texts(tree: &Value) -> Vec<String> {
 }
 
 #[test]
-#[ignore = "boots a real ART guest; run under tools/guarded.sh + run-exclusive.sh"]
+#[ignore = "boots a real ART guest; run under tools/guard/guarded.sh + run-exclusive.sh"]
 fn swipe_scrolls_a_long_list_and_scroll_until_finds_a_deep_row() {
     let apk = repo_root().join("fixtures/build/apps/scroll-list.apk");
     let art = art_bin();
     if !apk.is_file() || !art.is_file() {
-        acos_test_support::require_prereq(false, "swipe_scrolls_a_long_list_and_scroll_until_finds_a_deep_row", &format!("{} or {} missing (build with ACOS_APP_ONLY=scroll-list tools/build-apps.sh and cargo build --release -p acos-art/acos-cli)", apk.display(), art.display()));
+        acos_test_support::require_prereq(false, "swipe_scrolls_a_long_list_and_scroll_until_finds_a_deep_row", &format!("{} or {} missing (build with ACOS_APP_ONLY=scroll-list tools/build/build-apps.sh and cargo build --release -p acos-art/acos-cli)", apk.display(), art.display()));
         return;
     }
     let daemon = Daemon::start("swipe");

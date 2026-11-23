@@ -1,9 +1,0 @@
-acos-art: guards rss_max=2048MiB rlimit_data=2560MiB stream_cap=8MiB log_cap=50000
-/home/Qui/Projects/acos/.cache/art-locks/data-W31v-3595204/shim/artshim.c:95:13: warning: unused function 'sys6' [-Wunused-function]
-   95 | static long sys6(long n, long a, long b, long c, long d, long e, long f) {
-      |             ^~~~
-/home/Qui/Projects/acos/.cache/art-locks/data-W31v-3595204/shim/artshim.c:111:13: warning: unused function 'sb_putn' [-Wunused-function]
-  111 | static void sb_putn(struct sbuf *s, const char *p, usize n) { while (n--) sb_putc(s, *p++); }
-      |             ^~~~~~~
-2 warnings generated.
-wrote results/art-runtime/evidence/W31-art-verify.json

@@ -1,1 +1,0 @@
-evidence/W18-acos-counter and W18-acos-text-input (frame dumps, ~220 MB) are not tracked; kept at ~/acos-backups/evidence/.

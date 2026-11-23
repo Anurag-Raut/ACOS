@@ -1,8 +1,0 @@
-# W53 evidence: scope snapshot survival, default KillMode vs KillMode=process
-date -u: 2026-11-12T05:15:00Z
-
-default: snapshot_with_oom=6 missing=9 rcs: 143 143 137 137 137 143 137 143 137 143 143 137 143 143 143
-killmodeproc: snapshot_with_oom=15 missing=0 rcs: 137 137 137 137 137 137 137 137 137 137 137 137 137 137 137
-
-## file
-(.cache/w53/probe/snapshot-race.sh — same SCOPE observer, 128 MiB memory.max, 15 reps each)

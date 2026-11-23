@@ -1,7 +1,0 @@
-{
-  "request_id": "req_130f41_18e91b7e02d98435",
-  "started_at": "2026-11-18T10:02:34.511Z",
-  "scenario": "scenarios/modfill-wifi-network-real.yaml",
-  "apk": "",
-  "acos_version": "0.3.0"
-}

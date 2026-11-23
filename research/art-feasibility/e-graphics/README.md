@@ -20,7 +20,7 @@ draw path), plus two environment facts:
 ## Run it
 
 ```bash
-scripts/build-run.sh                 # NDK clang + javac/d8 + apply namespace fix + run under tools/guarded.sh
+scripts/build-run.sh                 # NDK clang + javac/d8 + apply namespace fix + run under tools/guard/guarded.sh
 scripts/public-libs.sh --restore     # undo the (scratch-sysroot) namespace fix
 ```
 

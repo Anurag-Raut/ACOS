@@ -1,5 +1,0 @@
-codec_field_orders_match_the_framework_dex: test
-every_spec_round_trips_through_a_parcel: test
-icon_payload_round_trips: test
-parcel_exception_constants_match_the_framework: test
-task_description_reads_the_api34_conditional_layout: test

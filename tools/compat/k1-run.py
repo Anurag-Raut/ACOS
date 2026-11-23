@@ -5,7 +5,7 @@ One app per invocation, one `acos serve --engine art` daemon per app, **one
 connection held open for the whole run** (the guest is currently killed when the
 launch connection closes — GL1 owns that bug; this harness must not depend on
 the fix landing). The caller wraps this script in
-`tools/art-runtime/run-exclusive.sh --task K1 -- tools/guarded.sh ...` so the
+`tools/art-runtime/run-exclusive.sh --task K1 -- tools/guard/guarded.sh ...` so the
 host-wide ART lock is taken and released per app.
 
 Steps (each one recorded with its own wall time and structured error):

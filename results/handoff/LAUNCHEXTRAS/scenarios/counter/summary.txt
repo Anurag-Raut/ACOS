@@ -1,2 +1,0 @@
-status=pass
-steps=launch:pass,wait_for:pass,assert_text:pass,assert_text:pass,assert_text:pass,assert_log:pass,tap:pass,assert_log:pass,assert_text:pass,capture:pass,tap:pass,assert_log:pass,assert_text:pass,rotate:pass,assert_log:pass,assert_text:pass,rotate:pass,assert_text:pass,tap:pass,assert_log:pass,assert_text:pass,back:pass,assert_no_crash:pass,assert_not_visible:pass

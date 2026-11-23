@@ -1,8 +1,0 @@
-{
-  "request_id": "req_69b6c_18e8df350d918bd6",
-  "started_at": "2026-11-17T15:37:50.461Z",
-  "scenario": "results/handoff/MODLOC3/location-live-attach.yaml",
-  "apk": "",
-  "acos_version": "0.3.0",
-  "overwrote_run_id": "req_6825a_18e8df196a1a1b1d"
-}

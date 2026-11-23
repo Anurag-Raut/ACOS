@@ -28,7 +28,7 @@ die() { printf '[art-perf] error: %s\n' "$*" >&2; exit 1; }
 mkdir -p "$RESULT_DIR"
 
 HELLO_DEX="$ROOT/fixtures/build/dexprogs/01_hello/classes.dex"
-[ -f "$HELLO_DEX" ] || die "missing $HELLO_DEX (run tools/build-fixtures.sh)"
+[ -f "$HELLO_DEX" ] || die "missing $HELLO_DEX (run tools/build/build-fixtures.sh)"
 
 BENCH_DEX="$(find "$ROOT/crates/acos-vm/benches/java" -name '*.dex' -print -quit 2>/dev/null || true)"
 BENCH_CLASS=""

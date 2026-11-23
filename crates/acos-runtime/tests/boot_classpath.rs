@@ -4,7 +4,7 @@
 //!
 //! `android.net.TetheringManager` lives in `framework-connectivity.jar` inside
 //! `com.google.android.tethering.apex`, not in `framework.jar`. Before
-//! `tools/extract-bootclasspath.sh` merged the APEX fragments, the M2 chain
+//! `tools/fetch/extract-bootclasspath.sh` merged the APEX fragments, the M2 chain
 //! stopped at `LoadedApk.makeApplication` with
 //! `Landroid/net/TetheringManager; is not implemented`. This pins the real
 //! VM-level presence, not just a filename in `BOOTCLASSPATH`.
@@ -49,7 +49,7 @@ fn boot_classpath_resolves_classes_from_apex_jars() {
             Ok(_) => {}
             Err(e) => panic!(
                 "{desc} (from {jar}) did not resolve from the boot classpath: {e}\n\
-                 re-extract with tools/extract-bootclasspath.sh --force"
+                 re-extract with tools/fetch/extract-bootclasspath.sh --force"
             ),
         }
     }

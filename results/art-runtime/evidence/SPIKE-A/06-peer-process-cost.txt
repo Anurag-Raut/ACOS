@@ -1,8 +1,0 @@
-Rss:                2668 kB
-Pss:                 765 kB
-Pss_Anon:            168 kB
-Pss_File:            597 kB
-Pss_Shmem:             0 kB
-Private_Dirty:       168 kB
-pid=650536
-binary_bytes=42703920

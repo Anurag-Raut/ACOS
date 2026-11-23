@@ -19,7 +19,7 @@
 # §5). This scenario is therefore RED on the engine as of GR1 and must stay in
 # the tree: it is the smallest reproduction of the open graphics-layer defect.
 #
-# Rebuild the fixture: tools/build-apps.sh (fixtures/build/apps/svg-viewbox.apk).
+# Rebuild the fixture: tools/build/build-apps.sh (fixtures/build/apps/svg-viewbox.apk).
 version: 1
 name: svg-viewbox
 description: >-

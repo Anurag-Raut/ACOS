@@ -43,7 +43,7 @@ fn manifest_of(relative: &str) -> Option<Manifest> {
         "w31_manifest_flags",
         &format!(
             "{relative} is not present in this checkout — build the fixtures \
-             (tools/build-apps.sh), or put the Gaten APK under .cache/gaten"
+             (tools/build/build-apps.sh), or put the Gaten APK under .cache/gaten"
         ),
     )?;
     let apk = Apk::open(&path).unwrap_or_else(|e| panic!("open {}: {e}", path.display()));

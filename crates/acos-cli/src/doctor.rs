@@ -128,11 +128,11 @@ impl DoctorReport {
     }
 }
 
-/// Locate the workspace root by walking up from the cwd for `tools/apk_append.py`.
+/// Locate the workspace root by walking up from the cwd for `tools/build/apk_append.py`.
 fn find_root() -> Option<PathBuf> {
     let mut dir = std::env::current_dir().ok()?;
     loop {
-        if dir.join("tools").join("apk_append.py").is_file() {
+        if dir.join("tools").join("build").join("apk_append.py").is_file() {
             return Some(dir);
         }
         if !dir.pop() {
@@ -345,19 +345,19 @@ fn check_workspace(installed: bool) -> Vec<Check> {
         ],
         None => vec![Check::fail(
             "workspace",
-            "could not find a workspace root (no tools/apk_append.py walking up)",
+            "could not find a workspace root (no tools/build/apk_append.py walking up)",
             "Run `acos doctor` from inside the ACOS checkout, or set ACOS_HOME to an installed ACOS.",
         )],
         Some(root) => {
             let mut out = vec![Check::ok("workspace", format!("{}", root.display()))];
-            let helper = root.join("tools").join("apk_append.py");
+            let helper = root.join("tools").join("build").join("apk_append.py");
             if helper.is_file() {
                 out.push(Check::ok("apk_append", format!("{}", helper.display())));
             } else {
                 out.push(Check::fail(
                     "apk_append",
                     format!("missing {}", helper.display()),
-                    "Restore tools/apk_append.py from the repo; the build cannot attach classes.dex without it.",
+                    "Restore tools/build/apk_append.py from the repo; the build cannot attach classes.dex without it.",
                 ));
             }
             let keystore = root
@@ -374,7 +374,7 @@ fn check_workspace(installed: bool) -> Vec<Check> {
                 out.push(Check::warn(
                     "debug_keystore",
                     format!("{} not generated yet", keystore.display()),
-                    "Run tools/build-dogfood-apps.sh; it generates a throwaway debug keystore on first build.",
+                    "Run tools/build/build-dogfood-apps.sh; it generates a throwaway debug keystore on first build.",
                 ));
             }
             let boot = root.join(".cache").join("boot").join("android-34");
@@ -790,7 +790,7 @@ fn check_gles() -> Check {
             "gles",
             format!("none ({detail})"),
             "Apps still launch; only GPU readbacks (Bitmap.Config.HARDWARE) are unsupported. \
-             Stage the provider with tools/art-gles.sh (the image build does it).",
+             Stage the provider with tools/probes/art-gles.sh (the image build does it).",
         )
     } else {
         Check::ok("gles", format!("{label} ({detail})"))

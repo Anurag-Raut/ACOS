@@ -96,7 +96,7 @@ pub const GRALLOC_SHIM_SOURCE: &str = include_str!("../shim/gralloc_shim.c");
 ///
 /// # Why the sysroot's copy is verified, not trusted
 ///
-/// `tools/art-sysroot.sh --shim` writes `shim/libacoshw.so` and stamps
+/// `tools/fetch/art-sysroot.sh --shim` writes `shim/libacoshw.so` and stamps
 /// `shim/gralloc_shim.hash` with the first 32 hex characters of the source's
 /// SHA-256. The `.so` lives **outside** this binary, so when the shim source
 /// changes an existing sysroot keeps the old artefact — and a session then
@@ -141,7 +141,7 @@ pub fn gralloc_shim(root: &ArtRoot) -> Result<PathBuf> {
     }
     let clang = ndk_clang().ok_or_else(|| {
         Error::Tool(format!(
-            "the sysroot's software gralloc shim ({}) was not built from this binary's              crates/acos-art/shim/gralloc_shim.c (stamp {} vs {want}), so it would crash an app              that wraps a HardwareBuffer in a Bitmap; rebuild it with              `tools/art-sysroot.sh --shim` or point ANDROID_NDK_HOME at an NDK",
+            "the sysroot's software gralloc shim ({}) was not built from this binary's              crates/acos-art/shim/gralloc_shim.c (stamp {} vs {want}), so it would crash an app              that wraps a HardwareBuffer in a Bitmap; rebuild it with              `tools/fetch/art-sysroot.sh --shim` or point ANDROID_NDK_HOME at an NDK",
             prebuilt.display(),
             stamp.display()
         ))
@@ -182,7 +182,7 @@ pub fn gralloc_shim(root: &ArtRoot) -> Result<PathBuf> {
 
 /// The NDK clang that can build the bionic-linked gralloc shim, if one is
 /// installed: `ACOS_ART_NDK`, `ANDROID_NDK_HOME`, `ANDROID_NDK_ROOT`, then the
-/// SDK's `ndk/*` (the same discovery `tools/art-sysroot.sh` uses).
+/// SDK's `ndk/*` (the same discovery `tools/fetch/art-sysroot.sh` uses).
 fn ndk_clang() -> Option<String> {
     let mut roots: Vec<PathBuf> = Vec::new();
     for key in ["ACOS_ART_NDK", "ANDROID_NDK_HOME", "ANDROID_NDK_ROOT"] {
@@ -284,7 +284,7 @@ pub enum Error {
     )]
     NoRepoRoot,
     #[error(
-        "ART sysroot not found: {0} (run tools/art-sysroot.sh --out {0}, or set ACOS_ART_SYSROOT)"
+        "ART sysroot not found: {0} (run tools/fetch/art-sysroot.sh --out {0}, or set ACOS_ART_SYSROOT)"
     )]
     NoSysroot(PathBuf),
     #[error("sysroot layout error: {0}")]
@@ -862,7 +862,7 @@ impl ArtRoot {
             .collect();
         if !missing.is_empty() {
             return Err(Error::Layout(format!(
-                "BOOTCLASSPATH names jars the sysroot lacks: {} (re-run tools/art-sysroot.sh)",
+                "BOOTCLASSPATH names jars the sysroot lacks: {} (re-run tools/fetch/art-sysroot.sh)",
                 missing
                     .iter()
                     .map(|s| s.as_str())
@@ -1018,7 +1018,7 @@ impl ArtRoot {
         .find_map(|p| fs::read_to_string(p).ok())
         .ok_or_else(|| {
             Error::Layout(format!(
-                "{} has no BOOTCLASSPATH (re-run tools/art-sysroot.sh)",
+                "{} has no BOOTCLASSPATH (re-run tools/fetch/art-sysroot.sh)",
                 self.sysroot.display()
             ))
         })?;
@@ -1896,7 +1896,7 @@ impl<'a> Sandbox<'a> {
             if !gles::lib_dir_ready(provider, r) {
                 return Err(Error::Layout(format!(
                     "ACOS_GUEST_GLES={}: {} is not a directory (install the provider with \
-                     `tools/art-gles.sh`)",
+                     `tools/probes/art-gles.sh`)",
                     provider.name,
                     gles::lib_dir(provider, r).display()
                 )));

@@ -13,7 +13,7 @@
  * Build (bionic, NDK -- the sysroot libs are bionic x86_64):
  *   $NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/x86_64-linux-android34-clang \
  *       -O2 -fPIC -shared -Wall -o libacoshw.so crates/acos-art/shim/gralloc_shim.c
- * (tools/art-sysroot.sh --shim builds exactly this into <sysroot>/shim/.)
+ * (tools/fetch/art-sysroot.sh --shim builds exactly this into <sysroot>/shim/.)
  *
  * WHY INTERPOSITION WORKS (measured, not assumed -- T0 §1):
  *   - neither libui.so nor libgui.so is linked -Bsymbolic / DF_SYMBOLIC, and

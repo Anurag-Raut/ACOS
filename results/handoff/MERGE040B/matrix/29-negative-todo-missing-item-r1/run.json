@@ -1,7 +1,0 @@
-{
-  "request_id": "req_aef44_18e90d6ce0f1e499",
-  "started_at": "2026-11-18T05:44:47.765Z",
-  "scenario": "scenarios/negative/todo-missing-item.yaml",
-  "apk": "",
-  "acos_version": "0.3.0"
-}

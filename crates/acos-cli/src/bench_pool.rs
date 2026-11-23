@@ -428,7 +428,7 @@ fn job_dex(args: &BenchArgs) -> Result<PathBuf, BenchFailure> {
             ErrorCode::InvalidArgument,
             format!(
                 "no --dex given and the default pooled workload {} is absent (run \
-                 tools/build-fixtures.sh)",
+                 tools/build/build-fixtures.sh)",
                 path.display()
             ),
         ))

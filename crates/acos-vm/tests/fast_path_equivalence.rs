@@ -74,7 +74,7 @@ fn fast_path_equals_general_path() {
 
 /// GC-stress forces a collection before every allocation, so the frame pool and
 /// reference bitmaps are exercised hard. 19 is skipped only to bound runtime;
-/// `tools/diff-dexprogs.sh --gc-stress` covers it.
+/// `tools/verify/diff-dexprogs.sh --gc-stress` covers it.
 #[test]
 fn fast_path_equals_general_path_gc_stress() {
     check(true, true);

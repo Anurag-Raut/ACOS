@@ -2,7 +2,7 @@
 """acos_bench.py -- the measurement half of tools/bench/acos-bench.sh (H6).
 
 One phase per invocation, always inside
-`tools/art-runtime/run-exclusive.sh --task H6 -- tools/guarded.sh ...`:
+`tools/art-runtime/run-exclusive.sh --task H6 -- tools/guard/guarded.sh ...`:
 
   --phase latency     M4/M6 strict+fast, M5, M7 strict+fast, M8 counter+form
                       strict+fast, tap ack, acos_destroy teardown (n=20)
@@ -27,7 +27,7 @@ results/bench/baseline-<UTC>.json (+ .md) and derives the per-metric noise
 thresholds from the rep-to-rep spread. `--compare` prints the per-metric delta
 against a stored baseline and exits non-zero on a regression.
 
-Reused, not reimplemented: tools/benchlib.py (stats, host gate, provenance,
+Reused, not reimplemented: tools/bench/benchlib.py (stats, host gate, provenance,
 cgroup/memory/PSS helpers), tools/art-runtime/d2_warm.py (Serve, WarmSampler,
 measure_screenshot, survivors), tools/art-runtime/agent_loop.py (Daemon),
 results/art-runtime/evidence/P5/p5_loop.py (agent loop),
@@ -53,7 +53,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parent.parent
-sys.path.insert(0, str(REPO / "tools"))
+sys.path.insert(0, str(REPO / "tools/bench"))
 sys.path.insert(0, str(REPO / "tools/art-runtime"))
 sys.path.insert(0, str(HERE))
 

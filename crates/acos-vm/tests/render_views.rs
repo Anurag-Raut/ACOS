@@ -13,7 +13,7 @@
 //! No scene JSON, no hand-authored coordinates: the candidate is whatever the
 //! framework's own `View.draw` produced. Reference is always the ART capture.
 //!
-//! Run: `tools/render-views.sh` (sets `ACOS_FONT_DIR`).
+//! Run: `tools/probes/render-views.sh` (sets `ACOS_FONT_DIR`).
 //!
 //! Skips loudly when `javac`/`d8`/`android.jar`, the fixture APK or the reference
 //! is unavailable. `ACOS_REQUIRE_FIXTURES` turns a missing fixture into a hard

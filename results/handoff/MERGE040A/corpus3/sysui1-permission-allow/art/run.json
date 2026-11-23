@@ -1,7 +1,0 @@
-{
-  "request_id": "req_1326d6_18e8e8d2f4704bc2",
-  "started_at": "2026-11-17T18:34:04.248Z",
-  "scenario": "scenarios/sysui1-permission-allow.yaml",
-  "apk": "",
-  "acos_version": "0.3.0"
-}

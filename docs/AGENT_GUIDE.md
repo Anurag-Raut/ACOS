@@ -1117,7 +1117,7 @@ Two session-specific hints worth memorising:
   pixel-identical device animation. Do not read interaction frames as a device
   screenshot.
 * **Signing.** ACOS never installs APKs on a device; it reads them. A debug
-  keystore is only needed to *build* fixtures (`tools/build-dogfood-apps.sh`
+  keystore is only needed to *build* fixtures (`tools/build/build-dogfood-apps.sh`
   generates one) and `acos doctor` reports it.
 * **Paths.** Every path argument (`apk`, `scenario`, `artifacts`, `path`) must
   resolve under one of the roots in `ACOS_ALLOWED_ROOTS` (`:`-separated). The

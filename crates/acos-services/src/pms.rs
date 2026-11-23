@@ -2604,7 +2604,7 @@ mod tests {
                 false,
                 "from_apk_reads_provider_authorities",
                 &format!(
-                    "fixture APK not built at {} — run tools/build-apps.sh, or set \
+                    "fixture APK not built at {} — run tools/build/build-apps.sh, or set \
                      ACOS_ALLOW_ART_SKIP=1 for a counted skip",
                     path.display()
                 ),

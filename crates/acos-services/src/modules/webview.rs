@@ -87,13 +87,13 @@ pub const CONFIG_PROVIDER_APK: &str = "provider_apk";
 /// provider built elsewhere).
 pub const PROVIDER_APK_ENV: &str = "ACOS_WEBVIEW_PROVIDER_APK";
 
-/// The provider APK as the **image** ships it (`tools/extract-bootclasspath.sh`,
-/// which builds it with `tools/build-webview-provider.sh` and stages it under
+/// The provider APK as the **image** ships it (`tools/fetch/extract-bootclasspath.sh`,
+/// which builds it with `tools/build/build-webview-provider.sh` and stages it under
 /// the boot image's `system-apps/`). This is the copy a fresh install has, so it
 /// is what a session installs unless an explicit path says otherwise.
 pub const PROVIDER_APK_IMAGE_REL: &str = ".cache/boot/android-34/system-apps/com.android.webview.apk";
 
-/// The workspace-relative provider APK `tools/build-apps.sh` produces (the
+/// The workspace-relative provider APK `tools/build/build-apps.sh` produces (the
 /// developer/fixture build; the image carries its own copy).
 pub const PROVIDER_APK_REL: &str = "fixtures/build/apps/webview-provider.apk";
 
@@ -257,7 +257,7 @@ impl Module for WebviewModule {
                 "the `real` profile needs the provider APK: pass \
                  `config: {{\"{CONFIG_PROVIDER_APK}\": \"<path>\"}}` or set {PROVIDER_APK_ENV} \
                  (the image ships {PROVIDER_APK_IMAGE_REL} from \
-                 tools/extract-bootclasspath.sh; the fixture build is {PROVIDER_APK_REL})"
+                 tools/fetch/extract-bootclasspath.sh; the fixture build is {PROVIDER_APK_REL})"
             ),
         })?;
         self.provider_apk = Some(apk);

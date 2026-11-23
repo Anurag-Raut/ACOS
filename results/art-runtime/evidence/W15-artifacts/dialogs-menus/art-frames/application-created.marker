@@ -1,7 +1,0 @@
-package=dev.acos.fixtures.dialogsmenus
-application=android.app.Application
-application_classloader_is_apk=true
-application_base=dev.acos.fixtures.dialogsmenus//data/app/dialogs-menus.apk
-instrumentation=android.app.Instrumentation
-instrumentation_source=framework (bind request instrumentationName=null)
-sourceDir=/data/app/dialogs-menus.apk

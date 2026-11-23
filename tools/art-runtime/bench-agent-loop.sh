@@ -9,7 +9,7 @@
 #
 # on two real apps (the counter fixture and form-validation), twice per app.
 # Per-verb p50/p95 (>= 20 samples each), round-trips per task, bytes returned
-# (tree JSON, PNG) and the provenance block come from tools/benchlib.py.
+# (tree JSON, PNG) and the provenance block come from tools/bench/benchlib.py.
 #
 # Gates (each reported PASS / FAIL / NOT_MEASURED, never fudged):
 #   * every verb p95 < 500 ms warm, except launch and reset;
@@ -25,7 +25,7 @@
 #
 # Usage:
 #   tools/art-runtime/run-exclusive.sh --task W49 -- \
-#     tools/guarded.sh --mem 8G --time 900 -- \
+#     tools/guard/guarded.sh --mem 8G --time 900 -- \
 #     tools/art-runtime/bench-agent-loop.sh [--loops 12] [--runs 2] [--strict]
 #
 # Options:
@@ -141,7 +141,7 @@ HOST_DEADLINE=$(( $(date +%s) + HOST_WAIT ))
 while :; do
     python3 -I - "$ROOT" <<'PY'
 import sys
-sys.path.insert(0, sys.argv[1] + "/tools")
+sys.path.insert(0, sys.argv[1] + "/tools/bench")
 import benchlib
 g = benchlib.host_gate(sys.argv[1], check_lock=False)
 print("bench-agent-loop: host gate ok=%s loadavg1=%.2f mem_available=%.1f GiB%s"

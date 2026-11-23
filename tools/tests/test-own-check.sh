@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Plain-bash tests for tools/own-check.sh. No frameworks, no new deps.
+# Plain-bash tests for tools/verify/own-check.sh. No frameworks, no new deps.
 # Usage: tools/tests/test-own-check.sh
 #
 # Each case runs the real tool against a throwaway git repo under .cache/tests/.
@@ -9,7 +9,7 @@ export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="$(cd "$HERE/../.." && pwd)"
-TOOL="$REPO/tools/own-check.sh"
+TOOL="$REPO/tools/verify/own-check.sh"
 SCRATCH="$REPO/.cache/tests/own-check.$$"
 rm -rf "$SCRATCH"
 mkdir -p "$SCRATCH"

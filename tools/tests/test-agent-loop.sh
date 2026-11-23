@@ -149,7 +149,7 @@ jsonval() { # jsonval FILE EXPR
     python3 -I - "$1" "$2" <<'PY'
 import json, os, sys
 d = json.load(open(sys.argv[1]))
-sys.path.insert(0, os.environ.get("ACOS_REPO", ".") + "/tools")
+sys.path.insert(0, os.environ.get("ACOS_REPO", ".") + "/tools/bench")
 import benchlib
 if sys.argv[2] == "schema_ok":
     print("1" if not benchlib.validate_matrix(d) else "0")

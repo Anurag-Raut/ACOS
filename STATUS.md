@@ -16,7 +16,7 @@ frozen; its old status is kept below under "Rust VM track (frozen)".
   APEX, device boot classpath) inside a bwrap user+mount namespace. No init,
   zygote, system_server, servicemanager or kernel `/dev/binder`
   (`results/art-feasibility/E1A.md`, `results/art-runtime/P2a.md`). Product
-  sysroot: `tools/art-sysroot.sh`; crate `crates/acos-art`.
+  sysroot: `tools/fetch/art-sysroot.sh`; crate `crates/acos-art`.
 - **Reuse ladder:** stock `libandroid_runtime`, stock `libbinder` with a
   userspace `/dev/binder` emulation (`LD_PRELOAD`), stock `libhwui` on the
   CPU Skia path, stock `AssetManager`/idmap2 overlays. Rust owns the services
@@ -99,7 +99,7 @@ Status values (`docs/OWNER_DIRECTION_2026-11-11.md` §12):
 | AssetManager / overlays | Google | PARTIAL | Static overlays through stock `ApkAssets`, with no hardcoding (commit `9c5947d`). The counter frame depends on them. | Not exercised through a live `Activity` launch. `hello-views` inflation is blocked upstream by the settings provider (P4b §4). | P0 |
 | Sessions (independent processes) | ACOS (Rust) | PARTIAL | N=10 independent ART processes, each rendering `counter.apk`, verified 10/10 in all 3 reps. Peak PSS sum 1386.1 MiB. Median 326.4 verified tasks per GiB-minute (Q1 §1). | The Q1 run has no LLM agent in the loop (Q1 §3.1). The `session` route never reaches its ready line: it aborts in `StateListAnimator` → `Choreographer` (R1 §5). Every run writes the same `/data` tree (S3 §5). | P1 |
 | Input and live interaction (tap, key, live tree, reset, relaunch) | ACOS (input) with the stock `ViewRootImpl` | NOT STARTED | No ART input result in the listed files. | Everything. P4b stops before `onResume`, so no input reaches a live view. | P0 |
-| Observation and verification | ACOS | PARTIAL | `render-app` plus `tools/art-render-app-compare.py`: `ok` and exit 0 means SSIM at least 0.99 and 8/8 structural nodes (Q1 §1; S3 §2). Tree 12/12 (P4b §0). | Frame and tree from a single shot. No `acos verify --engine art` result in the listed files. No live tree. | P0 |
+| Observation and verification | ACOS | PARTIAL | `render-app` plus `tools/probes/art-render-app-compare.py`: `ok` and exit 0 means SSIM at least 0.99 and 8/8 structural nodes (Q1 §1; S3 §2). Tree 12/12 (P4b §0). | Frame and tree from a single shot. No `acos verify --engine art` result in the listed files. No live tree. | P0 |
 | Sandbox (Linux isolation + ACOS orchestration) | ACOS (bwrap, Rust launcher) | PARTIAL | Hardened argv: `--unshare-pid/net/ipc/uts/cgroup-try`, `--die-with-parent`, `--clearenv`, `--cap-drop ALL`. Corpus unchanged. Killing the launcher leaves no guest or bwrap (S3 §2, §2.1; S2). Memory: logd cap 50 000 entries, 8 MiB stream caps, 2 GiB RSS watchdog (R1 §2). | `/data` is writable by any guest, and `boot.art` can be overwritten (S2 item 5; S3 §5). No mandatory cgroup memory limit (S3 §3). No seccomp or Landlock on the ART route (S3 §3). | P0 |
 | Rust DEX VM (`acos-vm`) | Rust | PARTIAL | Frozen as reference and fallback. `acos verify`: 10/10 at N=10 on the 13-step counter scenario, median 52.2 verified tasks per GiB-minute, about 578 MiB PSS per agent (Q1 §1). | No feature work (owner). Not comparable with the ART workload (Q1 §3.2). | frozen |
 | Warm-fork / shared pages | ACOS on Google ART | NOT STARTED | Nothing measured in the listed files beyond per-agent PSS (Q1 §1). | Gated after M-C, and only if it clears the gate (`docs/PLAN_V2.md` §2). | P2 |
@@ -115,7 +115,7 @@ Status values (`docs/OWNER_DIRECTION_2026-11-11.md` §12):
 
 **Smallest next actions, from the result files (in order):**
 
-1. Serve the `settings` provider to the ART peer, or fail the call with a structured error. A hang is not allowed (P4b §4). Verify with `tools/guarded.sh --mem 4G --time 300 -- ./target/debug/acos-art launch --apk fixtures/build/apps/counter.apk --until activity-resumed` (P4b §10).
+1. Serve the `settings` provider to the ART peer, or fail the call with a structured error. A hang is not allowed (P4b §4). Verify with `tools/guard/guarded.sh --mem 4G --time 300 -- ./target/debug/acos-art launch --apk fixtures/build/apps/counter.apk --until activity-resumed` (P4b §10).
 2. Serve `addToDisplayAsUser` and `relayout` with a null `SurfaceControl` (rung 0), so `performTraversals` gets past `relayout` (P4b §5.2).
 3. Provide a vsync peer node for `createDisplayEventConnection`, or the guest settle policy, so no animator starts during draw (P4b §5.3; Q3 §5, §8).
 4. Per-run `/data` root and a mandatory cgroup before any untrusted APK runs (S3 §3, §5).
@@ -162,7 +162,7 @@ live session. P3c's numbers are uncommitted at the time of writing.
   ready line: it aborts in `StateListAnimator` → `Choreographer`
   (`results/art-runtime/R1.md` §5). Every run shares one writable `/data` tree
   (`results/art-runtime/S3.md` §5). `crates/acos-art/src/session.rs`,
-  `tools/art-session-drive.py` and `tools/art-runtime/bench.sh` (ART engine row)
+  `tools/probes/art-session-drive.py` and `tools/art-runtime/bench.sh` (ART engine row)
   are untracked. There is no ART session result file in `results/`.
 - **`results/art-runtime/p3d/`** holds a frame, tree and `compare.json`
   (tree identical to `p3c`). There is no `P3d.md` report, so its status is unknown.
@@ -219,8 +219,8 @@ Recorded before 2026-11-11. Kept as written. Where it conflicts with "Current
 direction (ART)" above, the section above wins. Everything from "## One line" to the end of this file describes the Rust VM track; it is historical, not the current ART status.
 
 **As of 2026-11-11, HEAD `fd1a887`** (W165-A; `main` also carries W161-A through
-W171-A). `git log` is authoritative, and `tools/status-check.sh` fails when this
-line drifts more than 3 commits (`tools/verify-all.sh` now **fails** on it, not
+W171-A). `git log` is authoritative, and `tools/verify/status-check.sh` fails when this
+line drifts more than 3 commits (`tools/verify/verify-all.sh` now **fails** on it, not
 warns). **`BENCHMARKS.md` §9 is the authoritative measured table**; **§9.8 (W176-A) is
 the newest V1 run** (`results/bench/v1-w176a.json`) and reports **9 PASS /
 2 FAIL** (M5, M9) with all 11 metrics measured. It was built from `fd1a887`
@@ -282,7 +282,7 @@ summary" (M1..M5); M0 is the P0/P1 static-analysis foundation in
 `results/bench/v1-2026-11-11-061354.json` (release, 3 rounds, loadavg 1.99,
 35.8 GiB available, `.cache/target-w160a`, guarded). Built from `20663b3` + the
 uncommitted W160-A patch; `main` moved to `b467193`/`65856f2` during the run.
-Reproduce with `tools/bench-v1.sh --rounds 3`.
+Reproduce with `tools/bench/bench-v1.sh --rounds 3`.
 
 Against owner directive D2 (W176-A, §9.8): **9 PASS / 2 FAIL / 0 NOT_MEASURED**
 (was 7 PASS / 4 FAIL at W165-A). Passes: M1 fixed idle core **133.90 MiB** vs
@@ -316,8 +316,8 @@ validation), `acos-jni` lib 30/30 (`NewDirectByteBuffer` range validation),
 6/6, `counter_interaction` 3/3, `m2` 3/3, `acos-cli` session 11/11,
 `native_session` 1/1, `serve_daemon` 1/1, clippy `-D warnings --no-deps` clean
 on the touched crates, `cargo check --workspace --all-targets` pass and
-`tools/diff-dexprogs.sh --corelib real` **27 pass / 0 fail**, all re-run at
-`fd1a887` in `.cache/target-w172a` through `tools/guarded.sh`. W172-A also
+`tools/verify/diff-dexprogs.sh --corelib real` **27 pass / 0 fail**, all re-run at
+`fd1a887` in `.cache/target-w172a` through `tools/guard/guarded.sh`. W172-A also
 strengthened the `native_session`/`serve_daemon` frame assertions, gated the
 boot-cache and RN-pixel skips on `have_fixture`, and made
 `verify-all.sh`'s status-check step **fail** instead of warn.
@@ -466,7 +466,7 @@ Unregistered natives and explicit `unsupported_api` sites raise a structured
 
 ## Known risks
 
-- **Interpreter slower than `java -Xint`.** Final `tools/bench-vm.sh`
+- **Interpreter slower than `java -Xint`.** Final `tools/bench/bench-vm.sh`
   comparison (`crates/acos-vm/PERF.md` "Final comparison"): BenchFib 1.55×
   slower, BenchLoop 4.13× slower, BenchAlloc 1.73× slower; BenchString 3.30×
   faster. vs JIT it is 4–42× slower (no JIT, by design).
@@ -492,8 +492,8 @@ Unregistered natives and explicit `unsupported_api` sites raise a structured
 `fixtures/build/` and `.cache/boot/` are git-ignored, so differential tests
 silently `SKIP` on a fresh clone. Setting `ACOS_REQUIRE_FIXTURES=1` turns every
 skip into a **failure** (`crates/acos-vm/tests/fixtures_required.rs`);
-`tools/diff-dexprogs.sh` and `tools/bench-acos.sh` set it by default. CI must run
-`tools/build-fixtures.sh` / `tools/build-apps.sh` and the boot-cache extractor
+`tools/verify/diff-dexprogs.sh` and `tools/bench/bench-acos.sh` set it by default. CI must run
+`tools/build/build-fixtures.sh` / `tools/build/build-apps.sh` and the boot-cache extractor
 first (`HONESTY_AUDIT.md` #11).
 
 ## Per-metric vs legacy
@@ -505,7 +505,7 @@ owner directive D2 — M1/M2 memory, M3 framework-bound first frame and M7 live 
 tree beat the legacy ACVM; M4/M5/M6/M8/M9/M10/M11 are missing or fail. Note the
 table predates W161-A, so its "tap does not land" rows (M8, §9.5 item 3) are
 stale at HEAD: the tap lands on `counter.apk` (`results/m2/M2_LOG.md`
-§W161-A). The next `tools/bench-v1.sh` run must refresh them. The older
+§W161-A). The next `tools/bench/bench-v1.sh` run must refresh them. The older
 `results/bench/REPORT.md` table (commit `ced0d70`) is retained as wave history
 but is no longer the V1 record.
 
@@ -514,7 +514,7 @@ but is no longer the V1 record.
 Closed since the last refresh (do not re-open): **boot-image warm restore**
 (W154-A/W160-A) and the **`counter` tap** (W161-A). Current list:
 
-1. Re-run `tools/bench-v1.sh` on the committed post-W161-A HEAD so the V1 table
+1. Re-run `tools/bench/bench-v1.sh` on the committed post-W161-A HEAD so the V1 table
    reflects the tap fix, M8 and the ripple gap; record the exact committed SHA in
    the artefact (W170-A C1/C2). Owner: bench wave, not this doc.
 2. Score the launched `counter` frame against the ART reference and route
@@ -534,7 +534,7 @@ Closed since the last refresh (do not re-open): **boot-image warm restore**
 8. Give each session its own Binder transport so N workers are independently
    usable (M9/V1 §5.1; `results/bench/MEMORY_PROFILE.md` §5).
 9. Keep the fixture-gate coverage honest: every fixture-dependent test calls
-   `have_fixture` and is listed in `tools/verify-all.sh`'s `FIXTURE_TESTS`
+   `have_fixture` and is listed in `tools/verify/verify-all.sh`'s `FIXTURE_TESTS`
    (W172-A extended it to the boot cache, M2, interaction and the RN/Flutter
    product targets).
 10. Run the `scenarios/negative/*` suite (and a differential against the now
@@ -546,7 +546,7 @@ Closed since the last refresh (do not re-open): **boot-image warm restore**
 HEAD `fd1a887` (W165-A) is the committed checkpoint (W172-A below it). The tree is shared with
 concurrent waves (bench/pool, RN `fs` natives, ripple/tap, resources/input,
 ICU), so the working tree carries their in-flight edits; each agent builds into
-its own `CARGO_TARGET_DIR` (`.cache/target-w<N>`) through `tools/guarded.sh`.
+its own `CARGO_TARGET_DIR` (`.cache/target-w<N>`) through `tools/guard/guarded.sh`.
 Shared files (`heap.rs`, `reflect.rs`, `interp.rs`, `vm.rs`, `snapshot.rs`,
 `vfs.rs`, `natives/*`) are edited in place; re-read before editing and never
 `git stash`. Validate on a scratch worktree if the shared tree does not build.

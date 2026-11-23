@@ -1,7 +1,0 @@
-{
-  "request_id": "req_24604d_18e8755118c6dfce",
-  "started_at": "2026-11-16T07:17:22.675Z",
-  "scenario": "results/handoff/MODTAIL/tail-bluetooth.yaml",
-  "apk": "fixtures/build/apps/tail-probe.apk",
-  "acos_version": "0.2.2"
-}

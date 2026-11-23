@@ -45,7 +45,7 @@ server on the host and renders it.
   (relay-level) is now applied to every session at attach
   (`apply_relay_host_ports`), which also keeps NET3's per-session form
   (`hostport add 8081 --session acos-<id>`).
-- **App**: `tools/build-rn-hello.sh debug` → `fixtures/build/apps/rn-debug.apk`:
+- **App**: `tools/build/build-rn-hello.sh debug` → `fixtures/build/apps/rn-debug.apk`:
   no embedded `assets/index.android.bundle`, `getUseDeveloperSupport() == true`,
   and `debug_http_host = localhost:8081` (the `adb reverse` shape: `acos-netd`'s
   per-session forwarder binds `127.0.0.1:8081` inside the session netns).
@@ -238,12 +238,12 @@ Native uses would be a fake.
 
 ```sh
 export ACOS_FONT_DIR=/home/Qui/Projects/acos/.cache/boot/android-34/fonts
-tools/build-rn-hello.sh debug                  # fixtures/build/apps/rn-debug.apk
+tools/build/build-rn-hello.sh debug                  # fixtures/build/apps/rn-debug.apk
 # pinned pasta (one file, GPL-2, sha256 in research/spike-net/artifacts/passt-build.txt):
 git clone --depth 1 -b 2026_10_02.cba3570 https://passt.top/passt .cache/metro1/build/passt-src
 make -C .cache/metro1/build/passt-src static -j8 VERSION=2026_10_02.cba3570
 cargo build --release -p acos-cli -p acos-netd -p acos-art
 cp -al .cache/rn-0.81.4/jsproject .cache/metro1/app2     # Metro project (JS from the fixture)
-tools/art-runtime/run-exclusive.sh --task METRO1 -- tools/guarded.sh --mem 10G --time 700 -- \
+tools/art-runtime/run-exclusive.sh --task METRO1 -- tools/guard/guarded.sh --mem 10G --time 700 -- \
   bash tools/metro/metro1-dev-loop.sh "$PWD/results/handoff/METRO1/run"
 ```

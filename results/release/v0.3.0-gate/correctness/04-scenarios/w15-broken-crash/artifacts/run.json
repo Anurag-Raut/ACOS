@@ -1,7 +1,0 @@
-{
-  "request_id": "req_337387_18e87bcb509754a7",
-  "started_at": "2026-11-16T09:16:04.667Z",
-  "scenario": "scenarios/w15-broken-crash.yaml",
-  "apk": "",
-  "acos_version": "0.3.0"
-}

@@ -1,7 +1,0 @@
-package=dev.acos.fixtures.multiactivity
-activity=dev.acos.fixtures.multiactivity.MainActivity
-lifecycle=onCreate,onStart,onResume
-resumed=true
-called=true
-stopped=false
-window=com.android.internal.policy.PhoneWindow@1a6091b

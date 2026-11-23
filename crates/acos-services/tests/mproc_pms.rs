@@ -27,7 +27,7 @@ fn apk(rel: &str) -> std::path::PathBuf {
     let path = acos_services::workspace_path(rel).unwrap_or_else(|| std::path::PathBuf::from(rel));
     assert!(
         path.is_file(),
-        "{rel} is not built; run tools/build-apps.sh (fixtures/build is gitignored)"
+        "{rel} is not built; run tools/build/build-apps.sh (fixtures/build is gitignored)"
     );
     path
 }

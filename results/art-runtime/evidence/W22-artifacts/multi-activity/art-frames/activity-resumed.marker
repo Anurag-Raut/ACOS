@@ -1,8 +1,0 @@
-package=dev.acos.fixtures.multiactivity
-activity=dev.acos.fixtures.multiactivity.MainActivity
-lifecycle=onCreate,onStart,onResume
-resumed=true
-called=true
-stopped=false
-window=com.android.internal.policy.PhoneWindow@7c8079b
-post_resume_failure=java.lang.IllegalArgumentException: bad request for android.app.IActivityTaskManager::startActivity: arg 3 (TypedObject(android.content.Intent, nullable=true)): no parcelable codec for android.content.Intent

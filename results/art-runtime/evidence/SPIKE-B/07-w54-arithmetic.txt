@@ -1,7 +1,0 @@
-# Spike-B: W54 arithmetic, one line per quantity, as computed by the probe (AOSP bodies, real libui)
-# window layer: WMS relayout frame x=57 y=640 (root window at 400,200) -> composed origin 457,840
-buf=776  sx=466/776=0.6005  transformed=[457,840,923,1240]
-buf=1024 sx=466/1024=0.4551 transformed=[457,840,923,1240]   <-- invariant to buffer width
-C1 (no destinationFrame path): blit 1024px at x=57+parent, unscaled, no parent clip
-# source: surface_client.rs:2600 (destinationFrame decoded, dropped), :1849 (bufferCrop folded into crop),
-#         :1987 drawn_region, :866 (z,layer_id) sort; stock: RequestedLayerState.cpp:362-397, LayerSnapshotBuilder.cpp:942-996

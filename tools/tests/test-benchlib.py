@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests for tools/benchlib.py. Plain Python, no third-party dependencies.
+"""Tests for tools/bench/benchlib.py. Plain Python, no third-party dependencies.
 
 Run:  python3 tools/tests/test-benchlib.py
       BENCHLIB_PATH=/path/to/benchlib.py python3 tools/tests/test-benchlib.py
@@ -12,7 +12,7 @@ The suite has teeth in two directions:
    validate. To prove those tests can fail, run the same file against a
    mutated library (the W29 evidence does this):
 
-     sed 's/return spread > max_spread/return False/' tools/benchlib.py \
+     sed 's/return spread > max_spread/return False/' tools/bench/benchlib.py \
          > .cache/benchlib-mutant.py
      BENCHLIB_PATH=.cache/benchlib-mutant.py python3 tools/tests/test-benchlib.py
      # expected: FAIL test_noisy_row_cannot_pass (mutation is caught)
@@ -21,15 +21,15 @@ W45 denominator teeth (each mutant below is caught; W45.md records the output):
 
      # guest sibling cgroup dropped from the sum (W41 defect 1.1)
      sed 's/for cg, rows in (guest_series or {}).items():/for cg, rows in {}.items():/' \
-         tools/benchlib.py > .cache/m-no-guest.py
+         tools/bench/benchlib.py > .cache/m-no-guest.py
      # shared page cache charged to the task (W41 defect 1.2)
      sed 's/^PRIMARY_KEYS = ("anon", "shmem")/PRIMARY_KEYS = ("anon", "shmem", "file")/' \
-         tools/benchlib.py > .cache/m-file.py
+         tools/bench/benchlib.py > .cache/m-file.py
      # suite-lifetime scope accepted (W41 defect 1.3)
      sed 's/        if len(names) > 1:/        if False:/' \
-         tools/benchlib.py > .cache/m-scope.py
+         tools/bench/benchlib.py > .cache/m-scope.py
      # artifacts never pruned (decision e)
-     sed 's/^    if keep:$/    if True:/' tools/benchlib.py > .cache/m-noprune.py
+     sed 's/^    if keep:$/    if True:/' tools/bench/benchlib.py > .cache/m-noprune.py
      for m in .cache/m-*.py; do
        BENCHLIB_PATH=$m python3 tools/tests/test-benchlib.py | grep -E '^FAIL|passed,'
      done
@@ -45,7 +45,7 @@ from pathlib import Path
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(os.path.dirname(HERE))
-DEFAULT_LIB = os.path.join(REPO, "tools", "benchlib.py")
+DEFAULT_LIB = os.path.join(REPO, "tools", "bench", "benchlib.py")
 LIB_PATH = os.environ.get("BENCHLIB_PATH", DEFAULT_LIB)
 
 _spec = importlib.util.spec_from_file_location("benchlib", LIB_PATH)

@@ -1,5 +1,0 @@
-s1 pass=1 steps=10 
-s2 pass=1 steps=10 
-s3 pass=1 steps=10 
-s4 pass=1 steps=10 
-s5 pass=1 steps=10 

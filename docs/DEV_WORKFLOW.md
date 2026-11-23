@@ -9,7 +9,7 @@ How contributors and AI coding agents build, run, test, and verify changes in AC
 Before building or running tests in any worktree, source the shared environment script (see §14 for details):
 
 ```bash
-source tools/agent-env.sh
+source tools/dev/agent-env.sh
 export CARGO_TARGET_DIR="$PWD/.cache/target"
 ```
 
@@ -22,18 +22,18 @@ cargo run -p acos-cli -- doctor --json
 If `.cache/boot/android-34` is missing, extract it from the installed Android SDK system image (see [`INSTALL.md`](INSTALL.md)):
 
 ```bash
-tools/extract-bootclasspath.sh
+tools/fetch/extract-bootclasspath.sh
 ```
 
 ---
 
 ## 2. Host safety (ADR-0018)
 
-Host RAM must never exceed 90% (internal target ≤ 85%). Wrap builds, test suites, benchmarks, and guest runs with `tools/guarded.sh`:
+Host RAM must never exceed 90% (internal target ≤ 85%). Wrap builds, test suites, benchmarks, and guest runs with `tools/guard/guarded.sh`:
 
 ```bash
-tools/guarded.sh --mem 4G --time 900 -- cargo test -p acos-services
-tools/guarded.sh --mem 4G --time 900 -- cargo clippy --workspace -- -D warnings
+tools/guard/guarded.sh --mem 4G --time 900 -- cargo test -p acos-services
+tools/guard/guarded.sh --mem 4G --time 900 -- cargo clippy --workspace -- -D warnings
 ```
 
 - Never run `sudo` or privileged containers.
@@ -44,16 +44,16 @@ tools/guarded.sh --mem 4G --time 900 -- cargo clippy --workspace -- -D warnings
 
 ## 3. Building fixtures and running scenarios
 
-Build test APKs (already self-wraps with `tools/guarded.sh`):
+Build test APKs (already self-wraps with `tools/guard/guarded.sh`):
 
 ```bash
-tools/build-apps.sh
+tools/build/build-apps.sh
 ```
 
 Run an end-to-end verification scenario on real ART (the default engine):
 
 ```bash
-tools/guarded.sh --mem 4G --time 300 -- "$CARGO_TARGET_DIR/debug/acos" verify \
+tools/guard/guarded.sh --mem 4G --time 300 -- "$CARGO_TARGET_DIR/debug/acos" verify \
   --apk fixtures/build/apps/counter.apk \
   --scenario scenarios/counter.yaml \
   --json
@@ -87,11 +87,11 @@ cargo run -p acos-services --example gen-modules-docs > docs/MODULES.md
 cargo run -p acos-mcp --example gen-tools-docs
 
 # Regenerate docs/WINDOW_LAYERS.md from AOSP reference
-python3 tools/gen-window-layer-table.py
+python3 tools/build/gen-window-layer-table.py
 
 # Verify all doc, guide, schema, and module-table invariants
-tools/guarded.sh --mem 4G --time 600 -- cargo test -p acos-mcp --test docs --test guide --test documentation_args
-tools/guarded.sh --mem 4G --time 600 -- cargo test -p acos-services --test modules_doc
+tools/guard/guarded.sh --mem 4G --time 600 -- cargo test -p acos-mcp --test docs --test guide --test documentation_args
+tools/guard/guarded.sh --mem 4G --time 600 -- cargo test -p acos-services --test modules_doc
 ```
 
 `crates/acos-mcp/tests/documentation_args.rs` scans top-level `docs/*.md` for `acos_*` tool call examples and asserts that every documented argument is accepted by the published closed MCP schema.
@@ -100,25 +100,25 @@ tools/guarded.sh --mem 4G --time 600 -- cargo test -p acos-services --test modul
 
 ## 5. Checking AOSP sources before guessing
 
-Before reverse-engineering Android framework or Binder wire formats, inspect the local read-only AOSP `android-14.0.0_r75` checkout (`.cache/aosp/`, recreated with `tools/fetch-aosp-reference.sh`; see [`AOSP_REFERENCE.md`](AOSP_REFERENCE.md)) and [`IMAGE_ABI_NOTEBOOK.md`](IMAGE_ABI_NOTEBOOK.md).
+Before reverse-engineering Android framework or Binder wire formats, inspect the local read-only AOSP `android-14.0.0_r75` checkout (`.cache/aosp/`, recreated with `tools/fetch/fetch-aosp-reference.sh`; see [`AOSP_REFERENCE.md`](AOSP_REFERENCE.md)) and [`IMAGE_ABI_NOTEBOOK.md`](IMAGE_ABI_NOTEBOOK.md).
 
 ---
 
-## 14. Shared compiler cache (sccache) — source `tools/agent-env.sh` first
+## 14. Shared compiler cache (sccache) — source `tools/dev/agent-env.sh` first
 
 Every agent worktree on this host shares one compiler cache, so a worktree does
 not recompile the crates another worktree already compiled. There is exactly one
 place that sets it up:
 
 ```bash
-source tools/agent-env.sh          # in the worktree, before any build
+source tools/dev/agent-env.sh          # in the worktree, before any build
 ```
 
 `BRIEF_COMMON` asks agents to create `.cache/env.sh` (a stable path, because
 worktree names are not); make it a one-liner so there is nothing to keep in sync:
 
 ```bash
-mkdir -p .cache && echo 'source tools/agent-env.sh' > .cache/env.sh
+mkdir -p .cache && echo 'source tools/dev/agent-env.sh' > .cache/env.sh
 ```
 
 What it exports:

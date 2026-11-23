@@ -1,4 +1,0 @@
-acos-mcp: acos-mcp 0.2.2 starting (protocol 2025-03-26)
-acos-mcp: acos backend: /home/Qui/.t3/worktrees/acos/t3-a531561b-3a8f5c6b7589fc68/.cache/net3-target/release/acos
-acos-mcp: session daemon: forwarding session tools to /home/Qui/.t3/worktrees/acos/t3-a531561b-3a8f5c6b7589fc68/.cache/net3/session.sock
-acos-mcp: capability probe: 8 command(s) available [inspect, run-dex, run, observe, action, reset, destroy, verify]

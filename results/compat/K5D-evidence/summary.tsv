@@ -1,7 +1,0 @@
-keystore-file-mode	600	app-data/dev.acos.fixtures.keystoreprobe/acos-keystore/entries.properties
-fidelity	PASS	.cache/k5d/keystore-suite2/fidelity
-xsession-a-live-copy	0	.cache/k5d/keystore-suite2/xsession/a/appdata
-xsession-a-keystore-mode	600	/home/Qui/Projects/acos/.cache/art-locks/data-K5D-1639164/runs/1639378-0/app-data/dev.acos.fixtures.keystoreprobe/acos-keystore/entries.properties
-xsession-a-alive-during-b	yes	pid=1639378
-xsession	PASS	.cache/k5d/keystore-suite2/xsession
-default_off	PASS	.cache/k5d/keystore-suite2/default_off

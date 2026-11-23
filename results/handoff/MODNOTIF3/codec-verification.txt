@@ -1,7 +1,0 @@
-android.app.NotificationChannel                              Prefix    32/26  real=32 
-android.app.NotificationChannelGroup                         Prefix    10/6   real=10 
-android.app.Notification                                     Full      63/45  real=63 
-android.app.Notification$Action                              Full      11/9   real=11 
-android.app.PendingIntent                                    Full       1/1   real=1  
-android.graphics.drawable.Icon                               Curated    0/0   real=4  
-test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 4 filtered out; finished in 25.82s

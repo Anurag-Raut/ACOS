@@ -28,7 +28,7 @@
 #   tools/oracle/capture-device-reference.sh [app ...]
 #   ACOS_DEVICE_SERIAL=ZA222WGJPP tools/oracle/capture-device-reference.sh
 #
-# The APKs must already exist (tools/build-apps.sh). The device must be
+# The APKs must already exist (tools/build/build-apps.sh). The device must be
 # connected, unlocked and authorised for USB debugging.
 set -euo pipefail
 

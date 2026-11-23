@@ -1,6 +1,0 @@
-check=relay_up PASS "pasta_version": "2026_10_02.cba3570"
-check=offline_isolation PASS offline_session_failed=6 offline_session_200=4 peer_200=12
-check=host_loopback_blocked PASS host_loopback=000 unopted_port=000
-check=hostport_optin FAIL opted_in=000 not_opted_in=000 (see REPORT.md §5: pasta -t/-T direction)
-check=fail_closed_restart PASS before=200 during=000000 recovered=200 relay_down=yes spawn=network-unavailable
-check=no_leak "relay_veths": [] "session_rules": 0

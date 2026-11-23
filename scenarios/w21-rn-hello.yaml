@@ -13,7 +13,7 @@
 # module initializer therefore threw `NoClassDefFoundError` on the
 # `mqt_native_modules` thread, killing that Looper; every UIManager call JS made
 # afterwards was posted to a dead queue, so no view batch was ever dispatched.
-# With the artifact staged (`tools/rn-hello-deps.py`) the tree mounts. The
+# With the artifact staged (`tools/build/rn-hello-deps.py`) the tree mounts. The
 # `Invalid resource ID 0x0000000b` lines W21 recorded were this launcher's own
 # view-walk probe resolving RN's `View.generateViewId()` ids, not an app error;
 # the probe now skips ids without a package byte.

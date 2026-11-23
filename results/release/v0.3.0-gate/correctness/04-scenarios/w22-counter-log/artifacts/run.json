@@ -1,7 +1,0 @@
-{
-  "request_id": "req_338089_18e87bcd53df1c0b",
-  "started_at": "2026-11-16T09:16:13.312Z",
-  "scenario": "scenarios/w22-counter-log.yaml",
-  "apk": "",
-  "acos_version": "0.3.0"
-}
