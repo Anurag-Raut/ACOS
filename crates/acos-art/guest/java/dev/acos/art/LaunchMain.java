@@ -500,6 +500,10 @@ public final class LaunchMain {
         // publishes a structured UNSUPPORTED_ANDROID_API marker naming the call.
         // The app keeps running; no state is fabricated.
         installStartActivityGuard();
+        sHostLaunchAwaitingObservation =
+                System.getenv("ACOSLAUNCH_HOST_SCHEDULES") != null
+                        && "activity-resumed".equals(sUntil)
+                        && sActivity != null;
         installTopFinishHook();
 
         // The bindApplication H message is already posted; run the real main
@@ -3582,6 +3586,8 @@ public final class LaunchMain {
                 } catch (Throwable x) {
                     System.out.println("ACOSLAUNCH MARK watcher-error " + x);
                     x.printStackTrace(System.out);
+                } finally {
+                    releaseHostLaunchObservation();
                 }
                 System.out.flush();
             }
@@ -3781,13 +3787,22 @@ public final class LaunchMain {
             // `halt(0)` cut the finish/result handshake before the caller got
             // its result. `mCalled` is the framework's own onCreate/onStart
             // completion flag on the record the transaction created.
-            Object launched = null;
+            Object launched = launchedActivity(thread);
             long hostDeadline = System.currentTimeMillis() + sResumeMs;
-            while (launched == null && System.currentTimeMillis() < hostDeadline) {
-                Thread.sleep(5);
-                launched = launchedActivity(thread);
+            while (launched == null) {
+                long rem = hostDeadline - System.currentTimeMillis();
+                if (rem <= 0) break;
+                synchronized (sHostLaunchLock) {
+                    launched = launchedActivity(thread);
+                    if (launched != null) break;
+                    sHostLaunchLock.wait(Math.min(5L, rem));
+                }
+                if (launched == null) {
+                    launched = launchedActivity(thread);
+                }
             }
             if (launched == null) {
+                releaseHostLaunchObservation();
                 System.out.println("ACOSLAUNCH MARK host-transaction-timeout activity="
                         + sActivity + " timeout_ms=" + sResumeMs);
                 write(new File(sOut, "activity-not-resumed.marker"),
@@ -3831,8 +3846,10 @@ public final class LaunchMain {
                         + launched.getClass().getName() + " window=" + get(launched, "mWindow")
                         + " finish_during_create=true");
                 System.out.flush();
+                releaseHostLaunchObservation();
                 return;
             }
+            releaseHostLaunchObservation();
             System.out.println("ACOSLAUNCH MARK host-transaction-resumed activity="
                     + launched.getClass().getName()
                     + " token=" + (sCurrentToken == null ? "none" : "binder:"
@@ -5585,12 +5602,55 @@ public final class LaunchMain {
     private static final java.util.concurrent.atomic.AtomicBoolean sTopFinishWatcherStarted =
             new java.util.concurrent.atomic.AtomicBoolean(false);
     private static volatile boolean sTopFinishHookInstalled = false;
+    private static final Object sHostLaunchLock = new Object();
+    private static volatile boolean sHostLaunchAwaitingObservation = false;
+    private static final java.util.List<IBinder> sDeferredTopFinishes =
+            new java.util.ArrayList<IBinder>();
     private static volatile android.os.Handler sMainHandler;
     private static volatile Object sWrappedControllerProxy;
     private static volatile Object sWrappedControllerDelegate;
     private static Class<?> sPauseItemCls;
     private static Class<?> sStopItemCls;
     private static Class<?> sDestroyItemCls;
+
+    static boolean deferTopFinishIfLaunchPending(IBinder tkn) {
+        if (!sHostLaunchAwaitingObservation) return false;
+        synchronized (sHostLaunchLock) {
+            if (!sHostLaunchAwaitingObservation) return false;
+            if (tkn != null && !sDeferredTopFinishes.contains(tkn)) {
+                sDeferredTopFinishes.add(tkn);
+            }
+            sHostLaunchLock.notifyAll();
+            return true;
+        }
+    }
+
+    static void releaseHostLaunchObservation() {
+        final java.util.List<IBinder> pending;
+        synchronized (sHostLaunchLock) {
+            sHostLaunchAwaitingObservation = false;
+            if (sDeferredTopFinishes.isEmpty()) {
+                sHostLaunchLock.notifyAll();
+                return;
+            }
+            pending = new java.util.ArrayList<IBinder>(sDeferredTopFinishes);
+            sDeferredTopFinishes.clear();
+            sHostLaunchLock.notifyAll();
+        }
+        android.os.Handler h = sMainHandler;
+        if (h == null) {
+            h = new android.os.Handler(Looper.getMainLooper());
+            sMainHandler = h;
+        }
+        h.post(new Runnable() {
+            @Override
+            public void run() {
+                for (IBinder tkn : pending) {
+                    dispatchTopFinishes(tkn, false, 0);
+                }
+            }
+        });
+    }
 
     static void installTopFinishHook() {
         try {
@@ -5709,6 +5769,7 @@ public final class LaunchMain {
                     }
                     return;
                 }
+                if (deferTopFinishIfLaunchPending(token)) return;
                 deliverTopFinishTransactions(token);
                 return;
             }
@@ -5739,6 +5800,7 @@ public final class LaunchMain {
                     finishedTokens.add(tkn);
                 }
                 for (IBinder tkn : finishedTokens) {
+                    if (deferTopFinishIfLaunchPending(tkn)) continue;
                     deliverTopFinishTransactions(tkn);
                 }
             }
