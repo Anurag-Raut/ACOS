@@ -1705,14 +1705,47 @@ fn the_test_pattern_source_keeps_its_color_bar_fallback() {
     assert_eq!(status["calls"]["frames_failed"], 0);
 }
 
+/// `createStream` for a DEFERRED output, as `OutputConfiguration(Size, Class)`
+/// writes it: `isDeferredConfig = 1` and no Surface in `mSurfaces`.
+fn create_deferred_stream(host: &mut ServiceHost, dev: BinderId) -> i32 {
+    dev_transact(host, dev, device_code::BEGIN_CONFIGURE, dev_request());
+    let mut cs = dev_request();
+    cs.write_int32(1); // typed object present
+    cs.write_int32(0); // rotation
+    cs.write_int32(-1); // surfaceGroupId
+    cs.write_int32(0); // surfaceType = SURFACE_TYPE_SURFACE_VIEW (deferred outputs name a type)
+    cs.write_int32(640);
+    cs.write_int32(480);
+    cs.write_int32(1); // isDeferredConfig
+    cs.write_int32(0); // isShared
+    cs.write_int32(0); // writeTypedList(mSurfaces): empty
+    cs.write_string16_opt(None).expect("physicalCameraId");
+    cs.write_int32(0); // isMultiResolution
+    cs.write_int32(0); // sensorPixelModesUsed[]
+    cs.write_int64(1); // dynamicRangeProfile = STANDARD
+    cs.write_int32(-1); // colorSpace
+    cs.write_int64(0); // streamUseCase
+    cs.write_int32(0); // timestampBase
+    cs.write_int32(0); // mirrorMode
+    cs.write_int32(0); // readoutTimestampEnabled
+    let mut reply = dev_transact(host, dev, device_code::CREATE_STREAM, cs);
+    let stream_id = reply.read_int32().expect("streamId");
+    dev_transact(host, dev, device_code::END_CONFIGURE, dev_request());
+    let _ = host.take_deliveries();
+    stream_id
+}
+
 #[test]
 fn finalize_output_configurations_is_refused_not_acknowledged() {
     let (mut host, _registry) = attach();
     let (dev, _sink, _cb, igbp) = open_device_with_sink(&mut host);
-    let _ = create_stream_named(&mut host, dev, igbp, "640x480");
+    // A real deferred output: the stream was created WITHOUT a Surface...
+    let stream_id = create_deferred_stream(&mut host, dev);
+    // ...and `finalizeOutputConfigurations(streamId, OutputConfiguration)` now
+    // delivers the Surface (complete finalize parcel).
     let mut data = dev_request();
-    data.write_int32(0); // streamId
-    data.write_int32(1); // OutputConfiguration present
+    data.write_int32(stream_id);
+    write_fake_output_config(&mut data, 640, 480, igbp);
     data.set_data_position(0);
     let mut reply = Parcel::new();
     let err = host
