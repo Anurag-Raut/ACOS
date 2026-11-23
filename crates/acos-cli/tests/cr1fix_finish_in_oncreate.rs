@@ -55,6 +55,8 @@ fn host_scheduled_finish_in_oncreate_reports_launch_not_timeout() {
             .current_dir(&root)
             .env("ACOS_ART_BIN", art_bin())
             .env("ACOSLAUNCH_RESUME_MS", "1000")
+            // Widen the super.onCreate() -> finish() window in the fixture (test-only seam).
+            .env("ACOS_TEST_FINISH_DELAY_MS", "40")
             .args([
                 "verify",
                 "scenarios/sysui1-permission-pregranted.yaml",

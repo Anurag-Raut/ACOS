@@ -755,6 +755,11 @@ impl SecondaryShared {
         // delivery to it (and only to it).
         sb.env("ACOS_PROCESS_TAG", &spec.tag.to_string());
         sb.env("ACOS_PROCESS_NAME", &spec.package);
+        // CR1FIX2 #3: test-only seam, a splash-style fixture waits this long between
+        // `super.onCreate()` and `finish()`. Unset in normal runs (no delay).
+        if let Ok(v) = std::env::var("ACOS_TEST_FINISH_DELAY_MS") {
+            sb.env("ACOS_TEST_FINISH_DELAY_MS", &v);
+        }
         sb.env("ACOSLAUNCH_RESUME_MS", &self.resume_ms.to_string());
         // MPROC7 (ADR-0029 amendment): this process's first launch is a
         // host-built `ClientTransaction` (system_server owns the activity
@@ -2741,6 +2746,11 @@ pub(crate) fn launch_session(
     // CR1FIX2 #1: diagnostic seam, the decor reports no attached root.
     if std::env::var_os("ACOSLAUNCH_TEST_WINDOW_NO_ROOT").is_some() {
         sb.env("ACOSLAUNCH_TEST_WINDOW_NO_ROOT", "1");
+    }
+    // CR1FIX2 #3: test-only seam, a splash-style fixture waits this long between
+    // `super.onCreate()` and `finish()`. Unset in normal runs (no delay).
+    if let Ok(v) = std::env::var("ACOS_TEST_FINISH_DELAY_MS") {
+        sb.env("ACOS_TEST_FINISH_DELAY_MS", &v);
     }
     if let Ok(v) = std::env::var("ACOSART_CRASH_DUMP") {
         sb.env("ACOSART_CRASH_DUMP", &v);

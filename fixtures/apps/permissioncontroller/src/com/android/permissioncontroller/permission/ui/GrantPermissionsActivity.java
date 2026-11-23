@@ -87,11 +87,17 @@ public class GrantPermissionsActivity extends Activity {
         // controller grants and finishes without drawing anything.
         if (!hasOpenQuestion()) {
             Log.i(TAG, "nothing to ask, returning results " + describe(auto));
-            // CR1FIX2 #3: a splash/trampoline does a little work between
-            // `super.onCreate()` and `finish()`. Keep that window real (tens of
-            // ms) so a launch watcher that selects the Activity as soon as
-            // `super.onCreate()` set `mCalled` is exercised, not just lucky.
-            android.os.SystemClock.sleep(40);
+            // CR1FIX2 #3 (test-only): a splash/trampoline does a little work
+            // between `super.onCreate()` and `finish()`. The finish-in-onCreate
+            // test sets ACOS_TEST_FINISH_DELAY_MS to widen that window; normal
+            // sessions leave it unset, so the shipped dialog never waits.
+            String delay = System.getenv("ACOS_TEST_FINISH_DELAY_MS");
+            if (delay != null) {
+                try {
+                    android.os.SystemClock.sleep(Long.parseLong(delay.trim()));
+                } catch (NumberFormatException ignored) {
+                }
+            }
             answer(auto, false);
             return;
         }
