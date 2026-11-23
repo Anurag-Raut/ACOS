@@ -202,7 +202,7 @@ if [ -n "${ACOS_APP_ONLY:-}" ]; then
             # the broker's request interception.
             build_apk "$app" "$APPS_DIR/webview-probe/assets:assets"
         elif [ "$app" = "camerax-probe" ]; then
-            "$ROOT/tools/build-camerax-probe.sh"
+            "$ROOT/tools/build/build-camerax-probe.sh"
         else
             build_apk "$app"
         fi
@@ -349,11 +349,11 @@ build_apk location-probe
 # id, openCamera permission/refusal) and tests the `hw.camera` off tombstone.
 build_apk camera-probe
 if [ "${ACOS_BUILD_ONLY:-}" = "camerax-probe" ]; then
-    "$ROOT/tools/build-camerax-probe.sh"
+    "$ROOT/tools/build/build-camerax-probe.sh"
 elif [ -z "${ACOS_BUILD_ONLY:-}" ] && [ -d "$ROOT/.cache/maven-camerax" ]; then
-    "$ROOT/tools/build-camerax-probe.sh"
+    "$ROOT/tools/build/build-camerax-probe.sh"
 elif [ -z "${ACOS_BUILD_ONLY:-}" ]; then
-    echo "build-apps: skipping camerax-probe (.cache/maven-camerax not present; run tools/fetch-camerax-deps.sh)"
+    echo "build-apps: skipping camerax-probe (.cache/maven-camerax not present; run tools/fetch/fetch-camerax-deps.sh)"
 fi
 # MPROC4: the two-process pair (proc-a starts/binds components of proc-b).
 build_apk proc-a
