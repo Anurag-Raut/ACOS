@@ -8,13 +8,13 @@
 #   art  Real ART route: `acos-art render-app --apk fixtures/build/apps/counter.apk`
 #        (one-shot). Each agent gets its own seeded --data dir (copied from
 #        .cache/art/data, sockets excluded) so concurrent runs do not share /data.
-#        Verified = render outcome "ok" AND tools/art-render-app-compare.py exit 0
+#        Verified = render outcome "ok" AND tools/probes/art-render-app-compare.py exit 0
 #        (full-frame SSIM >= 0.99 and every structural node exact).
 #   vm   Rust VM route: `acos verify --engine rust-vm --scenario scenarios/v1-counter.yaml`
 #        (counter.apk, 13 scenario steps). Each agent gets its own ACOS_SESSION_ROOT.
 #        Verified = verdict "pass" in the --json envelope.
 #
-# Every agent process is started through tools/guarded.sh --mem 4G --time 300, so a
+# Every agent process is started through tools/guard/guarded.sh --mem 4G --time 300, so a
 # cohort of N is bounded at N x 4 GiB (< 50 GiB for N = 10) by cgroup MemoryMax.
 #
 # Concurrency model: the N agents of one cohort run concurrently (that is the
@@ -163,7 +163,7 @@ run_agent() {
     local engine="$1" a="$2" rc=0 t0 t1 verified=0
     t0="$(date +%s.%N)"
     if [ "$engine" = art ]; then
-        tools/guarded.sh --mem 4G --time 300 -- "$ART_BIN" render-app \
+        tools/guard/guarded.sh --mem 4G --time 300 -- "$ART_BIN" render-app \
             --apk "$ART_APK" --data "$a/data" --out "$a/out" --json \
             >"$a/stdout.json" 2>"$a/stderr.txt"
         rc=$?
@@ -175,13 +175,13 @@ try:
 except Exception:
     print("")' "$a/stdout.json")"
         if [ "$rc" -eq 0 ] && [ "$outcome" = ok ] && [ -f "$a/out/frame.png" ]; then
-            python3 "$ROOT/tools/art-render-app-compare.py" \
+            python3 "$ROOT/tools/probes/art-render-app-compare.py" \
                 --png "$a/out/frame.png" --tree "$a/out/tree.json" --app counter \
                 --out "$a/compare.json" >"$a/compare.stdout" 2>"$a/compare.stderr"
             [ $? -eq 0 ] && verified=1
         fi
     else
-        ACOS_SESSION_ROOT="$a/session-root" tools/guarded.sh --mem 4G --time 300 -- \
+        ACOS_SESSION_ROOT="$a/session-root" tools/guard/guarded.sh --mem 4G --time 300 -- \
             "$VM_BIN" verify --scenario "$VM_SCENARIO" --apk "$ART_APK" \
             --engine rust-vm --artifacts "$a/artifacts" --json \
             >"$a/stdout.json" 2>"$a/stderr.txt"
@@ -296,7 +296,7 @@ PY
 
     python3 -I - "$dir" "$N" "$t0" "$t1" "$ENGINE" "$ROOT" <<'PY'
 import json, os, statistics, sys
-sys.path.insert(0, os.path.join(sys.argv[6], "tools"))
+sys.path.insert(0, os.path.join(sys.argv[6], "tools", "bench"))
 import benchlib
 # W29: every result row carries the build profile + full binary sha256.
 profile = "release"
@@ -372,7 +372,7 @@ done
 python3 -I - "$OUT" "$ROOT" "${reps_json[@]}" <<'PY'
 import json, os, statistics, sys
 out, root, paths = sys.argv[1], sys.argv[2], sys.argv[3:]
-sys.path.insert(0, os.path.join(root, "tools"))
+sys.path.insert(0, os.path.join(root, "tools", "bench"))
 import benchlib
 reps = []
 for p in paths:

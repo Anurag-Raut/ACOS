@@ -281,7 +281,7 @@ fn probe_root(tag: &str) -> Option<ArtRoot> {
             acos_test_support::require_prereq(
                 false,
                 &format!("{tag} (spike net boundary)"),
-                &format!("no ART sysroot ({e}) — run tools/art-sysroot.sh"),
+                &format!("no ART sysroot ({e}) — run tools/fetch/art-sysroot.sh"),
             )?;
             return None;
         }
@@ -522,7 +522,7 @@ fn guest_cannot_change_the_lan_drop_rules() {
         acos_test_support::require_prereq(
             false,
             "spike net boundary (LAN rules)",
-            "no ART sysroot — run tools/art-sysroot.sh",
+            "no ART sysroot — run tools/fetch/art-sysroot.sh",
         );
         return;
     };
@@ -691,7 +691,7 @@ fn boundary_failure_never_starts_the_guest() {
         acos_test_support::require_prereq(
             false,
             "spike net boundary (fail-closed)",
-            "no ART sysroot — run tools/art-sysroot.sh",
+            "no ART sysroot — run tools/fetch/art-sysroot.sh",
         );
         return;
     };

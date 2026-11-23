@@ -1,6 +1,0 @@
-ACOSHWC[gralloc]: software gralloc shim loaded (1 fd / 9 ints)
-GUESTPID=584932
-ACOSHWC[gralloc]: software gralloc shim loaded (1 fd / 9 ints)
-couldn't find an OpenGL ES implementation, make sure one of persist.graphics.egl, ro.hardware.egl and ro.board.platform is set
-libc: failed to connect to tombstoned: No such file or directory
-sf_rc=134

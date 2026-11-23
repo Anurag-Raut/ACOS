@@ -21,7 +21,7 @@
 //! Heavy (it starts Chromium), so it is guarded and opt-in:
 //!
 //! ```text
-//! tools/art-runtime/run-exclusive.sh --task WV8 -- tools/guarded.sh --mem 8G --time 420 -- \
+//! tools/art-runtime/run-exclusive.sh --task WV8 -- tools/guard/guarded.sh --mem 8G --time 420 -- \
 //!   env ACOS_WEBVIEW_TEST=1 CARGO_TARGET_DIR=$PWD/.cache/wv8-target \
 //!   cargo test -p acos-webview --test wv8_viewport -- --nocapture --test-threads=1
 //! ```
@@ -133,7 +133,7 @@ fn the_default_arm_lays_out_at_the_view_width_and_ignores_meta_viewport() {
     if acos_test_support::require_prereq(
         engine_test_enabled(),
         "the_default_arm_lays_out_at_the_view_width_and_ignores_meta_viewport",
-        "set ACOS_WEBVIEW_TEST=1 to run this heavy Chromium test (the release gate runs it with the env set; see tools/test-prereq-optouts.txt)",
+        "set ACOS_WEBVIEW_TEST=1 to run this heavy Chromium test (the release gate runs it with the env set; see tools/verify/test-prereq-optouts.txt)",
     )
     .is_none()
     {
@@ -199,7 +199,7 @@ fn the_wide_arm_honours_meta_viewport_and_the_980_default_and_overview_fits_it()
     if acos_test_support::require_prereq(
         engine_test_enabled(),
         "the_wide_arm_honours_meta_viewport_and_the_980_default_and_overview_fits_it",
-        "set ACOS_WEBVIEW_TEST=1 to run this heavy Chromium test (the release gate runs it with the env set; see tools/test-prereq-optouts.txt)",
+        "set ACOS_WEBVIEW_TEST=1 to run this heavy Chromium test (the release gate runs it with the env set; see tools/verify/test-prereq-optouts.txt)",
     )
     .is_none()
     {

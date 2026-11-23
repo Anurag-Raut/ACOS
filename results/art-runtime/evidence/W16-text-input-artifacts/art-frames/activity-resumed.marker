@@ -1,7 +1,0 @@
-package=dev.acos.fixtures.textinput
-activity=dev.acos.fixtures.textinput.MainActivity
-lifecycle=onCreate,onStart,onResume
-resumed=true
-called=true
-stopped=false
-window=com.android.internal.policy.PhoneWindow@e65f963

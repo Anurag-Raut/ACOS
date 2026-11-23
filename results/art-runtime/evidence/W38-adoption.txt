@@ -1,6 +1,0 @@
-# W38: the host adopts the guest's real Binder activity tokens
-# counter: target/debug/acos-art launch counter.apk --until activity-resumed
-# gaten:   target/debug/acos-art launch .cache/gaten/gaten-x86_64-debug.apk (LauncherActivity.finish() -> MainActivity)
-acos-services: ActivityManagerAdopt token=0x100000003 activity=activity
-acos-services: ActivityManagerAdopt token=0x100000003 activity=com.gaten.app.MainActivity
-acos-services: ActivityManagerAdopt token=0x100000006 activity=activity

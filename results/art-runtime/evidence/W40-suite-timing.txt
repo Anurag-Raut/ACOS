@@ -1,6 +1,0 @@
-W40 item 3 evidence (results/bench/suite-W40.json, 2026-11-12T03:17:12Z start)
-
-T07-wrong: verdict wall 15654 ms, process wall 16230 ms
-  engine.json.timing: attributed 15640 ms, unattributed 14 ms, boot 365 ms
-  assert_log step (wrong log line, timeout budget spent) = 5028 ms, status fail
-  W34 baseline for the same variant: unattributed 5040 ms; the wait now lands on the assert_log step.

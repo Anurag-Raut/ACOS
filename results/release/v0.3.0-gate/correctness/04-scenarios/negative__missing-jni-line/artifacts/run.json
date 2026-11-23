@@ -1,7 +1,0 @@
-{
-  "request_id": "req_32e6f4_18e87bbc2c041297",
-  "started_at": "2026-11-16T09:14:59.629Z",
-  "scenario": "scenarios/negative/missing-jni-line.yaml",
-  "apk": "",
-  "acos_version": "0.3.0"
-}

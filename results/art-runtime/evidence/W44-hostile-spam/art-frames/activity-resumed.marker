@@ -1,8 +1,0 @@
-package=dev.acos.fixtures.hostileprobe
-activity=dev.acos.fixtures.hostileprobe.SpamActivity
-lifecycle=onCreate,onStart,onResume
-resumed=true
-called=true
-stopped=false
-window=com.android.internal.policy.PhoneWindow@8abe10e
-timeout_ms=12000

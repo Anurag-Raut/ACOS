@@ -1,7 +1,0 @@
-{
-  "request_id": "req_376ab_18e916c1e99e9228",
-  "started_at": "2026-11-18T08:35:48.587Z",
-  "scenario": "scenarios/mproc3-two-process.yaml",
-  "apk": "",
-  "acos_version": "0.3.0"
-}

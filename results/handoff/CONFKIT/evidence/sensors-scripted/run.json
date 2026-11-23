@@ -1,7 +1,0 @@
-{
-  "request_id": "req_b8c0_18e915a6488f8d39",
-  "started_at": "2026-11-18T08:15:30.409Z",
-  "scenario": "scenarios/sensors-scripted.yaml",
-  "apk": "",
-  "acos_version": "0.3.0"
-}

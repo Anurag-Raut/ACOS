@@ -1,6 +1,0 @@
-scenario	verdict	rc	wall_ms	artifacts
-notif-perm-granted	pass	0	2234	runs/notif-perm-granted
-notif-perm-denied	pass	0	1298	runs/notif-perm-denied
-location-pending-intent	pass	0	3752	runs/location-pending-intent
-mproc3-two-process	pass	0	10712	runs/mproc3-two-process
-binderpid	pass	0	2873	runs/binderpid

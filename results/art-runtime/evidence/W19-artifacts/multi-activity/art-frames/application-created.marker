@@ -1,7 +1,0 @@
-package=dev.acos.fixtures.multiactivity
-application=android.app.Application
-application_classloader_is_apk=true
-application_base=dev.acos.fixtures.multiactivity//data/app/multi-activity.apk
-instrumentation=android.app.Instrumentation
-instrumentation_source=framework (bind request instrumentationName=null)
-sourceDir=/data/app/multi-activity.apk

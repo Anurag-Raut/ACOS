@@ -42,9 +42,9 @@
 //! shared lock and the host guard:
 //!
 //! ```text
-//! ACOS_APP_ONLY=touch-probe tools/build-apps.sh
+//! ACOS_APP_ONLY=touch-probe tools/build/build-apps.sh
 //! tools/art-runtime/run-exclusive.sh --task TOUCHDISP -- \
-//!   tools/guarded.sh --mem 8G --time 900 -- \
+//!   tools/guard/guarded.sh --mem 8G --time 900 -- \
 //!   cargo test -p acos-cli --release --test touchdisp_dispatch -- --ignored --test-threads=1
 //! ```
 
@@ -100,7 +100,7 @@ impl Run {
         if !scenario.is_file() || (needs_apk && !apk.is_file()) || !art.is_file() {
             eprintln!(
                 "SKIP: {} / {} / {} missing (build with \
-                 ACOS_APP_ONLY=touch-probe tools/build-apps.sh and \
+                 ACOS_APP_ONLY=touch-probe tools/build/build-apps.sh and \
                  cargo build --release -p acos-art)",
                 scenario.display(),
                 apk.display(),
@@ -204,7 +204,7 @@ impl Run {
 }
 
 #[test]
-#[ignore = "boots a real ART guest; run under tools/guarded.sh + run-exclusive.sh"]
+#[ignore = "boots a real ART guest; run under tools/guard/guarded.sh + run-exclusive.sh"]
 fn a_posted_side_effect_of_an_unhandled_tap_is_captured_not_the_pre_state() {
     let run = Run::scenario("touchdisp-posted-side-effect.yaml", "posted");
     assert_eq!(run.envelope["status"], serde_json::json!("pass"), "{:#?}", run.envelope);
@@ -263,7 +263,7 @@ fn a_posted_side_effect_of_an_unhandled_tap_is_captured_not_the_pre_state() {
 }
 
 #[test]
-#[ignore = "boots a real ART guest; run under tools/guarded.sh + run-exclusive.sh"]
+#[ignore = "boots a real ART guest; run under tools/guard/guarded.sh + run-exclusive.sh"]
 fn an_unhandled_tap_that_changes_nothing_still_fails_expect_change() {
     // The negative control for the test above: the settle rule must never turn a
     // gesture that changed nothing into a pass just because it was unhandled.
@@ -280,7 +280,7 @@ fn an_unhandled_tap_that_changes_nothing_still_fails_expect_change() {
 }
 
 #[test]
-#[ignore = "boots a real ART guest; run under tools/guarded.sh + run-exclusive.sh"]
+#[ignore = "boots a real ART guest; run under tools/guard/guarded.sh + run-exclusive.sh"]
 fn a_long_press_on_a_non_clickable_gesture_surface_changes_state() {
     let run = Run::scenario("touchdisp-gesture.yaml", "gesture");
     assert_eq!(run.envelope["status"], serde_json::json!("pass"), "{:#?}", run.envelope);

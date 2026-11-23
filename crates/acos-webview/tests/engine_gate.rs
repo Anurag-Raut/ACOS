@@ -6,7 +6,7 @@
 //! Guard requirements, because this starts a Chromium and is heavy:
 //!
 //! ```text
-//! tools/art-runtime/run-exclusive.sh --task WVB -- tools/guarded.sh --mem 8G --time 420 -- \
+//! tools/art-runtime/run-exclusive.sh --task WVB -- tools/guard/guarded.sh --mem 8G --time 420 -- \
 //!   env ACOS_WEBVIEW_TEST=1 CARGO_TARGET_DIR=$PWD/.cache/wvb-target \
 //!   cargo test -p acos-webview --test engine_gate -- --nocapture --test-threads=1
 //! ```
@@ -258,7 +258,7 @@ fn engine_gate() {
     if acos_test_support::require_prereq(
         std::env::var("ACOS_WEBVIEW_TEST").as_deref() == Ok("1"),
         "engine_gate",
-        "set ACOS_WEBVIEW_TEST=1 to run this heavy Chromium test (the release gate runs it with the env set; see tools/test-prereq-optouts.txt)",
+        "set ACOS_WEBVIEW_TEST=1 to run this heavy Chromium test (the release gate runs it with the env set; see tools/verify/test-prereq-optouts.txt)",
     )
     .is_none()
     {

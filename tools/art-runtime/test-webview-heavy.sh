@@ -4,7 +4,7 @@
 #   tools/art-runtime/test-webview-heavy.sh <TASK>
 #
 # These tests start the real pinned Chromium engine, so they are gated on
-# ACOS_WEBVIEW_TEST=1. The default gate excludes them (tools/test-prereq-optouts.txt);
+# ACOS_WEBVIEW_TEST=1. The default gate excludes them (tools/verify/test-prereq-optouts.txt);
 # this script runs exactly those names, with the env set, under the ART lock and the
 # guard. A skipped test is a failure here, the same as in test-crates.sh.
 # The engine is downloaded once (SHA-pinned) into ACOS_WEBVIEW_CACHE, which defaults
@@ -19,12 +19,12 @@ mkdir -p "$ACOS_WEBVIEW_CACHE"
 log=${ACOS_TEST_LOG:-$wt/.cache/test-logs/$task-$(date -u +%Y%m%dT%H%M%SZ).log}
 mkdir -p "$(dirname "$log")"
 
-names=$(grep -v '^#' tools/test-prereq-optouts.txt | awk '/^[a-z_0-9]+ +/ && /ACOS_WEBVIEW_TEST=1/ {print $1}')
-[ -n "$names" ] || { echo "FAIL: no heavy webview tests listed in tools/test-prereq-optouts.txt" >&2; exit 2; }
+names=$(grep -v '^#' tools/verify/test-prereq-optouts.txt | awk '/^[a-z_0-9]+ +/ && /ACOS_WEBVIEW_TEST=1/ {print $1}')
+[ -n "$names" ] || { echo "FAIL: no heavy webview tests listed in tools/verify/test-prereq-optouts.txt" >&2; exit 2; }
 
 export HEAVY_NAMES="$names"
 tools/art-runtime/run-exclusive.sh --task "$task" -- \
-  tools/guarded.sh --mem "${ACOS_TEST_MEM:-12G}" --time "${ACOS_TEST_TIME:-1500}" -- \
+  tools/guard/guarded.sh --mem "${ACOS_TEST_MEM:-12G}" --time "${ACOS_TEST_TIME:-1500}" -- \
   bash -c 'rc=0; for n in $HEAVY_NAMES; do
     echo "== $n"
     cargo test --offline -p acos-webview -- --exact --nocapture "$n" || rc=1

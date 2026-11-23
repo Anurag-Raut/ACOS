@@ -1,4 +1,0 @@
-.cache/w36/counter/out/application-created.marker:app_flags=0x10800046
-.cache/w36/counter/out/application-created.marker:app_flags_source=manifest
-.cache/w36/counter/stderr.txt:acos-art: launch: app flags=0x10800046 (source=manifest; installed=true)
-acos-art: launch: app flags=0x10c08044 (source=manifest; installed=true)

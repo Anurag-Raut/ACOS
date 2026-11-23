@@ -1,5 +1,0 @@
-# W39 cached artefact == a generation produced before W39 (byte comparison)
-
-IDENTICAL  linkerconfig ld.config.txt  (.cache/art/build-cache/ea881911630dc7d5cc628ac753667067d6b96f618dcc0512b6507c7051ae3fc6/ld.config.txt vs .cache/art/data/linkerconfig/ld.config.txt)
-IDENTICAL  derive_classpath classpath  (.cache/art/build-cache/7186b7a7f8049073080714d2e7d9e6d961b218ba304eb8d740e7fcbac3bec699/classpath vs .cache/art/data/system/environ/classpath)
-IDENTICAL  static-RRO idmap  (.cache/art/build-cache/627351aae12dbc79b250face8d315ee2d979d32c1fca027237bab5e1ea2e103c/PixelConfigOverlayCommon.idmap vs .cache/art/data/overlay/PixelConfigOverlayCommon.idmap)

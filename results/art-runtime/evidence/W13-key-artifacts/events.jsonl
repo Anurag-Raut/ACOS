@@ -1,6 +1,0 @@
-{"seq":1,"timestamp_ms":1000,"session_id":"s_art_counter","kind":"frame","frame_seq":1,"cause_id":"art","meaningful":true,"content_hash":"7a58d7bb53d876abfbdda15b3d4f75ae"}
-{"seq":2,"timestamp_ms":2000,"session_id":"s_art_counter","kind":"frame","frame_seq":1,"cause_id":"art","meaningful":true,"content_hash":"7a58d7bb53d876abfbdda15b3d4f75ae"}
-{"seq":3,"timestamp_ms":3000,"session_id":"s_art_counter","kind":"frame","frame_seq":1,"cause_id":"art","meaningful":true,"content_hash":"7a58d7bb53d876abfbdda15b3d4f75ae"}
-{"seq":4,"timestamp_ms":4000,"session_id":"s_art_counter","kind":"frame","frame_seq":2,"cause_id":"art","meaningful":true,"content_hash":"4dc8bdc262945320b70d2a09bdc55383"}
-{"seq":5,"timestamp_ms":5000,"session_id":"s_art_counter","kind":"frame","frame_seq":3,"cause_id":"art","meaningful":true,"content_hash":"30dea89e17b82ed6cb4a1e5bb4575fb4"}
-{"seq":6,"timestamp_ms":6000,"session_id":"s_art_counter","kind":"frame","frame_seq":3,"cause_id":"art","meaningful":true,"content_hash":"30dea89e17b82ed6cb4a1e5bb4575fb4"}

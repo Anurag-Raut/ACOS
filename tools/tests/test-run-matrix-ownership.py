@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""tools/run-matrix.sh: the harness must not own the artifacts directory.
+"""tools/verify/run-matrix.sh: the harness must not own the artifacts directory.
 
 `acos verify --artifacts <dir>` owns that directory (ADR-0026, one run owns one
 artifacts directory): an existing directory with files in it is another run's
@@ -27,7 +27,7 @@ import tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(os.path.dirname(HERE))
-SCRIPT = os.path.join(REPO, "tools", "run-matrix.sh")
+SCRIPT = os.path.join(REPO, "tools", "verify", "run-matrix.sh")
 
 PASSES = FAILURES = 0
 

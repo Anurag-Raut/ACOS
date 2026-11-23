@@ -1525,7 +1525,7 @@ evidence a verdict depends on. The rule is:
 
 Measured on this host (API 34, 1080×2400): `v2-art-counter` 109.0 → 0.3 MiB
 (−99.7 %), `gaten-home` 195.3 → 8.8 MiB (−95.5 %), a failing Gaten negative
-131.8 → 131.8 MiB (unchanged, by design). `tools/check-artifact-references.py`
+131.8 → 131.8 MiB (unchanged, by design). `tools/verify/check-artifact-references.py`
 proves no report dangles after retention.
 
 ### 10.3 Pruning the collection: `acos artifacts gc`
@@ -1857,8 +1857,8 @@ can otherwise drive the host to tens of gigabytes (host-safety incident
   `stderr` line `acos-vm error: HOST_MEMORY_LIMIT: ...` (or `TIMEOUT`) and the
   typed `vm_error`. In the `--json` envelope the same code/message is reported
   in `error`.
-* Every wrapped run (`tools/guarded.sh`) exports both variables so the wrapper's
-  bound and the VM's bound agree. `tools/ramguard.sh` is the out-of-process
+* Every wrapped run (`tools/guard/guarded.sh`) exports both variables so the wrapper's
+  bound and the VM's bound agree. `tools/guard/ramguard.sh` is the out-of-process
   backstop: it kills `target/*/acos*` processes when `MemAvailable < 9 GiB`
   (≈85% used on the 62 GiB host) or a single process exceeds 8 GiB RSS.
 

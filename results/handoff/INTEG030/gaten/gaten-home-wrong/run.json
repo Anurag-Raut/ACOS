@@ -1,7 +1,0 @@
-{
-  "request_id": "req_1ca6e7_18e8723956713509",
-  "started_at": "2026-11-16T06:20:42.096Z",
-  "scenario": "scenarios/negative/gaten-home-wrong.yaml",
-  "apk": "",
-  "acos_version": "0.2.3"
-}

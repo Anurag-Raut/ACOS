@@ -20,7 +20,7 @@ rm -f "$SOCK"
 [ -x "$BIN" ] || { echo "g1-c1-run: build c1bridge first (cargo build --release in research/art-feasibility/g1-gralloc/c1bridge with CARGO_TARGET_DIR=$WORK/c1target)" >&2; exit 2; }
 
 # The harness is the compositor-client host; it is as guarded as the guest run.
-"$ROOT/tools/guarded.sh" --mem 2G --time 300 -- "$BIN" "$SOCK" >"$LOG" 2>&1 &
+"$ROOT/tools/guard/guarded.sh" --mem 2G --time 300 -- "$BIN" "$SOCK" >"$LOG" 2>&1 &
 HARNESS=$!
 for _ in $(seq 1 100); do
     [ -S "$SOCK" ] && break
@@ -28,7 +28,7 @@ for _ in $(seq 1 100); do
 done
 [ -S "$SOCK" ] || { echo "g1-c1-run: harness never listened ($LOG)" >&2; kill "$HARNESS" 2>/dev/null; exit 2; }
 
-G1_C1_SOCK="$SOCK" "$ROOT/tools/guarded.sh" --mem 4G --time 240 -- \
+G1_C1_SOCK="$SOCK" "$ROOT/tools/guard/guarded.sh" --mem 4G --time 240 -- \
     "$ROOT/research/art-feasibility/g1-gralloc/run.sh" blast
 RC=$?
 # the harness exits on EOF when the probe closes the socket

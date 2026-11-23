@@ -11,7 +11,7 @@
 //! Heavy (it starts Chromium), so it is guarded and opt-in:
 //!
 //! ```text
-//! tools/art-runtime/run-exclusive.sh --task WV5b -- tools/guarded.sh --mem 8G --time 420 -- \
+//! tools/art-runtime/run-exclusive.sh --task WV5b -- tools/guard/guarded.sh --mem 8G --time 420 -- \
 //!   env ACOS_WEBVIEW_TEST=1 CARGO_TARGET_DIR=$PWD/.cache/wv5b-target \
 //!   cargo test -p acos-webview --test gate_engine -- --nocapture --test-threads=1
 //! ```
@@ -76,7 +76,7 @@ fn two_sessions_get_their_own_context_and_a_real_png_frame_through_the_gate() {
     if acos_test_support::require_prereq(
         engine_test_enabled(),
         "two_sessions_get_their_own_context_and_a_real_png_frame_through_the_gate",
-        "set ACOS_WEBVIEW_TEST=1 to run this heavy Chromium test (the release gate runs it with the env set; see tools/test-prereq-optouts.txt)",
+        "set ACOS_WEBVIEW_TEST=1 to run this heavy Chromium test (the release gate runs it with the env set; see tools/verify/test-prereq-optouts.txt)",
     )
     .is_none()
     {

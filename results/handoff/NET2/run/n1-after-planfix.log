@@ -1,4 +1,0 @@
-verify: error (ok=false, backend=acos-native, fidelity=static-analysis)
-  error: GUEST_EXITED: acos-art: GUEST_EXITED: the guest ended before its first live frame (status exit status: 1)
-  artifacts: out/net-check
-verify: GUEST_EXITED (harness): acos-art: GUEST_EXITED: the guest ended before its first live frame (status exit status: 1) [class=harness, retryable=false]

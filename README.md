@@ -17,17 +17,17 @@ ACOS runs real Android APKs (API 34, x86_64) on Linux for AI coding agents witho
 
 ```bash
 # 1. Enable the shared compiler cache and test env (see docs/DEV_WORKFLOW.md)
-source tools/agent-env.sh
+source tools/dev/agent-env.sh
 export CARGO_TARGET_DIR="$PWD/.cache/target"
 
 # 2. Build the CLI and MCP server
-tools/guarded.sh --mem 4G --time 900 -- cargo build --release -p acos-cli -p acos-mcp
+tools/guard/guarded.sh --mem 4G --time 900 -- cargo build --release -p acos-cli -p acos-mcp
 
 # 3. Check Host readiness (boot image, bwrap, pasta, chrome-headless-shell)
 "$CARGO_TARGET_DIR/release/acos" doctor --json
 
 # 4. Run a scenario on real ART
-tools/guarded.sh --mem 4G --time 300 -- "$CARGO_TARGET_DIR/release/acos" verify \
+tools/guard/guarded.sh --mem 4G --time 300 -- "$CARGO_TARGET_DIR/release/acos" verify \
   --apk fixtures/build/apps/counter.apk --scenario scenarios/counter.yaml --json
 ```
 
@@ -35,11 +35,11 @@ See [`docs/INSTALL.md`](docs/INSTALL.md) for installation and image extraction, 
 
 ## Host safety (ADR-0018)
 
-Host RAM must never exceed 90% (target ≤ 85%). Wrap heavy builds, tests, and guest runs with `tools/guarded.sh`:
+Host RAM must never exceed 90% (target ≤ 85%). Wrap heavy builds, tests, and guest runs with `tools/guard/guarded.sh`:
 
 ```bash
-tools/guarded.sh --mem 4G --time 900 -- cargo test -p acos-services
-tools/guarded.sh --mem 4G --time 900 -- cargo clippy --workspace -- -D warnings
+tools/guard/guarded.sh --mem 4G --time 900 -- cargo test -p acos-services
+tools/guard/guarded.sh --mem 4G --time 900 -- cargo clippy --workspace -- -D warnings
 ```
 
-During parallel waves, run `tools/ramguard.sh &` to enforce the Host RAM ceiling. Details: [`docs/DEV_WORKFLOW.md`](docs/DEV_WORKFLOW.md), [`docs/SECURITY.md`](docs/SECURITY.md), and [`DECISIONS.md`](DECISIONS.md) (ADR-0018).
+During parallel waves, run `tools/guard/ramguard.sh &` to enforce the Host RAM ceiling. Details: [`docs/DEV_WORKFLOW.md`](docs/DEV_WORKFLOW.md), [`docs/SECURITY.md`](docs/SECURITY.md), and [`DECISIONS.md`](DECISIONS.md) (ADR-0018).

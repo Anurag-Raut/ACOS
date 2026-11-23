@@ -6,7 +6,7 @@
 #   scripts/repro.sh render    # counter preview md5 (must stay 9ec17f05...)
 #   scripts/repro.sh attach    # optional: host gdb attach to the guest (see README)
 #
-# Everything goes through tools/guarded.sh --mem 4G --time 300 and keeps scratch
+# Everything goes through tools/guard/guarded.sh --mem 4G --time 300 and keeps scratch
 # under .cache/w3/ (never /tmp).  The launch uses a *scratch* data root so the
 # shared .cache/art/data is untouched.
 set -uo pipefail
@@ -21,14 +21,14 @@ case "${1:-cascade}" in
     launch)
         out="$ROOT/.cache/w3/launch"
         rm -rf "$out"
-        tools/guarded.sh --mem 4G --time 300 -- ./target/debug/acos-art launch \
+        tools/guard/guarded.sh --mem 4G --time 300 -- ./target/debug/acos-art launch \
             --apk fixtures/build/apps/counter.apk --until activity-resumed \
             --out "$out" 2>&1 | grep -E "wall=|outcome|InputEventReceiver|bad array"
         ;;
     render)
         out="$ROOT/.cache/w3/counter"
         rm -rf "$out"
-        tools/guarded.sh --mem 4G --time 300 -- ./target/debug/acos-art render-app \
+        tools/guard/guarded.sh --mem 4G --time 300 -- ./target/debug/acos-art render-app \
             --apk fixtures/build/apps/counter.apk --out "$out" 2>&1 | grep md5
         ;;
     attach)

@@ -50,7 +50,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parent.parent
-sys.path.insert(0, str(REPO / "tools"))
+sys.path.insert(0, str(REPO / "tools/bench"))
 sys.path.insert(0, str(HERE))
 
 import benchlib  # noqa: E402

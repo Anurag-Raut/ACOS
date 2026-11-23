@@ -181,7 +181,7 @@ remains the proper attribution fix (S6 §5 #3).
 
 ### 4.6 Not covered
 * No live hostile-APK run was added: the fixtures toolchain
-  (`tools/build-apps.sh`) has no hostile-probe fixture, and building one means
+  (`tools/build/build-apps.sh`) has no hostile-probe fixture, and building one means
   editing `fixtures/` + the build script (outside S7 ownership). The unit tests
   exercise the exact host-side decoder the live path uses; the live milestone
   proves the honest path still works end to end.
@@ -195,7 +195,7 @@ All of these, in this order:
 
 1. **Fix §4.2** (window-session `float[]` length cap) and the same
    read-length-then-allocate pattern in `window_session.rs`; add the negative
-   test. Re-run `tools/guarded.sh --mem 8G cargo test -p acos-services -p acos-wm
+   test. Re-run `tools/guard/guarded.sh --mem 8G cargo test -p acos-services -p acos-wm
    -- --test-threads=1`.
 2. **Decide §4.4**: either label guest-reported tree/lifecycle and require
    host-observed corroboration for `pass`, or ship the out-of-process probe.
@@ -222,12 +222,12 @@ All of these, in this order:
 
 | check | command | result |
 |---|---|---|
-| new corpus | `tools/guarded.sh --mem 8G --time 600 -- cargo test -q -p acos-services --test sandbox_c1 -- --test-threads=1` | **9 passed** (2026-11-11T21:08:41Z) |
+| new corpus | `tools/guard/guarded.sh --mem 8G --time 600 -- cargo test -q -p acos-services --test sandbox_c1 -- --test-threads=1` | **9 passed** (2026-11-11T21:08:41Z) |
 | teeth (pre-fix decoder restored from HEAD, same test) | same command | **7 failed / 2 passed**, each failure the expected acceptance of a hostile shape (21:08:56Z); fixed file restored |
 | C1 regression | `… --test surface_client` | **12 passed** |
-| acceptance suite | `tools/guarded.sh --mem 8G --time 1200 -- cargo test -q -p acos-services -p acos-wm -- --test-threads=1` | **rc=0, 31 binaries, 272 tests, 0 failed** (21:09:51Z) |
+| acceptance suite | `tools/guard/guarded.sh --mem 8G --time 1200 -- cargo test -q -p acos-services -p acos-wm -- --test-threads=1` | **rc=0, 31 binaries, 272 tests, 0 failed** (21:09:51Z) |
 | S5/S6 corpus | `… cargo test -q -p acos-art --test sandbox_s5 --test sandbox_s6 -- --test-threads=1` | **5 + 5 passed** (21:10:28Z) |
-| milestone (interactive path) | `tools/art-runtime/run-exclusive.sh --task S7 -- tools/guarded.sh --mem 8G --time 900 -- ./target/debug/acos verify --scenario scenarios/v2-art-counter.yaml --apk fixtures/build/apps/counter.apk --engine art --json` | **pass, 11/11 steps, engine=art, mode=live**, rc=0 (21:10:02–21:10:13Z) |
+| milestone (interactive path) | `tools/art-runtime/run-exclusive.sh --task S7 -- tools/guard/guarded.sh --mem 8G --time 900 -- ./target/debug/acos verify --scenario scenarios/v2-art-counter.yaml --apk fixtures/build/apps/counter.apk --engine art --json` | **pass, 11/11 steps, engine=art, mode=live**, rc=0 (21:10:02–21:10:13Z) |
 | teardown | `pgrep -a -f 'acos-art\|LaunchMain'` after the milestone | no ACOS survivor (21:10:56Z) |
 
 ## 7. Decision on verdict integrity (2026-11-11, codex advisor gpt-6.1-sol, orchestrator decision)
@@ -360,7 +360,7 @@ the live hostile scenarios. Final evidence timestamps: gate1_bounds
 `counter` 11/11 **04:09:39–04:09:45Z**. Every hostile run used our own fixtures
 and `ACOS_ALLOW_UNTRUSTED_FOR_TESTS=1`, under
 `tools/art-runtime/run-exclusive.sh --task W44*` +
-`tools/guarded.sh --mem 8G --time 600|900`. No third-party APK was run.
+`tools/guard/guarded.sh --mem 8G --time 600|900`. No third-party APK was run.
 
 **Re-audit verdict: CERTIFIED-WITH-LIMITS.** Every §5 gate is met with evidence
 from this run; the limits are named in §8.7. `CERTIFIED` (without limits) is not

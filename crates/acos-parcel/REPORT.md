@@ -83,7 +83,7 @@ The ground truth is the disassembly of **two** libbinder builds, plus the NDK's
 
 The system library was extracted read-only with
 `crates/acos-parcel/tools/extract-system-libbinder.sh` (same unprivileged
-GPT → `dd` → `lpunpack` → `debugfs` method as `tools/extract-bootclasspath.sh`,
+GPT → `dd` → `lpunpack` → `debugfs` method as `tools/fetch/extract-bootclasspath.sh`,
 output under `.cache/parcel-evidence/`, multi-GB intermediates deleted on exit).
 
 ### System-build addresses (authoritative for ACOS)

@@ -1,7 +1,0 @@
-{
-  "request_id": "req_2fbf70_18e87a3952fd9a94",
-  "started_at": "2026-11-16T08:47:18.131Z",
-  "scenario": "scenarios/rel3h-unhandled-input-expect-change.yaml",
-  "apk": "",
-  "acos_version": "0.2.3"
-}

@@ -1,3 +1,0 @@
-=== AFTER adb devices ===
-List of devices attached
-

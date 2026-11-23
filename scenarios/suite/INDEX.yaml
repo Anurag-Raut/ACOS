@@ -4,7 +4,7 @@
 # WRONG variant that must fail with the expected structured error code. The
 # wrong twins seed wrong text / wrong post-tap state / missing element / wrong
 # log / wrong region, so a harness that reports a pass for them is broken
-# (false pass). `tools/run-suite.sh` reads this file; it never guesses a task.
+# (false pass). `tools/verify/run-suite.sh` reads this file; it never guesses a task.
 #
 # Schema per task:
 #   id, title, app, apk, apk_sha256, verbs, good{scenario,expected,error},
@@ -83,13 +83,13 @@ tasks:
       runs: four captures, one sha256). The fixture reference PNG is a full
       display frame (1080x2400, status/nav bars included) while assert_screenshot
       requires the frame size, so the phone SSIM comparison stays with
-      tools/art-render-app-compare.py (W24: 0.9778 aligned). Wrong twin: the
+      tools/probes/art-render-app-compare.py (W24: 0.9778 aligned). Wrong twin: the
       same top baseline against a shifted rectangle (x=0,y=120), i.e. the
       wrong region.
     unsupported:
       - "SSIM >= 0.98 against the 1080x2400 fixture reference is not a scenario
          assertion in this build (assert_screenshot needs same-size images;
-         assert_region is exact). Covered by tools/art-render-app-compare.py."
+         assert_region is exact). Covered by tools/probes/art-render-app-compare.py."
 
   - id: T04
     title: long text, RTL and spanned runs

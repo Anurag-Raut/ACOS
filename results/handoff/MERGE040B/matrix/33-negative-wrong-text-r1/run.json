@@ -1,7 +1,0 @@
-{
-  "request_id": "req_af37d_18e90d6dfe5903a8",
-  "started_at": "2026-11-18T05:44:52.553Z",
-  "scenario": "scenarios/negative/wrong-text.yaml",
-  "apk": "",
-  "acos_version": "0.3.0"
-}

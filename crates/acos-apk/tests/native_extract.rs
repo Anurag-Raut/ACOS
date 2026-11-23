@@ -126,7 +126,7 @@ fn hello_jni_fixture_apk_gates_and_extracts() {
         let _ = require_prereq(
             false,
             "hello_jni_fixture_apk_gates_and_extracts",
-            "fixtures/build/apps/hello-jni.apk is absent — run tools/build-apps.sh",
+            "fixtures/build/apps/hello-jni.apk is absent — run tools/build/build-apps.sh",
         );
         return;
     };

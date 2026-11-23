@@ -1,5 +1,0 @@
-w42-back-frame W7b pixel diff: report vs carve, frame 14 (final first-Activity capture)
-report PNG: 1080x2400 origin [0,0]; carve PNG: 1080x2209 origin [0,128]
-compared display rows 128..2336 (overlap); differing rows below
-display_y=411 carve_png_y=283 pixels=122 x_range=58..1026 channel_deltas=[(0, -1, 0, 0)]
-total differing rows in overlap: 1

@@ -23,5 +23,5 @@ export E2D_PRELOAD="$PRELOAD"
 export E2D_BINDER_FAKE="${E2D_BINDER_FAKE:-1}"
 export ACOS_GUARD_TIME="${ACOS_GUARD_TIME:-120}"
 
-exec "$ACOS_ROOT/tools/guarded.sh" --time "$ACOS_GUARD_TIME" -- \
+exec "$ACOS_ROOT/tools/guard/guarded.sh" --time "$ACOS_GUARD_TIME" -- \
     "$E2D_HERE/e2droot.sh" dalvikvm -cp "$DEX" dev.acos.e2d.Main "$STEP"

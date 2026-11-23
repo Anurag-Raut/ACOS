@@ -1,3 +1,0 @@
-ACOSART[render]: dlopen(libandroid_runtime.so) ok @0x42b4082deb3ce447 (default namespace, RTLD_GLOBAL)
-ACOSHWC[gralloc]: software gralloc shim loaded (1 fd / 9 ints)
-ACOSLAUNCH MARK crash-handler installed sigchain=0x7f3924419d40

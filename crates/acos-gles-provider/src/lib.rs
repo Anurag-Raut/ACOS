@@ -97,7 +97,7 @@
 //! digest and nothing per launch.
 //!
 //! The provider directory carries a `manifest.json` (source, version, licence,
-//! sha256 per file) written by `tools/art-gles.sh`; the launcher verifies every
+//! sha256 per file) written by `tools/probes/art-gles.sh`; the launcher verifies every
 //! file's sha256 against it (the A11YPACE stale-shim lesson: a shared prebuilt
 //! that silently predates its contract must fail loudly). A mismatched provider
 //! is a structured `Error::Layout`, never a silent skip that would reach
@@ -110,13 +110,13 @@
 //! caller holds — and hashes nothing. Any change to that fingerprint (a
 //! re-stage, a touched file, a different manifest) re-hashes; a missing or
 //! unreadable file is the same structured `Error::Layout` as before. The
-//! provider directory is published atomically by `tools/art-gles.sh`, so a
+//! provider directory is published atomically by `tools/probes/art-gles.sh`, so a
 //! `.verified` file can never describe a half-written provider.
 //!
 //! Accepted risk (documented, owner decision): a file rewritten **in place with
 //! the same size and the same `mtime`** on the same inode is not re-hashed, so
 //! it would be trusted. Nothing in ACOS writes a staged provider that way
-//! (`tools/art-gles.sh` replaces the directory), and `mtime`/`ino`/`size` are
+//! (`tools/probes/art-gles.sh` replaces the directory), and `mtime`/`ino`/`size` are
 //! the standard make-style freshness contract; the alternative — hashing 32 MB
 //! on every launch — is a measurable launch cost for a case that cannot arise
 //! from the shipped tooling.
@@ -157,7 +157,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 pub const ENV: &str = "ACOS_GUEST_GLES";
 
 /// The provider selected when [`ENV`] is unset: the software GL the image
-/// ships (ANGLE on SwiftShader's CPU Vulkan ICD). `tools/art-gles.sh` stages it
+/// ships (ANGLE on SwiftShader's CPU Vulkan ICD). `tools/probes/art-gles.sh` stages it
 /// at `<sysroot>/gles/angle-swiftshader` as part of the sysroot build.
 pub const DEFAULT_PROVIDER: &str = "angle-swiftshader";
 
@@ -193,7 +193,7 @@ pub struct GlesFile {
     pub size: u64,
 }
 
-/// What `tools/art-gles.sh` writes and the launcher verifies.
+/// What `tools/probes/art-gles.sh` writes and the launcher verifies.
 ///
 /// `tag` is the `ro.hardware.egl` value the loader appends (`libEGL_<tag>.so`).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -437,7 +437,7 @@ pub fn status(sysroot: &Path) -> Result<Status> {
             default: true,
             detail: format!(
                 "{DEFAULT_PROVIDER} is not installed at {} (stage it with \
-                 `tools/art-gles.sh`, or the image build)",
+                 `tools/probes/art-gles.sh`, or the image build)",
                 dir.display()
             ),
         });
@@ -568,7 +568,7 @@ pub fn load(sysroot: &Path, name: &str) -> Result<Provider> {
     let text = fs::read_to_string(&manifest_path).map_err(|e| {
         Error::Layout(format!(
             "ACOS_GUEST_GLES={name}: {} is unreadable ({e}); install the provider with \
-             `tools/art-gles.sh`",
+             `tools/probes/art-gles.sh`",
             manifest_path.display()
         ))
     })?;
@@ -634,7 +634,7 @@ pub fn load(sysroot: &Path, name: &str) -> Result<Provider> {
             if !manifest.files.iter().any(|f| f.path == icd) {
                 return Err(Error::Layout(format!(
                     "ACOS_GUEST_GLES={name}: manifest vulkan_tag is {vt:?} but it stages no {icd} \
-                     (reinstall with `tools/art-gles.sh`)"
+                     (reinstall with `tools/probes/art-gles.sh`)"
                 )));
             }
         }
@@ -785,7 +785,7 @@ pub fn verify_full(provider: &Provider, sysroot: &Path) -> Result<()> {
         if got != f.sha256 {
             return Err(Error::Layout(format!(
                 "ACOS_GUEST_GLES={}: {} sha256 {got} != manifest {} (reinstall with \
-                 `tools/art-gles.sh`)",
+                 `tools/probes/art-gles.sh`)",
                 provider.name,
                 path.display(),
                 f.sha256
@@ -1198,7 +1198,7 @@ mod tests {
     /// GLSHIP accepted risk (documented in the module docs): bytes rewritten in
     /// place with the **same size and the same `mtime`** are trusted, because
     /// the fingerprint matches. The provider is published atomically by
-    /// `tools/art-gles.sh`, so this cannot arise from the shipped tooling — and
+    /// `tools/probes/art-gles.sh`, so this cannot arise from the shipped tooling — and
     /// hashing 32 MB on every launch is a real cost for a case that cannot
     /// happen. This test pins the contract so a future change to it is a
     /// decision, not an accident.
@@ -1285,7 +1285,7 @@ mod tests {
         let dir = scratch("missing");
         let r = root(&dir);
         let e = load(&r, "nope").expect_err("must fail");
-        assert!(e.to_string().contains("tools/art-gles.sh"), "{e}");
+        assert!(e.to_string().contains("tools/probes/art-gles.sh"), "{e}");
         let _ = fs::remove_dir_all(&dir);
     }
 

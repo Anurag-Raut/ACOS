@@ -27,7 +27,7 @@ for i in $(seq 1 50); do [ -S "$SOCK" ] && break; sleep 0.05; done
 unset LD_LIBRARY_PATH
 export E3G_PRELOAD="${E3G_PRELOAD-/data/lib/libbindere3g.so}"
 export ACOS_GUARD_TIME="${ACOS_GUARD_TIME:-120}"
-"$ACOS_ROOT/tools/guarded.sh" --time "$ACOS_GUARD_TIME" -- \
+"$ACOS_ROOT/tools/guard/guarded.sh" --time "$ACOS_GUARD_TIME" -- \
     "$E3G_HERE/e3groot.sh" dalvikvm -cp "$DEX" dev.acos.e3g.Main "$STEP"
 RC=$?
 kill $PEER_PID 2>/dev/null

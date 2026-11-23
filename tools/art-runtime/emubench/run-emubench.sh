@@ -11,7 +11,7 @@
 # this driver verifies and force-kills leftovers by PID -- never `pkill -f`).
 #
 # Each phase is its own exclusive lock acquisition (the lock is never held for
-# more than ~10 min), each under tools/guarded.sh with a hard MemoryMax.
+# more than ~10 min), each under tools/guard/guarded.sh with a hard MemoryMax.
 #
 #   tools/art-runtime/emubench/run-emubench.sh                 # all four phases
 #   tools/art-runtime/emubench/run-emubench.sh n1-warm n2      # selected phases
@@ -23,7 +23,7 @@ set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 PY="$ROOT/tools/art-runtime/emubench/emu_bench.py"
 EXCL="/home/Qui/Projects/acos/tools/art-runtime/run-exclusive.sh"
-GUARD="$ROOT/tools/guarded.sh"
+GUARD="$ROOT/tools/guard/guarded.sh"
 STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
 DATE="$(date -u +%Y-%m-%d)"
 OUT="$ROOT/.cache/emubench/$STAMP"

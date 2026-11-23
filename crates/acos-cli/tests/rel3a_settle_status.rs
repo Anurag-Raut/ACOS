@@ -200,7 +200,7 @@ fn a_settle_timeout_on_an_action_is_not_a_pass() {
         .unwrap_or_else(|_| repo_root().join("fixtures/build/apps/counter.apk"));
     assert!(
         apk.is_file(),
-        "build fixtures first: `tools/build-apps.sh` (missing {})",
+        "build fixtures first: `tools/build/build-apps.sh` (missing {})",
         apk.display()
     );
     let launch = daemon.call(

@@ -13,7 +13,7 @@ Every task therefore runs on a freshly launched child (the P5 pattern: reset +
 relaunch per task), which is exactly the regime Z6's 10 s settling window made
 unmeasurable. The report states the latency from a session's own launch to its
 verified result, the tasks/min, and the cgroup memory integral (P5's GiB-min
-definition: `tools/benchlib.py::sample_integral` over the guarded job cgroup's
+definition: `tools/bench/benchlib.py::sample_integral` over the guarded job cgroup's
 `memory.current`, sampled every 100 ms).
 
 `--cycles` replaces the time box with a fixed number of rounds (the 20-cycle
@@ -30,7 +30,7 @@ from pathlib import Path
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
-sys.path.insert(0, os.path.join(HERE, "..", "..", "..", "tools"))
+sys.path.insert(0, os.path.join(HERE, "..", "..", "..", "tools", "bench"))
 sys.path.insert(0, os.path.join(HERE, "..", "..", "..", "tools", "art-runtime"))
 import common as C  # noqa: E402
 import drive as z4  # noqa: E402

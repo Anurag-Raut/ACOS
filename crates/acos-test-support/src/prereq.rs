@@ -44,7 +44,7 @@ pub const ALLOW_ANY_SKIP_ENV: &str = "ACOS_ALLOW_TEST_SKIP";
 /// this variable inside the lock.
 pub const WARM_DATA_ENV: &str = "ACOS_ART_WARM_DATA";
 
-/// The ART sysroot (`tools/art-sysroot.sh`).
+/// The ART sysroot (`tools/fetch/art-sysroot.sh`).
 pub const SYSROOT_ENV: &str = "ACOS_ART_SYSROOT";
 
 static SKIPPED: AtomicUsize = AtomicUsize::new(0);
@@ -207,7 +207,7 @@ pub fn require_art(checkout: &Path, test: &str) -> Option<ArtInputs> {
     let inputs = art_inputs(checkout);
     if !inputs.sysroot.join("system/apex").is_dir() {
         let reason = format!(
-            "no ART sysroot at {} — run tools/art-sysroot.sh",
+            "no ART sysroot at {} — run tools/fetch/art-sysroot.sh",
             inputs.sysroot.display()
         );
         require_prereq(false, test, &reason)?;

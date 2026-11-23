@@ -1,6 +1,0 @@
-{"i": 1, "apk": "counter.apk", "rc": 0, "wall_ms": 5000, "ok": true, "status": "pass", "stage": null, "code": null, "message": null, "guest_crash": null, "unparsed": null}
-{"i": 2, "apk": "counter.apk", "rc": 0, "wall_ms": 0, "ok": true, "status": "pass", "stage": null, "code": null, "message": null, "guest_crash": null, "unparsed": null}
-{"i": 3, "apk": "counter.apk", "rc": 0, "wall_ms": 0, "ok": true, "status": "pass", "stage": null, "code": null, "message": null, "guest_crash": null, "unparsed": null}
-{"i": 4, "apk": "counter.apk", "rc": 0, "wall_ms": 0, "ok": true, "status": "pass", "stage": null, "code": null, "message": null, "guest_crash": null, "unparsed": null}
-{"i": 5, "apk": "counter.apk", "rc": 0, "wall_ms": 1000, "ok": true, "status": "pass", "stage": null, "code": null, "message": null, "guest_crash": null, "unparsed": null}
-{"i": 6, "apk": "hello-views.apk", "rc": 0, "wall_ms": 0, "ok": true, "status": "pass", "stage": null, "code": null, "message": null, "guest_crash": null, "unparsed": null}

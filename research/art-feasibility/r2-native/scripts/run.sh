@@ -17,7 +17,7 @@ run() { # <mode> <apk> <libdir> [preload]
     local mode="$1" apk="$2" lib="$3" pre="${4:-}" log="$W/logs/$1.log"
     echo "== $mode (log: $log)"
     R2_PRELOAD="$pre" R2_APP_LD_LIBRARY_PATH=/data/lib \
-    "$ROOT/tools/guarded.sh" --mem 4G --time 300 -- \
+    "$ROOT/tools/guard/guarded.sh" --mem 4G --time 300 -- \
         "$HERE/scripts/r2root.sh" dalvikvm -cp /data/dex/r2/classes.dex \
         dev.acos.r2.R2Main "$mode" "$apk" "$lib" /data/dex/r2/classes.dex 2>&1 | tee "$log"
     echo "== $mode exit=${PIPESTATUS[0]}"

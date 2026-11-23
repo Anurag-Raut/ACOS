@@ -1524,7 +1524,7 @@ impl InputService {
     /// `deviceId`, a `hasMap` marker and then the map's keys. The host builds
     /// that payload from the stock `/system/usr/keychars/Virtual.kcm`
     /// (virtual keyboard, id `-1`) or `Generic.kcm` (touchscreen, id `0`) that
-    /// `tools/art-sysroot.sh` ships. A device whose stock file is missing gets
+    /// `tools/fetch/art-sysroot.sh` ships. A device whose stock file is missing gets
     /// the honest `hasMap = false` payload (no characters), never a guessed
     /// layout.
     fn key_character_map(id: i32) -> Parcelable {

@@ -1,7 +1,0 @@
-{
-  "request_id": "req_80166_18e90bc5fa1b9377",
-  "started_at": "2026-11-18T05:14:31.416Z",
-  "scenario": "scenarios/gles-software.yaml",
-  "apk": "",
-  "acos_version": "0.3.0"
-}

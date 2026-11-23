@@ -15,7 +15,7 @@ ACOS keeps **everything inside the app process stock AOSP** and replaces **every
 | Layer | Stock AOSP Emulator | ACOS |
 |---|---|---|
 | Kernel & virtualization | Separate QEMU VM + guest Android kernel per device | Shared Linux **Host** kernel + unprivileged `bwrap` namespaces (user/mount/pid/net), seccomp, Landlock |
-| App execution | Stock `dalvikvm64` (ART), `framework.jar`, `libandroid_runtime`, `libhwui` (Skia), Bionic `libc`, app `.so` | **Identical stock AOSP binaries** extracted from API-34 system image (`tools/extract-bootclasspath.sh`) |
+| App execution | Stock `dalvikvm64` (ART), `framework.jar`, `libandroid_runtime`, `libhwui` (Skia), Bionic `libc`, app `.so` | **Identical stock AOSP binaries** extracted from API-34 system image (`tools/fetch/extract-bootclasspath.sh`) |
 | Binder IPC | Kernel `/dev/binder` driver | **Userspace `/dev/binder` shim** (`crates/acos-art/shim/artshim.c`, `LD_PRELOAD`) translating `open/ioctl/mmap` over a Unix socket (`acos-binder-peer`) |
 | System services (`system_server`, `servicemanager`) | Heavy Java `system_server` + ~100 services per VM | Per-session Rust **Session Controller** (`acos-services`): `core` services + 23 attachable modules (`off` by default) |
 | Window compositor (`SurfaceFlinger`) | Full `SurfaceFlinger` + GPU pipeline per VM | C1 software compositor in Rust (`acos-wm`) + `acos-sfgeom` AOSP geometry, CPU Skia (`libhwui`) |
@@ -114,7 +114,7 @@ The rule across ACOS is: **keep the hot path lock-free and parallel; serialize o
 
 ### Critical Traps on Host-Shared Daemons (WVSCOPE / WVTAIL)
 
-1. **Never spawn a Host-shared daemon inside a Session's cgroup.** `setsid` changes process session ID, **not** cgroup—so tearing down one Session's cgroup (`tools/guarded.sh`) would SIGKILL the Host daemon for every other Session. `acos-webview` spawns its broker inside its own transient systemd scope (`systemd-run --user --scope --collect ...`) with idle shutdown.
+1. **Never spawn a Host-shared daemon inside a Session's cgroup.** `setsid` changes process session ID, **not** cgroup—so tearing down one Session's cgroup (`tools/guard/guarded.sh`) would SIGKILL the Host daemon for every other Session. `acos-webview` spawns its broker inside its own transient systemd scope (`systemd-run --user --scope --collect ...`) with idle shutdown.
 2. **Version-pin the Host daemon handshake.** A long-lived Host daemon can outlive the branch that compiled it. `acos-webview`'s `attach:2` handshake checks a build fingerprint (`version + git sha + workspace source digest`); on mismatch, a daemon with live sessions is left untouched and the new build binds its own endpoint (`broker-<source8>.sock`).
 3. **Never conflate engine restart with unknown view.** If the Host Chromium process restarts, every active view dies; the broker returns `ENGINE_RESTARTED` (never `NO_VIEW`) so callers know to recreate views rather than misdiagnosing a bookkeeping bug.
 

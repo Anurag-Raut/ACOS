@@ -290,7 +290,7 @@ fn rn_hermes_child_worker() {
 #[test]
 fn rn_hermes_merged_onloads_under_confinement() {
     if !acos_test_support::have_fixture("fixtures/build/apps/rn-hello.apk") {
-        acos_test_support::require_prereq(false, "rn_hermes_merged_onloads_under_confinement", "rn_hermes_merged_onloads_under_confinement: fixtures/build/apps/rn-hello.apk is absent (build with tools/build-rn-hello.sh)");
+        acos_test_support::require_prereq(false, "rn_hermes_merged_onloads_under_confinement", "rn_hermes_merged_onloads_under_confinement: fixtures/build/apps/rn-hello.apk is absent (build with tools/build/build-rn-hello.sh)");
         return;
     }
     let apk = repo_root().join("fixtures/build/apps/rn-hello.apk");

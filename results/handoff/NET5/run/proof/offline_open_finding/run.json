@@ -1,7 +1,0 @@
-{
-  "request_id": "req_2edab0_18e879c55cecb46f",
-  "started_at": "2026-11-16T08:39:00.081Z",
-  "scenario": "/home/Qui/.t3/worktrees/acos/t3-ba8936f8-e31a438bba670ddc/results/handoff/NET5/scenarios/open-finding-offline.yaml",
-  "apk": "fixtures/build/apps/net-check.apk",
-  "acos_version": "0.2.2"
-}

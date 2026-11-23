@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # run.sh -- build + run the G1 gralloc probes inside the ACOS bwrap mini-Android
 # root, with the *installed* shim (<sysroot>/shim/libacoshw.so, built by
-# tools/art-sysroot.sh --shim) preloaded.
+# tools/fetch/art-sysroot.sh --shim) preloaded.
 #
-#   tools/guarded.sh --mem 4G --time 300 -- research/art-feasibility/g1-gralloc/run.sh [flatten|blast|all]
+#   tools/guard/guarded.sh --mem 4G --time 300 -- research/art-feasibility/g1-gralloc/run.sh [flatten|blast|all]
 #
 # Scratch (binaries, /data bind source) lives under .cache/g1/ ; nothing is
 # written to /tmp and crates/ is untouched.
@@ -28,7 +28,7 @@ SHIM="$SYS/shim/libacoshw.so"
 mkdir -p "$DATA"
 export TMPDIR="$WORK"
 if [ ! -f "$SHIM" ]; then
-    echo "run.sh: $SHIM missing, building it (tools/art-sysroot.sh --shim does this)"
+    echo "run.sh: $SHIM missing, building it (tools/fetch/art-sysroot.sh --shim does this)"
     SHIM="$DATA/libacoshw.so"
     "$CC" -O2 -fPIC -shared -Wall -Wno-unused-parameter \
         -o "$SHIM" "$ROOT/crates/acos-art/shim/gralloc_shim.c" || exit 3

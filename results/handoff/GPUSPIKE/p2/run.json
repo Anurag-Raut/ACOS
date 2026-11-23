@@ -1,7 +1,0 @@
-{
-  "request_id": "req_aea30_18e90d68a9e5a17e",
-  "started_at": "2026-11-18T05:44:29.662Z",
-  "scenario": "scenarios/egl-probe.yaml",
-  "apk": "",
-  "acos_version": "0.3.0"
-}

@@ -1,2 +1,0 @@
-gate cost: 5 gates, start per gate [96.072µs, 58.171µs, 41.709µs, 35.668µs, 49.735µs] (max 96.072µs, total 0.281 ms), pss +149 KiB (per gate 29.8 KiB), threads +5, processes +0 (no daemon, no engine)
-test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.10s

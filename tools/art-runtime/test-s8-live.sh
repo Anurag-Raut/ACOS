@@ -5,7 +5,7 @@
 #
 # `hostile_live_run_is_gated_and_recorded_separately` (acos-cli, sandbox_s8) runs the
 # real APK under real ART. It is opt-in by ACOS_S8_LIVE_HOSTILE=1 and listed in
-# tools/test-prereq-optouts.txt, so the default gate excludes it. This script runs it
+# tools/verify/test-prereq-optouts.txt, so the default gate excludes it. This script runs it
 # with the env set, under the ART lock and the guard, and fails on any skip line.
 set -uo pipefail
 task=${1:?usage: $0 <TASK>}
@@ -18,7 +18,7 @@ log=${ACOS_TEST_LOG:-$wt/.cache/test-logs/$task-$(date -u +%Y%m%dT%H%M%SZ).log}
 mkdir -p "$(dirname "$log")"
 
 tools/art-runtime/run-exclusive.sh --task "$task" -- \
-  tools/guarded.sh --mem "${ACOS_TEST_MEM:-12G}" --time "${ACOS_TEST_TIME:-1200}" -- \
+  tools/guard/guarded.sh --mem "${ACOS_TEST_MEM:-12G}" --time "${ACOS_TEST_TIME:-1200}" -- \
   bash -c 'cargo build --offline -q -p acos-cli --bin acos || exit 1;
            cargo build --offline -q -p acos-art --bin acos-art || exit 1;
            export ACOS_ART_BIN="${CARGO_TARGET_DIR:-target}/debug/acos-art";

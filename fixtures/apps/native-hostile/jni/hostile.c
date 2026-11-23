@@ -1,7 +1,7 @@
 /*
  * ACOS hostile-native fixture library (owned test code).
  *
- * Compiled by `tools/build-apps.sh` and loaded under the ADR-0022 confinement.
+ * Compiled by `tools/build/build-apps.sh` and loaded under the ADR-0022 confinement.
  * `hostileProbe` attempts one action from each denied class and returns a
  * bitmask of what *succeeded*; the confinement must keep it zero:
  *   bit 0  open("/etc/passwd")              (Landlock filesystem rule)

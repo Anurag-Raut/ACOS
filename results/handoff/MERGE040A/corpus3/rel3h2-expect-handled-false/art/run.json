@@ -1,7 +1,0 @@
-{
-  "request_id": "req_130563_18e8e8c5a4956d5c",
-  "started_at": "2026-11-17T18:33:07.074Z",
-  "scenario": "scenarios/rel3h2-expect-handled-false.yaml",
-  "apk": "",
-  "acos_version": "0.3.0"
-}

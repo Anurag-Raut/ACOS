@@ -7,7 +7,7 @@
 #
 #   name(paramType,paramType)returnType
 #
-# `tools/gen-webview-provider.py` turns this into `WebSettingsChromium`: the
+# `tools/build/gen-webview-provider.py` turns this into `WebSettingsChromium`: the
 # methods in its IMPLEMENTED map forward to the provider's real code; every
 # other one throws a structured `UnsupportedOperationException` naming it
 # (ADR-0031, 0 false passes). Regenerate from:

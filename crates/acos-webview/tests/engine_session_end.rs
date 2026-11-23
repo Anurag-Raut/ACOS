@@ -10,7 +10,7 @@
 //! the **same generation**, with **no** restart.
 //!
 //! ```text
-//! tools/art-runtime/run-exclusive.sh --task WVKILL -- tools/guarded.sh --mem 8G --time 420 -- \
+//! tools/art-runtime/run-exclusive.sh --task WVKILL -- tools/guard/guarded.sh --mem 8G --time 420 -- \
 //!   env ACOS_WEBVIEW_TEST=1 CARGO_TARGET_DIR=$PWD/.cache/wvkill-target \
 //!   cargo test -p acos-webview --test engine_session_end -- --nocapture --test-threads=1
 //! ```
@@ -74,7 +74,7 @@ fn ending_one_session_does_not_kill_the_shared_engine_of_the_other() {
     if acos_test_support::require_prereq(
         std::env::var("ACOS_WEBVIEW_TEST").as_deref() == Ok("1"),
         "ending_one_session_does_not_kill_the_shared_engine_of_the_other",
-        "set ACOS_WEBVIEW_TEST=1 to run this heavy Chromium test (the release gate runs it with the env set; see tools/test-prereq-optouts.txt)",
+        "set ACOS_WEBVIEW_TEST=1 to run this heavy Chromium test (the release gate runs it with the env set; see tools/verify/test-prereq-optouts.txt)",
     )
     .is_none()
     {

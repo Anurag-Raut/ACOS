@@ -62,7 +62,7 @@ fn expected(name: &str, ext: &str) -> String {
 ///
 /// The bootstrap corelib does not implement `java.util.regex`; the regex corpus
 /// exercises the ICU-backed `Pattern`/`Matcher` (`com.android.icu.util.regex.*`)
-/// and is verified against real ART by `tools/diff-dexprogs.sh --corelib real`
+/// and is verified against real ART by `tools/verify/diff-dexprogs.sh --corelib real`
 /// (expectations in `fixtures/expected-art/dexprogs`).
 const REAL_CORELIB_ONLY: &[&str] = &[
     "21_regex_basic",
@@ -73,7 +73,7 @@ const REAL_CORELIB_ONLY: &[&str] = &[
     "26_regex_matrix",
     // DEX annotation reflection needs real `libcore.reflect.AnnotationFactory`
     // and `java.lang.reflect.Proxy`; verified against ART by
-    // `tools/diff-dexprogs.sh --corelib real`.
+    // `tools/verify/diff-dexprogs.sh --corelib real`.
     "27_annotations_reflection",
     // Framework-backed (`android.database.sqlite.*`): the bootstrap corelib has
     // no android.database, and the host JVM cannot run it either (its checked-in
@@ -88,7 +88,7 @@ const REAL_CORELIB_ONLY: &[&str] = &[
 #[test]
 fn dexprogs_match_jvm_reference() {
     if !acos_test_support::have_fixture("fixtures/build/dexprogs") {
-        acos_test_support::require_prereq(false, "dexprogs_match_jvm_reference", "dexprogs_match_jvm_reference: fixtures/build/dexprogs is absent (run tools/build-fixtures.sh)");
+        acos_test_support::require_prereq(false, "dexprogs_match_jvm_reference", "dexprogs_match_jvm_reference: fixtures/build/dexprogs is absent (run tools/build/build-fixtures.sh)");
         return;
     }
     let names = fixture_names();
@@ -128,7 +128,7 @@ fn dexprogs_match_jvm_reference() {
 /// The corpus must also pass with a collection before every allocation, which
 /// proves that every GC root is exact. (The heavy threading program 19 is
 /// excluded from the per-allocation stress run to keep the test bounded; it is
-/// still covered by the normal pass and by `tools/diff-dexprogs.sh --gc-stress`.)
+/// still covered by the normal pass and by `tools/verify/diff-dexprogs.sh --gc-stress`.)
 #[test]
 fn dexprogs_pass_gc_stress() {
     if acos_test_support::require_prereq(acos_test_support::have_fixture("fixtures/build/dexprogs"), "dexprogs_pass_gc_stress", "fixtures/build/dexprogs is absent").is_none() {

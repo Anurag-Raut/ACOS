@@ -9,7 +9,7 @@
 # What it does, in three separate phases so no lock is held longer than its job:
 #
 #   1. ACOS ART   `acos verify <scenario> --engine art` under the shared ART
-#                 lock (`tools/art-runtime/run-exclusive.sh` + `tools/guarded.sh`),
+#                 lock (`tools/art-runtime/run-exclusive.sh` + `tools/guard/guarded.sh`),
 #                 writing the usual artifacts (`verdict.json`, `tree/<seq>.json`).
 #   2. phone      the same scenario replayed on the device through
 #                 `tools/phone/replay_scenario.py` (agent-device + `uiautomator
@@ -141,7 +141,7 @@ if [ "$REUSE_ACOS" = "0" ]; then
     log "ACOS ART: verify $SCENARIO"
     lock=(/home/Qui/Projects/acos/tools/art-runtime/run-exclusive.sh --task PARITY1)
     [ "${EXCLUSIVE:-0}" = "1" ] && lock+=(--exclusive)
-    if ! "${lock[@]}" -- "$ROOT/tools/guarded.sh" --mem "$MEM" --time "$TIME" -- \
+    if ! "${lock[@]}" -- "$ROOT/tools/guard/guarded.sh" --mem "$MEM" --time "$TIME" -- \
             "$BIN" verify "$SCENARIO" --engine art --artifacts "$ARTIFACTS" --overwrite --json \
             >"$ARTIFACTS/verify.stdout.json" 2>"$ARTIFACTS/verify.stderr.log"; then
         log "the ACOS ART run did not pass; its artifacts are still diffed (a failing"

@@ -1,7 +1,0 @@
-package=dev.acos.fixtures.hellojni
-activity=dev.acos.fixtures.hellojni.MainActivity
-lifecycle=onCreate,onStart,onResume
-resumed=true
-called=true
-stopped=false
-window=com.android.internal.policy.PhoneWindow@a894b6b

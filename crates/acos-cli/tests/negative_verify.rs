@@ -2,7 +2,7 @@
 //!
 //! Each case runs the **product command**
 //! (`acos verify --apk … --scenario … --json --artifacts …`) against a
-//! deliberately broken APK built by `tools/build-negative-apps.sh` and asserts
+//! deliberately broken APK built by `tools/build/build-negative-apps.sh` and asserts
 //! the verdict is exactly the honest non-pass (fail / crash / unsupported) with
 //! a structured error. The final assertion is the V1 metric: **zero false
 //! passes**.
@@ -76,7 +76,7 @@ struct Case {
 #[test]
 fn broken_fixtures_never_false_pass() {
     let Some(boot) = boot_dir() else {
-        acos_test_support::require_prereq(false, "broken_fixtures_never_false_pass", "broken_fixtures_never_false_pass: no boot classpath; run tools/extract-bootclasspath.sh");
+        acos_test_support::require_prereq(false, "broken_fixtures_never_false_pass", "broken_fixtures_never_false_pass: no boot classpath; run tools/fetch/extract-bootclasspath.sh");
         return;
     };
     let apps = workspace().join("fixtures/build/apps");
@@ -109,7 +109,7 @@ fn broken_fixtures_never_false_pass() {
         .filter(|apk| !apps.join(apk).is_file())
         .collect();
     if !missing.is_empty() {
-        acos_test_support::require_prereq(false, "broken_fixtures_never_false_pass", &format!("broken_fixtures_never_false_pass: build fixtures first: `tools/build-apps.sh && tools/build-negative-apps.sh` (missing {missing:?})"));
+        acos_test_support::require_prereq(false, "broken_fixtures_never_false_pass", &format!("broken_fixtures_never_false_pass: build fixtures first: `tools/build/build-apps.sh && tools/build/build-negative-apps.sh` (missing {missing:?})"));
         return;
     }
 

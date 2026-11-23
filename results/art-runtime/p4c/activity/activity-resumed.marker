@@ -1,8 +1,0 @@
-package=dev.acos.fixtures.counter
-activity=dev.acos.fixtures.counter.MainActivity
-lifecycle=onCreate,onStart,onResume
-resumed=true
-called=true
-stopped=false
-window=com.android.internal.policy.PhoneWindow@3964742
-post_resume_failure=java.lang.UnsupportedOperationException: unsupported Android API: android.view.IWindowSession code 4 (openSession)

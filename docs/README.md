@@ -47,4 +47,4 @@ A small set of root files remain at repo root because tooling or tests reference
 - [`../BENCHMARKS.md`](../BENCHMARKS.md) — Benchmark methodology, metric definitions, and tracked baselines.
 - [`../EXPERIMENTS.md`](../EXPERIMENTS.md) — Experiment log.
 - [`../COMPATIBILITY.md`](../COMPATIBILITY.md) — Compatibility ledger (read by `acos-mcp`).
-- [`../STATUS.md`](../STATUS.md) — Historical milestone status log (checked by `tools/status-check.sh`).
+- [`../STATUS.md`](../STATUS.md) — Historical milestone status log (checked by `tools/verify/status-check.sh`).

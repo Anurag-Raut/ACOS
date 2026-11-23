@@ -1,1 +1,0 @@
-verify: ASSERTION_FAILED (assertion): expected text exactly "مرحبا", got text "مرحبا بالعالم" / hint "" [class=assertion, retryable=false]

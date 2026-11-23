@@ -1,8 +1,0 @@
-{
-  "request_id": "req_6a88e_18e8df5037b15250",
-  "started_at": "2026-11-17T15:39:47.131Z",
-  "scenario": "scenarios/net-check-offline.yaml",
-  "apk": "",
-  "acos_version": "0.3.0",
-  "overwrote_run_id": "req_68294_18e8df197421defe"
-}

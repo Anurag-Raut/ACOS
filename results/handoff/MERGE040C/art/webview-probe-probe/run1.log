@@ -1,6 +1,0 @@
-verify: pass (ok=true, backend=acos-native, fidelity=art-reference)
-  engine: art (mode: live)
-  services: core:real, webview:real attached; off: accessibility, system.permissions, system.notifications, sensors, feedback.vibrator, location, net.telephony, hw.bluetooth, hw.biometric, network, hw.usb, system.dropbox, hw.nfc, system.wallpaper, system.print, system.search, system.usage, system.dpm, system.role, geo.country
-  provenance: scenario /home/Qui/.t3/worktrees/acos/t3-2f630078-d1c2107b4b54fe17/scenarios/webview-probe.yaml (sha 368c9b5d349c), apk /home/Qui/.t3/worktrees/acos/t3-2f630078-d1c2107b4b54fe17/fixtures/build/apps/webview-probe.apk (sha d59e2f54e67d), engine art, fidelity art-reference, warnings: 1 [SCENARIO_ENGINE_MISMATCH]
-  artifacts: results/handoff/MERGE040C/art/webview-probe-probe/run1
-  steps: 20

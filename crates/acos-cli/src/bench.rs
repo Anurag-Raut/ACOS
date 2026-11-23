@@ -1967,7 +1967,7 @@ fn resolve_programs(args: &BenchArgs) -> Result<Vec<Program>, BenchFailure> {
             return Err(BenchFailure::new(
                 ErrorCode::ApkIo,
                 format!(
-                    "{} is missing; build it with tools/build-fixtures.sh",
+                    "{} is missing; build it with tools/build/build-fixtures.sh",
                     path.display()
                 ),
             ));
@@ -1998,7 +1998,7 @@ pub(crate) fn resolve_apk(args: &BenchArgs) -> Result<PathBuf, BenchFailure> {
         return Err(BenchFailure::new(
             ErrorCode::ApkIo,
             format!(
-                "{} is missing; build it with tools/build-apps.sh",
+                "{} is missing; build it with tools/build/build-apps.sh",
                 apk.display()
             ),
         ));

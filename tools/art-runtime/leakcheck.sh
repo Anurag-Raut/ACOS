@@ -23,7 +23,7 @@
 #   tools/art-runtime/leakcheck.sh watch    STATE_FILE -- CMD [ARGS...]
 #
 # `check` prints one line per leaked item and exits 1 (0 = clean). `watch` takes a
-# snapshot, runs CMD under tools/guarded.sh defaults supplied by the caller, checks
+# snapshot, runs CMD under tools/guard/guarded.sh defaults supplied by the caller, checks
 # again, and exits 1 on a leak (otherwise the command's own status). STATE_FILE is
 # scratch; put it under .cache/, never /tmp.
 #
@@ -33,7 +33,7 @@
 #
 # Examples:
 #   tools/art-runtime/leakcheck.sh watch .cache/h1/before.run -- \
-#       tools/guarded.sh --mem 4G --time 300 -- ./target/debug/acos-art render-app \
+#       tools/guard/guarded.sh --mem 4G --time 300 -- ./target/debug/acos-art render-app \
 #           --apk fixtures/build/apps/counter.apk --out .cache/h1/counter
 #   tools/art-runtime/leakcheck.sh snapshot .cache/h1/s0.tsv
 #   tools/art-runtime/leakcheck.sh check    .cache/h1/s0.tsv

@@ -1,7 +1,0 @@
-{
-  "request_id": "req_30825c_18e87a87a0d34fff",
-  "started_at": "2026-11-16T08:52:54.444Z",
-  "scenario": "scenarios/location-pending-intent.yaml",
-  "apk": "",
-  "acos_version": "0.2.2"
-}

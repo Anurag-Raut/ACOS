@@ -1,9 +1,0 @@
-ServiceHost::standard() install: 91924 ns
-lazily construct 9 services:   375911 ns
-100 replayed checkPermission calls: 1497986 ns (14979 ns/call)
-VmRSS:  3000 kB -> 7636 kB
-VmSize: 7896 kB -> 9188 kB
-VmHWM:  7636 kB
-constructions: 9
-registered descriptors: 19
-registered service names: 19

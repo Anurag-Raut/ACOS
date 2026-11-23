@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # p6-orphan.sh -- does the guest survive a SIGKILL of its launcher?
 #
-# Run the whole script under tools/guarded.sh (see S2.md). Inside, bwrap is
+# Run the whole script under tools/guard/guarded.sh (see S2.md). Inside, bwrap is
 # spawned directly (bwrap-raw.sh) because guarded.sh's process-group cleanup
 # would otherwise mask the answer.
 #

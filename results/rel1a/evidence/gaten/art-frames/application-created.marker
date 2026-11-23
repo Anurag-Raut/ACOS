@@ -1,9 +1,0 @@
-package=com.gaten
-application=com.gaten.app.MainApplication
-application_classloader_is_apk=true
-application_base=com.gaten//data/app/gaten-dev-f344272-x86_64-release-unsigned.apk
-instrumentation=android.app.Instrumentation
-instrumentation_source=framework (bind request instrumentationName=null)
-app_flags=0x10c8be44
-app_flags_source=manifest
-sourceDir=/data/app/gaten-dev-f344272-x86_64-release-unsigned.apk

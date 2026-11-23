@@ -1,7 +1,0 @@
-{
-  "request_id": "req_32cf66_18e87bb287dea505",
-  "started_at": "2026-11-16T09:14:18.221Z",
-  "scenario": "scenarios/negative/gaten-content-pixel.yaml",
-  "apk": "",
-  "acos_version": "0.3.0"
-}

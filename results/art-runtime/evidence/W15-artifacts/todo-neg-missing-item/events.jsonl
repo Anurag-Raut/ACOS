@@ -1,3 +1,0 @@
-{"seq":1,"timestamp_ms":1000,"session_id":"s_art_todo-list","kind":"frame","frame_seq":1,"cause_id":"art","meaningful":true,"content_hash":"b01dcc79007cff52b745f586792e1167"}
-{"seq":2,"timestamp_ms":2000,"session_id":"s_art_todo-list","kind":"frame","frame_seq":1,"cause_id":"art","meaningful":true,"content_hash":"b01dcc79007cff52b745f586792e1167"}
-{"seq":3,"timestamp_ms":3000,"session_id":"s_art_todo-list","kind":"frame","frame_seq":1,"cause_id":"art","meaningful":true,"content_hash":"b01dcc79007cff52b745f586792e1167"}

@@ -28,7 +28,7 @@ It is a harness, not product code. Nothing in `crates/**` is changed.
 Usage (always under the ART lock + guard):
 
   tools/art-runtime/run-exclusive.sh --task S3AB -- \
-    tools/guarded.sh --mem 24G --time 590 -- \
+    tools/guard/guarded.sh --mem 24G --time 590 -- \
     python3 tools/bench/s3ab_repro.py --acos target/release/acos \
       --out .cache/s3ab/repro-n20-on.json \
       --scratch .cache/s3ab/repro-n20-on \
@@ -52,7 +52,7 @@ import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(ROOT / "tools"))
+sys.path.insert(0, str(ROOT / "tools/bench"))
 sys.path.insert(0, str(ROOT / "tools/art-runtime"))
 sys.path.insert(0, str(ROOT / "results/art-runtime/evidence/P5"))
 

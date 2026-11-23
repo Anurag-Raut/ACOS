@@ -1,7 +1,0 @@
-{
-  "request_id": "req_b9d6_18e915a734ad3b9b",
-  "started_at": "2026-11-18T08:15:34.371Z",
-  "scenario": "scenarios/location-probe.yaml",
-  "apk": "",
-  "acos_version": "0.3.0"
-}

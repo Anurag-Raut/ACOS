@@ -6,7 +6,7 @@
 #   scripts/repro.sh hang    # stock ripple on a Looper thread, no SM        -> gdb backtrace
 #   scripts/repro.sh all
 #
-# Every run goes through tools/guarded.sh (--mem 4G --time 300) and keeps all
+# Every run goes through tools/guard/guarded.sh (--mem 4G --time 300) and keeps all
 # scratch under .cache/ (see Q3.md).
 set -uo pipefail
 Q3="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

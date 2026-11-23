@@ -1,7 +1,0 @@
-{
-  "request_id": "req_287a16_18e87726d99b59cd",
-  "started_at": "2026-11-16T07:51:00.250Z",
-  "scenario": "scenarios/rel3h-unhandled-input.yaml",
-  "apk": "fixtures/build/apps/tap-targets.apk",
-  "acos_version": "0.2.3"
-}

@@ -1,7 +1,0 @@
-package=dev.acos.fixtures.fragmentsnav
-activity=dev.acos.fixtures.fragmentsnav.MainActivity
-lifecycle=onCreate,onStart,onResume
-resumed=true
-called=true
-stopped=false
-window=com.android.internal.policy.PhoneWindow@89acbd2

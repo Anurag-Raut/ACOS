@@ -1,7 +1,0 @@
-{
-  "request_id": "req_16405_18e8d97893189549",
-  "started_at": "2026-11-17T13:52:43.394Z",
-  "scenario": "scenarios/negative/gaten-recognition-wrong.yaml",
-  "apk": "",
-  "acos_version": "0.3.0"
-}

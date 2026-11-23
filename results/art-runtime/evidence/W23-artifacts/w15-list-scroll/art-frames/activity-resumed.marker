@@ -1,7 +1,0 @@
-package=dev.acos.fixtures.listscroll
-activity=dev.acos.fixtures.listscroll.MainActivity
-lifecycle=onCreate,onStart,onResume
-resumed=true
-called=true
-stopped=false
-window=com.android.internal.policy.PhoneWindow@48c383d

@@ -1,8 +1,0 @@
-{
-  "request_id": "req_67631_18e8df097b998808",
-  "started_at": "2026-11-17T15:34:43.328Z",
-  "scenario": "scenarios/notif-perm-granted.yaml",
-  "apk": "",
-  "acos_version": "0.2.2",
-  "overwrote_run_id": "req_67402_18e8df07891439a4"
-}

@@ -3,7 +3,7 @@
 # mini-Android root.  Scratch (build outputs, /data bind source) lives under
 # .cache/t0-gralloc/ ; nothing is written to /tmp and crates/ is untouched.
 #
-#   tools/guarded.sh --mem 4G --time 300 -- research/art-feasibility/t0-gralloc/run.sh [--control]
+#   tools/guard/guarded.sh --mem 4G --time 300 -- research/art-feasibility/t0-gralloc/run.sh [--control]
 #
 #   --control   run the probe WITHOUT the LD_PRELOAD interposer (expected: the
 #               stock libui.so LOG_ALWAYS_FATALs in GraphicBufferMapper's ctor)

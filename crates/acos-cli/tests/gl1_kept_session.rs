@@ -10,11 +10,11 @@
 //! exactly "the `acos` process died".
 //!
 //! Both tests boot a real ART guest, so they are ignored by default and must run
-//! under `tools/guarded.sh` (ADR-0018), through the host-wide ART lock:
+//! under `tools/guard/guarded.sh` (ADR-0018), through the host-wide ART lock:
 //!
 //! ```text
 //! tools/art-runtime/run-exclusive.sh --task GL1 -- \
-//!   tools/guarded.sh --mem 8G --time 300 -- \
+//!   tools/guard/guarded.sh --mem 8G --time 300 -- \
 //!   cargo test --release -p acos-cli --test gl1_kept_session -- --ignored --test-threads=1
 //! ```
 //!
@@ -251,7 +251,7 @@ fn counter_apk() -> Option<PathBuf> {
 /// GL1/1: `launch --keep` in one process, then status/tree/tap/screenshot in
 /// other processes, then `destroy` leaves no guest behind.
 #[test]
-#[ignore = "boots a real ART guest; run under tools/guarded.sh"]
+#[ignore = "boots a real ART guest; run under tools/guard/guarded.sh"]
 fn a_kept_session_survives_the_launching_client() {
     let Some(apk) = acos_test_support::require_some(counter_apk(), "a_kept_session_survives_the_launching_client", "fixtures/build/apps/counter.apk is missing") else {
         return;
@@ -355,7 +355,7 @@ fn a_kept_session_survives_the_launching_client() {
 /// GL1/2: `kill -9` the daemon with a live session; the guest must go with it
 /// (that is the orphan-cleanup guarantee `PR_SET_PDEATHSIG` still provides).
 #[test]
-#[ignore = "boots a real ART guest; run under tools/guarded.sh"]
+#[ignore = "boots a real ART guest; run under tools/guard/guarded.sh"]
 fn a_sigkilled_daemon_takes_its_guests_with_it() {
     let Some(apk) = acos_test_support::require_some(counter_apk(), "a_sigkilled_daemon_takes_its_guests_with_it", "fixtures/build/apps/counter.apk is missing") else {
         return;
@@ -462,12 +462,12 @@ fn launch_and_destroy(daemon: &Daemon, apk: &Path) -> (Value, Duration) {
 /// GL1/3a: counter and the thread-heavy fixture both tear down in < 1 s with no
 /// leaked process, and the session is no longer listed.
 #[test]
-#[ignore = "boots a real ART guest; run under tools/guarded.sh"]
+#[ignore = "boots a real ART guest; run under tools/guard/guarded.sh"]
 fn explicit_destruction_is_bounded_and_leaves_nothing_behind() {
     let Some(counter) = acos_test_support::require_some(counter_apk(), "explicit_destruction_is_bounded_and_leaves_nothing_behind", "fixtures/build/apps/counter.apk is missing") else {
         return;
     };
-    let Some(thread_heavy) = acos_test_support::require_some(thread_heavy_apk(), "explicit_destruction_is_bounded_and_leaves_nothing_behind", "fixtures/build/apps/thread-heavy.apk is missing (tools/build-apps.sh)") else {
+    let Some(thread_heavy) = acos_test_support::require_some(thread_heavy_apk(), "explicit_destruction_is_bounded_and_leaves_nothing_behind", "fixtures/build/apps/thread-heavy.apk is missing (tools/build/build-apps.sh)") else {
         return;
     };
     let daemon = Daemon::start("destroy");
@@ -517,7 +517,7 @@ fn explicit_destruction_is_bounded_and_leaves_nothing_behind() {
 /// GL1/3b: when the app does not end by itself, destruction must not wait for
 /// its threads — the grace expires, the tree is killed, and the reply says so.
 #[test]
-#[ignore = "boots a real ART guest; run under tools/guarded.sh"]
+#[ignore = "boots a real ART guest; run under tools/guard/guarded.sh"]
 fn a_guest_that_never_ends_is_killed_after_the_bounded_grace() {
     let Some(thread_heavy) = acos_test_support::require_some(thread_heavy_apk(), "a_guest_that_never_ends_is_killed_after_the_bounded_grace", "fixtures/build/apps/thread-heavy.apk is missing") else {
         return;

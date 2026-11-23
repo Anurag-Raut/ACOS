@@ -1,6 +1,0 @@
-# HYG3 silent-skip audit, updated by HYG4 (branch hyg4).
-# Starting point (HYG3c, 26d034f2e): SILENT-SKIP SITES: 187 (list kept in results/handoff/HYG4/audit-start-187.txt).
-# Current (HYG4 final, tools/audit-silent-skips.sh, widened to multi-line prints):
-SILENT-SKIP SITES: 0
-# Reviewed non-test sites: tools/silent-skip-allowlist.txt (3 product-code messages + binder build script).
-# Per-crate gate logs: results/handoff/HYG4/logs/. Status and open items: results/handoff/HYG4/README.md.

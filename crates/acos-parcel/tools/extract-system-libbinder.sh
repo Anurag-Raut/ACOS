@@ -6,7 +6,7 @@
 #
 # This is a read-only-evidence helper for acos-parcel (T-02 interface-token
 # semantics). It intentionally mirrors the GPT -> super -> lpunpack -> debugfs
-# method of tools/extract-bootclasspath.sh without modifying it. Everything is
+# method of tools/fetch/extract-bootclasspath.sh without modifying it. Everything is
 # written under .cache/parcel-evidence/ (gitignored); the multi-GB intermediates
 # (super.img, system.img) live in .cache/parcel-evidence/.work and are removed
 # on exit, including on failure.

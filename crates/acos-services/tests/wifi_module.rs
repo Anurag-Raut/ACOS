@@ -748,7 +748,7 @@ fn a_module_feature_survives_the_launched_apk_install() {
     let apk = acos_services::workspace_path("fixtures/build/apps/wifi-probe.apk")
         .expect("repo root");
     if !apk.exists() {
-        panic!("build fixtures first: tools/build-apps.sh ({} missing)", apk.display());
+        panic!("build fixtures first: tools/build/build-apps.sh ({} missing)", apk.display());
     }
     let (mut host, _registry) = state_with(|_| {});
     let has_feature = |host: &mut ServiceHost| -> bool {

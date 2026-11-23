@@ -85,7 +85,7 @@ pub const PERMISSION_CONTROLLER_PACKAGE: &str =
 pub const CONFIG_APK: &str = "apk";
 /// The controller APK's environment override.
 pub const APK_ENV: &str = "ACOS_PERMISSION_CONTROLLER_APK";
-/// Workspace-relative default build output (`tools/build-apps.sh`).
+/// Workspace-relative default build output (`tools/build/build-apps.sh`).
 pub const APK_REL: &str = "fixtures/build/apps/permissioncontroller.apk";
 /// `config: {"system_ui": "dialogs" | "off"}`.
 pub const CONFIG_SYSTEM_UI: &str = "system_ui";

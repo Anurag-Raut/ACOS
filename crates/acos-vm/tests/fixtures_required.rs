@@ -4,7 +4,7 @@
 //! absent, so a fresh clone or CI run can be green without exercising the
 //! evidence. Every such test calls `acos_test_support::have_fixture`, which
 //! panics when `ACOS_REQUIRE_FIXTURES` is set; this test is the single explicit
-//! gate that `tools/verify-all.sh` runs *after* building the fixtures, so the
+//! gate that `tools/verify/verify-all.sh` runs *after* building the fixtures, so the
 //! suite fails loudly if the build step silently produced nothing.
 //!
 //! Without the variable it is a no-op so developer checkouts still build.

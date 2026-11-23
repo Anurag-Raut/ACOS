@@ -33,6 +33,6 @@ ls -l "$OUT/classes.dex" >&2
 export ACOS_ART_DATA="$ROOT/.cache/b2/probe/data"
 mkdir -p "$ACOS_ART_DATA"
 exec "$ROOT/tools/art-runtime/run-exclusive.sh" --task B2 -- \
-    "$ROOT/tools/guarded.sh" --mem 8G --time 900 -- \
+    "$ROOT/tools/guard/guarded.sh" --mem 8G --time 900 -- \
     "$ART" run --dex "$OUT/classes.dex" --class b2.HeapProbe \
     --image none --timeout 300 -- --garbage-mib "$garbage"

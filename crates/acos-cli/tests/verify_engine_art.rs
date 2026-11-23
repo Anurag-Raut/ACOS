@@ -182,7 +182,7 @@ fn run_verify_scenario(name: &str, fault: &str, scenario: &Path) -> Run {
     let apk = workspace.join("fixtures/build/apps/counter.apk");
     assert!(
         apk.is_file(),
-        "build fixtures first: `tools/build-apps.sh` (missing {})",
+        "build fixtures first: `tools/build/build-apps.sh` (missing {})",
         apk.display()
     );
     let output = Command::cargo_bin("acos")

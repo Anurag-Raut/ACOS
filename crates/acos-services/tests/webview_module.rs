@@ -39,10 +39,10 @@ fn the_real_profile_contributes_the_provider_apk_to_the_launch() {
     let apks = system_apks(&[spec(Profile::Real)]);
     assert_eq!(apks.len(), 1, "one provider package, got {apks:?}");
     // The provider APK is a **shipped** file: the image build
-    // (tools/extract-bootclasspath.sh) stages it under `system-apps/`, so a
+    // (tools/fetch/extract-bootclasspath.sh) stages it under `system-apps/`, so a
     // fresh install carries it and needs no separate APK build step. When the
     // image does not have it (a bare developer checkout), the fixture build
-    // tools/build-apps.sh produces is the fallback — never a hand-written
+    // tools/build/build-apps.sh produces is the fallback — never a hand-written
     // `extra_apks:` line either way.
     let name = apks[0].file_name().and_then(|n| n.to_str()).unwrap_or("");
     assert!(

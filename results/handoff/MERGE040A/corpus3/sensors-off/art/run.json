@@ -1,7 +1,0 @@
-{
-  "request_id": "req_133fca_18e8e8d7785f7600",
-  "started_at": "2026-11-17T18:34:23.642Z",
-  "scenario": "scenarios/sensors-off.yaml",
-  "apk": "",
-  "acos_version": "0.3.0"
-}

@@ -1,5 +1,0 @@
-host_listener_127.0.0.1:18081=200
-control_listener_in_A from_A=200 from_B=000000
-form=T-port listen=18081 from_target_ns=200 from_session_ns=000000 
-form=T-addr-relay listen=169.254.2.15/18081 from_target_ns=000000 from_session_ns=000000 pasta="Listening address not allowed for -T 169.254.2.15/18081"
-form=T-addr-veth listen=10.163.1.1/18081 from_target_ns=000000 from_session_ns=000000 pasta="Listening address not allowed for -T 10.163.1.1/18081"

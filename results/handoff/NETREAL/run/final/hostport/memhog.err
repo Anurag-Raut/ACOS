@@ -1,2 +1,0 @@
-acos-net: session=1 netns=net:[4026533312] iface=acoss1 addr=10.163.1.2/30 gw=10.163.1.1
-acos-netd: session memhog attached idx=1 addr=10.163.1.2 gw=10.163.1.1 pid=Some(937062) attach_ms=27.0

@@ -237,17 +237,17 @@ versions. See `docs/V1.md` §6 and §4.1 method record.
 
 ## 8. ACOS V1 metrics harness + first ACOS results (2026-11-10)
 
-The harness now exists: `tools/bench-acos.sh` drives `acos bench <metric>`
+The harness now exists: `tools/bench/bench-acos.sh` drives `acos bench <metric>`
 (`crates/acos-cli/src/bench.rs`). Every command emits a standard
 `acos-protocol` envelope (re-parsed and invariant-checked before printing), and
 every result carries its metric type, unit and cold/warm state.
 
 ```sh
-tools/bench-acos.sh                     # measure everything that exists today (>=20 samples)
-tools/bench-acos.sh --quick             # 3 samples: smoke test, NOT a claim
-tools/bench-acos.sh --check             # regression gate vs results/bench/baseline.json
-tools/bench-acos.sh --check --from-run results/bench/run-<stamp>.json
-tools/bench-acos.sh --profile dev       # unoptimised build (default: release)
+tools/bench/bench-acos.sh                     # measure everything that exists today (>=20 samples)
+tools/bench/bench-acos.sh --quick             # 3 samples: smoke test, NOT a claim
+tools/bench/bench-acos.sh --check             # regression gate vs results/bench/baseline.json
+tools/bench/bench-acos.sh --check --from-run results/bench/run-<stamp>.json
+tools/bench/bench-acos.sh --profile dev       # unoptimised build (default: release)
 ```
 
 Artifacts: `results/bench/run-<stamp>.json` (envelopes + host/commit/method
@@ -370,7 +370,7 @@ dependency in the message — it never returns a number.
 - Memory is `/proc/self/smaps_rollup` + `/proc/self/status` (PSS, RSS,
   `RssAnon+RssShmem`, private vs shared) — never PSS summed with a cgroup value.
 - Idle-CPU windows are 5 s each in a fresh process after boot+bind; 20 windows.
-- No `/usr/bin/time`, no `/tmp` scratch, one `tools/guarded.sh` scope per
+- No `/usr/bin/time`, no `/tmp` scratch, one `tools/guard/guarded.sh` scope per
   metric, `CARGO_TARGET_DIR` respected.
 - This section is the only place ACOS results are recorded; §4's table stays
   empty on purpose (single authoritative table, §8.1).
@@ -382,7 +382,7 @@ own counters (`vmbench --ops`, which routes every instruction through the
 general path and prints the opcode histogram) plus per-opcode before/after wall
 time on the `crates/acos-vm/benches/java` programs. Builds: `release`, own
 `CARGO_TARGET_DIR=.cache/target-w25a`, `CARGO_BUILD_JOBS=6`, every command under
-`tools/guarded.sh`. Each timed row is **p50 over 5 fresh processes, each
+`tools/guard/guarded.sh`. Each timed row is **p50 over 5 fresh processes, each
 `best-of-2` internal repetitions** (10 samples per program); spread is
 `(max-min)/p50` and is 1-8 % under host loadavg 4-25 (other agents were
 building/running concurrently, so before/after pairs are read within one
@@ -439,7 +439,7 @@ Correctness for the wave (all on commit 40f075c + these changes):
 
 * `tests/fast_path_equivalence.rs`: 2/2 pass (fast path == general path, normal
   and GC stress).
-* `tools/diff-dexprogs.sh --corelib real`: **25 pass / 0 fail**; `--gc-stress`:
+* `tools/verify/diff-dexprogs.sh --corelib real`: **25 pass / 0 fail**; `--gc-stress`:
   **25 pass / 0 fail**.
 * `cargo test --release -p acos-vm -- --skip thousand_events`: every target
   green except the two `res_natives` cases, which **already fail at HEAD without
@@ -447,7 +447,7 @@ Correctness for the wave (all on commit 40f075c + these changes):
   `clippy --release -p acos-vm` reports no warning in any touched file (the one
   warning is the pre-existing `let_unit_value` in `natives/fwk_surface.rs`).
 
-Interpreter-metric rerun (`tools/bench-acos.sh interpreter`,
+Interpreter-metric rerun (`tools/bench/bench-acos.sh interpreter`,
 `run-2026-11-10-205045.json`, loadavg1 4.80): `02_int_arith` 16.048 ms p50 /
 18.218 p95, `05_branches_loops` 15.054 / 16.372, `09_strings` 19.730 / 25.791.
 That metric's wall covers `Vm::new` (boot/native bring-up) as well as
@@ -523,7 +523,7 @@ Target: the remaining weak spots left by §8.6 — `BenchStaticCall`/`BenchVirtu
 touching correctness. Base = HEAD `40f075c` + the §8.6 w25a changes (the committed
 baseline binary `.cache/vmbench-base-w28a`); "after" = base + the three kept changes
 below. Builds: `release`, own `CARGO_TARGET_DIR=.cache/target-w28a`,
-`CARGO_BUILD_JOBS=4`, every command under `tools/guarded.sh` (ADR-0018).
+`CARGO_BUILD_JOBS=4`, every command under `tools/guard/guarded.sh` (ADR-0018).
 Method: **10 interleaved base/new rounds per program, each `best-of-1` internal
 repetition, p50 over the 10 samples**; spread is `(max-min)/p50`. Host 32 threads /
 60 GiB, loadavg1 2.56 (quiet window), so the base and after rows are read inside one
@@ -599,7 +599,7 @@ Correctness for the wave (worktree at `40f075c` + these changes):
 
 * `tests/fast_path_equivalence.rs`: 2/2 pass (fast path == general path, normal and
   GC stress) after the final `&elem`→`elem` clippy fix.
-* `tools/diff-dexprogs.sh --corelib real`: **25 pass / 0 fail**; `--gc-stress`:
+* `tools/verify/diff-dexprogs.sh --corelib real`: **25 pass / 0 fail**; `--gc-stress`:
   **25 pass / 0 fail** on the `40f075c` worktree. (`26_regex_matrix` is a fixture
   added *after* `40f075c` in a later commit; the `40f075c` binary reports it
   unsupported, so it is excluded from this wave's 25/25 — `diff-dexprogs` classifies
@@ -618,10 +618,10 @@ overwriting whole files). Re-run on that tree:
 * `cargo test --release -p acos-vm --test dexprogs -- --skip thousand_events`: 2/2
   pass (the main tree's newer corelib supports `26_regex_matrix`, so the full
   26/26 corpus is green).
-* `tools/diff-dexprogs.sh --corelib real`: **26 pass / 0 fail / 0 unsupported**;
+* `tools/verify/diff-dexprogs.sh --corelib real`: **26 pass / 0 fail / 0 unsupported**;
   `--gc-stress`: **26 pass / 0 fail / 0 unsupported**.
 
-Interpreter-metric rerun (`tools/bench-acos.sh interpreter --runs 10`,
+Interpreter-metric rerun (`tools/bench/bench-acos.sh interpreter --runs 10`,
 `run-2026-11-10-223843.json`, loadavg1 2.56, release): `02_int_arith`
 6.548 ms p50 / 7.434 p95, `05_branches_loops` 6.183 / 6.523, `09_strings`
 8.001 / 8.996. The metric's wall covers `Vm::new` (boot/native bring-up) as well as
@@ -666,7 +666,7 @@ Method: **10 interleaved off/on rounds per program, `vmbench` best-of-1 per
 round, p50 over the 10 samples**; `java -Xint` p50 over 5 runs, same host/window.
 Base = current main tree with `ACOS_EXEC` unset; tier = the same binary with
 `ACOS_EXEC=ir`. Builds `release`, own `CARGO_TARGET_DIR=.cache/target-w36a`,
-every command under `tools/guarded.sh` (ADR-0018).
+every command under `tools/guard/guarded.sh` (ADR-0018).
 
 | Program | off p50 (ms) | ir p50 (ms) | speedup | off spread | ir spread | `java -Xint` p50 (ms) | ir / `-Xint` |
 |---|---:|---:|---:|---:|---:|---:|---:|
@@ -711,7 +711,7 @@ hooks):
 * `crates/acos-vm/tests/ir_equivalence.rs`: **2/2 pass** — every DEX corpus
   program, byte-identical stdout/exit for IR vs the general interpreter, normal
   and GC-stress.
-* `tools/diff-dexprogs.sh --corelib real` with `ACOS_EXEC=ir`: **26 pass / 0 fail
+* `tools/verify/diff-dexprogs.sh --corelib real` with `ACOS_EXEC=ir`: **26 pass / 0 fail
   / 0 unsupported**; `--gc-stress`: **26 pass / 0 fail / 0 unsupported**.
 * `cargo clippy --release -p acos-vm --lib --tests -- -D warnings`: clean.
 * With `ACOS_EXEC` unset the only differences in the interpreter loop are a
@@ -747,7 +747,7 @@ Method: identical to §8.9 — **10 interleaved off/on rounds per program,
 `vmbench` best-of-1 per round, p50 over the 10 samples**; `java -Xint` p50 over
 5 runs, same host/window. Base = this wave's tree with `ACOS_EXEC` unset; tier
 = the same binary with `ACOS_EXEC=ir`. Builds `release`, own
-`CARGO_TARGET_DIR=.cache/target-w39a`, every command under `tools/guarded.sh`
+`CARGO_TARGET_DIR=.cache/target-w39a`, every command under `tools/guard/guarded.sh`
 (ADR-0018). `ACOS_CORELIB=real`.
 
 | Program | off p50 (ms) | ir p50 (ms) | speedup | off spread | ir spread | `java -Xint` p50 (ms) | ir / `-Xint` |
@@ -791,7 +791,7 @@ Correctness for w39a (worktree = main tree + `exec.rs`/`interp.rs`/`vm.rs`):
 * `crates/acos-vm/tests/ir_equivalence.rs`: **2/2 pass** — every DEX corpus
   program, byte-identical stdout/exit for IR vs the general interpreter, normal
   and GC-stress.
-* `tools/diff-dexprogs.sh --corelib real` with `ACOS_EXEC=ir`: **27 pass / 0 fail
+* `tools/verify/diff-dexprogs.sh --corelib real` with `ACOS_EXEC=ir`: **27 pass / 0 fail
   / 0 unsupported**; `--gc-stress`: **27 pass / 0 fail / 0 unsupported** (the
   27th fixture, `27_annotations_reflection`, landed concurrently with W38-A).
 * `cargo clippy --release -p acos-vm --lib --tests -- -D warnings`: clean.
@@ -815,12 +815,12 @@ first resume) by booting the framework once, snapshotting the quiescent
 `ActivityThread`-attached `Vm` (ACOSSNAP), and restoring per launch instead of
 re-running the framework boot. Ownership: `crates/acos-vm/src/snapshot.rs`,
 `crates/acos-runtime/src/session_pool.rs`, `crates/acos-cli/src/bench.rs`,
-`tools/bench-acos.sh`.
+`tools/bench/bench-acos.sh`.
 
 Run `results/bench/run-2026-11-11-001239.json` (commit `66e4232`, `dev`
 profile, 20 samples/metric, host 32 threads / 60 GiB, `corelib real`,
 fixture `fixtures/build/apps/hello-views.apk`). New reproducible row:
-`tools/bench-acos.sh --profile dev launch` (the `launch` metric is in the
+`tools/bench/bench-acos.sh --profile dev launch` (the `launch` metric is in the
 default `METRICS` list; `acos bench launch --runs 20 --warmup 2`). Fidelity
 `native-runtime` — **not** ART-verified.
 
@@ -861,7 +861,7 @@ ACOS-vs-legacy (BENCHMARKS.md §3 / `results/bench/baseline.json`):
 | `boot-attach.boot_ms.p50` (`baseline.json`) | 95.115 ms (ACOS baseline) | 66.545 ms | — | framework boot only; the `launch` row is larger |
 | `bind-app.attach_to_bind_ms.p50` (`baseline.json`) | 3.760 ms (ACOS baseline) | 9.445 ms | 11.134 ms | same order; host load differs |
 
-**Correctness.** `tools/diff-dexprogs.sh --corelib real` on the same worktree:
+**Correctness.** `tools/verify/diff-dexprogs.sh --corelib real` on the same worktree:
 **27 pass / 0 fail / 0 unsupported** (`results/vm/dexprogs-w45a-real.json`).
 The snapshot change only relaxes the precondition for the host sentinel base
 frame and makes the boot fingerprint the stable `BOOTCLASSPATH` definition
@@ -891,14 +891,14 @@ instead of the dynamically loaded lazy providers; neither touches the default
   template path is slower than the boot path, and it only pays off for many
   sequential launches until the restore cost is reduced.
 
-Method notes: no `/usr/bin/time`, `/proc` based, one `tools/guarded.sh` scope
+Method notes: no `/usr/bin/time`, `/proc` based, one `tools/guard/guarded.sh` scope
 per metric, `CARGO_TARGET_DIR` respected, no fixed sleeps in the timed path.
 
 ### 8.11 Allocation/GC gap vs `java -Xint` (w48a, 2026-11-11)
 
 Target: the `BenchGc` 4.4x / `BenchAlloc` 2.1x residual left by §8.9.1.
 A clean worktree of HEAD `515eeff` (`.cache/wt-w48a`, `CARGO_TARGET_DIR`
-`.cache/target-w48a`, every command under `tools/guarded.sh`) was profiled
+`.cache/target-w48a`, every command under `tools/guard/guarded.sh`) was profiled
 **first**. No `perf`/`samply` on the host, so the profile is a gperftools
 sampling profile (`LD_PRELOAD=/usr/lib/libprofiler.so`, 500 Hz,
 `setarch -R` for stable symbols), symbolized with `addr2line` against the
@@ -952,7 +952,7 @@ arena, both outside a semantics-preserving patch of this size.
 
 Correctness for the wave (worktree = HEAD `515eeff` + the kept change):
 
-* `tools/diff-dexprogs.sh --corelib real`: **27 pass / 0 fail / 0 unsupported**;
+* `tools/verify/diff-dexprogs.sh --corelib real`: **27 pass / 0 fail / 0 unsupported**;
   `--gc-stress`: **27 / 0 / 0**; `ACOS_EXEC=ir`: **27 / 0 / 0**; `ACOS_EXEC=ir`
   `--gc-stress`: **27 / 0 / 0**.
 * `cargo clippy --release -p acos-vm --lib --tests -- -D warnings`: clean.
@@ -989,7 +989,7 @@ from the image falls back to the old relink path and records its own image; the
 **first** restore of a class set in a fresh process still pays that relink.
 
 Measurements (worktree of HEAD `145c6eb`, `dev` profile,
-`CARGO_TARGET_DIR=.cache/target-w64a`, `tools/bench-acos.sh --profile dev launch`,
+`CARGO_TARGET_DIR=.cache/target-w64a`, `tools/bench/bench-acos.sh --profile dev launch`,
 20 samples, host 32 threads / 60 GiB, loadavg ≈ 5–6 during the runs, corelib
 `real`, fixture `fixtures/build/apps/hello-views.apk`). "before" = the same
 tree with the T-43 diff stashed (relink path); "after" = the diff applied.
@@ -1036,7 +1036,7 @@ tables rather than re-deriving them, and the one process-global image is
 bounded.
 
 **Correctness.**
-* `tools/diff-dexprogs.sh --corelib real`: **27 pass / 0 fail / 0 unsupported**
+* `tools/verify/diff-dexprogs.sh --corelib real`: **27 pass / 0 fail / 0 unsupported**
   (`results/vm/dexprogs-w64a-real-normal.json`); `--gc-stress`: **27 / 0 / 0**
   (`results/vm/dexprogs-w64a-real-gc-stress.json`).
 * `cargo test -p acos-vm --test snapshot`: **16 passed** (determinism,
@@ -1115,7 +1115,7 @@ processes, `results/bench/w96a-launch.json`):
 | `acos launch` peak RSS | 542 298 112 B (≈517 MiB) | — | control |
 | `acos run-dex 02_int_arith --corelib real` | 451 ms off / 453 ms on | — | unchanged (cache unused) |
 
-Correctness (worktree = HEAD `7360183` + this diff): `tools/diff-dexprogs.sh
+Correctness (worktree = HEAD `7360183` + this diff): `tools/verify/diff-dexprogs.sh
 --corelib real` **27 pass / 0 fail / 0 unsupported**
 (`results/vm/dexprogs-real-normal.json`); `cargo test -p acos-vm --test
 snapshot` **16 passed**; the new cache tests **10 unit + 3 integration passed**
@@ -1130,8 +1130,8 @@ template hit, corrupt-entry repair); `cargo clippy -p acos-vm -p acos-runtime
 ## 9. V1 measured benchmark (2026-11-11, W160-A)
 
 This is the authoritative ACOS measurement table. Every number below was
-produced by `tools/bench-v1.sh --rounds 3` with a release build at
-`CARGO_TARGET_DIR=.cache/target-w160a`, under `tools/guarded.sh`; raw per-round
+produced by `tools/bench/bench-v1.sh --rounds 3` with a release build at
+`CARGO_TARGET_DIR=.cache/target-w160a`, under `tools/guard/guarded.sh`; raw per-round
 samples are in `results/bench/v1-2026-11-11-061354.json`. The binary was built
 from **committed `20663b3` (W152-A) plus the uncommitted W160-A working-tree
 patch** (source-recorded native regions), because W160-A is the change under
@@ -1177,7 +1177,7 @@ D2 (`SPEC.md`) makes every legacy metric an acceptance gate: ACOS must **beat**
 the legacy ACVM value. Verdicts: `PASS` = same metric type/state and ACOS is
 lower; `FAIL` = ACOS is worse, or the capability is missing; a missing
 measurement is `NOT_MEASURED` and never a pass. Reproduce with
-`tools/bench-v1.sh --rounds 3`.
+`tools/bench/bench-v1.sh --rounds 3`.
 
 | # | Metric | ACOS (measured) | Legacy ACVM (§3) | Ratio | Verdict (D2) | Plan / caveat |
 |---|---|---|---|---|---|---|
@@ -1308,9 +1308,9 @@ product routing is partial (W142-A).
 - The W154-A/W160-A fix closes the top runtime bug (warm restore) and removes
   the 28.4 MB embedded ICU region from the boot cache. See
   `results/perf/BOOTIMAGE_CACHE.md` §W160-A.
-- `tools/bench-v1.sh` now takes the M3 verdict from `launch_default`; the cold
+- `tools/bench/bench-v1.sh` now takes the M3 verdict from `launch_default`; the cold
   control is reported in the row note.
-- `STATUS.md` and `tools/status-check.sh` are refreshed for this run.
+- `STATUS.md` and `tools/verify/status-check.sh` are refreshed for this run.
 
 **Reproduce:**
 
@@ -1326,7 +1326,7 @@ VMBENCH_BIN=$PWD/.cache/target-w160a/release/examples/vmbench \
 RENDER_BIN=$PWD/.cache/target-w160a/release/examples/bench_render \
 ACOS_CACHE_DIR=$PWD/results/tmp/w160a-bench-cache \
 ACOS_PROFILE_OUT=$PWD/results/tmp/w160a-profile.json \
-  tools/bench-v1.sh --rounds 3
+  tools/bench/bench-v1.sh --rounds 3
 ```
 
 The run writes `results/bench/v1-2026-11-11-061354.json`; the printed table is
@@ -1338,7 +1338,7 @@ the one in §9.1.
 
 The V1 gate has to compare like with like, so this section states exactly how
 the frozen ACVM measured each remaining non-pass and how ACOS measures it now.
-Every ACOS number here comes from the same `tools/bench-v1.sh` run as §9.1.
+Every ACOS number here comes from the same `tools/bench/bench-v1.sh` run as §9.1.
 
 #### Legacy method (frozen ACVM; reference only)
 
@@ -1364,7 +1364,7 @@ Every ACOS number here comes from the same `tools/bench-v1.sh` run as §9.1.
   is a **template reset**, not an in-place app-state reset; the process-global
   Binder transport is replaced. The comparison value is the legacy
   `reset --app → frame` 748.1 ms.
-* **M9** — `tools/bench-v1.sh` runs N=5/10/20 **separate OS processes**, each
+* **M9** — `tools/bench/bench-v1.sh` runs N=5/10/20 **separate OS processes**, each
   `acos observe --apk counter --tree` (launch + live tree), concurrently. Wall
   is parent-measured; per-session memory is each child's own `/proc/<pid>/status`
   `VmHWM` sampled while it is alive, reported as RSS (not PSS, not summed with a
@@ -1521,10 +1521,10 @@ All ACOS-native rows are `native-runtime`; none is ART-verified.
 
 ```sh
 CARGO_TARGET_DIR=$PWD/.cache/target-w176a CARGO_PROFILE_DEV_DEBUG=0 \
-  CARGO_BUILD_JOBS=2 tools/guarded.sh --mem 12G --time 3600 -- \
+  CARGO_BUILD_JOBS=2 tools/guard/guarded.sh --mem 12G --time 3600 -- \
   cargo build --release -p acos-cli -p acos-mcp --bins
 CARGO_TARGET_DIR=$PWD/.cache/target-w176a CARGO_PROFILE_DEV_DEBUG=0 \
-  CARGO_BUILD_JOBS=2 tools/guarded.sh --mem 12G --time 3600 -- \
+  CARGO_BUILD_JOBS=2 tools/guard/guarded.sh --mem 12G --time 3600 -- \
   cargo build --release -p acos-vm --example vmbench -p acos-render --example bench_render
 ACOS_BIN=$PWD/.cache/target-w176a/release/acos \
 ACOS_MCP_BIN=$PWD/.cache/target-w176a/release/acos-mcp \
@@ -1532,7 +1532,7 @@ VMBENCH_BIN=$PWD/.cache/target-w176a/release/examples/vmbench \
 RENDER_BIN=$PWD/.cache/target-w176a/release/examples/bench_render \
 ACOS_CACHE_DIR=$PWD/results/tmp/w176a-bench-cache \
 ACOS_PROFILE_OUT=$PWD/results/tmp/w176a-profile.json \
-  tools/guarded.sh --mem 40G --time 3600 -- tools/bench-v1.sh --rounds 3
+  tools/guard/guarded.sh --mem 40G --time 3600 -- tools/bench/bench-v1.sh --rounds 3
 ```
 
 This writes `results/bench/v1-2026-11-11-071510.json`; the table above is
@@ -1548,8 +1548,8 @@ fixed; M9 is measured and its allocator levers are quantified and rejected.
 
 **Method.** `CARGO_TARGET_DIR=.cache/target-w183a`,
 `CARGO_PROFILE_DEV_DEBUG=0`, `CARGO_BUILD_JOBS=2`, release build under
-`tools/guarded.sh`. M5 uses the exact `dm["screenshot"]` method of
-`tools/bench-v1.sh` §13: one daemon (`ACOS_NO_BOOT_CACHE=1`, private socket),
+`tools/guard/guarded.sh`. M5 uses the exact `dm["screenshot"]` method of
+`tools/bench/bench-v1.sh` §13: one daemon (`ACOS_NO_BOOT_CACHE=1`, private socket),
 `launch counter --keep`, then each sample is a **separate**
 `acos observe --screenshot <path> --session s_cli --json` process timed wall;
 n=25. The A/B ran in one host window: old = `.cache/target-w176a/release/acos`
@@ -1631,8 +1631,8 @@ M9 stays **FAIL** (input-level independence is still not proven), unchanged.
 | `cargo test -p acos-mcp` (incl. `e2e`) | **pass** after the same fixture placement + `target/release/acos` link |
 | `cargo clippy -p acos-runtime -p acos-cli -p acos-mcp --all-targets --no-deps -- -D warnings` | **clean (exit 0)** |
 | `cargo check --workspace --all-targets` | **pass (exit 0)** |
-| `tools/diff-dexprogs.sh --corelib real` | **27/27 pass** |
-| `tools/diff-dexprogs.sh --corelib real --gc-stress` | **27/27 pass** |
+| `tools/verify/diff-dexprogs.sh --corelib real` | **27/27 pass** |
+| `tools/verify/diff-dexprogs.sh --corelib real --gc-stress` | **27/27 pass** |
 
 **Files:** `crates/acos-cli/src/serve.rs` (event-driven accept poll),
 `crates/acos-runtime/src/session.rs` (CRC-32 table, Adler-32 batching, a
@@ -1713,9 +1713,9 @@ and could not be used as the comparator — recorded in `W12.md` §8.
 ## 11. Benchmark methodology (decided 2026-11-12)
 
 **Status:** this section is the method that binds every future ACOS benchmark row. It is
-implemented in `tools/benchlib.py` (with unit tests in `tools/tests/test-benchlib.py`),
+implemented in `tools/bench/benchlib.py` (with unit tests in `tools/tests/test-benchlib.py`),
 `tools/art-runtime/bench-release.sh`, `tools/art-runtime/bench-session.sh`,
-`tools/art-runtime/bench-n.sh`, `tools/run-matrix.sh` and
+`tools/art-runtime/bench-n.sh`, `tools/verify/run-matrix.sh` and
 `results/bench/schema/matrix.schema.json`. (`tools/art-runtime/bench.sh` already builds and
 runs release but is not yet stamped; it is outside the W29 file ownership.) It supersedes nothing numerically: **the
 ART-vs-legacy comparison is not yet measured. §9.8 is the Rust VM reference** (`fidelity:
@@ -1780,12 +1780,12 @@ Before a run and at each result stamp, `host_gate()` requires:
 
 A gate failure refuses the run (exit 4) or, if it happens mid-run, marks the row/result
 `contaminated` and excludes it from verdicts. ART work stays serialized through
-`tools/art-runtime/run-exclusive.sh --task <name> -- tools/guarded.sh --mem ... --`.
+`tools/art-runtime/run-exclusive.sh --task <name> -- tools/guard/guarded.sh --mem ... --`.
 Host limits from `docs/OPERATING_DIRECTIVES.md` §5 still bind.
 
 ### 11.5 One result schema for the scenario matrix
 
-The matrix runner is `tools/run-matrix.sh`; it writes
+The matrix runner is `tools/verify/run-matrix.sh`; it writes
 `results/bench/matrix-<UTC>.json` (validated before writing) plus a `.tsv` view. The schema is
 `results/bench/schema/matrix.schema.json` and its validator is
 `benchlib.validate_matrix()`. Each **row is one scenario run**, so a correctness run is also
@@ -1888,7 +1888,7 @@ binaries** (W39, 2026-11-12T03:00:16Z -> 03:05:03Z). It replaces the W33 table b
 (kept as the previous run) and supersedes §9.8 for the ART verdict; §9.x stays Rust-VM
 history and §11 remains the binding method. Raw record:
 `results/bench/d2-20261112T030016Z-w39.json` (+ `.md`, every sample, per-rep host load and
-cohort membership); harness `tools/art-runtime/bench-d2.sh` (uses `tools/benchlib.py`;
+cohort membership); harness `tools/art-runtime/bench-d2.sh` (uses `tools/bench/benchlib.py`;
 its M9 reason text was corrected in W39 because the W33 compiler-storm sentence no longer
 applies).
 
@@ -1964,7 +1964,7 @@ NOISY rather than repeating W33's PASS at a luckier moment.
 Both rows use the same denominator contract: cgroup `memory.stat` **anon+shmem** of the
 job **plus every guest** cgroup, 100 ms samples and a closing sample, sampler's
 `RssAnon+RssShmem` × window subtracted, page cache excluded; `false_pass > 0` zeroes M11.
-The N=10 runner (`tools/run-suite.sh --concurrency 10`) also reports the alternative
+The N=10 runner (`tools/verify/run-suite.sh --concurrency 10`) also reports the alternative
 "host-level integral over the same window, all job + guest cgroups", discovered
 independently of the per-run samplers, and rejects the run when the two disagree beyond
 the 5 % noise floor (`SCOPE_MISMATCH`).
@@ -2410,7 +2410,7 @@ tools/art-runtime/emubench/run-emubench.sh n1-warm-tree
 
 # the ACOS install row (MERGE040D(c)): exclusive, guarded, ~1 min
 tools/art-runtime/run-exclusive.sh --task EMUBENCH --exclusive -- \
-  tools/guarded.sh --mem 12G --time 600 -- \
+  tools/guard/guarded.sh --mem 12G --time 600 -- \
   python3 -I tools/bench/acos_bench.py --phase install \
     --acos target/release/acos --scratch .cache/bench-install-scratch \
     --out results/bench/merge040d/acos-apk-ready.json --reps 5

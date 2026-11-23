@@ -1,7 +1,0 @@
-tap publish_us=8 total_us=5095
-tap publish_us=9 total_us=5078
-tap publish_us=12 total_us=5080
-tap publish_us=7 total_us=5078
-tap publish_us=7 total_us=5070
-tap publish_us=9 total_us=5075
-tap publish_us=9 total_us=5075

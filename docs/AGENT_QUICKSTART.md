@@ -140,7 +140,7 @@ doctor → inspect → launch → status → observe_tree → tap/key/swipe → 
    answer to "how far did it get?".
 
    **Current ceiling (2026-11-11, HEAD `fd1a887`, verify with
-   `tools/status-check.sh`).** A `TextView`/`Button` activity reaches
+   `tools/verify/status-check.sh`).** A `TextView`/`Button` activity reaches
    `first_frame` for real: `counter.apk` and the W166-A fixtures
    (`dialogs-menus`, `list-adapter`, `fragments-nav`) return
    `reached_stage: first_frame`. A themed activity that inflates a `ListView`
@@ -222,9 +222,9 @@ The Gradle-free toolchain builds `fixtures/apps/<name>/` into
 `fixtures/build/apps/<name>.apk`:
 
 ```bash
-tools/build-dogfood-apps.sh --list          # available app names
-tools/build-dogfood-apps.sh todo-dogfood    # build one
-tools/build-dogfood-apps.sh                 # build all
+tools/build/build-dogfood-apps.sh --list          # available app names
+tools/build/build-dogfood-apps.sh todo-dogfood    # build one
+tools/build/build-dogfood-apps.sh                 # build all
 ```
 
 Each app needs `AndroidManifest.xml`, `res/`, and `src/`. On a missing tool or
@@ -232,16 +232,16 @@ directory the script names the exact path and suggests `acos doctor`. To drive
 a whole set and collect evidence:
 
 ```bash
-tools/e2e-dogfood.sh todo-dogfood
+tools/verify/e2e-dogfood.sh todo-dogfood
 # evidence: results/dogfood/launch/<app>.json + .summary.txt + SUMMARY.md
 ```
 
-`tools/build-apps.sh` builds every fixture app (`fixtures/apps/*`) into
-`fixtures/build/apps/`, which is what `tools/verify-all.sh` uses. Three apps
+`tools/build/build-apps.sh` builds every fixture app (`fixtures/apps/*`) into
+`fixtures/build/apps/`, which is what `tools/verify/verify-all.sh` uses. Three apps
 added at W166-A reach `first_frame` and are the best starting point for a new
 UI fixture: `dialogs-menus` (dialogs + option menus), `list-adapter`
 (`ListView`/adapter) and `fragments-nav` (fragments). Check the ladder after a
-launch instead of assuming: `tools/build-apps.sh && acos launch
+launch instead of assuming: `tools/build/build-apps.sh && acos launch
 fixtures/build/apps/list-adapter.apk --json` should report
 `reached_stage: first_frame`.
 
@@ -307,7 +307,7 @@ command fails with `UNSAFE_PATH` and `details.root_error`
 
 ## 6. Known state (as of 2026-11-11, HEAD `fd1a887`)
 
-`tools/build-dogfood-apps.sh` builds the framework-only fixtures. On this HEAD:
+`tools/build/build-dogfood-apps.sh` builds the framework-only fixtures. On this HEAD:
 
 * **`counter.apk` reaches `first_frame` for real.** `acos launch
   fixtures/build/apps/counter.apk --json` returns `status: pass` /

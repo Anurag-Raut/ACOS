@@ -1,4 +1,0 @@
-acos-binder-peer: listening on /home/Qui/Projects/acos/.cache/sa-spike/logs/06/binder.sock
-acos-binder-peer: driver connected
-acos-binder-peer: closed (unsupported=0 reverse_replies=0 reverse_failed=0)
-acos-binder-peer: unsupported log /home/Qui/Projects/acos/.cache/sa-spike/logs/06/unsupported.jsonl

@@ -15,7 +15,7 @@
 //!
 //! ```sh
 //! tools/art-runtime/run-exclusive.sh --task INTEG030 -- \
-//!   tools/guarded.sh --mem 12G --time 900 -- \
+//!   tools/guard/guarded.sh --mem 12G --time 900 -- \
 //!   cargo test --offline -p acos-cli --test rel3c_capped_verify -- --ignored --test-threads=1
 //! ```
 
@@ -74,7 +74,7 @@ fn live_verify(scenario: &str, apk: &Path, artifacts: &Path) -> (Value, usize, P
 /// The reply is capped, small, and still says: envelope outcome, verdict
 /// outcome, and which APK/scenario this was.
 #[test]
-#[ignore = "boots a real ART guest; run under tools/guarded.sh + run-exclusive.sh"]
+#[ignore = "boots a real ART guest; run under tools/guard/guarded.sh + run-exclusive.sh"]
 fn a_capped_live_verify_reply_keeps_the_outcome_and_provenance() {
     let Some(apk) = acos_test_support::require_some(gaten_apk(), "a_capped_live_verify_reply_keeps_the_outcome_and_provenance", "no Gaten x86_64 release APK (set ACOS_GATEN_APK)") else {
         return;
@@ -163,7 +163,7 @@ fn a_capped_live_verify_reply_keeps_the_outcome_and_provenance() {
 /// The failing case: the capped reply names the failing step (index, kind,
 /// message) instead of only a path.
 #[test]
-#[ignore = "boots a real ART guest; run under tools/guarded.sh + run-exclusive.sh"]
+#[ignore = "boots a real ART guest; run under tools/guard/guarded.sh + run-exclusive.sh"]
 fn a_capped_live_failing_verify_reply_names_the_failing_step() {
     let Some(apk) = acos_test_support::require_some(gaten_apk(), "a_capped_live_failing_verify_reply_names_the_failing_step", "no Gaten x86_64 release APK (set ACOS_GATEN_APK)") else {
         return;

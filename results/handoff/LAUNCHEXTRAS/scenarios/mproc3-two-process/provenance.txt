@@ -1,3 +1,0 @@
-apk=/home/Qui/.t3/worktrees/acos/t3-2d2bb735-60949492e8cb8af5/fixtures/build/apps/proc-a.apk
-apk_sha256=29c337de13bcc03d954b1fbb33b8bab6b69ce2592ac64403f35778e0576f517c
-engine=art

@@ -26,7 +26,7 @@ export ACOS_GUARD_TIME="${ACOS_GUARD_TIME:-180}"
 LOG="$ACOS_ROOT/.cache/art-exp-q3/logs"
 mkdir -p "$LOG" "$DATA/out"
 set -o pipefail
-"$ACOS_ROOT/tools/guarded.sh" --mem "${Q3_GUARD_MEM:-4G}" --time "${Q3_GUARD_TIME:-300}" -- \
+"$ACOS_ROOT/tools/guard/guarded.sh" --mem "${Q3_GUARD_MEM:-4G}" --time "${Q3_GUARD_TIME:-300}" -- \
     "$E4H/hroot.sh" dalvikvm \
     ${Q3_MODE:+-Dq3.mode=$Q3_MODE} \
     ${Q3_WAIT:+-Dq3.wait=$Q3_WAIT} \

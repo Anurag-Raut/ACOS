@@ -217,7 +217,7 @@ fn rn_child_worker() {
         ),
     }
     // The fixture APK now carries `com.facebook.jni.*` because
-    // `tools/rn-hello-deps.py` lists `com.facebook.fbjni:fbjni` as a root (the
+    // `tools/build/rn-hello-deps.py` lists `com.facebook.fbjni:fbjni` as a root (the
     // `react-android` POM marks it `optional`, so a plain Maven walk drops it).
     // The old 10 KiB `tests/data/fbjni-classes.dex` workaround is gone.
 
@@ -335,7 +335,7 @@ fn rn_child_worker() {
 #[test]
 fn rn_native_stack_under_confinement() {
     if !acos_test_support::have_fixture("fixtures/build/apps/rn-hello.apk") {
-        acos_test_support::require_prereq(false, "rn_native_stack_under_confinement", "rn_native_stack_under_confinement: fixtures/build/apps/rn-hello.apk is absent (build with tools/build-rn-hello.sh)");
+        acos_test_support::require_prereq(false, "rn_native_stack_under_confinement", "rn_native_stack_under_confinement: fixtures/build/apps/rn-hello.apk is absent (build with tools/build/build-rn-hello.sh)");
         return;
     }
     let apk = repo_root().join("fixtures/build/apps/rn-hello.apk");

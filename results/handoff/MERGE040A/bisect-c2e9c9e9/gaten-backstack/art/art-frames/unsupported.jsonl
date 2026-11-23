@@ -1,2 +1,0 @@
-{"code":221,"descriptor":"android.app.IActivityManager","error":"UNSUPPORTED_ANDROID_API","kind":"UNSUPPORTED_ANDROID_API","message":"unsupported Android API: android.app.IActivityManager code 221 (getHistoricalProcessExitReasons)","method":"getHistoricalProcessExitReasons"}
-{"code":1,"descriptor":"android.app.IActivityTaskManager","error":"UNSUPPORTED_ANDROID_API","kind":"UNSUPPORTED_ANDROID_API","message":"unsupported Android API: android.app.IActivityManager code 14 (startActivity flags 0x10200000)","method":"startActivity"}

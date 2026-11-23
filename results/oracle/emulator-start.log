@@ -1,6 +1,0 @@
-[oracle-emulator] MemAvailable: 50215 MiB (require > 16384 MiB)
-[oracle-emulator] booting acos-oracle-34 headless (ram=2048MB cores=4)
-[oracle-emulator] waiting for sys.boot_completed (timeout 600s)
-[oracle-emulator] BOOTED in 14s wall clock
-[oracle-emulator] emulator host RSS: 3107160 KiB (3034 MiB); .cache size 1.6G
-[oracle-emulator] serial: emulator-5554

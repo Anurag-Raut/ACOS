@@ -1,1 +1,0 @@
-acos-net: session=1 netns=net:[4026534308] iface=acoss1 addr=10.163.1.2/30 gw=10.163.1.1

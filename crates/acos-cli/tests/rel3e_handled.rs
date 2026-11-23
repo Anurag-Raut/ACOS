@@ -28,11 +28,11 @@
 //!
 //! ```text
 //! tools/art-runtime/run-exclusive.sh --task REL3E -- \
-//!   tools/guarded.sh --mem 8G --time 600 -- \
+//!   tools/guard/guarded.sh --mem 8G --time 600 -- \
 //!   cargo test -p acos-cli --release --test rel3e_handled -- --ignored --test-threads=1
 //! ```
 //!
-//! The fixture must be built first (`ACOS_APP_ONLY=tap-targets tools/build-apps.sh`).
+//! The fixture must be built first (`ACOS_APP_ONLY=tap-targets tools/build/build-apps.sh`).
 
 use std::io::{BufRead, BufReader, Write};
 use std::os::unix::net::UnixStream;
@@ -219,12 +219,12 @@ fn find_node<'a>(nodes: &'a Value, resource: &str) -> Option<&'a Value> {
 }
 
 #[test]
-#[ignore = "boots a real ART guest; run under tools/guarded.sh + run-exclusive.sh"]
+#[ignore = "boots a real ART guest; run under tools/guard/guarded.sh + run-exclusive.sh"]
 fn tap_on_a_label_is_reported_not_handled_and_names_the_switch() {
     let apk = repo_root().join("fixtures/build/apps/tap-targets.apk");
     let art = art_bin();
     if !apk.is_file() || !art.is_file() {
-        acos_test_support::require_prereq(false, "tap_on_a_label_is_reported_not_handled_and_names_the_switch", &format!("{} or {} missing (build with ACOS_APP_ONLY=tap-targets tools/build-apps.sh and cargo build --release -p acos-art)", apk.display(), art.display()));
+        acos_test_support::require_prereq(false, "tap_on_a_label_is_reported_not_handled_and_names_the_switch", &format!("{} or {} missing (build with ACOS_APP_ONLY=tap-targets tools/build/build-apps.sh and cargo build --release -p acos-art)", apk.display(), art.display()));
         return;
     }
     let daemon = Daemon::start("handled");

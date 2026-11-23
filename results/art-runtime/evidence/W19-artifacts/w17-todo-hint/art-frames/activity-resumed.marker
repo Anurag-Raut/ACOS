@@ -1,7 +1,0 @@
-package=dev.acos.fixtures.todolist
-activity=dev.acos.fixtures.todolist.MainActivity
-lifecycle=onCreate,onStart,onResume
-resumed=true
-called=true
-stopped=false
-window=com.android.internal.policy.PhoneWindow@d3825dd

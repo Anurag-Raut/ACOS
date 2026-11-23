@@ -169,16 +169,16 @@ impl From<io::Error> for Arm64Error {
 
 /// The exact remedy string used whenever the bionic sysroot is missing.
 pub const SYSROOT_REMEDY: &str =
-    "run `tools/fetch-bionic-sysroot.sh` (read-only `adb pull` from the attached arm64 \
+    "run `tools/fetch/fetch-bionic-sysroot.sh` (read-only `adb pull` from the attached arm64 \
      device) and/or set ACOS_BIONIC_ROOT=/path/to/bionic-arm64";
 
 /// The exact remedy string used whenever qemu-aarch64 is missing.
 pub const QEMU_REMEDY: &str =
-    "extract qemu-aarch64 user-locally with `tools/fetch-qemu-aarch64.sh` \
+    "extract qemu-aarch64 user-locally with `tools/fetch/fetch-qemu-aarch64.sh` \
      (or set ACOS_QEMU_AARCH64=/path/to/qemu-aarch64)";
 
 /// The exact remedy string used whenever the seccomp guard is missing.
-pub const GUARD_REMEDY: &str = "build it with `tools/build-arm64-guard.sh` (or set \
+pub const GUARD_REMEDY: &str = "build it with `tools/build/build-arm64-guard.sh` (or set \
      ACOS_SECCOMP_GUARD=/path/to/libacos_seccomp_guard.so)";
 
 /// The workspace root (`crates/acos-arm64/../..`).
@@ -553,7 +553,7 @@ pub fn launch(spec: LaunchSpec) -> Result<ConfinedChild, Arm64Error> {
             let _ = child.wait();
             return Err(Arm64Error::unavailable(
                 format!("arm64 child failed before seccomp was confirmed: {e}"),
-                "check `qemu-aarch64 --version` and the sysroot with `tools/fetch-bionic-sysroot.sh`",
+                "check `qemu-aarch64 --version` and the sysroot with `tools/fetch/fetch-bionic-sysroot.sh`",
             ));
         }
     };

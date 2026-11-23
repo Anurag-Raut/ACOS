@@ -1,8 +1,0 @@
-{
-  "request_id": "req_69c3a_18e8df36603e5be7",
-  "started_at": "2026-11-17T15:37:56.143Z",
-  "scenario": "results/handoff/MODTAIL/tail-telephony.yaml",
-  "apk": "",
-  "acos_version": "0.3.0",
-  "overwrote_run_id": "req_68269_18e8df196c8dea34"
-}

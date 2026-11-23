@@ -1,3 +1,0 @@
-
-warning: `acos-services` (test "w38_activity_token") generated 1 warning (run `cargo fix --test "w38_activity_token"` to apply 1 suggestion)
-    Finished `dev` profile [unoptimized] target(s) in 0.24s

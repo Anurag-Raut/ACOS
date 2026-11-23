@@ -6,7 +6,7 @@
 //! Prints per-run wall time, instruction throughput and the top opcode
 //! families (so a profile can be read off without an external profiler).
 //! This is deliberately dependency-free; it is the runner used while
-//! optimising the interpreter. See `tools/bench-vm.sh` for the full JSON
+//! optimising the interpreter. See `tools/bench/bench-vm.sh` for the full JSON
 //! benchmark that also compares against the host JVM.
 
 use std::time::Instant;

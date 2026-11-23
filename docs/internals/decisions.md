@@ -26,6 +26,6 @@ A curated index of the architectural decisions that govern ACOS today, grouped b
 
 - **Content-aware settle & placeholder window (ADR-0032 + GATEFIX):** `wait_for` and tree/text/state assertions default to `auto` (`strict` first, then `content` stability on animating screens, explicitly reporting `pixel_evidence: false`). Actions and pixel assertions remain `strict`. A timed-out settle is always `TIMEOUT`, never `pass`. `PLACEHOLDER_CONTENT` requires stability across the full `ACOS_ART_FIRST_FRAME_MS` window.
 - **Fail-closed confinement (ADR-0022, [`../SECURITY.md`](../SECURITY.md)):** Landlock, seccomp, namespaces, and rlimits cannot be weakened by env vars. `AF_INET`/`AF_INET6` is unlocked only when `network` is attached.
-- **Host RAM safety (ADR-0018):** Never exceed 90% Host RAM (target ≤ 85%); run builds/tests/guest executions under `tools/guarded.sh`.
+- **Host RAM safety (ADR-0018):** Never exceed 90% Host RAM (target ≤ 85%); run builds/tests/guest executions under `tools/guard/guarded.sh`.
 - **Live view & screenshots (ADR-0027):** `acos view` is a local view-only browser hub (`127.0.0.1` + token) with zero overhead when no viewer is connected (single atomic load). Screenshots default to compressed lossless PNG (downscaled preview + lossless file path over MCP).
 - **Lattice-aware benchmark gating (ADR-0028):** Fast-settle metrics sit on a ~16.4 ms frame lattice and are gated by pooled 5%-trimmed mean (`tools/bench/ab-compare.py`), while strict metrics keep median-of-p50s gating.

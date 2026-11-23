@@ -1,6 +1,0 @@
-verify: timeout (ok=false, backend=acos-native, fidelity=art-reference)
-  engine: art (mode: live)
-  error: TIMEOUT: observe: strict settle timed out (probe-floor); the step is a non-pass because the screen was still changing when the deadline elapsed
-  artifacts: /home/Qui/.t3/worktrees/acos/t3-a531561b-3a8f5c6b7589fc68/results/handoff/NET3/run/n5/rep1/4
-  steps: 2
-exit=1

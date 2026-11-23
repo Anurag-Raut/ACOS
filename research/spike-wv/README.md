@@ -39,8 +39,8 @@ ACOS_SPIKE_WV_SCRATCH=$PWD/.cache/spike-wv \
   --out research/spike-wv/evidence
 
 # 3. today's guest failure (real ART session)
-ACOS_APP_ONLY=webview-probe tools/build-apps.sh
-tools/art-runtime/run-exclusive.sh --task SPIKE-WV -- tools/guarded.sh \
+ACOS_APP_ONLY=webview-probe tools/build/build-apps.sh
+tools/art-runtime/run-exclusive.sh --task SPIKE-WV -- tools/guard/guarded.sh \
   --mem 8G --time 420 -- env ACOS_ART_BIN=$PWD/.cache/spike-wv-target/release/acos-art \
   ./.cache/spike-wv-target/release/acos verify --engine art \
   research/spike-wv/scenarios/webview-probe.yaml \

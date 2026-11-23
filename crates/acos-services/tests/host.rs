@@ -47,7 +47,7 @@ fn installing_a_package_from_apk_repoints_the_package_manager() {
             false,
             "installing_a_package_from_apk_repoints_the_package_manager",
             &format!(
-                "{} is missing — run tools/build-apps.sh, or set \
+                "{} is missing — run tools/build/build-apps.sh, or set \
                  ACOS_ALLOW_ART_SKIP=1 for a counted skip",
                 apk.display()
             ),

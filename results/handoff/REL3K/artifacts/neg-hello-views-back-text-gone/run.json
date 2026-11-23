@@ -1,7 +1,0 @@
-{
-  "request_id": "req_efc2f_18e86cc7e300ab73",
-  "started_at": "2026-11-16T04:40:57.269Z",
-  "scenario": "scenarios/negative/hello-views-back-text-gone.yaml",
-  "apk": "",
-  "acos_version": "0.2.3"
-}

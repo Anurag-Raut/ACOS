@@ -2,7 +2,7 @@
 //!
 //! `results/art-runtime/S1-sandbox-review.md` §5 #3: nothing in `acos-art`
 //! bounded memory. `RLIMIT_AS` is unusable for ART (Scudo reserves ~8.6 TB of
-//! virtual address space), `tools/guarded.sh` is a convention and its
+//! virtual address space), `tools/guard/guarded.sh` is a convention and its
 //! `ulimit -v` fallback actively breaks ART, and the launcher RSS watchdog
 //! ([`crate::watchdog`]) samples a process group after the fact. None of those
 //! is a *kernel-enforced* ceiling that fails closed before untrusted code runs.

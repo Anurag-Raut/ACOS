@@ -19,7 +19,7 @@
 #   a D2 verdict. tools/art-runtime/bench-release.sh builds release then runs.
 #   Every result JSON stamps profile, full binary sha256 per binary, the
 #   git-status porcelain hash, rustc, and the host gate
-#   (tools/benchlib.py; BENCHMARKS.md section 11).
+#   (tools/bench/benchlib.py; BENCHMARKS.md section 11).
 #
 # Modes
 #   full      N concurrent `acos verify --engine art --scenario
@@ -68,7 +68,7 @@
 # an engine's own "ok" alone in the comparator modes (the frame/count is read back).
 #
 # Safety: the whole run holds the host-wide ART lock
-# (tools/art-runtime/run-exclusive.sh) and runs under tools/guarded.sh --mem.
+# (tools/art-runtime/run-exclusive.sh) and runs under tools/guard/guarded.sh --mem.
 # `free -m` MemAvailable is checked before every cohort and the projected peak
 # is refused above --max-used % of MemTotal (default 75). ramguard.sh is started
 # if it is not already running and is stopped again if this script started it.
@@ -163,7 +163,7 @@ ACOS_ART="$BIN_ROOT/$PROFILE/acos-art"
 # run-exclusive.sh at the end of this script, so the probe here skips the lock.
 if ! python3 -I - "$ROOT" <<'PY'
 import sys
-sys.path.insert(0, sys.argv[1] + "/tools")
+sys.path.insert(0, sys.argv[1] + "/tools/bench")
 import benchlib
 g = benchlib.host_gate(sys.argv[1], check_lock=False)
 print("bench-session: host gate %s (loadavg1 %s, MemAvailable %s GiB)"
@@ -178,14 +178,14 @@ then
     exit 4
 fi
 
-if [ ! -f "$APK" ]; then echo "bench-session: $APK missing (run tools/build-apps.sh)" >&2; exit 2; fi
+if [ ! -f "$APK" ]; then echo "bench-session: $APK missing (run tools/build/build-apps.sh)" >&2; exit 2; fi
 if [ ! -f "$SCENARIO" ]; then echo "bench-session: $SCENARIO missing" >&2; exit 2; fi
 
 # ---- build (guarded); --no-build reuses existing binaries of this profile ----
 BUILD_ARGS=(-p acos-cli -p acos-art)
 [ "$PROFILE" = release ] && BUILD_ARGS=(--release "${BUILD_ARGS[@]}")
 if [ "$NO_BUILD" -eq 0 ]; then
-    if ! CARGO_TARGET_DIR="$TARGET_DIR" "$ROOT/tools/guarded.sh" --mem 12G --time 900 -- \
+    if ! CARGO_TARGET_DIR="$TARGET_DIR" "$ROOT/tools/guard/guarded.sh" --mem 12G --time 900 -- \
             cargo build "${BUILD_ARGS[@]}" >"$OUT/build.log" 2>&1; then
         echo "bench-session: build failed; see $OUT/build.log" >&2
         exit 3
@@ -208,8 +208,8 @@ if [ $(( MEM_AVAIL_KIB / 1024 / 1024 )) -lt "$MIN_AVAIL_GIB" ]; then
 fi
 
 RAMGUARD_PID=""
-if ! pgrep -f 'tools/ramguard.sh' >/dev/null 2>&1; then
-    "$ROOT/tools/ramguard.sh" --min-avail-gib 9 >/dev/null 2>&1 &
+if ! pgrep -f 'tools/guard/ramguard.sh' >/dev/null 2>&1; then
+    "$ROOT/tools/guard/ramguard.sh" --min-avail-gib 9 >/dev/null 2>&1 &
     RAMGUARD_PID=$!
     echo "bench-session: started ramguard pid=$RAMGUARD_PID" >&2
     sleep 0.5
@@ -262,8 +262,8 @@ VERDICT_ELIGIBLE = PROFILE == "release"
 # import it: it must never need a binary or a measurement to re-render a table.
 benchlib = None
 _lib_root = ROOT or os.getcwd()
-if os.path.isdir(os.path.join(_lib_root, "tools")):
-    sys.path.insert(0, os.path.join(_lib_root, "tools"))
+if os.path.isdir(os.path.join(_lib_root, "tools", "bench")):
+    sys.path.insert(0, os.path.join(_lib_root, "tools", "bench"))
     try:
         import benchlib  # noqa: E402
     except Exception as _exc:  # pragma: no cover - defensive
@@ -1033,7 +1033,7 @@ def provenance():
             },
             "rustc": benchlib.rustc_version(),
             "host_gate": gate,
-            "method": "BENCHMARKS.md section 11 (tools/benchlib.py)",
+            "method": "BENCHMARKS.md section 11 (tools/bench/benchlib.py)",
         }
     return {
         "utc": datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds"),
@@ -1336,7 +1336,7 @@ def render_table(run):
     out.append("")
     out.append("A row whose metric type or state differs from the legacy row is "
                "NOT_COMPARABLE, and a comparison over a single rep has no measured "
-               "spread so it can never PASS (tools/benchlib.py).")
+               "spread so it can never PASS (tools/bench/benchlib.py).")
     out.append("")
     out.append("")
     out.append("## W29 repeated-rep statistics (last rep per cohort; one rep = no spread = not passable)")
@@ -1448,6 +1448,6 @@ fi
 # The whole benchmark holds the host-wide ART lock, so N-session work from other
 # agents queues behind it and this run owns the machine for its duration.
 exec "$ROOT/tools/art-runtime/run-exclusive.sh" --task "W12-bench" -- \
-    "$ROOT/tools/guarded.sh" --mem "$MEM" --time 1800 -- \
+    "$ROOT/tools/guard/guarded.sh" --mem "$MEM" --time 1800 -- \
     python3 -I "$OUT/driver.py" "$ROOT" "$OUT" "$NS" "$MODES" "$REPS" "$SAMPLE_MS" \
     "$MIN_AVAIL_GIB" "$MAX_USED" "$KEEP_FRAMES" "$PROFILE" "$ACOS" "$ACOS_ART"

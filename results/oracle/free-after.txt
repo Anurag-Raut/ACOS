@@ -1,4 +1,0 @@
-=== AFTER free -m ===
-               total        used        free      shared  buff/cache   available
-Mem:           61908       11003       29911         769       22407       50905
-Swap:              0           0           0
