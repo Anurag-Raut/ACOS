@@ -1219,6 +1219,10 @@ fn fit_insets_frame(display: &DisplaySpec, params: &LayoutParams, bounds: RectI)
     let mut frame = bounds;
     if types & inset_type::STATUS_BAR != 0 {
         apply_bar_inset(display.bars.status_bar, bounds, sides, &mut frame);
+        // `reference_insets_state` carries the rotated config strip as a second
+        // STATUS_BAR source; `InsetsState.calculateInsets(frame, types, ..)`
+        // takes `Insets.max` over every source of the type.
+        apply_bar_inset(display.bars.status_bar_config, bounds, sides, &mut frame);
     }
     if types & inset_type::NAVIGATION_BAR != 0 {
         apply_bar_inset(display.bars.nav_bar, bounds, sides, &mut frame);
