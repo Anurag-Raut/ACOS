@@ -3,6 +3,7 @@
 //! Implements exactly one command so far: `acos inspect <apk> [--json]`.
 //! Unimplemented subcommands deliberately do not exist yet.
 
+mod adb;
 mod artifacts_gc;
 mod bench;
 mod bench_pool;

@@ -110,6 +110,9 @@ pub struct ArtSession {
     activity: Option<String>,
     width: u32,
     height: u32,
+    natural_width: u32,
+    natural_height: u32,
+    rotation: u8,
     density: u32,
     /// ADR-0029 item 4: the `services:` specs this session was launched with,
     /// kept so a `reset`/relaunch attaches the same modules.
@@ -2188,6 +2191,9 @@ impl ArtSession {
             activity: None,
             width: 1080,
             height: 2400,
+            natural_width: 1080,
+            natural_height: 2400,
+            rotation: 0,
             density: 420,
             services: services.to_vec(),
             intent: intent.clone(),
@@ -2325,9 +2331,11 @@ impl ArtSession {
             .filter(|group| *group > 1);
         if let Some(width) = ready.get("width").and_then(|v| v.as_u64()) {
             session.width = width as u32;
+            session.natural_width = session.width;
         }
         if let Some(height) = ready.get("height").and_then(|v| v.as_u64()) {
             session.height = height as u32;
+            session.natural_height = session.height;
         }
         if let Some(density) = ready.get("density").and_then(|v| v.as_u64()) {
             session.density = density as u32;
@@ -2836,6 +2844,47 @@ impl ArtSession {
     #[allow(dead_code)]
     pub const fn density(&self) -> u32 {
         self.density
+    }
+
+    /// Natural (portrait / unrotated) display size reported at boot.
+    pub const fn natural_display_size(&self) -> (u32, u32) {
+        (self.natural_width, self.natural_height)
+    }
+
+    /// Current display rotation (`0..=3`, Android `Surface.ROTATION_*`).
+    pub const fn rotation(&self) -> u8 {
+        self.rotation
+    }
+
+    /// Rotate the live session display (`0..=3`).
+    pub(crate) fn rotate_display(&mut self, rotation: u8) -> Result<(), BackendError> {
+        <Self as SessionBackend>::rotate(self, rotation)
+    }
+
+    /// Return current frame PNG bytes for `adb exec-out screencap -p` (tries a
+    /// fresh C1 capture first, falling back to the last bound frame when the
+    /// screen has not changed since the last capture).
+    pub(crate) fn screenshot_png_bytes(&mut self) -> Result<Vec<u8>, BackendError> {
+        match self.capture_frame() {
+            Ok(captured) => std::fs::read(&captured.path).map_err(|error| {
+                live_frame_unavailable(format!(
+                    "cannot read captured frame {}: {error}",
+                    captured.path.display()
+                ))
+            }),
+            Err(_) => {
+                let frame = self.bound_frame()?.ok_or_else(|| {
+                    live_frame_unavailable("no bound frame is available yet")
+                })?;
+                let png = frame.png();
+                if png.is_empty() {
+                    return Err(live_frame_unavailable(
+                        "the bound frame carries no PNG bytes",
+                    ));
+                }
+                Ok(png.to_vec())
+            }
+        }
     }
 
     /// Press a raw Android keycode (the protocol takes integers).
@@ -5704,6 +5753,7 @@ impl SessionBackend for ArtSession {
                 ));
             }
         }
+        self.rotation = rotation;
         // The frame's own size is the rotated one; frame artifacts are stamped
         // with it, so a later capture is bound to the geometry it really has.
         if let Some(width) = reply.get("width").and_then(serde_json::Value::as_u64) {

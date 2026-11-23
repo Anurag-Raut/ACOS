@@ -97,6 +97,10 @@ pub struct ServeArgs {
     /// refused at startup; there is no silent fallback.
     #[arg(long, default_value = "art", value_name = "art|rust-vm")]
     pub engine: String,
+
+    /// Expose live ART sessions as local adb emulators for T3 Code's Device panel.
+    #[arg(long)]
+    pub adb: bool,
 }
 
 /// Run `acos serve`.
@@ -162,13 +166,17 @@ pub fn run(args: ServeArgs) -> ExitCode {
     let artifacts_root = std::env::var_os("ACOS_SERVE_ARTIFACTS")
         .map(PathBuf::from)
         .unwrap_or_else(|| daemon::runtime_dir().join("art-sessions"));
-    let engine = Arc::new(ServeEngine::with_identity(
+    let mut engine = ServeEngine::with_identity(
         backend,
         default_engine,
         args.max_sessions,
         artifacts_root.clone(),
         args.auto_started,
-    ));
+    );
+    if args.adb {
+        engine.enable_adb();
+    }
+    let engine = Arc::new(engine);
     let shared = Arc::new(SharedState {
         last_activity: Mutex::new(Instant::now()),
         active: AtomicUsize::new(0),
@@ -189,17 +197,19 @@ pub fn run(args: ServeArgs) -> ExitCode {
                 "art_artifacts": artifacts_root.display().to_string(),
                 "owner_pid": args.owner_pid,
                 "auto_started": args.auto_started,
+                "adb": args.adb,
                 // REL3D: the identity every client compares against.
                 "identity": engine.identity(),
             })
         );
     }
     eprintln!(
-        "acos serve: listening on {} (engine={}, idle={}s, max_sessions={})",
+        "acos serve: listening on {} (engine={}, idle={}s, max_sessions={}{})",
         socket.display(),
         default_engine.as_str(),
         args.idle_timeout,
-        args.max_sessions
+        args.max_sessions,
+        if args.adb { ", adb=on" } else { "" }
     );
 
     // P8: the socket is bound and listening, so the daemon is ready exactly as
