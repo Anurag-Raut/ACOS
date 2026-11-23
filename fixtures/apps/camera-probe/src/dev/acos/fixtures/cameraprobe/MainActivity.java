@@ -124,7 +124,9 @@ public final class MainActivity extends Activity {
                 button("Repeat", v -> runRepeatingCapture()),
                 button("Preview", v -> runPreviewCapture())));
 
-        root.addView(button("Hold", v -> runHeldImages()));
+        root.addView(buttonRow(
+                button("Hold", v -> runHeldImages()),
+                button("Rebind", v -> runRebind())));
 
         status = new TextView(this);
         status.setId(R.id.status);
@@ -1212,6 +1214,136 @@ public final class MainActivity extends Activity {
             reader.close();
             bgThread.quitSafely();
             log("HOLD error=" + t.getClass().getSimpleName() + ": " + t.getMessage());
+        }
+    }
+
+    /**
+     * CR1FIX #15: re-register the SAME Surface with the camera service, as a
+     * CameraX unbind/rebind or a reconfigured session does. The Surface stays the
+     * app's; each session wraps it in an OutputConfiguration that differs from the
+     * previous one (timestamp base), so the framework deletes the old stream and
+     * creates a new one for the same Surface. Frames must keep arriving after
+     * every re-registration.
+     */
+    private void runRebind() {
+        final HandlerThread bgThread = new HandlerThread("cameraprobe-rebind");
+        bgThread.start();
+        final Handler bgHandler = new Handler(bgThread.getLooper());
+        final ImageReader reader = ImageReader.newInstance(
+                CAPTURE_WIDTH, CAPTURE_HEIGHT, ImageFormat.YUV_420_888, 4);
+        final Surface surface = reader.getSurface();
+        final java.util.concurrent.atomic.AtomicInteger frames =
+                new java.util.concurrent.atomic.AtomicInteger();
+        final int[] phase = new int[1];
+        final int[] phaseStart = new int[1];
+        final CameraDevice[] deviceRef = new CameraDevice[1];
+        final int[] timestampBase = {
+            android.hardware.camera2.params.OutputConfiguration.TIMESTAMP_BASE_DEFAULT,
+            android.hardware.camera2.params.OutputConfiguration.TIMESTAMP_BASE_MONOTONIC,
+            android.hardware.camera2.params.OutputConfiguration.TIMESTAMP_BASE_REALTIME,
+            android.hardware.camera2.params.OutputConfiguration.TIMESTAMP_BASE_SENSOR,
+        };
+        final int sessions = timestampBase.length;
+        final java.util.concurrent.Executor exec = bgHandler::post;
+        final Runnable[] startSession = new Runnable[1];
+
+        reader.setOnImageAvailableListener(r -> {
+            Image img = null;
+            try {
+                img = r.acquireNextImage();
+                if (img != null) {
+                    int n = frames.incrementAndGet();
+                    if (n - phaseStart[0] == 3) {
+                        log("REBIND session=" + phase[0] + " frames_after_register=3");
+                        mainHandler.post(() -> {
+                            if (phase[0] + 1 < sessions) {
+                                phase[0]++;
+                                phaseStart[0] = frames.get();
+                                startSession[0].run();
+                            } else {
+                                CameraDevice d = deviceRef[0];
+                                if (d != null) d.close();
+                            }
+                        });
+                    }
+                }
+            } catch (Throwable t) {
+                log("REBIND image_error=" + t.getClass().getSimpleName() + ": " + t.getMessage());
+            } finally {
+                if (img != null) img.close();
+            }
+        }, bgHandler);
+
+        startSession[0] = () -> {
+            final CameraDevice camera = deviceRef[0];
+            try {
+                android.hardware.camera2.params.OutputConfiguration oc =
+                        new android.hardware.camera2.params.OutputConfiguration(surface);
+                oc.setTimestampBase(timestampBase[phase[0]]);
+                android.hardware.camera2.params.SessionConfiguration cfg =
+                        new android.hardware.camera2.params.SessionConfiguration(
+                                android.hardware.camera2.params.SessionConfiguration.SESSION_REGULAR,
+                                Collections.singletonList(oc), exec,
+                                new CameraCaptureSession.StateCallback() {
+                                    @Override
+                                    public void onConfigured(CameraCaptureSession session) {
+                                        try {
+                                            CaptureRequest.Builder req = camera.createCaptureRequest(
+                                                    CameraDevice.TEMPLATE_PREVIEW);
+                                            req.addTarget(surface);
+                                            session.setRepeatingRequest(req.build(), null, bgHandler);
+                                        } catch (Throwable t) {
+                                            log("REBIND submit_error="
+                                                    + t.getClass().getSimpleName() + ": "
+                                                    + t.getMessage());
+                                            camera.close();
+                                        }
+                                    }
+
+                                    @Override
+                                    public void onConfigureFailed(CameraCaptureSession session) {
+                                        log("REBIND configure_failed session=" + phase[0]);
+                                        camera.close();
+                                    }
+                                });
+                camera.createCaptureSession(cfg);
+            } catch (Throwable t) {
+                log("REBIND session_error=" + t.getClass().getSimpleName() + ": " + t.getMessage());
+                camera.close();
+            }
+        };
+
+        try {
+            cameraManager.openCamera("0", new CameraDevice.StateCallback() {
+                @Override
+                public void onOpened(CameraDevice camera) {
+                    deviceRef[0] = camera;
+                    startSession[0].run();
+                }
+
+                @Override
+                public void onClosed(CameraDevice camera) {
+                    reader.close();
+                    bgThread.quitSafely();
+                    log("REBIND closed sessions_ok=" + (phase[0] + 1 == sessions
+                            && frames.get() - phaseStart[0] >= 3));
+                }
+
+                @Override
+                public void onDisconnected(CameraDevice camera) {
+                    camera.close();
+                }
+
+                @Override
+                public void onError(CameraDevice camera, int error) {
+                    log("REBIND device_error=" + error);
+                    camera.close();
+                }
+            }, bgHandler);
+        } catch (Throwable t) {
+            reader.close();
+            bgThread.quitSafely();
+            log("REBIND error=" + t.getClass().getSimpleName() + ": " + t.getMessage());
         }
     }
 }
