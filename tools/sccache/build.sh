@@ -2,7 +2,7 @@
 #
 # build.sh -- build and install the ACOS shared compiler cache (sccache).
 #
-# Every agent worktree shares one sccache cache (see tools/agent-env.sh), which
+# Every agent worktree shares one sccache cache (see tools/dev/agent-env.sh), which
 # needs one patch on top of stock sccache: stock sccache hashes the compile cwd
 # and the `CARGO_*` environment verbatim, so two checkouts of the same sources
 # never share an entry no matter what `SCCACHE_BASEDIRS` says. The patch is

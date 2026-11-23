@@ -17,7 +17,7 @@ code instead of a second implementation:
                   native_crash.
 
 Every guest runs inside the caller's one
-`tools/art-runtime/run-exclusive.sh --task S3 --exclusive -- tools/guarded.sh --mem 24G`
+`tools/art-runtime/run-exclusive.sh --task S3 --exclusive -- tools/guard/guarded.sh --mem 24G`
 acquisition.  Scratch is the caller's `.cache/s3/**`; nothing is written to
 /tmp and the corpus (read-only) is never modified.
 
@@ -44,7 +44,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parent.parent
-sys.path.insert(0, str(REPO / "tools"))
+sys.path.insert(0, str(REPO / "tools/bench"))
 sys.path.insert(0, str(REPO / "tools/art-runtime"))
 sys.path.insert(0, str(HERE))
 

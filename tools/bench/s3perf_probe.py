@@ -18,7 +18,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 # Default: tools/bench/ -> the repo root. ACOS_PROBE_REPO overrides (a worktree run).
 REPO = Path(os.environ.get("ACOS_PROBE_REPO", str(HERE.parents[1]))).resolve()
-sys.path.insert(0, str(REPO / "tools"))
+sys.path.insert(0, str(REPO / "tools/bench"))
 sys.path.insert(0, str(REPO / "tools/art-runtime"))
 
 import agent_loop  # noqa: E402

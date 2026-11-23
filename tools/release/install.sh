@@ -176,7 +176,7 @@ copy_tree "research/art-feasibility/a-dalvikvm/bootclasspath.txt" 0
 # so the installed tree must *carry* that APK: an installed ACOS has no checkout
 # to build it from, and "run build-apps.sh first" is exactly the separate step a
 # fresh install must not need. The image build
-# (`tools/extract-bootclasspath.sh`) ships it under `system-apps/`, the copy
+# (`tools/fetch/extract-bootclasspath.sh`) ships it under `system-apps/`, the copy
 # above carries it, and this block is the belt-and-braces: if the source image
 # predates that (or the copy lost it), build it into the install root with the
 # one build implementation.
@@ -188,10 +188,10 @@ ensure_webview_provider() {
         return 0
     fi
     printf 'webview provider: missing from the image, building it into the install\n'
-    [ -x "$REPO/tools/build-webview-provider.sh" ] ||
-        die "the image has no $PROVIDER_REL and $REPO/tools/build-webview-provider.sh is missing"
+    [ -x "$REPO/tools/build/build-webview-provider.sh" ] ||
+        die "the image has no $PROVIDER_REL and $REPO/tools/build/build-webview-provider.sh is missing"
     mkdir -p "$DEST/$(dirname -- "$PROVIDER_REL")"
-    "$REPO/tools/build-webview-provider.sh" --out "$DEST/$PROVIDER_REL" ||
+    "$REPO/tools/build/build-webview-provider.sh" --out "$DEST/$PROVIDER_REL" ||
         die "building the WebView provider into $DEST failed"
     [ -f "$DEST/$PROVIDER_REL" ] ||
         die "the WebView provider build produced no APK at $DEST/$PROVIDER_REL"

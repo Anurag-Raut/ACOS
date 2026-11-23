@@ -1,6 +1,6 @@
 # AOSP source reference for agents (read-only)
 
-Local sparse checkouts of Google's open-source Android at tag android-14.0.0_r75 (approx. 73 MB), in `/home/Qui/Projects/acos/.cache/aosp/` (gitignored; recreate with `tools/fetch-aosp-reference.sh`).
+Local sparse checkouts of Google's open-source Android at tag android-14.0.0_r75 (approx. 73 MB), in `/home/Qui/Projects/acos/.cache/aosp/` (gitignored; recreate with `tools/fetch/fetch-aosp-reference.sh`).
 Use them to understand behaviour and wire formats BEFORE guessing or disassembling. Do not copy source into the repo; the compiled binaries from the API-34 system image stay the thing we run. The tag is close to, not identical to, the image build: verify against the image when it matters (ELF build ID, disassembly).
 
 | Dir | Contents | Use for |
@@ -23,10 +23,10 @@ Use them to understand behaviour and wire formats BEFORE guessing or disassembli
 `SensorEvent.java`, `SensorManager.java` and `SystemSensorManager.java` — the
 client half of the native sensor stack the `sensors` module serves).
 
-Sparse checkouts: add more paths with `git -C <dir> sparse-checkout add <path>` (blobs are fetched on demand, partial clone). Cone mode only accepts directories; a single file path needs `--skip-checks` (which is what `tools/fetch-aosp-reference.sh` uses for `MediaRouter.java`).
+Sparse checkouts: add more paths with `git -C <dir> sparse-checkout add <path>` (blobs are fetched on demand, partial clone). Cone mode only accepts directories; a single file path needs `--skip-checks` (which is what `tools/fetch/fetch-aosp-reference.sh` uses for `MediaRouter.java`).
 
 The window-layer table is also generated from this cache into `docs/WINDOW_LAYERS.md`
-with `tools/gen-window-layer-table.py` (cite file:line per row; re-run it after a
+with `tools/build/gen-window-layer-table.py` (cite file:line per row; re-run it after a
 tag change and diff the output against the transcribed table).
 - `ActivityManager.INTENT_SENDER_*` (the `IIntentSender`/`getIntentSender` type) are
   **BROADCAST=1, ACTIVITY=2, ACTIVITY_RESULT=3, SERVICE=4, FOREGROUND_SERVICE=5**

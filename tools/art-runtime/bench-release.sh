@@ -17,7 +17,7 @@
 #       Build release, then run bench-session.sh --profile release with those args.
 #   tools/art-runtime/bench-release.sh --script tools/art-runtime/bench-n.sh -- art 10
 #
-# Build: CARGO_TARGET_DIR=<target-dir> tools/guarded.sh --mem ... -- cargo build
+# Build: CARGO_TARGET_DIR=<target-dir> tools/guard/guarded.sh --mem ... -- cargo build
 # --release -p acos-cli -p acos-art  (the same guarded path the harnesses use).
 #
 # Release-only rule (BENCHMARKS.md section 11): this wrapper refuses to hand a
@@ -65,7 +65,7 @@ echo "bench-release: profile release, target dir $TARGET_DIR" >&2
 
 # ---- build (guarded; same memory ceiling as the harnesses) ----
 if [ "$NO_BUILD" -eq 0 ]; then
-    if ! CARGO_TARGET_DIR="$TARGET_DIR" "$ROOT/tools/guarded.sh" --mem "$MEM" --time "$TIME" -- \
+    if ! CARGO_TARGET_DIR="$TARGET_DIR" "$ROOT/tools/guard/guarded.sh" --mem "$MEM" --time "$TIME" -- \
             cargo build --release -p acos-cli -p acos-art; then
         echo "bench-release: release build failed; no benchmark was run" >&2
         exit 3
@@ -82,7 +82,7 @@ done
 STAMP_JSON="$(python3 -I - "$ROOT" "$ACOS" "$ACOS_ART" <<'PY'
 import json
 import sys
-sys.path.insert(0, sys.argv[1] + "/tools")
+sys.path.insert(0, sys.argv[1] + "/tools/bench")
 import benchlib
 root, acos, acos_art = sys.argv[1], sys.argv[2], sys.argv[3]
 stamp = benchlib.provenance(

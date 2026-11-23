@@ -21,7 +21,7 @@
 #
 # It does NOT build and it does NOT take the host lock: call it inside
 #   tools/art-runtime/run-exclusive.sh --task W43 -- \
-#     tools/guarded.sh --mem 16G --time 1200 -- tools/art-runtime/load-repro.sh ...
+#     tools/guard/guarded.sh --mem 16G --time 1200 -- tools/art-runtime/load-repro.sh ...
 # The CPU load is bounded (spinner processes, no allocations); RAM stays low.
 #
 # Output: <out>/run.json (all sessions), <out>/rep-<k>/s<i>/ (stdout.json,

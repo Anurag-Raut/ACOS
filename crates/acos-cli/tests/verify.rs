@@ -30,7 +30,7 @@ fn require_hello_views_apk() -> PathBuf {
     let apk = workspace().join("fixtures/build/apps/hello-views.apk");
     assert!(
         apk.exists(),
-        "build fixtures first: `tools/build-apps.sh` (missing {})",
+        "build fixtures first: `tools/build/build-apps.sh` (missing {})",
         apk.display()
     );
     apk

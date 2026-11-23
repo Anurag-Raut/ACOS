@@ -27,7 +27,7 @@
 #
 # Every ART phase runs as its own lock acquisition:
 #   tools/art-runtime/run-exclusive.sh --task H6 -- \
-#     tools/guarded.sh --mem 8G --time N -- python3 tools/bench/acos_bench.py ...
+#     tools/guard/guarded.sh --mem 8G --time N -- python3 tools/bench/acos_bench.py ...
 # (memory phase: --mem 16G), so the host-wide lock is never held for long and
 # other agents can interleave. The lock task name is --task (default H6).
 # Scratch defaults to /home/Qui/Projects/acos/.cache/h6/ (override with
@@ -197,7 +197,7 @@ echo "acos-bench: run dir $RUN_DIR"
 if [ "$BUILD" -eq 1 ] || [ ! -x "$BIN" ]; then
     echo "acos-bench: building release (-p acos-cli -p acos-art) into $TARGET_DIR"
     CARGO_TARGET_DIR="$TARGET_DIR" CARGO_PROFILE_DEV_DEBUG=0 CARGO_BUILD_JOBS="${CARGO_BUILD_JOBS:-6}" \
-        tools/guarded.sh --mem 10G --time 1800 -- \
+        tools/guard/guarded.sh --mem 10G --time 1800 -- \
         cargo build --release --offline -p acos-cli -p acos-art || {
             echo "acos-bench: build failed" >&2; exit 2; }
 fi
@@ -243,7 +243,7 @@ for rep in $(seq 1 "$REPS"); do
         t0=$(date +%s)
         echo "acos-bench: rep $rep/$REPS group $gname [$gphases] mem $gmem time ${gtime}s"
         tools/art-runtime/run-exclusive.sh --task "$TASK" --exclusive -- \
-            tools/guarded.sh --mem "$gmem" --time "$gtime" -- \
+            tools/guard/guarded.sh --mem "$gmem" --time "$gtime" -- \
             python3 "$PY" --bundle "$gphases" --acos "$BIN" \
             --out-dir "$repdir" --scratch-root "$scratch" \
             --reps "$LATENCY_REPS" --fast-reps "$FAST_REPS" \

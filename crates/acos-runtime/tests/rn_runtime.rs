@@ -329,7 +329,7 @@ fn rn_runtime_child_worker() {
 #[test]
 fn rn_bridge_runs_on_a_real_runtime_session_and_taps_the_button() {
     if !acos_test_support::have_fixture("fixtures/build/apps/rn-hello.apk") {
-        acos_test_support::require_prereq(false, "rn_bridge_runs_on_a_real_runtime_session_and_taps_the_button", "rn_bridge_runs_on_a_real_runtime_session_and_taps_the_button: fixtures/build/apps/rn-hello.apk is absent (build with tools/build-rn-hello.sh)");
+        acos_test_support::require_prereq(false, "rn_bridge_runs_on_a_real_runtime_session_and_taps_the_button", "rn_bridge_runs_on_a_real_runtime_session_and_taps_the_button: fixtures/build/apps/rn-hello.apk is absent (build with tools/build/build-rn-hello.sh)");
         return;
     }
     let apk = repo_root().join("fixtures/build/apps/rn-hello.apk");

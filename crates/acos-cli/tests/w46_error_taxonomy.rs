@@ -139,7 +139,7 @@ fn launch_scenario(dir: &Path) -> PathBuf {
     let apk = workspace().join("fixtures/build/apps/counter.apk");
     assert!(
         apk.is_file(),
-        "build fixtures first: `tools/build-apps.sh` (missing {})",
+        "build fixtures first: `tools/build/build-apps.sh` (missing {})",
         apk.display()
     );
     let scenario = dir.join("w46-launch.yaml");

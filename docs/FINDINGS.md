@@ -45,7 +45,7 @@ compact-dex**; the jars are **not dex-stripped** (the image also ships vdex/odex
 not needed). Total real boot classpath: **17 dex / 55.5 MiB, 41,829 classes,
 328,352 methods, 5,607 native methods**.
 
-**Evidence.** `research/framework-dex/REPORT.md` §Q1–Q2; `tools/extract-bootclasspath.sh`;
+**Evidence.** `research/framework-dex/REPORT.md` §Q1–Q2; `tools/fetch/extract-bootclasspath.sh`;
 `.cache/boot/android-34/{BOOTCLASSPATH,manifest.json,jars/}` (12-jar boot order
 `core-oj … core-icu4j`).
 
@@ -211,7 +211,7 @@ is always a bug.
 framework classes in every rotation, asserting the nest bridge and the direct
 method map after each step, and repeats the nested initialisation 32x under
 `ACOS_GC_STRESS`; `cargo test -p acos-vm` (all suites pass);
-`tools/diff-dexprogs.sh --corelib real` 20/20 normal and 20/20 `--gc-stress`.
+`tools/verify/diff-dexprogs.sh --corelib real` 20/20 normal and 20/20 `--gc-stress`.
 The original transient was not reproduced in the stress runs (it needed
 fresh-VM, varied-order, GC-stress conditions), so the fix is a code invariant,
 not a captured interleaving.
@@ -239,7 +239,7 @@ All 20 console programs run on the real core-oj/core-libart/core-icu4j bytecode 
 
 ## 2026-11-10 — Runaway acos process reached 45 GB RSS (host-safety incident)
 
-During the parallel W9/W10 waves a debug `acos run-dex .../01_hello/classes.dex --main Main` was found after ~2.8 h with 45 GB RSS (host 62 GB, no swap, ~91% used). It was killed manually; no crash. There was no host-side memory or time ceiling in the VM (only the guest ACOS_HEAP_MAX). Actions: temporary watchdog (kills acos processes >8 GB or when MemAvailable <9 GB, log in /tmp/acos-ramguard.log), W12 to find the root cause and add VM-side limits and tools/guarded.sh. Policy recorded in DECISIONS.md ADR-0018.
+During the parallel W9/W10 waves a debug `acos run-dex .../01_hello/classes.dex --main Main` was found after ~2.8 h with 45 GB RSS (host 62 GB, no swap, ~91% used). It was killed manually; no crash. There was no host-side memory or time ceiling in the VM (only the guest ACOS_HEAP_MAX). Actions: temporary watchdog (kills acos processes >8 GB or when MemAvailable <9 GB, log in /tmp/acos-ramguard.log), W12 to find the root cause and add VM-side limits and tools/guard/guarded.sh. Policy recorded in DECISIONS.md ADR-0018.
 
 **Root cause (W12, 2026-11-10).** A semantic regression from the vm-perf merge
 (`2563a86`). The rewrite of `crates/acos-vm/src/interp.rs::run_batch` omitted
@@ -267,7 +267,7 @@ unbounded one.
 `Runnable` when it is still `Running`. Product-side `limits::HostGuard` now
 enforces `ACOS_HOST_RSS_MAX` (`HOST_MEMORY_LIMIT`) and `ACOS_WALL_MAX_SECS`
 (`TIMEOUT`) independently of the guest heap (ADR-0018, `docs/AGENT_API.md`
-§16), and `tools/guarded.sh` / `tools/ramguard.sh` bound and watch every run.
+§16), and `tools/guard/guarded.sh` / `tools/guard/ramguard.sh` bound and watch every run.
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 
 ## 2026-11-10 — Advisor review (gpt-6.1-sol) of the plan from M2 onward
 
@@ -337,7 +337,7 @@ the API-34 references.
 
 ### F-0013 — Interpreter speedups landed but the Alloc/Loop targets were missed — 2026-11-10
 
-**Finding.** `tools/bench-vm.sh` (10 reps, host OpenJDK 17) after the invoke/
+**Finding.** `tools/bench/bench-vm.sh` (10 reps, host OpenJDK 17) after the invoke/
 dispatch/frame-pool work: BenchFib 4.17× (528 ms, 1.55× slower than
 `java -Xint`), BenchString 3.30× **faster** than `-Xint`, BenchLoop 3.48×
 (1,696 ms, 4.13× slower), BenchAlloc 3.58× (2,109 ms, 1.73× slower). The

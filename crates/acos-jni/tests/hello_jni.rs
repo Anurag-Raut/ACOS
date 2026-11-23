@@ -53,7 +53,7 @@ fn reference_lines() -> Vec<String> {
 #[test]
 fn hello_jni_runs_through_the_vm() {
     if !boot_available() {
-        acos_test_support::require_prereq(false, "hello_jni_runs_through_the_vm", "hello_jni_runs_through_the_vm: .cache/boot/android-34 is absent (run tools/extract-bootclasspath.sh)");
+        acos_test_support::require_prereq(false, "hello_jni_runs_through_the_vm", "hello_jni_runs_through_the_vm: .cache/boot/android-34 is absent (run tools/fetch/extract-bootclasspath.sh)");
         return;
     }
 

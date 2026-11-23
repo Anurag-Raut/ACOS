@@ -8,7 +8,7 @@
 //!
 //! Any missing prerequisite fails the test loudly by default and is a counted
 //! skip only behind `ACOS_ALLOW_TEST_SKIP=1` (HYG3); the host list is
-//! `tools/test-prereq-optouts.txt`. The fail-closed error path is covered by a
+//! `tools/verify/test-prereq-optouts.txt`. The fail-closed error path is covered by a
 //! test that never needs a device.
 
 use std::path::{Path, PathBuf};
@@ -48,7 +48,7 @@ fn ndk_clang() -> Option<PathBuf> {
 
 /// A missing prerequisite **fails** the test (HYG3). The arm64 transport needs
 /// `qemu-aarch64`, a bionic sysroot pulled from an attached arm64 device
-/// (`tools/fetch-bionic-sysroot.sh`) and the built `libacos_seccomp_guard.so`;
+/// (`tools/fetch/fetch-bionic-sysroot.sh`) and the built `libacos_seccomp_guard.so`;
 /// a host without them cannot run this test, so the default path panics and the
 /// counted skip exists only behind `ACOS_ALLOW_TEST_SKIP=1`.
 fn skip(reason: &str) {

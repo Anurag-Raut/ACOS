@@ -392,7 +392,7 @@ fn forbidden_syscall_is_denied_and_logged_in_the_guest() {
             acos_test_support::require_prereq(
                 false,
                 "seccomp probe test",
-                &format!("no ART sysroot ({e}) — run tools/art-sysroot.sh"),
+                &format!("no ART sysroot ({e}) — run tools/fetch/art-sysroot.sh"),
             );
             return;
         }

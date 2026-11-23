@@ -6,7 +6,7 @@
 //! evidence. Every such test calls [`have_fixture`]; when the environment
 //! variable is set and the artifact is missing, it panics instead of skipping.
 //!
-//! `tools/diff-dexprogs.sh` and the bench scripts already export
+//! `tools/verify/diff-dexprogs.sh` and the bench scripts already export
 //! `ACOS_REQUIRE_FIXTURES=1`, so their runs now hard-fail on a missing fixture.
 
 use std::path::{Path, PathBuf};
@@ -33,7 +33,7 @@ pub fn fixtures_required() -> bool {
 /// Whether the workspace-relative `rel` artifact exists.
 ///
 /// When it is missing *and* `ACOS_REQUIRE_FIXTURES` is set, this panics: CI
-/// must build the fixture (`tools/build-fixtures.sh`) rather than skip. When
+/// must build the fixture (`tools/build/build-fixtures.sh`) rather than skip. When
 /// the variable is not set it returns `false` so a developer checkout still
 /// builds and its tests loudly skip.
 pub fn have_fixture(rel: &str) -> bool {
@@ -44,7 +44,7 @@ pub fn have_fixture(rel: &str) -> bool {
     if fixtures_required() {
         panic!(
             "ACOS_REQUIRE_FIXTURES is set but {rel} is missing; build the fixtures \
-             (tools/build-fixtures.sh) instead of skipping"
+             (tools/build/build-fixtures.sh) instead of skipping"
         );
     }
     false

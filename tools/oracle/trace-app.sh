@@ -60,7 +60,7 @@ cat "$NATIVE_SET" "$APP_NATIVE_SET" | sort -u >"$ALL_NATIVE_SET"
 
 # --- build / install apps ----------------------------------------------------
 for apk in hello-views hello-jni; do
-    [ -f "$APPS_DIR/$apk.apk" ] || { log "building apps"; bash "$ROOT/tools/build-apps.sh" >/dev/null; break; }
+    [ -f "$APPS_DIR/$apk.apk" ] || { log "building apps"; bash "$ROOT/tools/build/build-apps.sh" >/dev/null; break; }
 done
 "$ADB" -s "$SERIAL" install -r -g "$APPS_DIR/hello-views.apk" >/dev/null
 "$ADB" -s "$SERIAL" install -r -g "$APPS_DIR/hello-jni.apk" >/dev/null

@@ -18,7 +18,7 @@
 //! process also has `PR_SET_NO_NEW_PRIVS` set and Landlock applied by the
 //! launcher before the exec, both of which persist across `execve`.
 //!
-//! Build it with `tools/build-arm64-guard.sh`; the resulting
+//! Build it with `tools/build/build-arm64-guard.sh`; the resulting
 //! `libacos_seccomp_guard.so` is then passed as the `SeccompMode::DeferredPreload`
 //! guard (or discovered by `acos-arm64` via `ACOS_SECCOMP_GUARD`).
 #![deny(unsafe_op_in_unsafe_fn)]

@@ -205,7 +205,7 @@ fn gaten_apk_reports_its_alias_launcher() {
 /// The signers sequence (one length-prefixed signer, itself a length-prefixed
 /// signed data + signatures + public key) used to be parsed one nesting level
 /// off, so the reader consumed the whole signer as the signed data and failed
-/// with `truncated signatures`. Every APK `tools/build-apps.sh` produces was
+/// with `truncated signatures`. Every APK `tools/build/build-apps.sh` produces was
 /// affected, which made `PackageInfo.signatures` (a `GET_SIGNATURES` reply)
 /// an empty array — a phone reports the signer certificate there.
 #[test]

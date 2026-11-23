@@ -2,7 +2,7 @@
 # Run the K1 real-world corpus through ACOS's real-ART engine.
 #
 # Every guest run happens inside `tools/art-runtime/run-exclusive.sh` (the
-# host-wide ART lock) and `tools/guarded.sh` (hard memory + wall bounds). Each
+# host-wide ART lock) and `tools/guard/guarded.sh` (hard memory + wall bounds). Each
 # app gets its own `acos serve --engine art` daemon, its own session, and its
 # own evidence directory; the guest is destroyed after every app.
 #
@@ -121,7 +121,7 @@ while [ "$i" -lt "$total" ]; do
     first_pkg="${chunk[0]%%=*}"
     echo "=== K1 batch [$((i + 1))-$((i + ${#chunk[@]}))/$total] first=$first_pkg ram=${mem_pct}% disk=${disk_pct}% $(date -u +%FT%TZ)"
     tools/art-runtime/run-exclusive.sh --task K1 -- \
-        tools/guarded.sh --mem 8G --time "$TIME" -- \
+        tools/guard/guarded.sh --mem 8G --time "$TIME" -- \
         bash "$0" --inner "${chunk[@]}" 2>&1 | tail -60 || true
     echo "=== K1 batch done [$((i + 1))-$((i + ${#chunk[@]}))/$total] $(date -u +%FT%TZ)"
     i=$((i + ${#chunk[@]}))

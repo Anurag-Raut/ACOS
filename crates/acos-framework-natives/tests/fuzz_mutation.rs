@@ -154,7 +154,7 @@ fn fuzz_arsc_and_axml_never_panic() {
     if acos_test_support::require_prereq(
         acos_test_support::have_fixture("fixtures/build/apps/hello-views.apk"),
         "fuzz_arsc_and_axml_never_panic",
-        "fixtures/build/apps/hello-views.apk is absent — run tools/build-apps.sh",
+        "fixtures/build/apps/hello-views.apk is absent — run tools/build/build-apps.sh",
     )
     .is_none()
     {

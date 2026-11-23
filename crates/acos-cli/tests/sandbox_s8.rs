@@ -146,7 +146,7 @@ fn run_scenario(name: &str, scenario_text: &str, fault: &str, allow_untrusted: b
     let apk = workspace().join("fixtures/build/apps/counter.apk");
     assert!(
         apk.is_file(),
-        "build fixtures first: tools/build-apps.sh (missing {})",
+        "build fixtures first: tools/build/build-apps.sh (missing {})",
         apk.display()
     );
     let mut command = Command::cargo_bin("acos").expect("acos binary");

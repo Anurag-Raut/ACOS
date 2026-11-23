@@ -687,7 +687,7 @@ pub fn render_app(root: &ArtRoot, opts: &AppOpts) -> Result<AppResult> {
 ///   `config_*FontFamily` at), and
 /// * the same pair under `/system_ext` and `/vendor`.
 ///
-/// `tools/art-sysroot.sh` extracts all of them next to the partitions they come
+/// `tools/fetch/art-sysroot.sh` extracts all of them next to the partitions they come
 /// from (`<sysroot>/{product,system_ext,vendor}/{fonts,etc}`), read-only and
 /// without mounting anything. This function makes them reachable through the
 /// **existing** `/system` bind:
@@ -755,7 +755,7 @@ pub fn ensure_system_fonts(root: &ArtRoot, diagnostics: &mut Vec<String>) -> Res
     let n_base = fs::read_dir(&dest).map(|d| d.count()).unwrap_or(0);
 
     // The image's other font roots (P3c): the same one-way provision, from the
-    // partitions `tools/art-sysroot.sh` extracts next to `system/`.
+    // partitions `tools/fetch/art-sysroot.sh` extracts next to `system/`.
     let base_xml = root.sysroot.join("system/etc/fonts.xml");
     let mut base = fs::read_to_string(&base_xml).unwrap_or_default();
     let mut extra = 0usize;
@@ -927,7 +927,7 @@ fn merge_font_customization(
 /// them (`results/art-runtime/P2c.md`).
 ///
 /// The overlay set is exactly what the boot-image extraction
-/// (`tools/extract-bootclasspath.sh`) puts in `.cache/boot/android-34/overlays`:
+/// (`tools/fetch/extract-bootclasspath.sh`) puts in `.cache/boot/android-34/overlays`:
 /// the RROs whose binary manifest declares `android:isStatic="true"` and
 /// `android:targetPackage="android"`. Nothing is hardcoded here — the manifests
 /// are read with `aapt2` and the idmaps are produced by the image's own
@@ -987,7 +987,7 @@ pub fn provision_overlays(root: &ArtRoot, diagnostics: &mut Vec<String>) -> Resu
     let target = root.sysroot.join("system/framework/framework-res.apk");
     if !src.is_dir() {
         diagnostics.push(format!(
-            "no static overlays: {} is missing (re-run tools/extract-bootclasspath.sh); \
+            "no static overlays: {} is missing (re-run tools/fetch/extract-bootclasspath.sh); \
              rendering the un-overlaid framework resources",
             src.display()
         ));

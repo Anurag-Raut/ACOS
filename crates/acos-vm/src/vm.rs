@@ -355,7 +355,7 @@ impl NativeTrace {
 /// Structured boot-classpath failure.
 pub fn boot_classpath_missing(dir: &Path, detail: &str) -> VmError {
     VmError::BootClasspathMissing(format!(
-        "BOOT_CLASSPATH_MISSING: {detail} (looked in {})\ncreate it with: tools/extract-bootclasspath.sh (or set ACOS_BOOT_DIR)",
+        "BOOT_CLASSPATH_MISSING: {detail} (looked in {})\ncreate it with: tools/fetch/extract-bootclasspath.sh (or set ACOS_BOOT_DIR)",
         dir.display()
     ))
 }

@@ -123,7 +123,7 @@ fn manifest_parses_are_correct_and_timed_per_call() {
                 false,
                 &format!("manifest_parses_are_correct_and_timed_per_call apk={}", t.name),
                 &format!(
-                    "{} is missing — run tools/build-apps.sh (and link .cache/gaten), or \
+                    "{} is missing — run tools/build/build-apps.sh (and link .cache/gaten), or \
                      set ACOS_ALLOW_ART_SKIP=1 for a counted skip",
                     path.display()
                 ),

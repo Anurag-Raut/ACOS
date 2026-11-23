@@ -127,7 +127,7 @@ microcheck() {
     echo "layer0-single-window-ab: C1 one-layer composite micro-check ($label)"
     ( cd "$dir" && CARGO_TARGET_DIR="$dir/.cache/layer1-ab-target" \
         CARGO_PROFILE_TEST_DEBUG=0 CARGO_INCREMENTAL=0 \
-        "$ROOT/tools/guarded.sh" --mem 8G --time 600 -- \
+        "$ROOT/tools/guard/guarded.sh" --mem 8G --time 600 -- \
         cargo test --release --offline -p acos-services --test w35_composite \
             a_single_full_window_layer_passes_through_with_its_own_stride \
             -- --exact ) | tee "$OUT_DIR/microcheck-$label.txt"

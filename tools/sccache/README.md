@@ -1,6 +1,6 @@
 # Shared compiler cache (sccache) for ACOS worktrees
 
-`sccache` is the shared compiler cache every agent worktree uses. `tools/agent-env.sh`
+`sccache` is the shared compiler cache every agent worktree uses. `tools/dev/agent-env.sh`
 is the only place that wires it up; `docs/DEV_WORKFLOW.md` ("Shared compiler
 cache") is the agent-facing description and `results/handoff/BUILDCACHE/README.md`
 holds the measurements.

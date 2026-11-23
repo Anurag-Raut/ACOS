@@ -77,7 +77,7 @@ trap cleanup EXIT
 [ -x "$ACOS" ] || { note "FAIL missing acos binary: $ACOS"; exit 2; }
 [ -x "$NETD" ] || { note "FAIL missing acos-netd binary: $NETD"; exit 2; }
 [ -x "$PASTA" ] || { note "FAIL missing pinned pasta: $PASTA (see results/handoff/NET3.md)"; exit 2; }
-[ -f "$APK" ] || { note "FAIL missing debug APK: $APK (tools/build-rn-hello.sh debug)"; exit 2; }
+[ -f "$APK" ] || { note "FAIL missing debug APK: $APK (tools/build/build-rn-hello.sh debug)"; exit 2; }
 [ -d "$APP" ] || { note "FAIL missing Metro project: $APP"; exit 2; }
 note "pasta $("$PASTA" --version | head -1)"
 

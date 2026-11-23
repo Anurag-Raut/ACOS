@@ -340,7 +340,7 @@ fn from_apk_carries_the_manifest_meta_data() {
     if acos_test_support::require_prereq(
         path.is_file(),
         "from_apk_carries_the_manifest_meta_data",
-        "fixture APK not built: fixtures/build/apps/service-provider.apk (tools/build-apps.sh)",
+        "fixture APK not built: fixtures/build/apps/service-provider.apk (tools/build/build-apps.sh)",
     )
     .is_none()
     {

@@ -1149,7 +1149,7 @@ def resolve_apks():
     apks = {"counter": base / "counter.apk", "form": base / "form-validation.apk"}
     missing = [str(p) for p in apks.values() if not p.exists()]
     if missing:
-        raise SystemExit("missing fixtures: %s (run tools/build-apps.sh)" % missing)
+        raise SystemExit("missing fixtures: %s (run tools/build/build-apps.sh)" % missing)
     return apks
 
 

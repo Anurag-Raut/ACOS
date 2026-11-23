@@ -9,8 +9,8 @@
 //! * `an_unknown_session_is_not_routed_to_the_frozen_rust_vm` — no guest needed.
 //! * `serve_flag_rejects_an_unknown_engine` — no guest needed.
 //! * `art_agent_loop_over_the_socket` — **ignored by default**: it boots a real
-//!   ART guest, so it must run under `tools/guarded.sh` (ADR-0018), e.g.
-//!     tools/guarded.sh --mem 8G --time 600 -- \
+//!   ART guest, so it must run under `tools/guard/guarded.sh` (ADR-0018), e.g.
+//!     tools/guard/guarded.sh --mem 8G --time 600 -- \
 //!       cargo test -p acos-cli --release --test w50_serve_art -- \
 //!         --ignored --test-threads=1
 //!   The W50 benchmark run (`bench-agent-loop.sh`) exercises the same path.
@@ -286,11 +286,11 @@ fn serve_flag_rejects_an_unknown_engine() {
 /// The real loop, through the socket, on real ART.
 ///
 /// Ignored by default because it boots a guest: run it under
-/// `tools/guarded.sh` (ADR-0018). It is the functional counterpart of the
+/// `tools/guard/guarded.sh` (ADR-0018). It is the functional counterpart of the
 /// benchmark: tree reached, tap changes state, the assert verb passes, reset
 /// produces a newer frame, and destroy leaves no process behind.
 #[test]
-#[ignore = "boots a real ART guest; run under tools/guarded.sh"]
+#[ignore = "boots a real ART guest; run under tools/guard/guarded.sh"]
 fn art_agent_loop_over_the_socket() {
     let apk = repo_root().join("fixtures/build/apps/counter.apk");
     let art = repo_root().join(".cache/w50-target/release/acos-art");

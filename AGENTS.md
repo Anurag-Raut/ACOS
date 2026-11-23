@@ -54,7 +54,7 @@ Use these exact terms across code, docs, and commit messages (see [`docs/interna
 - **Never hand-edit generated docs.** Regenerate them from code:
   - `cargo run -p acos-services --example gen-modules-docs > docs/MODULES.md` (verified by `crates/acos-services/tests/modules_doc.rs`)
   - `cargo run -p acos-mcp --example gen-tools-docs` for `docs/MCP.md` (verified by `crates/acos-mcp/tests/docs.rs`)
-  - `python3 tools/gen-window-layer-table.py` for `docs/WINDOW_LAYERS.md`
+  - `python3 tools/build/gen-window-layer-table.py` for `docs/WINDOW_LAYERS.md`
 - **Every `docs/*.md` tool call example is schema-tested.** `crates/acos-mcp/tests/documentation_args.rs` scans top-level `docs/*.md` and rejects any documented `acos_*` argument not accepted by the closed MCP schema.
 
 ## Working rules & verification
@@ -64,10 +64,10 @@ Use these exact terms across code, docs, and commit messages (see [`docs/interna
    - Never fabricate a `pass` when a step timed out, an API is missing, or a frame did not settle.
    - Unattached services must answer with structured `UNSUPPORTED_ANDROID_API` (or Android's honest missing-service path), never silent fake success.
    - Keep verdicts, fidelity labels, and settle records exact (ADR-0032).
-3. **Host safety (ADR-0018):** Never exceed 90% Host RAM (target ≤ 85%). Wrap heavy builds, tests, and guest runs with `tools/guarded.sh --mem <limit> --time <secs> -- <cmd>`. Never use `sudo` or privileged containers.
+3. **Host safety (ADR-0018):** Never exceed 90% Host RAM (target ≤ 85%). Wrap heavy builds, tests, and guest runs with `tools/guard/guarded.sh --mem <limit> --time <secs> -- <cmd>`. Never use `sudo` or privileged containers.
 4. **Shared compiler cache (`sccache`):** Before building in any worktree, run:
    ```bash
-   source tools/agent-env.sh
+   source tools/dev/agent-env.sh
    export CARGO_TARGET_DIR="$PWD/.cache/target"
    ```
    Clean up temporary `.cache/target` directories when finished to preserve disk space. See [`docs/DEV_WORKFLOW.md`](docs/DEV_WORKFLOW.md#14-shared-compiler-cache-sccache--source-toolsagent-envsh-first).

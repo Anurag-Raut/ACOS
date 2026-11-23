@@ -413,7 +413,7 @@ fn flutter_child_worker() {
     //    writable scratch so the engine can `dlopen` the snapshot and read the
     //    manifests via the extract path. Prefer the W93-A instrumented snapshot
     //    (`libapp_probe.so`, prints `ACOS_DART_MAIN`) when it has been built by
-    //    `tools/flutter-hello-snapshot.sh`; otherwise use the shipped fixture.
+    //    `tools/probes/flutter-hello-snapshot.sh`; otherwise use the shipped fixture.
     let app_path = scratch.join("libapp.so");
     let probe_src = libdir.join("libapp_probe.so");
     let (app_src, app_source) = if probe_src.is_file() {
@@ -1025,7 +1025,7 @@ fn flutter_child_worker() {
 #[test]
 fn flutter_hello_under_confinement() {
     if !acos_test_support::have_fixture("fixtures/build/apps/flutter-hello.apk") {
-        acos_test_support::require_prereq(false, "flutter_hello_under_confinement", "flutter_hello_under_confinement: fixtures/build/apps/flutter-hello.apk is absent (build with tools/build-flutter-hello.sh x86_64)");
+        acos_test_support::require_prereq(false, "flutter_hello_under_confinement", "flutter_hello_under_confinement: fixtures/build/apps/flutter-hello.apk is absent (build with tools/build/build-flutter-hello.sh x86_64)");
         return;
     }
     let apk = repo_root().join("fixtures/build/apps/flutter-hello.apk");

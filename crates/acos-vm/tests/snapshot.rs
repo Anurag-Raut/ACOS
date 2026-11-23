@@ -187,7 +187,7 @@ fn snapshot_restore_real_regex() {
     assert!(failures.is_empty(), "{failures:#?}");
 }
 
-/// GC-stress variant of the real `tools/diff-dexprogs.sh --corelib real`
+/// GC-stress variant of the real `tools/verify/diff-dexprogs.sh --corelib real`
 /// corpus: a collection before every allocation must not change restore output.
 #[test]
 fn snapshot_restore_real_dexprogs_gc_stress() {
@@ -220,7 +220,7 @@ fn snapshot_restore_real_dexprogs_gc_stress() {
 }
 
 /// All 23 dexprogs through the real boot classpath, fresh vs restore. This is
-/// the `tools/diff-dexprogs.sh --corelib real` corpus, exercised via restore.
+/// the `tools/verify/diff-dexprogs.sh --corelib real` corpus, exercised via restore.
 #[test]
 fn snapshot_restore_real_all_dexprogs() {
     if guard_heavy_real() {

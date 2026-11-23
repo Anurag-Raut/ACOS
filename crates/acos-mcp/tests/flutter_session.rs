@@ -27,7 +27,7 @@ fn have(rel: &str) -> bool {
     acos_test_support::require_prereq(
         acos_test_support::have_fixture(rel),
         "flutter_session",
-        &format!("missing {rel} — build it with tools/build-apps.sh"),
+        &format!("missing {rel} — build it with tools/build/build-apps.sh"),
     )
     .is_some()
 }

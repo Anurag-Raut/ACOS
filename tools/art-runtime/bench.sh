@@ -78,7 +78,7 @@ trap 'kill "$HOLD_PID" 2>/dev/null' EXIT
 
 APK="$ROOT/fixtures/build/apps/counter.apk"
 if [ ! -f "$APK" ]; then
-    echo "bench.sh: $APK missing (run tools/build-apps.sh)" >&2
+    echo "bench.sh: $APK missing (run tools/build/build-apps.sh)" >&2
     exit 2
 fi
 
@@ -92,7 +92,7 @@ if [ "$NO_BUILD" -eq 0 ]; then
     else
         BUILD_ARGS=(-p acos-art)
     fi
-    if ! CARGO_BUILD_JOBS="${CARGO_BUILD_JOBS:-4}" "$ROOT/tools/guarded.sh" --mem 12G --time 900 -- \
+    if ! CARGO_BUILD_JOBS="${CARGO_BUILD_JOBS:-4}" "$ROOT/tools/guard/guarded.sh" --mem 12G --time 900 -- \
             cargo build --release "${BUILD_ARGS[@]}" >"$OUT/logs/build.log" 2>&1; then
         echo "bench.sh: build of ${BUILD_ARGS[*]} failed; see $OUT/logs/build.log" >&2
         printf '{"engine":"%s","status":"skipped: build failed","log":"%s"}\n' "$ENGINE" "$OUT/logs/build.log" >"$OUT/results.json"
@@ -814,7 +814,7 @@ def render_table(res):
 if __name__ == "__main__":
     main()
 PY
-"$ROOT/tools/guarded.sh" --mem "$MEM" --time "$TIME" -- \
+"$ROOT/tools/guard/guarded.sh" --mem "$MEM" --time "$TIME" -- \
     python3 -I "$OUT/driver.py" "$ENGINE" "$ROOT" "$OUT" "$NS" "$REPS" "$COLD" "$RAM_MAX" "$RAM_HARD" \
     "$TIME" "$APK" "$ACOS" "$ACOS_ART"
 rc=$?

@@ -28,9 +28,9 @@ execute or build guest code runs under a hard memory and wall-clock bound, and
 frees its resources as soon as it is done:
 
 ```bash
-tools/guarded.sh --mem 4G --time 300 -- cargo test -p acos-vm
-tools/guarded.sh --mem 2G --time 60  -- ./target/release/acos run-dex x.dex --main Main
-tools/guarded.sh --mem 6G --time 3600 -- tools/bench-vm.sh
+tools/guard/guarded.sh --mem 4G --time 300 -- cargo test -p acos-vm
+tools/guard/guarded.sh --mem 2G --time 60  -- ./target/release/acos run-dex x.dex --main Main
+tools/guard/guarded.sh --mem 6G --time 3600 -- tools/bench/bench-vm.sh
 ```
 
 * `guarded.sh` prefers a systemd user scope (`MemoryMax`, swap off) and falls
@@ -38,9 +38,9 @@ tools/guarded.sh --mem 6G --time 3600 -- tools/bench-vm.sh
   process group on every exit path, and exports `ACOS_HOST_RSS_MAX` (default
   `2G`) and `ACOS_WALL_MAX_SECS` so the VM aborts with the structured errors
   `HOST_MEMORY_LIMIT` / `TIMEOUT` even without the wrapper.
-* `tools/build-fixtures.sh` and `tools/build-apps.sh` re-exec themselves under
+* `tools/build/build-fixtures.sh` and `tools/build/build-apps.sh` re-exec themselves under
   `guarded.sh` automatically.
-* Run `tools/ramguard.sh &` during a parallel wave. It acts *before* 90% by
+* Run `tools/guard/ramguard.sh &` during a parallel wave. It acts *before* 90% by
   killing ACOS processes once `MemAvailable < 9 GiB` (≈85% used); pass `--once`
   for a single check, `--dry-run` to log without killing.
 * Scratch artifacts live under `target/tmp/` (gitignored) and are removed by
@@ -51,12 +51,12 @@ tools/guarded.sh --mem 6G --time 3600 -- tools/bench-vm.sh
 ## Running tests
 
 ```bash
-tools/guarded.sh --mem 4G --time 900 -- cargo test -p acos-vm
-tools/guarded.sh --mem 4G --time 900 -- cargo clippy --workspace -- -D warnings
-tools/guarded.sh --mem 2G --time 300 -- tools/diff-dexprogs.sh --corelib real
-tools/guarded.sh --mem 6G --time 3600 -- tools/verify-all.sh
+tools/guard/guarded.sh --mem 4G --time 900 -- cargo test -p acos-vm
+tools/guard/guarded.sh --mem 4G --time 900 -- cargo clippy --workspace -- -D warnings
+tools/guard/guarded.sh --mem 2G --time 300 -- tools/verify/diff-dexprogs.sh --corelib real
+tools/guard/guarded.sh --mem 6G --time 3600 -- tools/verify/verify-all.sh
 ```
 
-`tools/diff-dexprogs.sh`, `tools/bench-vm.sh` and the build scripts invoke
+`tools/verify/diff-dexprogs.sh`, `tools/bench/bench-vm.sh` and the build scripts invoke
 `guarded.sh` themselves; the explicit wrapper above is the rule for ad-hoc
 `cargo`/`acos` commands.

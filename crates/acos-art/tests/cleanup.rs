@@ -27,14 +27,14 @@
 //! the kill path re-derives it rather than trusting the caller.
 //!
 //! The suite **fails** when the ART sysroot or the cached guest dex is absent
-//! (HYG2): those are 1 GB+ host artefacts produced by `tools/art-sysroot.sh` /
+//! (HYG2): those are 1 GB+ host artefacts produced by `tools/fetch/art-sysroot.sh` /
 //! one warm `acos-art render-app`, not something a `cargo test` may download or
 //! build, but a test that asserts nothing must not report a pass. The one
 //! counted-skip path is `ACOS_ALLOW_ART_SKIP=1`, which prints the reason and a
 //! `SKIP SUMMARY` count at exit; `tools/art-runtime/test-crates.sh` exports the
 //! warm data inside the lock so the default path runs these cases.
 //!
-//! ART is started through `tools/guarded.sh` by the acceptance command; inside
+//! ART is started through `tools/guard/guarded.sh` by the acceptance command; inside
 //! the test, runs are serialised on one mutex so a suite run never has two
 //! guests alive at once (the owner's host-safety rule).
 
@@ -1170,7 +1170,7 @@ fn r1_watchdog_reports_host_memory_limit_and_leaves_no_orphans() {
             false,
             "watchdog test",
             &format!(
-                "no {} — build the dex corpus (tools/build-fixtures.sh)",
+                "no {} — build the dex corpus (tools/build/build-fixtures.sh)",
                 dex.display()
             ),
         );

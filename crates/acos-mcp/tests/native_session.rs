@@ -30,7 +30,7 @@ fn native_fixture() -> Option<PathBuf> {
     acos_test_support::require_prereq(
         acos_test_support::have_fixture(rel),
         "native_session",
-        &format!("missing {} — build it with tools/build-apps.sh", apk.display()),
+        &format!("missing {} — build it with tools/build/build-apps.sh", apk.display()),
     )?;
     Some(apk)
 }

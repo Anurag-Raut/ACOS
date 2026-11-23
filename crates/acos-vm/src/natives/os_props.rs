@@ -3,7 +3,7 @@
 //! `android.os.Build` and every `android.sysprop.*` class read the build
 //! identity through `SystemProperties`, so the table is seeded from the same
 //! file the reference image ships: `.cache/boot/android-34/build.prop`
-//! (extracted by `tools/extract-bootclasspath.sh`; size and SHA-256 are in
+//! (extracted by `tools/fetch/extract-bootclasspath.sh`; size and SHA-256 are in
 //! `.cache/boot/android-34/manifest.json`).
 //!
 //! Two properties `Build` reads are **computed by init, not stored** in that

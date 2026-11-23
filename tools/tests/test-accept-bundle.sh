@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Plain-bash tests for tools/accept-bundle.sh. No frameworks, no new deps.
+# Plain-bash tests for tools/verify/accept-bundle.sh. No frameworks, no new deps.
 # Usage: tools/tests/test-accept-bundle.sh
 #
 # Each case runs the real tool against a throwaway git repo under .cache/tests/
@@ -10,7 +10,7 @@ export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="$(cd "$HERE/../.." && pwd)"
-TOOL="$REPO/tools/accept-bundle.sh"
+TOOL="$REPO/tools/verify/accept-bundle.sh"
 SCRATCH="$REPO/.cache/tests/accept-bundle.$$"
 rm -rf "$SCRATCH"
 mkdir -p "$SCRATCH"
