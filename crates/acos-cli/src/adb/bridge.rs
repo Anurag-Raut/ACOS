@@ -641,6 +641,7 @@ fn dispatch_callback(
         }
         "touch" => {
             if target.is_verify_run() {
+                target.panel_input_dropped();
                 return json!({
                     "ok": false,
                     "code": "VERIFY_WATCH_ONLY",
@@ -680,6 +681,7 @@ fn dispatch_callback(
         }
         "key" => {
             if target.is_verify_run() {
+                target.panel_input_dropped();
                 return json!({
                     "ok": false,
                     "code": "VERIFY_WATCH_ONLY",
@@ -709,6 +711,7 @@ fn dispatch_callback(
         }
         "text" => {
             if target.is_verify_run() {
+                target.panel_input_dropped();
                 return json!({
                     "ok": false,
                     "code": "VERIFY_WATCH_ONLY",

@@ -51,6 +51,9 @@ pub trait AdbSessionOps: Send + Sync + 'static {
     fn panel_text(&self, text: &str) -> Result<(), String>;
     fn stream_socket(&self) -> Option<PathBuf>;
     fn is_verify_run(&self) -> bool;
+    /// A verify run is watch-only: called when panel input was dropped, so the
+    /// session's event feed can say so (DEVPANEL1 §3). No-op for live sessions.
+    fn panel_input_dropped(&self) {}
 }
 
 /// Per-session host-side virtual shell state.

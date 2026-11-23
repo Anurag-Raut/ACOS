@@ -8479,6 +8479,7 @@ fn interactive_serve(
                         protocol_write(&serde_json::json!({
                             "ok": true,
                             "cmd": "panel_touch",
+                            "action": masked_action,
                             "x": pointers[0].1.round() as i64,
                             "y": pointers[0].2.round() as i64,
                         }));

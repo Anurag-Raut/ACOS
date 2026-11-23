@@ -9,6 +9,7 @@
 pub mod bridge;
 pub mod shell;
 pub mod slots;
+pub mod verify_view;
 pub mod wire;
 
 use std::collections::HashMap;

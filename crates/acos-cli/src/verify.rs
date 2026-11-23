@@ -161,6 +161,12 @@ pub struct VerifyArgs {
     #[arg(long = "keep-artifacts", value_name = "all|referenced|none-on-pass")]
     pub keep_artifacts: Option<String>,
 
+    /// Show this run in T3 Code's Device panel, **watch-only**: panel input is
+    /// dropped (the feed records `panel input ignored: verify run`) and a
+    /// verdict is never influenced by a human. Opt-in; off costs nothing.
+    #[arg(long)]
+    pub adb: bool,
+
     /// Emit the standard ACOS JSON envelope instead of a text summary.
     #[arg(long)]
     pub json: bool,
@@ -591,6 +597,8 @@ pub fn run(args: VerifyArgs) -> ExitCode {
     // session's — the id is published in the engine report instead of dying with
     // the process.
     let mut session_id: Option<String> = None;
+    // DEVPANEL1: the watch-only device-panel exposure of this run (`--adb`).
+    let mut adb_view: Option<crate::adb::AdbManager> = None;
     let mut deferred_art_meta: Option<
         Arc<std::sync::Mutex<crate::engine::art::DeferredArtMeta>>,
     > = None;
@@ -729,6 +737,34 @@ pub fn run(args: VerifyArgs) -> ExitCode {
                         session_insets = Some(session.insets());
                         session_extra_apks = session.extra_apks().to_vec();
                         session_boot_image = session.boot_image().cloned();
+                        if args.adb {
+                            let manager = crate::adb::AdbManager::from_env();
+                            let ops = std::sync::Arc::new(crate::adb::verify_view::VerifyViewOps::new(
+                                crate::adb::AdbSessionSnapshot {
+                                    package: session.package().to_string(),
+                                    activity: session.activity().map(str::to_string),
+                                    natural_size: session.natural_display_size(),
+                                    display_size: session.display_size(),
+                                    rotation: session.rotation(),
+                                    density: session.density(),
+                                    animations: session.animations(),
+                                    guest_pid: session.guest_pid(),
+                                    launcher_pid: session.launcher_pid(),
+                                    apk_path: session.apk_path().to_path_buf(),
+                                },
+                                session.stream_socket().map(std::path::Path::to_path_buf),
+                            ));
+                            let session_label = session.session_id().to_string();
+                            let dp = manager.register(&session_label, ops);
+                            eprintln!(
+                                "acos verify: device_panel {}",
+                                serde_json::json!({
+                                    "device_panel": dp,
+                                    "stream_socket": session.stream_socket().map(|p| p.display().to_string()),
+                                })
+                            );
+                            adb_view = Some(manager);
+                        }
                         EngineBackend::session(Box::new(session))
                     }
                     Err(error) => {
@@ -767,6 +803,9 @@ pub fn run(args: VerifyArgs) -> ExitCode {
     // record is evidence for a pass as well as for a failure (a clean run ends
     // with guest_exit=0), and a caller that keeps only the artifacts keeps it.
     drop(guarded);
+    if let Some(manager) = adb_view.take() {
+        manager.shutdown_all();
+    }
     if let Some(meta) = deferred_art_meta.and_then(|m| m.lock().ok().map(|g| {
         (
             g.session_id.clone(),

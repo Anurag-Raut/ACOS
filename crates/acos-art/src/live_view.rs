@@ -1034,7 +1034,7 @@ impl LiveView {
     pub fn observe_request(&self, request: &serde_json::Value) {
         let carries_input = matches!(
             request.get("cmd").and_then(serde_json::Value::as_str),
-            Some("type_text" | "key")
+            Some("type_text" | "key" | "panel_key" | "panel_text")
         );
         // The reset runs *before* the no-subscriber early return: a "proven
         // non-password" state recorded while a viewer was attached must not
@@ -1837,6 +1837,30 @@ pub fn event_from_reply(reply: &serde_json::Value, masked: bool) -> Option<serde
             map.insert("kind".into(), serde_json::json!("action"));
             let wire_cmd = if cmd == "type_text" { "text" } else { cmd };
             map.insert("cmd".into(), serde_json::json!(wire_cmd));
+            // DEVPANEL1 §6: who caused the input. ACOS tools / MCP are `agent`.
+            map.insert("source".into(), serde_json::json!("agent"));
+        }
+        // DEVPANEL1 §6: input from T3 Code's Device panel (gRPC bridge), free-form
+        // and labelled `source: panel`. A drag is dozens of moves: only the
+        // down / up / cancel edges reach the feed, never every move.
+        "panel_touch" | "panel_key" | "panel_text" => {
+            let wire_cmd = match cmd {
+                "panel_touch" => {
+                    let phase = match reply.get("action").and_then(serde_json::Value::as_i64) {
+                        Some(0) => "down",
+                        Some(1) => "up",
+                        Some(3) => "cancel",
+                        _ => return None,
+                    };
+                    map.insert("phase".into(), serde_json::json!(phase));
+                    "touch"
+                }
+                "panel_key" => "key",
+                _ => "text",
+            };
+            map.insert("kind".into(), serde_json::json!("action"));
+            map.insert("cmd".into(), serde_json::json!(wire_cmd));
+            map.insert("source".into(), serde_json::json!("panel"));
         }
         "ready" => {
             map.insert("kind".into(), serde_json::json!("lifecycle"));
@@ -1859,7 +1883,7 @@ pub fn event_from_reply(reply: &serde_json::Value, masked: bool) -> Option<serde
     }
     if let Some(key) = reply.get("key") {
         map.insert("key".into(), masked_key(key, masked));
-    } else if cmd == "key" {
+    } else if cmd == "key" || cmd == "panel_key" {
         if let Some(code) = reply.get("code").and_then(serde_json::Value::as_i64) {
             map.insert("key".into(), masked_key(&serde_json::json!(code), masked));
         }
