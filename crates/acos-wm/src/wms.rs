@@ -2591,18 +2591,22 @@ mod tests {
         // Fitting TOP must not become a top inset or produce a zero-height frame.
         let r2 = base.rotated(2);
         assert_eq!(r2.bars.status_bar, RectI::new(0, 2272, 1080, 2400));
-        assert_eq!(compute_frame_for(&r2, &top_only), RectI::new(0, 0, 1080, 2400));
-        assert_eq!(compute_frame_for(&r2, &all_sides), RectI::new(0, 0, 1080, 2272));
+        // The rotated configuration also reserves the 63 px config strip at the
+        // top (`reference_insets_state`'s second STATUS_BAR source), and
+        // `InsetsState.calculateInsets` takes the per-edge max over both.
+        assert_eq!(compute_frame_for(&r2, &top_only), RectI::new(0, 63, 1080, 2400));
+        assert_eq!(compute_frame_for(&r2, &all_sides), RectI::new(0, 63, 1080, 2272));
 
         // Rotation 1 (90 deg): status bar is at left [0, 0, 128, 1080].
         let r1 = base.rotated(1);
-        assert_eq!(compute_frame_for(&r1, &top_only), RectI::new(0, 0, 2400, 1080));
-        assert_eq!(compute_frame_for(&r1, &all_sides), RectI::new(128, 0, 2400, 1080));
+        // Plus the config strip [0,0,2400,63]: TOP-only fitting keeps top=63.
+        assert_eq!(compute_frame_for(&r1, &top_only), RectI::new(0, 63, 2400, 1080));
+        assert_eq!(compute_frame_for(&r1, &all_sides), RectI::new(128, 63, 2400, 1080));
 
         // Rotation 3 (270 deg): status bar is at right [2272, 0, 2400, 1080].
         let r3 = base.rotated(3);
-        assert_eq!(compute_frame_for(&r3, &top_only), RectI::new(0, 0, 2400, 1080));
-        assert_eq!(compute_frame_for(&r3, &all_sides), RectI::new(0, 0, 2272, 1080));
+        assert_eq!(compute_frame_for(&r3, &top_only), RectI::new(0, 63, 2400, 1080));
+        assert_eq!(compute_frame_for(&r3, &all_sides), RectI::new(0, 63, 2272, 1080));
 
         // System gestures on 90 deg rotation sit on top/bottom, not left/right.
         let mut sys_gestures = app_params();
