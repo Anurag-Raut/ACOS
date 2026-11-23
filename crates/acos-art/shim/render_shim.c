@@ -312,6 +312,10 @@ typedef int (*fn_ANW_perform)(ANativeWindow*, int, ...);
 #define ACOS_NATIVE_WINDOW_API_CONNECT 13
 #define ACOS_NATIVE_WINDOW_API_DISCONNECT 14
 #define ACOS_NATIVE_WINDOW_API_CAMERA 4
+/* NATIVE_WINDOW_SET_DEQUEUE_TIMEOUT: verified in this image's libgui.so (Surface::perform's
+ * jump table entry 37 reads an int64 and calls IGraphicBufferProducer::setDequeueTimeout; 36 and
+ * 38 are GET_LAST_DEQUEUE_START / _DURATION). */
+#define ACOS_NATIVE_WINDOW_SET_DEQUEUE_TIMEOUT 37
 #define ACOS_AHB_USAGE_CPU_WRITE_OFTEN 0x30ULL
 #define ACOS_FMT_RGBA_8888 0x1u
 #define ACOS_FMT_BLOB 0x21u
@@ -358,8 +362,19 @@ static struct {
 
 #define ACOS_MAX_CAM_STREAMS 16
 static pthread_mutex_t g_cam_lock = PTHREAD_MUTEX_INITIALIZER;
+/* CR1FIX #17: g_cam_lock guards only this table. A delivery pins its stream
+ * (`inflight`) under the lock and then works on the window WITHOUT it, so a
+ * dequeue that cannot return never stalls release, registration or any other
+ * stream. Closing a stream is `closing` -> disconnect the producer (which wakes a
+ * blocked dequeue) -> wait for `inflight == 0` -> drop the window reference. */
+static pthread_cond_t g_cam_cond = PTHREAD_COND_INITIALIZER;
+/* A full queue drops the frame (as real Android does); it never blocks the sink. */
+#define ACOS_CAM_DEQUEUE_TIMEOUT_NS 0LL
 static struct {
     int active;
+    int closing;
+    int inflight;
+    unsigned drops;
     int stream_id;
     ANativeWindow* anw;
     int width;
@@ -409,11 +424,87 @@ static int cam_anw_connect(ANativeWindow* anw) {
     return perform(anw, ACOS_NATIVE_WINDOW_API_CONNECT, ACOS_NATIVE_WINDOW_API_CAMERA);
 }
 
+/* Make dequeueBuffer return -ETIMEDOUT instead of blocking when no buffer is free. */
+static int cam_anw_set_dequeue_timeout(ANativeWindow* anw, int64_t timeout_ns) {
+    fn_ANW_perform perform = *(fn_ANW_perform*)((char*)anw + ACOS_ANW_PERFORM_OFFSET);
+    if (!perform) return -EINVAL;
+    return perform(anw, ACOS_NATIVE_WINDOW_SET_DEQUEUE_TIMEOUT, timeout_ns);
+}
+
 static void cam_anw_disconnect(ANativeWindow* anw) {
     fn_ANW_perform perform = *(fn_ANW_perform*)((char*)anw + ACOS_ANW_PERFORM_OFFSET);
     if (perform) {
         (void)perform(anw, ACOS_NATIVE_WINDOW_API_DISCONNECT, ACOS_NATIVE_WINDOW_API_CAMERA, 0);
     }
+}
+
+/* Pin a live stream for one delivery. Returns its window (or NULL with *err set). */
+static ANativeWindow* cam_stream_begin(int streamId, int* req_w, int* req_h, int* slot_out,
+                                       int* err) {
+    pthread_mutex_lock(&g_cam_lock);
+    if (!g_cam_api.loaded) {
+        pthread_mutex_unlock(&g_cam_lock);
+        *err = -ENOSYS;
+        return NULL;
+    }
+    for (int i = 0; i < ACOS_MAX_CAM_STREAMS; i++) {
+        if (g_cam_streams[i].active && !g_cam_streams[i].closing &&
+            g_cam_streams[i].stream_id == streamId) {
+            if (*req_w <= 0) *req_w = g_cam_streams[i].width;
+            if (*req_h <= 0) *req_h = g_cam_streams[i].height;
+            g_cam_streams[i].inflight++;
+            *slot_out = i;
+            ANativeWindow* anw = g_cam_streams[i].anw;
+            pthread_mutex_unlock(&g_cam_lock);
+            return anw;
+        }
+    }
+    pthread_mutex_unlock(&g_cam_lock);
+    *err = -ENOENT;
+    return NULL;
+}
+
+static void cam_stream_end(int slot) {
+    pthread_mutex_lock(&g_cam_lock);
+    if (--g_cam_streams[slot].inflight == 0) pthread_cond_broadcast(&g_cam_cond);
+    pthread_mutex_unlock(&g_cam_lock);
+}
+
+/* A dequeue that returned because the queue is full is a dropped frame, not an
+ * error. Logs the first drop and then every 128th per stream. */
+static int cam_dequeue_failed(int slot, int streamId, const char* what, int rc) {
+    if (rc != -ETIMEDOUT && rc != -EAGAIN) {
+        LOG("camera-sink: %sdequeueBuffer(stream=%d) failed rc=%d", what, (int)streamId, rc);
+        return rc;
+    }
+    pthread_mutex_lock(&g_cam_lock);
+    unsigned n = ++g_cam_streams[slot].drops;
+    pthread_mutex_unlock(&g_cam_lock);
+    if (n == 1u || (n % 128u) == 0u) {
+        LOG("camera-sink: stream %d queue full, dropped %u frame(s)", (int)streamId, n);
+    }
+    return 0;
+}
+
+/* Close slot `i` (g_cam_lock held; may release it while waiting). The producer is
+ * disconnected FIRST: that wakes a delivery blocked in dequeue so `inflight` can
+ * drain. Other callers that need the same slot wait for it to finish. */
+static void cam_close_slot_locked(int i) {
+    if (g_cam_streams[i].closing) {
+        while (g_cam_streams[i].active && g_cam_streams[i].closing) {
+            pthread_cond_wait(&g_cam_cond, &g_cam_lock);
+        }
+        return;
+    }
+    g_cam_streams[i].closing = 1;
+    ANativeWindow* anw = g_cam_streams[i].anw;
+    if (anw) cam_anw_disconnect(anw);
+    while (g_cam_streams[i].inflight > 0) pthread_cond_wait(&g_cam_cond, &g_cam_lock);
+    if (anw && g_cam_api.release) g_cam_api.release(anw);
+    g_cam_streams[i].anw = NULL;
+    g_cam_streams[i].active = 0;
+    g_cam_streams[i].closing = 0;
+    pthread_cond_broadcast(&g_cam_cond);
 }
 
 /* Deterministic ACOS_PATTERN_COLORBARS_V1 test pattern (YUV_420_888):
@@ -508,6 +599,13 @@ JNIEXPORT jint JNICALL Java_dev_acos_art_RenderNat_cameraSinkRegister(
     if (conn_rc != 0) {
         LOG("camera-sink: stream %d connect(CAMERA) -> %d", (int)streamId, conn_rc);
     }
+    {
+        int trc = cam_anw_set_dequeue_timeout(anw, ACOS_CAM_DEQUEUE_TIMEOUT_NS);
+        if (trc != 0) {
+            LOG("camera-sink: stream %d setDequeueTimeout -> %d (a full queue can block a delivery)",
+                (int)streamId, trc);
+        }
+    }
     if (g_cam_api.setUsage) {
         (void)g_cam_api.setUsage(anw, ACOS_AHB_USAGE_CPU_WRITE_OFTEN);
     }
@@ -538,14 +636,13 @@ JNIEXPORT jint JNICALL Java_dev_acos_art_RenderNat_cameraSinkRegister(
     int slot = -1;
     for (int i = 0; i < ACOS_MAX_CAM_STREAMS; i++) {
         if (g_cam_streams[i].active && g_cam_streams[i].stream_id == streamId) {
-            cam_anw_disconnect(g_cam_streams[i].anw);
-            g_cam_api.release(g_cam_streams[i].anw);
-            g_cam_streams[i].active = 0;
+            cam_close_slot_locked(i);
             slot = i;
             break;
         }
     }
-    if (slot < 0) {
+    if (slot < 0 || g_cam_streams[slot].active) {
+        slot = -1;
         for (int i = 0; i < ACOS_MAX_CAM_STREAMS; i++) {
             if (!g_cam_streams[i].active) { slot = i; break; }
         }
@@ -557,6 +654,9 @@ JNIEXPORT jint JNICALL Java_dev_acos_art_RenderNat_cameraSinkRegister(
         return -ENOMEM;
     }
     g_cam_streams[slot].active = 1;
+    g_cam_streams[slot].closing = 0;
+    g_cam_streams[slot].inflight = 0;
+    g_cam_streams[slot].drops = 0;
     g_cam_streams[slot].stream_id = (int)streamId;
     g_cam_streams[slot].anw = anw;
     g_cam_streams[slot].width = w;
@@ -571,26 +671,14 @@ JNIEXPORT jint JNICALL Java_dev_acos_art_RenderNat_cameraSinkDeliver(
         JNIEnv* env, jclass klass, jint streamId, jint width, jint height,
         jlong frameNumber, jlong timestampNs, jint patternId) {
     (void)env; (void)klass; (void)patternId;
-    pthread_mutex_lock(&g_cam_lock);
-    if (!g_cam_api.loaded) {
-        pthread_mutex_unlock(&g_cam_lock);
-        return -ENOSYS;
-    }
-    ANativeWindow* anw = NULL;
     int req_w = (int)width;
     int req_h = (int)height;
-    for (int i = 0; i < ACOS_MAX_CAM_STREAMS; i++) {
-        if (g_cam_streams[i].active && g_cam_streams[i].stream_id == streamId) {
-            anw = g_cam_streams[i].anw;
-            if (req_w <= 0) req_w = g_cam_streams[i].width;
-            if (req_h <= 0) req_h = g_cam_streams[i].height;
-            break;
-        }
-    }
+    int slot = -1;
+    int lerr = 0;
+    ANativeWindow* anw = cam_stream_begin((int)streamId, &req_w, &req_h, &slot, &lerr);
     if (!anw) {
-        pthread_mutex_unlock(&g_cam_lock);
-        LOG("camera-sink: deliver unknown stream %d", (int)streamId);
-        return -ENOENT;
+        if (lerr == -ENOENT) LOG("camera-sink: deliver unknown stream %d", (int)streamId);
+        return lerr;
     }
 
     if (g_cam_api.setTimestamp) {
@@ -601,15 +689,15 @@ JNIEXPORT jint JNICALL Java_dev_acos_art_RenderNat_cameraSinkDeliver(
     int rc = g_cam_api.dequeue(anw, &buf, &fence_fd);
     if (fence_fd >= 0) close(fence_fd);
     if (rc != 0 || !buf) {
-        pthread_mutex_unlock(&g_cam_lock);
-        LOG("camera-sink: dequeueBuffer(stream=%d) failed rc=%d", (int)streamId, rc);
-        return rc ? rc : -EIO;
+        rc = rc ? cam_dequeue_failed(slot, (int)streamId, "", rc) : -EIO;
+        cam_stream_end(slot);
+        return rc;
     }
 
     AHardwareBuffer* ahb = g_cam_api.getAHB(buf);
     if (!ahb) {
         if (g_cam_api.cancel) g_cam_api.cancel(anw, buf, -1);
-        pthread_mutex_unlock(&g_cam_lock);
+        cam_stream_end(slot);
         return -EINVAL;
     }
     acos_ahb_desc_t desc;
@@ -626,7 +714,7 @@ JNIEXPORT jint JNICALL Java_dev_acos_art_RenderNat_cameraSinkDeliver(
             LOG("camera-sink: lockPlanes failed rc=%d count=%u", rc, planes.planeCount);
             if (rc == 0) g_cam_api.unlock(ahb, NULL);
             if (g_cam_api.cancel) g_cam_api.cancel(anw, buf, -1);
-            pthread_mutex_unlock(&g_cam_lock);
+            cam_stream_end(slot);
             return rc ? rc : -EINVAL;
         }
         fill_yuv420_colorbars(&planes, w, h, (uint64_t)frameNumber);
@@ -636,7 +724,7 @@ JNIEXPORT jint JNICALL Java_dev_acos_art_RenderNat_cameraSinkDeliver(
         rc = g_cam_api.lock(ahb, ACOS_AHB_USAGE_CPU_WRITE_OFTEN, -1, NULL, &vaddr);
         if (rc != 0 || !vaddr) {
             if (g_cam_api.cancel) g_cam_api.cancel(anw, buf, -1);
-            pthread_mutex_unlock(&g_cam_lock);
+            cam_stream_end(slot);
             return rc ? rc : -EIO;
         }
         if (desc.format == ACOS_FMT_BLOB) {
@@ -690,7 +778,7 @@ JNIEXPORT jint JNICALL Java_dev_acos_art_RenderNat_cameraSinkDeliver(
     }
 
     rc = g_cam_api.queue(anw, buf, -1);
-    pthread_mutex_unlock(&g_cam_lock);
+    cam_stream_end(slot);
     if (rc != 0) {
         LOG("camera-sink: queueBuffer(stream=%d) failed rc=%d", (int)streamId, rc);
     }
@@ -724,28 +812,15 @@ JNIEXPORT jint JNICALL Java_dev_acos_art_RenderNat_cameraSinkDeliverFd(
         return -EINVAL;
     }
 
-    pthread_mutex_lock(&g_cam_lock);
-    if (!g_cam_api.loaded) {
-        pthread_mutex_unlock(&g_cam_lock);
-        munmap(mapped, map_len);
-        return -ENOSYS;
-    }
-    ANativeWindow* anw = NULL;
     int req_w = (int)width;
     int req_h = (int)height;
-    for (int i = 0; i < ACOS_MAX_CAM_STREAMS; i++) {
-        if (g_cam_streams[i].active && g_cam_streams[i].stream_id == streamId) {
-            anw = g_cam_streams[i].anw;
-            if (req_w <= 0) req_w = g_cam_streams[i].width;
-            if (req_h <= 0) req_h = g_cam_streams[i].height;
-            break;
-        }
-    }
+    int slot = -1;
+    int lerr = 0;
+    ANativeWindow* anw = cam_stream_begin((int)streamId, &req_w, &req_h, &slot, &lerr);
     if (!anw) {
-        pthread_mutex_unlock(&g_cam_lock);
         munmap(mapped, map_len);
-        LOG("camera-sink: deliverFd unknown stream %d", (int)streamId);
-        return -ENOENT;
+        if (lerr == -ENOENT) LOG("camera-sink: deliverFd unknown stream %d", (int)streamId);
+        return lerr;
     }
     if (g_cam_api.setTimestamp) {
         (void)g_cam_api.setTimestamp(anw, (int64_t)timestampNs);
@@ -755,16 +830,16 @@ JNIEXPORT jint JNICALL Java_dev_acos_art_RenderNat_cameraSinkDeliverFd(
     int rc = g_cam_api.dequeue(anw, &buf, &fence_fd);
     if (fence_fd >= 0) close(fence_fd);
     if (rc != 0 || !buf) {
-        pthread_mutex_unlock(&g_cam_lock);
+        rc = rc ? cam_dequeue_failed(slot, (int)streamId, "deliverFd ", rc) : -EIO;
+        cam_stream_end(slot);
         munmap(mapped, map_len);
-        LOG("camera-sink: deliverFd dequeueBuffer(stream=%d) failed rc=%d", (int)streamId, rc);
-        return rc ? rc : -EIO;
+        return rc;
     }
 
     AHardwareBuffer* ahb = g_cam_api.getAHB(buf);
     if (!ahb) {
         if (g_cam_api.cancel) g_cam_api.cancel(anw, buf, -1);
-        pthread_mutex_unlock(&g_cam_lock);
+        cam_stream_end(slot);
         munmap(mapped, map_len);
         return -EINVAL;
     }
@@ -783,7 +858,7 @@ JNIEXPORT jint JNICALL Java_dev_acos_art_RenderNat_cameraSinkDeliverFd(
         size_t need_yuv = (size_t)sw * (size_t)sh + 2u * ((size_t)scw * (size_t)sch);
         if (hdr->yuv_size < need_yuv) {
             if (g_cam_api.cancel) g_cam_api.cancel(anw, buf, -1);
-            pthread_mutex_unlock(&g_cam_lock);
+            cam_stream_end(slot);
             munmap(mapped, map_len);
             return -EINVAL;
         }
@@ -793,7 +868,7 @@ JNIEXPORT jint JNICALL Java_dev_acos_art_RenderNat_cameraSinkDeliverFd(
         if (rc != 0 || planes.planeCount < 3u) {
             if (rc == 0) g_cam_api.unlock(ahb, NULL);
             if (g_cam_api.cancel) g_cam_api.cancel(anw, buf, -1);
-            pthread_mutex_unlock(&g_cam_lock);
+            cam_stream_end(slot);
             munmap(mapped, map_len);
             return rc ? rc : -EINVAL;
         }
@@ -847,7 +922,7 @@ JNIEXPORT jint JNICALL Java_dev_acos_art_RenderNat_cameraSinkDeliverFd(
         rc = g_cam_api.lock(ahb, ACOS_AHB_USAGE_CPU_WRITE_OFTEN, -1, NULL, &vaddr);
         if (rc != 0 || !vaddr) {
             if (g_cam_api.cancel) g_cam_api.cancel(anw, buf, -1);
-            pthread_mutex_unlock(&g_cam_lock);
+            cam_stream_end(slot);
             munmap(mapped, map_len);
             return rc ? rc : -EIO;
         }
@@ -857,7 +932,7 @@ JNIEXPORT jint JNICALL Java_dev_acos_art_RenderNat_cameraSinkDeliverFd(
             if (hdr->jpeg_size == 0u || (size_t)hdr->jpeg_size + 8u > cap) {
                 g_cam_api.unlock(ahb, NULL);
                 if (g_cam_api.cancel) g_cam_api.cancel(anw, buf, -1);
-                pthread_mutex_unlock(&g_cam_lock);
+                cam_stream_end(slot);
                 munmap(mapped, map_len);
                 LOG("camera-sink: BLOB capacity %zu too small for jpeg %u", cap, hdr->jpeg_size);
                 return -ENOSPC;
@@ -886,7 +961,7 @@ JNIEXPORT jint JNICALL Java_dev_acos_art_RenderNat_cameraSinkDeliverFd(
     }
 
     rc = g_cam_api.queue(anw, buf, -1);
-    pthread_mutex_unlock(&g_cam_lock);
+    cam_stream_end(slot);
     munmap(mapped, map_len);
     if (rc != 0) {
         LOG("camera-sink: deliverFd queueBuffer(stream=%d) failed rc=%d", (int)streamId, rc);
@@ -901,12 +976,7 @@ JNIEXPORT jint JNICALL Java_dev_acos_art_RenderNat_cameraSinkRelease(
     int released = 0;
     for (int i = 0; i < ACOS_MAX_CAM_STREAMS; i++) {
         if (g_cam_streams[i].active && (streamId < 0 || g_cam_streams[i].stream_id == streamId)) {
-            if (g_cam_streams[i].anw) {
-                cam_anw_disconnect(g_cam_streams[i].anw);
-                if (g_cam_api.release) g_cam_api.release(g_cam_streams[i].anw);
-            }
-            g_cam_streams[i].active = 0;
-            g_cam_streams[i].anw = NULL;
+            cam_close_slot_locked(i);
             released++;
         }
     }
