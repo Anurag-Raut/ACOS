@@ -3797,6 +3797,7 @@ public final class LaunchMain {
         // `IApplicationThread.scheduleTransaction` instead of marshalling its
         // own. The primary process keeps the local path (its token is the one
         // the guest itself must report back).
+        Object hostLaunched = null;
         if (System.getenv("ACOSLAUNCH_HOST_SCHEDULES") != null) {
             System.out.println("ACOSLAUNCH MARK waiting-for-host-transaction activity="
                     + sActivity);
@@ -3856,25 +3857,10 @@ public final class LaunchMain {
             boolean finishedDuringCreate = !resumed
                     && Boolean.TRUE.equals(get(launched, "mFinished"));
             if (finishedDuringCreate) {
-                // AOSP's own outcome for an Activity that finishes in onCreate:
-                // created (and started), never resumed, then paused/stopped/
-                // destroyed by the server. Report exactly that, and keep the
-                // real main looper alive: the server drives the rest of the
-                // lifecycle and the caller's `ActivityResultItem` follows the
-                // destroy — a halt here is what lost the result.
-                sActivityResumed = true;
-                sFinishDuringCreate = true;
-                writeResumeMarker(thread, launched,
-                        "finish_during_create=true\n"
-                                + "resume_skipped=finishing-in-onCreate "
-                                + "(ActivityThread.handleResumeActivity)");
-                System.out.println("ACOSLAUNCH MARK activity-resumed activity="
-                        + launched.getClass().getName() + " window=" + get(launched, "mWindow")
-                        + " finish_during_create=true");
-                System.out.flush();
-                releaseHostLaunchObservation();
+                reportFinishDuringCreate(thread, launched);
                 return;
             }
+            hostLaunched = launched;
             releaseHostLaunchObservation();
             System.out.println("ACOSLAUNCH MARK host-transaction-resumed activity="
                     + launched.getClass().getName()
@@ -3908,6 +3894,18 @@ public final class LaunchMain {
         long adeadline = System.currentTimeMillis() + sResumeMs;
         while (System.currentTimeMillis() < adeadline) {
             Object activity = resumedActivity(thread);
+            if (activity == null && hostLaunched != null
+                    && Boolean.TRUE.equals(get(hostLaunched, "mFinished"))) {
+                // `launchedActivity` selects on `mCalled`, which
+                // `super.onCreate()` sets, so an Activity that finishes later
+                // in the same `onCreate` (splash/trampoline) is selected
+                // before it finishes. `ActivityThread.handleResumeActivity`
+                // then skips its resume, so waiting for `mResumed` would time
+                // out a legitimate launch. `mFinished` set without `mResumed`
+                // is the same outcome as the early case above.
+                reportFinishDuringCreate(thread, hostLaunched);
+                return;
+            }
             if (activity != null) {
                 // O3: `mResumed` is set by Instrumentation *before* the
                 // fixture's onResume() body runs, so observing it is not
@@ -4293,6 +4291,30 @@ public final class LaunchMain {
                 + " window=" + get(activity, "mWindow") + " recorded_after=looper-threw");
         System.out.flush();
         return true;
+    }
+
+    /**
+     * The host-scheduled launch's outcome for an Activity that finished inside
+     * `onCreate` and was never resumed (see the call sites).
+     */
+    static void reportFinishDuringCreate(Object thread, Object launched) throws Exception {
+        // AOSP's own outcome for an Activity that finishes in onCreate:
+        // created (and started), never resumed, then paused/stopped/
+        // destroyed by the server. Report exactly that, and keep the
+        // real main looper alive: the server drives the rest of the
+        // lifecycle and the caller's `ActivityResultItem` follows the
+        // destroy -- a halt here is what lost the result.
+        sActivityResumed = true;
+        sFinishDuringCreate = true;
+        writeResumeMarker(thread, launched,
+                "finish_during_create=true\n"
+                        + "resume_skipped=finishing-in-onCreate "
+                        + "(ActivityThread.handleResumeActivity)");
+        System.out.println("ACOSLAUNCH MARK activity-resumed activity="
+                + launched.getClass().getName() + " window=" + get(launched, "mWindow")
+                + " finish_during_create=true");
+        System.out.flush();
+        releaseHostLaunchObservation();
     }
 
     /**
