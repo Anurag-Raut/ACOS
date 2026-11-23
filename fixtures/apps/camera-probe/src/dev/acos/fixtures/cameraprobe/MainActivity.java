@@ -1232,10 +1232,18 @@ public final class MainActivity extends Activity {
         final ImageReader reader = ImageReader.newInstance(
                 CAPTURE_WIDTH, CAPTURE_HEIGHT, ImageFormat.YUV_420_888, 4);
         final Surface surface = reader.getSurface();
-        final java.util.concurrent.atomic.AtomicInteger frames =
-                new java.util.concurrent.atomic.AtomicInteger();
+        // CR1FIX2 #12: a frame counts for a session only when BOTH its image
+        // and a capture result of THAT session's own request carry the same
+        // timestamp. Frames the previous session's repeating request had already
+        // queued never match (their results go to the old session's callback,
+        // which is ignored once the phase moves on). All of this state is touched
+        // only on bgHandler: the image listener, the capture callbacks and the
+        // phase change run on that one handler.
         final int[] phase = new int[1];
-        final int[] phaseStart = new int[1];
+        final int[] sessionFrames = new int[1];
+        final int[] unmatchedImages = new int[1];
+        final java.util.HashSet<Long> pendingImageTs = new java.util.HashSet<>();
+        final java.util.HashSet<Long> pendingResultTs = new java.util.HashSet<>();
         final CameraDevice[] deviceRef = new CameraDevice[1];
         final int[] timestampBase = {
             android.hardware.camera2.params.OutputConfiguration.TIMESTAMP_BASE_DEFAULT,
@@ -1247,24 +1255,36 @@ public final class MainActivity extends Activity {
         final java.util.concurrent.Executor exec = bgHandler::post;
         final Runnable[] startSession = new Runnable[1];
 
+        final Runnable[] onSessionFrame = new Runnable[1];
+        onSessionFrame[0] = () -> {
+            sessionFrames[0]++;
+            if (sessionFrames[0] != 3) return;
+            log("REBIND session=" + phase[0] + " frames_after_register=3"
+                    + " stale_or_unmatched_images=" + unmatchedImages[0]);
+            if (phase[0] + 1 < sessions) {
+                phase[0]++;
+                sessionFrames[0] = 0;
+                unmatchedImages[0] = 0;
+                pendingImageTs.clear();
+                pendingResultTs.clear();
+                startSession[0].run();
+            } else {
+                CameraDevice d = deviceRef[0];
+                if (d != null) d.close();
+            }
+        };
+
         reader.setOnImageAvailableListener(r -> {
             Image img = null;
             try {
                 img = r.acquireNextImage();
                 if (img != null) {
-                    int n = frames.incrementAndGet();
-                    if (n - phaseStart[0] == 3) {
-                        log("REBIND session=" + phase[0] + " frames_after_register=3");
-                        mainHandler.post(() -> {
-                            if (phase[0] + 1 < sessions) {
-                                phase[0]++;
-                                phaseStart[0] = frames.get();
-                                startSession[0].run();
-                            } else {
-                                CameraDevice d = deviceRef[0];
-                                if (d != null) d.close();
-                            }
-                        });
+                    Long ts = img.getTimestamp();
+                    if (pendingResultTs.remove(ts)) {
+                        onSessionFrame[0].run();
+                    } else {
+                        pendingImageTs.add(ts);
+                        unmatchedImages[0]++;
                     }
                 }
             } catch (Throwable t) {
@@ -1291,7 +1311,26 @@ public final class MainActivity extends Activity {
                                             CaptureRequest.Builder req = camera.createCaptureRequest(
                                                     CameraDevice.TEMPLATE_PREVIEW);
                                             req.addTarget(surface);
-                                            session.setRepeatingRequest(req.build(), null, bgHandler);
+                                            final int gen = phase[0];
+                                            session.setRepeatingRequest(req.build(),
+                                                    new CameraCaptureSession.CaptureCallback() {
+                                                        @Override
+                                                        public void onCaptureCompleted(
+                                                                CameraCaptureSession cs,
+                                                                CaptureRequest request,
+                                                                android.hardware.camera2.TotalCaptureResult result) {
+                                                            if (gen != phase[0]) return;
+                                                            Long ts = result.get(
+                                                                    android.hardware.camera2.CaptureResult.SENSOR_TIMESTAMP);
+                                                            if (ts == null) return;
+                                                            if (pendingImageTs.remove(ts)) {
+                                                                unmatchedImages[0]--;
+                                                                onSessionFrame[0].run();
+                                                            } else {
+                                                                pendingResultTs.add(ts);
+                                                            }
+                                                        }
+                                                    }, bgHandler);
                                         } catch (Throwable t) {
                                             log("REBIND submit_error="
                                                     + t.getClass().getSimpleName() + ": "
@@ -1326,7 +1365,7 @@ public final class MainActivity extends Activity {
                     reader.close();
                     bgThread.quitSafely();
                     log("REBIND closed sessions_ok=" + (phase[0] + 1 == sessions
-                            && frames.get() - phaseStart[0] >= 3));
+                            && sessionFrames[0] >= 3));
                 }
 
                 @Override
