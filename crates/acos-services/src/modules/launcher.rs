@@ -27,7 +27,7 @@ pub const LAUNCHER_PACKAGE: &str = "com.acos.launcher";
 pub const CONFIG_APK: &str = "apk";
 /// Environment override for the Launcher APK.
 pub const APK_ENV: &str = "ACOS_LAUNCHER_APK";
-/// Workspace-relative default build output (`tools/build-apps.sh`).
+/// Workspace-relative default build output (`tools/build/build-apps.sh`).
 pub const APK_REL: &str = "fixtures/build/apps/launcher.apk";
 
 const CONTROL_OPS: [ControlOp; 1] = [ControlOp {

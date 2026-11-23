@@ -401,7 +401,7 @@ Fixture work: one small activity that prints
 `isInMultiWindowMode()` / root bounds into a `TextView` (so the tree can assert
 it without log scraping), and a `resizeableActivity="false"` variant. Extend
 `fixtures/apps/two-activity` (it already declares the config changes) or add
-`fixtures/apps/multiwindow-probe`; `tools/build-apps.sh` builds it.
+`fixtures/apps/multiwindow-probe`; `tools/build/build-apps.sh` builds it.
 
 ---
 

@@ -101,7 +101,7 @@ fn framework_static_ints_for(class_desc: &str) -> Vec<(String, i64)> {
     let dir = framework_dex_dir();
     assert!(
         dir.is_dir(),
-        "framework dex directory missing at {}; run `source tools/agent-env.sh`",
+        "framework dex directory missing at {}; run `source tools/dev/agent-env.sh`",
         dir.display()
     );
     let mut dex_found = None;

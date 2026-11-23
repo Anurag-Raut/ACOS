@@ -4,11 +4,11 @@
 # `.cache/maven-camerax/` (from Google Maven and Maven Central only).
 #
 # Usage:
-#   tools/fetch-camerax-deps.sh               # download missing + verify all sha256
-#   tools/fetch-camerax-deps.sh --verify-only # offline check used by build scripts
+#   tools/fetch/fetch-camerax-deps.sh               # download missing + verify all sha256
+#   tools/fetch/fetch-camerax-deps.sh --verify-only # offline check used by build scripts
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 MANIFEST="$ROOT/fixtures/apps/camerax-probe/DEPS.md"
 CACHE_DIR="$ROOT/.cache/maven-camerax"
 
@@ -25,7 +25,7 @@ fi
 if [ "$VERIFY_ONLY" = 1 ] && [ ! -d "$CACHE_DIR" ]; then
     cat >&2 <<MSG
 camerax-probe: error: missing CameraX Maven cache at $CACHE_DIR
-Run: tools/fetch-camerax-deps.sh
+Run: tools/fetch/fetch-camerax-deps.sh
 (Requires one-time network access to dl.google.com and repo1.maven.org, ~6 MiB total, SHA-256 verified against fixtures/apps/camerax-probe/DEPS.md.)
 MSG
     exit 1
@@ -76,7 +76,7 @@ for coord, ver, ext, size_s, expected_sha, fname, url in entries:
                 f"camerax-probe: error: corrupted or mismatched artifact {dest}\n"
                 f"  expected size={expected_size} sha256={expected_sha}\n"
                 f"  actual   size={len(data)} sha256={actual_sha}\n"
-                f"Re-run: rm -rf {cache_dir} && tools/fetch-camerax-deps.sh",
+                f"Re-run: rm -rf {cache_dir} && tools/fetch/fetch-camerax-deps.sh",
                 file=sys.stderr,
             )
             sys.exit(1)
@@ -90,7 +90,7 @@ for coord, ver, ext, size_s, expected_sha, fname, url in entries:
 if missing:
     print(
         f"camerax-probe: error: missing {len(missing)} artifact(s) in {cache_dir} (first: {missing[0]})\n"
-        f"Run: tools/fetch-camerax-deps.sh",
+        f"Run: tools/fetch/fetch-camerax-deps.sh",
         file=sys.stderr,
     )
     sys.exit(1)

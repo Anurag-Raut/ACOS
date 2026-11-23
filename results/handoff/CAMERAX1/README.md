@@ -1,8 +1,8 @@
 # CAMERAX1 — AndroidX CameraX Verification on ACOS `hw.camera`
 
 Branch: `camera3`
-Dependency manifest: [`fixtures/apps/camerax-probe/DEPS.md`](../../../fixtures/apps/camerax-probe/DEPS.md) (37 artifacts, 5.95 MiB, SHA-256 verified via [`tools/fetch-camerax-deps.sh`](../../../tools/fetch-camerax-deps.sh))
-Offline APK builder: [`tools/build-camerax-probe.sh`](../../../tools/build-camerax-probe.sh) (Gradle-free `aapt2` + `javac --release 11` + `d8` + `zipalign` + `apksigner`; hooked into [`tools/build-apps.sh`](../../../tools/build-apps.sh) via `ACOS_APP_ONLY=camerax-probe`)
+Dependency manifest: [`fixtures/apps/camerax-probe/DEPS.md`](../../../fixtures/apps/camerax-probe/DEPS.md) (37 artifacts, 5.95 MiB, SHA-256 verified via [`tools/fetch/fetch-camerax-deps.sh`](../../../tools/fetch/fetch-camerax-deps.sh))
+Offline APK builder: [`tools/build/build-camerax-probe.sh`](../../../tools/build/build-camerax-probe.sh) (Gradle-free `aapt2` + `javac --release 11` + `d8` + `zipalign` + `apksigner`; hooked into [`tools/build-apps.sh`](../../../tools/build-apps.sh) via `ACOS_APP_ONLY=camerax-probe`)
 
 ## Summary of Results
 

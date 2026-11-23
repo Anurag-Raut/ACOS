@@ -695,7 +695,7 @@ fn check_metro() -> Check {
             "metro",
             reason,
             "`needs_env: [metro]` scenarios (the React Native dev loop) cannot run without node and a \
-             React Native node_modules; `tools/build-rn-hello.sh fetch` populates .cache/rn-0.81.4, or set ACOS_METRO_NODE_MODULES.",
+             React Native node_modules; `tools/build/build-rn-hello.sh fetch` populates .cache/rn-0.81.4, or set ACOS_METRO_NODE_MODULES.",
         ),
     }
 }

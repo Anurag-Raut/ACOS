@@ -2,13 +2,13 @@
 #
 # Build fixtures/apps/camerax-probe into fixtures/build/apps/camerax-probe.apk
 # without Gradle, using the SHA-256-verified Maven cache under
-# `.cache/maven-camerax/` (fetched via `tools/fetch-camerax-deps.sh`).
+# `.cache/maven-camerax/` (fetched via `tools/fetch/fetch-camerax-deps.sh`).
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
 if [ -z "${ACOS_GUARDED:-}" ]; then
-    exec "$ROOT/tools/guarded.sh" --mem 6G --time 1800 -- \
+    exec "$ROOT/tools/guard/guarded.sh" --mem 6G --time 1800 -- \
         env ACOS_GUARDED=1 "$0" "$@"
 fi
 
@@ -41,7 +41,7 @@ done
 [ -f "$ANDROID_JAR" ] || die "android.jar not found: $ANDROID_JAR"
 
 # Fail loudly with a helpful message if `.cache/maven-camerax` is missing or invalid.
-"$ROOT/tools/fetch-camerax-deps.sh" --verify-only
+"$ROOT/tools/fetch/fetch-camerax-deps.sh" --verify-only
 
 mkdir -p "$BUILD_DIR"
 if [ ! -f "$KEYSTORE" ]; then
@@ -141,7 +141,7 @@ EXTRA_ARGS=("$WORK/dex:.")
 if ls "$WORK/lib/x86_64/"*.so >/dev/null 2>&1; then
     EXTRA_ARGS+=("$WORK/lib:lib")
 fi
-python3 "$ROOT/tools/apk_append.py" "$WORK/base.apk" "${EXTRA_ARGS[@]}"
+python3 "$ROOT/tools/build/apk_append.py" "$WORK/base.apk" "${EXTRA_ARGS[@]}"
 
 echo "build-camerax-probe: aligning & signing"
 rm -f "$OUT" "$WORK/aligned.apk"

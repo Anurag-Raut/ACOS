@@ -101,7 +101,7 @@ pub struct Tag {
 /// The tags this module writes. Numbers and types are read from
 /// `system/media/camera/include/system/camera_metadata_tags.h` and
 /// `camera_metadata_tag_info.c` at the same tag as the rest of the reference
-/// cache (`tools/fetch-aosp-reference.sh`, the `media` checkout); the unit tests
+/// cache (`tools/fetch/fetch-aosp-reference.sh`, the `media` checkout); the unit tests
 /// assert the ones a Java `CameraCharacteristics.Key` name resolves to.
 pub mod tags {
     use super::{Tag, Type};

@@ -966,7 +966,7 @@ Rules and lifecycle guarantees:
 * **Host preflight.** `acos doctor` includes a `metro` check using the same
   rule as `dev_server: start` (Node.js on `PATH` plus a `node_modules` containing
   `react-native/cli.js` and `metro/`). Missing Node or Metro is reported clearly
-  as a warning with a `fix:` hint, and `tools/run-matrix.sh` skips
+  as a warning with a `fix:` hint, and `tools/verify/run-matrix.sh` skips
   `needs_env: [metro]` scenarios cleanly rather than failing mysteriously.
 
 <!-- /topic:scenarios -->

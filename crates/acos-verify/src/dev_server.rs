@@ -62,7 +62,7 @@ pub fn default_node_modules() -> Option<PathBuf> {
 }
 
 /// The one rule for "this host can run a `needs_env: [metro]` scenario" (used by
-/// `acos doctor`, which `tools/run-matrix.sh` asks, and by `dev_server start`).
+/// `acos doctor`, which `tools/verify/run-matrix.sh` asks, and by `dev_server start`).
 pub fn metro_environment() -> Result<MetroEnvironment, String> {
     let output = Command::new("node")
         .arg("--version")
@@ -74,7 +74,7 @@ pub fn metro_environment() -> Result<MetroEnvironment, String> {
     let version = String::from_utf8_lossy(&output.stdout).trim().to_string();
     let node = which("node").unwrap_or_else(|| PathBuf::from("node"));
     let node_modules = default_node_modules().ok_or_else(|| {
-        "no React Native node_modules with Metro (set ACOS_METRO_NODE_MODULES, or run `tools/build-rn-hello.sh fetch` for .cache/rn-0.81.4)".to_string()
+        "no React Native node_modules with Metro (set ACOS_METRO_NODE_MODULES, or run `tools/build/build-rn-hello.sh fetch` for .cache/rn-0.81.4)".to_string()
     })?;
     Ok(MetroEnvironment {
         node,

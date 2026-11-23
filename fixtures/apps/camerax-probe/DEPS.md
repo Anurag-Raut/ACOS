@@ -8,7 +8,7 @@ Maven Central (`https://repo1.maven.org/maven2/`).
 
 - **Artifact count**: 37 (5.95 MiB, 6,233,881 bytes)
 - **Local cache directory** (gitignored): `.cache/maven-camerax/`
-- **Fetch & verify script**: `tools/fetch-camerax-deps.sh`
+- **Fetch & verify script**: `tools/fetch/fetch-camerax-deps.sh`
 
 ## Artifacts
 

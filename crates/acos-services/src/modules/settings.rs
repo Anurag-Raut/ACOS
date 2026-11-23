@@ -28,7 +28,7 @@ pub const SETTINGS_PACKAGE: &str = "com.android.settings";
 pub const CONFIG_APK: &str = "apk";
 /// Environment override for the Settings APK.
 pub const APK_ENV: &str = "ACOS_SETTINGS_APK";
-/// Workspace-relative default build output (`tools/build-apps.sh`).
+/// Workspace-relative default build output (`tools/build/build-apps.sh`).
 pub const APK_REL: &str = "fixtures/build/apps/settings.apk";
 
 const CONTROL_OPS: [ControlOp; 1] = [ControlOp {
