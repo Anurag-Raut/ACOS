@@ -1,6 +1,6 @@
 # RELGATE6 — ACOS v0.4.1 Release Gate Re-run (Steps 1 & 7 on `origin/fix041`)
 
-> Raw logs/JSON referenced below are not tracked (repo layout rule, `tools/verify/check-layout.sh`); they are archived at `~/acos-evidence/v041-relgate6-raw-20261123.tar.zst` on the lead host.
+> Raw logs/JSON, run scripts, `repro.sh` files and generated tables referenced below are not tracked (repo policy: one report per task); they are archived on the lead host at `~/acos-evidence/v041-relgate6-raw-20261123.tar.zst` and `~/acos-evidence/v041-results-scripts-generated-md-20261123.tar.zst`.
 
 > **Lead re-run (normal shell, 2026-11-23):** `cargo test -p acos-art --test spike_net_boundary` with `ACOS_HOME=~/.local/share/acos/current` → **2 passed, 0 failed** (`guest_cannot_change_the_lan_drop_rules`, `boundary_failure_never_starts_the_guest`). Step 1 has no remaining open item.
 

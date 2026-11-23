@@ -1,6 +1,6 @@
 # RELGATE5 — v0.4.1 release gate (evidence only)
 
-> Raw logs/JSON referenced below are not tracked (repo layout rule, `tools/verify/check-layout.sh`); they are archived at `~/acos-evidence/v041-relgate5-raw-20261123.tar.zst` on the lead host.
+> Raw logs/JSON, run scripts, `repro.sh` files and generated tables referenced below are not tracked (repo policy: one report per task); they are archived on the lead host at `~/acos-evidence/v041-relgate5-raw-20261123.tar.zst` and `~/acos-evidence/v041-results-scripts-generated-md-20261123.tar.zst`.
 
 Worktree `/home/Qui/.t3/worktrees/acos/t3-8432ccd8-1d58d051095d020b`, branch
 `relgate5` created from `origin/modules` HEAD **`36859df75`** (`36859df75342bb42969da822c076717d96904365`).
