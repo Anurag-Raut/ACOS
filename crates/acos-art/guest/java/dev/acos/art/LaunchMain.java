@@ -1847,6 +1847,20 @@ public final class LaunchMain {
     }
 
     /**
+     * The decor's attached {@code ViewRootImpl}, or null when it has none.
+     * `ACOSLAUNCH_TEST_WINDOW_NO_ROOT` (diagnostic test seam, forwarded by the
+     * launcher, nothing else reads it) makes every lookup report "no root".
+     */
+    static Object windowRoot(Object decor) {
+        if (System.getenv("ACOSLAUNCH_TEST_WINDOW_NO_ROOT") != null) return null;
+        try {
+            return decor.getClass().getMethod("getViewRootImpl").invoke(decor);
+        } catch (Throwable ignored) {
+            return null;
+        }
+    }
+
+    /**
      * MULTIWIN3: force one relayout on the resumed Activity's decor so
      * {@code ViewRootImpl.performTraversals} fetches the new task frame from the
      * host WMS, then wake the probe *after* the frame traversal finishes so the
@@ -1863,11 +1877,7 @@ public final class LaunchMain {
                 Object window = activity.getClass().getMethod("getWindow").invoke(activity);
                 Object decor = window.getClass().getMethod("getDecorView").invoke(window);
                 if (decor instanceof View) {
-                    Object vr = null;
-                    try {
-                        vr = decor.getClass().getMethod("getViewRootImpl").invoke(decor);
-                    } catch (Throwable ignored) {
-                    }
+                    Object vr = windowRoot(decor);
                     if (vr != null) {
                         setFieldForce(vr.getClass(), vr, "mForceNextWindowRelayout", Boolean.TRUE);
                     }

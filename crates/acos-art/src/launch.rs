@@ -2738,6 +2738,10 @@ pub(crate) fn launch_session(
     if let Ok(mode) = std::env::var("ACOSLAUNCH_CRASH_TEST") {
         sb.env("ACOSLAUNCH_CRASH_TEST", &mode);
     }
+    // CR1FIX2 #1: diagnostic seam, the decor reports no attached root.
+    if std::env::var_os("ACOSLAUNCH_TEST_WINDOW_NO_ROOT").is_some() {
+        sb.env("ACOSLAUNCH_TEST_WINDOW_NO_ROOT", "1");
+    }
     if let Ok(v) = std::env::var("ACOSART_CRASH_DUMP") {
         sb.env("ACOSART_CRASH_DUMP", &v);
     }
