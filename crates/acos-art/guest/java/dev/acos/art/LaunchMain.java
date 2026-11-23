@@ -1869,52 +1869,88 @@ public final class LaunchMain {
     static void finishWindow(final int windowingMode, final boolean relaunch,
             final String rung, final int handled,
             final int l, final int t, final int r, final int b) {
-        Object activity = null;
-        try {
-            Object thread = sThread;
-            activity = thread == null ? null : resumedActivity(thread);
-            if (activity != null) {
-                Object window = activity.getClass().getMethod("getWindow").invoke(activity);
-                Object decor = window.getClass().getMethod("getDecorView").invoke(window);
-                if (decor instanceof View) {
-                    Object vr = windowRoot(decor);
-                    if (vr != null) {
-                        setFieldForce(vr.getClass(), vr, "mForceNextWindowRelayout", Boolean.TRUE);
-                    }
-                    ((View) decor).requestLayout();
-                }
-            }
-        } catch (Throwable err) {
-            System.out.println("ACOSLAUNCH MARK window-relayout-failed " + unwrap(err));
-        }
-        final Object fActivity = activity;
-        final Runnable wakeProbe = new Runnable() {
+        // CR1FIX2 #1: the command is acknowledged as done only after the target
+        // window's own traversal ran (its decor is attached to a ViewRootImpl and
+        // no longer has a pending layout request). An absent root is waited for
+        // within a bounded deadline; a relayout that throws, or a root that never
+        // traverses, marks the command FAILED so the host reports the failure.
+        final long deadlineNs = System.nanoTime() + 3000L * 1000000L;
+        final android.os.Handler main = new android.os.Handler(Looper.getMainLooper());
+        final boolean[] requested = new boolean[] {false};
+        final Runnable[] step = new Runnable[1];
+        step[0] = new Runnable() {
             @Override
             public void run() {
-                windowCmdFinished(false);
-                System.out.println("ACOSLAUNCH MARK window mode=" + windowingMode
-                        + " bounds=[" + l + "," + t + "," + r + "," + b + "]"
-                        + " relaunch=" + relaunch + " via=" + rung
-                        + " handled=0x" + Integer.toHexString(handled)
-                        + " activity=" + (fActivity == null ? "<none>" : fActivity.getClass().getName()));
-                System.out.flush();
+                Object activity = null;
+                String failure = null;
+                boolean traversed = false;
+                try {
+                    Object thread = sThread;
+                    activity = thread == null ? null : resumedActivity(thread);
+                    if (activity == null) {
+                        failure = "no resumed activity";
+                    } else {
+                        Object window = activity.getClass().getMethod("getWindow")
+                                .invoke(activity);
+                        Object decor = window.getClass().getMethod("getDecorView")
+                                .invoke(window);
+                        if (!(decor instanceof View)) {
+                            failure = "no decor view";
+                        } else {
+                            Object vr = windowRoot(decor);
+                            if (vr == null) {
+                                failure = "no attached ViewRootImpl";
+                            } else if (!requested[0]) {
+                                setFieldForce(vr.getClass(), vr,
+                                        "mForceNextWindowRelayout", Boolean.TRUE);
+                                ((View) decor).requestLayout();
+                                requested[0] = true;
+                                failure = "traversal pending";
+                            } else if (((View) decor).isLayoutRequested()) {
+                                failure = "traversal pending";
+                            } else {
+                                traversed = true;
+                            }
+                        }
+                    }
+                } catch (Throwable err) {
+                    System.out.println("ACOSLAUNCH MARK window-relayout-failed " + unwrap(err));
+                    System.out.flush();
+                    windowCmdFinished(true);
+                    return;
+                }
+                if (traversed) {
+                    windowCmdFinished(false);
+                    System.out.println("ACOSLAUNCH MARK window mode=" + windowingMode
+                            + " bounds=[" + l + "," + t + "," + r + "," + b + "]"
+                            + " relaunch=" + relaunch + " via=" + rung
+                            + " handled=0x" + Integer.toHexString(handled)
+                            + " activity=" + activity.getClass().getName());
+                    System.out.flush();
+                    return;
+                }
+                if (System.nanoTime() >= deadlineNs) {
+                    System.out.println("ACOSLAUNCH MARK window-relayout-failed " + failure
+                            + " before the deadline");
+                    System.out.flush();
+                    windowCmdFinished(true);
+                    return;
+                }
+                // Check again after the next frame's traversal.
+                try {
+                    android.view.Choreographer.getInstance().postFrameCallback(
+                            new android.view.Choreographer.FrameCallback() {
+                                @Override
+                                public void doFrame(long frameTimeNanos) {
+                                    main.post(step[0]);
+                                }
+                            });
+                } catch (Throwable ignored) {
+                    main.postDelayed(step[0], 16L);
+                }
             }
         };
-        final android.os.Handler main = new android.os.Handler(Looper.getMainLooper());
-        try {
-            // Post inside Choreographer's frame callback, then hop to main so
-            // CALLBACK_TRAVERSAL (performTraversals -> relayoutWindow -> layout)
-            // completes before the probe walks the view tree.
-            android.view.Choreographer.getInstance().postFrameCallback(
-                    new android.view.Choreographer.FrameCallback() {
-                        @Override
-                        public void doFrame(long frameTimeNanos) {
-                            main.post(wakeProbe);
-                        }
-                    });
-        } catch (Throwable ignored) {
-            main.post(wakeProbe);
-        }
+        step[0].run();
     }
 
     /**
