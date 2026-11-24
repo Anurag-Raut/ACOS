@@ -2872,10 +2872,18 @@ impl ArtSession {
                     captured.path.display()
                 ))
             }),
-            Err(_) => {
-                let frame = self.bound_frame()?.ok_or_else(|| {
-                    live_frame_unavailable("no bound frame is available yet")
-                })?;
+            Err(err) => {
+                let is_stale = matches!(
+                    &err,
+                    BackendError::Error {
+                        code: ErrorCode::NoFreshFrame,
+                        detail,
+                    } if detail.starts_with(super::STALE_FRAME)
+                );
+                if !is_stale || self.stdin.is_none() || self.closed || self.liveness().is_some() {
+                    return Err(err);
+                }
+                let frame = self.bound_frame()?.ok_or(err)?;
                 let png = frame.png();
                 if png.is_empty() {
                     return Err(live_frame_unavailable(
@@ -10032,6 +10040,104 @@ mod tests {
             doc["evidence_files"]["session-exit.json"].is_string(),
             "the evidence file list names what was kept: {doc}"
         );
+        std::env::remove_var("ACOS_ART_BIN");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn screenshot_png_bytes_propagates_errors_and_only_falls_back_on_live_stale_frame() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = scratch_dir("cr2-screenshot");
+        let out = dir.join("art-frames");
+        std::fs::create_dir_all(&out).unwrap();
+        let png = out.join("frame-001.png");
+        let png_bytes = super::super::fake::TINY_PNG;
+        std::fs::write(&png, png_bytes).unwrap();
+
+        let script = dir.join("fake-art-cr2");
+        let mut body = String::new();
+        body.push_str("#!/usr/bin/env bash\nset -e\n");
+        body.push_str(
+            "echo '{\"ok\":true,\"cmd\":\"ready\",\"package\":\"dev.cr2\",\
+             \"activity\":\"dev.cr2/.Main\",\"width\":100,\"height\":200,\"density\":160}'\n",
+        );
+        body.push_str("shots=0\n");
+        body.push_str("while IFS= read -r line; do\n");
+        body.push_str("  case \"$line\" in\n");
+        body.push_str("    *'\"cmd\":\"tree\"'*)\n");
+        body.push_str(&format!(
+            "      echo '{{\"ok\":true,\"cmd\":\"tree\",\"frame_seq\":1,\"md5\":\"m1\",\"png\":\"{}\",\"tree\":{{\"nodes\":[]}}}}'\n",
+            png.display()
+        ));
+        body.push_str("      ;;\n");
+        body.push_str("    *'\"cmd\":\"screenshot\"'*)\n");
+        body.push_str("      shots=$((shots+1))\n");
+        body.push_str("      if [ \"$shots\" -eq 1 ]; then\n");
+        // Call 1: same frame_seq=1 -> triggers STALE_FRAME while guest is still alive.
+        body.push_str(&format!(
+            "        echo '{{\"ok\":true,\"cmd\":\"screenshot\",\"frame_seq\":1,\"md5\":\"m1\",\"png\":\"{}\"}}'\n",
+            png.display()
+        ));
+        body.push_str("      elif [ \"$shots\" -eq 2 ]; then\n");
+        // Call 2: compositor error (INTERNAL).
+        body.push_str(
+            "        echo '{\"ok\":false,\"cmd\":\"screenshot\",\"code\":\"INTERNAL\",\"error\":\"compositor crashed\"}'\n",
+        );
+        body.push_str("      else\n");
+        // Call 3: child dies unexpectedly before replying (closed pipe, session.closed == false).
+        body.push_str("        exit 1\n");
+        body.push_str("      fi\n");
+        body.push_str("      ;;\n");
+        body.push_str("    *'\"cmd\":\"close\"'*)\n");
+        body.push_str("      echo '{\"ok\":true,\"cmd\":\"close\"}'\n");
+        body.push_str("      exit 0\n");
+        body.push_str("      ;;\n");
+        body.push_str(
+            "    *) echo '{\"ok\":false,\"code\":\"BAD_REQUEST\",\"error\":\"bad\"}'; ;;\n",
+        );
+        body.push_str("  esac\n");
+        body.push_str("done\n");
+        std::fs::write(&script, body).unwrap();
+        let mut perms = std::fs::metadata(&script).unwrap().permissions();
+        perms.set_mode(0o755);
+        std::fs::set_permissions(&script, perms).unwrap();
+
+        let apk = dir.join("fake.apk");
+        std::fs::write(&apk, b"not-a-real-apk").unwrap();
+        let _guard = art_bin_env_lock();
+        std::env::set_var("ACOS_ART_BIN", &script);
+
+        let mut session = ArtSession::start(&apk, &dir).expect("fake session starts");
+        // Bind initial frame_seq=1 so last_pixel holds valid cached PNG bytes.
+        let _ = session.frame().expect("initial frame bound");
+
+        // 1. Live STALE_FRAME must fall back to the bound frame PNG.
+        let stale_ok = session
+            .screenshot_png_bytes()
+            .expect("live STALE_FRAME falls back to cached PNG");
+        assert_eq!(stale_ok, png_bytes);
+
+        // 2. INTERNAL capture failure must propagate as Err, NOT return cached PNG.
+        let internal_err = session
+            .screenshot_png_bytes()
+            .expect_err("INTERNAL error must not be swallowed");
+        assert!(
+            internal_err.to_string().contains("compositor crashed"),
+            "unexpected internal error: {internal_err}"
+        );
+
+        // 3. Dead guest / EOF (without host close) must return Err, NOT cached PNG.
+        let dead_err = session
+            .screenshot_png_bytes()
+            .expect_err("dead guest must not serve cached PNG");
+        assert!(
+            matches!(
+                dead_err,
+                BackendError::Protocol { .. } | BackendError::Error { .. }
+            ),
+            "unexpected dead error: {dead_err}"
+        );
+
         std::env::remove_var("ACOS_ART_BIN");
         let _ = std::fs::remove_dir_all(&dir);
     }
