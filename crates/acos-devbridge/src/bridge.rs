@@ -19,6 +19,9 @@ use crate::keymap::KeyboardState;
 use crate::live_client::LiveStreamHub;
 use crate::touch::TouchTracker;
 
+/// Process-wide monotonically increasing sequence for temporary raw screenshot files.
+static SHOT_SEQ: AtomicU64 = AtomicU64::new(0);
+
 /// State shared between the bridge server and one session's gRPC service.
 pub struct BridgeSession {
     pub session_id: String,
@@ -34,7 +37,6 @@ pub struct BridgeSession {
     pub live_hub: Option<Arc<LiveStreamHub>>,
     pub touch_tracker: Mutex<TouchTracker>,
     pub keyboard_state: Mutex<KeyboardState>,
-    shot_seq: AtomicU64,
     shutdown_tx: watch::Sender<bool>,
 }
 
@@ -70,7 +72,6 @@ impl BridgeSession {
             live_hub,
             touch_tracker: Mutex::new(TouchTracker::default()),
             keyboard_state: Mutex::new(KeyboardState::default()),
-            shot_seq: AtomicU64::new(0),
             shutdown_tx,
         })
     }
@@ -94,7 +95,7 @@ impl BridgeSession {
     }
 
     pub async fn raw_screenshot(&self, format: &str) -> Result<(u32, u32, u8, Vec<u8>), String> {
-        let seq = self.shot_seq.fetch_add(1, Ordering::Relaxed);
+        let seq = SHOT_SEQ.fetch_add(1, Ordering::Relaxed);
         let shot_path = self
             .shot_dir
             .join(format!("shot-{}-{seq}.bin", std::process::id()));
@@ -434,4 +435,104 @@ fn peer_same_uid(stream: &UnixStream) -> bool {
         )
     };
     rc == 0 && cred.uid == unsafe { libc::getuid() }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn scratch_dir(tag: &str) -> PathBuf {
+        static NEXT: AtomicU64 = AtomicU64::new(0);
+        let dir = PathBuf::from("/tmp").join(format!(
+            "acos-t-{tag}-{}-{}",
+            std::process::id(),
+            NEXT.fetch_add(1, Ordering::Relaxed)
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        let _ = std::fs::create_dir_all(&dir);
+        dir
+    }
+
+    #[tokio::test]
+    async fn raw_screenshot_paths_do_not_collide_across_sessions() {
+        let dir = scratch_dir("shot-seq");
+        let sock = dir.join("cb.sock");
+        let listener = UnixListener::bind(&sock).expect("bind callback sock");
+
+        let recorded_paths: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
+        let recorded_bg = Arc::clone(&recorded_paths);
+        let server_task = tokio::spawn(async move {
+            use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+            for _ in 0..2 {
+                let (stream, _) = listener.accept().await.expect("accept");
+                let recorded_conn = Arc::clone(&recorded_bg);
+                tokio::spawn(async move {
+                    let (r, mut w) = stream.into_split();
+                    let mut reader = BufReader::new(r);
+                    let mut line = String::new();
+                    reader.read_line(&mut line).await.expect("read req");
+                    let req: Value = serde_json::from_str(&line).expect("json");
+                    let path = req
+                        .get("path")
+                        .and_then(Value::as_str)
+                        .expect("path")
+                        .to_string();
+                    std::fs::write(&path, b"PNGDATA").expect("write shot file");
+                    recorded_conn.lock().unwrap().push(path);
+                    let resp = json!({
+                        "ok": true,
+                        "width": 1080,
+                        "height": 2400,
+                        "rotation": 0,
+                    });
+                    let mut out = resp.to_string();
+                    out.push('\n');
+                    w.write_all(out.as_bytes()).await.expect("write resp");
+                });
+            }
+        });
+
+        let (tx1, _rx1) = watch::channel(false);
+        let s1 = BridgeSession::new(
+            "s1".to_string(),
+            "avd1".to_string(),
+            "tok1".to_string(),
+            sock.clone(),
+            dir.clone(),
+            1080,
+            2400,
+            0,
+            false,
+            None,
+            tx1,
+        );
+        let (tx2, _rx2) = watch::channel(false);
+        let s2 = BridgeSession::new(
+            "s2".to_string(),
+            "avd2".to_string(),
+            "tok2".to_string(),
+            sock.clone(),
+            dir.clone(),
+            1080,
+            2400,
+            0,
+            false,
+            None,
+            tx2,
+        );
+
+        let (r1, r2) = tokio::join!(s1.raw_screenshot("png"), s2.raw_screenshot("png"));
+        r1.expect("s1 raw_screenshot");
+        r2.expect("s2 raw_screenshot");
+        server_task.await.expect("server join");
+
+        let paths = recorded_paths.lock().unwrap();
+        assert_eq!(paths.len(), 2);
+        assert_ne!(
+            paths[0], paths[1],
+            "shot paths collided across sessions: {:?}",
+            *paths
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }
