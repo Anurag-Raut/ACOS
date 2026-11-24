@@ -500,6 +500,10 @@ public final class LaunchMain {
         // publishes a structured UNSUPPORTED_ANDROID_API marker naming the call.
         // The app keeps running; no state is fabricated.
         installStartActivityGuard();
+        sHostLaunchAwaitingObservation =
+                System.getenv("ACOSLAUNCH_HOST_SCHEDULES") != null
+                        && "activity-resumed".equals(sUntil)
+                        && sActivity != null;
         installTopFinishHook();
 
         // The bindApplication H message is already posted; run the real main
@@ -730,6 +734,28 @@ public final class LaunchMain {
     /** P3b: wakeup for the probe thread, so a host request is not a 50 ms wait. */
     static final Object sProbeWake = new Object();
     static boolean sProbeRequested = false;
+    /**
+     * CR1FIX #20: count of host WINDOW commands the guest has finished
+     * processing, and how many of those failed. Bumped only AFTER the new bounds
+     * were applied and the relayout choreography ran (or the command failed), then
+     * a probe is requested; every sample reports the pair as it was when its tree
+     * walk started, so a host can tell a post-apply tree from an older one.
+     */
+    static final java.util.concurrent.atomic.AtomicLong sWindowCmdDone =
+            new java.util.concurrent.atomic.AtomicLong();
+    static final java.util.concurrent.atomic.AtomicLong sWindowCmdFailed =
+            new java.util.concurrent.atomic.AtomicLong();
+
+    static void windowCmdFinished(boolean failed) {
+        if (failed) sWindowCmdFailed.incrementAndGet();
+        sWindowCmdDone.incrementAndGet();
+        sDirtyAtMs = 0;
+        sTreeDirty.set(true);
+        synchronized (sProbeWake) {
+            sProbeRequested = true;
+            sProbeWake.notifyAll();
+        }
+    }
     /**
      * SETTLE5: the probe channel's own liveness facts, so a host that waits for
      * a sample can never be left guessing whether its wake reached the guest.
@@ -1821,6 +1847,20 @@ public final class LaunchMain {
     }
 
     /**
+     * The decor's attached {@code ViewRootImpl}, or null when it has none.
+     * `ACOSLAUNCH_TEST_WINDOW_NO_ROOT` (diagnostic test seam, forwarded by the
+     * launcher, nothing else reads it) makes every lookup report "no root".
+     */
+    static Object windowRoot(Object decor) {
+        if (System.getenv("ACOSLAUNCH_TEST_WINDOW_NO_ROOT") != null) return null;
+        try {
+            return decor.getClass().getMethod("getViewRootImpl").invoke(decor);
+        } catch (Throwable ignored) {
+            return null;
+        }
+    }
+
+    /**
      * MULTIWIN3: force one relayout on the resumed Activity's decor so
      * {@code ViewRootImpl.performTraversals} fetches the new task frame from the
      * host WMS, then wake the probe *after* the frame traversal finishes so the
@@ -1829,61 +1869,88 @@ public final class LaunchMain {
     static void finishWindow(final int windowingMode, final boolean relaunch,
             final String rung, final int handled,
             final int l, final int t, final int r, final int b) {
-        Object activity = null;
-        try {
-            Object thread = sThread;
-            activity = thread == null ? null : resumedActivity(thread);
-            if (activity != null) {
-                Object window = activity.getClass().getMethod("getWindow").invoke(activity);
-                Object decor = window.getClass().getMethod("getDecorView").invoke(window);
-                if (decor instanceof View) {
-                    Object vr = null;
-                    try {
-                        vr = decor.getClass().getMethod("getViewRootImpl").invoke(decor);
-                    } catch (Throwable ignored) {
-                    }
-                    if (vr != null) {
-                        setFieldForce(vr.getClass(), vr, "mForceNextWindowRelayout", Boolean.TRUE);
-                    }
-                    ((View) decor).requestLayout();
-                }
-            }
-        } catch (Throwable err) {
-            System.out.println("ACOSLAUNCH MARK window-relayout-failed " + unwrap(err));
-        }
-        final Object fActivity = activity;
-        final Runnable wakeProbe = new Runnable() {
+        // CR1FIX2 #1: the command is acknowledged as done only after the target
+        // window's own traversal ran (its decor is attached to a ViewRootImpl and
+        // no longer has a pending layout request). An absent root is waited for
+        // within a bounded deadline; a relayout that throws, or a root that never
+        // traverses, marks the command FAILED so the host reports the failure.
+        final long deadlineNs = System.nanoTime() + 3000L * 1000000L;
+        final android.os.Handler main = new android.os.Handler(Looper.getMainLooper());
+        final boolean[] requested = new boolean[] {false};
+        final Runnable[] step = new Runnable[1];
+        step[0] = new Runnable() {
             @Override
             public void run() {
-                sDirtyAtMs = 0;
-                sTreeDirty.set(true);
-                synchronized (sProbeWake) {
-                    sProbeRequested = true;
-                    sProbeWake.notifyAll();
+                Object activity = null;
+                String failure = null;
+                boolean traversed = false;
+                try {
+                    Object thread = sThread;
+                    activity = thread == null ? null : resumedActivity(thread);
+                    if (activity == null) {
+                        failure = "no resumed activity";
+                    } else {
+                        Object window = activity.getClass().getMethod("getWindow")
+                                .invoke(activity);
+                        Object decor = window.getClass().getMethod("getDecorView")
+                                .invoke(window);
+                        if (!(decor instanceof View)) {
+                            failure = "no decor view";
+                        } else {
+                            Object vr = windowRoot(decor);
+                            if (vr == null) {
+                                failure = "no attached ViewRootImpl";
+                            } else if (!requested[0]) {
+                                setFieldForce(vr.getClass(), vr,
+                                        "mForceNextWindowRelayout", Boolean.TRUE);
+                                ((View) decor).requestLayout();
+                                requested[0] = true;
+                                failure = "traversal pending";
+                            } else if (((View) decor).isLayoutRequested()) {
+                                failure = "traversal pending";
+                            } else {
+                                traversed = true;
+                            }
+                        }
+                    }
+                } catch (Throwable err) {
+                    System.out.println("ACOSLAUNCH MARK window-relayout-failed " + unwrap(err));
+                    System.out.flush();
+                    windowCmdFinished(true);
+                    return;
                 }
-                System.out.println("ACOSLAUNCH MARK window mode=" + windowingMode
-                        + " bounds=[" + l + "," + t + "," + r + "," + b + "]"
-                        + " relaunch=" + relaunch + " via=" + rung
-                        + " handled=0x" + Integer.toHexString(handled)
-                        + " activity=" + (fActivity == null ? "<none>" : fActivity.getClass().getName()));
-                System.out.flush();
+                if (traversed) {
+                    windowCmdFinished(false);
+                    System.out.println("ACOSLAUNCH MARK window mode=" + windowingMode
+                            + " bounds=[" + l + "," + t + "," + r + "," + b + "]"
+                            + " relaunch=" + relaunch + " via=" + rung
+                            + " handled=0x" + Integer.toHexString(handled)
+                            + " activity=" + activity.getClass().getName());
+                    System.out.flush();
+                    return;
+                }
+                if (System.nanoTime() >= deadlineNs) {
+                    System.out.println("ACOSLAUNCH MARK window-relayout-failed " + failure
+                            + " before the deadline");
+                    System.out.flush();
+                    windowCmdFinished(true);
+                    return;
+                }
+                // Check again after the next frame's traversal.
+                try {
+                    android.view.Choreographer.getInstance().postFrameCallback(
+                            new android.view.Choreographer.FrameCallback() {
+                                @Override
+                                public void doFrame(long frameTimeNanos) {
+                                    main.post(step[0]);
+                                }
+                            });
+                } catch (Throwable ignored) {
+                    main.postDelayed(step[0], 16L);
+                }
             }
         };
-        final android.os.Handler main = new android.os.Handler(Looper.getMainLooper());
-        try {
-            // Post inside Choreographer's frame callback, then hop to main so
-            // CALLBACK_TRAVERSAL (performTraversals -> relayoutWindow -> layout)
-            // completes before the probe walks the view tree.
-            android.view.Choreographer.getInstance().postFrameCallback(
-                    new android.view.Choreographer.FrameCallback() {
-                        @Override
-                        public void doFrame(long frameTimeNanos) {
-                            main.post(wakeProbe);
-                        }
-                    });
-        } catch (Throwable ignored) {
-            main.post(wakeProbe);
-        }
+        step[0].run();
     }
 
     /**
@@ -2055,6 +2122,7 @@ public final class LaunchMain {
                     + " " + unwrap(err));
             err.printStackTrace(System.out);
             System.out.flush();
+            windowCmdFinished(true);
         }
     }
 
@@ -2131,6 +2199,7 @@ public final class LaunchMain {
                             if (parts.length != 10) {
                                 System.out.println("ACOSLAUNCH MARK window-bad-arg line=" + word);
                                 System.out.flush();
+                                windowCmdFinished(true);
                                 continue;
                             }
                             final int mode, l, t, r, b, al, atPx, ar, ab;
@@ -2147,6 +2216,7 @@ public final class LaunchMain {
                             } catch (Throwable bad) {
                                 System.out.println("ACOSLAUNCH MARK window-bad-arg line=" + word);
                                 System.out.flush();
+                                windowCmdFinished(true);
                                 continue;
                             }
                             main.post(new Runnable() {
@@ -2441,6 +2511,10 @@ public final class LaunchMain {
 
     static void emitProbe(Object activity, long seq, String cause) throws Throwable {
         long probeStart = System.nanoTime();
+        // CR1FIX #20: snapshot before the tree walk, so a sample that reports
+        // `done >= N` was walked after WINDOW command N had been applied.
+        final long windowCmdDone = sWindowCmdDone.get();
+        final long windowCmdFailed = sWindowCmdFailed.get();
         Object window = activity.getClass().getMethod("getWindow").invoke(activity);
         Object decor = window.getClass().getMethod("getDecorView").invoke(window);
         if (!(decor instanceof View)) return;
@@ -2549,6 +2623,8 @@ public final class LaunchMain {
                 .append(",\"time\":").append(System.currentTimeMillis())
                 .append(",\"cause\":\"").append(cause).append('"')
                 .append(",\"view_generation\":").append(sViewGeneration)
+                .append(",\"window_cmd\":{\"done\":").append(windowCmdDone)
+                .append(",\"failed\":").append(windowCmdFailed).append('}')
                 .append(",\"windows\":[").append(windows).append("]")
                 .append(",\"tree\":{\"nodes\":[").append(nodes).append(']')
                 .append(",\"window_count\":").append(z)
@@ -3582,6 +3658,8 @@ public final class LaunchMain {
                 } catch (Throwable x) {
                     System.out.println("ACOSLAUNCH MARK watcher-error " + x);
                     x.printStackTrace(System.out);
+                } finally {
+                    releaseHostLaunchObservation();
                 }
                 System.out.flush();
             }
@@ -3765,6 +3843,7 @@ public final class LaunchMain {
         // `IApplicationThread.scheduleTransaction` instead of marshalling its
         // own. The primary process keeps the local path (its token is the one
         // the guest itself must report back).
+        Object hostLaunched = null;
         if (System.getenv("ACOSLAUNCH_HOST_SCHEDULES") != null) {
             System.out.println("ACOSLAUNCH MARK waiting-for-host-transaction activity="
                     + sActivity);
@@ -3781,13 +3860,22 @@ public final class LaunchMain {
             // `halt(0)` cut the finish/result handshake before the caller got
             // its result. `mCalled` is the framework's own onCreate/onStart
             // completion flag on the record the transaction created.
-            Object launched = null;
+            Object launched = launchedActivity(thread);
             long hostDeadline = System.currentTimeMillis() + sResumeMs;
-            while (launched == null && System.currentTimeMillis() < hostDeadline) {
-                Thread.sleep(5);
-                launched = launchedActivity(thread);
+            while (launched == null) {
+                long rem = hostDeadline - System.currentTimeMillis();
+                if (rem <= 0) break;
+                synchronized (sHostLaunchLock) {
+                    launched = launchedActivity(thread);
+                    if (launched != null) break;
+                    sHostLaunchLock.wait(Math.min(5L, rem));
+                }
+                if (launched == null) {
+                    launched = launchedActivity(thread);
+                }
             }
             if (launched == null) {
+                releaseHostLaunchObservation();
                 System.out.println("ACOSLAUNCH MARK host-transaction-timeout activity="
                         + sActivity + " timeout_ms=" + sResumeMs);
                 write(new File(sOut, "activity-not-resumed.marker"),
@@ -3815,24 +3903,11 @@ public final class LaunchMain {
             boolean finishedDuringCreate = !resumed
                     && Boolean.TRUE.equals(get(launched, "mFinished"));
             if (finishedDuringCreate) {
-                // AOSP's own outcome for an Activity that finishes in onCreate:
-                // created (and started), never resumed, then paused/stopped/
-                // destroyed by the server. Report exactly that, and keep the
-                // real main looper alive: the server drives the rest of the
-                // lifecycle and the caller's `ActivityResultItem` follows the
-                // destroy — a halt here is what lost the result.
-                sActivityResumed = true;
-                sFinishDuringCreate = true;
-                writeResumeMarker(thread, launched,
-                        "finish_during_create=true\n"
-                                + "resume_skipped=finishing-in-onCreate "
-                                + "(ActivityThread.handleResumeActivity)");
-                System.out.println("ACOSLAUNCH MARK activity-resumed activity="
-                        + launched.getClass().getName() + " window=" + get(launched, "mWindow")
-                        + " finish_during_create=true");
-                System.out.flush();
+                reportFinishDuringCreate(thread, launched);
                 return;
             }
+            hostLaunched = launched;
+            releaseHostLaunchObservation();
             System.out.println("ACOSLAUNCH MARK host-transaction-resumed activity="
                     + launched.getClass().getName()
                     + " token=" + (sCurrentToken == null ? "none" : "binder:"
@@ -3865,6 +3940,18 @@ public final class LaunchMain {
         long adeadline = System.currentTimeMillis() + sResumeMs;
         while (System.currentTimeMillis() < adeadline) {
             Object activity = resumedActivity(thread);
+            if (activity == null && hostLaunched != null
+                    && Boolean.TRUE.equals(get(hostLaunched, "mFinished"))) {
+                // `launchedActivity` selects on `mCalled`, which
+                // `super.onCreate()` sets, so an Activity that finishes later
+                // in the same `onCreate` (splash/trampoline) is selected
+                // before it finishes. `ActivityThread.handleResumeActivity`
+                // then skips its resume, so waiting for `mResumed` would time
+                // out a legitimate launch. `mFinished` set without `mResumed`
+                // is the same outcome as the early case above.
+                reportFinishDuringCreate(thread, hostLaunched);
+                return;
+            }
             if (activity != null) {
                 // O3: `mResumed` is set by Instrumentation *before* the
                 // fixture's onResume() body runs, so observing it is not
@@ -4250,6 +4337,30 @@ public final class LaunchMain {
                 + " window=" + get(activity, "mWindow") + " recorded_after=looper-threw");
         System.out.flush();
         return true;
+    }
+
+    /**
+     * The host-scheduled launch's outcome for an Activity that finished inside
+     * `onCreate` and was never resumed (see the call sites).
+     */
+    static void reportFinishDuringCreate(Object thread, Object launched) throws Exception {
+        // AOSP's own outcome for an Activity that finishes in onCreate:
+        // created (and started), never resumed, then paused/stopped/
+        // destroyed by the server. Report exactly that, and keep the
+        // real main looper alive: the server drives the rest of the
+        // lifecycle and the caller's `ActivityResultItem` follows the
+        // destroy -- a halt here is what lost the result.
+        sActivityResumed = true;
+        sFinishDuringCreate = true;
+        writeResumeMarker(thread, launched,
+                "finish_during_create=true\n"
+                        + "resume_skipped=finishing-in-onCreate "
+                        + "(ActivityThread.handleResumeActivity)");
+        System.out.println("ACOSLAUNCH MARK activity-resumed activity="
+                + launched.getClass().getName() + " window=" + get(launched, "mWindow")
+                + " finish_during_create=true");
+        System.out.flush();
+        releaseHostLaunchObservation();
     }
 
     /**
@@ -5580,17 +5691,68 @@ public final class LaunchMain {
      */
     private static final java.util.Set<IBinder> sLocallyWatchedFinishes =
             java.util.Collections.synchronizedSet(new java.util.HashSet<IBinder>());
+    /**
+     * CR1FIX #10: the Activity below each in-guest started Activity, kept while the
+     * local finish watcher may give up (it waits 60 s), so a LATE finish that falls
+     * through to the general dispatcher resumes the previous Activity just like the
+     * local path does.
+     */
+    private static final java.util.Map<IBinder, IBinder> sFinishPrevious =
+            java.util.Collections.synchronizedMap(new java.util.HashMap<IBinder, IBinder>());
     private static final java.util.Set<IBinder> sTopFinishHandled =
             java.util.Collections.synchronizedSet(new java.util.HashSet<IBinder>());
     private static final java.util.concurrent.atomic.AtomicBoolean sTopFinishWatcherStarted =
             new java.util.concurrent.atomic.AtomicBoolean(false);
     private static volatile boolean sTopFinishHookInstalled = false;
+    private static final Object sHostLaunchLock = new Object();
+    private static volatile boolean sHostLaunchAwaitingObservation = false;
+    private static final java.util.List<IBinder> sDeferredTopFinishes =
+            new java.util.ArrayList<IBinder>();
     private static volatile android.os.Handler sMainHandler;
     private static volatile Object sWrappedControllerProxy;
     private static volatile Object sWrappedControllerDelegate;
     private static Class<?> sPauseItemCls;
     private static Class<?> sStopItemCls;
     private static Class<?> sDestroyItemCls;
+
+    static boolean deferTopFinishIfLaunchPending(IBinder tkn) {
+        if (!sHostLaunchAwaitingObservation) return false;
+        synchronized (sHostLaunchLock) {
+            if (!sHostLaunchAwaitingObservation) return false;
+            if (tkn != null && !sDeferredTopFinishes.contains(tkn)) {
+                sDeferredTopFinishes.add(tkn);
+            }
+            sHostLaunchLock.notifyAll();
+            return true;
+        }
+    }
+
+    static void releaseHostLaunchObservation() {
+        final java.util.List<IBinder> pending;
+        synchronized (sHostLaunchLock) {
+            sHostLaunchAwaitingObservation = false;
+            if (sDeferredTopFinishes.isEmpty()) {
+                sHostLaunchLock.notifyAll();
+                return;
+            }
+            pending = new java.util.ArrayList<IBinder>(sDeferredTopFinishes);
+            sDeferredTopFinishes.clear();
+            sHostLaunchLock.notifyAll();
+        }
+        android.os.Handler h = sMainHandler;
+        if (h == null) {
+            h = new android.os.Handler(Looper.getMainLooper());
+            sMainHandler = h;
+        }
+        h.post(new Runnable() {
+            @Override
+            public void run() {
+                for (IBinder tkn : pending) {
+                    dispatchTopFinishes(tkn, false, 0);
+                }
+            }
+        });
+    }
 
     static void installTopFinishHook() {
         try {
@@ -5709,6 +5871,7 @@ public final class LaunchMain {
                     }
                     return;
                 }
+                if (deferTopFinishIfLaunchPending(token)) return;
                 deliverTopFinishTransactions(token);
                 return;
             }
@@ -5739,6 +5902,7 @@ public final class LaunchMain {
                     finishedTokens.add(tkn);
                 }
                 for (IBinder tkn : finishedTokens) {
+                    if (deferTopFinishIfLaunchPending(tkn)) continue;
                     deliverTopFinishTransactions(tkn);
                 }
             }
@@ -5751,8 +5915,28 @@ public final class LaunchMain {
         }
     }
 
-    static void deliverTopFinishTransactions(IBinder tkn) throws Throwable {
+    static void deliverTopFinishTransactions(final IBinder tkn) throws Throwable {
         if (!sTopFinishHandled.add(tkn)) return;
+        final IBinder lateFinishPrevious = sFinishPrevious.remove(tkn);
+        if (lateFinishPrevious != null) {
+            // The local watcher timed out before this finish: run the same
+            // ordered sequence it would have (the previous Activity is resumed
+            // before the finished one is stopped and destroyed).
+            Thread t = new Thread(new Runnable() {
+                @Override
+                public void run() {
+                    try {
+                        runFinishSequence(tkn, lateFinishPrevious, activityForToken(tkn));
+                    } catch (Throwable x) {
+                        System.out.println("ACOSLAUNCH MARK late-finish-error " + x);
+                        x.printStackTrace(System.out);
+                    }
+                }
+            }, "acos-late-finish");
+            t.setDaemon(true);
+            t.start();
+            return;
+        }
         if (sPauseItemCls == null) {
             sPauseItemCls = Class.forName("android.app.servertransaction.PauseActivityItem");
             sStopItemCls = Class.forName("android.app.servertransaction.StopActivityItem");
@@ -5835,6 +6019,7 @@ public final class LaunchMain {
     static void startFinishWatcher(final IBinder token, final IBinder previous) {
         if (token != null) {
             sLocallyWatchedFinishes.add(token);
+            if (previous != null) sFinishPrevious.put(token, previous);
         }
         Thread t = new Thread(new Runnable() {
             @Override
@@ -5849,46 +6034,13 @@ public final class LaunchMain {
                     }
                     if (activity == null || !Boolean.TRUE.equals(get(activity, "mFinished"))) {
                         System.out.println("ACOSLAUNCH MARK finish-watcher-timeout");
+                        // CR1FIX #10: hand a later finish back to the general
+                        // dispatcher (it skips every token in this set).
+                        sLocallyWatchedFinishes.remove(token);
                         return;
                     }
-                    // ROT8: the order stock ATMS uses when a non-last Activity
-                    // finishes (ActivityTaskSupervisor / ActivityRecord.
-                    // completePause + resumeTopActivity + activityStopped):
-                    //   B.onPause -> A.onStart/onResume (A is redrawn)
-                    //   -> B.onStop -> B.onDestroy
-                    // The previous Activity is resumed BEFORE the finished one is
-                    // stopped/destroyed, so the user never sees an empty task and
-                    // A's window is relaid out and drawn while B is still alive.
-                    Class<?> pauseCls = Class.forName("android.app.servertransaction.PauseActivityItem");
-                    Class<?> stopCls = Class.forName("android.app.servertransaction.StopActivityItem");
-                    Class<?> destroyCls = Class.forName("android.app.servertransaction.DestroyActivityItem");
-                    Class<?> resumeCls = Class.forName("android.app.servertransaction.ResumeActivityItem");
-                    scheduleLocal(lifecycleTransaction(token,
-                            obtainPrimitiveItem(pauseCls, new boolean[]{true, false, false})));
-                    long pdl = System.currentTimeMillis() + 5000;
-                    while (System.currentTimeMillis() < pdl
-                            && Boolean.TRUE.equals(get(activity, "mResumed"))) {
-                        Thread.sleep(5);
-                    }
-                    scheduleLocal(lifecycleTransaction(previous, obtainResume(resumeCls)));
-                    sCurrentToken = previous;
-                    System.out.println("ACOSLAUNCH MARK activity-resumed-after-finish token=binder:"
-                            + Integer.toHexString(System.identityHashCode(previous)));
-                    long rdl = System.currentTimeMillis() + 10000;
-                    Object below = null;
-                    while (System.currentTimeMillis() < rdl) {
-                        below = activityForToken(previous);
-                        if (below != null && Boolean.TRUE.equals(get(below, "mResumed"))) break;
-                        Thread.sleep(5);
-                    }
-                    scheduleLocal(lifecycleTransaction(token,
-                            obtainPrimitiveItem(stopCls, new boolean[]{false})));
-                    scheduleLocal(lifecycleTransaction(token,
-                            obtainPrimitiveItem(destroyCls, new boolean[]{true, false, false})));
-                    System.out.println("ACOSLAUNCH MARK activity-destroyed-after-finish token=binder:"
-                            + Integer.toHexString(System.identityHashCode(token))
-                            + " order=Pause(finished)->Resume(previous)->Stop->Destroy");
-                    System.out.flush();
+                    sFinishPrevious.remove(token);
+                    runFinishSequence(token, previous, activity);
                 } catch (Throwable x) {
                     System.out.println("ACOSLAUNCH MARK finish-watcher-error " + x);
                     x.printStackTrace(System.out);
@@ -5897,6 +6049,52 @@ public final class LaunchMain {
         }, "acos-finish-watcher");
         t.setDaemon(true);
         t.start();
+    }
+
+    /**
+     * The ordered teardown for a finished Activity that was started over
+     * `previous`, shared by the local finish watcher and a late finish.
+     */
+    static void runFinishSequence(IBinder token, IBinder previous, Object activity)
+            throws Throwable {
+        // ROT8: the order stock ATMS uses when a non-last Activity
+        // finishes (ActivityTaskSupervisor / ActivityRecord.
+        // completePause + resumeTopActivity + activityStopped):
+        //   B.onPause -> A.onStart/onResume (A is redrawn)
+        //   -> B.onStop -> B.onDestroy
+        // The previous Activity is resumed BEFORE the finished one is
+        // stopped/destroyed, so the user never sees an empty task and
+        // A's window is relaid out and drawn while B is still alive.
+        Class<?> pauseCls = Class.forName("android.app.servertransaction.PauseActivityItem");
+        Class<?> stopCls = Class.forName("android.app.servertransaction.StopActivityItem");
+        Class<?> destroyCls = Class.forName("android.app.servertransaction.DestroyActivityItem");
+        Class<?> resumeCls = Class.forName("android.app.servertransaction.ResumeActivityItem");
+        scheduleLocal(lifecycleTransaction(token,
+                obtainPrimitiveItem(pauseCls, new boolean[]{true, false, false})));
+        long pdl = System.currentTimeMillis() + 5000;
+        while (System.currentTimeMillis() < pdl && activity != null
+                && Boolean.TRUE.equals(get(activity, "mResumed"))) {
+            Thread.sleep(5);
+        }
+        scheduleLocal(lifecycleTransaction(previous, obtainResume(resumeCls)));
+        sCurrentToken = previous;
+        System.out.println("ACOSLAUNCH MARK activity-resumed-after-finish token=binder:"
+                + Integer.toHexString(System.identityHashCode(previous)));
+        long rdl = System.currentTimeMillis() + 10000;
+        Object below = null;
+        while (System.currentTimeMillis() < rdl) {
+            below = activityForToken(previous);
+            if (below != null && Boolean.TRUE.equals(get(below, "mResumed"))) break;
+            Thread.sleep(5);
+        }
+        scheduleLocal(lifecycleTransaction(token,
+                obtainPrimitiveItem(stopCls, new boolean[]{false})));
+        scheduleLocal(lifecycleTransaction(token,
+                obtainPrimitiveItem(destroyCls, new boolean[]{true, false, false})));
+        System.out.println("ACOSLAUNCH MARK activity-destroyed-after-finish token=binder:"
+                + Integer.toHexString(System.identityHashCode(token))
+                + " order=Pause(finished)->Resume(previous)->Stop->Destroy");
+        System.out.flush();
     }
 
     /**

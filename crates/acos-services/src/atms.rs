@@ -1279,7 +1279,12 @@ impl AtmsState {
                     && !self
                         .activities
                         .iter()
-                        .any(|a| self.activity_tag(a.token) == PRIMARY_PROCESS_TAG && !a.finished)
+                        .any(|a| {
+                            // The synthetic fixture record is not a real activity.
+                            a.token != FIXTURE_ACTIVITY_TOKEN
+                                && self.activity_tag(a.token) == PRIMARY_PROCESS_TAG
+                                && !a.finished
+                        })
                 {
                     if let Some((pkg, cls)) = self.primary_activity.clone() {
                         if !cls.is_empty() {

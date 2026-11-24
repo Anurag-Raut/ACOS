@@ -1532,3 +1532,240 @@ fn encode_test_base64(input: &[u8]) -> String {
     }
     out
 }
+
+// ------------------------------------------------------------ CR1FIX #4 / #5
+
+const APP_TAG: u32 = 7;
+
+/// A `connectDevice` session for `dev.acos.fixtures.cameraprobe` with the frame
+/// sink, the callbacks binder and one `igbp` owned by app process 7.
+fn open_device_with_sink(host: &mut ServiceHost) -> (BinderId, BinderId, BinderId, BinderId) {
+    host.permission_store()
+        .expect("perm store")
+        .lock()
+        .unwrap()
+        .grant("android.permission.CAMERA");
+    let sink = BinderId((1u64 << 32) | 501);
+    let cb = BinderId((1u64 << 32) | 502);
+    let igbp = BinderId((1u64 << 32) | 503);
+    host.register_guest_service(APP_TAG, FRAME_SINK_SERVICE.to_string(), sink);
+    host.set_binder_owner(cb, APP_TAG);
+    host.set_binder_owner(igbp, APP_TAG);
+    let mut conn = request(host);
+    conn.write_strong_binder(cb);
+    conn.write_string16("0").expect("id");
+    conn.write_string16("dev.acos.fixtures.cameraprobe").expect("pkg");
+    conn.write_string16_opt(None).expect("feat");
+    conn.write_int32(-1);
+    conn.write_int32(0);
+    conn.write_int32(34);
+    conn.write_int32(0);
+    let mut reply = transact(host, code::CONNECT_DEVICE, conn);
+    let dev = reply.read_strong_binder().unwrap().unwrap();
+    (dev, sink, cb, igbp)
+}
+
+/// `createStream` for an `ImageReader` whose name carries `name_dims`. The width
+/// field is above 8192, so the service takes the dimensions from the name.
+fn create_stream_named(
+    host: &mut ServiceHost,
+    dev: BinderId,
+    igbp: BinderId,
+    name_dims: &str,
+) -> i32 {
+    dev_transact(host, dev, device_code::BEGIN_CONFIGURE, dev_request());
+    let mut cs = dev_request();
+    cs.write_int32(1);
+    cs.write_int32(0);
+    cs.write_int32(-1);
+    cs.write_int32(-1);
+    cs.write_int32(70_000);
+    cs.write_int32(16);
+    cs.write_int32(0);
+    cs.write_int32(0);
+    cs.write_int32(1);
+    cs.write_int32(1);
+    cs.write_string16(&format!("ImageReader-{name_dims}f23m4-1-0")).expect("name");
+    cs.write_int32(0);
+    cs.write_int32(SURFACE_PARCEL_MAGIC_BQUE as i32);
+    cs.write_strong_binder(igbp);
+    cs.write_strong_binder(BinderId::NULL);
+    cs.write_string16_opt(None).expect("physicalCameraId");
+    cs.write_int32(0);
+    cs.write_int32(0);
+    cs.write_int64(1);
+    cs.write_int32(-1);
+    cs.write_int64(0);
+    cs.write_int32(0);
+    cs.write_int32(0);
+    cs.write_int32(0);
+    let mut reply = dev_transact(host, dev, device_code::CREATE_STREAM, cs);
+    let stream_id = reply.read_int32().expect("streamId");
+    dev_transact(host, dev, device_code::END_CONFIGURE, dev_request());
+    let _ = host.take_deliveries();
+    stream_id
+}
+
+fn submit_one(host: &mut ServiceHost, dev: BinderId, stream_id: i32) {
+    let mut sub = dev_request();
+    sub.write_int32(1);
+    write_fake_capture_request(&mut sub, stream_id, 2);
+    sub.write_int32(0);
+    dev_transact(host, dev, device_code::SUBMIT_REQUEST_LIST, sub);
+}
+
+/// A 70000x16 stream cannot be encoded as a JPEG (the format caps a side at
+/// 65535), so building the pixel blob fails for any frame source. (If the stream
+/// size is ever bounded below 65535 this needs another unbuildable frame.)
+const UNBUILDABLE_FRAME: &str = "70000x16";
+
+#[test]
+fn a_scripted_frame_that_cannot_be_built_is_a_capture_failure_never_color_bars() {
+    let (mut host, mut registry) = attach_with(Profile::Scripted, serde_json::json!(null));
+    let frames_dir =
+        std::env::temp_dir().join(format!("acos-camera-cr1fix4-{}", std::process::id()));
+    acos_services::modules::camera::write_test_frames(&frames_dir).expect("write test frames");
+    registry
+        .control(
+            &mut host,
+            MODULE_ID,
+            "set_frame",
+            &serde_json::json!({"path": frames_dir.join("test-frame.png").to_str().unwrap()}),
+        )
+        .expect("set_frame png");
+    let _ = std::fs::remove_dir_all(&frames_dir);
+
+    let (dev, sink, cb, igbp) = open_device_with_sink(&mut host);
+    let stream = create_stream_named(&mut host, dev, igbp, UNBUILDABLE_FRAME);
+    submit_one(&mut host, dev, stream);
+    let deliveries = host.take_deliveries();
+
+    let to_sink: Vec<_> = deliveries.iter().filter(|d| d.target == sink).collect();
+    assert!(
+        to_sink.is_empty(),
+        "no pixels (and above all no colour bars) reach the sink for a scripted frame that \
+         could not be built: {:?}",
+        to_sink.iter().map(|d| d.code).collect::<Vec<_>>()
+    );
+    let to_app: Vec<u32> = deliveries.iter().filter(|d| d.target == cb).map(|d| d.code).collect();
+    assert!(
+        !to_app.contains(&callback_code::ON_CAPTURE_STARTED)
+            && !to_app.contains(&callback_code::ON_RESULT_RECEIVED),
+        "a failed capture must not report started/result: {to_app:?}"
+    );
+    let err = deliveries
+        .iter()
+        .find(|d| d.target == cb && d.code == callback_code::ON_DEVICE_ERROR)
+        .expect("onDeviceError(ERROR_CAMERA_REQUEST) tells the app the capture failed");
+    let mut p = err.data.clone();
+    p.set_data_position(0);
+    p.enforce_interface(DEVICE_CALLBACKS_DESCRIPTOR).unwrap();
+    assert_eq!(p.read_int32().unwrap(), 3, "ERROR_CAMERA_REQUEST");
+    assert_eq!(p.read_int32().unwrap(), 1, "CaptureResultExtras present");
+    assert_eq!(p.read_int32().unwrap(), 1, "the failed request id");
+
+    let status = registry
+        .control(&mut host, MODULE_ID, "status", &serde_json::json!(null))
+        .expect("status");
+    assert_eq!(status["calls"]["frames_delivered"], 0, "a failed frame is not delivered");
+    assert_eq!(status["calls"]["frames_failed"], 1);
+}
+
+#[test]
+fn the_test_pattern_source_keeps_its_color_bar_fallback() {
+    let (mut host, mut registry) = attach();
+    let (dev, sink, cb, igbp) = open_device_with_sink(&mut host);
+    let stream = create_stream_named(&mut host, dev, igbp, UNBUILDABLE_FRAME);
+    submit_one(&mut host, dev, stream);
+    let deliveries = host.take_deliveries();
+    let frame = deliveries
+        .iter()
+        .find(|d| d.target == sink)
+        .expect("the test pattern still delivers a frame");
+    assert_eq!(frame.code, sink_code::DELIVER_FRAME, "inline colour-bar delivery, no blob");
+    let mut p = frame.data.clone();
+    p.set_data_position(0);
+    p.enforce_interface(FRAME_SINK_DESCRIPTOR).unwrap();
+    for _ in 0..3 {
+        p.read_int32().unwrap();
+    }
+    p.read_int64().unwrap();
+    p.read_int64().unwrap();
+    assert_eq!(p.read_int32().unwrap(), 1, "ACOS_PATTERN_COLORBARS_V1");
+    assert!(deliveries
+        .iter()
+        .any(|d| d.target == cb && d.code == callback_code::ON_RESULT_RECEIVED));
+    assert!(!deliveries
+        .iter()
+        .any(|d| d.target == cb && d.code == callback_code::ON_DEVICE_ERROR));
+    let status = registry
+        .control(&mut host, MODULE_ID, "status", &serde_json::json!(null))
+        .expect("status");
+    assert_eq!(status["calls"]["frames_delivered"], 1);
+    assert_eq!(status["calls"]["frames_failed"], 0);
+}
+
+/// `createStream` for a DEFERRED output, as `OutputConfiguration(Size, Class)`
+/// writes it: `isDeferredConfig = 1` and no Surface in `mSurfaces`.
+fn create_deferred_stream(host: &mut ServiceHost, dev: BinderId) -> i32 {
+    dev_transact(host, dev, device_code::BEGIN_CONFIGURE, dev_request());
+    let mut cs = dev_request();
+    cs.write_int32(1); // typed object present
+    cs.write_int32(0); // rotation
+    cs.write_int32(-1); // surfaceGroupId
+    cs.write_int32(0); // surfaceType = SURFACE_TYPE_SURFACE_VIEW (deferred outputs name a type)
+    cs.write_int32(640);
+    cs.write_int32(480);
+    cs.write_int32(1); // isDeferredConfig
+    cs.write_int32(0); // isShared
+    cs.write_int32(0); // writeTypedList(mSurfaces): empty
+    cs.write_string16_opt(None).expect("physicalCameraId");
+    cs.write_int32(0); // isMultiResolution
+    cs.write_int32(0); // sensorPixelModesUsed[]
+    cs.write_int64(1); // dynamicRangeProfile = STANDARD
+    cs.write_int32(-1); // colorSpace
+    cs.write_int64(0); // streamUseCase
+    cs.write_int32(0); // timestampBase
+    cs.write_int32(0); // mirrorMode
+    cs.write_int32(0); // readoutTimestampEnabled
+    let mut reply = dev_transact(host, dev, device_code::CREATE_STREAM, cs);
+    let stream_id = reply.read_int32().expect("streamId");
+    dev_transact(host, dev, device_code::END_CONFIGURE, dev_request());
+    let _ = host.take_deliveries();
+    stream_id
+}
+
+#[test]
+fn finalize_output_configurations_is_refused_not_acknowledged() {
+    let (mut host, _registry) = attach();
+    let (dev, _sink, _cb, igbp) = open_device_with_sink(&mut host);
+    // A real deferred output: the stream was created WITHOUT a Surface...
+    let stream_id = create_deferred_stream(&mut host, dev);
+    // ...and `finalizeOutputConfigurations(streamId, OutputConfiguration)` now
+    // delivers the Surface (complete finalize parcel).
+    let mut data = dev_request();
+    data.write_int32(stream_id);
+    write_fake_output_config(&mut data, 640, 480, igbp);
+    data.set_data_position(0);
+    let mut reply = Parcel::new();
+    let err = host
+        .transact(dev, device_code::FINALIZE_OUTPUT_CONFIGURATIONS, &mut data, &mut reply, 0)
+        .expect_err("a deferred output cannot be finalized, so success would be a lie");
+    match err {
+        ServiceError::UnsupportedAndroidApi { ref method, .. } => {
+            assert!(method.contains("finalizeOutputConfigurations"), "got {method}");
+        }
+        other => panic!("expected a structured unsupported refusal, got {other}"),
+    }
+}
+
+#[test]
+fn error_camera_request_matches_the_framework_constant() {
+    let ints = framework_static_ints_for("Landroid/hardware/camera2/ICameraDeviceCallbacks;");
+    let found = ints.iter().find(|(n, _)| n == "ERROR_CAMERA_REQUEST");
+    assert_eq!(
+        found.map(|(_, v)| *v),
+        Some(i64::from(callback_code::ERROR_CAMERA_REQUEST)),
+        "ICameraDeviceCallbacks constants: {ints:?}"
+    );
+}

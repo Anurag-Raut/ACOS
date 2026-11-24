@@ -1162,14 +1162,50 @@ pub fn compute_frame_for(display: &DisplaySpec, params: &LayoutParams) -> RectI 
     compute_frame_for_requested(display, params, UNSPECIFIED_LENGTH, UNSPECIFIED_LENGTH)
 }
 
+/// Apply one bar rect to `frame` on the edge where it intersects `bounds`
+/// (matching AOSP `InsetsSource.calculateInsets` + `WindowLayout.computeFrames`).
+fn apply_bar_inset(bar: RectI, bounds: RectI, sides: i32, frame: &mut RectI) {
+    if bar.is_empty() || bounds.is_empty() {
+        return;
+    }
+    let inter = RectI::new(
+        bar.left.max(bounds.left),
+        bar.top.max(bounds.top),
+        bar.right.min(bounds.right),
+        bar.bottom.min(bounds.bottom),
+    );
+    if inter.is_empty() {
+        return;
+    }
+    match (
+        inter.width() == bounds.width(),
+        inter.height() == bounds.height(),
+    ) {
+        (true, false) => {
+            if inter.top == bounds.top && sides & 0x02 != 0 {
+                frame.top = frame.top.max(inter.bottom);
+            } else if inter.bottom == bounds.bottom && sides & 0x08 != 0 {
+                frame.bottom = frame.bottom.min(inter.top);
+            }
+        }
+        (false, true) => {
+            if inter.left == bounds.left && sides & 0x01 != 0 {
+                frame.left = frame.left.max(inter.right);
+            } else if inter.right == bounds.right && sides & 0x04 != 0 {
+                frame.right = frame.right.min(inter.left);
+            }
+        }
+        _ => {}
+    }
+}
+
 /// Subtract the `InsetsState` sources a window asked to fit, exactly as
 /// `WindowLayout.computeFrames` does with
 /// `state.calculateInsets(windowBounds, attrs.getFitInsetsTypes(), ...)`.
 ///
-/// The shim's display model has one status-bar source at the top and one
-/// navigation-bar source at the bottom; a zero `fitInsetsSides` (the field's
-/// pre-initialised value in [`LayoutParams::default`]) means `Side.all()`, which
-/// is the framework's own default.
+/// A zero `fitInsetsSides` (the field's pre-initialised value in
+/// [`LayoutParams::default`]) means `Side.all()`, which is the framework's
+/// own default.
 fn fit_insets_frame(display: &DisplaySpec, params: &LayoutParams, bounds: RectI) -> RectI {
     let types = params.fit_insets_types;
     if types == 0 {
@@ -1181,21 +1217,19 @@ fn fit_insets_frame(display: &DisplaySpec, params: &LayoutParams, bounds: RectI)
         params.fit_insets_sides
     };
     let mut frame = bounds;
-    if types & inset_type::STATUS_BAR != 0 && sides & 0x02 != 0 && !display.bars.status_bar.is_empty() {
-        frame.top = frame.top.max(display.bars.status_bar.bottom);
+    if types & inset_type::STATUS_BAR != 0 {
+        apply_bar_inset(display.bars.status_bar, bounds, sides, &mut frame);
+        // `reference_insets_state` carries the rotated config strip as a second
+        // STATUS_BAR source; `InsetsState.calculateInsets(frame, types, ..)`
+        // takes `Insets.max` over every source of the type.
+        apply_bar_inset(display.bars.status_bar_config, bounds, sides, &mut frame);
     }
-    if types & inset_type::NAVIGATION_BAR != 0 && sides & 0x08 != 0 && !display.bars.nav_bar.is_empty() {
-        frame.bottom = frame.bottom.min(display.bars.nav_bar.top);
+    if types & inset_type::NAVIGATION_BAR != 0 {
+        apply_bar_inset(display.bars.nav_bar, bounds, sides, &mut frame);
     }
-    // System gestures use the mandatory-gesture strips in the reference model;
-    // fitting them is a side inset only when the source is the side strip.
     if types & inset_type::SYSTEM_GESTURES != 0 {
-        if sides & 0x01 != 0 && !display.bars.system_gestures_left.is_empty() {
-            frame.left = frame.left.max(display.bars.system_gestures_left.right);
-        }
-        if sides & 0x04 != 0 && !display.bars.system_gestures_right.is_empty() {
-            frame.right = frame.right.min(display.bars.system_gestures_right.left);
-        }
+        apply_bar_inset(display.bars.system_gestures_left, bounds, sides, &mut frame);
+        apply_bar_inset(display.bars.system_gestures_right, bounds, sides, &mut frame);
     }
     frame.right = frame.right.max(frame.left);
     frame.bottom = frame.bottom.max(frame.top);
@@ -2538,5 +2572,51 @@ mod tests {
         assert!(wm.set_relayout_window_visible(a, true).unwrap());
         assert!(wm.windows[&a].visible);
         assert_eq!(wm.focus, Some(a));
+    }
+
+    #[test]
+    fn fit_insets_fits_rotated_status_bar_on_its_actual_edge() {
+        let base = DisplaySpec::reference_with_insets(InsetsMode::Report);
+
+        let mut top_only = app_params();
+        top_only.fit_insets_types = crate::codec::inset_type::STATUS_BAR;
+        top_only.fit_insets_sides = 0x02; // WindowInsets.Side.TOP
+
+        let mut all_sides = app_params();
+        all_sides.fit_insets_types = crate::codec::inset_type::STATUS_BAR;
+        all_sides.fit_insets_sides = 0; // Side.all()
+
+        // Rotation 0: status bar is at top [0, 0, 1080, 128].
+        let r0 = base.rotated(0);
+        assert_eq!(compute_frame_for(&r0, &top_only), RectI::new(0, 128, 1080, 2400));
+        assert_eq!(compute_frame_for(&r0, &all_sides), RectI::new(0, 128, 1080, 2400));
+
+        // Rotation 2 (180 deg): status bar is at bottom [0, 2272, 1080, 2400].
+        // Fitting TOP must not become a top inset or produce a zero-height frame.
+        let r2 = base.rotated(2);
+        assert_eq!(r2.bars.status_bar, RectI::new(0, 2272, 1080, 2400));
+        // The rotated configuration also reserves the 63 px config strip at the
+        // top (`reference_insets_state`'s second STATUS_BAR source), and
+        // `InsetsState.calculateInsets` takes the per-edge max over both.
+        assert_eq!(compute_frame_for(&r2, &top_only), RectI::new(0, 63, 1080, 2400));
+        assert_eq!(compute_frame_for(&r2, &all_sides), RectI::new(0, 63, 1080, 2272));
+
+        // Rotation 1 (90 deg): status bar is at left [0, 0, 128, 1080].
+        let r1 = base.rotated(1);
+        // Plus the config strip [0,0,2400,63]: TOP-only fitting keeps top=63.
+        assert_eq!(compute_frame_for(&r1, &top_only), RectI::new(0, 63, 2400, 1080));
+        assert_eq!(compute_frame_for(&r1, &all_sides), RectI::new(128, 63, 2400, 1080));
+
+        // Rotation 3 (270 deg): status bar is at right [2272, 0, 2400, 1080].
+        let r3 = base.rotated(3);
+        assert_eq!(compute_frame_for(&r3, &top_only), RectI::new(0, 63, 2400, 1080));
+        assert_eq!(compute_frame_for(&r3, &all_sides), RectI::new(0, 63, 2272, 1080));
+
+        // System gestures on 90 deg rotation sit on top/bottom, not left/right.
+        let mut sys_gestures = app_params();
+        sys_gestures.fit_insets_types = crate::codec::inset_type::SYSTEM_GESTURES;
+        sys_gestures.fit_insets_sides = 0;
+        let sg_r1 = compute_frame_for(&r1, &sys_gestures);
+        assert_eq!(sg_r1, RectI::new(0, 78, 2400, 1002));
     }
 }

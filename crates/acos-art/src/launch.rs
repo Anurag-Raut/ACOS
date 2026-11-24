@@ -755,6 +755,11 @@ impl SecondaryShared {
         // delivery to it (and only to it).
         sb.env("ACOS_PROCESS_TAG", &spec.tag.to_string());
         sb.env("ACOS_PROCESS_NAME", &spec.package);
+        // CR1FIX2 #3: test-only seam, a splash-style fixture waits this long between
+        // `super.onCreate()` and `finish()`. Unset in normal runs (no delay).
+        if let Ok(v) = std::env::var("ACOS_TEST_FINISH_DELAY_MS") {
+            sb.env("ACOS_TEST_FINISH_DELAY_MS", &v);
+        }
         sb.env("ACOSLAUNCH_RESUME_MS", &self.resume_ms.to_string());
         // MPROC7 (ADR-0029 amendment): this process's first launch is a
         // host-built `ClientTransaction` (system_server owns the activity
@@ -2738,6 +2743,15 @@ pub(crate) fn launch_session(
     if let Ok(mode) = std::env::var("ACOSLAUNCH_CRASH_TEST") {
         sb.env("ACOSLAUNCH_CRASH_TEST", &mode);
     }
+    // CR1FIX2 #1: diagnostic seam, the decor reports no attached root.
+    if std::env::var_os("ACOSLAUNCH_TEST_WINDOW_NO_ROOT").is_some() {
+        sb.env("ACOSLAUNCH_TEST_WINDOW_NO_ROOT", "1");
+    }
+    // CR1FIX2 #3: test-only seam, a splash-style fixture waits this long between
+    // `super.onCreate()` and `finish()`. Unset in normal runs (no delay).
+    if let Ok(v) = std::env::var("ACOS_TEST_FINISH_DELAY_MS") {
+        sb.env("ACOS_TEST_FINISH_DELAY_MS", &v);
+    }
     if let Ok(v) = std::env::var("ACOSART_CRASH_DUMP") {
         sb.env("ACOSART_CRASH_DUMP", &v);
     }
@@ -3601,6 +3615,45 @@ struct ProbeSample {
     window_gone: bool,
     /// P12: the guest's applied animation state (`None` if it did not report).
     animations_on: Option<bool>,
+    /// CR1FIX #20: the guest's `window_cmd` counters at the START of this
+    /// sample's tree walk: host WINDOW commands it has finished processing, and
+    /// how many of those failed. `None` when the guest did not report.
+    window_cmd: Option<WindowCmdCounters>,
+}
+
+/// CR1FIX #20: the guest's count of finished (and failed) WINDOW commands.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct WindowCmdCounters {
+    done: u64,
+    failed: u64,
+}
+
+/// CR1FIX #20: whether a probe sample proves the guest applied the first
+/// `sent` WINDOW commands before it walked its tree. A sequence increase proves
+/// nothing (an unread line the guest emitted before it saw the command is
+/// published with a higher host sequence); only the guest's own command-specific
+/// counter does.
+#[derive(Debug, PartialEq, Eq)]
+enum WindowAck {
+    /// The sample predates the commands (or carries no counter): keep waiting.
+    Pending,
+    /// Every sent command was processed and none failed since `failed_seen`.
+    Applied,
+    /// The guest reports a command failed (its own `window-failed` mark).
+    Failed,
+}
+
+fn window_ack(sample: &ProbeSample, sent: u64, failed_seen: u64) -> WindowAck {
+    match sample.window_cmd {
+        Some(c) if c.done >= sent => {
+            if c.failed > failed_seen {
+                WindowAck::Failed
+            } else {
+                WindowAck::Applied
+            }
+        }
+        _ => WindowAck::Pending,
+    }
 }
 
 /// P9: the launcher's event-driven wake channel for the startup loop.
@@ -4695,6 +4748,12 @@ fn drain_tee_lines<R: std::io::Read>(
                         .get("animations")
                         .and_then(|v| v.get("on"))
                         .and_then(|v| v.as_bool());
+                    let window_cmd = value.get("window_cmd").and_then(|c| {
+                        Some(WindowCmdCounters {
+                            done: c.get("done")?.as_u64()?,
+                            failed: c.get("failed")?.as_u64()?,
+                        })
+                    });
                     if let Some(on) = animations_on {
                         set_animations_state(on);
                     }
@@ -4748,6 +4807,7 @@ fn drain_tee_lines<R: std::io::Read>(
                             pending,
                             window_gone,
                             animations_on,
+                            window_cmd,
                         };
                         state.by_process.insert(tag, sample.clone());
                         // `latest` stays the newest sample of **any** process; it
@@ -7413,6 +7473,10 @@ fn interactive_serve(
         Some(fifo) => Some(GuestProbeChannel::Fifo(fifo)),
         None => child.stdin.take().map(GuestProbeChannel::Pipe),
     };
+    // CR1FIX #20: WINDOW commands written to the guest so far, and the guest's
+    // failed-command count already reported to the host.
+    let mut window_cmds_sent: u64 = 0;
+    let mut window_failed_seen: u64 = 0;
     let startup_deadline = started + startup_budget;
     // P9: the drain thread signals this on every parsed probe sample, so the
     // loop below is woken by the guest instead of polling on a fixed 10 ms
@@ -8731,7 +8795,6 @@ fn interactive_serve(
                             .and_then(|v| v.as_bool())
                             .unwrap_or(false);
                         if reply_ok && !guest_commands.is_empty() {
-                            let before = latest_probe(probe_state).map(|p| p.seq).unwrap_or(0);
                             let mut dispatch_err: Option<serde_json::Value> = None;
                             for command in &guest_commands {
                                 match *command {
@@ -8787,6 +8850,7 @@ fn interactive_serve(
                                             }));
                                             break;
                                         }
+                                        window_cmds_sent += 1;
                                     }
                                 }
                             }
@@ -8796,11 +8860,36 @@ fn interactive_serve(
                                 let deadline = Instant::now() + frame_wait;
                                 let mut fresh = None;
                                 let mut exited: Option<serde_json::Value> = None;
+                                let mut cmd_failed: Option<serde_json::Value> = None;
                                 while Instant::now() < deadline {
                                     if let Some(sample) = latest_probe(probe_state) {
-                                        if sample.seq > before {
-                                            fresh = Some(sample);
-                                            break;
+                                        // CR1FIX #20: only the guest's own
+                                        // command-specific counter proves the
+                                        // tree was walked after the WINDOW
+                                        // command was applied.
+                                        match window_ack(
+                                            &sample,
+                                            window_cmds_sent,
+                                            window_failed_seen,
+                                        ) {
+                                            WindowAck::Applied => {
+                                                fresh = Some(sample);
+                                                break;
+                                            }
+                                            WindowAck::Failed => {
+                                                window_failed_seen = sample
+                                                    .window_cmd
+                                                    .map(|c| c.failed)
+                                                    .unwrap_or(window_failed_seen);
+                                                cmd_failed = Some(serde_json::json!({
+                                                    "ok": false,
+                                                    "cmd": "services",
+                                                    "code": "GUEST_WINDOW_FAILED",
+                                                    "error": "the guest failed to apply GuestCommand::Window (see its `ACOSLAUNCH MARK window-failed` line)",
+                                                }));
+                                                break;
+                                            }
+                                            WindowAck::Pending => {}
                                         }
                                     }
                                     if let Ok(Some(status)) = child.try_wait() {
@@ -8818,6 +8907,8 @@ fn interactive_serve(
                                 }
                                 if let Some(exit_reply) = exited {
                                     exit_reply
+                                } else if let Some(failed_reply) = cmd_failed {
+                                    failed_reply
                                 } else if let Some(sample) = fresh {
                                     if let Some(obj) = reply.as_object_mut() {
                                         obj.insert(
@@ -8832,7 +8923,7 @@ fn interactive_serve(
                                         "ok": false,
                                         "cmd": "services",
                                         "code": "NO_FRESH_TREE",
-                                        "error": "the guest published no probe sample after GuestCommand::Window",
+                                        "error": "the guest published no probe sample proving it applied GuestCommand::Window",
                                     })
                                 }
                             }
@@ -10872,6 +10963,47 @@ mod probe_line_tests {
         assert_eq!(state.oversized_lines, 0);
     }
 
+    /// CR1FIX #20: a probe line the guest emitted BEFORE it applied WINDOW can
+    /// still be unread when the host writes the command; the drain publishes it
+    /// with a host sequence above the pre-command one. Only the guest's own
+    /// `window_cmd` counter may acknowledge the command.
+    #[test]
+    fn a_stale_probe_with_a_higher_seq_does_not_ack_a_window_command() {
+        // The host read seq 4 before writing WINDOW (command 1)...
+        let before = drain(
+            "ACOSPROBE {\"seq\":4,\"window_cmd\":{\"done\":0,\"failed\":0},\"tree\":{\"nodes\":[]}}\n",
+        );
+        let before_seq = before.latest.expect("baseline sample").seq;
+        // ...then the unread pre-command line (seq 5, done=0) is drained.
+        let stale = drain(
+            "ACOSPROBE {\"seq\":5,\"window_cmd\":{\"done\":0,\"failed\":0},\"tree\":{\"nodes\":[\"old\"]}}\n",
+        )
+        .latest
+        .expect("stale sample");
+        assert!(stale.seq > before_seq, "the old sequence rule would accept it");
+        assert_eq!(window_ack(&stale, 1, 0), WindowAck::Pending);
+        // A sample walked after the guest applied the command acknowledges it.
+        let applied = drain(
+            "ACOSPROBE {\"seq\":6,\"window_cmd\":{\"done\":1,\"failed\":0},\"tree\":{\"nodes\":[\"new\"]}}\n",
+        )
+        .latest
+        .expect("applied sample");
+        assert_eq!(window_ack(&applied, 1, 0), WindowAck::Applied);
+        // A guest that predates the counter (no field) can never ack.
+        let legacy = drain("ACOSPROBE {\"seq\":9,\"tree\":{\"nodes\":[]}}\n")
+            .latest
+            .expect("legacy sample");
+        assert_eq!(window_ack(&legacy, 1, 0), WindowAck::Pending);
+        // The guest's own failure is surfaced, not turned into a tree.
+        let failed = drain(
+            "ACOSPROBE {\"seq\":7,\"window_cmd\":{\"done\":2,\"failed\":1},\"tree\":{\"nodes\":[]}}\n",
+        )
+        .latest
+        .expect("failed sample");
+        assert_eq!(window_ack(&failed, 2, 0), WindowAck::Failed);
+        assert_eq!(window_ack(&failed, 2, 1), WindowAck::Applied);
+    }
+
     /// A guest probe throw must reach the host with its payload, never be
     /// swallowed (W32's only visible symptom was a frozen `seq`).
     #[test]
@@ -10912,6 +11044,7 @@ mod probe_line_tests {
             pending: Vec::new(),
             window_gone: false,
             animations_on: None,
+            window_cmd: None,
         }
     }
 
@@ -12124,6 +12257,7 @@ mod backsettle_tests {
                 pending: if settled { Vec::new() } else { vec!["traversal".into()] },
                 window_gone: false,
                 animations_on: None,
+                window_cmd: None,
             }
         }
         let bind = Some(ReshownOutcome::Bind(0x10, 3));

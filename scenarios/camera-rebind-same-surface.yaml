@@ -1,0 +1,51 @@
+# CR1FIX #15 probe: the same Surface re-registered by successive sessions.
+version: 1
+name: camera-rebind-same-surface
+description: >-
+  CR1FIX #15: one ImageReader Surface is registered with the camera service by
+  four successive sessions (each OutputConfiguration differs, so the framework
+  deletes the old stream and creates a new one for the same Surface). Frames must
+  keep arriving after each re-registration.
+app: fixtures/build/apps/camera-probe.apk
+api_level: 34
+isolation: process
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+capabilities:
+  - ui.offscreen
+  - ui.text
+  - ui.screenshot
+  - input
+services:
+  - id: system.permissions
+    profile: real
+  - id: hw.camera
+    profile: stub
+expectation: pass
+budgets:
+  memory_mib: 640
+  wall_ms: 180000
+steps:
+  - launch:
+      activity: dev.acos.fixtures.cameraprobe/.MainActivity
+      clear_state: true
+  - wait_for:
+      selector: {text: {contains: "READY mgr=present feat_cam=true feat_any=true"}}
+      timeout_ms: 20000
+  - service_ctl:
+      module: system.permissions
+      op: grant
+      args: {permission: "android.permission.CAMERA"}
+      expect:
+        ok: true
+  - tap:
+      selector: {text: {exact: "Rebind"}}
+  - wait_for:
+      selector: {text: {contains: "REBIND session=3 frames_after_register=3"}}
+      timeout_ms: 30000
+  - wait_for:
+      selector: {text: {contains: "REBIND closed sessions_ok=true"}}
+      timeout_ms: 30000

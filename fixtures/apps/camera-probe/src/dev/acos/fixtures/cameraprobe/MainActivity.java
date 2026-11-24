@@ -124,6 +124,10 @@ public final class MainActivity extends Activity {
                 button("Repeat", v -> runRepeatingCapture()),
                 button("Preview", v -> runPreviewCapture())));
 
+        root.addView(buttonRow(
+                button("Hold", v -> runHeldImages()),
+                button("Rebind", v -> runRebind())));
+
         status = new TextView(this);
         status.setId(R.id.status);
         status.setTextIsSelectable(true);
@@ -1054,6 +1058,331 @@ public final class MainActivity extends Activity {
             reader.close();
             bgThread.quitSafely();
             log("REPEAT error=" + t.getClass().getSimpleName() + ": " + t.getMessage());
+        }
+    }
+
+    /**
+     * CR1FIX #17 regression guard: one session with two ImageReader outputs, one
+     * whose Images the app never closes and one it drains promptly. The camera
+     * must keep delivering to the drained reader, drop frames for the held one
+     * (as on a real device) and close promptly. (An ImageReader consumer is
+     * app-controlled, so its dequeue never blocks; the blocking case is covered
+     * by the native test crates/acos-art/tests/cam_sink_native.rs.)
+     */
+    private void runHeldImages() {
+        final HandlerThread bgThread = new HandlerThread("cameraprobe-hold");
+        bgThread.start();
+        final Handler bgHandler = new Handler(bgThread.getLooper());
+        final ImageReader reader = ImageReader.newInstance(
+                CAPTURE_WIDTH, CAPTURE_HEIGHT, ImageFormat.YUV_420_888, 2);
+        final List<Image> held = new ArrayList<>();
+        final ImageReader drainReader = ImageReader.newInstance(
+                CAPTURE_WIDTH, CAPTURE_HEIGHT, ImageFormat.YUV_420_888, 2);
+        final java.util.concurrent.atomic.AtomicInteger drained =
+                new java.util.concurrent.atomic.AtomicInteger();
+        final int[] drainedAtStall = new int[1];
+        drainReader.setOnImageAvailableListener(r -> {
+            try {
+                Image img = r.acquireNextImage();
+                if (img != null) {
+                    img.close();
+                    drained.incrementAndGet();
+                }
+            } catch (Throwable ignored) {
+            }
+        }, bgHandler);
+        final AtomicBoolean closing = new AtomicBoolean(false);
+        final CameraDevice[] deviceRef = new CameraDevice[1];
+        final CameraCaptureSession[] sessionRef = new CameraCaptureSession[1];
+        final long[] closeStartMs = new long[1];
+        final java.util.concurrent.atomic.AtomicInteger completed = new java.util.concurrent.atomic.AtomicInteger();
+
+        reader.setOnImageAvailableListener(r -> {
+            try {
+                Image img = r.acquireNextImage();
+                if (img != null) {
+                    int n;
+                    synchronized (held) {
+                        held.add(img);
+                        n = held.size();
+                    }
+                    if (n >= 2 && closing.compareAndSet(false, true)) {
+                        log("HOLD held=" + n + " (never closing them)");
+                        drainedAtStall[0] = drained.get();
+                        // Let the producer run into the full queue, then close.
+                        mainHandler.postDelayed(() -> {
+                            closeStartMs[0] = System.currentTimeMillis();
+                            CameraCaptureSession sess = sessionRef[0];
+                            if (sess != null) {
+                                try {
+                                    sess.close();
+                                } catch (Throwable ignored) {
+                                }
+                            }
+                            CameraDevice dev = deviceRef[0];
+                            if (dev != null) {
+                                dev.close();
+                            }
+                        }, 1500);
+                    }
+                }
+            } catch (Throwable t) {
+                log("HOLD image_error=" + t.getClass().getSimpleName() + ": " + t.getMessage());
+            }
+        }, bgHandler);
+
+        try {
+            cameraManager.openCamera("0", new CameraDevice.StateCallback() {
+                @Override
+                public void onOpened(CameraDevice camera) {
+                    deviceRef[0] = camera;
+                    try {
+                        camera.createCaptureSession(
+                                java.util.Arrays.asList(reader.getSurface(),
+                                        drainReader.getSurface()),
+                                new CameraCaptureSession.StateCallback() {
+                                    @Override
+                                    public void onConfigured(CameraCaptureSession session) {
+                                        sessionRef[0] = session;
+                                        try {
+                                            CaptureRequest.Builder req = camera.createCaptureRequest(
+                                                    CameraDevice.TEMPLATE_PREVIEW);
+                                            req.addTarget(reader.getSurface());
+                                            req.addTarget(drainReader.getSurface());
+                                            session.setRepeatingRequest(req.build(), new CameraCaptureSession.CaptureCallback() {
+                                                @Override
+                                                public void onCaptureCompleted(CameraCaptureSession s, CaptureRequest request, TotalCaptureResult result) {
+                                                    completed.incrementAndGet();
+                                                }
+                                            }, bgHandler);
+                                        } catch (Throwable t) {
+                                            log("HOLD submit_error="
+                                                    + t.getClass().getSimpleName() + ": "
+                                                    + t.getMessage());
+                                            camera.close();
+                                        }
+                                    }
+
+                                    @Override
+                                    public void onConfigureFailed(CameraCaptureSession session) {
+                                        log("HOLD configure_failed");
+                                        camera.close();
+                                    }
+                                },
+                                bgHandler);
+                    } catch (Throwable t) {
+                        log("HOLD session_error=" + t.getClass().getSimpleName() + ": " + t.getMessage());
+                        camera.close();
+                    }
+                }
+
+                @Override
+                public void onClosed(CameraDevice camera) {
+                    long ms = closeStartMs[0] == 0 ? -1 : System.currentTimeMillis() - closeStartMs[0];
+                    synchronized (held) {
+                        for (Image i : held) {
+                            try {
+                                i.close();
+                            } catch (Throwable ignored) {
+                            }
+                        }
+                        held.clear();
+                    }
+                    reader.close();
+                    drainReader.close();
+                    bgThread.quitSafely();
+                    log("HOLD completed=" + completed.get());
+                    int after = drained.get() - drainedAtStall[0];
+                    log("HOLD drained_after_stall=" + after + " other_stream_alive=" + (after >= 5));
+                    log("HOLD closed id=" + camera.getId() + " close_ms_under_10000="
+                            + (ms >= 0 && ms < 10000));
+                }
+
+                @Override
+                public void onDisconnected(CameraDevice camera) {
+                    log("HOLD disconnected");
+                    camera.close();
+                }
+
+                @Override
+                public void onError(CameraDevice camera, int error) {
+                    log("HOLD device_error=" + error);
+                    camera.close();
+                }
+            }, bgHandler);
+        } catch (Throwable t) {
+            reader.close();
+            bgThread.quitSafely();
+            log("HOLD error=" + t.getClass().getSimpleName() + ": " + t.getMessage());
+        }
+    }
+
+    /**
+     * CR1FIX #15: re-register the SAME Surface with the camera service, as a
+     * CameraX unbind/rebind or a reconfigured session does. The Surface stays the
+     * app's; each session wraps it in an OutputConfiguration that differs from the
+     * previous one (timestamp base), so the framework deletes the old stream and
+     * creates a new one for the same Surface. Frames must keep arriving after
+     * every re-registration.
+     */
+    private void runRebind() {
+        final HandlerThread bgThread = new HandlerThread("cameraprobe-rebind");
+        bgThread.start();
+        final Handler bgHandler = new Handler(bgThread.getLooper());
+        final ImageReader reader = ImageReader.newInstance(
+                CAPTURE_WIDTH, CAPTURE_HEIGHT, ImageFormat.YUV_420_888, 4);
+        final Surface surface = reader.getSurface();
+        // CR1FIX2 #12: a frame counts for a session only when BOTH its image
+        // and a capture result of THAT session's own request carry the same
+        // timestamp. Frames the previous session's repeating request had already
+        // queued never match (their results go to the old session's callback,
+        // which is ignored once the phase moves on). All of this state is touched
+        // only on bgHandler: the image listener, the capture callbacks and the
+        // phase change run on that one handler.
+        final int[] phase = new int[1];
+        final int[] sessionFrames = new int[1];
+        final int[] unmatchedImages = new int[1];
+        final java.util.HashSet<Long> pendingImageTs = new java.util.HashSet<>();
+        final java.util.HashSet<Long> pendingResultTs = new java.util.HashSet<>();
+        final CameraDevice[] deviceRef = new CameraDevice[1];
+        final int[] timestampBase = {
+            android.hardware.camera2.params.OutputConfiguration.TIMESTAMP_BASE_DEFAULT,
+            android.hardware.camera2.params.OutputConfiguration.TIMESTAMP_BASE_MONOTONIC,
+            android.hardware.camera2.params.OutputConfiguration.TIMESTAMP_BASE_REALTIME,
+            android.hardware.camera2.params.OutputConfiguration.TIMESTAMP_BASE_SENSOR,
+        };
+        final int sessions = timestampBase.length;
+        final java.util.concurrent.Executor exec = bgHandler::post;
+        final Runnable[] startSession = new Runnable[1];
+
+        final Runnable[] onSessionFrame = new Runnable[1];
+        onSessionFrame[0] = () -> {
+            sessionFrames[0]++;
+            if (sessionFrames[0] != 3) return;
+            log("REBIND session=" + phase[0] + " frames_after_register=3"
+                    + " stale_or_unmatched_images=" + unmatchedImages[0]);
+            if (phase[0] + 1 < sessions) {
+                phase[0]++;
+                sessionFrames[0] = 0;
+                unmatchedImages[0] = 0;
+                pendingImageTs.clear();
+                pendingResultTs.clear();
+                startSession[0].run();
+            } else {
+                CameraDevice d = deviceRef[0];
+                if (d != null) d.close();
+            }
+        };
+
+        reader.setOnImageAvailableListener(r -> {
+            Image img = null;
+            try {
+                img = r.acquireNextImage();
+                if (img != null) {
+                    Long ts = img.getTimestamp();
+                    if (pendingResultTs.remove(ts)) {
+                        onSessionFrame[0].run();
+                    } else {
+                        pendingImageTs.add(ts);
+                        unmatchedImages[0]++;
+                    }
+                }
+            } catch (Throwable t) {
+                log("REBIND image_error=" + t.getClass().getSimpleName() + ": " + t.getMessage());
+            } finally {
+                if (img != null) img.close();
+            }
+        }, bgHandler);
+
+        startSession[0] = () -> {
+            final CameraDevice camera = deviceRef[0];
+            try {
+                android.hardware.camera2.params.OutputConfiguration oc =
+                        new android.hardware.camera2.params.OutputConfiguration(surface);
+                oc.setTimestampBase(timestampBase[phase[0]]);
+                android.hardware.camera2.params.SessionConfiguration cfg =
+                        new android.hardware.camera2.params.SessionConfiguration(
+                                android.hardware.camera2.params.SessionConfiguration.SESSION_REGULAR,
+                                Collections.singletonList(oc), exec,
+                                new CameraCaptureSession.StateCallback() {
+                                    @Override
+                                    public void onConfigured(CameraCaptureSession session) {
+                                        try {
+                                            CaptureRequest.Builder req = camera.createCaptureRequest(
+                                                    CameraDevice.TEMPLATE_PREVIEW);
+                                            req.addTarget(surface);
+                                            final int gen = phase[0];
+                                            session.setRepeatingRequest(req.build(),
+                                                    new CameraCaptureSession.CaptureCallback() {
+                                                        @Override
+                                                        public void onCaptureCompleted(
+                                                                CameraCaptureSession cs,
+                                                                CaptureRequest request,
+                                                                android.hardware.camera2.TotalCaptureResult result) {
+                                                            if (gen != phase[0]) return;
+                                                            Long ts = result.get(
+                                                                    android.hardware.camera2.CaptureResult.SENSOR_TIMESTAMP);
+                                                            if (ts == null) return;
+                                                            if (pendingImageTs.remove(ts)) {
+                                                                unmatchedImages[0]--;
+                                                                onSessionFrame[0].run();
+                                                            } else {
+                                                                pendingResultTs.add(ts);
+                                                            }
+                                                        }
+                                                    }, bgHandler);
+                                        } catch (Throwable t) {
+                                            log("REBIND submit_error="
+                                                    + t.getClass().getSimpleName() + ": "
+                                                    + t.getMessage());
+                                            camera.close();
+                                        }
+                                    }
+
+                                    @Override
+                                    public void onConfigureFailed(CameraCaptureSession session) {
+                                        log("REBIND configure_failed session=" + phase[0]);
+                                        camera.close();
+                                    }
+                                });
+                camera.createCaptureSession(cfg);
+            } catch (Throwable t) {
+                log("REBIND session_error=" + t.getClass().getSimpleName() + ": " + t.getMessage());
+                camera.close();
+            }
+        };
+
+        try {
+            cameraManager.openCamera("0", new CameraDevice.StateCallback() {
+                @Override
+                public void onOpened(CameraDevice camera) {
+                    deviceRef[0] = camera;
+                    startSession[0].run();
+                }
+
+                @Override
+                public void onClosed(CameraDevice camera) {
+                    reader.close();
+                    bgThread.quitSafely();
+                    log("REBIND closed sessions_ok=" + (phase[0] + 1 == sessions
+                            && sessionFrames[0] >= 3));
+                }
+
+                @Override
+                public void onDisconnected(CameraDevice camera) {
+                    camera.close();
+                }
+
+                @Override
+                public void onError(CameraDevice camera, int error) {
+                    log("REBIND device_error=" + error);
+                    camera.close();
+                }
+            }, bgHandler);
+        } catch (Throwable t) {
+            reader.close();
+            bgThread.quitSafely();
+            log("REBIND error=" + t.getClass().getSimpleName() + ": " + t.getMessage());
         }
     }
 }

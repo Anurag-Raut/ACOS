@@ -19,17 +19,16 @@ __pycache__/
 /off/
 /research/.cache/
 
-# results/ and out/: only reports (*.md), harness code (*.py *.sh *.rs) and the
-# few inputs that code reads are tracked. All other run evidence (frames, logs,
+# results/ and out/: only reports (*.md) and the few inputs that code reads are
+# tracked. All other run evidence (frames, logs,
 # JSON captures, ...) is local-only; see results/README.md. `out/` is the default
 # `acos` run-output directory and is never tracked.
 /out/
 /results/**
 !/results/**/
 !/results/**/*.md
-!/results/**/*.py
-!/results/**/*.sh
-!/results/**/*.rs
+# New results/ content is one .md report per task (AGENTS.md "What may be committed");
+# scripts and run output stay local. Already-tracked harness files are unaffected.
 !/results/aidl/**
 !/results/wm/**
 !/results/res/**
@@ -41,3 +40,8 @@ __pycache__/
 !/results/parity/w193a/counter.tree.json
 !/results/oracle/dexprogs-nondeterminism.txt
 /results/aidl/all_interfaces.json
+
+# Run output never belongs in git, wherever an agent writes it.
+repro.sh
+/results/**/artifacts/**
+*.verdict.json
