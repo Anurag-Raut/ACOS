@@ -20,6 +20,7 @@ const A_WRTE: u32 = 0x4554_5257;
 const A_VERSION: u32 = 0x0100_0000;
 const MAX_PAYLOAD_BYTES: usize = 4 * 1024 * 1024;
 const OKAY_WAIT_TIMEOUT: Duration = Duration::from_secs(10);
+const WRITE_TIMEOUT: Duration = Duration::from_secs(5);
 
 const ID_STDOUT: u8 = 1;
 const ID_STDERR: u8 = 2;
@@ -88,11 +89,19 @@ fn write_packet(
     hdr[20..24].copy_from_slice(&magic.to_le_bytes());
 
     let mut guard = writer.lock().unwrap_or_else(|e| e.into_inner());
-    guard.write_all(&hdr)?;
-    if !payload.is_empty() {
-        guard.write_all(payload)?;
+    let res = (|| -> io::Result<()> {
+        guard.write_all(&hdr)?;
+        if !payload.is_empty() {
+            guard.write_all(payload)?;
+        }
+        guard.flush()
+    })();
+    if res.is_err() {
+        // A partial write or timeout leaves the multiplexed stream mid-frame;
+        // shut down immediately so readers/other workers unwind without corrupting frames.
+        let _ = guard.shutdown(Shutdown::Both);
     }
-    guard.flush()
+    res
 }
 
 struct StreamState {
@@ -136,15 +145,28 @@ fn parse_service(raw: &str) -> ServiceMode<'_> {
 
 /// Serve one adb server TCP connection until EOF, error, or `closing` is set.
 pub fn handle_connection(
+    stream: TcpStream,
+    target: Arc<dyn AdbSessionOps>,
+    shell_state: Arc<Mutex<AdbShellState>>,
+    closing: Arc<AtomicBool>,
+) {
+    handle_connection_with_write_timeout(stream, target, shell_state, closing, WRITE_TIMEOUT);
+}
+
+pub(crate) fn handle_connection_with_write_timeout(
     mut stream: TcpStream,
     target: Arc<dyn AdbSessionOps>,
     shell_state: Arc<Mutex<AdbShellState>>,
     closing: Arc<AtomicBool>,
+    write_timeout: Duration,
 ) {
     let _ = stream.set_nodelay(true);
     let Ok(writer_stream) = stream.try_clone() else {
         return;
     };
+    if writer_stream.set_write_timeout(Some(write_timeout)).is_err() {
+        return;
+    }
     let writer = Arc::new(Mutex::new(writer_stream));
     let streams: Arc<Mutex<HashMap<u32, Arc<StreamState>>>> = Arc::new(Mutex::new(HashMap::new()));
     let next_local_id = AtomicU32::new(1);
@@ -587,5 +609,145 @@ fn run_sync_worker(
         .lock()
         .unwrap_or_else(|e| e.into_inner())
         .remove(&local_id);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::net::TcpListener;
+    use std::os::unix::io::AsRawFd;
+    use std::path::{Path, PathBuf};
+
+    struct LargeShotMockOps;
+
+    impl AdbSessionOps for LargeShotMockOps {
+        fn snapshot(&self) -> Result<shell::AdbSessionSnapshot, String> {
+            Ok(shell::AdbSessionSnapshot {
+                package: "com.example.test".to_string(),
+                activity: None,
+                natural_size: (1080, 2400),
+                display_size: (1080, 2400),
+                rotation: 0,
+                density: 420,
+                animations: "on",
+                guest_pid: None,
+                launcher_pid: None,
+                apk_path: PathBuf::from("/tmp/app.apk"),
+            })
+        }
+        fn rotate(&self, _rotation: u8) -> Result<(), String> {
+            Ok(())
+        }
+        fn dump_tree(&self) -> Result<(acos_protocol::ui::UiTree, u8), String> {
+            Err("unused".to_string())
+        }
+        fn screenshot_png(&self) -> Result<Vec<u8>, String> {
+            Ok(vec![0xAB; 2 * 1024 * 1024])
+        }
+        fn raw_screenshot(&self, _out: &Path, _fmt: &str) -> Result<(u32, u32, u8), String> {
+            Err("unused".to_string())
+        }
+        fn panel_touch(&self, _: i32, _: i64, _: i64, _: &[(i32, f32, f32)]) -> Result<(), String> {
+            Ok(())
+        }
+        fn panel_key(&self, _: i32, _: &str, _: i32, _: i32) -> Result<(), String> {
+            Ok(())
+        }
+        fn panel_text(&self, _: &str) -> Result<(), String> {
+            Ok(())
+        }
+        fn stream_socket(&self) -> Option<PathBuf> {
+            None
+        }
+        fn is_verify_run(&self) -> bool {
+            false
+        }
+    }
+
+    fn shrink_tcp_buffers(stream: &TcpStream, bytes: libc::c_int) {
+        unsafe {
+            libc::setsockopt(
+                stream.as_raw_fd(),
+                libc::SOL_SOCKET,
+                libc::SO_SNDBUF,
+                (&bytes as *const libc::c_int).cast(),
+                std::mem::size_of::<libc::c_int>() as libc::socklen_t,
+            );
+            libc::setsockopt(
+                stream.as_raw_fd(),
+                libc::SOL_SOCKET,
+                libc::SO_RCVBUF,
+                (&bytes as *const libc::c_int).cast(),
+                std::mem::size_of::<libc::c_int>() as libc::socklen_t,
+            );
+        }
+    }
+
+    fn send_raw_pkt(stream: &mut TcpStream, command: u32, arg0: u32, arg1: u32, payload: &[u8]) {
+        let len = payload.len() as u32;
+        let crc = payload
+            .iter()
+            .fold(0u32, |acc, &b| acc.wrapping_add(u32::from(b)));
+        let magic = command ^ 0xffff_ffff;
+        let mut hdr = [0u8; 24];
+        hdr[0..4].copy_from_slice(&command.to_le_bytes());
+        hdr[4..8].copy_from_slice(&arg0.to_le_bytes());
+        hdr[8..12].copy_from_slice(&arg1.to_le_bytes());
+        hdr[12..16].copy_from_slice(&len.to_le_bytes());
+        hdr[16..20].copy_from_slice(&crc.to_le_bytes());
+        hdr[20..24].copy_from_slice(&magic.to_le_bytes());
+        stream.write_all(&hdr).expect("write hdr");
+        if !payload.is_empty() {
+            stream.write_all(payload).expect("write payload");
+        }
+        stream.flush().expect("flush");
+    }
+
+    #[test]
+    fn stalled_peer_write_times_out_and_shuts_down_transport() {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
+        let addr = listener.local_addr().expect("addr");
+
+        let mut client = TcpStream::connect(addr).expect("connect");
+        shrink_tcp_buffers(&client, 4096);
+        let (server, _) = listener.accept().expect("accept");
+        shrink_tcp_buffers(&server, 4096);
+
+        let closing = Arc::new(AtomicBool::new(false));
+        let (done_tx, done_rx) = mpsc::channel();
+        let closing_srv = Arc::clone(&closing);
+        std::thread::spawn(move || {
+            handle_connection_with_write_timeout(
+                server,
+                Arc::new(LargeShotMockOps),
+                Arc::new(Mutex::new(AdbShellState::default())),
+                closing_srv,
+                Duration::from_millis(150),
+            );
+            let _ = done_tx.send(());
+        });
+
+        client
+            .set_read_timeout(Some(Duration::from_secs(2)))
+            .expect("read timeout");
+        send_raw_pkt(&mut client, A_CNXN, A_VERSION, 1024 * 1024, b"host::\0");
+        let cnxn = read_packet(&mut client).expect("read A_CNXN");
+        assert_eq!(cnxn.command, A_CNXN);
+
+        // Open `exec:screencap -p` (2 MiB payload) and read A_OKAY, then STOP reading.
+        send_raw_pkt(&mut client, A_OPEN, 7, 0, b"exec:screencap -p\0");
+        let okay = read_packet(&mut client).expect("read A_OKAY");
+        assert_eq!(okay.command, A_OKAY);
+
+        // With bounded write timeout, the stalled write must time out and tear down
+        // the multiplexed connection rather than blocking forever.
+        let res = done_rx.recv_timeout(Duration::from_secs(1));
+        closing.store(true, Ordering::Release);
+        drop(client);
+        assert!(
+            res.is_ok(),
+            "handle_connection blocked indefinitely on stalled peer write"
+        );
+    }
 }
 
