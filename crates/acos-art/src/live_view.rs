@@ -1552,7 +1552,12 @@ fn writer_loop(inner: Arc<Inner>) {
             }
         };
         let Some(frame) = pending else {
-            inner.wait(Duration::from_millis(20));
+            let wait = if inner.flush_pending() {
+                Duration::from_millis(1)
+            } else {
+                Duration::from_millis(20)
+            };
+            inner.wait(wait);
             continue;
         };
         let started = Instant::now();
@@ -3030,6 +3035,76 @@ mod tests {
         assert_eq!(event["status"], "VERIFY_WATCH_ONLY");
         assert_eq!(event["note"], "panel input ignored: verify run");
         assert_eq!(view.attach_epoch().load(Ordering::Acquire), 1);
+
+        view.shutdown();
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn idle_screen_flushes_pending_large_rgb888_tail_to_slow_reader() {
+        let dir = scratch_dir("rgb888-tail");
+        // 1080x2400 rgb888 is ~7.77 MiB, far exceeding the Unix socket buffer.
+        let sent = Arc::new(AtomicBool::new(false));
+        let sent_src = Arc::clone(&sent);
+        let source: Arc<dyn Fn() -> Option<SourceFrame> + Send + Sync> = Arc::new(move || {
+            if sent_src.swap(true, Ordering::AcqRel) {
+                return None;
+            }
+            Some(SourceFrame {
+                seq: 1,
+                generation: 1,
+                width: 1080,
+                height: 2400,
+                stride: 1080,
+                rgba: vec![0x42u8; 1080 * 2400 * 4],
+                secure: false,
+            })
+        });
+        let view = LiveView::bind(
+            &dir.join("v.sock"),
+            LiveViewConfig::default(),
+            (1080, 2400),
+            1,
+            source,
+            Arc::new(TestWake::new()),
+        )
+        .expect("bind");
+        let mut client = UnixStream::connect(view.socket_path()).expect("connect");
+        subscribe_line(
+            &mut client,
+            "\"frames\":true,\"format\":\"rgb888\",\"scale\":1.0,\"max_fps\":30,",
+        );
+        client
+            .set_read_timeout(Some(Duration::from_secs(1)))
+            .expect("timeout");
+        assert_eq!(read_message(&mut client).expect("hello").0, TYPE_HELLO);
+        assert!(wait_for(|| view.has_subscribers(), Duration::from_secs(2)));
+
+        // Emit one frame and then keep the screen completely idle (`source` returns None).
+        view.tick();
+        assert!(wait_for(
+            || view.stats().frames_sent == 1,
+            Duration::from_secs(2)
+        ));
+        // Wait longer than the 33ms frame interval AFTER broadcast so `now >= next_at`
+        // runs on an empty slot while the ~7.4 MiB frame tail is still queued.
+        std::thread::sleep(Duration::from_millis(80));
+
+        let (kind, payload) = loop {
+            let msg = read_message(&mut client).unwrap_or_else(|error| {
+                panic!(
+                    "pending rgb888 tail stalled on idle screen: {error} {:?}",
+                    view.stats()
+                )
+            });
+            if msg.0 == TYPE_FRAME {
+                break msg;
+            }
+        };
+        assert_eq!(kind, TYPE_FRAME);
+        let newline = payload.iter().position(|b| *b == b'\n').expect("header");
+        let raw = &payload[newline + 1..];
+        assert_eq!(raw.len(), 1080 * 2400 * 3);
 
         view.shutdown();
         let _ = std::fs::remove_dir_all(&dir);
