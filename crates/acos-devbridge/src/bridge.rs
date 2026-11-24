@@ -292,9 +292,6 @@ impl BridgeControl {
             .and_then(Value::as_str)
             .map(str::to_string);
 
-        // Replace if already present.
-        self.unregister(&session_id);
-
         let listener = match TcpListener::bind("127.0.0.1:0").await {
             Ok(l) => l,
             Err(e) => {
@@ -343,13 +340,17 @@ impl BridgeControl {
                 .await;
         });
 
-        self.sessions.lock().unwrap_or_else(|e| e.into_inner()).insert(
+        let displaced = self.sessions.lock().unwrap_or_else(|e| e.into_inner()).insert(
             session_id,
             RunningGrpc {
                 session,
                 task,
             },
         );
+        if let Some(old) = displaced {
+            old.session.shutdown();
+            old.task.abort();
+        }
         json!({ "ok": true, "grpc_port": grpc_port })
     }
 }
@@ -534,5 +535,64 @@ mod tests {
             *paths
         );
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn concurrent_register_same_session_shuts_down_displaced_servers() {
+        let dir = scratch_dir("reg-race");
+        let sock = dir.join("cb.sock");
+        let (ctrl, _rx) = BridgeControl::new(sock, dir.clone());
+        let mut all_ports = Vec::new();
+
+        for round in 0..40 {
+            let sid = format!("sess-race-{round}");
+            let req1 = json!({
+                "cmd": "register",
+                "session_id": sid,
+                "token": "tok-a",
+                "avd_name": "ACOS",
+                "display": [1080, 2400],
+            });
+            let req2 = json!({
+                "cmd": "register",
+                "session_id": sid,
+                "token": "tok-b",
+                "avd_name": "ACOS",
+                "display": [1080, 2400],
+            });
+            let c1 = Arc::clone(&ctrl);
+            let c2 = Arc::clone(&ctrl);
+            let h1 = tokio::spawn(async move { c1.handle_cmd(req1).await });
+            let h2 = tokio::spawn(async move { c2.handle_cmd(req2).await });
+            let (r1, r2) = tokio::join!(h1, h2);
+            let p1 = r1.unwrap()["grpc_port"].as_u64().expect("p1") as u16;
+            let p2 = r2.unwrap()["grpc_port"].as_u64().expect("p2") as u16;
+            all_ports.push(p1);
+            all_ports.push(p2);
+
+            let unreg = ctrl
+                .handle_cmd(json!({ "cmd": "unregister", "session_id": sid }))
+                .await;
+            assert_eq!(unreg["ok"], true);
+        }
+
+        // Give aborted tasks a brief moment to drop their TcpListeners.
+        tokio::time::sleep(Duration::from_millis(50)).await;
+
+        let mut still_listening = Vec::new();
+        for port in all_ports {
+            if tokio::net::TcpStream::connect(("127.0.0.1", port))
+                .await
+                .is_ok()
+            {
+                still_listening.push(port);
+            }
+        }
+        ctrl.shutdown_all();
+        let _ = std::fs::remove_dir_all(&dir);
+        assert!(
+            still_listening.is_empty(),
+            "displaced gRPC listeners leaked open ports after unregister: {still_listening:?}"
+        );
     }
 }
