@@ -274,6 +274,7 @@ fn cp1_live_art_adb_and_hub_parsers() {
     let serial = dp["serial"].as_str().expect("serial").to_string();
     assert!(serial.starts_with("emulator-55"), "unexpected serial {serial}");
 
+    let t_scan = Instant::now();
     let script = daemon.dir.join("check_hub.mjs");
     std::fs::write(
         &script,
@@ -291,26 +292,44 @@ const apkPath = process.env.ACOS_APK;
 const adbMod = await import(pathToFileURL(path.join(dist, "adb.js")).href);
 const accMod = await import(pathToFileURL(path.join(dist, "accessibility.js")).href);
 const appMod = await import(pathToFileURL(path.join(dist, "app-info.js")).href);
+const capMod = await import(pathToFileURL(path.join(dist, "device-capabilities.js")).href);
+const permMod = await import(pathToFileURL(path.join(dist, "app-permissions.js")).href);
 
 let found = false;
+const tDiscoverStart = Date.now();
+let discoverMs = null;
 for (let i = 0; i < 40; i++) {
-  const devs = await adbMod.listDevices();
+  const devs = await adbMod.listAllDevices();
   if (devs.some((d) => d.serial === serial && d.state === "device")) {
     found = true;
+    discoverMs = Date.now() - tDiscoverStart;
     break;
   }
   await new Promise((r) => setTimeout(r, 100));
 }
-assert(found, `${serial} not discovered in adb devices`);
+assert(found, `${serial} not discovered in adbMod.listAllDevices()`);
+console.log(`SCAN_MS=${discoverMs}`);
+
+const activeDevs = await adbMod.listDevices();
+assert(activeDevs.some((d) => d.serial === serial && d.state === "device"));
+
+assert.equal(capMod.isEmulatorSerial(serial), true);
+const modes = capMod.availableStreamModesForSerial(serial);
+assert(modes.includes("grpc-screenshot"), `unexpected stream modes: ${JSON.stringify(modes)}`);
 
 const size = await adbMod.getDeviceSize(serial);
 assert.equal(size.width, 1080);
 assert.equal(size.height, 2400);
 
+const effSize = await adbMod.readEffectiveDisplaySize(serial);
+assert.equal(effSize.widthPx, 1080);
+assert.equal(effSize.heightPx, 2400);
+
 const density = await adbMod.getDisplayDensity(serial);
 assert.equal(density.scale, 1);
 
 assert.equal(await adbMod.getDisplayRotation(serial), 0);
+assert.equal(await adbMod.getDisplayOrientation(serial), "portrait");
 const urot = await adbMod.getUserRotation(serial);
 assert.equal(urot.mode, "free");
 
@@ -336,6 +355,9 @@ const fg = await appMod.getForegroundApp(serial);
 assert.equal(fg.packageName, "dev.acos.fixtures.counter");
 assert(fg.pid > 0);
 
+const perms = await permMod.listPermissions(serial, "dev.acos.fixtures.counter");
+assert.equal(perms.ok, true);
+
 const acc = await accMod.getAccessibilitySnapshot(serial);
 assert(acc.ok);
 assert(acc.nodes.some((n) => n.text === "Increment"));
@@ -343,6 +365,13 @@ assert(acc.nodes.some((n) => n.text === "Increment"));
 const rotRes = await adbMod.setUserRotation(serial, "landscape");
 assert.equal(rotRes.mode, "lock");
 assert.equal(await adbMod.getDisplayRotation(serial), 1);
+assert.equal(await adbMod.getDisplayOrientation(serial), "landscape_right");
+
+const freeRes = await adbMod.setUserRotation(serial, "auto");
+assert.equal(freeRes.mode, "free");
+
+// Unsupported setter must fail honestly rather than faking success.
+await assert.rejects(() => adbMod.setFontScale(serial, 1.3), /acos: unsupported/);
 
 const unsup = spawnSync("adb", ["-P", adbPort, "-s", serial, "shell", "logcat"], { encoding: "utf8" });
 assert.notEqual(unsup.status, 0);
@@ -354,6 +383,7 @@ assert((inst.stderr + inst.stdout).includes("acos: unsupported"));
 "#,
     )
     .unwrap();
+    let _ = t_scan;
 
     let node_out = Command::new("node")
         .arg(&script)
@@ -369,7 +399,12 @@ assert((inst.stderr + inst.stdout).includes("acos: unsupported"));
         String::from_utf8_lossy(&node_out.stdout),
         String::from_utf8_lossy(&node_out.stderr)
     );
+    eprintln!(
+        "cp1_live_art_adb_and_hub_parsers: {}",
+        String::from_utf8_lossy(&node_out.stdout).trim()
+    );
 
+    let destroy_start = Instant::now();
     let destroy = conn.call("acos_destroy", json!({ "base": base }));
     assert_eq!(destroy["ok"], json!(true), "{destroy:#?}");
 
@@ -382,6 +417,10 @@ assert((inst.stderr + inst.stdout).includes("acos: unsupported"));
             .expect("adb devices");
         let text = String::from_utf8_lossy(&out.stdout);
         if !text.lines().any(|l| l.starts_with(&serial)) {
+            eprintln!(
+                "cp1_live_art_adb_and_hub_parsers: GONE_AFTER_DESTROY_MS={}",
+                destroy_start.elapsed().as_millis()
+            );
             break;
         }
         assert!(
