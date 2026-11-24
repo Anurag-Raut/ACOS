@@ -217,8 +217,14 @@ impl LiveRegistry {
     }
 
     fn prepare_dir(&self) -> io::Result<()> {
+        use std::os::unix::fs::DirBuilderExt;
         if let Some(parent) = self.dir.parent() {
-            std::fs::create_dir_all(parent)?;
+            if !parent.as_os_str().is_empty() {
+                std::fs::DirBuilder::new()
+                    .recursive(true)
+                    .mode(0o700)
+                    .create(parent)?;
+            }
         }
         verify_private_dir(&self.dir, true)
     }
@@ -738,5 +744,24 @@ mod tests {
             }
         }
         (raw.to_string(), String::new())
+    }
+
+    #[test]
+    fn write_creates_missing_parent_dir_with_mode_0700() {
+        let base = scratch("nested-parent");
+        let parent = base.join("acos");
+        let dir = parent.join("live");
+        let registry = LiveRegistry::at(dir.clone());
+        registry.write(&entry("s_nested")).expect("write nested");
+        for path in [&parent, &dir] {
+            let mode = std::fs::metadata(path).unwrap().permissions().mode() & 0o777;
+            assert_eq!(
+                mode,
+                0o700,
+                "{} created with mode 0{mode:o}, expected 0700",
+                path.display()
+            );
+        }
+        let _ = std::fs::remove_dir_all(&base);
     }
 }

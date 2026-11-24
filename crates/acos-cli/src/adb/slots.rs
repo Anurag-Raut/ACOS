@@ -54,7 +54,12 @@ pub struct SlotClaim {
 /// Ensure the lock directory exists and is `0700` owned by the current uid.
 fn prepare_lock_dir(dir: &Path) -> std::io::Result<()> {
     if let Some(parent) = dir.parent() {
-        std::fs::create_dir_all(parent)?;
+        if !parent.as_os_str().is_empty() {
+            std::fs::DirBuilder::new()
+                .recursive(true)
+                .mode(0o700)
+                .create(parent)?;
+        }
     }
     match std::fs::DirBuilder::new().mode(0o700).create(dir) {
         Ok(()) => {}
@@ -114,4 +119,29 @@ pub fn claim_slot(lock_dir: &Path) -> std::io::Result<Option<SlotClaim>> {
         }));
     }
     Ok(None)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn prepare_lock_dir_creates_missing_parents_0700() {
+        let base = std::env::temp_dir().join(format!("acos-slots-mode-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        std::fs::create_dir_all(&base).unwrap();
+        let parent = base.join("acos");
+        let leaf = parent.join("adb-locks");
+        prepare_lock_dir(&leaf).expect("prepare_lock_dir");
+        for path in [&parent, &leaf] {
+            let mode = std::fs::metadata(path).unwrap().permissions().mode() & 0o777;
+            assert_eq!(
+                mode,
+                0o700,
+                "{} created with mode 0{mode:o}, expected 0700",
+                path.display()
+            );
+        }
+        let _ = std::fs::remove_dir_all(&base);
+    }
 }

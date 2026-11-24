@@ -245,6 +245,76 @@ fn serve_with_adb_starts_cleanly_when_idle() {
 }
 
 #[test]
+fn serve_starts_after_nested_socket_creates_acos_parent_under_fresh_xdg_runtime_dir() {
+    let xdg = PathBuf::from(format!("/tmp/acos-xdg-fresh-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&xdg);
+    std::fs::create_dir_all(&xdg).unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&xdg, std::fs::Permissions::from_mode(0o700)).unwrap();
+    }
+
+    // 1. Start a child using a nested socket under $XDG_RUNTIME_DIR/acos/sub/s.sock
+    //    (simulates any helper/subpath creating $XDG_RUNTIME_DIR/acos before default serve).
+    let custom_sock = xdg.join("acos").join("sub").join("custom.sock");
+    let mut first = Command::new(acos_bin())
+        .args(["serve", "--socket"])
+        .arg(&custom_sock)
+        .args(["--idle-timeout", "30"])
+        .env("XDG_RUNTIME_DIR", &xdg)
+        .env_remove("ACOS_RUNTIME_DIR")
+        .env_remove("ACOS_SESSION_SOCKET")
+        .env("ACOS_MEMORY_GUARD", "off")
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("spawn custom acos serve");
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while !custom_sock.exists() && Instant::now() < deadline {
+        std::thread::sleep(Duration::from_millis(25));
+    }
+    assert!(custom_sock.exists(), "custom socket did not appear");
+    let _ = first.kill();
+    let _ = first.wait();
+
+    // 2. Now start default `acos serve` using XDG_RUNTIME_DIR=<xdg>.
+    //    Its runtime_dir is $XDG_RUNTIME_DIR/acos, which must already be 0700
+    //    or ensure_private_dir will refuse startup with "expected 0700".
+    let default_sock = xdg.join("acos").join("session.sock");
+    let mut default_child = Command::new(acos_bin())
+        .args(["serve", "--idle-timeout", "30"])
+        .env("XDG_RUNTIME_DIR", &xdg)
+        .env_remove("ACOS_RUNTIME_DIR")
+        .env_remove("ACOS_SESSION_SOCKET")
+        .env("ACOS_MEMORY_GUARD", "off")
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("spawn default acos serve");
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while !default_sock.exists() && Instant::now() < deadline {
+        if let Ok(Some(status)) = default_child.try_wait() {
+            let mut err = String::new();
+            if let Some(mut stderr) = default_child.stderr.take() {
+                use std::io::Read;
+                let _ = stderr.read_to_string(&mut err);
+            }
+            let _ = std::fs::remove_dir_all(&xdg);
+            panic!("default `acos serve` exited early ({status}): {err}");
+        }
+        std::thread::sleep(Duration::from_millis(25));
+    }
+    assert!(default_sock.exists(), "default session.sock never appeared");
+    let mut conn = Conn::new(&default_sock);
+    let pong = conn.call("ping", json!({}));
+    assert_eq!(pong["ok"], json!(true));
+    let _ = default_child.kill();
+    let _ = default_child.wait();
+    let _ = std::fs::remove_dir_all(&xdg);
+}
+
+#[test]
 #[ignore = "boots a real ART guest and exercises real /usr/bin/adb + expo-device-hub parsers"]
 fn cp1_live_art_adb_and_hub_parsers() {
     let Some(apk) = find_counter_apk() else {

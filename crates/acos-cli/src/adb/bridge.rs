@@ -152,7 +152,12 @@ pub fn random_bearer_token() -> String {
 
 fn prepare_private_dir(dir: &Path) -> std::io::Result<()> {
     if let Some(parent) = dir.parent() {
-        std::fs::create_dir_all(parent)?;
+        if !parent.as_os_str().is_empty() {
+            std::fs::DirBuilder::new()
+                .recursive(true)
+                .mode(0o700)
+                .create(parent)?;
+        }
     }
     match std::fs::DirBuilder::new().mode(0o700).create(dir) {
         Ok(()) => {}
@@ -794,5 +799,28 @@ mod tests {
         assert!(dead_real_emu.exists(), "non-ACOS ini must never be touched");
         assert!(live_acos.exists(), "live ACOS ini must be preserved");
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn prepare_private_dir_creates_missing_parents_0700() {
+        let base = std::env::temp_dir().join(format!(
+            "acos-bridge-mode-{}-{}",
+            std::process::id(),
+            random_bearer_token()
+        ));
+        std::fs::create_dir_all(&base).unwrap();
+        let parent = base.join("acos");
+        let leaf = parent.join("avd");
+        prepare_private_dir(&leaf).expect("prepare_private_dir");
+        for path in [&parent, &leaf] {
+            let mode = std::fs::metadata(path).unwrap().permissions().mode() & 0o777;
+            assert_eq!(
+                mode,
+                0o700,
+                "{} created with mode 0{mode:o}, expected 0700",
+                path.display()
+            );
+        }
+        let _ = std::fs::remove_dir_all(&base);
     }
 }

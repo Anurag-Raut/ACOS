@@ -507,10 +507,14 @@ fn context_for(args: &Value) -> acos_mcp::CallContext {
 /// instead of chmod-ing someone else's path. An explicit `--socket` parent is
 /// still created 0700 as before (the caller chose it).
 fn prepare_runtime_dir(dir: &std::path::Path) -> std::io::Result<()> {
+    use std::os::unix::fs::DirBuilderExt;
     if dir == daemon::runtime_dir() {
         return daemon::ensure_private_dir(dir);
     }
-    std::fs::create_dir_all(dir)?;
+    std::fs::DirBuilder::new()
+        .recursive(true)
+        .mode(0o700)
+        .create(dir)?;
     std::fs::set_permissions(dir, std::fs::Permissions::from_mode(0o700))
 }
 
