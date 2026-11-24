@@ -48,79 +48,98 @@ impl TouchTracker {
 
         let now_ns = monotonic_nanos();
         let mut frames = Vec::new();
-        let mut any_move = false;
+        let mut pending_move = false;
+        let mut pending_move_stationary = false;
 
-        // 1. Handle new pointer downs (`pressure > 0`, not currently active).
-        for &(id, x, y, pressure) in touches {
-            if pressure > 0 && !self.active.contains_key(&id) {
-                let coords = clamp_xy(x, y);
-                self.active.insert(id, coords);
-                let down_time_ns = match self.down_time_ns {
-                    Some(t) => t,
-                    None => {
-                        self.down_time_ns = Some(now_ns);
-                        now_ns
-                    }
-                };
+        let flush_move = |frames: &mut Vec<TouchFrame>,
+                          active: &BTreeMap<i32, (f32, f32)>,
+                          down_time_ns: Option<i64>,
+                          pending_move: &mut bool,
+                          pending_move_stationary: &mut bool,
+                          allow_stationary: bool| {
+            let should_emit =
+                *pending_move || (allow_stationary && *pending_move_stationary && frames.is_empty());
+            if should_emit && !active.is_empty() {
+                let down_time_ns = down_time_ns.unwrap_or(now_ns);
                 let pointers: Vec<(i32, f32, f32)> =
-                    self.active.iter().map(|(&pid, &(px, py))| (pid, px, py)).collect();
-                let action = if pointers.len() == 1 {
-                    ACTION_DOWN
-                } else {
-                    let idx = pointers
-                        .iter()
-                        .position(|&(pid, _, _)| pid == id)
-                        .unwrap_or(0) as i32;
-                    ACTION_POINTER_DOWN | (idx << ACTION_POINTER_INDEX_SHIFT)
-                };
+                    active.iter().map(|(&pid, &(px, py))| (pid, px, py)).collect();
                 frames.push(TouchFrame {
-                    action,
+                    action: ACTION_MOVE,
                     down_time_ns,
                     event_time_ns: now_ns,
                     pointers,
                 });
             }
-        }
+            *pending_move = false;
+            *pending_move_stationary = false;
+        };
 
-        // 2. Handle pointer moves (`pressure > 0`, already active before step 1 or updated).
-        // Skip pointers just inserted in step 1 unless duplicate entries appeared.
         for &(id, x, y, pressure) in touches {
+            let coords = clamp_xy(x, y);
             if pressure > 0 {
-                let coords = clamp_xy(x, y);
                 if let Some(entry) = self.active.get_mut(&id) {
                     if *entry != coords {
                         *entry = coords;
-                        any_move = true;
-                    } else if frames.is_empty() {
-                        // Even stationary move packets from a client emit ACTION_MOVE
-                        // if this TouchEvent contained no down/up transitions.
-                        any_move = true;
+                        pending_move = true;
+                    } else {
+                        pending_move_stationary = true;
                     }
+                } else {
+                    flush_move(
+                        &mut frames,
+                        &self.active,
+                        self.down_time_ns,
+                        &mut pending_move,
+                        &mut pending_move_stationary,
+                        false,
+                    );
+                    self.active.insert(id, coords);
+                    let down_time_ns = match self.down_time_ns {
+                        Some(t) => t,
+                        None => {
+                            self.down_time_ns = Some(now_ns);
+                            now_ns
+                        }
+                    };
+                    let pointers: Vec<(i32, f32, f32)> = self
+                        .active
+                        .iter()
+                        .map(|(&pid, &(px, py))| (pid, px, py))
+                        .collect();
+                    let action = if pointers.len() == 1 {
+                        ACTION_DOWN
+                    } else {
+                        let idx = pointers
+                            .iter()
+                            .position(|&(pid, _, _)| pid == id)
+                            .unwrap_or(0) as i32;
+                        ACTION_POINTER_DOWN | (idx << ACTION_POINTER_INDEX_SHIFT)
+                    };
+                    frames.push(TouchFrame {
+                        action,
+                        down_time_ns,
+                        event_time_ns: now_ns,
+                        pointers,
+                    });
                 }
-            }
-        }
-        if any_move && !self.active.is_empty() {
-            let down_time_ns = self.down_time_ns.unwrap_or(now_ns);
-            let pointers: Vec<(i32, f32, f32)> =
-                self.active.iter().map(|(&pid, &(px, py))| (pid, px, py)).collect();
-            frames.push(TouchFrame {
-                action: ACTION_MOVE,
-                down_time_ns,
-                event_time_ns: now_ns,
-                pointers,
-            });
-        }
-
-        // 3. Handle pointer releases (`pressure == 0`, currently active).
-        for &(id, x, y, pressure) in touches {
-            if pressure == 0 && self.active.contains_key(&id) {
-                let coords = clamp_xy(x, y);
+            } else if self.active.contains_key(&id) {
+                flush_move(
+                    &mut frames,
+                    &self.active,
+                    self.down_time_ns,
+                    &mut pending_move,
+                    &mut pending_move_stationary,
+                    false,
+                );
                 if let Some(entry) = self.active.get_mut(&id) {
                     *entry = coords;
                 }
                 let down_time_ns = self.down_time_ns.unwrap_or(now_ns);
-                let pointers: Vec<(i32, f32, f32)> =
-                    self.active.iter().map(|(&pid, &(px, py))| (pid, px, py)).collect();
+                let pointers: Vec<(i32, f32, f32)> = self
+                    .active
+                    .iter()
+                    .map(|(&pid, &(px, py))| (pid, px, py))
+                    .collect();
                 let action = if pointers.len() == 1 {
                     ACTION_UP
                 } else {
@@ -142,6 +161,15 @@ impl TouchTracker {
                 }
             }
         }
+
+        flush_move(
+            &mut frames,
+            &self.active,
+            self.down_time_ns,
+            &mut pending_move,
+            &mut pending_move_stationary,
+            true,
+        );
 
         frames
     }
@@ -210,5 +238,62 @@ mod tests {
         let mut tracker = TouchTracker::default();
         let down = tracker.apply(&[(0, -50, 9999, 1)], 1080, 2400);
         assert_eq!(down[0].pointers, vec![(0, 0.0, 2399.0)]);
+    }
+
+    #[test]
+    fn release_then_reuse_same_pointer_in_single_event_single_finger() {
+        let mut tracker = TouchTracker::default();
+        let initial = tracker.apply(&[(0, 100, 200, 1)], 1080, 2400);
+        assert_eq!(initial.len(), 1);
+        assert_eq!(initial[0].action, ACTION_DOWN);
+
+        // Single TouchEvent releases pointer 0 and presses pointer 0 again at a new position.
+        let reused = tracker.apply(&[(0, 110, 210, 0), (0, 500, 600, 1)], 1080, 2400);
+        assert_eq!(reused.len(), 2, "expected UP then DOWN, got {reused:?}");
+        assert_eq!(reused[0].action, ACTION_UP);
+        assert_eq!(reused[0].pointers, vec![(0, 110.0, 210.0)]);
+        assert_eq!(reused[1].action, ACTION_DOWN);
+        assert_eq!(reused[1].pointers, vec![(0, 500.0, 600.0)]);
+
+        // Pointer 0 must remain active so a subsequent move updates it rather than emitting a new DOWN.
+        let next = tracker.apply(&[(0, 520, 620, 1)], 1080, 2400);
+        assert_eq!(next.len(), 1);
+        assert_eq!(next[0].action, ACTION_MOVE);
+        assert_eq!(next[0].pointers, vec![(0, 520.0, 620.0)]);
+    }
+
+    #[test]
+    fn release_then_reuse_same_pointer_in_single_event_multi_touch() {
+        let mut tracker = TouchTracker::default();
+        let _ = tracker.apply(&[(0, 100, 200, 1), (1, 300, 400, 1)], 1080, 2400);
+
+        let reused = tracker.apply(&[(0, 105, 205, 0), (0, 700, 800, 1)], 1080, 2400);
+        assert_eq!(reused.len(), 2, "expected POINTER_UP then POINTER_DOWN, got {reused:?}");
+        assert_eq!(reused[0].action, ACTION_POINTER_UP); // pointer 0 is index 0
+        assert_eq!(
+            reused[0].pointers,
+            vec![(0, 105.0, 205.0), (1, 300.0, 400.0)]
+        );
+        assert_eq!(reused[1].action, ACTION_POINTER_DOWN); // pointer 0 is index 0 again
+        assert_eq!(
+            reused[1].pointers,
+            vec![(0, 700.0, 800.0), (1, 300.0, 400.0)]
+        );
+    }
+
+    #[test]
+    fn stationary_move_emits_move_only_without_transitions() {
+        let mut tracker = TouchTracker::default();
+        let _ = tracker.apply(&[(0, 100, 200, 1)], 1080, 2400);
+
+        // Stationary pointer alone emits ACTION_MOVE.
+        let stationary = tracker.apply(&[(0, 100, 200, 1)], 1080, 2400);
+        assert_eq!(stationary.len(), 1);
+        assert_eq!(stationary[0].action, ACTION_MOVE);
+
+        // Stationary active pointer paired with a new pointer down does not emit a redundant MOVE.
+        let down2 = tracker.apply(&[(0, 100, 200, 1), (1, 300, 400, 1)], 1080, 2400);
+        assert_eq!(down2.len(), 1);
+        assert_eq!(down2[0].action, ACTION_POINTER_DOWN | (1 << 8));
     }
 }
