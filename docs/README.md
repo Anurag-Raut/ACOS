@@ -21,6 +21,7 @@ Start here to understand how ACOS works, what is shared on the Host vs private p
 - **[Error Codes](ERROR_CODES.md)** — Canonical `ErrorCode` taxonomy and exit statuses.
 - **[Installation](INSTALL.md)** — Installing ACOS, `ACOS_HOME`, boot image extraction, `pasta`, and `chrome-headless-shell`.
 - **[Live View](LIVE_VIEW.md)** — Protocol v1 stream and `acos view` browser hub.
+- **[Interactive live view (plan)](HUMAN_VIEW_SPEC.md)** — HUMANVIEW1: make `acos view` an interactive emulator-like window (awaiting approval).
 - **[UI-Tree Parity](PARITY.md)** — Running ACOS vs physical phone scenario parity checks.
 
 ## Security & Confinement
