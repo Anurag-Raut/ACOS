@@ -802,3 +802,298 @@ fn cp3_crash_cleanup() {
     let _ = serve2.wait();
     drop(adb_srv);
 }
+
+// ---------------------------------------------------------------------------
+// CR #11: deferred ART launch (`dev_server: start` before `launch`) under --adb
+// ---------------------------------------------------------------------------
+
+#[test]
+fn cp3_deferred_verify_adb_exposes_only_after_launch() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let dir = scratch("cp3-deferred-adb");
+    let avd_dir = dir.join("avd-running");
+    let sockets = ShortSocketDir::new("cp3-def");
+
+    // Unused TCP port for ANDROID_ADB_SERVER_PORT so notify_adb_server never touches host port 5037.
+    let unused_adb_port = {
+        let l = TcpListener::bind("127.0.0.1:0").expect("bind ephemeral unused port");
+        l.local_addr().unwrap().port()
+    };
+    let dev_server_port = {
+        let l = TcpListener::bind("127.0.0.1:0").expect("bind ephemeral metro port");
+        l.local_addr().unwrap().port()
+    };
+
+    // Fake react-native/cli.js + metro/ dir that records whether any pid_*.ini existed at dev_server start.
+    let nm_dir = dir.join("node_modules");
+    std::fs::create_dir_all(nm_dir.join("react-native")).unwrap();
+    std::fs::create_dir_all(nm_dir.join("metro")).unwrap();
+    std::fs::write(nm_dir.join("metro/index.js"), "module.exports = {};\n").unwrap();
+    let metro_saw_ini = dir.join("metro_saw_ini.txt");
+    std::fs::write(
+        nm_dir.join("react-native/cli.js"),
+        r#"
+const fs = require("fs");
+const http = require("http");
+const path = require("path");
+const args = process.argv.slice(2);
+const portIdx = args.indexOf("--port");
+const port = portIdx >= 0 ? Number(args[portIdx + 1]) : 8081;
+const avdDir = process.env.ACOS_AVD_RUNNING_DIR;
+const entries = fs.existsSync(avdDir) ? fs.readdirSync(avdDir).filter((f) => f.endsWith(".ini")) : [];
+fs.writeFileSync(process.env.METRO_SAW_INI, JSON.stringify(entries));
+const srv = http.createServer((req, res) => {
+  if (req.url && req.url.startsWith("/status")) {
+    res.writeHead(200, { "Content-Type": "text/plain" });
+    res.end("packager-status:running\n");
+    return;
+  }
+  res.writeHead(404);
+  res.end();
+});
+srv.listen(port, "127.0.0.1");
+process.on("SIGTERM", () => srv.close(() => process.exit(0)));
+"#,
+    )
+    .unwrap();
+
+    let project_dir = dir.join("project");
+    std::fs::create_dir_all(&project_dir).unwrap();
+    std::fs::write(project_dir.join("index.js"), "// dummy\n").unwrap();
+
+    // Fake acos-art binary speaking the session line-JSON protocol and recording avd_dir on `tree`.
+    let fake_art = dir.join("fake_art.py");
+    let tree_saw_ini = dir.join("tree_saw_ini.txt");
+    let frames_dir = dir.join("frames");
+    std::fs::create_dir_all(&frames_dir).unwrap();
+    std::fs::write(
+        &fake_art,
+        r##"#!/usr/bin/env python3
+import base64, hashlib, json, os, sys
+
+PNG = base64.b64decode(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4//8/AAX+Av4N70a4AAAAAElFTkSuQmCC"
+)
+out = os.environ["FAKE_ART_OUT"]
+avd_dir = os.environ["ACOS_AVD_RUNNING_DIR"]
+seq = 0
+
+def reply_frame(cmd, with_tree):
+    global seq
+    seq += 1
+    p = os.path.join(out, f"f_{seq}.png")
+    data = PNG + f"#seq={seq}".encode()
+    with open(p, "wb") as f:
+        f.write(data)
+    rep = {
+        "ok": True,
+        "cmd": cmd,
+        "frame_seq": seq,
+        "png": p,
+        "md5": hashlib.md5(data).hexdigest(),
+    }
+    if with_tree:
+        rep["tree"] = {
+            "nodes": [{
+                "class": "android.widget.TextView",
+                "id": "dev.acos.fixtures.counter:id/count",
+                "text": "0",
+                "bounds": "[42,317][63,368]",
+                "visibility": 0,
+            }]
+        }
+    return rep
+
+print(json.dumps(reply_frame("ready", True)), flush=True)
+for line in sys.stdin:
+    line = line.strip()
+    if not line:
+        continue
+    req = json.loads(line)
+    cmd = req.get("cmd", "")
+    if cmd == "close":
+        print(json.dumps({"ok": True, "cmd": "close", "frame_seq": seq}), flush=True)
+        break
+    if cmd == "tree":
+        inis = sorted(f for f in os.listdir(avd_dir) if f.endswith(".ini")) if os.path.isdir(avd_dir) else []
+        with open(os.environ["TREE_SAW_INI"], "w") as f:
+            json.dump(inis, f)
+        print(json.dumps(reply_frame("tree", True)), flush=True)
+    elif cmd == "screenshot":
+        print(json.dumps(reply_frame("screenshot", False)), flush=True)
+    elif cmd == "reset":
+        print(json.dumps(reply_frame("reset", True)), flush=True)
+    else:
+        print(json.dumps({"ok": False, "cmd": cmd, "code": "BAD_CMD", "error": "unknown"}), flush=True)
+"##,
+    )
+    .unwrap();
+    std::fs::set_permissions(&fake_art, std::fs::Permissions::from_mode(0o755)).unwrap();
+
+    // Use real acos-devbridge when built alongside, else fall back to a minimal mock.
+    let devbridge_bin = find_bin("acos-devbridge", "ACOS_DEVBRIDGE_BIN").unwrap_or_else(|| {
+        let mock = dir.join("fake_devbridge.py");
+        std::fs::write(
+            &mock,
+            r##"#!/usr/bin/env python3
+import argparse, json, os, signal, socket
+
+p = argparse.ArgumentParser()
+p.add_argument("--socket", required=True)
+p.add_argument("--callback", required=True)
+args = p.parse_args()
+if os.path.exists(args.socket):
+    os.unlink(args.socket)
+srv = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+srv.bind(args.socket)
+srv.listen(8)
+running = True
+def stop(_s, _f):
+    global running
+    running = False
+    try:
+        srv.close()
+    except Exception:
+        pass
+signal.signal(signal.SIGTERM, stop)
+while running:
+    try:
+        conn, _ = srv.accept()
+    except OSError:
+        break
+    with conn:
+        line = conn.makefile("r").readline()
+        if not line:
+            continue
+        req = json.loads(line)
+        if req.get("cmd") == "register":
+            resp = {"ok": True, "grpc_port": 50051}
+        else:
+            resp = {"ok": True}
+        conn.sendall((json.dumps(resp) + "\n").encode())
+"##,
+        )
+        .unwrap();
+        std::fs::set_permissions(&mock, std::fs::Permissions::from_mode(0o755)).unwrap();
+        mock
+    });
+
+    let apk = find_fixture_apk("counter.apk").unwrap_or_else(|| {
+        let p = dir.join("dummy.apk");
+        std::fs::write(&p, b"PK\x05\x06").unwrap();
+        p
+    });
+
+    let scenario = dir.join("deferred-watch.yaml");
+    std::fs::write(
+        &scenario,
+        format!(
+            r#"version: 1
+name: deferred-watch
+description: Verify --adb registers WatchViewOps after deferred launch.
+app: {apk}
+engine: art
+fallback: report-and-escalate
+api_level: 34
+isolation: process
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+capabilities: [lifecycle, ui.offscreen, ui.text]
+needs_env: [metro]
+expectation: pass
+expectation_reason: exercises deferred ART session boot under --adb
+budgets:
+  memory_mib: 512
+  wall_ms: 60000
+steps:
+  - dev_server:
+      op: start
+      project: {project}
+      port: {port}
+      expose_to_guest: false
+      timeout_ms: 15000
+  - launch:
+      activity: dev.acos.fixtures.counter/.MainActivity
+  - wait_for:
+      selector: {{id: count}}
+      timeout_ms: 5000
+  - dev_server:
+      op: stop
+"#,
+            apk = apk.display(),
+            project = project_dir.display(),
+            port = dev_server_port,
+        ),
+    )
+    .unwrap();
+
+    let artifacts = dir.join("artifacts");
+    let out = Command::new(acos_bin())
+        .args(["verify", "--adb", "--engine", "art", "--overwrite", "--json"])
+        .arg(&scenario)
+        .arg("--artifacts")
+        .arg(&artifacts)
+        .env("ACOS_NO_DAEMON", "1")
+        .env("ACOS_RUNTIME_DIR", dir.join("runtime"))
+        .env("ACOS_CACHE_DIR", dir.join("cache"))
+        .env("ACOS_ADB_LOCK_DIR", dir.join("adb-locks"))
+        .env("ACOS_AVD_RUNNING_DIR", &avd_dir)
+        .env("ACOS_DEV_SERVER_DIR", dir.join("dev-server"))
+        .env("ACOS_METRO_NODE_MODULES", &nm_dir)
+        .env("ACOS_MEMORY_GUARD", "off")
+        .env("XDG_RUNTIME_DIR", sockets.dir())
+        .env("ANDROID_ADB_SERVER_PORT", unused_adb_port.to_string())
+        .env("ACOS_ART_BIN", &fake_art)
+        .env("ACOS_DEVBRIDGE_BIN", &devbridge_bin)
+        .env("FAKE_ART_OUT", &frames_dir)
+        .env("METRO_SAW_INI", &metro_saw_ini)
+        .env("TREE_SAW_INI", &tree_saw_ini)
+        .output()
+        .expect("run acos verify --adb on deferred scenario");
+
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(out.status.success(), "verify failed:\nstdout={stdout}\nstderr={stderr}");
+    let verdict: Value = serde_json::from_str(stdout.trim()).expect("verdict JSON");
+    assert_eq!(verdict["status"], json!("pass"), "verdict={stdout}");
+
+    // 1. Before `launch` (while dev_server starts), no device_panel exposure / .ini exists yet.
+    let at_metro: Vec<String> = serde_json::from_str(
+        &std::fs::read_to_string(&metro_saw_ini).expect("metro_saw_ini written"),
+    )
+    .unwrap();
+    assert!(
+        at_metro.is_empty(),
+        "device_panel exposed too early during dev_server start: {at_metro:?}"
+    );
+
+    // 2. Once `launch` boots the deferred ART session, stderr announces exposure and pid_*.ini exists.
+    let announce_line = stderr
+        .lines()
+        .find_map(|l| l.strip_prefix("acos verify: device_panel "))
+        .unwrap_or_else(|| {
+            panic!("verify never announced device_panel on deferred launch.\nstderr={stderr}")
+        });
+    let announce: Value = serde_json::from_str(announce_line).expect("device_panel JSON");
+    assert_eq!(announce["device_panel"]["exposed"], json!(true), "{announce:#?}");
+
+    let at_tree: Vec<String> = serde_json::from_str(
+        &std::fs::read_to_string(&tree_saw_ini).expect("tree_saw_ini written"),
+    )
+    .unwrap();
+    assert_eq!(
+        at_tree.len(),
+        1,
+        "expected exactly 1 pid_*.ini visible after deferred launch, saw {at_tree:?}"
+    );
+
+    // 3. After verify exits, shutdown_all cleaned up the .ini.
+    let left: Vec<_> = std::fs::read_dir(&avd_dir).unwrap().flatten().collect();
+    assert!(left.is_empty(), "ini left after deferred verify run: {left:?}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+

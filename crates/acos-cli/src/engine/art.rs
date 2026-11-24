@@ -6114,6 +6114,7 @@ pub struct DeferredArtStart {
     pub session_id: Option<String>,
     pub services: Vec<serde_json::Value>,
     pub intent: acos_protocol::LaunchIntent,
+    pub on_started: Option<Box<dyn FnOnce(&ArtSession) + Send>>,
 }
 
 /// Session metadata populated once a [`DeferredArtSession`] actually boots,
@@ -6193,6 +6194,9 @@ impl DeferredArtSession {
                 meta.session_extra_apks = session.extra_apks().to_vec();
                 meta.session_boot_image = session.boot_image().cloned();
                 meta.module_rows = Some(session.module_rows());
+            }
+            if let Some(on_started) = cfg.on_started {
+                on_started(&session);
             }
             if let Some(timeout) = self.pending_settle_timeout.take() {
                 SessionBackend::set_settle_timeout(&mut session, timeout);

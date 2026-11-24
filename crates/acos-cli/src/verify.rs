@@ -598,7 +598,9 @@ pub fn run(args: VerifyArgs) -> ExitCode {
     // the process.
     let mut session_id: Option<String> = None;
     // DEVPANEL1: the watch-only device-panel exposure of this run (`--adb`).
-    let mut adb_view: Option<crate::adb::AdbManager> = None;
+    let mut adb_view: Option<Arc<crate::adb::AdbManager>> =
+        (args.adb && matches!(engine, Engine::Art))
+            .then(|| Arc::new(crate::adb::AdbManager::from_env()));
     let mut deferred_art_meta: Option<
         Arc<std::sync::Mutex<crate::engine::art::DeferredArtMeta>>,
     > = None;
@@ -692,11 +694,44 @@ pub fn run(args: VerifyArgs) -> ExitCode {
             let zygote = Arc::new(crate::engine::zygote_host::ZygoteHost::for_artifacts(
                 &artifacts,
             ));
+            let register_verify_adb =
+                |manager: &crate::adb::AdbManager, session: &crate::engine::art::ArtSession| {
+                    let ops = std::sync::Arc::new(crate::adb::verify_view::VerifyViewOps::new(
+                        crate::adb::AdbSessionSnapshot {
+                            package: session.package().to_string(),
+                            activity: session.activity().map(str::to_string),
+                            natural_size: session.natural_display_size(),
+                            display_size: session.display_size(),
+                            rotation: session.rotation(),
+                            density: session.density(),
+                            animations: session.animations(),
+                            guest_pid: session.guest_pid(),
+                            launcher_pid: session.launcher_pid(),
+                            apk_path: session.apk_path().to_path_buf(),
+                        },
+                        session.stream_socket().map(std::path::Path::to_path_buf),
+                    ));
+                    let session_label = session.session_id().to_string();
+                    let dp = manager.register(&session_label, ops);
+                    eprintln!(
+                        "acos verify: device_panel {}",
+                        serde_json::json!({
+                            "device_panel": dp,
+                            "stream_socket": session.stream_socket().map(|p| p.display().to_string()),
+                        })
+                    );
+                };
             // METRO3b: when a scenario starts a host dev server before its first
             // `launch`, defer spawning the ART guest until `launch` runs so the
             // relay's host-port opt-in and Metro itself are already up before
             // the debug app executes `Application.onCreate`.
             if scenario_starts_dev_server_before_launch(&scenario) {
+                let on_started = adb_view.as_ref().map(|manager| {
+                    let manager = Arc::clone(manager);
+                    Box::new(move |session: &crate::engine::art::ArtSession| {
+                        register_verify_adb(&manager, session);
+                    }) as Box<dyn FnOnce(&crate::engine::art::ArtSession) + Send>
+                });
                 let (deferred, meta) = crate::engine::art::DeferredArtSession::new(
                     crate::engine::art::DeferredArtStart {
                         apk,
@@ -709,6 +744,7 @@ pub fn run(args: VerifyArgs) -> ExitCode {
                         session_id: None,
                         services: validated_services.clone(),
                         intent: launch_intent,
+                        on_started,
                     },
                 );
                 deferred_art_meta = Some(meta);
@@ -737,33 +773,8 @@ pub fn run(args: VerifyArgs) -> ExitCode {
                         session_insets = Some(session.insets());
                         session_extra_apks = session.extra_apks().to_vec();
                         session_boot_image = session.boot_image().cloned();
-                        if args.adb {
-                            let manager = crate::adb::AdbManager::from_env();
-                            let ops = std::sync::Arc::new(crate::adb::verify_view::VerifyViewOps::new(
-                                crate::adb::AdbSessionSnapshot {
-                                    package: session.package().to_string(),
-                                    activity: session.activity().map(str::to_string),
-                                    natural_size: session.natural_display_size(),
-                                    display_size: session.display_size(),
-                                    rotation: session.rotation(),
-                                    density: session.density(),
-                                    animations: session.animations(),
-                                    guest_pid: session.guest_pid(),
-                                    launcher_pid: session.launcher_pid(),
-                                    apk_path: session.apk_path().to_path_buf(),
-                                },
-                                session.stream_socket().map(std::path::Path::to_path_buf),
-                            ));
-                            let session_label = session.session_id().to_string();
-                            let dp = manager.register(&session_label, ops);
-                            eprintln!(
-                                "acos verify: device_panel {}",
-                                serde_json::json!({
-                                    "device_panel": dp,
-                                    "stream_socket": session.stream_socket().map(|p| p.display().to_string()),
-                                })
-                            );
-                            adb_view = Some(manager);
+                        if let Some(manager) = adb_view.as_ref() {
+                            register_verify_adb(manager, &session);
                         }
                         EngineBackend::session(Box::new(session))
                     }
