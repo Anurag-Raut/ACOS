@@ -722,16 +722,16 @@ const dist = process.env.HUB_DIST;
 const avdDir = process.env.ACOS_AVD_RUNNING_DIR;
 const serial = process.env.ACOS_SERIAL;
 
-const { findEmulatorGrpcEndpoint, EmulatorGrpcClient } = await import(
+const { findEmulatorGrpcEndpoint, EmulatorGrpcClient, IMG_FORMAT_RGB888 } = await import(
   pathToFileURL(path.join(dist, "emulator-grpc.js")).href
 );
 const endpoint = findEmulatorGrpcEndpoint(serial, { discoveryDirs: () => [avdDir] });
 assert(endpoint, `missing endpoint for ${serial}`);
 const client = new EmulatorGrpcClient(endpoint);
-const status = await client.getStatus();
-assert.equal(status.booted, true);
-const shot = await client.getScreenshot({ format: "RGB888", width: 1080, height: 2400 });
-assert(shot.image.length > 0);
+const shot = await client.getScreenshot({ format: IMG_FORMAT_RGB888 });
+assert.equal(shot.width, 1080);
+assert.equal(shot.height, 2400);
+assert.equal(shot.image.length, 1080 * 2400 * 3);
 client.close();
 "#,
     )
