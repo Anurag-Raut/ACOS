@@ -631,5 +631,97 @@ while True:
         mgr.shutdown_all();
         let _ = std::fs::remove_dir_all(&base);
     }
+
+    #[test]
+    fn bridge_survives_spawning_worker_thread_exit() {
+        let base = std::env::temp_dir().join(format!("acos-cr1-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        std::fs::create_dir_all(&base).unwrap();
+
+        let state_dir = base.join("bridge-state");
+        std::fs::create_dir_all(&state_dir).unwrap();
+        let script = base.join("fake-bridge.py");
+        let py = format!(
+            r#"#!/usr/bin/env python3
+import json, os, signal, socket, sys
+
+signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
+args = sys.argv[1:]
+sock_path = args[args.index("--socket") + 1]
+state_dir = {state_dir:?}
+with open(os.path.join(state_dir, "pid"), "w") as f:
+    f.write(str(os.getpid()))
+
+srv = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+srv.bind(sock_path)
+srv.listen(32)
+port = 41000
+while True:
+    conn, _ = srv.accept()
+    with conn:
+        buf = b""
+        while b"\n" not in buf:
+            chunk = conn.recv(4096)
+            if not chunk:
+                break
+            buf += chunk
+        if not buf:
+            continue
+        req = json.loads(buf.decode().splitlines()[0])
+        cmd = req.get("cmd")
+        if cmd == "register":
+            port += 1
+            conn.sendall((json.dumps({{"ok": True, "grpc_port": port}}) + "\n").encode())
+        elif cmd == "unregister":
+            conn.sendall((json.dumps({{"ok": True}}) + "\n").encode())
+        elif cmd == "shutdown":
+            conn.sendall((json.dumps({{"ok": True}}) + "\n").encode())
+            break
+"#,
+            state_dir = state_dir.to_string_lossy()
+        );
+        std::fs::write(&script, py).unwrap();
+        std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+
+        let mgr = Arc::new(AdbManager::with_test_dirs(
+            base.join("locks"),
+            base.join("avd"),
+            script,
+        ));
+
+        // Spawn BridgeProcess on an ephemeral worker thread (mimicking acos serve's
+        // per-connection worker thread) and let that thread exit.
+        let mgr_bg = Arc::clone(&mgr);
+        let worker = std::thread::spawn(move || {
+            let alive = Arc::new(AtomicBool::new(true));
+            let info = mgr_bg.register("sess-worker", FakeOps::new(71001, alive));
+            assert_eq!(info["exposed"], json!(true), "{info:#?}");
+        });
+        worker.join().expect("worker joined");
+
+        // Give the kernel time to deliver PR_SET_PDEATHSIG if the bridge was
+        // bound to the exiting worker thread instead of the process-lifetime spawner.
+        std::thread::sleep(std::time::Duration::from_millis(250));
+
+        let pid_str = std::fs::read_to_string(state_dir.join("pid")).unwrap();
+        let bridge_pid: i32 = pid_str.trim().parse().unwrap();
+
+        // Register a second session and verify bridge PID did NOT die / respawn.
+        let alive2 = Arc::new(AtomicBool::new(true));
+        let info2 = mgr.register("sess-2", FakeOps::new(71002, alive2));
+        assert_eq!(info2["exposed"], json!(true), "{info2:#?}");
+        let pid_after: i32 = std::fs::read_to_string(state_dir.join("pid"))
+            .unwrap()
+            .trim()
+            .parse()
+            .unwrap();
+        assert_eq!(
+            pid_after, bridge_pid,
+            "bridge died when spawning worker thread exited (before={bridge_pid}, after={pid_after})"
+        );
+
+        mgr.shutdown_all();
+        let _ = std::fs::remove_dir_all(&base);
+    }
 }
 

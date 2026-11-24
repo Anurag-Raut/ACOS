@@ -1489,7 +1489,7 @@ fn state_changed(baseline: Option<&(String, u64)>, current: Option<&CachedFrame>
 /// The thread is created once per process and never exits; a guest whose parent
 /// thread is gone would be killed by the kernel (that is the guarantee we are
 /// keeping), so "never exits" is not an optimisation, it is the contract.
-mod spawner {
+pub(crate) mod spawner {
     use std::process::{Child, Command};
     use std::sync::mpsc::channel;
     use std::sync::OnceLock;

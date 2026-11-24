@@ -678,3 +678,80 @@ client.close();
     let remaining: Vec<_> = std::fs::read_dir(&daemon.avd_dir).unwrap().flatten().collect();
     assert_eq!(remaining.len(), 0, "expected all ini files removed after destroy");
 }
+
+#[test]
+#[ignore = "boots a real ART guest and verifies acos-devbridge survives client disconnect"]
+fn cp2_bridge_survives_client_disconnect() {
+    let Some(counter_apk) = find_fixture_apk("counter.apk") else {
+        panic!("counter.apk missing");
+    };
+    let hub_dist = hub_dist_dir();
+    assert!(hub_dist.join("emulator-grpc.js").is_file());
+
+    let adb_srv = PrivateAdbServer::start();
+    let adb_port_str = adb_srv.port.to_string();
+    let daemon = Daemon::start(
+        "cr1-disconnect",
+        &["--adb"],
+        &[("ANDROID_ADB_SERVER_PORT", &adb_port_str)],
+    );
+
+    let base = json!({ "session_id": "cp2-cr1" });
+    let serial = {
+        let mut conn1 = daemon.connect();
+        let launch = conn1.call("acos_launch", json!({ "base": base, "apk": counter_apk }));
+        assert_eq!(launch["ok"], json!(true), "{launch:#?}");
+        launch["result"]["device_panel"]["serial"]
+            .as_str()
+            .expect("serial")
+            .to_string()
+        // conn1 drops here, terminating the daemon's per-connection worker thread.
+    };
+
+    std::thread::sleep(Duration::from_millis(500));
+
+    let check_script = daemon.dir.join("check_disconnect_grpc.mjs");
+    std::fs::write(
+        &check_script,
+        r#"
+import assert from "node:assert/strict";
+import path from "node:path";
+import { pathToFileURL } from "node:url";
+
+const dist = process.env.HUB_DIST;
+const avdDir = process.env.ACOS_AVD_RUNNING_DIR;
+const serial = process.env.ACOS_SERIAL;
+
+const { findEmulatorGrpcEndpoint, EmulatorGrpcClient } = await import(
+  pathToFileURL(path.join(dist, "emulator-grpc.js")).href
+);
+const endpoint = findEmulatorGrpcEndpoint(serial, { discoveryDirs: () => [avdDir] });
+assert(endpoint, `missing endpoint for ${serial}`);
+const client = new EmulatorGrpcClient(endpoint);
+const status = await client.getStatus();
+assert.equal(status.booted, true);
+const shot = await client.getScreenshot({ format: "RGB888", width: 1080, height: 2400 });
+assert(shot.image.length > 0);
+client.close();
+"#,
+    )
+    .unwrap();
+
+    let out = Command::new("node")
+        .arg(&check_script)
+        .env("HUB_DIST", &hub_dist)
+        .env("ACOS_AVD_RUNNING_DIR", &daemon.avd_dir)
+        .env("ACOS_SERIAL", &serial)
+        .output()
+        .expect("run node disconnect grpc check");
+    assert!(
+        out.status.success(),
+        "gRPC failed after client disconnect:\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+
+    let mut conn2 = daemon.connect();
+    let destroy = conn2.call("acos_destroy", json!({ "base": base }));
+    assert_eq!(destroy["ok"], json!(true), "{destroy:#?}");
+}

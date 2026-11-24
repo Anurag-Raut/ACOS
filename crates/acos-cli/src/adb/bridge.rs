@@ -552,7 +552,9 @@ impl BridgeProcess {
             });
         }
 
-        let mut child = match cmd.spawn() {
+        // Spawn via the process-lifetime spawner thread so PR_SET_PDEATHSIG watches
+        // the `acos` daemon process rather than the calling client worker thread.
+        let mut child = match crate::engine::art::spawner::spawn(cmd) {
             Ok(c) => c,
             Err(e) => {
                 if !closing.swap(true, Ordering::AcqRel) {
