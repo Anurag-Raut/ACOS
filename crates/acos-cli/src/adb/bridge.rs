@@ -11,7 +11,7 @@ use std::os::unix::net::{UnixListener, UnixStream};
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU16, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
@@ -196,11 +196,37 @@ fn bridge_socket_dir() -> std::io::Result<PathBuf> {
     Ok(dir)
 }
 
+/// Discovery `.ini` and live port handle kept in sync across `acos-devbridge` restarts.
+#[derive(Clone)]
+pub struct IniSpec {
+    pub avd_dir: PathBuf,
+    pub ini_pid: u32,
+    pub console_port: u16,
+    pub adb_port: u16,
+    pub grpc_port: Arc<AtomicU16>,
+}
+
+/// Outcome of registering a session with [`BridgeHandle`].
+pub struct BridgeRegisterResult {
+    pub grpc_port: u16,
+    pub pruned_sessions: Vec<String>,
+}
+
+#[derive(Clone)]
+struct RegisteredSession {
+    avd_name: String,
+    token: String,
+    target: Arc<dyn AdbSessionOps>,
+    ini_spec: Option<IniSpec>,
+}
+
 /// Manages the lazily-spawned `acos-devbridge` process and its `serve-cb.sock`
 /// callback listener for one `acos serve --adb` daemon.
 pub struct BridgeHandle {
     inner: Mutex<Option<BridgeProcess>>,
     targets: Arc<Mutex<HashMap<String, Arc<dyn AdbSessionOps>>>>,
+    registered: Mutex<HashMap<String, RegisteredSession>>,
+    bin_override: Option<PathBuf>,
 }
 
 struct BridgeProcess {
@@ -218,65 +244,142 @@ impl BridgeHandle {
         Self {
             inner: Mutex::new(None),
             targets: Arc::new(Mutex::new(HashMap::new())),
+            registered: Mutex::new(HashMap::new()),
+            bin_override: None,
+        }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn with_bin(bin: PathBuf) -> Self {
+        Self {
+            inner: Mutex::new(None),
+            targets: Arc::new(Mutex::new(HashMap::new())),
+            registered: Mutex::new(HashMap::new()),
+            bin_override: Some(bin),
         }
     }
 
     /// Lazily start `acos-devbridge` (if not already running) and register a
     /// session gRPC endpoint, returning the bound `127.0.0.1:<grpc_port>`.
+    /// If a previously running bridge exited and was respawned, every surviving
+    /// session is re-registered and its discovery `.ini` + port are updated.
     pub fn register_session(
         &self,
         session_id: &str,
         avd_name: &str,
         token: &str,
         target: Arc<dyn AdbSessionOps>,
-    ) -> Result<u16, String> {
+        ini_spec: Option<IniSpec>,
+    ) -> Result<BridgeRegisterResult, String> {
         let snap = target.snapshot()?;
         let stream_socket = target.stream_socket().map(|p| p.display().to_string());
         let verify = target.is_verify_run();
 
-        self.targets
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .insert(session_id.to_string(), target);
-
-        let bridge_sock = {
+        let (bridge_sock, respawned) = {
             let mut guard = self.inner.lock().unwrap_or_else(|e| e.into_inner());
+            let mut respawned = false;
             if let Some(proc) = guard.as_mut() {
                 if let Ok(Some(_)) = proc.child.try_wait() {
                     proc.stop();
                     *guard = None;
+                    respawned = true;
                 }
             }
             if guard.is_none() {
-                match BridgeProcess::spawn(Arc::clone(&self.targets)) {
-                    Ok(proc) => *guard = Some(proc),
-                    Err(err) => {
-                        self.targets
-                            .lock()
-                            .unwrap_or_else(|e| e.into_inner())
-                            .remove(session_id);
-                        return Err(err);
+                let proc = BridgeProcess::spawn(
+                    Arc::clone(&self.targets),
+                    self.bin_override.as_deref(),
+                )?;
+                *guard = Some(proc);
+            }
+            (guard.as_ref().unwrap().bridge_sock.clone(), respawned)
+        };
+
+        let mut pruned_sessions = Vec::new();
+        if respawned {
+            let prior: Vec<(String, RegisteredSession)> = {
+                let guard = self.registered.lock().unwrap_or_else(|e| e.into_inner());
+                guard
+                    .iter()
+                    .filter(|(id, _)| id.as_str() != session_id)
+                    .map(|(id, rec)| (id.clone(), rec.clone()))
+                    .collect()
+            };
+            for (old_id, old_rec) in prior {
+                let Ok(old_snap) = old_rec.target.snapshot() else {
+                    self.registered
+                        .lock()
+                        .unwrap_or_else(|e| e.into_inner())
+                        .remove(&old_id);
+                    self.targets
+                        .lock()
+                        .unwrap_or_else(|e| e.into_inner())
+                        .remove(&old_id);
+                    if let Some(spec) = &old_rec.ini_spec {
+                        let _ = std::fs::remove_file(
+                            spec.avd_dir.join(format!("pid_{}.ini", spec.ini_pid)),
+                        );
+                    }
+                    pruned_sessions.push(old_id);
+                    continue;
+                };
+                let old_stream = old_rec
+                    .target
+                    .stream_socket()
+                    .map(|p| p.display().to_string());
+                let old_verify = old_rec.target.is_verify_run();
+                if let Ok(port) = register_one_session(
+                    &bridge_sock,
+                    &old_id,
+                    &old_rec.avd_name,
+                    &old_rec.token,
+                    &old_snap,
+                    old_verify,
+                    old_stream.as_deref(),
+                ) {
+                    let still_registered = self
+                        .registered
+                        .lock()
+                        .unwrap_or_else(|e| e.into_inner())
+                        .contains_key(&old_id);
+                    if still_registered {
+                        if let Some(spec) = &old_rec.ini_spec {
+                            spec.grpc_port.store(port, Ordering::Release);
+                            let _ = write_ini_file(
+                                &spec.avd_dir,
+                                spec.ini_pid,
+                                spec.console_port,
+                                spec.adb_port,
+                                port,
+                                &old_rec.token,
+                                &old_rec.avd_name,
+                            );
+                        }
+                    } else {
+                        let _ = bridge_rpc(
+                            &bridge_sock,
+                            &json!({ "cmd": "unregister", "session_id": old_id }),
+                        );
                     }
                 }
             }
-            guard.as_ref().unwrap().bridge_sock.clone()
-        };
+        }
 
-        let resp = bridge_rpc(
+        self.targets
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert(session_id.to_string(), Arc::clone(&target));
+
+        let port = match register_one_session(
             &bridge_sock,
-            &json!({
-                "cmd": "register",
-                "session_id": session_id,
-                "avd_name": avd_name,
-                "token": token,
-                "display": [snap.display_size.0, snap.display_size.1],
-                "rotation": snap.rotation,
-                "verify": verify,
-                "stream_socket": stream_socket,
-            }),
-        );
-        let resp = match resp {
-            Ok(v) => v,
+            session_id,
+            avd_name,
+            token,
+            &snap,
+            verify,
+            stream_socket.as_deref(),
+        ) {
+            Ok(port) => port,
             Err(e) => {
                 self.targets
                     .lock()
@@ -285,27 +388,30 @@ impl BridgeHandle {
                 return Err(e);
             }
         };
-        if resp.get("ok").and_then(Value::as_bool) != Some(true) {
-            self.targets
-                .lock()
-                .unwrap_or_else(|e| e.into_inner())
-                .remove(session_id);
-            return Err(resp
-                .get("error")
-                .and_then(Value::as_str)
-                .unwrap_or("acos-devbridge register failed")
-                .to_string());
+
+        if let Some(spec) = &ini_spec {
+            spec.grpc_port.store(port, Ordering::Release);
         }
-        let port = resp
-            .get("grpc_port")
-            .and_then(Value::as_u64)
-            .and_then(|p| u16::try_from(p).ok())
-            .filter(|&p| p > 0)
-            .ok_or_else(|| "acos-devbridge returned invalid grpc_port".to_string())?;
-        Ok(port)
+        self.registered.lock().unwrap_or_else(|e| e.into_inner()).insert(
+            session_id.to_string(),
+            RegisteredSession {
+                avd_name: avd_name.to_string(),
+                token: token.to_string(),
+                target,
+                ini_spec,
+            },
+        );
+        Ok(BridgeRegisterResult {
+            grpc_port: port,
+            pruned_sessions,
+        })
     }
 
     pub fn unregister_session(&self, session_id: &str) {
+        self.registered
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .remove(session_id);
         self.targets
             .lock()
             .unwrap_or_else(|e| e.into_inner())
@@ -326,6 +432,10 @@ impl BridgeHandle {
     }
 
     pub fn shutdown(&self) {
+        self.registered
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clear();
         self.targets
             .lock()
             .unwrap_or_else(|e| e.into_inner())
@@ -337,6 +447,42 @@ impl BridgeHandle {
     }
 }
 
+fn register_one_session(
+    bridge_sock: &Path,
+    session_id: &str,
+    avd_name: &str,
+    token: &str,
+    snap: &super::shell::AdbSessionSnapshot,
+    verify: bool,
+    stream_socket: Option<&str>,
+) -> Result<u16, String> {
+    let resp = bridge_rpc(
+        bridge_sock,
+        &json!({
+            "cmd": "register",
+            "session_id": session_id,
+            "avd_name": avd_name,
+            "token": token,
+            "display": [snap.display_size.0, snap.display_size.1],
+            "rotation": snap.rotation,
+            "verify": verify,
+            "stream_socket": stream_socket,
+        }),
+    )?;
+    if resp.get("ok").and_then(Value::as_bool) != Some(true) {
+        return Err(resp
+            .get("error")
+            .and_then(Value::as_str)
+            .unwrap_or("acos-devbridge register failed")
+            .to_string());
+    }
+    resp.get("grpc_port")
+        .and_then(Value::as_u64)
+        .and_then(|p| u16::try_from(p).ok())
+        .filter(|&p| p > 0)
+        .ok_or_else(|| "acos-devbridge returned invalid grpc_port".to_string())
+}
+
 impl Drop for BridgeHandle {
     fn drop(&mut self) {
         self.shutdown();
@@ -346,6 +492,7 @@ impl Drop for BridgeHandle {
 impl BridgeProcess {
     fn spawn(
         targets: Arc<Mutex<HashMap<String, Arc<dyn AdbSessionOps>>>>,
+        bin_override: Option<&Path>,
     ) -> Result<Self, String> {
         let runtime_dir =
             bridge_socket_dir().map_err(|e| format!("create bridge runtime dir: {e}"))?;
@@ -381,7 +528,9 @@ impl BridgeProcess {
             })
             .map_err(|e| format!("spawn callback thread: {e}"))?;
 
-        let bin = resolve_devbridge_bin();
+        let bin = bin_override
+            .map(Path::to_path_buf)
+            .unwrap_or_else(resolve_devbridge_bin);
         let parent_pid = unsafe { libc::getpid() };
         let mut cmd = Command::new(&bin);
         cmd.arg("--socket")

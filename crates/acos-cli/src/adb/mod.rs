@@ -17,7 +17,7 @@ use std::io::ErrorKind;
 use std::net::{Shutdown, TcpStream};
 use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU16, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
 
@@ -25,7 +25,7 @@ use serde_json::{json, Value};
 
 use bridge::{
     avd_running_dir_from_env, random_bearer_token, sweep_stale_acos_ini, write_ini_file,
-    BridgeHandle,
+    BridgeHandle, IniSpec,
 };
 pub use shell::{AdbSessionOps, AdbSessionSnapshot, AdbShellState};
 use slots::{claim_slot, lock_dir_from_env, SlotClaim, SlotInfo};
@@ -49,6 +49,16 @@ impl AdbManager {
             lock_dir: lock_dir_from_env(),
             avd_dir,
             bridge: BridgeHandle::new(),
+            sessions: Mutex::new(HashMap::new()),
+        }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn with_test_dirs(lock_dir: PathBuf, avd_dir: PathBuf, bridge_bin: PathBuf) -> Self {
+        Self {
+            lock_dir,
+            avd_dir,
+            bridge: BridgeHandle::with_bin(bridge_bin),
             sessions: Mutex::new(HashMap::new()),
         }
     }
@@ -91,20 +101,43 @@ impl AdbManager {
         };
         let avd_name = format!("ACOS {pkg} {}", short_session_id(session_id));
         let token = random_bearer_token();
+        let grpc_port_ref = Arc::new(AtomicU16::new(0));
+        let ini_spec = IniSpec {
+            avd_dir: self.avd_dir.clone(),
+            ini_pid,
+            console_port: claim.info.console_port,
+            adb_port: claim.info.adb_port,
+            grpc_port: Arc::clone(&grpc_port_ref),
+        };
 
-        let grpc_port =
-            match self
-                .bridge
-                .register_session(session_id, &avd_name, &token, Arc::clone(&target))
-            {
-                Ok(port) => port,
-                Err(err) => {
-                    return json!({
-                        "exposed": false,
-                        "reason": format!("cannot start gRPC bridge: {err}"),
-                    });
-                }
+        let reg = match self.bridge.register_session(
+            session_id,
+            &avd_name,
+            &token,
+            Arc::clone(&target),
+            Some(ini_spec),
+        ) {
+            Ok(reg) => reg,
+            Err(err) => {
+                return json!({
+                    "exposed": false,
+                    "reason": format!("cannot start gRPC bridge: {err}"),
+                });
+            }
+        };
+        if !reg.pruned_sessions.is_empty() {
+            let dead: Vec<Arc<ExposedSession>> = {
+                let mut guard = self.sessions.lock().unwrap_or_else(|e| e.into_inner());
+                reg.pruned_sessions
+                    .iter()
+                    .filter_map(|id| guard.remove(id))
+                    .collect()
             };
+            for exp in dead {
+                exp.stop();
+            }
+        }
+        let grpc_port = reg.grpc_port;
 
         let ini_path = match write_ini_file(
             &self.avd_dir,
@@ -125,8 +158,13 @@ impl AdbManager {
             }
         };
 
-        let exposed = match ExposedSession::start(claim, avd_name, grpc_port, ini_path.clone(), target)
-        {
+        let exposed = match ExposedSession::start(
+            claim,
+            avd_name,
+            grpc_port_ref,
+            ini_path.clone(),
+            target,
+        ) {
             Ok(exp) => Arc::new(exp),
             Err(err) => {
                 let _ = std::fs::remove_file(&ini_path);
@@ -185,7 +223,7 @@ impl AdbManager {
 pub struct ExposedSession {
     slot: SlotInfo,
     avd_name: String,
-    grpc_port: u16,
+    grpc_port: Arc<AtomicU16>,
     ini_path: PathBuf,
     closing: Arc<AtomicBool>,
     stop_event_fd: OwnedFd,
@@ -198,7 +236,7 @@ impl ExposedSession {
     fn start(
         claim: SlotClaim,
         avd_name: String,
-        grpc_port: u16,
+        grpc_port: Arc<AtomicU16>,
         ini_path: PathBuf,
         target: Arc<dyn AdbSessionOps>,
     ) -> std::io::Result<Self> {
@@ -250,7 +288,7 @@ impl ExposedSession {
             "serial": self.slot.serial,
             "console_port": self.slot.console_port,
             "adb_port": self.slot.adb_port,
-            "grpc_port": self.grpc_port,
+            "grpc_port": self.grpc_port.load(Ordering::Acquire),
             "avd_name": self.avd_name,
         })
     }
@@ -389,5 +427,209 @@ fn notify_adb_server(adb_port: u16) {
     let packet = format!("{:04x}{msg}", msg.len());
     let _ = stream.write_all(packet.as_bytes());
     let _ = stream.flush();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use acos_protocol::ui::UiTree;
+    use std::os::unix::fs::PermissionsExt;
+    use std::path::Path;
+
+    struct FakeOps {
+        pid: u32,
+        alive: Arc<AtomicBool>,
+    }
+
+    impl FakeOps {
+        fn new(pid: u32, alive: Arc<AtomicBool>) -> Arc<Self> {
+            Arc::new(Self { pid, alive })
+        }
+    }
+
+    impl AdbSessionOps for FakeOps {
+        fn snapshot(&self) -> Result<AdbSessionSnapshot, String> {
+            if !self.alive.load(Ordering::Acquire) {
+                return Err("session died".to_string());
+            }
+            Ok(AdbSessionSnapshot {
+                package: "dev.acos.test".to_string(),
+                activity: None,
+                natural_size: (1080, 2400),
+                display_size: (1080, 2400),
+                rotation: 0,
+                density: 420,
+                animations: "on",
+                guest_pid: Some(self.pid),
+                launcher_pid: Some(self.pid),
+                apk_path: PathBuf::from("/tmp/fake.apk"),
+            })
+        }
+        fn rotate(&self, _: u8) -> Result<(), String> {
+            Ok(())
+        }
+        fn dump_tree(&self) -> Result<(UiTree, u8), String> {
+            Err("unused".into())
+        }
+        fn screenshot_png(&self) -> Result<Vec<u8>, String> {
+            Err("unused".into())
+        }
+        fn raw_screenshot(&self, _: &Path, _: &str) -> Result<(u32, u32, u8), String> {
+            Err("unused".into())
+        }
+        fn panel_touch(&self, _: i32, _: i64, _: i64, _: &[(i32, f32, f32)]) -> Result<(), String> {
+            Ok(())
+        }
+        fn panel_key(&self, _: i32, _: &str, _: i32, _: i32) -> Result<(), String> {
+            Ok(())
+        }
+        fn panel_text(&self, _: &str) -> Result<(), String> {
+            Ok(())
+        }
+        fn stream_socket(&self) -> Option<PathBuf> {
+            None
+        }
+        fn is_verify_run(&self) -> bool {
+            false
+        }
+    }
+
+    #[test]
+    fn dead_bridge_respawn_reregisters_surviving_sessions_and_updates_ini() {
+        let base = std::env::temp_dir().join(format!(
+            "acos-cr5-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&base);
+        std::fs::create_dir_all(&base).unwrap();
+
+        let state_dir = base.join("bridge-state");
+        std::fs::create_dir_all(&state_dir).unwrap();
+        let script = base.join("fake-bridge.py");
+        let py = format!(
+            r#"#!/usr/bin/env python3
+import json, os, socket, sys
+
+args = sys.argv[1:]
+sock_path = args[args.index("--socket") + 1]
+state_dir = {state_dir:?}
+seq_file = os.path.join(state_dir, "seq")
+try:
+    with open(seq_file, "r") as f:
+        inst = int(f.read().strip()) + 1
+except FileNotFoundError:
+    inst = 1
+with open(seq_file, "w") as f:
+    f.write(str(inst))
+with open(os.path.join(state_dir, f"pid-{{inst}}"), "w") as f:
+    f.write(str(os.getpid()))
+log_path = os.path.join(state_dir, f"reg-{{inst}}.jsonl")
+
+srv = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+srv.bind(sock_path)
+srv.listen(32)
+next_port = inst * 10000 + 100
+while True:
+    conn, _ = srv.accept()
+    with conn:
+        buf = b""
+        while b"\n" not in buf:
+            chunk = conn.recv(4096)
+            if not chunk:
+                break
+            buf += chunk
+        if not buf:
+            continue
+        req = json.loads(buf.decode().splitlines()[0])
+        cmd = req.get("cmd")
+        if cmd == "register":
+            port = next_port
+            next_port += 1
+            with open(log_path, "a") as lf:
+                lf.write(json.dumps({{"session_id": req["session_id"], "port": port}}) + "\n")
+            conn.sendall((json.dumps({{"ok": True, "grpc_port": port}}) + "\n").encode())
+        elif cmd == "unregister":
+            conn.sendall((json.dumps({{"ok": True}}) + "\n").encode())
+        elif cmd == "shutdown":
+            conn.sendall((json.dumps({{"ok": True}}) + "\n").encode())
+            break
+        else:
+            conn.sendall((json.dumps({{"ok": False, "error": "unknown"}}) + "\n").encode())
+"#,
+            state_dir = state_dir.to_string_lossy()
+        );
+        std::fs::write(&script, py).unwrap();
+        std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+
+        let lock_dir = base.join("locks");
+        let avd_dir = base.join("avd");
+        let mgr = AdbManager::with_test_dirs(lock_dir, avd_dir.clone(), script);
+
+        // Register surviving session A and a soon-to-die session D while bridge 1 is alive.
+        let pid_a = 70001;
+        let pid_d = 70002;
+        let alive_a = Arc::new(AtomicBool::new(true));
+        let alive_d = Arc::new(AtomicBool::new(true));
+        let info_a = mgr.register("sess-a", FakeOps::new(pid_a, Arc::clone(&alive_a)));
+        assert_eq!(info_a["exposed"], json!(true), "{info_a:#?}");
+        let old_port_a = info_a["grpc_port"].as_u64().unwrap() as u16;
+        let info_d = mgr.register("sess-d", FakeOps::new(pid_d, Arc::clone(&alive_d)));
+        assert_eq!(info_d["exposed"], json!(true), "{info_d:#?}");
+
+        // Session D dies, and bridge 1 is SIGKILLed out-of-band.
+        alive_d.store(false, Ordering::Release);
+        let pid1: i32 = std::fs::read_to_string(state_dir.join("pid-1"))
+            .unwrap()
+            .trim()
+            .parse()
+            .unwrap();
+        unsafe {
+            libc::kill(pid1, libc::SIGKILL);
+        }
+        std::thread::sleep(std::time::Duration::from_millis(80));
+
+        // Register session B — forces bridge respawn as instance 2.
+        let alive_b = Arc::new(AtomicBool::new(true));
+        let info_b = mgr.register("sess-b", FakeOps::new(70003, alive_b));
+        assert_eq!(info_b["exposed"], json!(true), "{info_b:#?}");
+
+        // Check instance 2 received re-registration for sess-a (NOT sess-d) plus sess-b.
+        let reg2 = std::fs::read_to_string(state_dir.join("reg-2.jsonl")).unwrap();
+        let entries2: Vec<Value> = reg2
+            .lines()
+            .map(|l| serde_json::from_str::<Value>(l).unwrap())
+            .collect();
+        let a_entry2 = entries2
+            .iter()
+            .find(|v| v["session_id"] == json!("sess-a"))
+            .unwrap_or_else(|| panic!("bridge 2 did not re-register sess-a:\n{reg2}"));
+        assert!(
+            !entries2.iter().any(|v| v["session_id"] == json!("sess-d")),
+            "dead sess-d should be pruned, not re-registered:\n{reg2}"
+        );
+
+        let new_port_a = a_entry2["port"].as_u64().unwrap() as u16;
+        assert_ne!(new_port_a, old_port_a);
+
+        // ExposedSession & discovery ini for sess-a must reflect the new gRPC port.
+        let refreshed_a = mgr.info("sess-a").expect("sess-a still registered");
+        assert_eq!(refreshed_a["grpc_port"], json!(new_port_a));
+        let ini_a = std::fs::read_to_string(avd_dir.join(format!("pid_{pid_a}.ini"))).unwrap();
+        assert!(
+            ini_a.contains(&format!("grpc.port={new_port_a}\n")),
+            "ini_a has stale port:\n{ini_a}"
+        );
+        assert!(
+            !avd_dir.join(format!("pid_{pid_d}.ini")).exists(),
+            "dead session ini must be removed on prune"
+        );
+        assert!(
+            mgr.info("sess-d").is_none(),
+            "dead session should be removed from AdbManager::sessions"
+        );
+
+        mgr.shutdown_all();
+        let _ = std::fs::remove_dir_all(&base);
+    }
 }
 
