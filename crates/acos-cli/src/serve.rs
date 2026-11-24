@@ -136,6 +136,11 @@ pub fn run(args: ServeArgs) -> ExitCode {
             }
         }
     }
+    let adb_manager = if args.adb {
+        Some(Arc::new(crate::adb::AdbManager::from_env()))
+    } else {
+        None
+    };
     let listener = match UnixListener::bind(&socket) {
         Ok(listener) => listener,
         Err(e) => {
@@ -173,8 +178,8 @@ pub fn run(args: ServeArgs) -> ExitCode {
         artifacts_root.clone(),
         args.auto_started,
     );
-    if args.adb {
-        engine.enable_adb();
+    if let Some(adb) = adb_manager {
+        engine.set_adb(adb);
     }
     let engine = Arc::new(engine);
     let shared = Arc::new(SharedState {

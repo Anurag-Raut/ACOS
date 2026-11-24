@@ -1470,6 +1470,21 @@ fn subscribe(mut stream: UnixStream, inner: Arc<Inner>) {
             return;
         }
     }
+    if request
+        .get("panel_input_ignored")
+        .and_then(serde_json::Value::as_bool)
+        == Some(true)
+    {
+        inner.push_event(serde_json::json!({
+            "ts_ms": now_ms(),
+            "kind": "action",
+            "source": "panel",
+            "status": "VERIFY_WATCH_ONLY",
+            "note": "panel input ignored: verify run",
+        }));
+        inner.subscribe_threads.fetch_sub(1, Ordering::AcqRel);
+        return;
+    }
     let _ = inner.attach(stream, &request);
     inner.subscribe_threads.fetch_sub(1, Ordering::AcqRel);
 }
@@ -2974,6 +2989,47 @@ mod tests {
         assert_eq!(header["h"], 2);
         let raw = &payload[newline + 1..];
         assert_eq!(raw.len(), 4 * 2 * 3);
+
+        view.shutdown();
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn panel_input_ignored_emits_verify_watch_only_without_attaching() {
+        let dir = scratch_dir("panel-ignored");
+        let source = HandSource::new(4, 2, false);
+        let view = bound(&dir, "v.sock", &source);
+
+        // Attach an events-only observer first.
+        let mut viewer = UnixStream::connect(view.socket_path()).expect("connect viewer");
+        subscribe_line(&mut viewer, "\"frames\":false,");
+        viewer
+            .set_read_timeout(Some(Duration::from_secs(2)))
+            .expect("timeout");
+        let (kind, _) = read_message(&mut viewer).expect("hello");
+        assert_eq!(kind, TYPE_HELLO);
+        assert!(wait_for(|| view.has_subscribers(), Duration::from_secs(2)));
+
+        // Send a watch-only dropped-input notification; it must not attach as a subscriber.
+        let mut notify = UnixStream::connect(view.socket_path()).expect("connect notify");
+        notify
+            .write_all(b"{\"v\":1,\"panel_input_ignored\":true}\n")
+            .expect("write notify");
+        drop(notify);
+
+        let (kind, payload) = loop {
+            let msg = read_message(&mut viewer).expect("event");
+            if msg.0 == TYPE_EVENT {
+                break msg;
+            }
+        };
+        assert_eq!(kind, TYPE_EVENT);
+        let event: serde_json::Value = serde_json::from_slice(&payload).expect("event json");
+        assert_eq!(event["kind"], "action");
+        assert_eq!(event["source"], "panel");
+        assert_eq!(event["status"], "VERIFY_WATCH_ONLY");
+        assert_eq!(event["note"], "panel input ignored: verify run");
+        assert_eq!(view.attach_epoch().load(Ordering::Acquire), 1);
 
         view.shutdown();
         let _ = std::fs::remove_dir_all(&dir);

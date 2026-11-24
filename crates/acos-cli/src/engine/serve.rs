@@ -349,9 +349,10 @@ impl ServeEngine {
         }
     }
 
-    /// Enable `--adb` device-panel exposure for sessions launched by this daemon.
-    pub fn enable_adb(&mut self) {
-        self.adb = Some(Arc::new(crate::adb::AdbManager::from_env()));
+    /// Attach a pre-constructed [`crate::adb::AdbManager`] (constructed before
+    /// binding the serve socket so stale discovery files are already swept).
+    pub fn set_adb(&mut self, adb: Arc<crate::adb::AdbManager>) {
+        self.adb = Some(adb);
     }
 
     /// This daemon's identity (REL3D).
