@@ -390,6 +390,7 @@ impl EmulatorController for AcosControllerService {
                 ev.display
             )));
         }
+        let _input_guard = self.session.input_lock.lock().await;
         if self.session.verify_run.load(Ordering::Relaxed) {
             let resp = self
                 .session
@@ -448,6 +449,7 @@ impl EmulatorController for AcosControllerService {
     async fn send_key(&self, request: Request<KeyboardEvent>) -> Result<Response<()>, Status> {
         self.check_auth(&request)?;
         let ev = request.into_inner();
+        let _input_guard = self.session.input_lock.lock().await;
         let translated = {
             let mut ks = self
                 .session
@@ -655,5 +657,203 @@ impl EmulatorController for AcosControllerService {
         request: Request<DisplayMode>,
     ) -> Result<Response<()>, Status> {
         Err(self.unimplemented(&request, "setDisplayMode"))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::PathBuf;
+    use std::sync::atomic::{AtomicU64, Ordering as AtomicOrdering};
+    use std::sync::Mutex as StdMutex;
+    use std::time::Duration;
+    use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+    use tokio::net::UnixListener;
+    use tokio::sync::{watch, Notify};
+
+    fn scratch_dir(tag: &str) -> PathBuf {
+        static NEXT: AtomicU64 = AtomicU64::new(0);
+        let dir = PathBuf::from("/tmp").join(format!(
+            "acos-t-grpc-{tag}-{}-{}",
+            std::process::id(),
+            NEXT.fetch_add(1, AtomicOrdering::Relaxed)
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        let _ = std::fs::create_dir_all(&dir);
+        dir
+    }
+
+    fn auth_request<T>(token: &str, msg: T) -> Request<T> {
+        let mut req = Request::new(msg);
+        req.metadata_mut().insert(
+            "authorization",
+            format!("Bearer {token}").parse().expect("auth header"),
+        );
+        req
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn concurrent_send_touch_and_send_key_serialize_callbacks() {
+        let dir = scratch_dir("serial-input");
+        let sock = dir.join("cb.sock");
+        let listener = UnixListener::bind(&sock).expect("bind callback sock");
+
+        let trace: Arc<StdMutex<Vec<String>>> = Arc::new(StdMutex::new(Vec::new()));
+        let first_touch_entered = Arc::new(Notify::new());
+        let first_key_entered = Arc::new(Notify::new());
+
+        let trace_srv = Arc::clone(&trace);
+        let touch_notify = Arc::clone(&first_touch_entered);
+        let key_notify = Arc::clone(&first_key_entered);
+        let server_task = tokio::spawn(async move {
+            for _ in 0..4 {
+                let (stream, _) = listener.accept().await.expect("accept");
+                let trace_conn = Arc::clone(&trace_srv);
+                let touch_n = Arc::clone(&touch_notify);
+                let key_n = Arc::clone(&key_notify);
+                tokio::spawn(async move {
+                    let (r, mut w) = stream.into_split();
+                    let mut reader = BufReader::new(r);
+                    let mut line = String::new();
+                    reader.read_line(&mut line).await.expect("read req");
+                    let req: serde_json::Value = serde_json::from_str(&line).expect("json");
+                    let cmd = req["cmd"].as_str().unwrap_or("");
+                    let label = match cmd {
+                        "touch" => {
+                            let action = req["action"].as_i64().unwrap_or(-1);
+                            let tag = format!("touch:{action}");
+                            trace_conn.lock().unwrap().push(format!("start:{tag}"));
+                            if action == 0 {
+                                touch_n.notify_one();
+                                tokio::time::sleep(Duration::from_millis(80)).await;
+                            }
+                            tag
+                        }
+                        "key" => {
+                            let et = req["event_type"].as_str().unwrap_or("");
+                            let tag = format!("key:{et}");
+                            trace_conn.lock().unwrap().push(format!("start:{tag}"));
+                            if et == "down" {
+                                key_n.notify_one();
+                                tokio::time::sleep(Duration::from_millis(80)).await;
+                            }
+                            tag
+                        }
+                        other => other.to_string(),
+                    };
+                    trace_conn.lock().unwrap().push(format!("end:{label}"));
+                    let mut out = json!({ "ok": true }).to_string();
+                    out.push('\n');
+                    w.write_all(out.as_bytes()).await.expect("write resp");
+                });
+            }
+        });
+
+        let (shutdown_tx, _rx) = watch::channel(false);
+        let session = BridgeSession::new(
+            "sess-1".to_string(),
+            "ACOS".to_string(),
+            "tok".to_string(),
+            sock,
+            dir.clone(),
+            1080,
+            2400,
+            0,
+            false,
+            None,
+            shutdown_tx,
+        );
+        let svc = Arc::new(AcosControllerService::new(session));
+
+        // 1. Concurrent touch DOWN followed closely by UP.
+        let svc1 = Arc::clone(&svc);
+        let down_task = tokio::spawn(async move {
+            svc1.send_touch(auth_request(
+                "tok",
+                TouchEvent {
+                    touches: vec![Touch {
+                        x: 100,
+                        y: 200,
+                        identifier: 0,
+                        pressure: 1,
+                        ..Default::default()
+                    }],
+                    display: 0,
+                },
+            ))
+            .await
+        });
+        tokio::time::timeout(Duration::from_secs(5), first_touch_entered.notified())
+            .await
+            .expect("touch down callback entered");
+        let svc2 = Arc::clone(&svc);
+        let up_task = tokio::spawn(async move {
+            svc2.send_touch(auth_request(
+                "tok",
+                TouchEvent {
+                    touches: vec![Touch {
+                        x: 100,
+                        y: 200,
+                        identifier: 0,
+                        pressure: 0,
+                        ..Default::default()
+                    }],
+                    display: 0,
+                },
+            ))
+            .await
+        });
+        down_task.await.unwrap().expect("touch down ok");
+        up_task.await.unwrap().expect("touch up ok");
+
+        // 2. Concurrent KeyDown followed closely by KeyUp.
+        let svc3 = Arc::clone(&svc);
+        let kd_task = tokio::spawn(async move {
+            svc3.send_key(auth_request(
+                "tok",
+                KeyboardEvent {
+                    code_type: keyboard_event::KeyCodeType::Evdev as i32,
+                    event_type: keyboard_event::KeyEventType::Keydown as i32,
+                    key_code: 30,
+                    ..Default::default()
+                },
+            ))
+            .await
+        });
+        tokio::time::timeout(Duration::from_secs(5), first_key_entered.notified())
+            .await
+            .expect("key down callback entered");
+        let svc4 = Arc::clone(&svc);
+        let ku_task = tokio::spawn(async move {
+            svc4.send_key(auth_request(
+                "tok",
+                KeyboardEvent {
+                    code_type: keyboard_event::KeyCodeType::Evdev as i32,
+                    event_type: keyboard_event::KeyEventType::Keyup as i32,
+                    key_code: 30,
+                    ..Default::default()
+                },
+            ))
+            .await
+        });
+        kd_task.await.unwrap().expect("key down ok");
+        ku_task.await.unwrap().expect("key up ok");
+
+        server_task.await.expect("server join");
+        let events = trace.lock().unwrap().clone();
+        let _ = std::fs::remove_dir_all(&dir);
+        assert_eq!(
+            events,
+            vec![
+                "start:touch:0",
+                "end:touch:0",
+                "start:touch:1",
+                "end:touch:1",
+                "start:key:down",
+                "end:key:down",
+                "start:key:up",
+                "end:key:up",
+            ]
+        );
     }
 }

@@ -37,6 +37,7 @@ pub struct BridgeSession {
     pub live_hub: Option<Arc<LiveStreamHub>>,
     pub touch_tracker: Mutex<TouchTracker>,
     pub keyboard_state: Mutex<KeyboardState>,
+    pub input_lock: tokio::sync::Mutex<()>,
     shutdown_tx: watch::Sender<bool>,
 }
 
@@ -72,6 +73,7 @@ impl BridgeSession {
             live_hub,
             touch_tracker: Mutex::new(TouchTracker::default()),
             keyboard_state: Mutex::new(KeyboardState::default()),
+            input_lock: tokio::sync::Mutex::new(()),
             shutdown_tx,
         })
     }
