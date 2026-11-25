@@ -147,6 +147,12 @@ pub const ACTION_MOVE: i32 = 2;
 pub const ACTION_CANCEL: i32 = 3;
 /// `MotionEvent.ACTION_OUTSIDE`.
 pub const ACTION_OUTSIDE: i32 = 4;
+/// `MotionEvent.ACTION_POINTER_DOWN`.
+pub const ACTION_POINTER_DOWN: i32 = 5;
+/// `MotionEvent.ACTION_POINTER_UP`.
+pub const ACTION_POINTER_UP: i32 = 6;
+/// `MotionEvent.ACTION_POINTER_INDEX_SHIFT`.
+pub const ACTION_POINTER_INDEX_SHIFT: i32 = 8;
 
 /// `KeyEvent.ACTION_DOWN`.
 pub const KEY_ACTION_DOWN: i32 = 0;

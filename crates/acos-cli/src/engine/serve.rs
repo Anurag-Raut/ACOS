@@ -72,6 +72,8 @@ struct HeldArtSession {
     /// The agent's `acos_launch {label}` (empty when unset): the human handle
     /// `session list` / `acos_status` print beside the session id.
     label: Mutex<String>,
+    /// Optional agent-provided display name (`acos_launch {device_name}` / `--device-name`).
+    device_name: Mutex<Option<String>>,
     /// When the current launch started (ms since the epoch), for the `age_s`
     /// column of `session list`.
     started_ms: Mutex<u64>,
@@ -96,6 +98,17 @@ impl HeldArtSession {
             .started_ms
             .lock()
             .unwrap_or_else(|e| e.into_inner()) = crate::live_registry::now_ms();
+    }
+
+    fn set_device_name(&self, name: Option<String>) {
+        *self.device_name.lock().unwrap_or_else(|e| e.into_inner()) = name;
+    }
+
+    fn device_name(&self) -> Option<String> {
+        self.device_name
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
     }
 
     fn label(&self) -> String {
@@ -158,6 +171,159 @@ fn guest_rss_kb(pid: u32) -> Option<u64> {
     None
 }
 
+impl crate::adb::AdbSessionOps for HeldArtSession {
+    fn snapshot(&self) -> Result<crate::adb::AdbSessionSnapshot, String> {
+        let mut session = self.session.lock().unwrap_or_else(|e| e.into_inner());
+        if session.liveness().is_some() {
+            return Err("guest exited".to_string());
+        }
+        Ok(crate::adb::AdbSessionSnapshot {
+            package: session.package().to_string(),
+            activity: session.activity().map(str::to_string),
+            natural_size: session.natural_display_size(),
+            display_size: session.display_size(),
+            rotation: session.rotation(),
+            density: session.density(),
+            animations: session.animations(),
+            guest_pid: session.guest_pid(),
+            launcher_pid: session.launcher_pid(),
+            apk_path: session.apk_path().to_path_buf(),
+            device_name: self.device_name(),
+            extra_apks: session.extra_apks().to_vec(),
+        })
+    }
+
+    fn rotate(&self, rotation: u8) -> Result<(), String> {
+        let mut session = self.session.lock().unwrap_or_else(|e| e.into_inner());
+        if session.liveness().is_some() {
+            return Err("guest exited".to_string());
+        }
+        session
+            .rotate_display(rotation)
+            .map_err(|e| e.to_string())
+    }
+
+    fn dump_tree(&self) -> Result<(UiTree, u8), String> {
+        let mut session = self.session.lock().unwrap_or_else(|e| e.into_inner());
+        if session.liveness().is_some() {
+            return Err("guest exited".to_string());
+        }
+        let tree = session
+            .tree_with_settle_pixels("fast", false)
+            .or_else(|_| session.ensure_bound_tree())
+            .map_err(|e| e.to_string())?;
+        Ok((tree, session.rotation()))
+    }
+
+    fn screenshot_png(&self) -> Result<Vec<u8>, String> {
+        let mut session = self.session.lock().unwrap_or_else(|e| e.into_inner());
+        if session.liveness().is_some() {
+            return Err("guest exited".to_string());
+        }
+        session.screenshot_png_bytes().map_err(|e| e.to_string())
+    }
+
+    fn raw_screenshot(&self, out_path: &Path, format: &str) -> Result<(u32, u32, u8), String> {
+        let mut session = self.session.lock().unwrap_or_else(|e| e.into_inner());
+        if session.liveness().is_some() {
+            return Err("guest exited".to_string());
+        }
+        session
+            .raw_screenshot(out_path, format)
+            .map_err(|e| e.to_string())
+    }
+
+    fn panel_touch(
+        &self,
+        action: i32,
+        down_time: i64,
+        event_time: i64,
+        pointers: &[(i32, f32, f32)],
+    ) -> Result<(), String> {
+        let mut session = self.session.lock().unwrap_or_else(|e| e.into_inner());
+        if session.liveness().is_some() {
+            return Err("guest exited".to_string());
+        }
+        session
+            .panel_touch(action, down_time, event_time, pointers)
+            .map_err(|e| e.to_string())
+    }
+
+    fn panel_key(
+        &self,
+        code: i32,
+        event_type: &str,
+        meta_state: i32,
+        device_id: i32,
+    ) -> Result<(), String> {
+        let mut session = self.session.lock().unwrap_or_else(|e| e.into_inner());
+        if session.liveness().is_some() {
+            return Err("guest exited".to_string());
+        }
+        session
+            .panel_key(code, event_type, meta_state, device_id)
+            .map_err(|e| e.to_string())
+    }
+
+    fn panel_text(&self, text: &str) -> Result<(), String> {
+        let mut session = self.session.lock().unwrap_or_else(|e| e.into_inner());
+        if session.liveness().is_some() {
+            return Err("guest exited".to_string());
+        }
+        session.panel_text(text).map_err(|e| e.to_string())
+    }
+
+    fn adb_tap(&self, x: i32, y: i32) -> Result<(), String> {
+        let mut session = self.session.lock().unwrap_or_else(|e| e.into_inner());
+        if session.liveness().is_some() {
+            return Err("guest exited".to_string());
+        }
+        session.adb_tap(x, y).map_err(|e| e.to_string())
+    }
+
+    fn adb_swipe(
+        &self,
+        x1: i32,
+        y1: i32,
+        x2: i32,
+        y2: i32,
+        duration_ms: u64,
+    ) -> Result<(), String> {
+        let mut session = self.session.lock().unwrap_or_else(|e| e.into_inner());
+        if session.liveness().is_some() {
+            return Err("guest exited".to_string());
+        }
+        session
+            .adb_swipe(x1, y1, x2, y2, duration_ms)
+            .map_err(|e| e.to_string())
+    }
+
+    fn adb_key(&self, code: i32, longpress: bool) -> Result<(), String> {
+        let mut session = self.session.lock().unwrap_or_else(|e| e.into_inner());
+        if session.liveness().is_some() {
+            return Err("guest exited".to_string());
+        }
+        session.adb_key(code, longpress).map_err(|e| e.to_string())
+    }
+
+    fn adb_text(&self, text: &str) -> Result<(), String> {
+        let mut session = self.session.lock().unwrap_or_else(|e| e.into_inner());
+        if session.liveness().is_some() {
+            return Err("guest exited".to_string());
+        }
+        session.adb_text(text).map_err(|e| e.to_string())
+    }
+
+    fn stream_socket(&self) -> Option<PathBuf> {
+        let session = self.session.lock().unwrap_or_else(|e| e.into_inner());
+        session.stream_socket().map(Path::to_path_buf)
+    }
+
+    fn is_verify_run(&self) -> bool {
+        false
+    }
+}
+
 /// Session routing for the daemon: which engine owns a session id.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Route {
@@ -185,6 +351,8 @@ pub struct ServeEngine {
     /// One keeper per `ZygoteKey`, closed on serve exit: a keeper outlives
     /// sessions, never a serve.
     zygote: Arc<ZygoteHost>,
+    /// DEVPANEL1: optional adb/gRPC exposure (`--adb`), `None` when disabled.
+    adb: Option<Arc<crate::adb::AdbManager>>,
 }
 
 impl ServeEngine {
@@ -233,7 +401,14 @@ impl ServeEngine {
             art: Mutex::new(HashMap::new()),
             routes: Mutex::new(HashMap::new()),
             zygote,
+            adb: None,
         }
+    }
+
+    /// Attach a pre-constructed [`crate::adb::AdbManager`] (constructed before
+    /// binding the serve socket so stale discovery files are already swept).
+    pub fn set_adb(&mut self, adb: Arc<crate::adb::AdbManager>) {
+        self.adb = Some(adb);
     }
 
     /// This daemon's identity (REL3D).
@@ -253,6 +428,9 @@ impl ServeEngine {
     /// Close every held ART guest (daemon shutdown). Returns how many were
     /// closed. The legacy backend's sessions die with the process as before.
     pub fn shutdown(&self) -> usize {
+        if let Some(adb) = &self.adb {
+            adb.shutdown_all();
+        }
         let held: Vec<(String, Arc<HeldArtSession>)> = {
             let mut map = self.art.lock().unwrap_or_else(|e| e.into_inner());
             map.drain().collect()
@@ -324,7 +502,12 @@ impl ServeEngine {
             // A dead guest is reported as dead, with its own exit facts, never
             // as a live frame sequence (W55).
             let exit = session.liveness();
-            sessions.push(json!({
+            if exit.is_some() {
+                if let Some(adb) = &self.adb {
+                    adb.unregister(id);
+                }
+            }
+            let mut row = json!({
                 "session_id": id,
                 "launched": true,
                 "package": session.package(),
@@ -357,7 +540,15 @@ impl ServeEngine {
                 // can check that the session it is about to destroy is still the
                 // guest *it* launched.
                 "session_token": held.launch_token(),
-            }));
+            });
+            if let Some(adb) = &self.adb {
+                if exit.is_none() {
+                    if let Some(dp) = adb.info(id) {
+                        row["device_panel"] = dp;
+                    }
+                }
+            }
+            sessions.push(row);
         }
         let count = sessions.len();
         merged["sessions"] = Value::Array(sessions);
@@ -595,6 +786,27 @@ impl ServeEngine {
             .and_then(Value::as_str)
             .unwrap_or_default()
             .to_string();
+        let device_name: Option<String> = match args.get("device_name") {
+            None | Some(Value::Null) => None,
+            Some(Value::String(s)) => {
+                let trimmed = s.trim();
+                if trimmed.is_empty() {
+                    None
+                } else {
+                    Some(trimmed.to_string())
+                }
+            }
+            Some(other) => {
+                return art_failure(
+                    request_id,
+                    Some(id),
+                    trust,
+                    ErrorCode::InvalidArgument,
+                    format!("device_name must be a string (got {})", json_kind(other)),
+                    json!({"field": "device_name"}),
+                )
+            }
+        };
         let verb_started = std::time::Instant::now();
         // P9: launch consumes P1/P3b's settle vocabulary. `strict` is the
         // default and unchanged; `fast` binds the first traversal's probe sample
@@ -913,6 +1125,13 @@ impl ServeEngine {
                     // frame (the daemon's whole point); never boot a second
                     // guest.
                     held.note_launch(&agent_label);
+                    if device_name.is_some() {
+                        held.set_device_name(device_name.clone());
+                    }
+                    let device_panel = self.adb.as_ref().map(|adb| {
+                        let ops: Arc<dyn crate::adb::AdbSessionOps> = Arc::clone(&held) as _;
+                        adb.register(id, ops)
+                    });
                     let mut session = held.session.lock().unwrap_or_else(|e| e.into_inner());
                     return match session.ensure_launch_tree(settle, pixels) {
                         Ok(tree) => launch_reply(
@@ -925,6 +1144,7 @@ impl ServeEngine {
                             None,
                             verb_started,
                             args,
+                            device_panel,
                         ),
                         Err(error) => art_error(request_id, Some(id), held.trust, &error),
                     };
@@ -932,6 +1152,9 @@ impl ServeEngine {
                 Some(details) => {
                     // Dead: drop the held session (dropping closes and reaps the
                     // process group) and start a fresh guest for the same APK.
+                    if let Some(adb) = &self.adb {
+                        adb.unregister(id);
+                    }
                     self.art
                         .lock()
                         .unwrap_or_else(|e| e.into_inner())
@@ -1018,6 +1241,7 @@ impl ServeEngine {
                     artifacts: artifacts.clone(),
                     trust,
                     label: Mutex::new(String::new()),
+                    device_name: Mutex::new(device_name),
                     started_ms: Mutex::new(0),
                     launch_token: Mutex::new(String::new()),
                     session: Mutex::new(session),
@@ -1035,6 +1259,10 @@ impl ServeEngine {
                     let session = held.session.lock().unwrap_or_else(|e| e.into_inner());
                     self.publish_live(id, &session);
                 }
+                let device_panel = self.adb.as_ref().map(|adb| {
+                    let ops: Arc<dyn crate::adb::AdbSessionOps> = Arc::clone(&held) as _;
+                    adb.register(id, ops)
+                });
                 let mut guard = held.session.lock().unwrap_or_else(|e| e.into_inner());
                 launch_reply(
                     request_id,
@@ -1046,6 +1274,7 @@ impl ServeEngine {
                     replaced_guest,
                     verb_started,
                     args,
+                    device_panel,
                 )
             }
             Err(error) => {
@@ -1064,6 +1293,9 @@ impl ServeEngine {
         args: &Value,
         ctx: &CallContext,
     ) -> Envelope {
+        if let Some(adb) = &self.adb {
+            adb.unregister(id);
+        }
         let held = self
             .art
             .lock()
@@ -1713,6 +1945,7 @@ fn net_ctl(session: &mut ArtSession, args: &Value) -> Result<Value, BackendError
     Ok(value)
 }
 
+#[allow(clippy::too_many_arguments)]
 fn launch_reply(
     request_id: &str,
     id: &str,
@@ -1723,6 +1956,7 @@ fn launch_reply(
     replaced_guest: Option<Value>,
     started: std::time::Instant,
     args: &Value,
+    device_panel: Option<Value>,
 ) -> Envelope {
     let (tree_value, max_nodes, node_count, truncated, tree_path, next_cursor) =
         shaped_tree(&held.artifacts, tree, 2000, args);
@@ -1760,6 +1994,9 @@ fn launch_reply(
             {"stage": "first_frame", "ok": true, "status": "ok", "ms": session.session_start_ms()}
         ],
     });
+    if let Some(dp) = device_panel {
+        result["device_panel"] = dp;
+    }
     // PROVENANCE: which APK this guest booted, with its digest, the engine and
     // the fidelity. The digest is what makes "the launch passed" checkable
     // against the build under test (feedback 2026-11-14: a stale APK passed).

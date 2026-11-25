@@ -110,6 +110,9 @@ pub struct ArtSession {
     activity: Option<String>,
     width: u32,
     height: u32,
+    natural_width: u32,
+    natural_height: u32,
+    rotation: u8,
     density: u32,
     /// ADR-0029 item 4: the `services:` specs this session was launched with,
     /// kept so a `reset`/relaunch attaches the same modules.
@@ -1486,7 +1489,7 @@ fn state_changed(baseline: Option<&(String, u64)>, current: Option<&CachedFrame>
 /// The thread is created once per process and never exits; a guest whose parent
 /// thread is gone would be killed by the kernel (that is the guarantee we are
 /// keeping), so "never exits" is not an optimisation, it is the contract.
-mod spawner {
+pub(crate) mod spawner {
     use std::process::{Child, Command};
     use std::sync::mpsc::channel;
     use std::sync::OnceLock;
@@ -2188,6 +2191,9 @@ impl ArtSession {
             activity: None,
             width: 1080,
             height: 2400,
+            natural_width: 1080,
+            natural_height: 2400,
+            rotation: 0,
             density: 420,
             services: services.to_vec(),
             intent: intent.clone(),
@@ -2325,9 +2331,11 @@ impl ArtSession {
             .filter(|group| *group > 1);
         if let Some(width) = ready.get("width").and_then(|v| v.as_u64()) {
             session.width = width as u32;
+            session.natural_width = session.width;
         }
         if let Some(height) = ready.get("height").and_then(|v| v.as_u64()) {
             session.height = height as u32;
+            session.natural_height = session.height;
         }
         if let Some(density) = ready.get("density").and_then(|v| v.as_u64()) {
             session.density = density as u32;
@@ -2836,6 +2844,188 @@ impl ArtSession {
     #[allow(dead_code)]
     pub const fn density(&self) -> u32 {
         self.density
+    }
+
+    /// Natural (portrait / unrotated) display size reported at boot.
+    pub const fn natural_display_size(&self) -> (u32, u32) {
+        (self.natural_width, self.natural_height)
+    }
+
+    /// Current display rotation (`0..=3`, Android `Surface.ROTATION_*`).
+    pub const fn rotation(&self) -> u8 {
+        self.rotation
+    }
+
+    /// Rotate the live session display (`0..=3`).
+    pub(crate) fn rotate_display(&mut self, rotation: u8) -> Result<(), BackendError> {
+        <Self as SessionBackend>::rotate(self, rotation)
+    }
+
+    /// Return current frame PNG bytes for `adb exec-out screencap -p` (tries a
+    /// fresh C1 capture first, falling back to the last bound frame when the
+    /// screen has not changed since the last capture).
+    pub(crate) fn screenshot_png_bytes(&mut self) -> Result<Vec<u8>, BackendError> {
+        match self.capture_frame() {
+            Ok(captured) => std::fs::read(&captured.path).map_err(|error| {
+                live_frame_unavailable(format!(
+                    "cannot read captured frame {}: {error}",
+                    captured.path.display()
+                ))
+            }),
+            Err(err) => {
+                let is_stale = matches!(
+                    &err,
+                    BackendError::Error {
+                        code: ErrorCode::NoFreshFrame,
+                        detail,
+                    } if detail.starts_with(super::STALE_FRAME)
+                );
+                if !is_stale || self.stdin.is_none() || self.closed || self.liveness().is_some() {
+                    return Err(err);
+                }
+                let frame = self.bound_frame()?.ok_or(err)?;
+                let png = frame.png();
+                if png.is_empty() {
+                    return Err(live_frame_unavailable(
+                        "the bound frame carries no PNG bytes",
+                    ));
+                }
+                Ok(png.to_vec())
+            }
+        }
+    }
+
+    /// Capture the current C1 composite buffer in `"rgb888"`, `"rgba8888"`, or
+    /// `"png"` straight to `out_path` without creating a `frames/` artifact.
+    pub(crate) fn raw_screenshot(
+        &mut self,
+        out_path: &Path,
+        format: &str,
+    ) -> Result<(u32, u32, u8), BackendError> {
+        let reply = self.command(serde_json::json!({
+            "cmd": "raw_screenshot",
+            "path": out_path.display().to_string(),
+            "format": format,
+        }))?;
+        let width = reply
+            .get("width")
+            .and_then(|v| v.as_u64())
+            .ok_or_else(|| live_frame_unavailable("raw_screenshot missing width"))?
+            as u32;
+        let height = reply
+            .get("height")
+            .and_then(|v| v.as_u64())
+            .ok_or_else(|| live_frame_unavailable("raw_screenshot missing height"))?
+            as u32;
+        let rotation = reply
+            .get("rotation")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(u64::from(self.rotation)) as u8;
+        self.rotation = rotation;
+        Ok((width, height, rotation))
+    }
+
+    /// Send a non-blocking panel touch frame (`action`, `down_time`, `event_time`, `pointers`).
+    pub(crate) fn panel_touch(
+        &mut self,
+        action: i32,
+        down_time: i64,
+        event_time: i64,
+        pointers: &[(i32, f32, f32)],
+    ) -> Result<(), BackendError> {
+        let ptr_json: Vec<serde_json::Value> = pointers
+            .iter()
+            .map(|&(id, x, y)| serde_json::json!([id, x, y]))
+            .collect();
+        self.command(serde_json::json!({
+            "cmd": "panel_touch",
+            "action": action,
+            "down_time": down_time,
+            "event_time": event_time,
+            "pointers": ptr_json,
+        }))?;
+        Ok(())
+    }
+
+    /// Send a non-blocking panel key event (`down` | `up` | `press`).
+    pub(crate) fn panel_key(
+        &mut self,
+        code: i32,
+        event_type: &str,
+        meta_state: i32,
+        device_id: i32,
+    ) -> Result<(), BackendError> {
+        self.command(serde_json::json!({
+            "cmd": "panel_key",
+            "code": code,
+            "event_type": event_type,
+            "meta_state": meta_state,
+            "device_id": device_id,
+        }))?;
+        Ok(())
+    }
+
+    /// Send non-blocking panel text input.
+    pub(crate) fn panel_text(&mut self, text: &str) -> Result<(), BackendError> {
+        self.command(serde_json::json!({
+            "cmd": "panel_text",
+            "text": text,
+        }))?;
+        Ok(())
+    }
+
+    /// Inject a tap over adb (`source: "adb"` in the live-view feed, display coordinates).
+    pub(crate) fn adb_tap(&mut self, x: i32, y: i32) -> Result<(), BackendError> {
+        self.input_command(
+            serde_json::json!({"cmd": "tap", "x": x, "y": y, "source": "adb"}),
+            "input.tap",
+        )
+    }
+
+    /// Inject a swipe over adb (`source: "adb"` in the live-view feed, display coordinates).
+    pub(crate) fn adb_swipe(
+        &mut self,
+        x1: i32,
+        y1: i32,
+        x2: i32,
+        y2: i32,
+        duration_ms: u64,
+    ) -> Result<(), BackendError> {
+        self.input_command(
+            serde_json::json!({
+                "cmd": "swipe",
+                "x1": x1,
+                "y1": y1,
+                "x2": x2,
+                "y2": y2,
+                "duration_ms": duration_ms.max(1),
+                "source": "adb",
+            }),
+            "input.swipe",
+        )
+    }
+
+    /// Inject a keyevent over adb (`source: "adb"` in the live-view feed).
+    pub(crate) fn adb_key(&mut self, code: i32, longpress: bool) -> Result<(), BackendError> {
+        if code < 0 {
+            return Err(BackendError::unsupported(
+                "input.key",
+                format!("invalid keycode {code}"),
+            ));
+        }
+        let mut req = serde_json::json!({"cmd": "key", "code": code, "source": "adb"});
+        if longpress {
+            req["longpress"] = serde_json::json!(true);
+        }
+        self.input_command(req, "input.key")
+    }
+
+    /// Inject text over adb (`source: "adb"` in the live-view feed).
+    pub(crate) fn adb_text(&mut self, text: &str) -> Result<(), BackendError> {
+        self.input_command(
+            serde_json::json!({"cmd": "type_text", "text": text, "source": "adb"}),
+            "input.type_text",
+        )
     }
 
     /// Press a raw Android keycode (the protocol takes integers).
@@ -5704,6 +5894,7 @@ impl SessionBackend for ArtSession {
                 ));
             }
         }
+        self.rotation = rotation;
         // The frame's own size is the rotated one; frame artifacts are stamped
         // with it, so a later capture is bound to the geometry it really has.
         if let Some(width) = reply.get("width").and_then(serde_json::Value::as_u64) {
@@ -5977,6 +6168,7 @@ pub struct DeferredArtStart {
     pub session_id: Option<String>,
     pub services: Vec<serde_json::Value>,
     pub intent: acos_protocol::LaunchIntent,
+    pub on_started: Option<Box<dyn FnOnce(&ArtSession) + Send>>,
 }
 
 /// Session metadata populated once a [`DeferredArtSession`] actually boots,
@@ -6056,6 +6248,9 @@ impl DeferredArtSession {
                 meta.session_extra_apks = session.extra_apks().to_vec();
                 meta.session_boot_image = session.boot_image().cloned();
                 meta.module_rows = Some(session.module_rows());
+            }
+            if let Some(on_started) = cfg.on_started {
+                on_started(&session);
             }
             if let Some(timeout) = self.pending_settle_timeout.take() {
                 SessionBackend::set_settle_timeout(&mut session, timeout);
@@ -9903,6 +10098,104 @@ mod tests {
             doc["evidence_files"]["session-exit.json"].is_string(),
             "the evidence file list names what was kept: {doc}"
         );
+        std::env::remove_var("ACOS_ART_BIN");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn screenshot_png_bytes_propagates_errors_and_only_falls_back_on_live_stale_frame() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = scratch_dir("cr2-screenshot");
+        let out = dir.join("art-frames");
+        std::fs::create_dir_all(&out).unwrap();
+        let png = out.join("frame-001.png");
+        let png_bytes = super::super::fake::TINY_PNG;
+        std::fs::write(&png, png_bytes).unwrap();
+
+        let script = dir.join("fake-art-cr2");
+        let mut body = String::new();
+        body.push_str("#!/usr/bin/env bash\nset -e\n");
+        body.push_str(
+            "echo '{\"ok\":true,\"cmd\":\"ready\",\"package\":\"dev.cr2\",\
+             \"activity\":\"dev.cr2/.Main\",\"width\":100,\"height\":200,\"density\":160}'\n",
+        );
+        body.push_str("shots=0\n");
+        body.push_str("while IFS= read -r line; do\n");
+        body.push_str("  case \"$line\" in\n");
+        body.push_str("    *'\"cmd\":\"tree\"'*)\n");
+        body.push_str(&format!(
+            "      echo '{{\"ok\":true,\"cmd\":\"tree\",\"frame_seq\":1,\"md5\":\"m1\",\"png\":\"{}\",\"tree\":{{\"nodes\":[]}}}}'\n",
+            png.display()
+        ));
+        body.push_str("      ;;\n");
+        body.push_str("    *'\"cmd\":\"screenshot\"'*)\n");
+        body.push_str("      shots=$((shots+1))\n");
+        body.push_str("      if [ \"$shots\" -eq 1 ]; then\n");
+        // Call 1: same frame_seq=1 -> triggers STALE_FRAME while guest is still alive.
+        body.push_str(&format!(
+            "        echo '{{\"ok\":true,\"cmd\":\"screenshot\",\"frame_seq\":1,\"md5\":\"m1\",\"png\":\"{}\"}}'\n",
+            png.display()
+        ));
+        body.push_str("      elif [ \"$shots\" -eq 2 ]; then\n");
+        // Call 2: compositor error (INTERNAL).
+        body.push_str(
+            "        echo '{\"ok\":false,\"cmd\":\"screenshot\",\"code\":\"INTERNAL\",\"error\":\"compositor crashed\"}'\n",
+        );
+        body.push_str("      else\n");
+        // Call 3: child dies unexpectedly before replying (closed pipe, session.closed == false).
+        body.push_str("        exit 1\n");
+        body.push_str("      fi\n");
+        body.push_str("      ;;\n");
+        body.push_str("    *'\"cmd\":\"close\"'*)\n");
+        body.push_str("      echo '{\"ok\":true,\"cmd\":\"close\"}'\n");
+        body.push_str("      exit 0\n");
+        body.push_str("      ;;\n");
+        body.push_str(
+            "    *) echo '{\"ok\":false,\"code\":\"BAD_REQUEST\",\"error\":\"bad\"}'; ;;\n",
+        );
+        body.push_str("  esac\n");
+        body.push_str("done\n");
+        std::fs::write(&script, body).unwrap();
+        let mut perms = std::fs::metadata(&script).unwrap().permissions();
+        perms.set_mode(0o755);
+        std::fs::set_permissions(&script, perms).unwrap();
+
+        let apk = dir.join("fake.apk");
+        std::fs::write(&apk, b"not-a-real-apk").unwrap();
+        let _guard = art_bin_env_lock();
+        std::env::set_var("ACOS_ART_BIN", &script);
+
+        let mut session = ArtSession::start(&apk, &dir).expect("fake session starts");
+        // Bind initial frame_seq=1 so last_pixel holds valid cached PNG bytes.
+        let _ = session.frame().expect("initial frame bound");
+
+        // 1. Live STALE_FRAME must fall back to the bound frame PNG.
+        let stale_ok = session
+            .screenshot_png_bytes()
+            .expect("live STALE_FRAME falls back to cached PNG");
+        assert_eq!(stale_ok, png_bytes);
+
+        // 2. INTERNAL capture failure must propagate as Err, NOT return cached PNG.
+        let internal_err = session
+            .screenshot_png_bytes()
+            .expect_err("INTERNAL error must not be swallowed");
+        assert!(
+            internal_err.to_string().contains("compositor crashed"),
+            "unexpected internal error: {internal_err}"
+        );
+
+        // 3. Dead guest / EOF (without host close) must return Err, NOT cached PNG.
+        let dead_err = session
+            .screenshot_png_bytes()
+            .expect_err("dead guest must not serve cached PNG");
+        assert!(
+            matches!(
+                dead_err,
+                BackendError::Protocol { .. } | BackendError::Error { .. }
+            ),
+            "unexpected dead error: {dead_err}"
+        );
+
         std::env::remove_var("ACOS_ART_BIN");
         let _ = std::fs::remove_dir_all(&dir);
     }

@@ -67,6 +67,9 @@ pub const SUBSCRIBE_DEADLINE: Duration = Duration::from_secs(5);
 /// Bytes queued for a subscriber that is not reading right now. Beyond this the
 /// subscriber is dropped (the producer never blocks on a viewer).
 pub const MAX_QUEUED_BYTES: usize = 8 * 1024 * 1024;
+/// Queue limit for uncompressed `rgb888` subscribers (a single 1080x2400 raw
+/// frame is ~7.8 MiB, so 8 MiB would drop on the second queued frame).
+pub const MAX_QUEUED_BYTES_RAW: usize = 32 * 1024 * 1024;
 /// The mode the view socket file is given right after `bind` (see
 /// [`bind_private`]): owner read/write only.
 pub const SOCKET_MODE: libc::mode_t = 0o600;
@@ -105,15 +108,19 @@ pub enum FrameFormat {
     Jpeg,
     /// PNG (lossless).
     Png,
+    /// Uncompressed top-down 24-bit RGB (`width * height * 3` bytes, for
+    /// zero-copy gRPC streaming to `expo-device-hub` / `adb`/`EmulatorController`).
+    Rgb888,
 }
 
 impl FrameFormat {
-    /// Wire name (`"jpeg"` | `"png"`).
+    /// Wire name (`"jpeg"` | `"png"` | `"rgb888"`).
     #[must_use]
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::Jpeg => "jpeg",
             Self::Png => "png",
+            Self::Rgb888 => "rgb888",
         }
     }
 
@@ -123,6 +130,7 @@ impl FrameFormat {
         match text.trim().to_ascii_lowercase().as_str() {
             "jpeg" | "jpg" => Some(Self::Jpeg),
             "png" => Some(Self::Png),
+            "rgb888" | "rgb24" => Some(Self::Rgb888),
             _ => None,
         }
     }
@@ -131,6 +139,7 @@ impl FrameFormat {
         match self {
             Self::Jpeg => 1,
             Self::Png => 2,
+            Self::Rgb888 => 3,
         }
     }
 
@@ -138,6 +147,7 @@ impl FrameFormat {
         match code {
             1 => Some(Self::Jpeg),
             2 => Some(Self::Png),
+            3 => Some(Self::Rgb888),
             _ => None,
         }
     }
@@ -338,15 +348,31 @@ impl Subscriber {
     /// it (a frame larger than `SO_SNDBUF`, ~208 KB, would otherwise never be
     /// delivered). Only a real write error, a `WriteZero`, or crossing
     /// [`MAX_QUEUED_BYTES`] drops the subscriber, and the producer never blocks.
-    fn send(&mut self, message: &[u8]) -> io::Result<()> {
+    fn send(&mut self, message: &[u8], max_queued: usize) -> io::Result<()> {
         self.pending.extend_from_slice(message);
-        if self.pending.len() - self.offset > MAX_QUEUED_BYTES {
+        if self.pending.len() - self.offset > max_queued {
             return Err(io::Error::new(
                 io::ErrorKind::WouldBlock,
                 "the subscriber is too far behind",
             ));
         }
         self.flush()
+    }
+
+    /// `true` once the peer has closed its end of the Unix socket (even while
+    /// the screen is idle and we are not writing frames).
+    fn is_peer_closed(&self) -> bool {
+        use std::os::unix::io::AsRawFd;
+        let mut pfd = libc::pollfd {
+            fd: self.stream.as_raw_fd(),
+            events: 0,
+            revents: 0,
+        };
+        let rc = unsafe { libc::poll(&mut pfd, 1, 0) };
+        if rc < 0 {
+            return false;
+        }
+        (pfd.revents & (libc::POLLHUP | libc::POLLERR | libc::POLLNVAL)) != 0
     }
 
     /// Write as much of the queue as the socket accepts right now.
@@ -382,6 +408,11 @@ struct Inner {
     config: LiveViewConfig,
     display: (u32, u32),
     session_pid: u32,
+    /// Serializes `attach()` so empty-subscriber resets and config selection never race.
+    attach_lock: Mutex<()>,
+    /// Incremented on every `attach()` so `live_view_source` re-emits the current
+    /// frame immediately on an idle screen.
+    attach_epoch: Arc<AtomicU64>,
     /// The values the stream is actually using (fixed by the first subscriber).
     active_format: AtomicU32,
     active_scale: AtomicU32,
@@ -482,6 +513,13 @@ impl Inner {
         Duration::from_micros(1_000_000 / u64::from(self.max_fps().max(1)))
     }
 
+    fn max_queued_bytes(&self) -> usize {
+        match self.format() {
+            FrameFormat::Rgb888 => MAX_QUEUED_BYTES_RAW,
+            FrameFormat::Jpeg | FrameFormat::Png => MAX_QUEUED_BYTES,
+        }
+    }
+
     /// The first subscriber fixes the stream's format/scale/rate; a request that
     /// arrives later is told the active values instead (one encoder, one shape).
     fn configure_from_request(&self, request: &serde_json::Value) {
@@ -531,6 +569,25 @@ impl Inner {
     }
 
     fn attach(self: &Arc<Self>, stream: UnixStream, request: &serde_json::Value) -> io::Result<()> {
+        let _attach_guard = self.attach_lock.lock().unwrap_or_else(|e| e.into_inner());
+        let was_empty = {
+            let subscribers = self.subscribers.lock().unwrap_or_else(|e| e.into_inner());
+            subscribers.is_empty()
+        };
+        if was_empty {
+            // Once all viewers detach, the next viewer starts fresh and may
+            // negotiate a different format/scale/max_fps (e.g. browser hub PNG
+            // @ 0.5 vs. device panel RGB888 @ 1.0).
+            self.active_format.store(0, Ordering::Release);
+            self.active_scale.store(0, Ordering::Release);
+            self.active_max_fps.store(0, Ordering::Release);
+            self.last_capture_ms.store(0, Ordering::Release);
+            *self.slot.lock().unwrap_or_else(|e| e.into_inner()) = None;
+            *self
+                .password_state
+                .lock()
+                .unwrap_or_else(|e| e.into_inner()) = None;
+        }
         self.configure_from_request(request);
         let subscribe = request.get("subscribe").unwrap_or(request);
         let wants_frames = subscribe
@@ -544,7 +601,7 @@ impl Inner {
         stream.set_nonblocking(true)?;
         let hello = frame_message(TYPE_HELLO, self.hello().to_string().as_bytes());
         let mut subscriber = Subscriber::new(stream, wants_frames, wants_events);
-        subscriber.send(&hello)?;
+        subscriber.send(&hello, self.max_queued_bytes())?;
         let mut subscribers = self.subscribers.lock().unwrap_or_else(|e| e.into_inner());
         while subscribers.len() + 1 > self.config_max_subscribers() {
             // Cap: drop the oldest so a reconnecting viewer is never locked out.
@@ -568,8 +625,10 @@ impl Inner {
         // stream) must see the screen *now*, not at the next redraw: the encoder
         // only sends a frame newer than the last one it sent, so on an idle
         // screen the newcomer would stare at black until something repainted.
-        // Forgetting the last encoded `seq` makes the next capture go out once
-        // (a duplicate for existing viewers, never a new capture rate).
+        // Incrementing `attach_epoch` lets `live_view_source` emit the latest
+        // composited frame once even when `seq` has not advanced, and forgetting
+        // `last_encoded_seq` lets the writer loop push it.
+        self.attach_epoch.fetch_add(1, Ordering::AcqRel);
         self.last_encoded_seq.store(0, Ordering::Relaxed);
         self.notify();
         // The tap thread exists only while someone watches: with no subscriber
@@ -718,6 +777,7 @@ impl Inner {
     }
 
     fn broadcast(&self, message: &[u8], frames: bool) {
+        let max_queued = self.max_queued_bytes();
         let mut subscribers = self.subscribers.lock().unwrap_or_else(|e| e.into_inner());
         if subscribers.is_empty() {
             return;
@@ -730,7 +790,7 @@ impl Inner {
             if !frames && !subscriber.wants_events {
                 continue;
             }
-            if subscriber.send(message).is_err() {
+            if subscriber.send(message, max_queued).is_err() {
                 dead.push(index);
             }
         }
@@ -738,6 +798,25 @@ impl Inner {
             subscribers.remove(index);
             self.subscriber_count.fetch_sub(1, Ordering::AcqRel);
             self.subscribers_dropped.fetch_add(1, Ordering::Relaxed);
+        }
+    }
+
+    /// Remove any subscriber whose client socket was closed, so `subscriber_count`
+    /// returns to zero promptly even while the guest screen is completely idle.
+    fn prune_closed_subscribers(&self) {
+        let mut subscribers = self.subscribers.lock().unwrap_or_else(|e| e.into_inner());
+        if subscribers.is_empty() {
+            return;
+        }
+        let mut closed: Vec<usize> = Vec::new();
+        for (index, subscriber) in subscribers.iter().enumerate() {
+            if subscriber.is_peer_closed() {
+                closed.push(index);
+            }
+        }
+        for index in closed.into_iter().rev() {
+            subscribers.remove(index);
+            self.subscriber_count.fetch_sub(1, Ordering::AcqRel);
         }
     }
 
@@ -852,6 +931,8 @@ impl LiveView {
             config,
             display,
             session_pid,
+            attach_lock: Mutex::new(()),
+            attach_epoch: Arc::new(AtomicU64::new(0)),
             active_format: AtomicU32::new(0),
             active_scale: AtomicU32::new(0),
             active_max_fps: AtomicU32::new(0),
@@ -919,6 +1000,13 @@ impl LiveView {
         &self.path
     }
 
+    /// Shared attach counter, bumped on every subscriber `attach()` so a
+    /// stateful frame source can re-emit the latest frame on an idle screen.
+    #[must_use]
+    pub fn attach_epoch(&self) -> Arc<AtomicU64> {
+        Arc::clone(&self.inner.attach_epoch)
+    }
+
     /// Whether at least one viewer is attached (the fast-path predicate).
     #[must_use]
     pub fn has_subscribers(&self) -> bool {
@@ -946,7 +1034,7 @@ impl LiveView {
     pub fn observe_request(&self, request: &serde_json::Value) {
         let carries_input = matches!(
             request.get("cmd").and_then(serde_json::Value::as_str),
-            Some("type_text" | "key")
+            Some("type_text" | "key" | "panel_key" | "panel_text")
         );
         // The reset runs *before* the no-subscriber early return: a "proven
         // non-password" state recorded while a viewer was attached must not
@@ -1382,6 +1470,36 @@ fn subscribe(mut stream: UnixStream, inner: Arc<Inner>) {
             return;
         }
     }
+    if request
+        .get("panel_input_ignored")
+        .and_then(serde_json::Value::as_bool)
+        == Some(true)
+    {
+        inner.push_event(serde_json::json!({
+            "ts_ms": now_ms(),
+            "kind": "action",
+            "source": "panel",
+            "status": "VERIFY_WATCH_ONLY",
+            "note": "panel input ignored: verify run",
+        }));
+        inner.subscribe_threads.fetch_sub(1, Ordering::AcqRel);
+        return;
+    }
+    if request
+        .get("adb_input_ignored")
+        .and_then(serde_json::Value::as_bool)
+        == Some(true)
+    {
+        inner.push_event(serde_json::json!({
+            "ts_ms": now_ms(),
+            "kind": "action",
+            "source": "adb",
+            "status": "VERIFY_WATCH_ONLY",
+            "note": "adb input ignored: verify run",
+        }));
+        inner.subscribe_threads.fetch_sub(1, Ordering::AcqRel);
+        return;
+    }
     let _ = inner.attach(stream, &request);
     inner.subscribe_threads.fetch_sub(1, Ordering::AcqRel);
 }
@@ -1415,6 +1533,7 @@ fn writer_loop(inner: Arc<Inner>) {
             }
             was_watching = subscribers > 0;
         }
+        inner.prune_closed_subscribers();
         if inner.subscriber_count.load(Ordering::Acquire) == 0 {
             // No viewer: block until one attaches (or the session ends). No
             // periodic wakeup, no work.
@@ -1448,7 +1567,12 @@ fn writer_loop(inner: Arc<Inner>) {
             }
         };
         let Some(frame) = pending else {
-            inner.wait(Duration::from_millis(20));
+            let wait = if inner.flush_pending() {
+                Duration::from_millis(1)
+            } else {
+                Duration::from_millis(20)
+            };
+            inner.wait(wait);
             continue;
         };
         let started = Instant::now();
@@ -1600,6 +1724,9 @@ fn rgba_to_rgb(rgba: &[u8]) -> Vec<u8> {
 /// Encode one downscaled frame in the configured format.
 fn encode(frame: &Slot, format: FrameFormat, jpeg_quality: u8) -> io::Result<Vec<u8>> {
     let rgb = rgba_to_rgb(&frame.rgba);
+    if matches!(format, FrameFormat::Rgb888) {
+        return Ok(rgb);
+    }
     let mut out = Vec::new();
     match format {
         FrameFormat::Jpeg => {
@@ -1631,6 +1758,7 @@ fn encode(frame: &Slot, format: FrameFormat, jpeg_quality: u8) -> io::Result<Vec
             )
             .map_err(io::Error::other)?;
         }
+        FrameFormat::Rgb888 => unreachable!(),
     }
     Ok(out)
 }
@@ -1744,6 +1872,36 @@ pub fn event_from_reply(reply: &serde_json::Value, masked: bool) -> Option<serde
             map.insert("kind".into(), serde_json::json!("action"));
             let wire_cmd = if cmd == "type_text" { "text" } else { cmd };
             map.insert("cmd".into(), serde_json::json!(wire_cmd));
+            // DEVPANEL1 §6: who caused the input. ACOS tools / MCP are `agent`;
+            // Option B `adb shell input ...` carries `source: "adb"`.
+            let src = reply
+                .get("source")
+                .and_then(|v| v.as_str())
+                .filter(|s| !s.is_empty())
+                .unwrap_or("agent");
+            map.insert("source".into(), serde_json::json!(src));
+        }
+        // DEVPANEL1 §6: input from T3 Code's Device panel (gRPC bridge), free-form
+        // and labelled `source: panel`. A drag is dozens of moves: only the
+        // down / up / cancel edges reach the feed, never every move.
+        "panel_touch" | "panel_key" | "panel_text" => {
+            let wire_cmd = match cmd {
+                "panel_touch" => {
+                    let phase = match reply.get("action").and_then(serde_json::Value::as_i64) {
+                        Some(0) => "down",
+                        Some(1) => "up",
+                        Some(3) => "cancel",
+                        _ => return None,
+                    };
+                    map.insert("phase".into(), serde_json::json!(phase));
+                    "touch"
+                }
+                "panel_key" => "key",
+                _ => "text",
+            };
+            map.insert("kind".into(), serde_json::json!("action"));
+            map.insert("cmd".into(), serde_json::json!(wire_cmd));
+            map.insert("source".into(), serde_json::json!("panel"));
         }
         "ready" => {
             map.insert("kind".into(), serde_json::json!("lifecycle"));
@@ -1766,7 +1924,7 @@ pub fn event_from_reply(reply: &serde_json::Value, masked: bool) -> Option<serde
     }
     if let Some(key) = reply.get("key") {
         map.insert("key".into(), masked_key(key, masked));
-    } else if cmd == "key" {
+    } else if cmd == "key" || cmd == "panel_key" {
         if let Some(code) = reply.get("code").and_then(serde_json::Value::as_i64) {
             map.insert("key".into(), masked_key(&serde_json::json!(code), masked));
         }
@@ -1809,6 +1967,16 @@ pub fn merge_request(event: &mut serde_json::Value, request: &serde_json::Value,
     let Some(map) = event.as_object_mut() else {
         return;
     };
+    if let Some(src) = request
+        .get("source")
+        .and_then(|value| value.as_str())
+        .filter(|s| !s.is_empty())
+    {
+        if map.get("source").and_then(|v| v.as_str()) == Some("agent") || !map.contains_key("source")
+        {
+            map.insert("source".to_string(), serde_json::json!(src));
+        }
+    }
     for key in ["x", "y", "x2", "y2"] {
         if !map.contains_key(key) {
             if let Some(value) = request.get(key).filter(|value| value.is_i64()) {
@@ -2788,6 +2956,236 @@ mod tests {
             "the viewer was not dropped"
         );
         assert!(view.has_subscribers());
+        view.shutdown();
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn rgb888_format_streams_raw_top_down_bytes_and_resets_on_reattach() {
+        let dir = scratch_dir("rgb888");
+        let source = HandSource::new(4, 2, false);
+        let view = bound(&dir, "v.sock", &source);
+        let epoch = view.attach_epoch();
+        assert_eq!(epoch.load(Ordering::Acquire), 0);
+
+        // First subscriber negotiates PNG @ scale 0.5, then disconnects cleanly.
+        let mut png_client = UnixStream::connect(view.socket_path()).expect("connect png");
+        subscribe_line(
+            &mut png_client,
+            "\"frames\":true,\"format\":\"png\",\"scale\":0.5,\"max_fps\":10,",
+        );
+        png_client
+            .set_read_timeout(Some(Duration::from_secs(2)))
+            .expect("timeout");
+        let (kind, payload) = read_message(&mut png_client).expect("hello");
+        assert_eq!(kind, TYPE_HELLO);
+        let hello: serde_json::Value = serde_json::from_slice(&payload).expect("hello json");
+        assert_eq!(hello["format"], "png");
+        assert_eq!(hello["scale"], 0.5);
+        assert!(wait_for(|| view.has_subscribers(), Duration::from_secs(2)));
+        assert_eq!(epoch.load(Ordering::Acquire), 1);
+
+        // Close while idle: writer_loop prunes closed subscriber without needing a new frame.
+        drop(png_client);
+        assert!(
+            wait_for(|| !view.has_subscribers(), Duration::from_secs(2)),
+            "subscriber_count returns to 0 on idle disconnect"
+        );
+
+        // Second subscriber requests rgb888 @ scale 1.0: reset lets it negotiate fresh.
+        let mut raw_client = UnixStream::connect(view.socket_path()).expect("connect rgb888");
+        subscribe_line(
+            &mut raw_client,
+            "\"frames\":true,\"format\":\"rgb888\",\"scale\":1.0,\"max_fps\":30,",
+        );
+        raw_client
+            .set_read_timeout(Some(Duration::from_secs(2)))
+            .expect("timeout");
+        let (kind, payload) = read_message(&mut raw_client).expect("hello 2");
+        assert_eq!(kind, TYPE_HELLO);
+        let hello2: serde_json::Value = serde_json::from_slice(&payload).expect("hello2 json");
+        assert_eq!(hello2["format"], "rgb888");
+        assert_eq!(hello2["scale"], 1.0);
+        assert!(wait_for(|| view.has_subscribers(), Duration::from_secs(2)));
+        assert_eq!(epoch.load(Ordering::Acquire), 2);
+
+        view.tick();
+        let (kind, payload) = loop {
+            let msg = read_message(&mut raw_client).expect("frame");
+            if msg.0 == TYPE_FRAME {
+                break msg;
+            }
+        };
+        assert_eq!(kind, TYPE_FRAME);
+        let newline = payload.iter().position(|b| *b == b'\n').expect("header");
+        let header: serde_json::Value =
+            serde_json::from_slice(&payload[..newline]).expect("header json");
+        assert_eq!(header["format"], "rgb888");
+        assert_eq!(header["w"], 4);
+        assert_eq!(header["h"], 2);
+        let raw = &payload[newline + 1..];
+        assert_eq!(raw.len(), 4 * 2 * 3);
+
+        view.shutdown();
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn panel_input_ignored_emits_verify_watch_only_without_attaching() {
+        let dir = scratch_dir("panel-ignored");
+        let source = HandSource::new(4, 2, false);
+        let view = bound(&dir, "v.sock", &source);
+
+        // Attach an events-only observer first.
+        let mut viewer = UnixStream::connect(view.socket_path()).expect("connect viewer");
+        subscribe_line(&mut viewer, "\"frames\":false,");
+        viewer
+            .set_read_timeout(Some(Duration::from_secs(2)))
+            .expect("timeout");
+        let (kind, _) = read_message(&mut viewer).expect("hello");
+        assert_eq!(kind, TYPE_HELLO);
+        assert!(wait_for(|| view.has_subscribers(), Duration::from_secs(2)));
+
+        // Send a watch-only dropped-input notification; it must not attach as a subscriber.
+        let mut notify = UnixStream::connect(view.socket_path()).expect("connect notify");
+        notify
+            .write_all(b"{\"v\":1,\"panel_input_ignored\":true}\n")
+            .expect("write notify");
+        drop(notify);
+
+        let (kind, payload) = loop {
+            let msg = read_message(&mut viewer).expect("event");
+            if msg.0 == TYPE_EVENT {
+                break msg;
+            }
+        };
+        assert_eq!(kind, TYPE_EVENT);
+        let event: serde_json::Value = serde_json::from_slice(&payload).expect("event json");
+        assert_eq!(event["kind"], "action");
+        assert_eq!(event["source"], "panel");
+        assert_eq!(event["status"], "VERIFY_WATCH_ONLY");
+        assert_eq!(event["note"], "panel input ignored: verify run");
+        assert_eq!(view.attach_epoch().load(Ordering::Acquire), 1);
+
+        view.shutdown();
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn idle_screen_flushes_pending_large_rgb888_tail_to_slow_reader() {
+        let dir = scratch_dir("rgb888-tail");
+        // 1080x2400 rgb888 is ~7.77 MiB, far exceeding the Unix socket buffer.
+        let sent = Arc::new(AtomicBool::new(false));
+        let sent_src = Arc::clone(&sent);
+        let source: Arc<dyn Fn() -> Option<SourceFrame> + Send + Sync> = Arc::new(move || {
+            if sent_src.swap(true, Ordering::AcqRel) {
+                return None;
+            }
+            Some(SourceFrame {
+                seq: 1,
+                generation: 1,
+                width: 1080,
+                height: 2400,
+                stride: 1080,
+                rgba: vec![0x42u8; 1080 * 2400 * 4],
+                secure: false,
+            })
+        });
+        let view = LiveView::bind(
+            &dir.join("v.sock"),
+            LiveViewConfig::default(),
+            (1080, 2400),
+            1,
+            source,
+            Arc::new(TestWake::new()),
+        )
+        .expect("bind");
+        let mut client = UnixStream::connect(view.socket_path()).expect("connect");
+        subscribe_line(
+            &mut client,
+            "\"frames\":true,\"format\":\"rgb888\",\"scale\":1.0,\"max_fps\":30,",
+        );
+        client
+            .set_read_timeout(Some(Duration::from_secs(1)))
+            .expect("timeout");
+        assert_eq!(read_message(&mut client).expect("hello").0, TYPE_HELLO);
+        assert!(wait_for(|| view.has_subscribers(), Duration::from_secs(2)));
+
+        // Emit one frame and then keep the screen completely idle (`source` returns None).
+        view.tick();
+        assert!(wait_for(
+            || view.stats().frames_sent == 1,
+            Duration::from_secs(2)
+        ));
+        // Wait longer than the 33ms frame interval AFTER broadcast so `now >= next_at`
+        // runs on an empty slot while the ~7.4 MiB frame tail is still queued.
+        std::thread::sleep(Duration::from_millis(80));
+
+        let (kind, payload) = loop {
+            let msg = read_message(&mut client).unwrap_or_else(|error| {
+                panic!(
+                    "pending rgb888 tail stalled on idle screen: {error} {:?}",
+                    view.stats()
+                )
+            });
+            if msg.0 == TYPE_FRAME {
+                break msg;
+            }
+        };
+        assert_eq!(kind, TYPE_FRAME);
+        let newline = payload.iter().position(|b| *b == b'\n').expect("header");
+        let raw = &payload[newline + 1..];
+        assert_eq!(raw.len(), 1080 * 2400 * 3);
+
+        view.shutdown();
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn adb_source_and_adb_input_ignored_emit_expected_events() {
+        let mut ev = event_from_reply(&serde_json::json!({"ok": true, "cmd": "tap"}), false)
+            .expect("tap event");
+        assert_eq!(ev["source"], "agent");
+        merge_request(
+            &mut ev,
+            &serde_json::json!({"cmd": "tap", "x": 12, "y": 34, "source": "adb"}),
+            false,
+        );
+        assert_eq!(ev["source"], "adb");
+        assert_eq!(ev["x"], 12);
+        assert_eq!(ev["y"], 34);
+
+        let dir = scratch_dir("adb-ignored");
+        let source = HandSource::new(4, 2, false);
+        let view = bound(&dir, "v.sock", &source);
+        let mut viewer = UnixStream::connect(view.socket_path()).expect("connect viewer");
+        subscribe_line(&mut viewer, "\"frames\":false,");
+        viewer
+            .set_read_timeout(Some(Duration::from_secs(2)))
+            .expect("timeout");
+        let (kind, _) = read_message(&mut viewer).expect("hello");
+        assert_eq!(kind, TYPE_HELLO);
+        assert!(wait_for(|| view.has_subscribers(), Duration::from_secs(2)));
+
+        let mut notify = UnixStream::connect(view.socket_path()).expect("connect notify");
+        notify
+            .write_all(b"{\"v\":1,\"adb_input_ignored\":true}\n")
+            .expect("write notify");
+        drop(notify);
+
+        let (kind, payload) = loop {
+            let msg = read_message(&mut viewer).expect("event");
+            if msg.0 == TYPE_EVENT {
+                break msg;
+            }
+        };
+        assert_eq!(kind, TYPE_EVENT);
+        let event: serde_json::Value = serde_json::from_slice(&payload).expect("event json");
+        assert_eq!(event["kind"], "action");
+        assert_eq!(event["source"], "adb");
+        assert_eq!(event["status"], "VERIFY_WATCH_ONLY");
+        assert_eq!(event["note"], "adb input ignored: verify run");
+
         view.shutdown();
         let _ = std::fs::remove_dir_all(&dir);
     }

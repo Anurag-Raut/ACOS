@@ -2630,6 +2630,7 @@ mod engine_tests {
             untrusted: false,
             overwrite: true,
             keep_artifacts: Some("all".to_string()),
+            adb: false,
             json,
         }
     }

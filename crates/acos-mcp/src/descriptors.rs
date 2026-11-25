@@ -678,6 +678,14 @@ fn session_tool_spec(name: &str) -> (&'static str, Value) {
                                     label you can recognise — the server destroys its own idle \
                                     sessions, and the label is how you tell which one went."
                 },
+                "device_name": {
+                    "type": "string",
+                    "description": "DEVPANEL1: display name for this session in the T3 Device \
+                                    panel, `adb emu avd name`, and `getprop` (for example \
+                                    `Checkout Form`). Defaults to `<app label or package> · <session_id>`. \
+                                    Control characters, newlines, and `=` are stripped and the name \
+                                    is capped at 64 characters."
+                },
                 "services": {
                     "type": "array",
                     "description": "ADR-0029 item 4: service modules to attach at launch, in order \

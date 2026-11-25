@@ -97,6 +97,10 @@ pub struct ServeArgs {
     /// refused at startup; there is no silent fallback.
     #[arg(long, default_value = "art", value_name = "art|rust-vm")]
     pub engine: String,
+
+    /// Expose live ART sessions as local adb emulators for T3 Code's Device panel.
+    #[arg(long)]
+    pub adb: bool,
 }
 
 /// Run `acos serve`.
@@ -132,6 +136,11 @@ pub fn run(args: ServeArgs) -> ExitCode {
             }
         }
     }
+    let adb_manager = if args.adb {
+        Some(Arc::new(crate::adb::AdbManager::from_env()))
+    } else {
+        None
+    };
     let listener = match UnixListener::bind(&socket) {
         Ok(listener) => listener,
         Err(e) => {
@@ -162,13 +171,17 @@ pub fn run(args: ServeArgs) -> ExitCode {
     let artifacts_root = std::env::var_os("ACOS_SERVE_ARTIFACTS")
         .map(PathBuf::from)
         .unwrap_or_else(|| daemon::runtime_dir().join("art-sessions"));
-    let engine = Arc::new(ServeEngine::with_identity(
+    let mut engine = ServeEngine::with_identity(
         backend,
         default_engine,
         args.max_sessions,
         artifacts_root.clone(),
         args.auto_started,
-    ));
+    );
+    if let Some(adb) = adb_manager {
+        engine.set_adb(adb);
+    }
+    let engine = Arc::new(engine);
     let shared = Arc::new(SharedState {
         last_activity: Mutex::new(Instant::now()),
         active: AtomicUsize::new(0),
@@ -189,17 +202,19 @@ pub fn run(args: ServeArgs) -> ExitCode {
                 "art_artifacts": artifacts_root.display().to_string(),
                 "owner_pid": args.owner_pid,
                 "auto_started": args.auto_started,
+                "adb": args.adb,
                 // REL3D: the identity every client compares against.
                 "identity": engine.identity(),
             })
         );
     }
     eprintln!(
-        "acos serve: listening on {} (engine={}, idle={}s, max_sessions={})",
+        "acos serve: listening on {} (engine={}, idle={}s, max_sessions={}{})",
         socket.display(),
         default_engine.as_str(),
         args.idle_timeout,
-        args.max_sessions
+        args.max_sessions,
+        if args.adb { ", adb=on" } else { "" }
     );
 
     // P8: the socket is bound and listening, so the daemon is ready exactly as
@@ -492,10 +507,14 @@ fn context_for(args: &Value) -> acos_mcp::CallContext {
 /// instead of chmod-ing someone else's path. An explicit `--socket` parent is
 /// still created 0700 as before (the caller chose it).
 fn prepare_runtime_dir(dir: &std::path::Path) -> std::io::Result<()> {
+    use std::os::unix::fs::DirBuilderExt;
     if dir == daemon::runtime_dir() {
         return daemon::ensure_private_dir(dir);
     }
-    std::fs::create_dir_all(dir)?;
+    std::fs::DirBuilder::new()
+        .recursive(true)
+        .mode(0o700)
+        .create(dir)?;
     std::fs::set_permissions(dir, std::fs::Permissions::from_mode(0o700))
 }
 

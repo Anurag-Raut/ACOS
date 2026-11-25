@@ -1609,3 +1609,19 @@ Modules live in `acos-services` and run on the binder peer thread (`Module::cont
 - `acos-services` stays decoupled from `acos-art` process handles and probe loops; unit tests in `acos-services` can inspect the queued `GuestCommand`s directly via `ServiceHost::drain_guest_commands`.
 - The module itself never computes or fabricates guest layout; host-computed geometry flows from `WmsState` through `GuestCommand` to the guest's activity override `Configuration` and `relayout`.
 
+## ADR-0033 — Device panel exposure and input (`ADR-0027` §5 amended, DEVPANEL1, 2026-11-24)
+
+**Context.** `ADR-0027` §5 made live viewing strictly view-only so human interaction could not race the agent driving a session. T3 Code's Device panel (`docs/DEVICE_PANEL_SPEC.md`, agreed 2026-11-23) embeds running Android emulators via adb discovery plus `android.emulation.control.EmulatorController` gRPC so a developer can watch live agent sessions and tap, swipe, or type directly when collaborating with an agent, while keeping zero cost when unused and keeping `acos verify` verdicts immune to human interference.
+
+**Decision (`ADR-0027` §5 amended).**
+
+1. **Viewers may send input, but only through the device-panel path:** the opt-in `acos serve --adb` host endpoint paired with the local, bearer-token-protected `acos-devbridge` gRPC bridge (`127.0.0.1` only, `pid_<session-pid>.ini` discovery, `SO_PEERCRED` unix socket back to `acos serve`).
+2. **Input is free-form:** there is no take/release control lock and no `HUMAN_IN_CONTROL` hold timer; agent tool calls and human panel input both land in the live session.
+3. **Every human input is recorded with `source: panel`:** the session's action/event feed labels panel gRPC inputs `source: panel` and agent/MCP tool inputs `source: agent` (with typed text masked identically), so an agent can distinguish human intervention from its own actions.
+4. **`acos verify` runs ignore panel input:** under `acos verify --adb`, the session runs watch-only; panel gRPC `sendTouch`/`sendKey` requests are rejected, the event feed records `VERIFY_WATCH_ONLY` (`panel input ignored: verify run`), and verdicts are never influenced by human input.
+5. **`acos view` itself stays view-only:** the browser hub (`docs/LIVE_VIEW.md`) keeps no input path, and the live-view stream protocol remains outbound-only (`no subscriber = one atomic load`).
+
+**Consequences.**
+- Without `--adb`, `acos serve` creates no adb listener, no discovery files, no bridge process, and zero overhead.
+- With `--adb`, sessions occupy up to 16 emulator slots (`emulator-5554`..`emulator-5584`, flock-protected); sessions beyond 16 still run normally and report `device_panel: {"exposed": false, "reason": "all 16 adb emulator slots in use"}`.
+- `acos-devbridge` isolates `tokio`/`tonic`/`prost` into a separate binary started lazily on the first exposed session; `acos serve` and `acos-art` remain async-runtime-free.
