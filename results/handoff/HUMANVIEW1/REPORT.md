@@ -261,3 +261,21 @@ All six verifier findings were resolved on `humanview` and verified end-to-end a
 | e2 | `hello-views.apk` + `system.launcher` (`real`) -> `#btn-home` enabled (`title="Home"`) -> opens `ACOS Home` | **PASS** | `y` | `.cache/hv-e2e/out/step_e_home.png` |
 | verify | `acos verify` watch-only (`counter.apk`, 7 s wait) renders crisp `540x1200` idle frame immediately, `watch-only: verify run` banner visible, all toolbar buttons disabled, click ignored, `verifyOk: true` | **PASS** | `y` | `.cache/hv-e2e/out/step_verify_watch.png` |
 
+---
+
+## 9. Fix Round 2
+
+Addressed the two LOW findings from re-verification:
+
+1. **Documented optional `has_home` (`docs/LIVE_VIEW.md` §2, §5, §8):**
+   - Added `has_home` to the `H` hello frame example & field table (§2), the `LiveEntry` registry JSON & field notes (§5), and the `/api/sessions` + SSE `state` hub summary (§8).
+2. **Stopped infinite `startFrameStream()` 400 ms retries on destroyed sessions (`crates/acos-cli/src/view/{page.rs,mod.rs}`):**
+   - Stops retrying and switches both `#dstate` and `#offline` to `"session ended"` (closing SSE and WebSocket as well) on HTTP `404`, when the session disappears from `/api/sessions`, or when `connected === false` after/while watching.
+   - Added exponential backoff (`400 ms` up to `5 s`) with abort-aware sleep on other errors.
+   - Added regression test `view::tests::page_contains_session_ended_stop_and_backoff`.
+
+**Checks:**
+- `cargo test --offline -p acos-cli --bin acos view`: **28 passed, 0 failed** (200 filtered out).
+- `cargo test --offline -p acos-mcp --test docs --test guide --test documentation_args`: **docs 1 passed**, **documentation_args 4 passed**, **guide 14 passed**, **0 failed**.
+- `tools/verify/check-layout.sh`: **`check-layout: ok`**.
+

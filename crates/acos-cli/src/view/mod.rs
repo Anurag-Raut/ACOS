@@ -1611,6 +1611,25 @@ mod tests {
         );
     }
 
+    #[test]
+    fn page_contains_session_ended_stop_and_backoff() {
+        let server = Server::start("page-ended");
+        let page = server.raw(&format!("/?t={}", server.token));
+        assert_eq!(status_of(&page), 200);
+        let html = String::from_utf8_lossy(body_of(&page)).to_string();
+        for needle in [
+            "response.status === 404",
+            "markSessionEnded",
+            "session ended",
+            "sessionEverConnected",
+            "connected === false",
+            "retryDelay",
+            "Math.min(retryDelay * 2, 5000)",
+        ] {
+            assert!(html.contains(needle), "page missing {needle}");
+        }
+    }
+
     fn send(
         stream: &mut std::os::unix::net::UnixStream,
         kind: u8,

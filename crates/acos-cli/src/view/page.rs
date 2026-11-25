@@ -178,6 +178,10 @@ let currentRotation = 0;
 let pollTimer = null;
 let streamAbort = null;
 let frameGeneration = 0;
+let sessionEnded = false;
+let sessionEverConnected = false;
+let disconnectedPolls = 0;
+let hasPolledSessions = false;
 
 function afterLoad(fn) {
   if (document.readyState === "complete") fn();
@@ -342,6 +346,7 @@ async function refresh() {
     const response = await fetch(auth("/api/sessions"), { cache: "no-store" });
     if (!response.ok) throw new Error("HTTP " + response.status);
     const data = await response.json();
+    hasPolledSessions = true;
     sessions = data.sessions || [];
     statusPill.textContent = sessions.length + (sessions.length === 1 ? " live session" : " live sessions");
     statusPill.className = "pill ok";
@@ -349,21 +354,31 @@ async function refresh() {
     if (current) {
       const updated = sessions.find((s) => s.session_id === current.session_id);
       if (!updated) {
-        $("dstate").textContent = "session ended";
-        $("dstate").className = "pill bad";
+        markSessionEnded(current.session_id);
       } else {
-        const prevHasHome = current.has_home;
-        current = updated;
-        if (typeof current.has_home !== "boolean" && typeof prevHasHome === "boolean") {
-          current.has_home = prevHasHome;
+        if (updated.connected === true) {
+          sessionEverConnected = true;
+          disconnectedPolls = 0;
+        } else if (updated.connected === false) {
+          disconnectedPolls += 1;
+          if (sessionEverConnected || disconnectedPolls >= 2) {
+            markSessionEnded(current.session_id);
+          }
         }
-        $("dtitle").textContent = sessionTitle(updated);
-        if (updated.display && updated.display.w && updated.display.h) {
-          display = { w: updated.display.w, h: updated.display.h };
-          setAspect(display.w, display.h);
+        if (!sessionEnded) {
+          const prevHasHome = current.has_home;
+          current = updated;
+          if (typeof current.has_home !== "boolean" && typeof prevHasHome === "boolean") {
+            current.has_home = prevHasHome;
+          }
+          $("dtitle").textContent = sessionTitle(updated);
+          if (updated.display && updated.display.w && updated.display.h) {
+            display = { w: updated.display.w, h: updated.display.h };
+            setAspect(display.w, display.h);
+          }
+          if (updated.activity) $("dactivity").textContent = updated.activity;
+          applyToolbarUi();
         }
-        if (updated.activity) $("dactivity").textContent = updated.activity;
-        applyToolbarUi();
       }
     }
   } catch (error) {
@@ -384,7 +399,7 @@ function closeWs() {
 }
 
 function ensureWs() {
-  if (!current || current.watch_only) return null;
+  if (!current || current.watch_only || sessionEnded) return null;
   if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
     return ws;
   }
@@ -563,20 +578,25 @@ async function startFrameStream(sid) {
   const ctrl = new AbortController();
   streamAbort = ctrl;
   const decoder = new TextDecoder();
+  let retryDelay = 400;
 
-  while (!ctrl.signal.aborted && streamAbort === ctrl && current && current.session_id === sid) {
+  while (!ctrl.signal.aborted && streamAbort === ctrl && current && current.session_id === sid && !sessionEnded) {
     let reader = null;
     try {
       const response = await fetch(auth("/api/frames/" + encodeURIComponent(sid)), {
         cache: "no-store",
         signal: ctrl.signal,
       });
+      if (response.status === 404) {
+        markSessionEnded(sid);
+        return;
+      }
       if (!response.ok || !response.body) {
         throw new Error("HTTP " + response.status);
       }
       reader = response.body.getReader();
       let buf = new Uint8Array(0);
-      while (!ctrl.signal.aborted && streamAbort === ctrl) {
+      while (!ctrl.signal.aborted && streamAbort === ctrl && !sessionEnded) {
         const { value, done } = await reader.read();
         if (done) break;
         if (!value || !value.length) continue;
@@ -611,30 +631,49 @@ async function startFrameStream(sid) {
           latest = { contentType, payload };
         }
         if (latest) {
+          retryDelay = 400;
           await drawDecodedFrame(latest, sid, gen, ctrl);
         }
       }
     } catch (error) {
-      if (ctrl.signal.aborted || streamAbort !== ctrl) return;
+      if (ctrl.signal.aborted || streamAbort !== ctrl || sessionEnded) return;
     } finally {
       if (reader) {
         try { await reader.cancel(); } catch (_) {}
       }
     }
-    if (ctrl.signal.aborted || streamAbort !== ctrl || !current || current.session_id !== sid) {
+    if (ctrl.signal.aborted || streamAbort !== ctrl || !current || current.session_id !== sid || sessionEnded) {
       return;
     }
+    const liveEntry = sessions.find((s) => s.session_id === sid);
+    if (hasPolledSessions && (!liveEntry || (sessionEverConnected && liveEntry.connected === false))) {
+      markSessionEnded(sid);
+      return;
+    }
+    $("offline").textContent = "stream offline · reconnecting…";
     $("offline").hidden = false;
     $("dstate").textContent = "reconnecting";
     $("dstate").className = "pill bad";
-    await new Promise((resolve) => setTimeout(resolve, 400));
+    const delay = retryDelay;
+    retryDelay = Math.min(retryDelay * 2, 5000);
+    await new Promise((resolve) => {
+      const t = setTimeout(resolve, delay);
+      ctrl.signal.addEventListener("abort", () => {
+        clearTimeout(t);
+        resolve();
+      }, { once: true });
+    });
   }
 }
 
 function openSession(s) {
   closeWs();
   stopFrameStream();
+  if (source) { source.close(); source = null; }
   clearFrameCanvas();
+  sessionEnded = false;
+  sessionEverConnected = false;
+  disconnectedPolls = 0;
   current = s;
   display = { w: (s.display && s.display.w) || 0, h: (s.display && s.display.h) || 0 };
   currentRotation = (display.w > display.h) ? 1 : 0;
@@ -647,6 +686,7 @@ function openSession(s) {
   eventsList.textContent = "";
   $("dstate").textContent = s.stream ? "connecting" : "no stream";
   $("dstate").className = "pill";
+  $("offline").textContent = "stream offline · reconnecting…";
   $("offline").hidden = true;
   applyToolbarUi();
   if (s.stream) {
@@ -654,7 +694,7 @@ function openSession(s) {
     connectEvents(s);
     const sid = s.session_id;
     afterLoad(() => {
-      if (current && current.session_id === sid) {
+      if (current && current.session_id === sid && !sessionEnded) {
         startFrameStream(sid);
       }
     });
@@ -665,6 +705,9 @@ function openSession(s) {
 }
 
 function closeSession() {
+  sessionEnded = false;
+  sessionEverConnected = false;
+  disconnectedPolls = 0;
   closeWs();
   stopFrameStream();
   if (source) { source.close(); source = null; }
@@ -674,20 +717,39 @@ function closeSession() {
   detail.hidden = true;
   grid.hidden = false;
   document.body.classList.remove("watching");
+  $("offline").textContent = "stream offline · reconnecting…";
+  $("offline").hidden = true;
   location.hash = "";
   history.replaceState(null, "", location.pathname + location.search);
   refresh();
 }
 
 function markLive() {
+  if (sessionEnded) return;
+  sessionEverConnected = true;
+  disconnectedPolls = 0;
+  $("offline").textContent = "stream offline · reconnecting…";
   $("offline").hidden = true;
   $("dstate").textContent = "live";
   $("dstate").className = "pill ok";
 }
 
+function markSessionEnded(sid) {
+  if (!current || (sid && current.session_id !== sid)) return;
+  sessionEnded = true;
+  closeWs();
+  stopFrameStream();
+  if (source) { source.close(); source = null; }
+  $("offline").textContent = "session ended";
+  $("offline").hidden = false;
+  $("dstate").textContent = "session ended";
+  $("dstate").className = "pill bad";
+}
+
 function connectEvents(s) {
   source = new EventSource(auth("/api/events/" + encodeURIComponent(s.session_id)));
   source.addEventListener("state", (message) => {
+    if (sessionEnded) return;
     let data = {};
     try { data = JSON.parse(message.data); } catch (error) { return; }
     const entry = data.entry || {};
@@ -708,23 +770,39 @@ function connectEvents(s) {
       applyToolbarUi();
     }
     if (entry.activity) $("dactivity").textContent = entry.activity;
+    if (data.connected === true) {
+      sessionEverConnected = true;
+      disconnectedPolls = 0;
+    } else if (data.connected === false && sessionEverConnected) {
+      markSessionEnded(s.session_id);
+      return;
+    }
+    $("offline").textContent = "stream offline · reconnecting…";
     $("offline").hidden = !!data.connected;
     $("dstate").textContent = data.connected ? "live" : "reconnecting";
     $("dstate").className = "pill" + (data.connected ? " ok" : " bad");
   });
   source.addEventListener("ev", (message) => {
+    if (sessionEnded) return;
     let data = {};
     try { data = JSON.parse(message.data); } catch (error) { return; }
     markLive();
     onEvent(data.event || {}, data.kind || "event");
   });
   source.addEventListener("lag", (message) => {
+    if (sessionEnded) return;
     let data = {};
     try { data = JSON.parse(message.data); } catch (error) { return; }
     if (data.missed) addEvent({ cmd: "…", status: "", text: data.missed + " earlier events dropped" }, "lag");
   });
-  source.onopen = () => { $("offline").hidden = true; };
+  source.onopen = () => {
+    if (sessionEnded) return;
+    $("offline").textContent = "stream offline · reconnecting…";
+    $("offline").hidden = true;
+  };
   source.onerror = () => {
+    if (sessionEnded) return;
+    $("offline").textContent = "stream offline · reconnecting…";
     $("offline").hidden = false;
     $("dstate").textContent = "reconnecting";
     $("dstate").className = "pill bad";

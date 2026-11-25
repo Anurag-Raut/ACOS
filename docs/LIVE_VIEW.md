@@ -75,7 +75,7 @@ A consumer must refuse `length == 0` and should refuse `length > 64 MiB`.
 JSON object:
 
 ```json
-{"v":1,"session":12345,"display":{"w":1080,"h":2400},"format":"png","scale":0.5}
+{"v":1,"session":12345,"display":{"w":1080,"h":2400},"format":"png","scale":0.5,"has_home":true}
 ```
 
 | field | meaning |
@@ -85,6 +85,7 @@ JSON object:
 | `display.w`,`display.h` | the **session display** size in pixels (frames are `scale` times this) |
 | `format` | the active image format |
 | `scale` | the active downscale factor |
+| `has_home` | optional boolean: `true` when a `CATEGORY_HOME` activity is installed, `false` when none is installed, omitted when unknown |
 
 ### Type `F` — frame
 
@@ -246,7 +247,8 @@ changes, and removed on destroy/close/daemon exit. Document:
   "serve_socket": "/run/user/1000/acos/mcp-5678/session.sock",
   "activity": "com.gaten/.MainActivity",
   "display": {"w": 1080, "h": 2400},
-  "stream_socket": "/run/user/1000/acos-view-5701-0/view.sock"
+  "stream_socket": "/run/user/1000/acos-view-5701-0/view.sock",
+  "has_home": true
 }
 ```
 
@@ -269,6 +271,11 @@ changes, and removed on destroy/close/daemon exit. Document:
   helper (`live_registry::is_stale` / `sweep`) and the hub sweeps on each poll.
 * `stream_socket` is `null` when the launcher could not bind one; such an entry
   is metadata only.
+* `has_home` is an optional boolean (`true`, `false`, or `null` when unknown)
+  reporting whether the session has an installed `CATEGORY_HOME` activity.
+  `acos view` propagates it into `/api/sessions` and SSE `state` (`entry.has_home`
+  alongside `hello.has_home`) so the page disables the `Home` toolbar button
+  when `has_home === false`.
 
 ## 6. Reference consumer
 
@@ -374,13 +381,13 @@ acos view: http://127.0.0.1:54321/?t=<token>
 * **Browsing.** The page polls `/api/sessions` every 2 s: a grid of live
   sessions from the registry (title from `device_name` or
   `<app_label or package> · <session_id>`, agent/client, project dir,
-  APK/package, current activity, age, display, watchers, `watch_only`) with
+  APK/package, current activity, age, display, watchers, `watch_only`, `has_home`) with
   stale entries swept and hidden. Clicking one opens it.
 * **Watching one session.** The page opens two streams for the clicked session:
   `/api/frames/<session_id>` (one `multipart/x-mixed-replace` MJPEG response of
   the producer's PNG/JPEG frames, with `X-Frame-Seq`/`X-Frame-Size` and only the
   newest frame, so a slow browser skips frames) and `/api/events/<session_id>`
-  (SSE: one `state` event — registry entry + `hello` — then one `ev` per `E`
+  (SSE: one `state` event — registry entry + `hello` (both carrying optional `has_home`) + `connected` — then one `ev` per `E`
   message, a `lag` event when the bounded ring dropped history, and a
   keep-alive). Overlays are drawn client-side from those events: a tap ripple at
   the event's `x/y` (display space, scaled to the frame), the current activity,
