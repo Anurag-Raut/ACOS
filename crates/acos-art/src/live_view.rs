@@ -156,6 +156,8 @@ pub struct LiveViewConfig {
     pub max_fps: Option<u32>,
     /// JPEG quality (ignored for PNG).
     pub jpeg_quality: u8,
+    /// Whether this session has an installed `CATEGORY_HOME` activity.
+    pub has_home: Option<bool>,
 }
 
 impl Default for LiveViewConfig {
@@ -165,6 +167,7 @@ impl Default for LiveViewConfig {
             scale: None,
             max_fps: None,
             jpeg_quality: DEFAULT_JPEG_QUALITY,
+            has_home: None,
         }
     }
 }
@@ -542,13 +545,17 @@ impl Inner {
 
     fn hello(&self) -> serde_json::Value {
         let (w, h) = self.display;
-        serde_json::json!({
+        let mut doc = serde_json::json!({
             "v": PROTOCOL_VERSION,
             "session": self.session_pid,
             "display": {"w": w, "h": h},
             "format": self.format().as_str(),
             "scale": self.scale(),
-        })
+        });
+        if let Some(has_home) = self.config.has_home {
+            doc["has_home"] = serde_json::json!(has_home);
+        }
+        doc
     }
 
     fn attach(self: &Arc<Self>, stream: UnixStream, request: &serde_json::Value) -> io::Result<()> {
@@ -3150,6 +3157,38 @@ mod tests {
 
     #[test]
     fn empty_source_poll_does_not_rate_limit_next_frame() {
+        struct ParkWake {
+            entered: AtomicBool,
+            released: Mutex<bool>,
+            cv: Condvar,
+        }
+
+        impl ParkWake {
+            fn new() -> Arc<Self> {
+                Arc::new(Self {
+                    entered: AtomicBool::new(false),
+                    released: Mutex::new(false),
+                    cv: Condvar::new(),
+                })
+            }
+
+            fn release(&self) {
+                let mut g = self.released.lock().unwrap_or_else(|e| e.into_inner());
+                *g = true;
+                self.cv.notify_all();
+            }
+        }
+
+        impl FrameWake for ParkWake {
+            fn wait(&self, _timeout: Duration) {
+                self.entered.store(true, Ordering::Release);
+                let mut g = self.released.lock().unwrap_or_else(|e| e.into_inner());
+                while !*g {
+                    g = self.cv.wait(g).unwrap_or_else(|e| e.into_inner());
+                }
+            }
+        }
+
         let dir = scratch_dir("empty-poll");
         let seq = Arc::new(AtomicU64::new(0));
         let emitted = Arc::new(AtomicU64::new(0));
@@ -3171,13 +3210,14 @@ mod tests {
                 secure: false,
             })
         });
+        let wake = ParkWake::new();
         let view = LiveView::bind(
             &dir.join("v.sock"),
             LiveViewConfig::default(),
             (64, 64),
             1,
             source,
-            Arc::new(TestWake::new()),
+            Arc::clone(&wake) as Arc<dyn FrameWake>,
         )
         .expect("bind");
         let mut client = UnixStream::connect(view.socket_path()).expect("connect");
@@ -3187,6 +3227,13 @@ mod tests {
             .expect("timeout");
         assert_eq!(read_message(&mut client).expect("hello").0, TYPE_HELLO);
         assert!(wait_for(|| view.has_subscribers(), Duration::from_secs(2)));
+        // Wait until the background tap thread finishes its initial empty poll
+        // and parks on `ParkWake`, so only the test's `view.tick()` calls drive
+        // capture timing.
+        assert!(wait_for(
+            || wake.entered.load(Ordering::Acquire),
+            Duration::from_secs(2)
+        ));
 
         // Emit frame 1 and wait past the 66 ms (15 fps) interval.
         seq.store(1, Ordering::Release);
@@ -3213,6 +3260,7 @@ mod tests {
         assert_eq!(stats.captures_rate_limited, 0);
 
         view.shutdown();
+        wake.release();
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

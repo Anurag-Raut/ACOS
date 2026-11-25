@@ -68,6 +68,8 @@ pub struct LiveEntry {
     /// The live-view stream socket (`docs/LIVE_VIEW.md`), when the launcher
     /// bound one.
     pub stream_socket: Option<String>,
+    /// Whether this session has an installed `CATEGORY_HOME` activity.
+    pub has_home: Option<bool>,
 }
 
 impl LiveEntry {
@@ -91,6 +93,7 @@ impl LiveEntry {
             "activity": self.activity,
             "display": {"w": self.display.0, "h": self.display.1},
             "stream_socket": self.stream_socket,
+            "has_home": self.has_home,
         })
     }
 }
@@ -652,6 +655,7 @@ mod tests {
             activity: Some("dev.acos.fixtures.counter.MainActivity".to_string()),
             display: (1080, 2400),
             stream_socket: Some("/run/user/1000/acos-art-1-0/view.sock".to_string()),
+            has_home: Some(false),
         }
     }
 

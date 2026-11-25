@@ -379,13 +379,19 @@ impl MjpegStream {
                                     }
                                 }
                             }
+                            let boundary_after = b"\r\n--acosframe\r\n";
                             let body_start = hdr_end + 4;
-                            let total_need = body_start + content_length + 2;
+                            let total_need = body_start + content_length + boundary_after.len();
                             if buf.len() < total_need {
                                 break;
                             }
+                            assert_eq!(
+                                &buf[body_start + content_length..total_need],
+                                boundary_after,
+                                "MJPEG part must be immediately followed by closing boundary"
+                            );
                             let bytes = buf[body_start..body_start + content_length].to_vec();
-                            buf.drain(..total_need);
+                            buf.drain(..body_start + content_length + 2);
                             if !content_type.is_empty() && !bytes.is_empty() {
                                 idx += 1;
                                 let (lock, cv) = &*state_t;

@@ -2308,6 +2308,19 @@ impl ServiceHost {
         atms.launch_home()
     }
 
+    /// Whether any installed activity in this session answers `ACTION_MAIN` +
+    /// `CATEGORY_HOME`.
+    #[must_use]
+    pub fn has_home_activity(&mut self) -> bool {
+        let Ok(object) = self.ensure("android.app.IActivityTaskManager") else {
+            return false;
+        };
+        object
+            .as_any_mut()
+            .and_then(|any| any.downcast_mut::<crate::atms::AtmsService>())
+            .is_some_and(|atms| atms.has_home_activity())
+    }
+
     /// The dynamic receiver registrations `IActivityManager`
     /// (`registerReceiver[WithFeature]`) has recorded, with the decoded
     /// `IntentFilter` facts (W28). Oldest first.

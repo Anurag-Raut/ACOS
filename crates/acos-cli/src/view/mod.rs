@@ -441,6 +441,7 @@ fn stream_frames(mut connection: TcpStream, hub: &Arc<Hub>, session_id: String) 
     let _ = connection.flush();
 
     let mut cursor = 0u64;
+    let mut first = true;
     loop {
         match watcher.wait_frame(cursor, EOF_POLL) {
             Some(frame) => {
@@ -449,8 +450,14 @@ fn stream_frames(mut connection: TcpStream, hub: &Arc<Hub>, session_id: String) 
                     "jpeg" | "jpg" => "image/jpeg",
                     _ => "image/png",
                 };
+                let prefix = if first {
+                    first = false;
+                    "--acosframe\r\n"
+                } else {
+                    ""
+                };
                 let part = format!(
-                    "--acosframe\r\nContent-Type: {content_type}\r\nContent-Length: {}\r\n\
+                    "{prefix}Content-Type: {content_type}\r\nContent-Length: {}\r\n\
                      X-Timestamp: {}\r\nX-Frame-Seq: {}\r\nX-Frame-Size: {}x{}\r\n\r\n",
                     frame.bytes.len(),
                     frame.ts_ms,
@@ -460,7 +467,7 @@ fn stream_frames(mut connection: TcpStream, hub: &Arc<Hub>, session_id: String) 
                 );
                 if connection.write_all(part.as_bytes()).is_err()
                     || connection.write_all(&frame.bytes).is_err()
-                    || connection.write_all(b"\r\n").is_err()
+                    || connection.write_all(b"\r\n--acosframe\r\n").is_err()
                     || connection.flush().is_err()
                 {
                     break; // slow or closed browser: never block the producer
@@ -1426,18 +1433,165 @@ mod tests {
     }
 
     #[test]
+    fn stream_frames_flushes_closing_boundary_before_blocking_for_next_frame() {
+        use std::sync::mpsc;
+
+        let server = Server::start("mjpeg-bnd");
+        let socket_path = server.registry.join("bnd.sock");
+        let listener = UnixListener::bind(&socket_path).expect("bind producer");
+        let (tx_send_second, rx_send_second) = mpsc::channel::<()>();
+        let (tx_stop, rx_stop) = mpsc::channel::<()>();
+
+        let png: &'static [u8] = &[
+            0x89, b'P', b'N', b'G', 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0x0d, b'I', b'H', b'D', b'R',
+            0, 0, 0, 1, 0, 0, 0, 1, 8, 6, 0, 0, 0, 0x1f, 0x15, 0xc4, 0x89, 0, 0, 0, 0x0a, b'I',
+            b'D', b'A', b'T', 0x78, 0x9c, 0x63, 0x00, 0x01, 0x00, 0x00, 0x05, 0x00, 0x01, 0x0d,
+            0x0a, 0x2d, 0xb4, 0, 0, 0, 0, 0, b'I', b'E', b'N', b'D', 0xae, 0x42, 0x60, 0x82,
+        ];
+
+        std::thread::spawn(move || {
+            let Ok((mut stream, _)) = listener.accept() else {
+                return;
+            };
+            let mut reader = std::io::BufReader::new(stream.try_clone().expect("clone"));
+            let mut line = String::new();
+            let _ = reader.read_line(&mut line);
+            let hello = br#"{"v":1,"session":9,"display":{"w":1080,"h":2400},"format":"png","scale":0.5}"#;
+            let _ = send(&mut stream, b'H', hello);
+
+            let send_frame = |stream: &mut std::os::unix::net::UnixStream, seq: u64| {
+                let header = format!(
+                    "{{\"seq\":{seq},\"generation\":1,\"w\":1,\"h\":1,\"format\":\"png\",\"ts_ms\":{}}}\n",
+                    crate::live_registry::now_ms()
+                );
+                let mut payload = header.into_bytes();
+                payload.extend_from_slice(png);
+                send(stream, b'F', &payload)
+            };
+
+            // Emit frame 1 and then block until released.
+            let _ = send_frame(&mut stream, 1);
+            if rx_send_second.recv_timeout(Duration::from_secs(5)).is_ok() {
+                let _ = send_frame(&mut stream, 2);
+                let _ = rx_stop.recv_timeout(Duration::from_secs(5));
+            }
+        });
+
+        let live = json!({
+            "v": 1,
+            "session_id": "s_bnd",
+            "daemon_pid": std::process::id(),
+            "started_ms": crate::live_registry::now_ms(),
+            "client": {"name": "bnd-test", "version": "1"},
+            "project_dir": "/tmp",
+            "apk": "x.apk",
+            "package": "x",
+            "activity": "x/.Main",
+            "display": {"w": 1080, "h": 2400},
+            "stream_socket": socket_path.display().to_string(),
+        });
+        std::fs::write(
+            server
+                .registry
+                .join(format!("s_bnd-{}.json", std::process::id())),
+            live.to_string(),
+        )
+        .expect("write live");
+
+        let mut conn = TcpStream::connect((Ipv4Addr::LOCALHOST, server.port)).expect("connect");
+        conn.set_read_timeout(Some(Duration::from_millis(200)))
+            .unwrap();
+        write!(
+            conn,
+            "GET /api/frames/s_bnd?t={} HTTP/1.1\r\nHost: 127.0.0.1:{}\r\n\r\n",
+            server.token, server.port
+        )
+        .expect("write");
+
+        let head = read_response_head(&mut conn);
+        assert!(head.starts_with("HTTP/1.1 200"), "{head}");
+
+        let mut body = Vec::new();
+        let mut buf = [0u8; 4096];
+        let mut expected_part1_end = Vec::from(png);
+        expected_part1_end.extend_from_slice(b"\r\n--acosframe\r\n");
+
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while Instant::now() < deadline {
+            match conn.read(&mut buf) {
+                Ok(0) => break,
+                Ok(n) => {
+                    body.extend_from_slice(&buf[..n]);
+                    if body.windows(expected_part1_end.len()).any(|w| w == expected_part1_end) {
+                        break;
+                    }
+                }
+                Err(e) if matches!(e.kind(), ErrorKind::WouldBlock | ErrorKind::TimedOut) => {}
+                Err(e) => panic!("read error: {e}"),
+            }
+        }
+        assert!(
+            body.starts_with(b"--acosframe\r\n"),
+            "first part must begin with opening boundary: {:?}",
+            String::from_utf8_lossy(&body[..body.len().min(64)])
+        );
+        assert!(
+            body.windows(expected_part1_end.len())
+                .any(|w| w == expected_part1_end),
+            "frame 1 must be immediately followed by closing boundary \\r\\n--acosframe\\r\\n before stream blocks"
+        );
+        let first_consumed = body.len();
+
+        // Release frame 2 and verify its headers start cleanly after the already-flushed boundary
+        // and its bytes also end with \r\n--acosframe\r\n before blocking again.
+        let _ = tx_send_second.send(());
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while Instant::now() < deadline {
+            match conn.read(&mut buf) {
+                Ok(0) => break,
+                Ok(n) => {
+                    body.extend_from_slice(&buf[..n]);
+                    let tail = &body[first_consumed..];
+                    if tail.windows(expected_part1_end.len()).any(|w| w == expected_part1_end) {
+                        break;
+                    }
+                }
+                Err(e) if matches!(e.kind(), ErrorKind::WouldBlock | ErrorKind::TimedOut) => {}
+                Err(e) => panic!("read error: {e}"),
+            }
+        }
+        let tail = &body[first_consumed..];
+        assert!(
+            tail.starts_with(b"Content-Type: image/png\r\n"),
+            "frame 2 must start with headers (no duplicate boundary), got: {:?}",
+            String::from_utf8_lossy(&tail[..tail.len().min(64)])
+        );
+        assert!(
+            tail.windows(expected_part1_end.len())
+                .any(|w| w == expected_part1_end),
+            "frame 2 must also end with closing boundary \\r\\n--acosframe\\r\\n before blocking"
+        );
+        let _ = tx_stop.send(());
+    }
+
+    #[test]
     fn page_contains_interactive_controls_and_verify_banner() {
         let server = Server::start("page-ui");
         let page = server.raw(&format!("/?t={}", server.token));
         assert_eq!(status_of(&page), 200);
         let html = String::from_utf8_lossy(body_of(&page)).to_string();
         for needle in [
+            "<canvas id=\"frame\"",
+            "createImageBitmap",
+            "getReader",
             "btn-back",
             "btn-home",
             "btn-recents",
             "btn-rotate",
             "verify-banner",
             "watch-only: verify run",
+            "no launcher in this session",
+            "HOME_UNAVAILABLE",
             "sessionTitle",
             "/api/input/",
             "agent &amp; human activity",
@@ -1447,6 +1601,10 @@ mod tests {
         ] {
             assert!(html.contains(needle), "page missing {needle}");
         }
+        assert!(
+            !html.contains("<img id=\"frame\""),
+            "must use canvas + fetch stream instead of endless <img>"
+        );
         assert!(
             !html.contains("view-only · no input reaches the guest"),
             "stale view-only header pill must be removed"

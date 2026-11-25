@@ -1624,5 +1624,4 @@ Modules live in `acos-services` and run on the binder peer thread (`Module::cont
 - Input-to-changed-frame latency measures **p50 = 66.70 ms, p95 = 68.90 ms** (50 reps, 1080×2400 PNG @ 30 fps; targets ≤ 100 ms / ≤ 200 ms).
 - 4-rep interleaved A/B against `v0.4.1` (`acos_bench.py --phase memory,latency --animations on`) passes both the old median gate and the lattice trimmed-mean gate across all 32 metrics (`within-noise`), and 4-rep interleaved idle CPU with a page open and idle (`0.242 %`) matches closed (`0.233 %`).
 - `docs/LIVE_VIEW.md` §8, `docs/AGENT_GUIDE.md`, and `docs/MCP.md` are updated to reflect interactive `acos view` and `source: panel`.
-
-
+- **Numbering note:** `ADR-0033` remains assigned to HUMANVIEW1; if parked PR #5 (`devpanel`) is revived, its device-panel ADR must take the next free number (`ADR-0034`+).

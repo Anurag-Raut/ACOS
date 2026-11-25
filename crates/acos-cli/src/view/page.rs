@@ -145,7 +145,7 @@ pub const PAGE: &str = r##"<!doctype html>
   </div>
   <div class="stage">
     <div class="screenwrap" id="screenwrap" tabindex="0">
-      <img id="frame" alt="live screen" draggable="false">
+      <canvas id="frame" width="0" height="0" aria-label="live screen"></canvas>
       <div id="overlay"></div>
       <div id="offline" hidden>stream offline · reconnecting…</div>
     </div>
@@ -165,7 +165,7 @@ const token = new URLSearchParams(location.search).get("t") || "";
 const auth = (path) => path + (path.includes("?") ? "&" : "?") + "t=" + encodeURIComponent(token);
 const $ = (id) => document.getElementById(id);
 const grid = $("grid"), detail = $("detail"), statusPill = $("status");
-const frame = $("frame"), screenWrap = $("screenwrap"), overlay = $("overlay"), eventsList = $("events");
+const frame = $("frame"), frameCtx = frame.getContext("2d"), screenWrap = $("screenwrap"), overlay = $("overlay"), eventsList = $("events");
 const btnBack = $("btn-back"), btnHome = $("btn-home"), btnRecents = $("btn-recents"), btnRotate = $("btn-rotate");
 const verifyBanner = $("verify-banner"), dinput = $("dinput");
 
@@ -173,8 +173,16 @@ let sessions = [];
 let current = null;
 let source = null;       // EventSource
 let display = { w: 0, h: 0 };
+let frameSize = { w: 0, h: 0 };
 let currentRotation = 0;
 let pollTimer = null;
+let streamAbort = null;
+let frameGeneration = 0;
+
+function afterLoad(fn) {
+  if (document.readyState === "complete") fn();
+  else window.addEventListener("load", fn, { once: true });
+}
 
 let ws = null;
 let wsQueue = [];
@@ -230,13 +238,26 @@ function projectName(path) {
   return parts.length ? parts[parts.length - 1] : path;
 }
 
-function applyWatchOnlyUi(isWatchOnly) {
+function applyToolbarUi() {
+  const isWatchOnly = !!(current && current.watch_only);
+  const noLauncher = !!(current && current.has_home === false);
   verifyBanner.hidden = !isWatchOnly;
-  screenWrap.classList.toggle("watchonly", !!isWatchOnly);
-  for (const btn of [btnBack, btnHome, btnRecents, btnRotate]) {
-    btn.disabled = !!isWatchOnly;
-    btn.title = isWatchOnly ? "watch-only: verify run" : "";
-  }
+  screenWrap.classList.toggle("watchonly", isWatchOnly);
+
+  btnBack.disabled = isWatchOnly;
+  btnBack.title = isWatchOnly ? "watch-only: verify run" : "Back (Escape)";
+
+  btnHome.disabled = isWatchOnly || noLauncher;
+  btnHome.title = isWatchOnly
+    ? "watch-only: verify run"
+    : (noLauncher ? "no launcher in this session" : "Home");
+
+  btnRecents.disabled = isWatchOnly;
+  btnRecents.title = isWatchOnly ? "watch-only: verify run" : "Recents";
+
+  btnRotate.disabled = isWatchOnly;
+  btnRotate.title = isWatchOnly ? "watch-only: verify run" : "Rotate 90°";
+
   if (isWatchOnly) {
     dinput.textContent = "watch-only";
     dinput.className = "pill warn";
@@ -252,7 +273,31 @@ function setAspect(w, h) {
   }
 }
 
+let lastGridSig = "";
+
+function gridSignature(list) {
+  if (!list.length) return "empty";
+  return JSON.stringify(list.map((s) => [
+    s.session_id, s.stream, s.connected, s.watchers > 0, s.watch_only,
+    s.has_home, s.device_name, s.app_label, s.package, s.activity,
+    s.display ? s.display.w : 0, s.display ? s.display.h : 0,
+    s.project_dir, clientLabel(s),
+  ]));
+}
+
 function renderGrid() {
+  const sig = gridSignature(sessions);
+  if (sig === lastGridSig && grid.children.length === (sessions.length || 1)) {
+    for (let i = 0; i < sessions.length; i++) {
+      const card = grid.children[i];
+      if (!card) continue;
+      card._session = sessions[i];
+      const ageEl = card.querySelector(".age");
+      if (ageEl) ageEl.textContent = age(sessions[i].age_ms) + " old";
+    }
+    return;
+  }
+  lastGridSig = sig;
   grid.textContent = "";
   if (!sessions.length) {
     const empty = el("div", "empty", "No live sessions. Start one with acos_launch — this page refreshes by itself.");
@@ -261,6 +306,7 @@ function renderGrid() {
   }
   for (const s of sessions) {
     const card = el("div", "card" + (s.stream ? "" : " off"));
+    card._session = s;
     const top = el("div", "top");
     top.appendChild(el("div", "id", s.session_id));
     const spacer = el("span"); spacer.style.flex = "1"; top.appendChild(spacer);
@@ -281,11 +327,11 @@ function renderGrid() {
     card.appendChild(proj);
     const foot = el("div", "foot");
     foot.appendChild(el("span", null, clientLabel(s)));
-    foot.appendChild(el("span", null, age(s.age_ms) + " old"));
+    foot.appendChild(el("span", "age", age(s.age_ms) + " old"));
     foot.appendChild(el("span", null, (s.display ? s.display.w + "×" + s.display.h : "-")));
     card.appendChild(foot);
     if (s.stream) {
-      card.addEventListener("click", () => openSession(s));
+      card.addEventListener("click", () => openSession(card._session));
     }
     grid.appendChild(card);
   }
@@ -306,14 +352,18 @@ async function refresh() {
         $("dstate").textContent = "session ended";
         $("dstate").className = "pill bad";
       } else {
+        const prevHasHome = current.has_home;
         current = updated;
+        if (typeof current.has_home !== "boolean" && typeof prevHasHome === "boolean") {
+          current.has_home = prevHasHome;
+        }
         $("dtitle").textContent = sessionTitle(updated);
         if (updated.display && updated.display.w && updated.display.h) {
           display = { w: updated.display.w, h: updated.display.h };
           setAspect(display.w, display.h);
         }
         if (updated.activity) $("dactivity").textContent = updated.activity;
-        applyWatchOnlyUi(updated.watch_only);
+        applyToolbarUi();
       }
     }
   } catch (error) {
@@ -359,8 +409,13 @@ function ensureWs() {
     if (!msg) return;
     if (msg.ok === false && msg.code === "VERIFY_WATCH_ONLY") {
       if (current) current.watch_only = true;
-      applyWatchOnlyUi(true);
+      applyToolbarUi();
       closeWs();
+      return;
+    }
+    if (msg.ok === false && msg.code === "HOME_UNAVAILABLE") {
+      if (current) current.has_home = false;
+      applyToolbarUi();
       return;
     }
     if (msg.ok && msg.t === "rotate" && msg.width > 0 && msg.height > 0) {
@@ -391,7 +446,7 @@ function ensureWs() {
 function sendInput(msg) {
   if (!current) return false;
   if (current.watch_only) {
-    applyWatchOnlyUi(true);
+    applyToolbarUi();
     return false;
   }
   const sock = ensureWs();
@@ -407,8 +462,8 @@ function sendInput(msg) {
 
 function renderedImageRect() {
   const rect = frame.getBoundingClientRect();
-  const nw = frame.naturalWidth || display.w || 1080;
-  const nh = frame.naturalHeight || display.h || 2400;
+  const nw = frameSize.w || frame.width || display.w || 1080;
+  const nh = frameSize.h || frame.height || display.h || 2400;
   if (!rect.width || !rect.height || !nw || !nh) return rect;
   const imgRatio = nw / nh;
   const boxRatio = rect.width / rect.height;
@@ -425,8 +480,8 @@ function renderedImageRect() {
 
 function clientToDisplay(clientX, clientY, clampOutside) {
   const r = renderedImageRect();
-  const dw = display.w || frame.naturalWidth || 1080;
-  const dh = display.h || frame.naturalHeight || 2400;
+  const dw = display.w || frameSize.w || frame.width || 1080;
+  const dh = display.h || frameSize.h || frame.height || 2400;
   if (!r.width || !r.height) return null;
   let nx = (clientX - r.left) / r.width;
   let ny = (clientY - r.top) / r.height;
@@ -439,8 +494,147 @@ function clientToDisplay(clientX, clientY, clampOutside) {
   };
 }
 
+const CRLF2 = new Uint8Array([13, 10, 13, 10]);
+
+function indexOfBytes(hay, needle, from) {
+  const start = from || 0;
+  const limit = hay.length - needle.length;
+  outer: for (let i = start; i <= limit; i++) {
+    for (let j = 0; j < needle.length; j++) {
+      if (hay[i + j] !== needle[j]) continue outer;
+    }
+    return i;
+  }
+  return -1;
+}
+
+function concatBytes(a, b) {
+  if (!a.length) return b;
+  if (!b.length) return a;
+  const out = new Uint8Array(a.length + b.length);
+  out.set(a, 0);
+  out.set(b, a.length);
+  return out;
+}
+
+function stopFrameStream() {
+  frameGeneration += 1;
+  if (streamAbort) {
+    try { streamAbort.abort(); } catch (_) {}
+    streamAbort = null;
+  }
+}
+
+function clearFrameCanvas() {
+  frameSize = { w: 0, h: 0 };
+  if (frameCtx && frame.width && frame.height) {
+    frameCtx.clearRect(0, 0, frame.width, frame.height);
+  }
+  frame.width = 0;
+  frame.height = 0;
+}
+
+async function drawDecodedFrame(part, sid, gen, ctrl) {
+  const blob = new Blob([part.payload], { type: part.contentType || "image/png" });
+  const bmp = await createImageBitmap(blob);
+  if (ctrl.signal.aborted || streamAbort !== ctrl || frameGeneration !== gen || !current || current.session_id !== sid) {
+    bmp.close();
+    return;
+  }
+  if (frame.width !== bmp.width || frame.height !== bmp.height) {
+    frame.width = bmp.width;
+    frame.height = bmp.height;
+  }
+  frameSize = { w: bmp.width, h: bmp.height };
+  if (frameCtx) {
+    frameCtx.drawImage(bmp, 0, 0);
+  }
+  bmp.close();
+  markLive();
+  setAspect(frameSize.w, frameSize.h);
+  if (display.w && display.h && ((display.w < display.h) !== (frameSize.w < frameSize.h))) {
+    display = { w: display.h, h: display.w };
+  }
+}
+
+async function startFrameStream(sid) {
+  stopFrameStream();
+  const gen = ++frameGeneration;
+  const ctrl = new AbortController();
+  streamAbort = ctrl;
+  const decoder = new TextDecoder();
+
+  while (!ctrl.signal.aborted && streamAbort === ctrl && current && current.session_id === sid) {
+    let reader = null;
+    try {
+      const response = await fetch(auth("/api/frames/" + encodeURIComponent(sid)), {
+        cache: "no-store",
+        signal: ctrl.signal,
+      });
+      if (!response.ok || !response.body) {
+        throw new Error("HTTP " + response.status);
+      }
+      reader = response.body.getReader();
+      let buf = new Uint8Array(0);
+      while (!ctrl.signal.aborted && streamAbort === ctrl) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        if (!value || !value.length) continue;
+        buf = concatBytes(buf, value);
+        let latest = null;
+        while (true) {
+          const hdrEnd = indexOfBytes(buf, CRLF2, 0);
+          if (hdrEnd < 0) break;
+          const hdrText = decoder.decode(buf.subarray(0, hdrEnd));
+          let contentType = "image/png";
+          let contentLength = -1;
+          for (const line of hdrText.split(/\r?\n/)) {
+            const colon = line.indexOf(":");
+            if (colon <= 0) continue;
+            const k = line.slice(0, colon).trim().toLowerCase();
+            const v = line.slice(colon + 1).trim();
+            if (k === "content-type") contentType = v;
+            else if (k === "content-length") contentLength = Number.parseInt(v, 10);
+          }
+          const bodyStart = hdrEnd + 4;
+          if (!(contentLength > 0)) {
+            buf = buf.slice(bodyStart);
+            continue;
+          }
+          if (buf.length < bodyStart + contentLength) break;
+          const payload = buf.slice(bodyStart, bodyStart + contentLength);
+          let nextStart = bodyStart + contentLength;
+          if (nextStart + 2 <= buf.length && buf[nextStart] === 13 && buf[nextStart + 1] === 10) {
+            nextStart += 2;
+          }
+          buf = buf.slice(nextStart);
+          latest = { contentType, payload };
+        }
+        if (latest) {
+          await drawDecodedFrame(latest, sid, gen, ctrl);
+        }
+      }
+    } catch (error) {
+      if (ctrl.signal.aborted || streamAbort !== ctrl) return;
+    } finally {
+      if (reader) {
+        try { await reader.cancel(); } catch (_) {}
+      }
+    }
+    if (ctrl.signal.aborted || streamAbort !== ctrl || !current || current.session_id !== sid) {
+      return;
+    }
+    $("offline").hidden = false;
+    $("dstate").textContent = "reconnecting";
+    $("dstate").className = "pill bad";
+    await new Promise((resolve) => setTimeout(resolve, 400));
+  }
+}
+
 function openSession(s) {
   closeWs();
+  stopFrameStream();
+  clearFrameCanvas();
   current = s;
   display = { w: (s.display && s.display.w) || 0, h: (s.display && s.display.h) || 0 };
   currentRotation = (display.w > display.h) ? 1 : 0;
@@ -454,12 +648,16 @@ function openSession(s) {
   $("dstate").textContent = s.stream ? "connecting" : "no stream";
   $("dstate").className = "pill";
   $("offline").hidden = true;
-  applyWatchOnlyUi(s.watch_only);
-  frame.removeAttribute("src");
+  applyToolbarUi();
   if (s.stream) {
-    frame.src = auth("/api/frames/" + encodeURIComponent(s.session_id));
     setAspect(display.w, display.h);
     connectEvents(s);
+    const sid = s.session_id;
+    afterLoad(() => {
+      if (current && current.session_id === sid) {
+        startFrameStream(sid);
+      }
+    });
   }
   location.hash = "s=" + encodeURIComponent(s.session_id);
   history.replaceState(null, "", location.pathname + location.search + location.hash);
@@ -468,8 +666,9 @@ function openSession(s) {
 
 function closeSession() {
   closeWs();
+  stopFrameStream();
   if (source) { source.close(); source = null; }
-  frame.removeAttribute("src");
+  clearFrameCanvas();
   overlay.textContent = "";
   current = null;
   detail.hidden = true;
@@ -486,29 +685,27 @@ function markLive() {
   $("dstate").className = "pill ok";
 }
 
-frame.addEventListener("load", () => {
-  markLive();
-  if (frame.naturalWidth && frame.naturalHeight) {
-    setAspect(frame.naturalWidth, frame.naturalHeight);
-    if (display.w && display.h && ((display.w < display.h) !== (frame.naturalWidth < frame.naturalHeight))) {
-      display = { w: display.h, h: display.w };
-    }
-  }
-});
-
 function connectEvents(s) {
   source = new EventSource(auth("/api/events/" + encodeURIComponent(s.session_id)));
   source.addEventListener("state", (message) => {
     let data = {};
     try { data = JSON.parse(message.data); } catch (error) { return; }
     const entry = data.entry || {};
+    const hello = data.hello || {};
     if (entry.display && entry.display.w) {
       display = { w: entry.display.w, h: entry.display.h };
       setAspect(display.w, display.h);
     }
-    if (typeof entry.watch_only === "boolean" && current) {
-      current.watch_only = entry.watch_only;
-      applyWatchOnlyUi(entry.watch_only);
+    if (current) {
+      if (typeof entry.watch_only === "boolean") {
+        current.watch_only = entry.watch_only;
+      }
+      if (typeof entry.has_home === "boolean") {
+        current.has_home = entry.has_home;
+      } else if (typeof hello.has_home === "boolean") {
+        current.has_home = hello.has_home;
+      }
+      applyToolbarUi();
     }
     if (entry.activity) $("dactivity").textContent = entry.activity;
     $("offline").hidden = !!data.connected;
@@ -552,8 +749,8 @@ function onEvent(event, kind) {
 }
 
 function ripple(event) {
-  const dw = display.w || frame.naturalWidth || 1080;
-  const dh = display.h || frame.naturalHeight || 2400;
+  const dw = display.w || frameSize.w || frame.width || 1080;
+  const dh = display.h || frameSize.h || frame.height || 2400;
   const imgRect = renderedImageRect();
   const ovRect = overlay.getBoundingClientRect();
   if (!imgRect.width || !imgRect.height || !ovRect.width || !ovRect.height) return;
@@ -610,7 +807,7 @@ screenWrap.addEventListener("pointerdown", (e) => {
   e.preventDefault();
   screenWrap.focus({ preventScroll: true });
   if (current.watch_only) {
-    applyWatchOnlyUi(true);
+    applyToolbarUi();
     return;
   }
   try { screenWrap.setPointerCapture(e.pointerId); } catch (_) {}
@@ -651,7 +848,7 @@ screenWrap.addEventListener("wheel", (e) => {
   };
   e.preventDefault();
   if (current.watch_only) {
-    applyWatchOnlyUi(true);
+    applyToolbarUi();
     return;
   }
   const scale = e.deltaMode === 1 ? 40 : (e.deltaMode === 2 ? 400 : 1);
@@ -698,7 +895,10 @@ function sendKeyPress(code) {
 }
 
 btnBack.addEventListener("click", () => sendKeyPress("KEYCODE_BACK"));
-btnHome.addEventListener("click", () => sendKeyPress("KEYCODE_HOME"));
+btnHome.addEventListener("click", () => {
+  if (current && current.has_home === false) return;
+  sendKeyPress("KEYCODE_HOME");
+});
 btnRecents.addEventListener("click", () => sendKeyPress("KEYCODE_APP_SWITCH"));
 btnRotate.addEventListener("click", () => {
   const next = (currentRotation + 1) % 4;
@@ -711,6 +911,7 @@ btnRotate.addEventListener("click", () => {
 $("back").addEventListener("click", closeSession);
 window.addEventListener("pagehide", () => {
   closeWs();
+  stopFrameStream();
   if (source) source.close();
 });
 refresh();

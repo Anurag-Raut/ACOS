@@ -3,7 +3,7 @@
 **Branch:** `humanview` (from `v0.4.1` / `40389d8a7`, **no PR opened, not merged**)
 **Decision:** ADR-0033 (`DECISIONS.md`) amends ADR-0027 §5
 **Spec:** `docs/HUMAN_VIEW_SPEC.md`
-**Status:** Automated CP1–CP5 complete & pushed; **Live T3 browser E2E** and **Owner one-time Gaten check** are **PENDING** (runbooks in §6–§7).
+**Status:** Automated CP1–CP5 + Fix Round 1 + Live T3 & Playwright Browser E2E complete & pushed; **Owner one-time Gaten check** remains manual (runbook in §7).
 
 ---
 
@@ -208,3 +208,56 @@ Execute from `/home/Qui/Projects/acos/.cache/wt-humanview` using `CARGO_TARGET_D
    - Live screen is crisp (`1.0×` PNG once first interaction opens `/api/input`) and responsive during navigation;
    - Taps, vertical scroll/fling, typing into a form field, `Back`, `Home`, and `Rotate` behave like an emulator window;
    - Recent actions strip shows both `agent` and `panel` actions cleanly without interfering with a concurrent agent call.
+
+---
+
+## 8. Fix Round 1 — Verifier Findings & Live Browser E2E
+
+All six verifier findings were resolved on `humanview` and verified end-to-end against live ART sessions in both T3 Code's built-in preview tab and headless Chromium (Playwright):
+
+### 8.1 Fixes Applied (`file:line`)
+
+1. **[HIGH] Immediate MJPEG closing boundary & flush** (`crates/acos-cli/src/view/mod.rs:443-475`, `crates/acos-cli/tests/humanview_cp4.rs:382-395`):
+   - `stream_frames` writes `--acosframe\r\n` as the opening prefix only on frame 1, then appends `\r\n--acosframe\r\n` immediately after every frame's payload and calls `connection.flush()` before blocking for the next frame.
+   - Regression test `view::tests::stream_frames_flushes_closing_boundary_before_blocking_for_next_frame` (`crates/acos-cli/src/view/mod.rs:1436-1573`) verifies frames 1 and 2 emit `\r\n--acosframe\r\n` before the producer blocks; `MjpegStream` in `humanview_cp4.rs` asserts the closing boundary immediately follows each part.
+2. **[HIGH] T3 Code built-in browser tab support & DOM-stable hub grid** (`crates/acos-cli/src/view/page.rs:148,182-189,276-339,560-668`, `crates/acos-cli/src/view/mod.rs:1575-1625`):
+   - Root cause of the 15 s `preview_snapshot` timeouts: (a) `<img src="/api/frames/...">` held the browser's `load` event open indefinitely on an endless multipart stream, and (b) `renderGrid()` wiped and rebuilt `.card` DOM nodes every 2 s, invalidating Playwright/T3 `aria-ref` locators mid-click.
+   - Replaced `<img id="frame">` with `<canvas id="frame">` driven post-`load` (`afterLoad`) via `startFrameStream()` (`fetch()` + `ReadableStream` multipart parser + `createImageBitmap` + `drawImage`). Kept `/api/frames/<id>` MJPEG unchanged on the server.
+   - Keyed `renderGrid()` via `lastGridSig` so 2 s `/api/sessions` refreshes update card data and `.age` text in-place without recreating `.card` elements.
+3. **[MEDIUM] Deterministic producer rate-limiter test** (`crates/acos-art/src/live_view.rs:3152-3268`):
+   - Replaced wall-sleep coordination in `empty_source_poll_does_not_rate_limit_next_frame` with an explicit `ParkWake` hook so the background `acos-live-view-tap` thread waits until signaled and only the test's `view.tick()` calls drive the source. Verified 20/20 consecutive passes.
+4. **[MEDIUM] Launcher-aware Home button (`has_home`)** (`crates/acos-services/src/{atms.rs:2415-2427,host.rs:2311-2323}`, `crates/acos-art/src/{launch.rs:1920-1924,3069,7457,7636,7666,live_view.rs:160,170,555-557}`, `crates/acos-cli/src/{engine/art.rs,engine/serve.rs,verify.rs,live_registry.rs}`, `crates/acos-cli/src/view/{hub.rs:66,100,153,176,page.rs:241-265,416-420,694-710,898-901}`):
+   - Plumbed `has_home` from `AtmsService::has_home_activity()` through `LaunchReady` + `LiveViewConfig` (`hello`) + `LiveEntry` to `/api/sessions` and SSE `state`, with a `HOME_UNAVAILABLE` WS error fallback.
+   - Single-APK sessions without a launcher disable `#btn-home` with tooltip `"no launcher in this session"`; sessions with `system.launcher` keep `#btn-home` enabled and launch `com.acos.launcher`.
+5. **[LOW] Clear cached frame on last-watcher detach** (`crates/acos-cli/src/view/hub.rs:712,2588-2658`):
+   - `Slot::detach` clears `state.frame = None` when resetting slot state, verified by `view::hub::tests::detach_clears_cached_frame_so_reattach_waits_for_fresh_frame`.
+6. **ADR numbering note** (`DECISIONS.md:1627`):
+   - Retained `ADR-0033` for HUMANVIEW1 and noted that parked PR #5 (`devpanel`) must take the next free number (`ADR-0034`+) if revived.
+
+### 8.2 Post-Fix Automated Checks (Exact Counts)
+
+- `cargo test --offline -p acos-art --lib live_view`: **22 passed, 0 failed** (190 filtered out); 20/20 loop pass on `empty_source_poll_does_not_rate_limit_next_frame`.
+- `cargo test --offline -p acos-cli --bin acos view`: **27 passed, 0 failed** (200 filtered out, includes both new regression tests).
+- `cargo test --offline -p acos-cli --bin acos live_registry`: **8 passed, 0 failed** (219 filtered out).
+- `cargo test --offline -p acos-cli --test humanview_cp1 --test humanview_cp2 --test humanview_cp3 --test humanview_cp4` (non-ignored): `cp1` **3 passed** (2 ignored), `cp2` **3 passed** (1 ignored), `cp3` **3 passed** (2 ignored), `cp4` **2 passed** (1 ignored).
+- `cargo test --release --offline -p acos-cli --test humanview_cp4 -- --ignored --nocapture` (under `run-exclusive.sh` + `guarded.sh`): **1 passed, 0 failed** (`p50_ms = 66.72 ms`, `p95_ms = 67.88 ms`, `mean_ms = 66.94 ms`, `mean_encode_ms = 1.74 ms`, `frames_dropped_latest = 0`, `events_dropped = 0`).
+- `cargo test --release --offline -p acos-cli --test humanview_cp1 --test humanview_cp2 --test humanview_cp3 -- --ignored --test-threads=1` (after fixes 1–6, before the final `renderGrid` DOM-stability tweak): `cp1` **2 passed**, `cp2` **1 passed**, `cp3` **2 passed**, **0 failed**.
+- Docs & layout: `acos-mcp` (`docs`: **1 passed**, `documentation_args`: **4 passed**, `guide`: **14 passed**), `acos-services --test modules_doc` (**2 passed**), `tools/verify/check-layout.sh` (`check-layout: ok`).
+
+### 8.3 Live Browser E2E Results
+
+- **T3 Code built-in preview tab (`y`):** Tested directly against a live `counter.apk` session using `preview_open`, `preview_snapshot`, `preview_act`, `preview_evaluate`, and `t3_preview_close` (tabs closed cleanly):
+  - `preview_snapshot` on both hub grid (~1–3 s) and `#s=t3_counter` detail view (< 1 s) succeeded after the `<canvas>` post-`load` fix.
+  - `preview_act` clicking session card by `aria-ref` (after the `lastGridSig` DOM-stability fix) and clicking live canvas at `Increment` succeeded, upgrading `540x1200` (`631,260` non-black pixels, `#btn-home` disabled with `"no launcher in this session"`) -> `1080x2400` (`interactive`, `panel touch ok @ 158,430`). Sequential `preview_snapshot` + `Rotate` click also succeeded (one back-to-back concurrent `preview_snapshot`+`preview_evaluate` right after click timed out at 15 s; sequential calls all passed).
+- **Playwright Headless Chromium E2E (`.cache/hv-e2e/e2e_browser.mjs` under `run-exclusive.sh` + `guarded.sh`):** All steps passed with `pageErrors: []`, `consoleErrors: []`, and inspected screenshots confirming rendered frames match the `acos_observe` UI tree:
+
+| Step | Scenario / Action | Result | Frame Matches Tree | Evidence |
+|---|---|---|---|---|
+| a | `counter.apk` open idle (`540x1200`) -> click `Increment` x2 -> `1080x2400` (`count == "2"`, `Home` disabled `"no launcher in this session"`) | **PASS** | `y` | `.cache/hv-e2e/out/step_a_*.png` |
+| b | `list-scroll.apk` drag + wheel scroll (`Row 0..3` -> `Row 35..38`) | **PASS** | `y` | `.cache/hv-e2e/out/step_b_*.png` |
+| c | `touch-probe.apk` long press 800 ms (`status == "long-pressed"`) | **PASS** | `y` | `.cache/hv-e2e/out/step_c_*.png` |
+| d | `form-validation.apk` focus `EditText` + type `"hello human"` | **PASS** | `y` | `.cache/hv-e2e/out/step_d_*.png` |
+| e1 | `multi-activity.apk` open second activity -> `#btn-back` -> `#btn-rotate` (`1080x2400` -> `2400x1080`) | **PASS** | `y` | `.cache/hv-e2e/out/step_e_{back,rot}.png` |
+| e2 | `hello-views.apk` + `system.launcher` (`real`) -> `#btn-home` enabled (`title="Home"`) -> opens `ACOS Home` | **PASS** | `y` | `.cache/hv-e2e/out/step_e_home.png` |
+| verify | `acos verify` watch-only (`counter.apk`, 7 s wait) renders crisp `540x1200` idle frame immediately, `watch-only: verify run` banner visible, all toolbar buttons disabled, click ignored, `verifyOk: true` | **PASS** | `y` | `.cache/hv-e2e/out/step_verify_watch.png` |
+

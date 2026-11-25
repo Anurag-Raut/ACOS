@@ -1917,9 +1917,10 @@ pub(crate) fn launch_session(
         // guest that asks for its own `ApplicationInfo` fails loudly on its
         // own).
         let primary_uid = host.package_uid(&package).map(|uid| uid as u32);
-        (host, handles, registry, primary_uid)
+        let has_home = host.has_home_activity();
+        (host, handles, registry, primary_uid, has_home)
     };
-    let (peer_host, live, peer_registry, primary_uid) = live_handles;
+    let (peer_host, live, peer_registry, primary_uid, session_has_home) = live_handles;
     let service_control = Arc::new(ServiceControl::default());
     // A live module request wakes the peer's idle wait (see `ServiceControl`).
     service_control.set_wake(peer_wakeup.write);
@@ -3065,6 +3066,7 @@ pub(crate) fn launch_session(
             &view_dir.0,
             // ADR-0029 item 4: the attached set and the live-op channel.
             &session_module_rows,
+            session_has_home,
             &service_control,
             // MPROC4 step 3b: the session's secondary processes.
             &mut secondary_pool,
@@ -7452,6 +7454,7 @@ fn interactive_serve(
     // ADR-0029 item 4: the attached modules at launch (ready line), and the
     // channel to the peer thread for live attach/detach.
     modules: &[serde_json::Value],
+    has_home: bool,
     control: &ServiceControl,
     // MPROC4 step 3b: the session's secondary processes, and the spawn requests
     // the peer thread hands over.
@@ -7629,9 +7632,11 @@ fn interactive_serve(
     // line. With no subscriber the tap does one atomic load per probe wake and
     // nothing else — no capture, no copy, no encode.
     let attach_epoch_slot = Arc::new(std::sync::OnceLock::new());
+    let mut view_config = crate::live_view::LiveViewConfig::from_env();
+    view_config.has_home = Some(has_home);
     let view = match crate::live_view::LiveView::bind(
         &sockets.join("view.sock"),
-        crate::live_view::LiveViewConfig::from_env(),
+        view_config,
         (width, height),
         std::process::id(),
         live_view_source(Arc::clone(&live.compositor), Arc::clone(&attach_epoch_slot)),
@@ -7658,6 +7663,7 @@ fn interactive_serve(
         "ok": true,
         "cmd": "ready",
         "modules": modules,
+        "has_home": has_home,
         "package": package,
         "activity": activity.unwrap_or(""),
         // VIEW1a: the live-view stream socket (`docs/LIVE_VIEW.md`), null when

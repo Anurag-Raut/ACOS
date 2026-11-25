@@ -2412,6 +2412,20 @@ impl AtmsService {
         Ok(code)
     }
 
+    /// Whether any installed activity resolves `ACTION_MAIN` + `CATEGORY_HOME`.
+    #[must_use]
+    pub fn has_home_activity(&self) -> bool {
+        let Ok(state) = self.state.lock() else {
+            return false;
+        };
+        let intent = crate::ams::IntentFacts {
+            action: Some("android.intent.action.MAIN".into()),
+            categories: vec!["android.intent.category.HOME".into()],
+            ..Default::default()
+        };
+        state.ams.manifests.resolve_activity(&intent).is_ok()
+    }
+
     /// The seeded primary package (tests/inspection).
     #[must_use]
     pub fn primary_package(&self) -> Option<String> {
