@@ -1,7 +1,6 @@
 # Live view — protocol v1 (producer side)
 
-Status: **implemented** (producer: track VIEW1a; browser hub: track VIEW1b; owner
-decision ADR-0027). §1–§7 are the producer contract; §8 is the hub,
+Status: **implemented** (producer: track VIEW1a; browser hub: track VIEW1b; interactive input: track HUMANVIEW1; owner decisions ADR-0027 + ADR-0033). §1–§7 are the producer contract; §8 is the hub,
 `acos view`. Nothing here changes an agent-facing reply, the settle rules or a
 tracked benchmark metric.
 
@@ -28,8 +27,11 @@ the session's frame path does **one atomic load** and nothing else.
 
 ## 1. Client → server
 
-One JSON line, sent immediately after connecting, then nothing else. The stream
-is **view-only**: the producer ignores any later input (ADR-0027 §5).
+One JSON line, sent immediately after connecting, then nothing else on
+`view.sock`. The frame/event socket itself stays unidirectional (`H`/`F`/`E`
+out); interactive human input from `acos view` is routed by the hub through the
+session's `serve.sock` `InputDispatch` path (`panel_*`, ADR-0033), never injected
+over `view.sock`.
 
 ```json
 {"v":1,"subscribe":{"frames":true,"events":true,"max_fps":15,"scale":0.5,"format":"png"}}
@@ -131,19 +133,22 @@ JSON object, one per line of the feed:
 |---|---|
 | `ts_ms` | host wall clock (ms since the Unix epoch) |
 | `kind` | `"action"` \| `"activity"` \| `"lifecycle"` \| `"settle"` |
-| `cmd` | for `action`/`lifecycle`: `tap` \| `key` \| `text` \| `swipe` \| `tree` \| `screenshot` \| `reset` \| `close` \| `launch` \| `session` |
+| `source` | `"agent"` (agent tool / CLI / MCP) or `"panel"` (human input via `acos view` `/api/input`), when emitted by an input or action event |
+| `cmd` | for `action`/`lifecycle`: `tap` \| `touch` \| `scroll` \| `key` \| `text` \| `swipe` \| `rotate` \| `tree` \| `screenshot` \| `reset` \| `close` \| `launch` \| `session` |
 | `x`,`y`,`x2`,`y2` | input coordinates (display space) when the command had them |
 | `key` | key code for `key`: **masked** (`"[masked]"`) exactly when `text` is (a key code is a keystroke, and `KEYCODE_A`…`KEYCODE_Z` spell a secret) |
 | `text` | typed text: **masked** (`"[masked]"`) by default; shown (truncated to 64 characters + `…`) only when the reply of that very command carries a fresh tree that proves a **focused, non-password** field. A tree with no focused node, a password field, no tree at all, or a tree from an earlier command all mask |
-| `status` | `"ok"` or the launcher's structured code (`ELEMENT_OFFSCREEN`, `NO_FRESH_FRAME`, …) |
+| `status` | `"ok"` or the launcher's structured code (`ELEMENT_OFFSCREEN`, `NO_FRESH_FRAME`, `VERIFY_WATCH_ONLY`, …) |
 | `activity` | focused activity (`<package>/<Class>`) on `activity`/`lifecycle` events |
 | `frame_seq` | the launcher's logical frame id of the reply this event describes, when it has one |
 | `settle` | present only when the reply's observation was **not settled** (a timeout or an animating screen): the launcher's settle object, verbatim |
 
 Event kinds:
 
-* `action` — every command the launcher executed (`tap`, `key`, `text`, `tree`,
-  `screenshot`, `swipe`), with its result `status`. Emitted for failures too.
+* `action` — every command the launcher executed (`tap`, `touch`, `scroll`,
+  `key`, `text`, `tree`, `screenshot`, `swipe`, `rotate`), with its `source`
+  (`"agent"` or `"panel"`) and result `status`. Emitted for failures and
+  `VERIFY_WATCH_ONLY` refusals too.
 * `activity` — the focused activity changed (once per distinct value).
 * `lifecycle` — `launch` (the ready line, `status: "ok"` or the failure code),
   `reset`, `close`, `session` (the session ended by itself: guest exit, timeout,
@@ -235,9 +240,13 @@ changes, and removed on destroy/close/daemon exit. Document:
   "project_dir": "/home/Qui/Projects/gaten",
   "apk": "/home/Qui/Projects/gaten/android/app/build/outputs/apk/debug/app-debug.apk",
   "package": "com.gaten",
+  "app_label": "Gaten",
+  "device_name": "Gaten Checkout",
+  "watch_only": false,
+  "serve_socket": "/run/user/1000/acos/mcp-5678/session.sock",
   "activity": "com.gaten/.MainActivity",
   "display": {"w": 1080, "h": 2400},
-  "stream_socket": "/run/user/1000/acos-art-5701-0/view.sock"
+  "stream_socket": "/run/user/1000/acos-view-5701-0/view.sock"
 }
 ```
 
@@ -246,6 +255,12 @@ changes, and removed on destroy/close/daemon exit. Document:
   `{"name":…,"version":…}`) and `ACOS_VIEW_PROJECT` (the MCP server's working
   directory). A CLI-started daemon publishes `"client": {"name": "acos-cli",
   "version": ""}` and its own working directory.
+* `device_name` comes from `acos_launch {device_name}` or
+  `acos launch --device-name`, sanitized (control chars/newlines/`=` stripped,
+  max 64 chars). When absent, the page falls back to `<app_label or package> · <session_id>`.
+* `watch_only` is `true` for `acos verify` runs (`serve_socket: null`); normal
+  sessions publish `watch_only: false` and `serve_socket` so the hub can route
+  panel input.
 * `ACOS_VIEW_REGISTRY_DIR` overrides the directory (tests and tools only).
 * **Stale entries**: a reader must treat an entry whose `daemon_pid` is not
   alive (`kill(pid, 0)` → `ESRCH`) as stale and delete it — a SIGKILLed daemon
@@ -287,6 +302,10 @@ away from the tracked M4–M8 metrics — and it is lossless, so half-resolution
 text is readable by construction. JPEG stays selectable (per subscriber, or
 `ACOS_VIEW_FORMAT=jpeg`) and wins on bytes for image-heavy screens. Both are far
 below the 15 fps budget (66 ms): a frame costs ≤ 12 ms of a separate thread.
+At full `1.0` scale (1080×2400) for interactive `acos view` (HUMANVIEW1), fast
+adaptive PNG stays ~10× faster to encode than scalar JPEG (**2.08 ms** mean
+encode, ~56 KB/frame on `counter.apk`) and delivers **p50 = 66.70 ms, p95 = 68.90 ms**
+input-to-changed-frame latency at 30 fps.
 
 Readability at 0.5 is checked by eye on the saved frames (`counter`: "Counter",
 "1", "Increment", "Reset" all legible in both formats).
@@ -316,12 +335,13 @@ current activity is in the registry entry and the `H` hello names the display
 and the active format/scale. See `results/handoff/VIEW1a.md` for the viewer-on
 benchmark table and the viewer-off A/B.
 
-## 8. The browser hub (`acos view`, VIEW1b)
+## 8. The browser hub (`acos view`, VIEW1b + HUMANVIEW1)
 
 `acos view` is the consumer the owner uses: one process that serves a single
-self-contained page and proxies the sessions' streams to it. It is the **only**
-subscriber a session has while someone watches, and it holds no session open on
-its own.
+self-contained page, proxies the sessions' streams to it, and routes interactive
+human input back to non-verify sessions (ADR-0033 amending ADR-0027 §5). It is
+the **only** stream subscriber a session has while someone watches, and it holds
+no session open on its own.
 
 ```bash
 acos view                 # prints one line, then serves until it is stopped
@@ -348,12 +368,14 @@ acos view: http://127.0.0.1:54321/?t=<token>
   existing one that is another uid's, not a directory or a symlink is refused.
 * **Token on every request.** A fresh 32-byte token (256 bits, hex) is read from
   `/dev/urandom` at startup and compared in constant time; `/?t=` missing or
-  wrong is `HTTP 403` on the page, the JSON API and both streams. Only `GET` is
-  answered (`405` otherwise). The token is printed once and never logged again.
+  wrong is `HTTP 403` on the page, the JSON API, the MJPEG/SSE streams, and the
+  `/api/input` WebSocket. Only `GET` is answered (`405` otherwise). The token is
+  printed once and never logged again.
 * **Browsing.** The page polls `/api/sessions` every 2 s: a grid of live
-  sessions from the registry (agent/client, project dir, APK/package, current
-  activity, age, display, watchers) with stale entries swept and hidden. Clicking
-  one opens it.
+  sessions from the registry (title from `device_name` or
+  `<app_label or package> · <session_id>`, agent/client, project dir,
+  APK/package, current activity, age, display, watchers, `watch_only`) with
+  stale entries swept and hidden. Clicking one opens it.
 * **Watching one session.** The page opens two streams for the clicked session:
   `/api/frames/<session_id>` (one `multipart/x-mixed-replace` MJPEG response of
   the producer's PNG/JPEG frames, with `X-Frame-Seq`/`X-Frame-Size` and only the
@@ -361,14 +383,35 @@ acos view: http://127.0.0.1:54321/?t=<token>
   (SSE: one `state` event — registry entry + `hello` — then one `ev` per `E`
   message, a `lag` event when the bounded ring dropped history, and a
   keep-alive). Overlays are drawn client-side from those events: a tap ripple at
-  the event's `x/y` (display space, scaled to the frame), the current activity
-  and the recent actions (tool, masked text, status). The page is ~15 KB of
-  inline HTML/CSS/JS: no CDN, no external request, nothing served from disk, and
-  no path parameter is used as a filesystem path (a session id is only matched
-  against the registry).
-* **View-only.** There is no request shape that forwards input to a guest: the
-  hub has no input path at all (ADR-0027 §5), and nothing in it writes to a
-  session socket after the subscribe line.
+  the event's `x/y` (display space, scaled to the frame), the current activity,
+  and the recent actions (`agent` / `panel` source pill, tool, masked text,
+  status). The page is ~29 KB of self-contained inline HTML/CSS/JS: no CDN, no
+  external request, nothing served from disk, and no path parameter is used as a
+  filesystem path (a session id is only matched against the registry).
+* **Interactive input (`/api/input/<session_id>?t=<token>`, ADR-0033).**
+  - Opened **lazily** on the first human pointer, wheel, keyboard, or toolbar
+    (`Back`, `Home`, `Recents`, `Rotate`) interaction over an RFC 6455 WebSocket
+    with the same `Host`, constant-time token, and 64-connection cap checks.
+  - Messages are JSON in display coordinates:
+    - `{"t":"touch","phase":"down|move|up|cancel","id":0,"x":540,"y":1200}`
+    - `{"t":"scroll","x":540,"y":1200,"dx":0,"dy":450}`
+    - `{"t":"key","code":"KEYCODE_BACK","phase":"down|up|press"}`
+    - `{"t":"text","s":"hello"}`
+    - `{"t":"rotate","rotation":0|1|2|3}`
+  - **Ordering & safety.** One ordered worker per session routes each message
+    over the session's `serve_socket` via the existing `InputDispatch` path
+    (`panel_touch`, `panel_key`, `panel_text`, `panel_rotate`), tagging every
+    emitted event `source: "panel"` in `/api/events`. A disconnect mid-gesture
+    automatically sends `cancel` for any active pointer.
+  - **Dynamic stream upgrade.** Watch-only stays `0.5` PNG @ `15` fps. While an
+    input WebSocket is open, the hub upgrades the upstream subscription to `1.0`
+    PNG @ `30` fps and reverts back to `0.5` PNG @ `15` fps when the last input
+    socket closes.
+* **Verify runs stay watch-only.** For sessions owned by `acos verify`
+  (`watch_only: true`), the page shows a `watch-only: verify run` banner with
+  disabled toolbar buttons, and `/api/input` refuses every message with
+  `{"ok":false,"code":"VERIFY_WATCH_ONLY"}` while recording the refusal in the
+  event feed; the verify verdict and settle rules are unaffected.
 * **One upstream per session, only while watched.** The first browser
   connection to a session makes the hub connect to its `stream_socket` and send
   the one subscribe line; later connections join the same subscription (one
@@ -387,7 +430,8 @@ acos view: http://127.0.0.1:54321/?t=<token>
   no plugin (ADR-0027 §3).
 * **Cost.** `acos view` is a separate process that only runs when it is started;
   it changes nothing on the producer's command path, so the tracked M4–M8
-  metrics are unaffected when nobody views (see `results/handoff/VIEW1b.md`).
+  metrics, memory, and idle CPU match `v0.4.1` within noise both with `acos view`
+  closed and open-but-idle (see `results/handoff/HUMANVIEW1/REPORT.md`).
 
 The dev-only `ACOS_VIEW_STATS_FILE` seam (§3, measurement only) now also writes
 once when the last subscriber leaves, so a consumer test can show the producer's

@@ -1609,3 +1609,20 @@ Modules live in `acos-services` and run on the binder peer thread (`Module::cont
 - `acos-services` stays decoupled from `acos-art` process handles and probe loops; unit tests in `acos-services` can inspect the queued `GuestCommand`s directly via `ServiceHost::drain_guest_commands`.
 - The module itself never computes or fabricates guest layout; host-computed geometry flows from `WmsState` through `GuestCommand` to the guest's activity override `Configuration` and `relayout`.
 
+## ADR-0033 — Interactive `acos view` (amends ADR-0027 §5, HUMANVIEW1, 2026-11-25)
+
+**Context.** ADR-0027 §5 kept `acos view` strictly view-only so human clicks could not race an agent driving the same session. Owner request (HUMANVIEW1, `docs/HUMAN_VIEW_SPEC.md`): humans should be able to interact with a live session in `acos view` (inside T3 Code's built-in browser tab or any local browser) like a normal emulator window—tapping, dragging, scrolling, typing, pressing Back/Home/Recents, and rotating—while agents keep driving the same session and stay able to distinguish human actions from their own.
+
+**Decision.** ADR-0027 §5 is amended: `acos view` accepts interactive human input on live (non-verify) sessions under the same local security, provenance, and zero-cost invariants:
+
+1. **Local, Host-checked, token-gated WebSocket.** Input arrives over one WebSocket per watched session, `/api/input/<session_id>?t=<token>`, using a small hand-written RFC 6455 frame codec in `crates/acos-cli/src/view/ws.rs` (no new network crate). Connections enforce the ADR-0027 §1 / VIEW1c bounds: `127.0.0.1`-only bind, exact `Host: 127.0.0.1:<port>` check, constant-time 256-bit token check, 64-connection cap, and `SO_PEERCRED` same-uid verification on the upstream socket.
+2. **Existing guest input path + provenance (`source: panel`).** The hub runs one ordered worker per session that translates `touch` (`down`/`move`/`up`/`cancel`), `scroll`, `key`, `text`, and `rotate` messages into the session's existing `InputDispatch` (`panel_touch`, `panel_key`, `panel_text`, `panel_rotate`), never introducing a separate guest input implementation. Every event dispatched this way is tagged `source: "panel"` in `/api/events` and the producer's `E` feed, while agent tool actions are tagged `source: "agent"`. A WebSocket disconnect mid-gesture dispatches `cancel` for any active pointer.
+3. **Verify runs stay strictly watch-only.** Sessions launched by `acos verify` advertise `watch_only: true` in the live registry and refuse all `/api/input` messages with `VERIFY_WATCH_ONLY` (recorded in the event feed; verdict and settle semantics unchanged).
+4. **Zero-cost when unused; 1.0× PNG @ 30 fps while interacting.** `/api/input` is opened lazily on first human interaction. Watch-only viewers stay at `0.5` scale PNG @ `15` fps. While at least one `/api/input` WebSocket is open on a non-verify session, the hub upgrades its single upstream subscription to `1.0` scale PNG @ `30` fps (measured **2.08 ms** mean encode at 1080×2400 on this host, vs ~40+ ms for scalar 1.0× JPEG in the `image` crate) and reverts to `0.5` PNG @ `15` fps when the last input socket closes. With no viewer connected, the producer still performs a single atomic load and zero encoding.
+
+**Consequences.**
+- Input-to-changed-frame latency measures **p50 = 66.70 ms, p95 = 68.90 ms** (50 reps, 1080×2400 PNG @ 30 fps; targets ≤ 100 ms / ≤ 200 ms).
+- 4-rep interleaved A/B against `v0.4.1` (`acos_bench.py --phase memory,latency --animations on`) passes both the old median gate and the lattice trimmed-mean gate across all 32 metrics (`within-noise`), and 4-rep interleaved idle CPU with a page open and idle (`0.242 %`) matches closed (`0.233 %`).
+- `docs/LIVE_VIEW.md` §8, `docs/AGENT_GUIDE.md`, and `docs/MCP.md` are updated to reflect interactive `acos view` and `source: panel`.
+
+
