@@ -72,6 +72,8 @@ struct HeldArtSession {
     /// The agent's `acos_launch {label}` (empty when unset): the human handle
     /// `session list` / `acos_status` print beside the session id.
     label: Mutex<String>,
+    /// Optional agent-provided display name (`acos_launch {device_name}` / `--device-name`).
+    device_name: Mutex<Option<String>>,
     /// When the current launch started (ms since the epoch), for the `age_s`
     /// column of `session list`.
     started_ms: Mutex<u64>,
@@ -96,6 +98,17 @@ impl HeldArtSession {
             .started_ms
             .lock()
             .unwrap_or_else(|e| e.into_inner()) = crate::live_registry::now_ms();
+    }
+
+    fn set_device_name(&self, name: Option<String>) {
+        *self.device_name.lock().unwrap_or_else(|e| e.into_inner()) = name;
+    }
+
+    fn device_name(&self) -> Option<String> {
+        self.device_name
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
     }
 
     fn label(&self) -> String {
@@ -175,6 +188,8 @@ impl crate::adb::AdbSessionOps for HeldArtSession {
             guest_pid: session.guest_pid(),
             launcher_pid: session.launcher_pid(),
             apk_path: session.apk_path().to_path_buf(),
+            device_name: self.device_name(),
+            extra_apks: session.extra_apks().to_vec(),
         })
     }
 
@@ -256,6 +271,47 @@ impl crate::adb::AdbSessionOps for HeldArtSession {
             return Err("guest exited".to_string());
         }
         session.panel_text(text).map_err(|e| e.to_string())
+    }
+
+    fn adb_tap(&self, x: i32, y: i32) -> Result<(), String> {
+        let mut session = self.session.lock().unwrap_or_else(|e| e.into_inner());
+        if session.liveness().is_some() {
+            return Err("guest exited".to_string());
+        }
+        session.adb_tap(x, y).map_err(|e| e.to_string())
+    }
+
+    fn adb_swipe(
+        &self,
+        x1: i32,
+        y1: i32,
+        x2: i32,
+        y2: i32,
+        duration_ms: u64,
+    ) -> Result<(), String> {
+        let mut session = self.session.lock().unwrap_or_else(|e| e.into_inner());
+        if session.liveness().is_some() {
+            return Err("guest exited".to_string());
+        }
+        session
+            .adb_swipe(x1, y1, x2, y2, duration_ms)
+            .map_err(|e| e.to_string())
+    }
+
+    fn adb_key(&self, code: i32, longpress: bool) -> Result<(), String> {
+        let mut session = self.session.lock().unwrap_or_else(|e| e.into_inner());
+        if session.liveness().is_some() {
+            return Err("guest exited".to_string());
+        }
+        session.adb_key(code, longpress).map_err(|e| e.to_string())
+    }
+
+    fn adb_text(&self, text: &str) -> Result<(), String> {
+        let mut session = self.session.lock().unwrap_or_else(|e| e.into_inner());
+        if session.liveness().is_some() {
+            return Err("guest exited".to_string());
+        }
+        session.adb_text(text).map_err(|e| e.to_string())
     }
 
     fn stream_socket(&self) -> Option<PathBuf> {
@@ -730,6 +786,27 @@ impl ServeEngine {
             .and_then(Value::as_str)
             .unwrap_or_default()
             .to_string();
+        let device_name: Option<String> = match args.get("device_name") {
+            None | Some(Value::Null) => None,
+            Some(Value::String(s)) => {
+                let trimmed = s.trim();
+                if trimmed.is_empty() {
+                    None
+                } else {
+                    Some(trimmed.to_string())
+                }
+            }
+            Some(other) => {
+                return art_failure(
+                    request_id,
+                    Some(id),
+                    trust,
+                    ErrorCode::InvalidArgument,
+                    format!("device_name must be a string (got {})", json_kind(other)),
+                    json!({"field": "device_name"}),
+                )
+            }
+        };
         let verb_started = std::time::Instant::now();
         // P9: launch consumes P1/P3b's settle vocabulary. `strict` is the
         // default and unchanged; `fast` binds the first traversal's probe sample
@@ -1048,6 +1125,9 @@ impl ServeEngine {
                     // frame (the daemon's whole point); never boot a second
                     // guest.
                     held.note_launch(&agent_label);
+                    if device_name.is_some() {
+                        held.set_device_name(device_name.clone());
+                    }
                     let device_panel = self.adb.as_ref().map(|adb| {
                         let ops: Arc<dyn crate::adb::AdbSessionOps> = Arc::clone(&held) as _;
                         adb.register(id, ops)
@@ -1161,6 +1241,7 @@ impl ServeEngine {
                     artifacts: artifacts.clone(),
                     trust,
                     label: Mutex::new(String::new()),
+                    device_name: Mutex::new(device_name),
                     started_ms: Mutex::new(0),
                     launch_token: Mutex::new(String::new()),
                     session: Mutex::new(session),

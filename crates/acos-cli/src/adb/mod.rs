@@ -7,6 +7,7 @@
 //! session state.
 
 pub mod bridge;
+pub mod console;
 pub mod shell;
 pub mod slots;
 pub mod verify_view;
@@ -16,11 +17,12 @@ use std::collections::HashMap;
 use std::io::ErrorKind;
 use std::net::{Shutdown, TcpStream};
 use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU16, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
 
+use acos_apk::Apk;
 use serde_json::{json, Value};
 
 use bridge::{
@@ -29,6 +31,71 @@ use bridge::{
 };
 pub use shell::{AdbSessionOps, AdbSessionSnapshot, AdbShellState};
 use slots::{claim_slot, lock_dir_from_env, SlotClaim, SlotInfo};
+
+const MAX_DEVICE_NAME_CHARS: usize = 64;
+
+/// Sanitize a caller-provided or derived device display name:
+/// strip control characters / newlines / `=`, collapse whitespace, cap at 64 chars,
+/// and fall back to `fallback` if empty.
+#[must_use]
+pub fn sanitize_device_name(raw: &str, fallback: &str) -> String {
+    let cleaned = sanitize_single_pass(raw);
+    if !cleaned.is_empty() {
+        return cleaned;
+    }
+    let fb = sanitize_single_pass(fallback);
+    if !fb.is_empty() {
+        fb
+    } else {
+        "ACOS".to_string()
+    }
+}
+
+fn sanitize_single_pass(raw: &str) -> String {
+    let filtered: String = raw
+        .chars()
+        .map(|c| if c.is_control() || c == '=' { ' ' } else { c })
+        .collect();
+    let collapsed = filtered.split_whitespace().collect::<Vec<_>>().join(" ");
+    let capped: String = collapsed.chars().take(MAX_DEVICE_NAME_CHARS).collect();
+    capped.trim().to_string()
+}
+
+/// Resolve the APK's human application label (`AndroidManifest.xml`), falling back to `package`.
+#[must_use]
+pub fn resolve_app_display_name(apk_path: &Path, package: &str) -> String {
+    if !apk_path.as_os_str().is_empty() {
+        if let Ok(apk) = Apk::open(apk_path) {
+            if let Ok(manifest) = apk.manifest() {
+                let res = apk.resources().ok().flatten();
+                if let Some(label) = manifest.app_label(res.as_ref()) {
+                    let trimmed = label.trim();
+                    if !trimmed.is_empty() {
+                        return trimmed.to_string();
+                    }
+                }
+            }
+        }
+    }
+    if package.trim().is_empty() {
+        "ACOS".to_string()
+    } else {
+        package.to_string()
+    }
+}
+
+/// Default device name when `device_name` is unset or blank: `<app label or package> · <session_id>`.
+#[must_use]
+pub fn default_device_name(apk_path: &Path, package: &str, session_id: &str) -> String {
+    let label = sanitize_device_name(&resolve_app_display_name(apk_path, package), package);
+    let sid = sanitize_device_name(&short_session_id(session_id), "acos");
+    let suffix = format!(" · {sid}");
+    let suffix_chars = suffix.chars().count();
+    let max_label_chars = MAX_DEVICE_NAME_CHARS.saturating_sub(suffix_chars);
+    let trimmed_label: String = label.chars().take(max_label_chars).collect();
+    let combined = format!("{}{suffix}", trimmed_label.trim());
+    sanitize_device_name(&combined, &sid)
+}
 
 /// Coordinates all adb-exposed sessions for one `acos serve --adb` daemon.
 pub struct AdbManager {
@@ -92,14 +159,25 @@ impl AdbManager {
         };
 
         let snap = target.snapshot();
-        let (pkg, ini_pid) = match &snap {
+        let (pkg, ini_pid, apk_path, requested_name) = match &snap {
             Ok(s) => (
                 s.package.clone(),
                 s.launcher_pid.unwrap_or_else(std::process::id),
+                s.apk_path.clone(),
+                s.device_name.clone(),
             ),
-            Err(_) => ("unknown".to_string(), std::process::id()),
+            Err(_) => (
+                "unknown".to_string(),
+                std::process::id(),
+                PathBuf::new(),
+                None,
+            ),
         };
-        let avd_name = format!("ACOS {pkg} {}", short_session_id(session_id));
+        let fallback_name = default_device_name(&apk_path, &pkg, session_id);
+        let avd_name = requested_name
+            .as_deref()
+            .map(|raw| sanitize_device_name(raw, &fallback_name))
+            .unwrap_or(fallback_name);
         let token = random_bearer_token();
         let grpc_port_ref = Arc::new(AtomicU16::new(0));
         let ini_spec = IniSpec {
@@ -219,7 +297,7 @@ impl AdbManager {
     }
 }
 
-/// One active adb listener + slot claim + discovery ini bound to a live ACOS session.
+/// One active adb listener + console listener + slot claim + discovery ini bound to a live ACOS session.
 pub struct ExposedSession {
     slot: SlotInfo,
     avd_name: String,
@@ -229,6 +307,7 @@ pub struct ExposedSession {
     stop_event_fd: OwnedFd,
     active_conns: Arc<Mutex<Vec<TcpStream>>>,
     accept_thread: Mutex<Option<JoinHandle<()>>>,
+    console_thread: Mutex<Option<JoinHandle<()>>>,
     slot_claim: Mutex<Option<SlotClaim>>,
 }
 
@@ -250,9 +329,13 @@ impl ExposedSession {
         let slot = claim.info.clone();
         let closing = Arc::new(AtomicBool::new(false));
         let active_conns: Arc<Mutex<Vec<TcpStream>>> = Arc::new(Mutex::new(Vec::new()));
-        let shell_state = Arc::new(Mutex::new(AdbShellState::default()));
+        let shell_state = Arc::new(Mutex::new(AdbShellState {
+            avd_name: avd_name.clone(),
+            ..Default::default()
+        }));
 
         let listener = claim.listener.try_clone()?;
+        let console_listener = claim.console_listener.try_clone()?;
         let closing_bg = Arc::clone(&closing);
         let conns_bg = Arc::clone(&active_conns);
 
@@ -269,6 +352,36 @@ impl ExposedSession {
                 );
             })?;
 
+        let closing_console = Arc::clone(&closing);
+        let conns_console = Arc::clone(&active_conns);
+        let avd_console = avd_name.clone();
+        let console_handle = match std::thread::Builder::new()
+            .name(format!("acos-emu-{}", slot.console_port))
+            .spawn(move || {
+                console_accept_loop(
+                    console_listener,
+                    stop_raw_fd,
+                    closing_console,
+                    avd_console,
+                    conns_console,
+                );
+            }) {
+            Ok(h) => h,
+            Err(err) => {
+                closing.store(true, Ordering::Release);
+                let one: u64 = 1;
+                unsafe {
+                    libc::write(
+                        stop_event_fd.as_raw_fd(),
+                        (&one as *const u64).cast::<libc::c_void>(),
+                        std::mem::size_of::<u64>(),
+                    );
+                }
+                let _ = handle.join();
+                return Err(err);
+            }
+        };
+
         Ok(Self {
             slot,
             avd_name,
@@ -278,6 +391,7 @@ impl ExposedSession {
             stop_event_fd,
             active_conns,
             accept_thread: Mutex::new(Some(handle)),
+            console_thread: Mutex::new(Some(console_handle)),
             slot_claim: Mutex::new(Some(claim)),
         })
     }
@@ -298,7 +412,7 @@ impl ExposedSession {
             return;
         }
         let _ = std::fs::remove_file(&self.ini_path);
-        // Wake the accept loop poll() with zero delay.
+        // Wake both accept loops' poll() with zero delay.
         let one: u64 = 1;
         unsafe {
             libc::write(
@@ -316,6 +430,14 @@ impl ExposedSession {
         }
         if let Some(handle) = self
             .accept_thread
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .take()
+        {
+            let _ = handle.join();
+        }
+        if let Some(handle) = self
+            .console_thread
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .take()
@@ -396,6 +518,60 @@ fn accept_loop(
     }
 }
 
+fn console_accept_loop(
+    listener: std::net::TcpListener,
+    stop_fd: i32,
+    closing: Arc<AtomicBool>,
+    avd_name: String,
+    active_conns: Arc<Mutex<Vec<TcpStream>>>,
+) {
+    let listener_fd = listener.as_raw_fd();
+    while !closing.load(Ordering::Acquire) {
+        match listener.accept() {
+            Ok((stream, _)) => {
+                if closing.load(Ordering::Acquire) {
+                    let _ = stream.shutdown(Shutdown::Both);
+                    break;
+                }
+                if let Ok(cloned) = stream.try_clone() {
+                    let mut guard = active_conns.lock().unwrap_or_else(|e| e.into_inner());
+                    if guard.len() > 32 {
+                        guard.clear();
+                    }
+                    guard.push(cloned);
+                }
+                let avd_name = avd_name.clone();
+                let closing_conn = Arc::clone(&closing);
+                std::thread::spawn(move || {
+                    console::handle_connection(stream, &avd_name, closing_conn);
+                });
+            }
+            Err(e) if e.kind() == ErrorKind::WouldBlock => {
+                let mut pfds = [
+                    libc::pollfd {
+                        fd: listener_fd,
+                        events: libc::POLLIN,
+                        revents: 0,
+                    },
+                    libc::pollfd {
+                        fd: stop_fd,
+                        events: libc::POLLIN,
+                        revents: 0,
+                    },
+                ];
+                let rc = unsafe { libc::poll(pfds.as_mut_ptr(), 2, -1) };
+                if rc < 0 && std::io::Error::last_os_error().kind() != ErrorKind::Interrupted {
+                    break;
+                }
+                if (pfds[1].revents & libc::POLLIN) != 0 {
+                    break;
+                }
+            }
+            Err(_) => break,
+        }
+    }
+}
+
 fn short_session_id(id: &str) -> String {
     if id.chars().count() <= 12 {
         id.to_string()
@@ -434,7 +610,6 @@ mod tests {
     use super::*;
     use acos_protocol::ui::UiTree;
     use std::os::unix::fs::PermissionsExt;
-    use std::path::Path;
 
     struct FakeOps {
         pid: u32,
@@ -463,6 +638,8 @@ mod tests {
                 guest_pid: Some(self.pid),
                 launcher_pid: Some(self.pid),
                 apk_path: PathBuf::from("/tmp/fake.apk"),
+                device_name: None,
+                extra_apks: Vec::new(),
             })
         }
         fn rotate(&self, _: u8) -> Result<(), String> {
@@ -484,6 +661,18 @@ mod tests {
             Ok(())
         }
         fn panel_text(&self, _: &str) -> Result<(), String> {
+            Ok(())
+        }
+        fn adb_tap(&self, _: i32, _: i32) -> Result<(), String> {
+            Ok(())
+        }
+        fn adb_swipe(&self, _: i32, _: i32, _: i32, _: i32, _: u64) -> Result<(), String> {
+            Ok(())
+        }
+        fn adb_key(&self, _: i32, _: bool) -> Result<(), String> {
+            Ok(())
+        }
+        fn adb_text(&self, _: &str) -> Result<(), String> {
             Ok(())
         }
         fn stream_socket(&self) -> Option<PathBuf> {
@@ -723,5 +912,27 @@ while True:
         mgr.shutdown_all();
         let _ = std::fs::remove_dir_all(&base);
     }
-}
 
+    #[test]
+    fn sanitize_device_name_strips_controls_equals_collapses_and_caps() {
+        assert_eq!(
+            sanitize_device_name("  My\n\x00App=v2\t (test)  ", "fallback"),
+            "My App v2 (test)"
+        );
+        assert_eq!(sanitize_device_name("  \n===\t ", "Counter · s1"), "Counter · s1");
+        let long = "A".repeat(90);
+        let capped = sanitize_device_name(&long, "fallback");
+        assert_eq!(capped.chars().count(), 64);
+    }
+
+    #[test]
+    fn default_device_name_uses_package_fallback_and_preserves_session_id() {
+        let name = default_device_name(Path::new("/nonexistent/app.apk"), "com.example.app", "s_42");
+        assert_eq!(name, "com.example.app · s_42");
+
+        let long_pkg = "com.example.".to_string() + &"very_long_segment_".repeat(5);
+        let long_name = default_device_name(Path::new("/nonexistent/app.apk"), &long_pkg, "s_99");
+        assert!(long_name.chars().count() <= 64);
+        assert!(long_name.ends_with(" · s_99"), "got {long_name}");
+    }
+}

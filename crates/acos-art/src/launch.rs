@@ -9025,6 +9025,10 @@ fn interactive_serve(
                         }
                     }
                 };
+                let key_longpress = request
+                    .get("longpress")
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false);
                 // P1: the fast baseline is the tree *before* the input is
                 // published, so a sample that differs from it can only be the
                 // input's own state change. The publish timestamp is the zero
@@ -9136,6 +9140,32 @@ fn interactive_serve(
                         ("type_text", _) => live
                             .input
                             .type_text(text_arg.as_deref().unwrap_or_default(), ack_wait),
+                        (_, Some(code)) if key_longpress => {
+                            let down_ns = acos_services::input_channel::monotonic_nanos();
+                            live.input
+                                .key_event(
+                                    acos_services::input_channel::KEY_ACTION_DOWN,
+                                    code,
+                                    0,
+                                    1,
+                                    down_ns,
+                                    down_ns,
+                                    ack_wait,
+                                )
+                                .and_then(|_| {
+                                    std::thread::sleep(Duration::from_millis(550));
+                                    let up_ns = acos_services::input_channel::monotonic_nanos();
+                                    live.input.key_event(
+                                        acos_services::input_channel::KEY_ACTION_UP,
+                                        code,
+                                        0,
+                                        1,
+                                        down_ns,
+                                        up_ns,
+                                        ack_wait,
+                                    )
+                                })
+                        }
                         (_, Some(code)) => live.input.key(code, ack_wait),
                         _ => unreachable!(),
                     }

@@ -48,8 +48,8 @@ pub fn avd_running_dir_from_env() -> PathBuf {
 }
 
 /// Remove stale ACOS `pid_<pid>.ini` files in `dir` whose owning pid is dead
-/// (`kill(pid, 0)` -> `ESRCH`) AND whose `avd.name` starts with `ACOS `.
-/// Never touches real Android emulator ini files.
+/// (`kill(pid, 0)` -> `ESRCH`) AND which carry `acos.managed=1` or legacy
+/// `avd.name=ACOS `. Never touches real Android emulator ini files.
 pub fn sweep_stale_acos_ini(dir: &Path) {
     let Ok(entries) = std::fs::read_dir(dir) else {
         return;
@@ -83,9 +83,10 @@ pub fn sweep_stale_acos_ini(dir: &Path) {
         let Ok(text) = std::fs::read_to_string(&path) else {
             continue;
         };
-        let is_acos = text
-            .lines()
-            .any(|line| line.trim_start().starts_with("avd.name=ACOS "));
+        let is_acos = text.lines().any(|line| {
+            let trimmed = line.trim_start();
+            trimmed == "acos.managed=1" || trimmed.starts_with("avd.name=ACOS ")
+        });
         if is_acos {
             let _ = std::fs::remove_file(&path);
         }
@@ -110,7 +111,8 @@ pub fn write_ini_file(
          port.adb={adb_port}\n\
          grpc.port={grpc_port}\n\
          grpc.token={token}\n\
-         avd.name={avd_name}\n"
+         avd.name={avd_name}\n\
+         acos.managed=1\n"
     );
     {
         let mut file = OpenOptions::new()
@@ -234,8 +236,9 @@ struct BridgeProcess {
     bridge_sock: PathBuf,
     child: Child,
     closing: Arc<AtomicBool>,
-    stop_event_fd: OwnedFd,
+    stop_event_fd: Arc<OwnedFd>,
     cb_thread: Option<JoinHandle<()>>,
+    supervisor_thread: Option<JoinHandle<()>>,
 }
 
 impl BridgeHandle {
@@ -489,6 +492,27 @@ impl Drop for BridgeHandle {
     }
 }
 
+fn signal_stop_fd(closing: &AtomicBool, stop_event_fd: &OwnedFd) {
+    if !closing.swap(true, Ordering::AcqRel) {
+        let one: u64 = 1;
+        unsafe {
+            libc::write(
+                stop_event_fd.as_raw_fd(),
+                (&one as *const u64).cast::<libc::c_void>(),
+                std::mem::size_of::<u64>(),
+            );
+        }
+    }
+}
+
+impl Drop for BridgeProcess {
+    fn drop(&mut self) {
+        if self.supervisor_thread.is_some() || self.cb_thread.is_some() {
+            self.stop();
+        }
+    }
+}
+
 impl BridgeProcess {
     fn spawn(
         targets: Arc<Mutex<HashMap<String, Arc<dyn AdbSessionOps>>>>,
@@ -498,6 +522,7 @@ impl BridgeProcess {
             bridge_socket_dir().map_err(|e| format!("create bridge runtime dir: {e}"))?;
         let cb_sock = runtime_dir.join("serve-cb.sock");
         let bridge_sock = runtime_dir.join("bridge.sock");
+        let stderr_log = runtime_dir.join("devbridge.stderr.log");
 
         if cb_sock.exists() {
             let _ = std::fs::remove_file(&cb_sock);
@@ -516,70 +541,126 @@ impl BridgeProcess {
                 std::io::Error::last_os_error()
             ));
         }
-        let stop_event_fd = unsafe { OwnedFd::from_raw_fd(efd_raw) };
-        let stop_raw_fd = stop_event_fd.as_raw_fd();
+        let stop_event_fd = Arc::new(unsafe { OwnedFd::from_raw_fd(efd_raw) });
+        let stop_fd_cb = Arc::clone(&stop_event_fd);
+        let stop_fd_sup = Arc::clone(&stop_event_fd);
         let closing = Arc::new(AtomicBool::new(false));
         let closing_bg = Arc::clone(&closing);
 
         let cb_thread = std::thread::Builder::new()
             .name("acos-devbridge-cb".to_string())
             .spawn(move || {
-                callback_accept_loop(listener, stop_raw_fd, closing_bg, targets);
+                callback_accept_loop(listener, stop_fd_cb, closing_bg, targets);
             })
             .map_err(|e| format!("spawn callback thread: {e}"))?;
 
         let bin = bin_override
             .map(Path::to_path_buf)
             .unwrap_or_else(resolve_devbridge_bin);
+        let bridge_sock_child = bridge_sock.clone();
+        let cb_sock_child = cb_sock.clone();
+        let stderr_log_child = stderr_log.clone();
+        let closing_sup = Arc::clone(&closing);
         let parent_pid = unsafe { libc::getpid() };
-        let mut cmd = Command::new(&bin);
-        cmd.arg("--socket")
-            .arg(&bridge_sock)
-            .arg("--callback")
-            .arg(&cb_sock)
-            .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(Stdio::piped());
-        unsafe {
-            cmd.pre_exec(move || {
-                if libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGTERM) != 0 {
-                    return Err(std::io::Error::last_os_error());
-                }
-                if libc::getppid() != parent_pid {
-                    libc::_exit(1);
-                }
-                Ok(())
-            });
-        }
+        let (spawn_tx, spawn_rx) = std::sync::mpsc::channel::<Result<Child, String>>();
 
-        // Spawn via the process-lifetime spawner thread so PR_SET_PDEATHSIG watches
-        // the `acos` daemon process rather than the calling client worker thread.
-        let mut child = match crate::engine::art::spawner::spawn(cmd) {
-            Ok(c) => c,
-            Err(e) => {
-                if !closing.swap(true, Ordering::AcqRel) {
-                    let one: u64 = 1;
-                    unsafe {
-                        libc::write(
-                            stop_event_fd.as_raw_fd(),
-                            (&one as *const u64).cast::<libc::c_void>(),
-                            std::mem::size_of::<u64>(),
-                        );
+        // Fork `acos-devbridge` on a dedicated long-lived thread: Linux ties
+        // `PR_SET_PDEATHSIG` to the *spawning thread*, so spawning directly from a
+        // short-lived client-connection worker thread would SIGTERM the bridge as
+        // soon as that client disconnects (e.g. `acos launch --keep`).
+        let supervisor_thread = match std::thread::Builder::new()
+            .name("acos-devbridge-sup".to_string())
+            .spawn(move || {
+                let stderr_stdio = std::fs::File::create(&stderr_log_child)
+                    .map(Stdio::from)
+                    .unwrap_or_else(|_| Stdio::null());
+                let mut cmd = Command::new(&bin);
+                cmd.arg("--socket")
+                    .arg(&bridge_sock_child)
+                    .arg("--callback")
+                    .arg(&cb_sock_child)
+                    .stdin(Stdio::null())
+                    .stdout(Stdio::null())
+                    .stderr(stderr_stdio);
+                unsafe {
+                    cmd.pre_exec(move || {
+                        if libc::prctl(
+                            libc::PR_SET_PDEATHSIG,
+                            libc::SIGTERM as libc::c_ulong,
+                            0 as libc::c_ulong,
+                            0 as libc::c_ulong,
+                            0 as libc::c_ulong,
+                        ) != 0
+                        {
+                            return Err(std::io::Error::last_os_error());
+                        }
+                        if libc::getppid() != parent_pid {
+                            libc::_exit(1);
+                        }
+                        Ok(())
+                    });
+                }
+                match cmd.spawn() {
+                    Ok(child) => {
+                        if spawn_tx.send(Ok(child)).is_err() {
+                            return;
+                        }
+                        while !closing_sup.load(Ordering::Acquire) {
+                            let mut pfd = libc::pollfd {
+                                fd: stop_fd_sup.as_raw_fd(),
+                                events: libc::POLLIN,
+                                revents: 0,
+                            };
+                            let rc = unsafe { libc::poll(&mut pfd, 1, -1) };
+                            if rc < 0
+                                && std::io::Error::last_os_error().kind() != ErrorKind::Interrupted
+                            {
+                                break;
+                            }
+                            if (pfd.revents
+                                & (libc::POLLIN | libc::POLLERR | libc::POLLHUP | libc::POLLNVAL))
+                                != 0
+                            {
+                                break;
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        let _ = spawn_tx.send(Err(format!("spawn {}: {e}", bin.display())));
                     }
                 }
+            }) {
+            Ok(h) => h,
+            Err(e) => {
+                signal_stop_fd(&closing, &stop_event_fd);
                 let _ = cb_thread.join();
                 let _ = std::fs::remove_dir_all(&runtime_dir);
-                return Err(format!("spawn {}: {e}", bin.display()));
+                return Err(format!("spawn bridge supervisor thread: {e}"));
+            }
+        };
+
+        let mut child = match spawn_rx.recv() {
+            Ok(Ok(c)) => c,
+            Ok(Err(err)) => {
+                signal_stop_fd(&closing, &stop_event_fd);
+                let _ = supervisor_thread.join();
+                let _ = cb_thread.join();
+                let _ = std::fs::remove_dir_all(&runtime_dir);
+                return Err(err);
+            }
+            Err(e) => {
+                signal_stop_fd(&closing, &stop_event_fd);
+                let _ = supervisor_thread.join();
+                let _ = cb_thread.join();
+                let _ = std::fs::remove_dir_all(&runtime_dir);
+                return Err(format!("bridge supervisor thread aborted: {e}"));
             }
         };
 
         let deadline = Instant::now() + Duration::from_secs(5);
         while Instant::now() < deadline {
             if let Ok(Some(status)) = child.try_wait() {
-                let mut stderr_buf = String::new();
-                if let Some(mut se) = child.stderr.take() {
-                    let _ = std::io::Read::read_to_string(&mut se, &mut stderr_buf);
-                }
+                let stderr_buf = std::fs::read_to_string(&stderr_log).unwrap_or_default();
                 let mut tmp = Self {
                     runtime_dir,
                     bridge_sock,
@@ -587,6 +668,7 @@ impl BridgeProcess {
                     closing,
                     stop_event_fd,
                     cb_thread: Some(cb_thread),
+                    supervisor_thread: Some(supervisor_thread),
                 };
                 tmp.stop();
                 return Err(format!(
@@ -602,6 +684,7 @@ impl BridgeProcess {
                     closing,
                     stop_event_fd,
                     cb_thread: Some(cb_thread),
+                    supervisor_thread: Some(supervisor_thread),
                 });
             }
             std::thread::sleep(Duration::from_millis(10));
@@ -614,6 +697,7 @@ impl BridgeProcess {
             closing,
             stop_event_fd,
             cb_thread: Some(cb_thread),
+            supervisor_thread: Some(supervisor_thread),
         };
         proc.stop();
         Err("timed out waiting for acos-devbridge control socket".to_string())
@@ -635,15 +719,9 @@ impl BridgeProcess {
                 }
             }
         }
-        if !self.closing.swap(true, Ordering::AcqRel) {
-            let one: u64 = 1;
-            unsafe {
-                libc::write(
-                    self.stop_event_fd.as_raw_fd(),
-                    (&one as *const u64).cast::<libc::c_void>(),
-                    std::mem::size_of::<u64>(),
-                );
-            }
+        signal_stop_fd(&self.closing, &self.stop_event_fd);
+        if let Some(handle) = self.supervisor_thread.take() {
+            let _ = handle.join();
         }
         if let Some(handle) = self.cb_thread.take() {
             let _ = handle.join();
@@ -676,11 +754,12 @@ fn bridge_rpc(sock: &Path, req: &Value) -> Result<Value, String> {
 
 fn callback_accept_loop(
     listener: UnixListener,
-    stop_fd: i32,
+    stop_fd: Arc<OwnedFd>,
     closing: Arc<AtomicBool>,
     targets: Arc<Mutex<HashMap<String, Arc<dyn AdbSessionOps>>>>,
 ) {
     let listener_fd = listener.as_raw_fd();
+    let stop_raw_fd = stop_fd.as_raw_fd();
     while !closing.load(Ordering::Acquire) {
         match listener.accept() {
             Ok((stream, _)) => {
@@ -703,7 +782,7 @@ fn callback_accept_loop(
                         revents: 0,
                     },
                     libc::pollfd {
-                        fd: stop_fd,
+                        fd: stop_raw_fd,
                         events: libc::POLLIN,
                         revents: 0,
                     },
@@ -712,7 +791,10 @@ fn callback_accept_loop(
                 if rc < 0 && std::io::Error::last_os_error().kind() != ErrorKind::Interrupted {
                     break;
                 }
-                if (pfds[1].revents & libc::POLLIN) != 0 {
+                if (pfds[1].revents
+                    & (libc::POLLIN | libc::POLLERR | libc::POLLHUP | libc::POLLNVAL))
+                    != 0
+                {
                     break;
                 }
             }
@@ -929,6 +1011,13 @@ mod tests {
         )
         .unwrap();
 
+        let dead_custom_acos = dir.join("pid_999997.ini");
+        std::fs::write(
+            &dead_custom_acos,
+            "port.serial=5560\nport.adb=5561\ngrpc.port=12347\navd.name=My Counter · s_1\nacos.managed=1\n",
+        )
+        .unwrap();
+
         let dead_real_emu = dir.join("pid_999998.ini");
         std::fs::write(
             &dead_real_emu,
@@ -947,6 +1036,7 @@ mod tests {
         sweep_stale_acos_ini(&dir);
 
         assert!(!dead_acos.exists(), "dead ACOS ini should be swept");
+        assert!(!dead_custom_acos.exists(), "dead custom-named ACOS ini should be swept");
         assert!(dead_real_emu.exists(), "non-ACOS ini must never be touched");
         assert!(live_acos.exists(), "live ACOS ini must be preserved");
         let _ = std::fs::remove_dir_all(&dir);

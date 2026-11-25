@@ -1485,6 +1485,21 @@ fn subscribe(mut stream: UnixStream, inner: Arc<Inner>) {
         inner.subscribe_threads.fetch_sub(1, Ordering::AcqRel);
         return;
     }
+    if request
+        .get("adb_input_ignored")
+        .and_then(serde_json::Value::as_bool)
+        == Some(true)
+    {
+        inner.push_event(serde_json::json!({
+            "ts_ms": now_ms(),
+            "kind": "action",
+            "source": "adb",
+            "status": "VERIFY_WATCH_ONLY",
+            "note": "adb input ignored: verify run",
+        }));
+        inner.subscribe_threads.fetch_sub(1, Ordering::AcqRel);
+        return;
+    }
     let _ = inner.attach(stream, &request);
     inner.subscribe_threads.fetch_sub(1, Ordering::AcqRel);
 }
@@ -1857,8 +1872,14 @@ pub fn event_from_reply(reply: &serde_json::Value, masked: bool) -> Option<serde
             map.insert("kind".into(), serde_json::json!("action"));
             let wire_cmd = if cmd == "type_text" { "text" } else { cmd };
             map.insert("cmd".into(), serde_json::json!(wire_cmd));
-            // DEVPANEL1 §6: who caused the input. ACOS tools / MCP are `agent`.
-            map.insert("source".into(), serde_json::json!("agent"));
+            // DEVPANEL1 §6: who caused the input. ACOS tools / MCP are `agent`;
+            // Option B `adb shell input ...` carries `source: "adb"`.
+            let src = reply
+                .get("source")
+                .and_then(|v| v.as_str())
+                .filter(|s| !s.is_empty())
+                .unwrap_or("agent");
+            map.insert("source".into(), serde_json::json!(src));
         }
         // DEVPANEL1 §6: input from T3 Code's Device panel (gRPC bridge), free-form
         // and labelled `source: panel`. A drag is dozens of moves: only the
@@ -1946,6 +1967,16 @@ pub fn merge_request(event: &mut serde_json::Value, request: &serde_json::Value,
     let Some(map) = event.as_object_mut() else {
         return;
     };
+    if let Some(src) = request
+        .get("source")
+        .and_then(|value| value.as_str())
+        .filter(|s| !s.is_empty())
+    {
+        if map.get("source").and_then(|v| v.as_str()) == Some("agent") || !map.contains_key("source")
+        {
+            map.insert("source".to_string(), serde_json::json!(src));
+        }
+    }
     for key in ["x", "y", "x2", "y2"] {
         if !map.contains_key(key) {
             if let Some(value) = request.get(key).filter(|value| value.is_i64()) {
@@ -3105,6 +3136,55 @@ mod tests {
         let newline = payload.iter().position(|b| *b == b'\n').expect("header");
         let raw = &payload[newline + 1..];
         assert_eq!(raw.len(), 1080 * 2400 * 3);
+
+        view.shutdown();
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn adb_source_and_adb_input_ignored_emit_expected_events() {
+        let mut ev = event_from_reply(&serde_json::json!({"ok": true, "cmd": "tap"}), false)
+            .expect("tap event");
+        assert_eq!(ev["source"], "agent");
+        merge_request(
+            &mut ev,
+            &serde_json::json!({"cmd": "tap", "x": 12, "y": 34, "source": "adb"}),
+            false,
+        );
+        assert_eq!(ev["source"], "adb");
+        assert_eq!(ev["x"], 12);
+        assert_eq!(ev["y"], 34);
+
+        let dir = scratch_dir("adb-ignored");
+        let source = HandSource::new(4, 2, false);
+        let view = bound(&dir, "v.sock", &source);
+        let mut viewer = UnixStream::connect(view.socket_path()).expect("connect viewer");
+        subscribe_line(&mut viewer, "\"frames\":false,");
+        viewer
+            .set_read_timeout(Some(Duration::from_secs(2)))
+            .expect("timeout");
+        let (kind, _) = read_message(&mut viewer).expect("hello");
+        assert_eq!(kind, TYPE_HELLO);
+        assert!(wait_for(|| view.has_subscribers(), Duration::from_secs(2)));
+
+        let mut notify = UnixStream::connect(view.socket_path()).expect("connect notify");
+        notify
+            .write_all(b"{\"v\":1,\"adb_input_ignored\":true}\n")
+            .expect("write notify");
+        drop(notify);
+
+        let (kind, payload) = loop {
+            let msg = read_message(&mut viewer).expect("event");
+            if msg.0 == TYPE_EVENT {
+                break msg;
+            }
+        };
+        assert_eq!(kind, TYPE_EVENT);
+        let event: serde_json::Value = serde_json::from_slice(&payload).expect("event json");
+        assert_eq!(event["kind"], "action");
+        assert_eq!(event["source"], "adb");
+        assert_eq!(event["status"], "VERIFY_WATCH_ONLY");
+        assert_eq!(event["note"], "adb input ignored: verify run");
 
         view.shutdown();
         let _ = std::fs::remove_dir_all(&dir);

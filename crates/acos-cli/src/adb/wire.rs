@@ -633,6 +633,8 @@ mod tests {
                 guest_pid: None,
                 launcher_pid: None,
                 apk_path: PathBuf::from("/tmp/app.apk"),
+                device_name: None,
+                extra_apks: Vec::new(),
             })
         }
         fn rotate(&self, _rotation: u8) -> Result<(), String> {
@@ -654,6 +656,18 @@ mod tests {
             Ok(())
         }
         fn panel_text(&self, _: &str) -> Result<(), String> {
+            Ok(())
+        }
+        fn adb_tap(&self, _: i32, _: i32) -> Result<(), String> {
+            Ok(())
+        }
+        fn adb_swipe(&self, _: i32, _: i32, _: i32, _: i32, _: u64) -> Result<(), String> {
+            Ok(())
+        }
+        fn adb_key(&self, _: i32, _: bool) -> Result<(), String> {
+            Ok(())
+        }
+        fn adb_text(&self, _: &str) -> Result<(), String> {
             Ok(())
         }
         fn stream_socket(&self) -> Option<PathBuf> {

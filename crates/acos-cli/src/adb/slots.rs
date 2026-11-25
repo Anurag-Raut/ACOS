@@ -43,9 +43,10 @@ pub struct SlotInfo {
     pub serial: String,
 }
 
-/// An active slot claim: holds the `flock` and TCP listener until dropped.
+/// An active slot claim: holds the `flock` and TCP listeners until dropped.
 pub struct SlotClaim {
     pub info: SlotInfo,
+    pub console_listener: TcpListener,
     pub listener: TcpListener,
     _lock_file: File,
     pub lock_path: PathBuf,
@@ -94,6 +95,13 @@ pub fn claim_slot(lock_dir: &Path) -> std::io::Result<Option<SlotClaim>> {
         if rc != 0 {
             continue;
         }
+        let console_listener = match TcpListener::bind((Ipv4Addr::LOCALHOST, console_port)) {
+            Ok(l) => l,
+            Err(_) => continue,
+        };
+        if console_listener.set_nonblocking(true).is_err() {
+            continue;
+        }
         let listener = match TcpListener::bind((Ipv4Addr::LOCALHOST, adb_port)) {
             Ok(l) => l,
             Err(_) => continue,
@@ -113,6 +121,7 @@ pub fn claim_slot(lock_dir: &Path) -> std::io::Result<Option<SlotClaim>> {
                 adb_port,
                 serial: format!("emulator-{console_port}"),
             },
+            console_listener,
             listener,
             _lock_file: file,
             lock_path,

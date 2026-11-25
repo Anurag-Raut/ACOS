@@ -393,7 +393,7 @@ const endpoint = findEmulatorGrpcEndpoint(serial, { discoveryDirs: () => [avdDir
 assert(endpoint, `findEmulatorGrpcEndpoint returned null for ${serial}`);
 assert(endpoint.port > 0);
 assert(endpoint.token && endpoint.token.length === 32, "expected 32-hex bearer token");
-assert(endpoint.avdName.startsWith("ACOS dev.acos.fixtures.counter"), `bad avdName: ${endpoint.avdName}`);
+assert(endpoint.avdName === "Counter · cp2-counter", `bad avdName: ${endpoint.avdName}`);
 
 // Helper to verify UNAUTHENTICATED / UNIMPLEMENTED raw gRPC status
 function rawUnary(method, bodyBuf, tokenHeader) {

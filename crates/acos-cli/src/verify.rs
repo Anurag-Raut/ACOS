@@ -708,6 +708,8 @@ pub fn run(args: VerifyArgs) -> ExitCode {
                             guest_pid: session.guest_pid(),
                             launcher_pid: session.launcher_pid(),
                             apk_path: session.apk_path().to_path_buf(),
+                            device_name: None,
+                            extra_apks: session.extra_apks().to_vec(),
                         },
                         session.stream_socket().map(std::path::Path::to_path_buf),
                     ));

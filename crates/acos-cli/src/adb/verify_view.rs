@@ -18,6 +18,7 @@ use acos_protocol::ui::UiTree;
 use super::shell::{AdbSessionOps, AdbSessionSnapshot};
 
 const WATCH_ONLY: &str = "panel input ignored: verify run";
+const ADB_WATCH_ONLY: &str = "adb input ignored: verify run";
 const NOT_AVAILABLE: &str = "not available during a verify run (watch-only)";
 /// At most one feed note per this long, so a drag does not flood the feed.
 const NOTE_INTERVAL: Duration = Duration::from_millis(1000);
@@ -36,6 +37,23 @@ impl VerifyViewOps {
             snapshot,
             stream_socket,
             last_note: Mutex::new(None),
+        }
+    }
+
+    fn emit_input_dropped_note(&self, payload: &[u8]) {
+        let Some(path) = self.stream_socket.as_ref() else {
+            return;
+        };
+        {
+            let mut last = self.last_note.lock().unwrap_or_else(|e| e.into_inner());
+            if last.is_some_and(|at| at.elapsed() < NOTE_INTERVAL) {
+                return;
+            }
+            *last = Some(Instant::now());
+        }
+        if let Ok(mut stream) = UnixStream::connect(path) {
+            let _ = stream.set_write_timeout(Some(Duration::from_millis(200)));
+            let _ = stream.write_all(payload);
         }
     }
 }
@@ -85,6 +103,29 @@ impl AdbSessionOps for VerifyViewOps {
         Err(WATCH_ONLY.to_string())
     }
 
+    fn adb_tap(&self, _x: i32, _y: i32) -> Result<(), String> {
+        Err(ADB_WATCH_ONLY.to_string())
+    }
+
+    fn adb_swipe(
+        &self,
+        _x1: i32,
+        _y1: i32,
+        _x2: i32,
+        _y2: i32,
+        _duration_ms: u64,
+    ) -> Result<(), String> {
+        Err(ADB_WATCH_ONLY.to_string())
+    }
+
+    fn adb_key(&self, _code: i32, _longpress: bool) -> Result<(), String> {
+        Err(ADB_WATCH_ONLY.to_string())
+    }
+
+    fn adb_text(&self, _text: &str) -> Result<(), String> {
+        Err(ADB_WATCH_ONLY.to_string())
+    }
+
     fn stream_socket(&self) -> Option<PathBuf> {
         self.stream_socket.clone()
     }
@@ -94,19 +135,10 @@ impl AdbSessionOps for VerifyViewOps {
     }
 
     fn panel_input_dropped(&self) {
-        let Some(path) = self.stream_socket.as_ref() else {
-            return;
-        };
-        {
-            let mut last = self.last_note.lock().unwrap_or_else(|e| e.into_inner());
-            if last.is_some_and(|at| at.elapsed() < NOTE_INTERVAL) {
-                return;
-            }
-            *last = Some(Instant::now());
-        }
-        if let Ok(mut stream) = UnixStream::connect(path) {
-            let _ = stream.set_write_timeout(Some(Duration::from_millis(200)));
-            let _ = stream.write_all(b"{\"v\":1,\"panel_input_ignored\":true}\n");
-        }
+        self.emit_input_dropped_note(b"{\"v\":1,\"panel_input_ignored\":true}\n");
+    }
+
+    fn adb_input_dropped(&self) {
+        self.emit_input_dropped_note(b"{\"v\":1,\"adb_input_ignored\":true}\n");
     }
 }

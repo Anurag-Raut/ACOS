@@ -2974,6 +2974,60 @@ impl ArtSession {
         Ok(())
     }
 
+    /// Inject a tap over adb (`source: "adb"` in the live-view feed, display coordinates).
+    pub(crate) fn adb_tap(&mut self, x: i32, y: i32) -> Result<(), BackendError> {
+        self.input_command(
+            serde_json::json!({"cmd": "tap", "x": x, "y": y, "source": "adb"}),
+            "input.tap",
+        )
+    }
+
+    /// Inject a swipe over adb (`source: "adb"` in the live-view feed, display coordinates).
+    pub(crate) fn adb_swipe(
+        &mut self,
+        x1: i32,
+        y1: i32,
+        x2: i32,
+        y2: i32,
+        duration_ms: u64,
+    ) -> Result<(), BackendError> {
+        self.input_command(
+            serde_json::json!({
+                "cmd": "swipe",
+                "x1": x1,
+                "y1": y1,
+                "x2": x2,
+                "y2": y2,
+                "duration_ms": duration_ms.max(1),
+                "source": "adb",
+            }),
+            "input.swipe",
+        )
+    }
+
+    /// Inject a keyevent over adb (`source: "adb"` in the live-view feed).
+    pub(crate) fn adb_key(&mut self, code: i32, longpress: bool) -> Result<(), BackendError> {
+        if code < 0 {
+            return Err(BackendError::unsupported(
+                "input.key",
+                format!("invalid keycode {code}"),
+            ));
+        }
+        let mut req = serde_json::json!({"cmd": "key", "code": code, "source": "adb"});
+        if longpress {
+            req["longpress"] = serde_json::json!(true);
+        }
+        self.input_command(req, "input.key")
+    }
+
+    /// Inject text over adb (`source: "adb"` in the live-view feed).
+    pub(crate) fn adb_text(&mut self, text: &str) -> Result<(), BackendError> {
+        self.input_command(
+            serde_json::json!({"cmd": "type_text", "text": text, "source": "adb"}),
+            "input.type_text",
+        )
+    }
+
     /// Press a raw Android keycode (the protocol takes integers).
     ///
     /// `key()` maps symbolic names; a socket caller may send `{"code": 66}`
