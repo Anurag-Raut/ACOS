@@ -204,6 +204,39 @@ impl LiveRegistry {
         Ok(true)
     }
 
+    /// Update the `display` size in the session's registry entry (e.g. after rotate).
+    pub fn update_display(&self, session_id: &str, display: (u32, u32)) -> io::Result<bool> {
+        let path = self
+            .dir
+            .join(self.file_name(session_id, std::process::id()));
+        let Ok(text) = std::fs::read_to_string(&path) else {
+            return Ok(false);
+        };
+        let Ok(mut doc) = serde_json::from_str::<serde_json::Value>(&text) else {
+            return Ok(false);
+        };
+        let current_w = doc
+            .pointer("/display/w")
+            .and_then(serde_json::Value::as_u64)
+            .unwrap_or(0) as u32;
+        let current_h = doc
+            .pointer("/display/h")
+            .and_then(serde_json::Value::as_u64)
+            .unwrap_or(0) as u32;
+        if (current_w, current_h) == display {
+            return Ok(false);
+        }
+        let Some(object) = doc.as_object_mut() else {
+            return Ok(false);
+        };
+        object.insert(
+            "display".to_string(),
+            serde_json::json!({"w": display.0, "h": display.1}),
+        );
+        write_atomic(&path, &doc.to_string())?;
+        Ok(true)
+    }
+
     /// Remove one session's entry (destroy/close). Missing is success.
     pub fn remove(&self, session_id: &str) {
         let path = self

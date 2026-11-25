@@ -22,12 +22,17 @@
 //!   message is capped at 64 MiB, per `docs/LIVE_VIEW.md` §2.
 
 use std::collections::{BTreeMap, VecDeque};
-use std::io::{self, ErrorKind, Read, Write};
+use std::io::{self, BufRead, BufReader, ErrorKind, Read, Write};
+use std::net::TcpStream;
 use std::os::unix::net::UnixStream;
 use std::path::PathBuf;
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::{Duration, Instant};
 
+use acos_services::input_channel::{
+    monotonic_nanos, ACTION_CANCEL, ACTION_DOWN, ACTION_MOVE, ACTION_POINTER_DOWN,
+    ACTION_POINTER_INDEX_SHIFT, ACTION_POINTER_UP, ACTION_UP,
+};
 use serde_json::{json, Value};
 
 use crate::live_registry;
@@ -218,6 +223,7 @@ pub struct Hub {
 struct Inner {
     entries: BTreeMap<String, Entry>,
     slots: BTreeMap<String, Arc<Slot>>,
+    input_slots: BTreeMap<String, Arc<InputSlot>>,
 }
 
 impl Hub {
@@ -229,6 +235,7 @@ impl Hub {
             inner: Mutex::new(Inner {
                 entries: BTreeMap::new(),
                 slots: BTreeMap::new(),
+                input_slots: BTreeMap::new(),
             }),
         }
     }
@@ -257,11 +264,19 @@ impl Hub {
                 *slot.meta.lock().expect("slot meta") = entry.clone();
             }
         }
+        for (key, input_slot) in &inner.input_slots {
+            if let Some(entry) = entries.get(key) {
+                *input_slot.meta.lock().expect("input slot meta") = entry.clone();
+            }
+        }
         // Keep a slot while a browser still watches it (the registry entry may
         // be written/removed around a destroy) or while its upstream is alive.
         inner
             .slots
             .retain(|key, slot| entries.contains_key(key) || slot.is_attached());
+        inner
+            .input_slots
+            .retain(|key, slot| entries.contains_key(key) || slot.is_active());
         inner.entries = entries;
     }
 
@@ -326,6 +341,29 @@ impl Hub {
         Some(Watcher { slot })
     }
 
+    /// Open an interactive input client on `session_id`, lazily spawning the
+    /// session's single ordered [`InputSlot`] worker if one is not running.
+    ///
+    /// Returns `None` when the session is not live in the registry.
+    #[must_use]
+    pub fn open_input(&self, session_id: &str) -> Option<InputClient> {
+        let entry = self.entry(session_id)?;
+        let slot = {
+            let mut inner = self.inner.lock().expect("hub");
+            if let Some(slot) = inner.input_slots.get(session_id) {
+                *slot.meta.lock().expect("input slot meta") = entry.clone();
+                Arc::clone(slot)
+            } else {
+                let slot = Arc::new(InputSlot::new(entry));
+                inner
+                    .input_slots
+                    .insert(session_id.to_string(), Arc::clone(&slot));
+                slot
+            }
+        };
+        Some(slot.attach_client())
+    }
+
     /// Per-session counters (the hub's test seam, and what a test asserts on
     /// to prove one upstream per session and zero after the last browser).
     #[must_use]
@@ -335,6 +373,17 @@ impl Hub {
         let mut out: Vec<SlotStats> = inner.slots.values().map(|slot| slot.stats()).collect();
         out.sort_by(|a, b| a.session_id.cmp(&b.session_id));
         out
+    }
+
+    /// Whether an input worker is currently active for `session_id` (test seam).
+    #[must_use]
+    #[cfg_attr(not(test), allow(dead_code))]
+    pub fn input_active(&self, session_id: &str) -> bool {
+        let inner = self.inner.lock().expect("hub");
+        inner
+            .input_slots
+            .get(session_id)
+            .is_some_and(|slot| slot.is_active())
     }
 }
 
@@ -842,6 +891,873 @@ fn framing(message: impl std::fmt::Display) -> io::Error {
     io::Error::new(ErrorKind::InvalidData, message.to_string())
 }
 
+// ------------------------------------------------------------------------- //
+// Interactive WebSocket input worker (HUMANVIEW1 CP2)
+// ------------------------------------------------------------------------- //
+
+/// An active browser `/api/input/<session_id>` client handle.
+///
+/// Dropping this handle notifies the per-session worker to emit `ACTION_CANCEL`
+/// for any pointers this client left down (and `up` for any held keys) and lets
+/// the worker exit once the last input client disconnects.
+pub struct InputClient {
+    client_id: u64,
+    slot: Arc<InputSlot>,
+}
+
+impl InputClient {
+    /// Current session metadata snapshot.
+    #[must_use]
+    pub fn entry(&self) -> Entry {
+        self.slot.meta.lock().expect("input slot meta").clone()
+    }
+
+    /// Parse one raw WebSocket JSON text message and enqueue it onto the
+    /// session's ordered worker. Invalid JSON/arguments reply immediately on
+    /// `reply_to` without hitting the worker.
+    pub fn enqueue(&self, raw_json: &str, reply_to: Arc<Mutex<TcpStream>>) {
+        match parse_input_command(raw_json) {
+            Ok(cmd) => {
+                let mut state = self.slot.state.lock().expect("input slot");
+                state.queue.push_back(WorkerTask::Command {
+                    client_id: self.client_id,
+                    cmd,
+                    reply_to,
+                });
+                self.slot.cv.notify_one();
+            }
+            Err(err_msg) => {
+                let reply = json!({
+                    "ok": false,
+                    "code": "INVALID_ARGUMENT",
+                    "error": err_msg,
+                })
+                .to_string();
+                let _ = super::ws::send_text_locked(&reply_to, &reply);
+            }
+        }
+    }
+}
+
+impl Drop for InputClient {
+    fn drop(&mut self) {
+        let mut state = self.slot.state.lock().expect("input slot");
+        state.clients = state.clients.saturating_sub(1);
+        state.queue.push_back(WorkerTask::ClientDisconnected {
+            client_id: self.client_id,
+        });
+        self.slot.cv.notify_one();
+    }
+}
+
+#[derive(Debug, Clone)]
+enum TouchPhase {
+    Down,
+    Move,
+    Up,
+    Cancel,
+}
+
+#[derive(Debug, Clone)]
+enum KeyPhase {
+    Down,
+    Up,
+    Press,
+}
+
+#[derive(Debug, Clone)]
+enum InputCommand {
+    Touch {
+        phase: TouchPhase,
+        id: i32,
+        x: Option<f32>,
+        y: Option<f32>,
+    },
+    Scroll {
+        x: f32,
+        y: f32,
+        dx: f32,
+        dy: f32,
+    },
+    Key {
+        code: i32,
+        phase: KeyPhase,
+    },
+    Text {
+        s: String,
+    },
+    Rotate {
+        rotation: u8,
+    },
+}
+
+enum WorkerTask {
+    Command {
+        client_id: u64,
+        cmd: InputCommand,
+        reply_to: Arc<Mutex<TcpStream>>,
+    },
+    ClientDisconnected {
+        client_id: u64,
+    },
+}
+
+struct InputSlot {
+    meta: Mutex<Entry>,
+    state: Mutex<InputSlotState>,
+    cv: Condvar,
+}
+
+struct InputSlotState {
+    clients: usize,
+    next_client_id: u64,
+    running: bool,
+    queue: VecDeque<WorkerTask>,
+}
+
+impl InputSlot {
+    fn new(entry: Entry) -> Self {
+        Self {
+            meta: Mutex::new(entry),
+            state: Mutex::new(InputSlotState {
+                clients: 0,
+                next_client_id: 1,
+                running: false,
+                queue: VecDeque::new(),
+            }),
+            cv: Condvar::new(),
+        }
+    }
+
+    fn is_active(&self) -> bool {
+        let state = self.state.lock().expect("input slot");
+        state.clients > 0 || state.running
+    }
+
+    fn attach_client(self: &Arc<Self>) -> InputClient {
+        let mut state = self.state.lock().expect("input slot");
+        let client_id = state.next_client_id;
+        state.next_client_id += 1;
+        state.clients += 1;
+        if !state.running {
+            state.running = true;
+            let slot = Arc::clone(self);
+            std::thread::Builder::new()
+                .name("acos-view-input".to_string())
+                .spawn(move || InputWorker::new(slot).run())
+                .expect("spawn input worker");
+        }
+        InputClient {
+            client_id,
+            slot: Arc::clone(self),
+        }
+    }
+}
+
+struct DaemonConn {
+    socket_path: String,
+    writer: UnixStream,
+    reader: BufReader<UnixStream>,
+    next_id: u64,
+}
+
+impl DaemonConn {
+    fn connect(socket_path: &str) -> Result<Self, (String, String)> {
+        let stream = UnixStream::connect(socket_path).map_err(|e| {
+            (
+                "INPUT_UNAVAILABLE".to_string(),
+                format!("cannot connect to session daemon {socket_path}: {e}"),
+            )
+        })?;
+        verify_peer_uid(&stream).map_err(|e| ("PERMISSION_DENIED".to_string(), e.to_string()))?;
+        let _ = stream.set_read_timeout(Some(Duration::from_secs(5)));
+        let _ = stream.set_write_timeout(Some(Duration::from_secs(2)));
+        let writer = stream
+            .try_clone()
+            .map_err(|e| ("INPUT_UNAVAILABLE".to_string(), e.to_string()))?;
+        Ok(Self {
+            socket_path: socket_path.to_string(),
+            writer,
+            reader: BufReader::new(stream),
+            next_id: 1,
+        })
+    }
+
+    fn call(&mut self, tool: &str, args: Value) -> Result<Value, (String, String)> {
+        let id = self.next_id;
+        self.next_id += 1;
+        let line = json!({
+            "id": id,
+            "tool": tool,
+            "args": args,
+        })
+        .to_string()
+            + "\n";
+        self.writer
+            .write_all(line.as_bytes())
+            .and_then(|()| self.writer.flush())
+            .map_err(|e| ("IO_ERROR".to_string(), e.to_string()))?;
+        let mut resp_line = String::new();
+        let n = self
+            .reader
+            .read_line(&mut resp_line)
+            .map_err(|e| ("IO_ERROR".to_string(), e.to_string()))?;
+        if n == 0 {
+            return Err(("EOF".to_string(), "daemon closed socket".to_string()));
+        }
+        let resp: Value = serde_json::from_str(&resp_line)
+            .map_err(|e| ("BAD_REPLY".to_string(), format!("invalid daemon JSON: {e}")))?;
+        let envelope = resp.get("envelope").ok_or_else(|| {
+            (
+                "BAD_REPLY".to_string(),
+                "daemon response missing envelope".to_string(),
+            )
+        })?;
+        if envelope.get("ok").and_then(Value::as_bool) == Some(true) {
+            Ok(envelope.get("result").cloned().unwrap_or(Value::Null))
+        } else {
+            let code = envelope
+                .pointer("/error/code")
+                .and_then(Value::as_str)
+                .unwrap_or("INPUT_FAILED")
+                .to_string();
+            let message = envelope
+                .pointer("/error/message")
+                .and_then(Value::as_str)
+                .unwrap_or("panel input rejected")
+                .to_string();
+            Err((code, message))
+        }
+    }
+}
+
+struct ActivePointer {
+    client_id: u64,
+    pointer_id: i32,
+    x: f32,
+    y: f32,
+}
+
+struct InputWorker {
+    slot: Arc<InputSlot>,
+    conn: Option<DaemonConn>,
+    pointers: Vec<ActivePointer>,
+    down_time_ns: Option<i64>,
+    last_event_time_ns: i64,
+    held_keys: Vec<(u64, i32)>,
+}
+
+impl InputWorker {
+    fn new(slot: Arc<InputSlot>) -> Self {
+        Self {
+            slot,
+            conn: None,
+            pointers: Vec::new(),
+            down_time_ns: None,
+            last_event_time_ns: 0,
+            held_keys: Vec::new(),
+        }
+    }
+
+    fn next_ts_ns(&mut self) -> i64 {
+        let now = monotonic_nanos();
+        let ts = now.max(self.last_event_time_ns + 1);
+        self.last_event_time_ns = ts;
+        ts
+    }
+
+    fn run(mut self) {
+        loop {
+            let task = {
+                let mut state = self.slot.state.lock().expect("input slot");
+                loop {
+                    if let Some(task) = state.queue.pop_front() {
+                        break task;
+                    }
+                    if state.clients == 0 {
+                        state.running = false;
+                        return;
+                    }
+                    state = self
+                        .slot
+                        .cv
+                        .wait(state)
+                        .unwrap_or_else(|poison| poison.into_inner());
+                }
+            };
+            match task {
+                WorkerTask::Command {
+                    client_id,
+                    cmd,
+                    reply_to,
+                } => {
+                    let reply = self.handle_command(client_id, cmd);
+                    let _ = super::ws::send_text_locked(&reply_to, &reply.to_string());
+                }
+                WorkerTask::ClientDisconnected { client_id } => {
+                    self.cancel_client(client_id);
+                }
+            }
+        }
+    }
+
+    fn entry(&self) -> Entry {
+        self.slot.meta.lock().expect("input slot meta").clone()
+    }
+
+    fn notify_watch_only_ignored(&self, entry: &Entry) {
+        let Some(stream_sock) = entry.stream_socket.as_deref() else {
+            return;
+        };
+        if let Ok(mut stream) = UnixStream::connect(stream_sock) {
+            if verify_peer_uid(&stream).is_ok() {
+                let _ = stream.set_write_timeout(Some(Duration::from_millis(250)));
+                let _ = stream.write_all(b"{\"v\":1,\"panel_input_ignored\":true}\n");
+                let _ = stream.flush();
+            }
+        }
+    }
+
+    fn call_daemon(&mut self, tool: &str, mut args: Value) -> Result<Value, (String, String)> {
+        let entry = self.entry();
+        let Some(sock) = entry.serve_socket.as_deref() else {
+            return Err((
+                "INPUT_UNAVAILABLE".to_string(),
+                "session has no input socket".to_string(),
+            ));
+        };
+        if let Some(obj) = args.as_object_mut() {
+            obj.insert(
+                "base".to_string(),
+                json!({ "session_id": entry.session_id }),
+            );
+        }
+        let need_new = self
+            .conn
+            .as_ref()
+            .is_none_or(|c| c.socket_path != sock);
+        if need_new {
+            self.conn = Some(DaemonConn::connect(sock)?);
+        }
+        let first_err = match self.conn.as_mut().expect("conn").call(tool, args.clone()) {
+            Ok(res) => return Ok(res),
+            Err(err) => err,
+        };
+        if first_err.0 == "IO_ERROR" || first_err.0 == "EOF" {
+            self.conn = None;
+            let mut fresh = DaemonConn::connect(sock)?;
+            let res = fresh.call(tool, args)?;
+            self.conn = Some(fresh);
+            return Ok(res);
+        }
+        Err(first_err)
+    }
+
+    fn pointer_wire_list(&self) -> Vec<Value> {
+        self.pointers
+            .iter()
+            .map(|p| json!([p.pointer_id, p.x, p.y]))
+            .collect()
+    }
+
+    fn send_touch_frame(
+        &mut self,
+        action: i32,
+        down_time: i64,
+        event_time: i64,
+    ) -> Result<Value, (String, String)> {
+        let pointers = self.pointer_wire_list();
+        self.call_daemon(
+            "panel_touch",
+            json!({
+                "action": action,
+                "down_time": down_time,
+                "event_time": event_time,
+                "pointers": pointers,
+            }),
+        )
+    }
+
+    fn handle_command(&mut self, client_id: u64, cmd: InputCommand) -> Value {
+        let entry = self.entry();
+        if entry.watch_only {
+            self.conn = None;
+            let should_emit = matches!(
+                cmd,
+                InputCommand::Touch {
+                    phase: TouchPhase::Down,
+                    ..
+                } | InputCommand::Scroll { .. }
+                    | InputCommand::Key {
+                        phase: KeyPhase::Down | KeyPhase::Press,
+                        ..
+                    }
+                    | InputCommand::Text { .. }
+                    | InputCommand::Rotate { .. }
+            );
+            if should_emit {
+                self.notify_watch_only_ignored(&entry);
+            }
+            return json!({
+                "ok": false,
+                "code": "VERIFY_WATCH_ONLY",
+                "error": "watch-only: verify run",
+            });
+        }
+
+        match cmd {
+            InputCommand::Touch { phase, id, x, y } => {
+                self.handle_touch(client_id, phase, id, x, y)
+            }
+            InputCommand::Scroll { x, y, dx, dy } => self.handle_scroll(&entry, x, y, dx, dy),
+            InputCommand::Key { code, phase } => self.handle_key(client_id, code, phase),
+            InputCommand::Text { s } => self.handle_text(&s),
+            InputCommand::Rotate { rotation } => self.handle_rotate(rotation),
+        }
+    }
+
+    fn handle_touch(
+        &mut self,
+        client_id: u64,
+        phase: TouchPhase,
+        pointer_id: i32,
+        x: Option<f32>,
+        y: Option<f32>,
+    ) -> Value {
+        match phase {
+            TouchPhase::Down => {
+                let (Some(x), Some(y)) = (x, y) else {
+                    return err_json("INVALID_ARGUMENT", "touch down requires x and y");
+                };
+                if let Some(pos) = self
+                    .pointers
+                    .iter()
+                    .position(|p| p.client_id == client_id && p.pointer_id == pointer_id)
+                {
+                    self.pointers[pos].x = x;
+                    self.pointers[pos].y = y;
+                    let ts = self.next_ts_ns();
+                    let down_time = self.down_time_ns.unwrap_or(ts);
+                    return match self.send_touch_frame(ACTION_MOVE, down_time, ts) {
+                        Ok(_) => json!({ "ok": true, "t": "touch", "phase": "move" }),
+                        Err((c, m)) => err_json(&c, &m),
+                    };
+                }
+                self.pointers.push(ActivePointer {
+                    client_id,
+                    pointer_id,
+                    x,
+                    y,
+                });
+                let ts = self.next_ts_ns();
+                let is_first = self.pointers.len() == 1;
+                if is_first {
+                    self.down_time_ns = Some(ts);
+                }
+                let down_time = self.down_time_ns.unwrap_or(ts);
+                let action = if is_first {
+                    ACTION_DOWN
+                } else {
+                    let idx = (self.pointers.len() - 1) as i32;
+                    ACTION_POINTER_DOWN | (idx << ACTION_POINTER_INDEX_SHIFT)
+                };
+                match self.send_touch_frame(action, down_time, ts) {
+                    Ok(_) => json!({ "ok": true, "t": "touch", "phase": "down" }),
+                    Err((c, m)) => {
+                        self.pointers.pop();
+                        if self.pointers.is_empty() {
+                            self.down_time_ns = None;
+                        }
+                        err_json(&c, &m)
+                    }
+                }
+            }
+            TouchPhase::Move => {
+                let (Some(x), Some(y)) = (x, y) else {
+                    return err_json("INVALID_ARGUMENT", "touch move requires x and y");
+                };
+                let Some(pos) = self
+                    .pointers
+                    .iter()
+                    .position(|p| p.client_id == client_id && p.pointer_id == pointer_id)
+                else {
+                    return json!({ "ok": true, "t": "touch", "ignored": "pointer_not_down" });
+                };
+                self.pointers[pos].x = x;
+                self.pointers[pos].y = y;
+                let ts = self.next_ts_ns();
+                let down_time = self.down_time_ns.unwrap_or(ts);
+                match self.send_touch_frame(ACTION_MOVE, down_time, ts) {
+                    Ok(_) => json!({ "ok": true, "t": "touch", "phase": "move" }),
+                    Err((c, m)) => err_json(&c, &m),
+                }
+            }
+            TouchPhase::Up => {
+                let (Some(x), Some(y)) = (x, y) else {
+                    return err_json("INVALID_ARGUMENT", "touch up requires x and y");
+                };
+                let Some(pos) = self
+                    .pointers
+                    .iter()
+                    .position(|p| p.client_id == client_id && p.pointer_id == pointer_id)
+                else {
+                    return json!({ "ok": true, "t": "touch", "ignored": "pointer_not_down" });
+                };
+                self.pointers[pos].x = x;
+                self.pointers[pos].y = y;
+                let ts = self.next_ts_ns();
+                let down_time = self.down_time_ns.unwrap_or(ts);
+                let action = if self.pointers.len() == 1 {
+                    ACTION_UP
+                } else {
+                    ACTION_POINTER_UP | ((pos as i32) << ACTION_POINTER_INDEX_SHIFT)
+                };
+                let res = self.send_touch_frame(action, down_time, ts);
+                self.pointers.remove(pos);
+                if self.pointers.is_empty() {
+                    self.down_time_ns = None;
+                }
+                match res {
+                    Ok(_) => json!({ "ok": true, "t": "touch", "phase": "up" }),
+                    Err((c, m)) => err_json(&c, &m),
+                }
+            }
+            TouchPhase::Cancel => {
+                if let (Some(x), Some(y)) = (x, y) {
+                    if let Some(pos) = self
+                        .pointers
+                        .iter()
+                        .position(|p| p.client_id == client_id && p.pointer_id == pointer_id)
+                    {
+                        self.pointers[pos].x = x;
+                        self.pointers[pos].y = y;
+                    }
+                }
+                self.cancel_client_pointers(client_id)
+            }
+        }
+    }
+
+    fn cancel_client_pointers(&mut self, client_id: u64) -> Value {
+        let has_client_ptr = self.pointers.iter().any(|p| p.client_id == client_id);
+        if !has_client_ptr {
+            return json!({ "ok": true, "t": "touch", "phase": "cancel" });
+        }
+        let only_this_client = self.pointers.iter().all(|p| p.client_id == client_id);
+        if only_this_client {
+            let ts = self.next_ts_ns();
+            let down_time = self.down_time_ns.unwrap_or(ts);
+            let res = self.send_touch_frame(ACTION_CANCEL, down_time, ts);
+            self.pointers.clear();
+            self.down_time_ns = None;
+            return match res {
+                Ok(_) => json!({ "ok": true, "t": "touch", "phase": "cancel" }),
+                Err((c, m)) => err_json(&c, &m),
+            };
+        }
+        let mut last_res = Ok(Value::Null);
+        while let Some(pos) = self.pointers.iter().position(|p| p.client_id == client_id) {
+            let ts = self.next_ts_ns();
+            let down_time = self.down_time_ns.unwrap_or(ts);
+            let action = if self.pointers.len() == 1 {
+                ACTION_CANCEL
+            } else {
+                ACTION_POINTER_UP | ((pos as i32) << ACTION_POINTER_INDEX_SHIFT)
+            };
+            last_res = self.send_touch_frame(action, down_time, ts);
+            self.pointers.remove(pos);
+        }
+        if self.pointers.is_empty() {
+            self.down_time_ns = None;
+        }
+        match last_res {
+            Ok(_) => json!({ "ok": true, "t": "touch", "phase": "cancel" }),
+            Err((c, m)) => err_json(&c, &m),
+        }
+    }
+
+    fn handle_scroll(&mut self, entry: &Entry, x: f32, y: f32, dx: f32, dy: f32) -> Value {
+        if !self.pointers.is_empty() {
+            return err_json("INVALID_STATE", "cannot scroll while a touch pointer is active");
+        }
+        if dx == 0.0 && dy == 0.0 {
+            return json!({ "ok": true, "t": "scroll", "ignored": "zero_delta" });
+        }
+        let w = if entry.display.0 > 0 {
+            entry.display.0 as f32
+        } else {
+            1080.0
+        };
+        let h = if entry.display.1 > 0 {
+            entry.display.1 as f32
+        } else {
+            2400.0
+        };
+        let sx = x.clamp(4.0, (w - 4.0).max(4.0));
+        let sy = y.clamp(4.0, (h - 4.0).max(4.0));
+        let step_x = if dx.abs() > 0.0 {
+            -dx.signum() * dx.abs().clamp(48.0, 600.0)
+        } else {
+            0.0
+        };
+        let step_y = if dy.abs() > 0.0 {
+            -dy.signum() * dy.abs().clamp(48.0, 900.0)
+        } else {
+            0.0
+        };
+        let ex = (sx + step_x).clamp(4.0, (w - 4.0).max(4.0));
+        let ey = (sy + step_y).clamp(4.0, (h - 4.0).max(4.0));
+
+        const MOVE_STEPS: usize = 6;
+        const STEP_NS: i64 = 8_000_000;
+        let span_ns = (MOVE_STEPS as i64 + 1) * STEP_NS;
+        let end_now = monotonic_nanos();
+        let down_time = (end_now - span_ns).max(self.last_event_time_ns + 1);
+
+        let frames = (0..=MOVE_STEPS + 1).map(|i| {
+            let t = i as f32 / (MOVE_STEPS + 1) as f32;
+            let px = sx + (ex - sx) * t;
+            let py = sy + (ey - sy) * t;
+            let action = if i == 0 {
+                ACTION_DOWN
+            } else if i == MOVE_STEPS + 1 {
+                ACTION_UP
+            } else {
+                ACTION_MOVE
+            };
+            let event_time = down_time + (i as i64) * STEP_NS;
+            (action, px, py, event_time)
+        });
+
+        for (action, px, py, event_time) in frames {
+            self.last_event_time_ns = event_time;
+            if let Err((c, m)) = self.call_daemon(
+                "panel_touch",
+                json!({
+                    "action": action,
+                    "down_time": down_time,
+                    "event_time": event_time,
+                    "pointers": [[0, px, py]],
+                }),
+            ) {
+                return err_json(&c, &m);
+            }
+        }
+        json!({ "ok": true, "t": "scroll" })
+    }
+
+    fn handle_key(&mut self, client_id: u64, code: i32, phase: KeyPhase) -> Value {
+        let event_type = match phase {
+            KeyPhase::Down => {
+                if !self.held_keys.contains(&(client_id, code)) {
+                    self.held_keys.push((client_id, code));
+                }
+                "down"
+            }
+            KeyPhase::Up => {
+                self.held_keys.retain(|&pair| pair != (client_id, code));
+                "up"
+            }
+            KeyPhase::Press => {
+                self.held_keys.retain(|&pair| pair != (client_id, code));
+                "press"
+            }
+        };
+        match self.call_daemon(
+            "panel_key",
+            json!({
+                "code": code,
+                "event_type": event_type,
+            }),
+        ) {
+            Ok(_) => json!({ "ok": true, "t": "key", "code": code, "phase": event_type }),
+            Err((c, m)) => err_json(&c, &m),
+        }
+    }
+
+    fn handle_text(&mut self, text: &str) -> Value {
+        if text.is_empty() {
+            return json!({ "ok": true, "t": "text" });
+        }
+        match self.call_daemon("panel_text", json!({ "text": text })) {
+            Ok(_) => json!({ "ok": true, "t": "text" }),
+            Err((c, m)) => err_json(&c, &m),
+        }
+    }
+
+    fn handle_rotate(&mut self, rotation: u8) -> Value {
+        match self.call_daemon("panel_rotate", json!({ "rotation": rotation })) {
+            Ok(res) => {
+                let width = res.get("width").and_then(Value::as_u64).unwrap_or(0) as u32;
+                let height = res.get("height").and_then(Value::as_u64).unwrap_or(0) as u32;
+                let applied = res
+                    .get("rotation")
+                    .and_then(Value::as_u64)
+                    .unwrap_or(u64::from(rotation));
+                if width > 0 && height > 0 {
+                    self.slot.meta.lock().expect("input slot meta").display = (width, height);
+                }
+                json!({
+                    "ok": true,
+                    "t": "rotate",
+                    "width": width,
+                    "height": height,
+                    "rotation": applied,
+                })
+            }
+            Err((c, m)) => err_json(&c, &m),
+        }
+    }
+
+    fn cancel_client(&mut self, client_id: u64) {
+        let entry = self.entry();
+        if entry.watch_only {
+            self.pointers.retain(|p| p.client_id != client_id);
+            if self.pointers.is_empty() {
+                self.down_time_ns = None;
+            }
+            self.held_keys.retain(|&(cid, _)| cid != client_id);
+            return;
+        }
+        let _ = self.cancel_client_pointers(client_id);
+        let keys_to_release: Vec<i32> = self
+            .held_keys
+            .iter()
+            .filter_map(|&(cid, code)| (cid == client_id).then_some(code))
+            .collect();
+        self.held_keys.retain(|&(cid, _)| cid != client_id);
+        for code in keys_to_release {
+            let _ = self.call_daemon(
+                "panel_key",
+                json!({
+                    "code": code,
+                    "event_type": "up",
+                }),
+            );
+        }
+    }
+}
+
+fn err_json(code: &str, error: &str) -> Value {
+    json!({
+        "ok": false,
+        "code": code,
+        "error": error,
+    })
+}
+
+fn parse_input_command(raw_json: &str) -> Result<InputCommand, String> {
+    let val: Value =
+        serde_json::from_str(raw_json).map_err(|e| format!("invalid JSON: {e}"))?;
+    let kind = val
+        .get("t")
+        .and_then(Value::as_str)
+        .ok_or_else(|| "missing string field `t`".to_string())?;
+    match kind {
+        "touch" => {
+            let phase = match val.get("phase").and_then(Value::as_str) {
+                Some("down") => TouchPhase::Down,
+                Some("move") => TouchPhase::Move,
+                Some("up") => TouchPhase::Up,
+                Some("cancel") => TouchPhase::Cancel,
+                other => {
+                    return Err(format!(
+                        "touch requires phase down|move|up|cancel (got {other:?})"
+                    ))
+                }
+            };
+            let id = match val.get("id") {
+                None | Some(Value::Null) => 0,
+                Some(v) => v
+                    .as_i64()
+                    .and_then(|n| i32::try_from(n).ok())
+                    .ok_or_else(|| "touch `id` must be an integer".to_string())?,
+            };
+            let x = finite_opt_f32(val.get("x"), "x")?;
+            let y = finite_opt_f32(val.get("y"), "y")?;
+            if !matches!(phase, TouchPhase::Cancel) && (x.is_none() || y.is_none()) {
+                return Err("touch down/move/up requires numeric `x` and `y`".to_string());
+            }
+            Ok(InputCommand::Touch { phase, id, x, y })
+        }
+        "scroll" => {
+            let x = finite_opt_f32(val.get("x"), "x")?
+                .ok_or_else(|| "scroll requires numeric `x`".to_string())?;
+            let y = finite_opt_f32(val.get("y"), "y")?
+                .ok_or_else(|| "scroll requires numeric `y`".to_string())?;
+            let dx = finite_opt_f32(val.get("dx"), "dx")?;
+            let dy = finite_opt_f32(val.get("dy"), "dy")?;
+            if dx.is_none() && dy.is_none() {
+                return Err("scroll requires `dy` or `dx`".to_string());
+            }
+            Ok(InputCommand::Scroll {
+                x,
+                y,
+                dx: dx.unwrap_or(0.0),
+                dy: dy.unwrap_or(0.0),
+            })
+        }
+        "key" => {
+            let code = match val.get("code") {
+                Some(Value::String(name)) => super::keycodes::parse_keycode(name)
+                    .ok_or_else(|| format!("unknown key code {name:?}"))?,
+                Some(Value::Number(n)) => n
+                    .as_i64()
+                    .and_then(|v| i32::try_from(v).ok())
+                    .filter(|&v| v >= 0)
+                    .ok_or_else(|| "numeric key code out of range".to_string())?,
+                _ => return Err("key requires string or integer `code`".to_string()),
+            };
+            let phase = match val.get("phase").and_then(Value::as_str) {
+                None | Some("press") => KeyPhase::Press,
+                Some("down") => KeyPhase::Down,
+                Some("up") => KeyPhase::Up,
+                Some(other) => {
+                    return Err(format!(
+                        "key `phase` must be down|up|press (got {other:?})"
+                    ))
+                }
+            };
+            Ok(InputCommand::Key { code, phase })
+        }
+        "text" => {
+            let s = val
+                .get("s")
+                .or_else(|| val.get("text"))
+                .and_then(Value::as_str)
+                .ok_or_else(|| "text requires string `s`".to_string())?
+                .to_string();
+            Ok(InputCommand::Text { s })
+        }
+        "rotate" => {
+            let rot = val
+                .get("rotation")
+                .and_then(Value::as_u64)
+                .and_then(|v| u8::try_from(v).ok())
+                .filter(|&v| v <= 3)
+                .ok_or_else(|| "rotate requires integer `rotation` in 0..=3".to_string())?;
+            Ok(InputCommand::Rotate { rotation: rot })
+        }
+        other => Err(format!("unknown input message type {other:?}")),
+    }
+}
+
+fn finite_opt_f32(val: Option<&Value>, field: &str) -> Result<Option<f32>, String> {
+    let Some(v) = val else {
+        return Ok(None);
+    };
+    if v.is_null() {
+        return Ok(None);
+    }
+    let f = v
+        .as_f64()
+        .ok_or_else(|| format!("field `{field}` must be a number"))?;
+    if !f.is_finite() {
+        return Err(format!("field `{field}` must be finite"));
+    }
+    Ok(Some(f as f32))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1184,5 +2100,290 @@ mod tests {
         assert!(hub.watch("s_meta").is_none(), "no stream socket, no watch");
 
         let _ = std::fs::remove_dir_all(&registry);
+    }
+
+    struct FakeDaemon {
+        socket: PathBuf,
+        calls: Arc<Mutex<Vec<(String, Value)>>>,
+        root: PathBuf,
+    }
+
+    impl FakeDaemon {
+        fn start(tag: &str) -> Self {
+            let root = scratch(tag);
+            let socket = root.join("serve.sock");
+            let listener = UnixListener::bind(&socket).expect("bind fake daemon");
+            let calls = Arc::new(Mutex::new(Vec::new()));
+            let calls_thread = Arc::clone(&calls);
+            std::thread::spawn(move || {
+                for stream in listener.incoming() {
+                    let Ok(mut writer) = stream else { break };
+                    let reader = BufReader::new(writer.try_clone().expect("clone"));
+                    let calls = Arc::clone(&calls_thread);
+                    std::thread::spawn(move || {
+                        for line in reader.lines() {
+                            let Ok(line) = line else { break };
+                            if line.trim().is_empty() {
+                                continue;
+                            }
+                            let req: Value = serde_json::from_str(&line).expect("req json");
+                            let id = req["id"].clone();
+                            let tool = req["tool"].as_str().unwrap_or("").to_string();
+                            let args = req["args"].clone();
+                            calls.lock().unwrap().push((tool.clone(), args));
+                            let result = if tool == "panel_rotate" {
+                                json!({
+                                    "ok": true,
+                                    "session_id": "s_inp",
+                                    "width": 2400,
+                                    "height": 1080,
+                                    "rotation": 1,
+                                })
+                            } else {
+                                json!({ "ok": true, "session_id": "s_inp" })
+                            };
+                            let resp = json!({
+                                "id": id,
+                                "envelope": {
+                                    "ok": true,
+                                    "result": result,
+                                },
+                            });
+                            let _ = std::io::Write::write_all(
+                                &mut writer,
+                                (resp.to_string() + "\n").as_bytes(),
+                            );
+                            let _ = std::io::Write::flush(&mut writer);
+                        }
+                    });
+                }
+            });
+            Self {
+                socket,
+                calls,
+                root,
+            }
+        }
+    }
+
+    impl Drop for FakeDaemon {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.root);
+        }
+    }
+
+    fn ws_sink_pair() -> (TcpStream, Arc<Mutex<TcpStream>>) {
+        let listener = std::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0)).unwrap();
+        let addr = listener.local_addr().unwrap();
+        let client = TcpStream::connect(addr).unwrap();
+        let (server, _) = listener.accept().unwrap();
+        let _ = client.set_read_timeout(Some(Duration::from_secs(3)));
+        (client, Arc::new(Mutex::new(server)))
+    }
+
+    fn read_server_ws_text(client: &mut TcpStream) -> Value {
+        let mut head = [0u8; 2];
+        client.read_exact(&mut head).unwrap();
+        assert_eq!(head[0] & 0x0f, super::super::ws::OPCODE_TEXT);
+        let len7 = head[1] & 0x7f;
+        let len = match len7 {
+            0..=125 => usize::from(len7),
+            126 => {
+                let mut ext = [0u8; 2];
+                client.read_exact(&mut ext).unwrap();
+                usize::from(u16::from_be_bytes(ext))
+            }
+            _ => panic!("unexpected long test frame"),
+        };
+        let mut buf = vec![0u8; len];
+        client.read_exact(&mut buf).unwrap();
+        serde_json::from_slice(&buf).unwrap()
+    }
+
+    fn publish_input_entry(
+        dir: &std::path::Path,
+        session: &str,
+        serve_socket: Option<&std::path::Path>,
+        stream_socket: Option<&std::path::Path>,
+        watch_only: bool,
+    ) {
+        let entry = crate::live_registry::LiveEntry {
+            session_id: session.to_string(),
+            daemon_pid: std::process::id(),
+            launcher_pid: Some(std::process::id()),
+            started_ms: live_registry::now_ms(),
+            client_name: "hub-test".to_string(),
+            client_version: "1".to_string(),
+            project_dir: "/home/Qui/Projects/acos".to_string(),
+            apk: "fixtures/build/apps/counter.apk".to_string(),
+            package: "dev.acos.fixtures.counter".to_string(),
+            app_label: Some("Counter".to_string()),
+            device_name: None,
+            watch_only,
+            serve_socket: serve_socket.map(|p| p.display().to_string()),
+            activity: Some("dev.acos.fixtures.counter.MainActivity".to_string()),
+            display: (1080, 2400),
+            stream_socket: stream_socket.map(|p| p.display().to_string()),
+        };
+        crate::live_registry::LiveRegistry::at(dir.to_path_buf())
+            .write(&entry)
+            .expect("publish input entry");
+    }
+
+    #[test]
+    fn input_worker_handles_multitouch_scroll_and_disconnect_cancel() {
+        let daemon = FakeDaemon::start("inp-d");
+        let registry = scratch("inp-reg");
+        publish_input_entry(&registry, "s_inp", Some(&daemon.socket), None, false);
+        let hub = Hub::new(registry.clone());
+
+        assert!(!hub.input_active("s_inp"), "zero cost until open_input");
+        let client = hub.open_input("s_inp").expect("open input");
+        assert!(hub.input_active("s_inp"));
+        let (mut cli_rx, srv_tx) = ws_sink_pair();
+
+        // Multi-touch: p0 down -> p1 down -> move -> p1 up -> disconnect cancels p0!
+        client.enqueue(
+            r#"{"t":"touch","phase":"down","id":0,"x":100,"y":200}"#,
+            Arc::clone(&srv_tx),
+        );
+        assert_eq!(read_server_ws_text(&mut cli_rx)["ok"], json!(true));
+        client.enqueue(
+            r#"{"t":"touch","phase":"down","id":1,"x":300,"y":400}"#,
+            Arc::clone(&srv_tx),
+        );
+        assert_eq!(read_server_ws_text(&mut cli_rx)["ok"], json!(true));
+        client.enqueue(
+            r#"{"t":"touch","phase":"move","id":1,"x":310,"y":410}"#,
+            Arc::clone(&srv_tx),
+        );
+        assert_eq!(read_server_ws_text(&mut cli_rx)["ok"], json!(true));
+        client.enqueue(
+            r#"{"t":"touch","phase":"up","id":1,"x":320,"y":420}"#,
+            Arc::clone(&srv_tx),
+        );
+        assert_eq!(read_server_ws_text(&mut cli_rx)["ok"], json!(true));
+        // Hold a key and disconnect mid-gesture -> should cancel p0 and release key!
+        client.enqueue(
+            r#"{"t":"key","code":"KEYCODE_SPACE","phase":"down"}"#,
+            Arc::clone(&srv_tx),
+        );
+        assert_eq!(read_server_ws_text(&mut cli_rx)["ok"], json!(true));
+        drop(client);
+
+        wait_until(
+            || !hub.input_active("s_inp"),
+            "input worker to exit after disconnect",
+        );
+
+        let recorded = daemon.calls.lock().unwrap().clone();
+        assert_eq!(recorded.len(), 7, "expected 7 daemon calls: {recorded:#?}");
+        assert_eq!(recorded[0].0, "panel_touch");
+        assert_eq!(recorded[0].1["action"], json!(ACTION_DOWN));
+        assert_eq!(
+            recorded[1].1["action"],
+            json!(ACTION_POINTER_DOWN | (1 << ACTION_POINTER_INDEX_SHIFT))
+        );
+        assert_eq!(recorded[1].1["pointers"].as_array().unwrap().len(), 2);
+        assert_eq!(recorded[2].1["action"], json!(ACTION_MOVE));
+        assert_eq!(
+            recorded[3].1["action"],
+            json!(ACTION_POINTER_UP | (1 << ACTION_POINTER_INDEX_SHIFT))
+        );
+        assert_eq!(recorded[4].0, "panel_key");
+        assert_eq!(recorded[4].1["event_type"], json!("down"));
+        assert_eq!(recorded[5].0, "panel_touch");
+        assert_eq!(recorded[5].1["action"], json!(ACTION_CANCEL));
+        assert_eq!(recorded[6].0, "panel_key");
+        assert_eq!(recorded[6].1["event_type"], json!("up"));
+
+        // Monotonic nanosecond timestamps across touch frames.
+        let mut prev_ts = 0i64;
+        for idx in [0, 1, 2, 3, 5] {
+            let ts = recorded[idx].1["event_time"].as_i64().unwrap();
+            assert!(ts > prev_ts, "non-monotonic event_time at {idx}: {ts} <= {prev_ts}");
+            prev_ts = ts;
+        }
+
+        // Scroll + rotate update display.
+        daemon.calls.lock().unwrap().clear();
+        let client2 = hub.open_input("s_inp").expect("reopen input");
+        client2.enqueue(
+            r#"{"t":"scroll","x":540,"y":1200,"dy":250}"#,
+            Arc::clone(&srv_tx),
+        );
+        assert_eq!(read_server_ws_text(&mut cli_rx)["ok"], json!(true));
+        client2.enqueue(r#"{"t":"rotate","rotation":1}"#, Arc::clone(&srv_tx));
+        let rot_reply = read_server_ws_text(&mut cli_rx);
+        assert_eq!(rot_reply["ok"], json!(true));
+        assert_eq!(rot_reply["width"], json!(2400));
+        assert_eq!(rot_reply["height"], json!(1080));
+        assert_eq!(client2.entry().display, (2400, 1080));
+
+        let scroll_calls = daemon.calls.lock().unwrap().clone();
+        // 1 DOWN + 6 MOVEs + 1 UP + 1 rotate = 9 calls.
+        assert_eq!(scroll_calls.len(), 9);
+        assert_eq!(scroll_calls[0].1["action"], json!(ACTION_DOWN));
+        assert_eq!(scroll_calls[7].1["action"], json!(ACTION_UP));
+        // Positive dy (scroll down) drags finger upward (decreasing y).
+        let y0 = scroll_calls[0].1["pointers"][0][2].as_f64().unwrap();
+        let y7 = scroll_calls[7].1["pointers"][0][2].as_f64().unwrap();
+        assert!(y7 < y0, "expected y7 < y0, got {y7} vs {y0}");
+
+        drop(client2);
+        wait_until(|| !hub.input_active("s_inp"), "second worker exit");
+        let _ = std::fs::remove_dir_all(&registry);
+    }
+
+    #[test]
+    fn verify_watch_only_refuses_input_and_emits_ignored_marker() {
+        let daemon = FakeDaemon::start("ver-d");
+        let stream_root = scratch("ver-s");
+        let stream_sock = stream_root.join("stream.sock");
+        let listener = UnixListener::bind(&stream_sock).unwrap();
+        let ignored_seen = Arc::new(Mutex::new(Vec::<String>::new()));
+        let ignored_t = Arc::clone(&ignored_seen);
+        std::thread::spawn(move || {
+            for s in listener.incoming() {
+                let Ok(s) = s else { break };
+                let mut r = BufReader::new(s);
+                let mut line = String::new();
+                if r.read_line(&mut line).is_ok() && !line.is_empty() {
+                    ignored_t.lock().unwrap().push(line);
+                }
+            }
+        });
+
+        let registry = scratch("ver-reg");
+        publish_input_entry(
+            &registry,
+            "s_ver",
+            Some(&daemon.socket),
+            Some(&stream_sock),
+            true,
+        );
+        let hub = Hub::new(registry.clone());
+        let client = hub.open_input("s_ver").expect("open verify input");
+        let (mut cli_rx, srv_tx) = ws_sink_pair();
+
+        client.enqueue(
+            r#"{"t":"touch","phase":"down","id":0,"x":100,"y":200}"#,
+            Arc::clone(&srv_tx),
+        );
+        let reply = read_server_ws_text(&mut cli_rx);
+        assert_eq!(reply["ok"], json!(false));
+        assert_eq!(reply["code"], json!("VERIFY_WATCH_ONLY"));
+        assert!(daemon.calls.lock().unwrap().is_empty());
+
+        wait_until(
+            || !ignored_seen.lock().unwrap().is_empty(),
+            "panel_input_ignored marker on stream_socket",
+        );
+        assert!(ignored_seen.lock().unwrap()[0].contains("panel_input_ignored"));
+
+        drop(client);
+        wait_until(|| !hub.input_active("s_ver"), "verify input exit");
+        let _ = std::fs::remove_dir_all(&registry);
+        let _ = std::fs::remove_dir_all(&stream_root);
     }
 }
