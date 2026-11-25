@@ -86,8 +86,11 @@ pub fn fallback_runtime_dir() -> PathBuf {
 /// The `/tmp` fallback is different: see [`ensure_private_dir`], which refuses a
 /// mode it did not create.
 pub fn ensure_runtime_base(dir: &Path) -> std::io::Result<()> {
-    use std::os::unix::fs::{MetadataExt, PermissionsExt};
-    std::fs::create_dir_all(dir)?;
+    use std::os::unix::fs::{DirBuilderExt, MetadataExt, PermissionsExt};
+    std::fs::DirBuilder::new()
+        .recursive(true)
+        .mode(0o700)
+        .create(dir)?;
     // FB5b/M3: never chmod *through* a symlink (the chmod would land on whatever
     // the link names). A link is accepted only when its target is ours and
     // already private; it is verified, not repaired.
@@ -138,7 +141,12 @@ pub fn ensure_private_dir(dir: &Path) -> std::io::Result<()> {
         Ok(_) => {}
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
             if let Some(parent) = dir.parent() {
-                std::fs::create_dir_all(parent)?;
+                if !parent.as_os_str().is_empty() {
+                    std::fs::DirBuilder::new()
+                        .recursive(true)
+                        .mode(0o700)
+                        .create(parent)?;
+                }
             }
             // Created 0700 atomically; an existing entry (a racing symlink) makes
             // this fail with AlreadyExists and falls through to the check below.
@@ -518,6 +526,42 @@ mod tests {
             .mode()
             & 0o777;
         assert_eq!(mode, 0o755, "still untouched");
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn ensure_private_dir_creates_missing_parents_0700() {
+        let base = scratch("nested-private");
+        let mid = base.join("acos");
+        let leaf = mid.join("runtime");
+        ensure_private_dir(&leaf).expect("create nested 0700");
+        for path in [&mid, &leaf] {
+            let mode = std::fs::metadata(path).expect("stat").permissions().mode() & 0o777;
+            assert_eq!(
+                mode,
+                0o700,
+                "{} created with mode 0{mode:o}, expected 0700",
+                path.display()
+            );
+        }
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn ensure_runtime_base_creates_missing_parents_0700() {
+        let base = scratch("nested-base");
+        let mid = base.join("acos");
+        let leaf = mid.join("base");
+        ensure_runtime_base(&leaf).expect("create nested base 0700");
+        for path in [&mid, &leaf] {
+            let mode = std::fs::metadata(path).expect("stat").permissions().mode() & 0o777;
+            assert_eq!(
+                mode,
+                0o700,
+                "{} created with mode 0{mode:o}, expected 0700",
+                path.display()
+            );
+        }
         let _ = std::fs::remove_dir_all(&base);
     }
 }

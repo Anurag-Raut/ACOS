@@ -51,6 +51,10 @@ pub struct Entry {
     pub project_dir: String,
     pub apk: String,
     pub package: String,
+    pub app_label: Option<String>,
+    pub device_name: Option<String>,
+    pub watch_only: bool,
+    pub serve_socket: Option<String>,
     pub activity: Option<String>,
     pub display: (u32, u32),
     pub stream_socket: Option<String>,
@@ -66,6 +70,24 @@ impl Entry {
         let display = doc.get("display");
         let activity = doc
             .get("activity")
+            .and_then(Value::as_str)
+            .filter(|value| !value.is_empty())
+            .map(str::to_string);
+        let app_label = doc
+            .get("app_label")
+            .and_then(Value::as_str)
+            .filter(|value| !value.is_empty())
+            .map(str::to_string);
+        let device_name = doc
+            .get("device_name")
+            .and_then(Value::as_str)
+            .and_then(live_registry::sanitize_device_name);
+        let watch_only = doc
+            .get("watch_only")
+            .and_then(Value::as_bool)
+            .unwrap_or(false);
+        let serve_socket = doc
+            .get("serve_socket")
             .and_then(Value::as_str)
             .filter(|value| !value.is_empty())
             .map(str::to_string);
@@ -101,6 +123,10 @@ impl Entry {
                 .and_then(Value::as_str)
                 .unwrap_or("")
                 .to_string(),
+            app_label,
+            device_name,
+            watch_only,
+            serve_socket,
             activity,
             display: (
                 display
@@ -121,7 +147,7 @@ impl Entry {
     }
 
     /// The JSON shape the page consumes (the registry entry plus what the hub
-    /// knows about the stream).
+    /// knows about the stream). Note `serve_socket` stays internal to the hub.
     #[must_use]
     pub fn to_json(&self) -> Value {
         json!({
@@ -133,6 +159,9 @@ impl Entry {
             "project_dir": self.project_dir,
             "apk": self.apk,
             "package": self.package,
+            "app_label": self.app_label,
+            "device_name": self.device_name,
+            "watch_only": self.watch_only,
             "activity": self.activity,
             "display": {"w": self.display.0, "h": self.display.1},
             "stream": self.stream_socket.is_some(),
@@ -929,6 +958,10 @@ mod tests {
             project_dir: "/home/Qui/Projects/acos".to_string(),
             apk: "fixtures/build/apps/counter.apk".to_string(),
             package: "dev.acos.fixtures.counter".to_string(),
+            app_label: Some("Counter".to_string()),
+            device_name: None,
+            watch_only: false,
+            serve_socket: None,
             activity: Some("dev.acos.fixtures.counter.MainActivity".to_string()),
             display: (1080, 2400),
             stream_socket: Some(socket.display().to_string()),

@@ -72,6 +72,8 @@ struct HeldArtSession {
     /// The agent's `acos_launch {label}` (empty when unset): the human handle
     /// `session list` / `acos_status` print beside the session id.
     label: Mutex<String>,
+    /// Optional sanitized display name for `acos view`.
+    device_name: Mutex<Option<String>>,
     /// When the current launch started (ms since the epoch), for the `age_s`
     /// column of `session list`.
     started_ms: Mutex<u64>,
@@ -96,6 +98,17 @@ impl HeldArtSession {
             .started_ms
             .lock()
             .unwrap_or_else(|e| e.into_inner()) = crate::live_registry::now_ms();
+    }
+
+    fn set_device_name(&self, name: Option<String>) {
+        *self.device_name.lock().unwrap_or_else(|e| e.into_inner()) = name;
+    }
+
+    fn device_name(&self) -> Option<String> {
+        self.device_name
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
     }
 
     fn label(&self) -> String {
@@ -185,6 +198,9 @@ pub struct ServeEngine {
     /// One keeper per `ZygoteKey`, closed on serve exit: a keeper outlives
     /// sessions, never a serve.
     zygote: Arc<ZygoteHost>,
+    /// Daemon Unix socket path published in `LiveEntry` so `acos view` can route
+    /// interactive panel input back through this daemon's existing input path.
+    serve_socket: Option<PathBuf>,
 }
 
 impl ServeEngine {
@@ -233,7 +249,14 @@ impl ServeEngine {
             art: Mutex::new(HashMap::new()),
             routes: Mutex::new(HashMap::new()),
             zygote,
+            serve_socket: None,
         }
+    }
+
+    /// Record the daemon's Unix socket path so `LiveEntry` advertises where
+    /// `acos view` should deliver interactive panel input.
+    pub fn set_serve_socket(&mut self, socket: PathBuf) {
+        self.serve_socket = Some(socket);
     }
 
     /// This daemon's identity (REL3D).
@@ -277,7 +300,7 @@ impl ServeEngine {
     }
 
     /// VIEW1a: publish one ready session to the live-view registry.
-    fn publish_live(&self, id: &str, session: &ArtSession) {
+    fn publish_live(&self, id: &str, held: &HeldArtSession, session: &ArtSession) {
         let (client_name, client_version) = self.live.client();
         let entry = crate::live_registry::LiveEntry {
             session_id: id.to_string(),
@@ -289,6 +312,13 @@ impl ServeEngine {
             project_dir: self.live.project_dir().to_string(),
             apk: session.apk_path().display().to_string(),
             package: session.package().to_string(),
+            app_label: session.app_label().map(str::to_string),
+            device_name: held.device_name(),
+            watch_only: false,
+            serve_socket: self
+                .serve_socket
+                .as_ref()
+                .map(|path| path.display().to_string()),
             activity: session.activity().map(str::to_string),
             display: session.display_size(),
             stream_socket: session
@@ -479,6 +509,19 @@ impl ServeEngine {
         match tool {
             "acos_launch" => self.call_launch(&request_id, &id, args, ctx, explicit),
             "acos_destroy" => self.call_destroy(&request_id, &id, args, ctx),
+            "panel_touch" | "panel_key" | "panel_text" | "panel_rotate" => {
+                if let Some(held) = held {
+                    return self.call_panel(&request_id, &id, &held, tool, args);
+                }
+                art_failure(
+                    &request_id,
+                    Some(&id),
+                    Trust::Trusted,
+                    ErrorCode::SessionNotFound,
+                    format!("no live ART session `{id}`; {tool} needs a launched session"),
+                    json!({"engine": ENGINE_ART, "tool": tool}),
+                )
+            }
             _ => {
                 if let Some(held) = art_target {
                     return self.call_art(&request_id, &id, &held, tool, args);
@@ -595,6 +638,20 @@ impl ServeEngine {
             .and_then(Value::as_str)
             .unwrap_or_default()
             .to_string();
+        let device_name: Option<String> = match args.get("device_name") {
+            None | Some(Value::Null) => None,
+            Some(Value::String(s)) => crate::live_registry::sanitize_device_name(s),
+            Some(other) => {
+                return art_failure(
+                    request_id,
+                    Some(id),
+                    trust,
+                    ErrorCode::InvalidArgument,
+                    format!("device_name must be a string (got {})", json_kind(other)),
+                    json!({"field": "device_name"}),
+                )
+            }
+        };
         let verb_started = std::time::Instant::now();
         // P9: launch consumes P1/P3b's settle vocabulary. `strict` is the
         // default and unchanged; `fast` binds the first traversal's probe sample
@@ -913,7 +970,11 @@ impl ServeEngine {
                     // frame (the daemon's whole point); never boot a second
                     // guest.
                     held.note_launch(&agent_label);
+                    if device_name.is_some() {
+                        held.set_device_name(device_name.clone());
+                    }
                     let mut session = held.session.lock().unwrap_or_else(|e| e.into_inner());
+                    self.publish_live(id, &held, &session);
                     return match session.ensure_launch_tree(settle, pixels) {
                         Ok(tree) => launch_reply(
                             request_id,
@@ -1018,6 +1079,7 @@ impl ServeEngine {
                     artifacts: artifacts.clone(),
                     trust,
                     label: Mutex::new(String::new()),
+                    device_name: Mutex::new(device_name),
                     started_ms: Mutex::new(0),
                     launch_token: Mutex::new(String::new()),
                     session: Mutex::new(session),
@@ -1033,7 +1095,7 @@ impl ServeEngine {
                 // fails the launch (the session itself is fine).
                 {
                     let session = held.session.lock().unwrap_or_else(|e| e.into_inner());
-                    self.publish_live(id, &session);
+                    self.publish_live(id, &held, &session);
                 }
                 let mut guard = held.session.lock().unwrap_or_else(|e| e.into_inner());
                 launch_reply(
@@ -1329,6 +1391,176 @@ impl ServeEngine {
                     );
                 }
                 envelope
+            }
+            Err(error) => art_error(request_id, Some(id), trust, &error),
+        }
+    }
+
+    /// Fast internal dispatch for interactive panel events (`panel_touch`,
+    /// `panel_key`, `panel_text`, `panel_rotate`). Goes through the held
+    /// session's existing `InputDispatch` launcher channel with `source: panel`
+    /// and skips tree-settle / screenshot capture on the reply path so browser
+    /// touch/scroll/typing stays low-latency.
+    fn call_panel(
+        &self,
+        request_id: &str,
+        id: &str,
+        held: &Arc<HeldArtSession>,
+        tool: &str,
+        args: &Value,
+    ) -> Envelope {
+        let trust = held.trust;
+        let mut session = held.session.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(exit) = session.liveness() {
+            return guest_exit_envelope(request_id, id, held, &mut session, tool, &exit);
+        }
+        let outcome: Result<Value, BackendError> = match tool {
+            "panel_touch" => (|| {
+                let action = args
+                    .get("action")
+                    .and_then(Value::as_i64)
+                    .and_then(|v| i32::try_from(v).ok())
+                    .ok_or_else(|| BackendError::Failed {
+                        code: ErrorCode::InvalidArgument,
+                        detail: "panel_touch requires integer `action`".to_string(),
+                    })?;
+                let down_time = args
+                    .get("down_time")
+                    .and_then(Value::as_i64)
+                    .ok_or_else(|| BackendError::Failed {
+                        code: ErrorCode::InvalidArgument,
+                        detail: "panel_touch requires integer `down_time`".to_string(),
+                    })?;
+                let event_time = args
+                    .get("event_time")
+                    .and_then(Value::as_i64)
+                    .ok_or_else(|| BackendError::Failed {
+                        code: ErrorCode::InvalidArgument,
+                        detail: "panel_touch requires integer `event_time`".to_string(),
+                    })?;
+                let ptrs_raw = args
+                    .get("pointers")
+                    .and_then(Value::as_array)
+                    .ok_or_else(|| BackendError::Failed {
+                        code: ErrorCode::InvalidArgument,
+                        detail: "panel_touch requires `pointers` array".to_string(),
+                    })?;
+                let mut pointers = Vec::with_capacity(ptrs_raw.len());
+                for item in ptrs_raw {
+                    if let Some(arr) = item.as_array() {
+                        if arr.len() >= 3 {
+                            let pid = arr[0].as_i64().and_then(|v| i32::try_from(v).ok());
+                            let x = arr[1].as_f64().map(|v| v as f32);
+                            let y = arr[2].as_f64().map(|v| v as f32);
+                            if let (Some(pid), Some(x), Some(y)) = (pid, x, y) {
+                                pointers.push((pid, x, y));
+                                continue;
+                            }
+                        }
+                    } else if let Some(obj) = item.as_object() {
+                        let pid = obj
+                            .get("id")
+                            .and_then(Value::as_i64)
+                            .and_then(|v| i32::try_from(v).ok());
+                        let x = obj.get("x").and_then(Value::as_f64).map(|v| v as f32);
+                        let y = obj.get("y").and_then(Value::as_f64).map(|v| v as f32);
+                        if let (Some(pid), Some(x), Some(y)) = (pid, x, y) {
+                            pointers.push((pid, x, y));
+                            continue;
+                        }
+                    }
+                    return Err(BackendError::Failed {
+                        code: ErrorCode::InvalidArgument,
+                        detail: "panel_touch pointer entry must be [id, x, y]".to_string(),
+                    });
+                }
+                session.panel_touch(action, down_time, event_time, &pointers)?;
+                Ok(json!({ "ok": true, "session_id": id }))
+            })(),
+            "panel_key" => (|| {
+                let code = if let Some(c) = args.get("code").and_then(Value::as_i64) {
+                    i32::try_from(c).map_err(|_| BackendError::Failed {
+                        code: ErrorCode::InvalidArgument,
+                        detail: "panel_key `code` out of range".to_string(),
+                    })?
+                } else if let Some(name) = args.get("key").and_then(Value::as_str) {
+                    let c = super::key_code(name);
+                    if c < 0 {
+                        return Err(BackendError::Failed {
+                            code: ErrorCode::InvalidArgument,
+                            detail: format!("unknown symbolic key {name:?}"),
+                        });
+                    }
+                    c
+                } else {
+                    return Err(BackendError::Failed {
+                        code: ErrorCode::InvalidArgument,
+                        detail: "panel_key requires integer `code` or string `key`".to_string(),
+                    });
+                };
+                let event_type = args
+                    .get("event_type")
+                    .or_else(|| args.get("phase"))
+                    .and_then(Value::as_str)
+                    .unwrap_or("press");
+                let meta_state = args
+                    .get("meta_state")
+                    .and_then(Value::as_i64)
+                    .and_then(|v| i32::try_from(v).ok())
+                    .unwrap_or(0);
+                let device_id = args
+                    .get("device_id")
+                    .and_then(Value::as_i64)
+                    .and_then(|v| i32::try_from(v).ok())
+                    .unwrap_or(0);
+                session.panel_key(code, event_type, meta_state, device_id)?;
+                Ok(json!({ "ok": true, "session_id": id }))
+            })(),
+            "panel_text" => (|| {
+                let text = args
+                    .get("text")
+                    .and_then(Value::as_str)
+                    .ok_or_else(|| BackendError::Failed {
+                        code: ErrorCode::InvalidArgument,
+                        detail: "panel_text requires string `text`".to_string(),
+                    })?;
+                session.panel_text(text)?;
+                Ok(json!({ "ok": true, "session_id": id }))
+            })(),
+            "panel_rotate" => (|| {
+                let rotation = args
+                    .get("rotation")
+                    .and_then(Value::as_u64)
+                    .and_then(|v| u8::try_from(v).ok())
+                    .ok_or_else(|| BackendError::Failed {
+                        code: ErrorCode::InvalidArgument,
+                        detail: "panel_rotate requires integer `rotation` (0..=3)".to_string(),
+                    })?;
+                let (w, h, applied) = session.panel_rotate(rotation)?;
+                Ok(json!({
+                    "ok": true,
+                    "session_id": id,
+                    "width": w,
+                    "height": h,
+                    "rotation": applied,
+                }))
+            })(),
+            other => Err(BackendError::Unsupported {
+                capability: other.to_string(),
+                detail: format!("unknown panel tool {other}"),
+            }),
+        };
+        match outcome {
+            Ok(result) => {
+                self.refresh_live_activity(id, &session);
+                Envelope::pass(
+                    request_id,
+                    ProtocolBackend::AcosNative,
+                    Fidelity::ArtReference,
+                    Metrics::wall_ms(0),
+                )
+                .with_session_id(id.to_string())
+                .with_value_result(result)
             }
             Err(error) => art_error(request_id, Some(id), trust, &error),
         }
@@ -1769,6 +2001,9 @@ fn launch_reply(
         ENGINE_ART,
         Fidelity::ArtReference,
     );
+    if let Some(name) = held.device_name() {
+        result["device_name"] = json!(name);
+    }
     label_meta(&mut result, ENGINE_ART, held.trust, EVIDENCE_HOST_PIXEL);
     // ZPROD3: a session that really runs a zygote child says so, with the facts
     // the keeper acked. With the flag off `merge_zygote_fields` changes nothing,
