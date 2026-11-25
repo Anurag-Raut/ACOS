@@ -1,4 +1,4 @@
-//! `acos view` — the local, view-only live view hub (VIEW1b, ADR-0027).
+//! `acos view` — the local, interactive live view hub (ADR-0027 + HUMANVIEW1).
 //!
 //! One command starts an HTTP server **on 127.0.0.1 only** with a random
 //! ≥128-bit token required on every request (`/?t=<token>`), and prints exactly
@@ -8,26 +8,26 @@
 //! acos view: http://127.0.0.1:54321/?t=<token>
 //! ```
 //!
-//! The page lists the live sessions from the registry (client, project, APK,
-//! activity, age), and clicking one shows its screen plus tap ripples, the
-//! current activity and the recent action feed. Frames and events come from the
-//! session's stream socket through the [`hub`], which keeps exactly one upstream
-//! subscription per session while at least one browser watches it — so a session
-//! nobody looks at still costs nothing (`docs/LIVE_VIEW.md` §3).
-//!
-//! **View-only:** there is no request shape that forwards input to a guest, no
-//! file serving, and no path parameter that is used as a filesystem path (a
-//! session id is only ever matched against the registry).
+//! The page lists the live sessions from the registry, and clicking one shows
+//! its screen plus tap ripples, the current activity and the recent action feed.
+//! Frames and events come from the session's stream socket through the [`hub`],
+//! which keeps one upstream subscription per session while at least one
+//! browser watches it — so a session nobody looks at still costs nothing.
+//! Interactive input arrives over `/api/input/<session_id>?t=<token>` and is
+//! dispatched per session in order through `panel_*` (`source: panel`), except
+//! verify runs which stay strictly watch-only.
 
 mod hub;
+mod keycodes;
 mod page;
+mod ws;
 
 use std::io::{self, ErrorKind, Read, Write};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr, TcpListener, TcpStream};
 use std::path::PathBuf;
 use std::process::ExitCode;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use serde_json::json;
@@ -319,6 +319,8 @@ fn handle(mut connection: TcpStream, token: &str, hub: &Arc<Hub>, port: u16) {
         stream_frames(connection, hub, decode_component(session_id));
     } else if let Some(session_id) = path.strip_prefix("/api/events/") {
         stream_events(connection, hub, decode_component(session_id));
+    } else if let Some(session_id) = path.strip_prefix("/api/input/") {
+        handle_input_ws(connection, &request, hub, decode_component(session_id));
     } else {
         let _ = respond(
             &mut connection,
@@ -327,6 +329,89 @@ fn handle(mut connection: TcpStream, token: &str, hub: &Arc<Hub>, port: u16) {
             b"404 not found\n",
         );
     }
+}
+
+/// WebSocket endpoint `/api/input/<session_id>?t=<token>` (HUMANVIEW1).
+///
+/// Enforces WebSocket upgrade headers, looks up the live session, upgrades the
+/// TCP stream to RFC 6455, and forwards JSON input messages to the session's
+/// ordered input worker until close/EOF (which cancels active pointers/keys).
+fn handle_input_ws(
+    mut connection: TcpStream,
+    request: &Request,
+    hub: &Arc<Hub>,
+    session_id: String,
+) {
+    let upgrade_ok = request
+        .upgrade
+        .as_deref()
+        .is_some_and(|v| v.trim().eq_ignore_ascii_case("websocket"));
+    let connection_ok = request.connection.as_deref().is_some_and(|v| {
+        v.split(',')
+            .any(|part| part.trim().eq_ignore_ascii_case("upgrade"))
+    });
+    let ws_key = request
+        .sec_websocket_key
+        .as_deref()
+        .map(str::trim)
+        .filter(|k| !k.is_empty());
+    let (true, true, Some(ws_key)) = (upgrade_ok, connection_ok, ws_key) else {
+        let _ = respond(
+            &mut connection,
+            400,
+            "text/plain; charset=utf-8",
+            b"400 bad request: expected WebSocket upgrade\n",
+        );
+        return;
+    };
+
+    if session_id.is_empty() {
+        let _ = respond(
+            &mut connection,
+            404,
+            "text/plain; charset=utf-8",
+            b"404 missing session_id\n",
+        );
+        return;
+    }
+
+    let Some(client) = hub.open_input(&session_id) else {
+        let _ = respond(
+            &mut connection,
+            404,
+            "text/plain; charset=utf-8",
+            b"404 no live session for that session_id\n",
+        );
+        return;
+    };
+
+    if ws::write_handshake_response(&mut connection, ws_key).is_err() {
+        return;
+    }
+    let _ = connection.set_write_timeout(Some(WRITE_TIMEOUT));
+    let Ok(writer_stream) = connection.try_clone() else {
+        return;
+    };
+    let writer = Arc::new(Mutex::new(writer_stream));
+
+    loop {
+        match ws::read_message_with_writer(&mut connection, &writer) {
+            Ok(Some(ws::WsMessage::Text(text))) => {
+                client.enqueue(&text, Arc::clone(&writer));
+            }
+            Ok(Some(ws::WsMessage::Binary(_))) => {
+                let err = json!({
+                    "ok": false,
+                    "code": "INVALID_ARGUMENT",
+                    "error": "binary WebSocket frames are not supported",
+                })
+                .to_string();
+                let _ = ws::send_text_locked(&writer, &err);
+            }
+            Ok(None) | Err(_) => break,
+        }
+    }
+    // Dropping `client` enqueues ClientDisconnected so active pointers cancel.
 }
 
 /// MJPEG: the newest frame, repeatedly, on one multipart response.
@@ -501,6 +586,7 @@ fn respond(
 ) -> io::Result<()> {
     let reason = match status {
         200 => "OK",
+        400 => "Bad Request",
         403 => "Forbidden",
         404 => "Not Found",
         405 => "Method Not Allowed",
@@ -526,12 +612,17 @@ struct Request {
     path: String,
     query: String,
     host: Option<String>,
+    upgrade: Option<String>,
+    connection: Option<String>,
+    sec_websocket_key: Option<String>,
 }
 
 impl Request {
     fn param(&self, name: &str) -> Option<String> {
         for pair in self.query.split('&') {
-            let (key, value) = pair.split_once('=')?;
+            let Some((key, value)) = pair.split_once('=') else {
+                continue;
+            };
             if key == name {
                 return Some(decode_component(value));
             }
@@ -572,21 +663,34 @@ fn read_request(connection: &mut TcpStream) -> Option<Request> {
         Some((path, query)) => (path.to_string(), query.to_string()),
         None => (target, String::new()),
     };
-    let host = text
-        .lines()
-        .skip(1)
-        .take_while(|line| !line.is_empty())
-        .find_map(|line| {
-            let (name, value) = line.split_once(':')?;
-            name.trim()
-                .eq_ignore_ascii_case("host")
-                .then(|| value.trim().to_string())
-        });
+    let mut host = None;
+    let mut upgrade = None;
+    let mut conn_hdr = None;
+    let mut sec_websocket_key = None;
+    for header_line in text.lines().skip(1).take_while(|line| !line.is_empty()) {
+        let Some((name, value)) = header_line.split_once(':') else {
+            continue;
+        };
+        let name = name.trim();
+        let value = value.trim().to_string();
+        if name.eq_ignore_ascii_case("host") {
+            host = Some(value);
+        } else if name.eq_ignore_ascii_case("upgrade") {
+            upgrade = Some(value);
+        } else if name.eq_ignore_ascii_case("connection") {
+            conn_hdr = Some(value);
+        } else if name.eq_ignore_ascii_case("sec-websocket-key") {
+            sec_websocket_key = Some(value);
+        }
+    }
     Some(Request {
         method,
         path,
         query,
         host,
+        upgrade,
+        connection: conn_hdr,
+        sec_websocket_key,
     })
 }
 
@@ -1160,6 +1264,165 @@ mod tests {
         assert_eq!(stats[0].watchers, 0);
         assert!(!stats[0].connected);
         assert_eq!(stats[0].upstream_connects, 1);
+    }
+
+    #[test]
+    fn api_input_enforces_token_host_upgrade_and_forwards_ws_messages() {
+        let server = Server::start("ws-in");
+        let daemon_sock = server.registry.join("daemon.sock");
+        let daemon_listener = UnixListener::bind(&daemon_sock).expect("bind daemon");
+        let calls = Arc::new(Mutex::new(Vec::<(String, serde_json::Value)>::new()));
+        let calls_t = Arc::clone(&calls);
+        std::thread::spawn(move || {
+            for stream in daemon_listener.incoming() {
+                let Ok(mut writer) = stream else { break };
+                let reader = std::io::BufReader::new(writer.try_clone().expect("clone"));
+                let calls = Arc::clone(&calls_t);
+                std::thread::spawn(move || {
+                    for line in reader.lines() {
+                        let Ok(line) = line else { break };
+                        if line.trim().is_empty() {
+                            continue;
+                        }
+                        let req: serde_json::Value = serde_json::from_str(&line).unwrap();
+                        calls.lock().unwrap().push((
+                            req["tool"].as_str().unwrap_or("").to_string(),
+                            req["args"].clone(),
+                        ));
+                        let resp = json!({
+                            "id": req["id"],
+                            "envelope": { "ok": true, "result": { "ok": true } },
+                        });
+                        let _ = writer.write_all((resp.to_string() + "\n").as_bytes());
+                        let _ = writer.flush();
+                    }
+                });
+            }
+        });
+
+        let live = json!({
+            "v": 1,
+            "session_id": "s_ws",
+            "daemon_pid": std::process::id(),
+            "started_ms": crate::live_registry::now_ms(),
+            "client": {"name": "ws-test", "version": "1"},
+            "project_dir": "/tmp",
+            "apk": "x.apk",
+            "package": "x",
+            "serve_socket": daemon_sock.display().to_string(),
+            "display": {"w": 1080, "h": 2400},
+            "stream_socket": null,
+        });
+        std::fs::write(
+            server
+                .registry
+                .join(format!("s_ws-{}.json", std::process::id())),
+            live.to_string(),
+        )
+        .unwrap();
+
+        // 1. Missing/wrong token on /api/input -> 403.
+        assert_eq!(status_of(&server.raw("/api/input/s_ws")), 403);
+        assert_eq!(
+            status_of(&server.raw(&format!("/api/input/s_ws?t={}bad", server.token))),
+            403
+        );
+        // 2. Wrong Host on /api/input -> 403.
+        let mut bad_host = TcpStream::connect((Ipv4Addr::LOCALHOST, server.port)).unwrap();
+        write!(
+            bad_host,
+            "GET /api/input/s_ws?t={} HTTP/1.1\r\nHost: evil.example:{}\r\n\
+             Upgrade: websocket\r\nConnection: Upgrade\r\n\
+             Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\r\n",
+            server.token, server.port
+        )
+        .unwrap();
+        let mut resp = Vec::new();
+        let _ = bad_host.read_to_end(&mut resp);
+        assert_eq!(status_of(&resp), 403);
+
+        // 3. Valid token + Host, but non-WS GET -> 400.
+        assert_eq!(
+            status_of(&server.raw(&format!("/api/input/s_ws?t={}", server.token))),
+            400
+        );
+        // 4. Valid WS upgrade for missing session -> 404.
+        let mut missing = TcpStream::connect((Ipv4Addr::LOCALHOST, server.port)).unwrap();
+        write!(
+            missing,
+            "GET /api/input/nope?t={} HTTP/1.1\r\nHost: 127.0.0.1:{}\r\n\
+             Upgrade: websocket\r\nConnection: Upgrade\r\n\
+             Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\r\n",
+            server.token, server.port
+        )
+        .unwrap();
+        let mut resp404 = Vec::new();
+        let _ = missing.read_to_end(&mut resp404);
+        assert_eq!(status_of(&resp404), 404);
+
+        // 5. Real WS upgrade + input messages + mid-gesture drop -> ACTION_CANCEL.
+        let mut ws_cli = TcpStream::connect((Ipv4Addr::LOCALHOST, server.port)).unwrap();
+        let _ = ws_cli.set_read_timeout(Some(Duration::from_secs(5)));
+        write!(
+            ws_cli,
+            "GET /api/input/s_ws?t={} HTTP/1.1\r\nHost: 127.0.0.1:{}\r\n\
+             Upgrade: websocket\r\nConnection: Upgrade\r\n\
+             Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\r\n",
+            server.token, server.port
+        )
+        .unwrap();
+        let head = read_response_head(&mut ws_cli);
+        assert!(head.starts_with("HTTP/1.1 101"), "{head}");
+        assert!(head.contains("s3pPLMBiTxaQ9kYGzzhZRbK+xOo="), "{head}");
+
+        let send_masked = |stream: &mut TcpStream, msg: &str| {
+            let payload = msg.as_bytes();
+            let mut frame = Vec::new();
+            frame.push(0x81);
+            assert!(payload.len() <= 125);
+            frame.push(0x80 | (payload.len() as u8));
+            let mask = [0x12u8, 0x34, 0x56, 0x78];
+            frame.extend_from_slice(&mask);
+            for (i, b) in payload.iter().enumerate() {
+                frame.push(*b ^ mask[i & 3]);
+            }
+            stream.write_all(&frame).unwrap();
+            stream.flush().unwrap();
+        };
+        let read_reply = |stream: &mut TcpStream| -> serde_json::Value {
+            let mut h = [0u8; 2];
+            stream.read_exact(&mut h).unwrap();
+            let len = usize::from(h[1] & 0x7f);
+            let mut buf = vec![0u8; len];
+            stream.read_exact(&mut buf).unwrap();
+            serde_json::from_slice(&buf).unwrap()
+        };
+
+        send_masked(&mut ws_cli, r#"{"t":"touch","phase":"down","id":0,"x":10,"y":20}"#);
+        assert_eq!(read_reply(&mut ws_cli)["ok"], json!(true));
+        send_masked(&mut ws_cli, r#"{"t":"text","s":"hi"}"#);
+        assert_eq!(read_reply(&mut ws_cli)["ok"], json!(true));
+        send_masked(&mut ws_cli, r#"{"t":"key","code":"KEYCODE_BACK","phase":"press"}"#);
+        assert_eq!(read_reply(&mut ws_cli)["ok"], json!(true));
+
+        // Drop mid-gesture (finger still down) -> worker sends ACTION_CANCEL.
+        drop(ws_cli);
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while Instant::now() < deadline {
+            if calls.lock().unwrap().len() >= 4 {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        let recorded = calls.lock().unwrap().clone();
+        assert_eq!(recorded.len(), 4, "{recorded:#?}");
+        assert_eq!(recorded[0].0, "panel_touch");
+        assert_eq!(recorded[0].1["action"], json!(0));
+        assert_eq!(recorded[1].0, "panel_text");
+        assert_eq!(recorded[2].0, "panel_key");
+        assert_eq!(recorded[2].1["code"], json!(4));
+        assert_eq!(recorded[3].0, "panel_touch");
+        assert_eq!(recorded[3].1["action"], json!(3)); // ACTION_CANCEL
     }
 
     fn send(

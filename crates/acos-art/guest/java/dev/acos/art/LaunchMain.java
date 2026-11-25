@@ -5649,9 +5649,15 @@ public final class LaunchMain {
                     }
                     // Let `handleResumeActivity` and the first traversal finish.
                     Thread.sleep(200);
-                    Class<?> stopCls = Class.forName("android.app.servertransaction.StopActivityItem");
-                    Object stopItem = obtainPrimitiveItem(stopCls, new boolean[]{false});
-                    scheduleLocal(lifecycleTransaction(previous, stopItem));
+                    synchronized (sFinishPrevious) {
+                        if (sCurrentToken != token
+                                || Boolean.TRUE.equals(get(activity, "mFinished"))) {
+                            return;
+                        }
+                        Class<?> stopCls = Class.forName("android.app.servertransaction.StopActivityItem");
+                        Object stopItem = obtainPrimitiveItem(stopCls, new boolean[]{false});
+                        scheduleLocal(lifecycleTransaction(previous, stopItem));
+                    }
                     System.out.println("ACOSLAUNCH MARK activity-stopped-after-launch token=binder:"
                             + Integer.toHexString(System.identityHashCode(previous)));
                     System.out.flush();
@@ -6069,15 +6075,17 @@ public final class LaunchMain {
         Class<?> stopCls = Class.forName("android.app.servertransaction.StopActivityItem");
         Class<?> destroyCls = Class.forName("android.app.servertransaction.DestroyActivityItem");
         Class<?> resumeCls = Class.forName("android.app.servertransaction.ResumeActivityItem");
-        scheduleLocal(lifecycleTransaction(token,
-                obtainPrimitiveItem(pauseCls, new boolean[]{true, false, false})));
+        synchronized (sFinishPrevious) {
+            sCurrentToken = previous;
+            scheduleLocal(lifecycleTransaction(token,
+                    obtainPrimitiveItem(pauseCls, new boolean[]{true, false, false})));
+        }
         long pdl = System.currentTimeMillis() + 5000;
         while (System.currentTimeMillis() < pdl && activity != null
                 && Boolean.TRUE.equals(get(activity, "mResumed"))) {
             Thread.sleep(5);
         }
         scheduleLocal(lifecycleTransaction(previous, obtainResume(resumeCls)));
-        sCurrentToken = previous;
         System.out.println("ACOSLAUNCH MARK activity-resumed-after-finish token=binder:"
                 + Integer.toHexString(System.identityHashCode(previous)));
         long rdl = System.currentTimeMillis() + 10000;

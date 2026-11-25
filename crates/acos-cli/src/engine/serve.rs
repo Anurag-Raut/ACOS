@@ -1553,6 +1553,9 @@ impl ServeEngine {
         match outcome {
             Ok(result) => {
                 self.refresh_live_activity(id, &session);
+                if tool == "panel_rotate" {
+                    let _ = self.live.update_display(id, session.display_size());
+                }
                 Envelope::pass(
                     request_id,
                     ProtocolBackend::AcosNative,
