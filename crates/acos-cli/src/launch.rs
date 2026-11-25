@@ -78,6 +78,12 @@ pub struct LaunchArgs {
     #[arg(long)]
     pub label: Option<String>,
 
+    /// Optional display name for the session in `acos view`. Defaults to
+    /// `<app label or package> · <session_id>`. Control characters, newlines,
+    /// and `=` are stripped and the name is capped at 64 characters.
+    #[arg(long = "device-name", value_name = "NAME")]
+    pub device_name: Option<String>,
+
     /// Override the display density (dpi) the client sees. `--density 400`
     /// lays ACOS out at 1080x2400 @ 400 dpi (the moto g35 under test) instead
     /// of the API-34 emulator's 420 dpi, so geometry can be compared on the
@@ -415,6 +421,9 @@ fn run_keep(
     // whose Rust value is `None` is absent from the request.
     if let Some(seconds) = args.idle_kill_seconds {
         daemon_args["idle_kill_seconds"] = json!(seconds);
+    }
+    if let Some(device_name) = args.device_name.as_deref() {
+        daemon_args["device_name"] = json!(device_name);
     }
     // LAUNCHEXTRAS: the same three fields the MCP tool takes, and only the ones
     // the caller set (like every other optional wire field above).

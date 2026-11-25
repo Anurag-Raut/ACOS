@@ -594,6 +594,25 @@ pub fn run(args: VerifyArgs) -> ExitCode {
     let mut deferred_art_meta: Option<
         Arc<std::sync::Mutex<crate::engine::art::DeferredArtMeta>>,
     > = None;
+    struct VerifyLiveGuard {
+        registry: crate::live_registry::LiveRegistry,
+        session_id: Arc<std::sync::Mutex<Option<String>>>,
+    }
+    impl Drop for VerifyLiveGuard {
+        fn drop(&mut self) {
+            if let Ok(guard) = self.session_id.lock() {
+                if let Some(id) = guard.as_deref() {
+                    self.registry.remove(id);
+                }
+            }
+        }
+    }
+    let verify_live_session_id = Arc::new(std::sync::Mutex::new(None));
+    let verify_live_registry = crate::live_registry::LiveRegistry::from_env();
+    let verify_live_guard = VerifyLiveGuard {
+        registry: verify_live_registry.clone(),
+        session_id: Arc::clone(&verify_live_session_id),
+    };
     let backend: EngineBackend = match engine {
         // The default route is forwarded verbatim: engine selection does not
         // change Rust VM behaviour.
@@ -688,7 +707,47 @@ pub fn run(args: VerifyArgs) -> ExitCode {
             // `launch`, defer spawning the ART guest until `launch` runs so the
             // relay's host-port opt-in and Metro itself are already up before
             // the debug app executes `Application.onCreate`.
+            let publish_verify_live = |registry: &crate::live_registry::LiveRegistry,
+                                       sid_slot: &Arc<std::sync::Mutex<Option<String>>>,
+                                       session: &crate::engine::art::ArtSession| {
+                let (client_name, client_version) = registry.client();
+                let id = session.session_id().to_string();
+                if let Ok(mut guard) = sid_slot.lock() {
+                    *guard = Some(id.clone());
+                }
+                let entry = crate::live_registry::LiveEntry {
+                    session_id: id,
+                    daemon_pid: std::process::id(),
+                    launcher_pid: session.launcher_pid(),
+                    started_ms: crate::live_registry::now_ms(),
+                    client_name: client_name.to_string(),
+                    client_version: client_version.to_string(),
+                    project_dir: registry.project_dir().to_string(),
+                    apk: session.apk_path().display().to_string(),
+                    package: session.package().to_string(),
+                    app_label: session.app_label().map(str::to_string),
+                    device_name: None,
+                    watch_only: true,
+                    serve_socket: None,
+                    activity: session.activity().map(str::to_string),
+                    display: session.display_size(),
+                    stream_socket: session
+                        .stream_socket()
+                        .map(|path| path.display().to_string()),
+                };
+                if let Err(error) = registry.write(&entry) {
+                    eprintln!(
+                        "acos verify: live view: cannot publish watch-only entry to {}: {error}",
+                        registry.dir().display()
+                    );
+                }
+            };
             if scenario_starts_dev_server_before_launch(&scenario) {
+                let registry = verify_live_registry.clone();
+                let sid_slot = Arc::clone(&verify_live_session_id);
+                let on_started = Box::new(move |session: &crate::engine::art::ArtSession| {
+                    publish_verify_live(&registry, &sid_slot, session);
+                }) as Box<dyn FnOnce(&crate::engine::art::ArtSession) + Send>;
                 let (deferred, meta) = crate::engine::art::DeferredArtSession::new(
                     crate::engine::art::DeferredArtStart {
                         apk,
@@ -701,6 +760,7 @@ pub fn run(args: VerifyArgs) -> ExitCode {
                         session_id: None,
                         services: validated_services.clone(),
                         intent: launch_intent,
+                        on_started: Some(on_started),
                     },
                 );
                 deferred_art_meta = Some(meta);
@@ -729,6 +789,11 @@ pub fn run(args: VerifyArgs) -> ExitCode {
                         session_insets = Some(session.insets());
                         session_extra_apks = session.extra_apks().to_vec();
                         session_boot_image = session.boot_image().cloned();
+                        publish_verify_live(
+                            &verify_live_registry,
+                            &verify_live_session_id,
+                            &session,
+                        );
                         EngineBackend::session(Box::new(session))
                     }
                     Err(error) => {
@@ -767,6 +832,7 @@ pub fn run(args: VerifyArgs) -> ExitCode {
     // record is evidence for a pass as well as for a failure (a clean run ends
     // with guest_exit=0), and a caller that keeps only the artifacts keeps it.
     drop(guarded);
+    drop(verify_live_guard);
     if let Some(meta) = deferred_art_meta.and_then(|m| m.lock().ok().map(|g| {
         (
             g.session_id.clone(),

@@ -53,6 +53,14 @@ pub struct LiveEntry {
     pub apk: String,
     /// The launched package.
     pub package: String,
+    /// The human-readable app label from the APK manifest/resources, when known.
+    pub app_label: Option<String>,
+    /// Optional human-readable device name set on `acos_launch`.
+    pub device_name: Option<String>,
+    /// `true` for `acos verify` runs (panel input is refused / watch-only).
+    pub watch_only: bool,
+    /// `acos serve` Unix socket path for routing interactive panel input (`None` for verify runs).
+    pub serve_socket: Option<String>,
     /// The focused activity, when known.
     pub activity: Option<String>,
     /// The session display size.
@@ -76,6 +84,10 @@ impl LiveEntry {
             "project_dir": self.project_dir,
             "apk": self.apk,
             "package": self.package,
+            "app_label": self.app_label,
+            "device_name": self.device_name,
+            "watch_only": self.watch_only,
+            "serve_socket": self.serve_socket,
             "activity": self.activity,
             "display": {"w": self.display.0, "h": self.display.1},
             "stream_socket": self.stream_socket,
@@ -217,8 +229,14 @@ impl LiveRegistry {
     }
 
     fn prepare_dir(&self) -> io::Result<()> {
+        use std::os::unix::fs::DirBuilderExt;
         if let Some(parent) = self.dir.parent() {
-            std::fs::create_dir_all(parent)?;
+            if !parent.as_os_str().is_empty() {
+                std::fs::DirBuilder::new()
+                    .recursive(true)
+                    .mode(0o700)
+                    .create(parent)?;
+            }
         }
         verify_private_dir(&self.dir, true)
     }
@@ -468,6 +486,27 @@ fn sanitize(session_id: &str) -> String {
     }
 }
 
+const MAX_DEVICE_NAME_CHARS: usize = 64;
+
+/// Sanitize a caller-provided device display name: strip control characters,
+/// newlines, and `=`, collapse whitespace, and cap at 64 Unicode scalar values.
+/// Returns `None` when the sanitized result is empty.
+#[must_use]
+pub fn sanitize_device_name(raw: &str) -> Option<String> {
+    let filtered: String = raw
+        .chars()
+        .map(|c| if c.is_control() || c == '=' { ' ' } else { c })
+        .collect();
+    let collapsed = filtered.split_whitespace().collect::<Vec<_>>().join(" ");
+    let capped: String = collapsed.chars().take(MAX_DEVICE_NAME_CHARS).collect();
+    let trimmed = capped.trim();
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(trimmed.to_string())
+    }
+}
+
 /// Root for the small files (and Unix sockets) the viewer tests create.
 ///
 /// The rule lives in [`acos_test_support::short_scratch_root`] because it is one
@@ -573,6 +612,10 @@ mod tests {
             project_dir: "/home/Qui/Projects/acos".to_string(),
             apk: "fixtures/build/apps/counter.apk".to_string(),
             package: "dev.acos.fixtures.counter".to_string(),
+            app_label: Some("Counter".to_string()),
+            device_name: None,
+            watch_only: false,
+            serve_socket: None,
             activity: Some("dev.acos.fixtures.counter.MainActivity".to_string()),
             display: (1080, 2400),
             stream_socket: Some("/run/user/1000/acos-art-1-0/view.sock".to_string()),
@@ -738,5 +781,36 @@ mod tests {
             }
         }
         (raw.to_string(), String::new())
+    }
+
+    #[test]
+    fn write_creates_missing_parent_dir_with_mode_0700() {
+        let base = scratch("nested-parent");
+        let parent = base.join("acos");
+        let dir = parent.join("live");
+        let registry = LiveRegistry::at(dir.clone());
+        registry.write(&entry("s_nested")).expect("write nested");
+        for path in [&parent, &dir] {
+            let mode = std::fs::metadata(path).unwrap().permissions().mode() & 0o777;
+            assert_eq!(
+                mode,
+                0o700,
+                "{} created with mode 0{mode:o}, expected 0700",
+                path.display()
+            );
+        }
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn sanitize_device_name_strips_controls_equals_collapses_and_caps() {
+        assert_eq!(
+            sanitize_device_name("  My\n\x00App=v2\t (test)  ").as_deref(),
+            Some("My App v2 (test)")
+        );
+        assert_eq!(sanitize_device_name("  \n===\t "), None);
+        let long = "A".repeat(90);
+        let capped = sanitize_device_name(&long).expect("capped");
+        assert_eq!(capped.chars().count(), 64);
     }
 }
