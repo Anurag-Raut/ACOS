@@ -25,9 +25,13 @@ pub const PAGE: &str = r##"<!doctype html>
   header h1 { font-size: 16px; margin: 0; letter-spacing: .02em; }
   header .spacer { flex: 1; }
   .pill { border: 1px solid var(--line); border-radius: 999px; padding: 2px 10px;
-    color: var(--muted); font-size: 12px; }
+    color: var(--muted); font-size: 12px; white-space: nowrap; }
   .pill.ok { color: var(--ok); border-color: #1f6f36; }
   .pill.bad { color: var(--bad); border-color: #6e2a26; }
+  .pill.warn { color: var(--warn); border-color: #7d5913; }
+  .banner { border: 1px solid #7d5913; background: rgba(210, 153, 34, .14);
+    color: var(--warn); border-radius: 8px; padding: 3px 10px; font-size: 12px;
+    font-weight: 600; white-space: nowrap; }
   main { padding: 18px; }
   #grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; }
   .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
@@ -45,25 +49,35 @@ pub const PAGE: &str = r##"<!doctype html>
   .card .mono { font-family: var(--mono); }
   .card .foot { display: flex; gap: 10px; margin-top: 8px; font-size: 11px; color: var(--muted); }
   .empty { color: var(--muted); padding: 32px 4px; }
-  #detail { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 18px; padding: 18px; }
-  @media (max-width: 900px) { #detail { grid-template-columns: minmax(0, 1fr); } }
-  .bar { display: flex; gap: 12px; align-items: center; grid-column: 1 / -1; }
+  #detail { display: flex; flex-direction: column; height: 100vh; padding: 10px 14px; gap: 10px; overflow: hidden; }
+  .bar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; flex-shrink: 0; }
   .bar button { background: var(--panel); color: var(--text); border: 1px solid var(--line);
-    border-radius: 8px; padding: 6px 12px; cursor: pointer; font-size: 13px; }
-  .bar button:hover { border-color: var(--accent); }
-  .bar .titles { min-width: 0; }
-  .bar .titles .big { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .bar .titles .small { color: var(--muted); font-size: 12px; font-family: var(--mono);
+    border-radius: 8px; padding: 5px 11px; cursor: pointer; font-size: 12px; }
+  .bar button:hover:not(:disabled) { border-color: var(--accent); }
+  .bar button:disabled { opacity: .45; cursor: not-allowed; }
+  .bar .actions { display: flex; gap: 6px; align-items: center; }
+  .bar .spacer { flex: 1; }
+  .bar .titles { min-width: 0; max-width: 320px; }
+  .bar .titles .big { font-weight: 600; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .bar .titles .small { color: var(--muted); font-size: 11px; font-family: var(--mono);
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .stage { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 310px;
+    gap: 14px; align-items: stretch; }
   .screenwrap { position: relative; background: #000; border: 1px solid var(--line);
-    border-radius: 12px; overflow: hidden; align-self: start; }
-  #frame { display: block; width: 100%; height: auto; }
+    border-radius: 12px; overflow: hidden; width: 100%; height: 100%; min-width: 0; min-height: 0;
+    display: flex; align-items: center; justify-content: center;
+    touch-action: none; user-select: none; outline: none; cursor: crosshair; }
+  .screenwrap:focus-visible { border-color: var(--accent); }
+  .screenwrap.watchonly { cursor: default; }
+  #frame { display: block; width: 100%; height: 100%; object-fit: contain;
+    pointer-events: none; -webkit-user-drag: none; user-select: none; }
   #offline { position: absolute; inset: auto 0 0 0; background: rgba(13,17,23,.82);
-    color: var(--warn); font-size: 12px; padding: 6px 10px; }
-  #overlay { position: absolute; inset: 0; pointer-events: none; }
+    color: var(--warn); font-size: 12px; padding: 6px 10px; z-index: 3; }
+  #overlay { position: absolute; inset: 0; pointer-events: none; z-index: 2; overflow: hidden; }
   .ripple { position: absolute; width: 44px; height: 44px; margin: -22px 0 0 -22px;
     border: 2px solid var(--accent); border-radius: 50%; opacity: .95;
     animation: ripple .9s ease-out forwards; }
+  .ripple.panel { border-color: var(--ok); }
   .ripple.bad { border-color: var(--bad); }
   @keyframes ripple {
     from { transform: scale(.25); opacity: .95; }
@@ -71,36 +85,35 @@ pub const PAGE: &str = r##"<!doctype html>
   }
   .rip-tag { position: absolute; transform: translate(-50%, 26px); font: 11px/1 var(--mono);
     background: rgba(13,17,23,.85); border: 1px solid var(--line); border-radius: 6px;
-    padding: 3px 6px; color: var(--text); animation: fade 1.4s ease-out forwards; }
+    padding: 3px 6px; color: var(--text); animation: fade 1.4s ease-out forwards; white-space: nowrap; }
   @keyframes fade { from { opacity: 1; } to { opacity: 0; } }
   aside { background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
-    padding: 12px 14px; min-width: 0; align-self: start; }
-  aside h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .08em;
-    color: var(--muted); margin: 0 0 8px; }
-  #events { list-style: none; margin: 0; padding: 0; max-height: 60vh; overflow-y: auto; }
+    padding: 12px 14px; min-width: 0; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+  aside h2 { font-size: 11px; text-transform: uppercase; letter-spacing: .08em;
+    color: var(--muted); margin: 0 0 6px; }
+  #events { list-style: none; margin: 0; padding: 0; flex: 1; min-height: 0; overflow-y: auto; }
   #events li { border-top: 1px solid var(--line); padding: 6px 0; font-size: 12px;
-    display: grid; grid-template-columns: 58px minmax(0, 1fr); gap: 8px; }
+    display: grid; grid-template-columns: 54px minmax(0, 1fr); gap: 8px; }
   #events li:first-child { border-top: 0; }
-  #events .t { color: var(--muted); font-family: var(--mono); }
+  #events .t { color: var(--muted); font-family: var(--mono); font-size: 11px; }
   #events .what { min-width: 0; overflow-wrap: anywhere; }
+  #events .src { display: inline-block; font: 10px/1.3 var(--mono); border-radius: 4px;
+    padding: 1px 5px; margin-right: 5px; border: 1px solid var(--line); color: var(--muted); }
+  #events .src.panel { color: var(--accent); border-color: #264f78; background: rgba(79,156,249,.12); }
+  #events .src.agent { color: var(--ok); border-color: #1f6f36; background: rgba(63,185,80,.10); }
   #events .cmd { font-weight: 600; }
   #events .st { font-family: var(--mono); font-size: 11px; }
   #events .st.ok { color: var(--ok); }
   #events .st.bad { color: var(--bad); }
   #events .txt { color: var(--muted); font-family: var(--mono); }
-  .note { color: var(--muted); font-size: 12px; margin-top: 10px; }
-  /* Watching one session: only the screen, scaled to fit the pane. */
+  .note { color: var(--muted); font-size: 11px; margin-top: 8px; flex-shrink: 0; }
   body.watching { height: 100vh; overflow: hidden; }
-  body.watching header, body.watching aside, body.watching .bar .titles,
-  body.watching .bar .spacer, body.watching .bar .pill { display: none; }
-  body.watching #detail { display: flex; align-items: center; justify-content: center;
-    height: 100vh; padding: 8px; gap: 0; }
-  body.watching .bar { position: fixed; top: 8px; left: 8px; z-index: 5; }
-  body.watching .bar button { opacity: .55; }
-  body.watching .bar button:hover { opacity: 1; }
-  body.watching .screenwrap { align-self: center; height: calc(100vh - 16px);
-    aspect-ratio: var(--ar, 9 / 20); max-width: 100%; border-radius: 10px; }
-  body.watching #frame { width: 100%; height: 100%; object-fit: contain; }
+  body.watching header { display: none; }
+  @media (max-width: 820px) {
+    .stage { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) 150px; }
+    .bar .titles { max-width: 180px; }
+    aside .note { display: none; }
+  }
   [hidden] { display: none !important; }
 </style>
 </head>
@@ -109,7 +122,7 @@ pub const PAGE: &str = r##"<!doctype html>
   <h1>ACOS live view</h1>
   <span class="pill" id="status">connecting…</span>
   <span class="spacer"></span>
-  <span class="pill">view-only · no input reaches the guest</span>
+  <span class="pill">127.0.0.1 · token-gated · verify stays watch-only</span>
 </header>
 <main id="grid"></main>
 <section id="detail" hidden>
@@ -119,22 +132,32 @@ pub const PAGE: &str = r##"<!doctype html>
       <div class="big" id="dtitle">session</div>
       <div class="small" id="dsub"></div>
     </div>
+    <span class="banner" id="verify-banner" hidden>watch-only: verify run</span>
+    <div class="actions">
+      <button id="btn-back" type="button" title="Back (Escape)">Back</button>
+      <button id="btn-home" type="button" title="Home">Home</button>
+      <button id="btn-recents" type="button" title="Recents">Recents</button>
+      <button id="btn-rotate" type="button" title="Rotate 90°">Rotate</button>
+    </div>
     <span class="spacer"></span>
+    <span class="pill" id="dinput">idle</span>
     <span class="pill" id="dstate">stream</span>
   </div>
-  <div class="screenwrap">
-    <img id="frame" alt="live screen">
-    <div id="overlay"></div>
-    <div id="offline" hidden>stream offline · reconnecting…</div>
+  <div class="stage">
+    <div class="screenwrap" id="screenwrap" tabindex="0">
+      <img id="frame" alt="live screen" draggable="false">
+      <div id="overlay"></div>
+      <div id="offline" hidden>stream offline · reconnecting…</div>
+    </div>
+    <aside>
+      <h2>activity</h2>
+      <div class="mono" id="dactivity" style="font-size:12px;color:var(--muted);margin-bottom:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">-</div>
+      <h2>agent &amp; human activity</h2>
+      <ol id="events" reversed></ol>
+      <div class="note">Click or type on the screen to interact (source: panel).
+        Watch-only until first input; verify sessions stay read-only.</div>
+    </aside>
   </div>
-  <aside>
-    <h2>activity</h2>
-    <div class="mono" id="dactivity" style="font-size:12px;color:var(--muted)">-</div>
-    <h2 style="margin-top:14px">recent actions</h2>
-    <ol id="events" reversed></ol>
-    <div class="note">Frames and events appear only while this page is open;
-      the session costs nothing when nobody watches.</div>
-  </aside>
 </section>
 <script>
 "use strict";
@@ -142,19 +165,48 @@ const token = new URLSearchParams(location.search).get("t") || "";
 const auth = (path) => path + (path.includes("?") ? "&" : "?") + "t=" + encodeURIComponent(token);
 const $ = (id) => document.getElementById(id);
 const grid = $("grid"), detail = $("detail"), statusPill = $("status");
-const frame = $("frame"), overlay = $("overlay"), eventsList = $("events");
+const frame = $("frame"), screenWrap = $("screenwrap"), overlay = $("overlay"), eventsList = $("events");
+const btnBack = $("btn-back"), btnHome = $("btn-home"), btnRecents = $("btn-recents"), btnRotate = $("btn-rotate");
+const verifyBanner = $("verify-banner"), dinput = $("dinput");
 
 let sessions = [];
-let current = null;   // { session_id, display: {w,h} } while a session is open
-let source = null;    // EventSource
+let current = null;
+let source = null;       // EventSource
 let display = { w: 0, h: 0 };
+let currentRotation = 0;
 let pollTimer = null;
+
+let ws = null;
+let wsQueue = [];
+const activePointers = new Map();
+
+const KEY_MAP = {
+  Backspace: "KEYCODE_DEL",
+  Delete: "KEYCODE_FORWARD_DEL",
+  Enter: "KEYCODE_ENTER",
+  Escape: "KEYCODE_BACK",
+  Tab: "KEYCODE_TAB",
+  ArrowUp: "KEYCODE_DPAD_UP",
+  ArrowDown: "KEYCODE_DPAD_DOWN",
+  ArrowLeft: "KEYCODE_DPAD_LEFT",
+  ArrowRight: "KEYCODE_DPAD_RIGHT",
+  Home: "KEYCODE_MOVE_HOME",
+  End: "KEYCODE_MOVE_END",
+  PageUp: "KEYCODE_PAGE_UP",
+  PageDown: "KEYCODE_PAGE_DOWN",
+};
 
 function el(tag, cls, text) {
   const node = document.createElement(tag);
   if (cls) node.className = cls;
   if (text !== undefined && text !== null) node.textContent = String(text);
   return node;
+}
+
+function sessionTitle(s) {
+  if (s.device_name) return s.device_name;
+  const label = s.app_label || s.package || "session";
+  return label + " · " + s.session_id;
 }
 
 function age(ms) {
@@ -178,6 +230,28 @@ function projectName(path) {
   return parts.length ? parts[parts.length - 1] : path;
 }
 
+function applyWatchOnlyUi(isWatchOnly) {
+  verifyBanner.hidden = !isWatchOnly;
+  screenWrap.classList.toggle("watchonly", !!isWatchOnly);
+  for (const btn of [btnBack, btnHome, btnRecents, btnRotate]) {
+    btn.disabled = !!isWatchOnly;
+    btn.title = isWatchOnly ? "watch-only: verify run" : "";
+  }
+  if (isWatchOnly) {
+    dinput.textContent = "watch-only";
+    dinput.className = "pill warn";
+  } else if (!ws) {
+    dinput.textContent = "idle";
+    dinput.className = "pill";
+  }
+}
+
+function setAspect(w, h) {
+  if (w > 0 && h > 0) {
+    screenWrap.style.setProperty("--ar", w + " / " + h);
+  }
+}
+
 function renderGrid() {
   grid.textContent = "";
   if (!sessions.length) {
@@ -190,14 +264,18 @@ function renderGrid() {
     const top = el("div", "top");
     top.appendChild(el("div", "id", s.session_id));
     const spacer = el("span"); spacer.style.flex = "1"; top.appendChild(spacer);
+    if (s.watch_only) {
+      top.appendChild(el("span", "pill warn", "watch-only"));
+    }
     if (s.stream) {
       top.appendChild(el("span", "pill" + (s.connected ? " ok" : ""), s.watchers > 0 ? "watching" : "live"));
     } else {
       top.appendChild(el("span", "pill", "no stream"));
     }
     card.appendChild(top);
-    card.appendChild(el("div", "pkg", s.package || "-"));
-    card.appendChild(el("div", "line mono", s.activity || "activity unknown"));
+    card.appendChild(el("div", "pkg", sessionTitle(s)));
+    const pkgLine = (s.package ? s.package + " · " : "") + (s.activity || "activity unknown");
+    card.appendChild(el("div", "line mono", pkgLine));
     const proj = el("div", "line", "project: " + projectName(s.project_dir));
     proj.title = s.project_dir || "";
     card.appendChild(proj);
@@ -222,10 +300,21 @@ async function refresh() {
     statusPill.textContent = sessions.length + (sessions.length === 1 ? " live session" : " live sessions");
     statusPill.className = "pill ok";
     if (!current) renderGrid();
-    if (current && !sessions.some((s) => s.session_id === current.session_id)) {
-      // The session ended: keep the last frame, say so, keep the page usable.
-      $("dstate").textContent = "session ended";
-      $("dstate").className = "pill bad";
+    if (current) {
+      const updated = sessions.find((s) => s.session_id === current.session_id);
+      if (!updated) {
+        $("dstate").textContent = "session ended";
+        $("dstate").className = "pill bad";
+      } else {
+        current = updated;
+        $("dtitle").textContent = sessionTitle(updated);
+        if (updated.display && updated.display.w && updated.display.h) {
+          display = { w: updated.display.w, h: updated.display.h };
+          setAspect(display.w, display.h);
+        }
+        if (updated.activity) $("dactivity").textContent = updated.activity;
+        applyWatchOnlyUi(updated.watch_only);
+      }
     }
   } catch (error) {
     statusPill.textContent = "hub unreachable · " + error.message;
@@ -235,32 +324,150 @@ async function refresh() {
   pollTimer = setTimeout(refresh, 2000);
 }
 
+function closeWs() {
+  activePointers.clear();
+  wsQueue = [];
+  if (ws) {
+    try { ws.close(); } catch (_) {}
+    ws = null;
+  }
+}
+
+function ensureWs() {
+  if (!current || current.watch_only) return null;
+  if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
+    return ws;
+  }
+  const proto = location.protocol === "https:" ? "wss://" : "ws://";
+  const url = proto + location.host + auth("/api/input/" + encodeURIComponent(current.session_id));
+  const sock = new WebSocket(url);
+  ws = sock;
+  dinput.textContent = "connecting…";
+  dinput.className = "pill";
+  sock.onopen = () => {
+    if (ws !== sock) return;
+    dinput.textContent = "interactive";
+    dinput.className = "pill ok";
+    while (wsQueue.length > 0 && sock.readyState === WebSocket.OPEN) {
+      sock.send(wsQueue.shift());
+    }
+  };
+  sock.onmessage = (ev) => {
+    if (ws !== sock) return;
+    let msg = null;
+    try { msg = JSON.parse(ev.data); } catch (_) { return; }
+    if (!msg) return;
+    if (msg.ok === false && msg.code === "VERIFY_WATCH_ONLY") {
+      if (current) current.watch_only = true;
+      applyWatchOnlyUi(true);
+      closeWs();
+      return;
+    }
+    if (msg.ok && msg.t === "rotate" && msg.width > 0 && msg.height > 0) {
+      display = { w: msg.width, h: msg.height };
+      if (typeof msg.rotation === "number") currentRotation = msg.rotation;
+      setAspect(display.w, display.h);
+    }
+  };
+  sock.onclose = () => {
+    if (ws !== sock) return;
+    ws = null;
+    wsQueue = [];
+    activePointers.clear();
+    if (current && !current.watch_only) {
+      dinput.textContent = "idle";
+      dinput.className = "pill";
+    }
+  };
+  sock.onerror = () => {
+    if (ws === sock && current && !current.watch_only) {
+      dinput.textContent = "input error";
+      dinput.className = "pill bad";
+    }
+  };
+  return sock;
+}
+
+function sendInput(msg) {
+  if (!current) return false;
+  if (current.watch_only) {
+    applyWatchOnlyUi(true);
+    return false;
+  }
+  const sock = ensureWs();
+  if (!sock) return false;
+  const raw = JSON.stringify(msg);
+  if (sock.readyState === WebSocket.OPEN) {
+    sock.send(raw);
+  } else if (sock.readyState === WebSocket.CONNECTING) {
+    if (wsQueue.length < 128) wsQueue.push(raw);
+  }
+  return true;
+}
+
+function renderedImageRect() {
+  const rect = frame.getBoundingClientRect();
+  const nw = frame.naturalWidth || display.w || 1080;
+  const nh = frame.naturalHeight || display.h || 2400;
+  if (!rect.width || !rect.height || !nw || !nh) return rect;
+  const imgRatio = nw / nh;
+  const boxRatio = rect.width / rect.height;
+  let w = rect.width, h = rect.height, left = rect.left, top = rect.top;
+  if (boxRatio > imgRatio) {
+    w = rect.height * imgRatio;
+    left = rect.left + (rect.width - w) / 2;
+  } else {
+    h = rect.width / imgRatio;
+    top = rect.top + (rect.height - h) / 2;
+  }
+  return { left, top, width: w, height: h, right: left + w, bottom: top + h };
+}
+
+function clientToDisplay(clientX, clientY, clampOutside) {
+  const r = renderedImageRect();
+  const dw = display.w || frame.naturalWidth || 1080;
+  const dh = display.h || frame.naturalHeight || 2400;
+  if (!r.width || !r.height) return null;
+  let nx = (clientX - r.left) / r.width;
+  let ny = (clientY - r.top) / r.height;
+  if (!clampOutside && (nx < 0 || nx > 1 || ny < 0 || ny > 1)) return null;
+  nx = Math.max(0, Math.min(1, nx));
+  ny = Math.max(0, Math.min(1, ny));
+  return {
+    x: Math.max(0, Math.min(dw - 1, Math.round(nx * (dw - 1)))),
+    y: Math.max(0, Math.min(dh - 1, Math.round(ny * (dh - 1)))),
+  };
+}
+
 function openSession(s) {
+  closeWs();
   current = s;
   display = { w: (s.display && s.display.w) || 0, h: (s.display && s.display.h) || 0 };
+  currentRotation = (display.w > display.h) ? 1 : 0;
   grid.hidden = true;
   detail.hidden = false;
   document.body.classList.add("watching");
-  $("dtitle").textContent = s.package || s.session_id;
-  $("dsub").textContent = s.session_id + " · " + clientLabel(s) + " · " + (s.project_dir || "-");
+  $("dtitle").textContent = sessionTitle(s);
+  $("dsub").textContent = s.session_id + " · " + clientLabel(s) + " · " + projectName(s.project_dir);
   $("dactivity").textContent = s.activity || "-";
   eventsList.textContent = "";
   $("dstate").textContent = s.stream ? "connecting" : "no stream";
   $("dstate").className = "pill";
   $("offline").hidden = true;
+  applyWatchOnlyUi(s.watch_only);
   frame.removeAttribute("src");
   if (s.stream) {
     frame.src = auth("/api/frames/" + encodeURIComponent(s.session_id));
-    if (s.display && s.display.w && s.display.h) {
-      frame.parentElement.style.setProperty("--ar", s.display.w + " / " + s.display.h);
-    }
+    setAspect(display.w, display.h);
     connectEvents(s);
   }
   location.hash = "s=" + encodeURIComponent(s.session_id);
   history.replaceState(null, "", location.pathname + location.search + location.hash);
+  screenWrap.focus({ preventScroll: true });
 }
 
 function closeSession() {
+  closeWs();
   if (source) { source.close(); source = null; }
   frame.removeAttribute("src");
   overlay.textContent = "";
@@ -279,8 +486,15 @@ function markLive() {
   $("dstate").className = "pill ok";
 }
 
-// A decoded frame is the strongest liveness signal there is.
-frame.addEventListener("load", markLive);
+frame.addEventListener("load", () => {
+  markLive();
+  if (frame.naturalWidth && frame.naturalHeight) {
+    setAspect(frame.naturalWidth, frame.naturalHeight);
+    if (display.w && display.h && ((display.w < display.h) !== (frame.naturalWidth < frame.naturalHeight))) {
+      display = { w: display.h, h: display.w };
+    }
+  }
+});
 
 function connectEvents(s) {
   source = new EventSource(auth("/api/events/" + encodeURIComponent(s.session_id)));
@@ -288,7 +502,14 @@ function connectEvents(s) {
     let data = {};
     try { data = JSON.parse(message.data); } catch (error) { return; }
     const entry = data.entry || {};
-    if (entry.display && entry.display.w) display = { w: entry.display.w, h: entry.display.h };
+    if (entry.display && entry.display.w) {
+      display = { w: entry.display.w, h: entry.display.h };
+      setAspect(display.w, display.h);
+    }
+    if (typeof entry.watch_only === "boolean" && current) {
+      current.watch_only = entry.watch_only;
+      applyWatchOnlyUi(entry.watch_only);
+    }
     if (entry.activity) $("dactivity").textContent = entry.activity;
     $("offline").hidden = !!data.connected;
     $("dstate").textContent = data.connected ? "live" : "reconnecting";
@@ -297,8 +518,6 @@ function connectEvents(s) {
   source.addEventListener("ev", (message) => {
     let data = {};
     try { data = JSON.parse(message.data); } catch (error) { return; }
-    // An event from the session proves the upstream is live: the one-shot
-    // `state` sent at subscribe time can predate the hub's connection.
     markLive();
     onEvent(data.event || {}, data.kind || "event");
   });
@@ -333,16 +552,24 @@ function onEvent(event, kind) {
 }
 
 function ripple(event) {
-  const width = display.w || 1080, height = display.h || 2400;
+  const dw = display.w || frame.naturalWidth || 1080;
+  const dh = display.h || frame.naturalHeight || 2400;
+  const imgRect = renderedImageRect();
+  const ovRect = overlay.getBoundingClientRect();
+  if (!imgRect.width || !imgRect.height || !ovRect.width || !ovRect.height) return;
+  const leftPx = (imgRect.left - ovRect.left) + (event.x / dw) * imgRect.width;
+  const topPx = (imgRect.top - ovRect.top) + (event.y / dh) * imgRect.height;
   const ok = !event.status || event.status === "ok";
-  const dot = el("div", "ripple" + (ok ? "" : " bad"));
-  dot.style.left = (100 * event.x / width) + "%";
-  dot.style.top = (100 * event.y / height) + "%";
+  const srcCls = event.source === "panel" ? " panel" : "";
+  const dot = el("div", "ripple" + srcCls + (ok ? "" : " bad"));
+  dot.style.left = leftPx + "px";
+  dot.style.top = topPx + "px";
   overlay.appendChild(dot);
-  const tag = el("div", "rip-tag", (event.cmd || "tap") + " " + event.x + "," + event.y
+  const srcPrefix = event.source ? event.source + " " : "";
+  const tag = el("div", "rip-tag", srcPrefix + (event.cmd || "tap") + " " + event.x + "," + event.y
     + (ok ? "" : " · " + event.status));
-  tag.style.left = (100 * event.x / width) + "%";
-  tag.style.top = (100 * event.y / height) + "%";
+  tag.style.left = leftPx + "px";
+  tag.style.top = topPx + "px";
   overlay.appendChild(tag);
   setTimeout(() => { dot.remove(); tag.remove(); }, 1400);
 }
@@ -352,6 +579,10 @@ function addEvent(event, kind) {
   const stamp = new Date(event.ts_ms || Date.now());
   item.appendChild(el("span", "t", stamp.toLocaleTimeString([], { hour12: false })));
   const what = el("div", "what");
+  if (event.source) {
+    const srcCls = event.source === "panel" ? "src panel" : (event.source === "agent" ? "src agent" : "src");
+    what.appendChild(el("span", srcCls, event.source));
+  }
   const label = event.cmd || event.kind || kind;
   what.appendChild(el("span", "cmd", label));
   if (event.status) {
@@ -362,16 +593,126 @@ function addEvent(event, kind) {
     what.appendChild(el("span", "txt", " @ " + event.x + "," + event.y
       + (typeof event.x2 === "number" ? " → " + event.x2 + "," + event.y2 : "")));
   }
-  if (event.key) what.appendChild(el("span", "txt", " key " + event.key));
+  if (event.key !== undefined && event.key !== null) what.appendChild(el("span", "txt", " key " + event.key));
   if (event.text) what.appendChild(el("span", "txt", " “" + event.text + "”"));
+  if (event.note) what.appendChild(el("span", "txt", " · " + event.note));
   if (event.activity && event.kind === "activity") what.appendChild(el("span", "txt", " " + event.activity));
   item.appendChild(what);
   eventsList.prepend(item);
   while (eventsList.children.length > 40) eventsList.lastChild.remove();
 }
 
+screenWrap.addEventListener("pointerdown", (e) => {
+  if (!current) return;
+  if (e.pointerType === "mouse" && e.button !== 0) return;
+  const pt = clientToDisplay(e.clientX, e.clientY, false);
+  if (!pt) return;
+  e.preventDefault();
+  screenWrap.focus({ preventScroll: true });
+  if (current.watch_only) {
+    applyWatchOnlyUi(true);
+    return;
+  }
+  try { screenWrap.setPointerCapture(e.pointerId); } catch (_) {}
+  activePointers.set(e.pointerId, pt);
+  sendInput({ t: "touch", phase: "down", id: e.pointerId, x: pt.x, y: pt.y });
+});
+
+screenWrap.addEventListener("pointermove", (e) => {
+  if (!activePointers.has(e.pointerId)) return;
+  const pt = clientToDisplay(e.clientX, e.clientY, true);
+  if (!pt) return;
+  const prev = activePointers.get(e.pointerId);
+  if (prev && prev.x === pt.x && prev.y === pt.y) return;
+  activePointers.set(e.pointerId, pt);
+  sendInput({ t: "touch", phase: "move", id: e.pointerId, x: pt.x, y: pt.y });
+});
+
+function finishPointer(e, phase) {
+  if (!activePointers.has(e.pointerId)) return;
+  const pt = clientToDisplay(e.clientX, e.clientY, true) || activePointers.get(e.pointerId);
+  activePointers.delete(e.pointerId);
+  try {
+    if (screenWrap.hasPointerCapture && screenWrap.hasPointerCapture(e.pointerId)) {
+      screenWrap.releasePointerCapture(e.pointerId);
+    }
+  } catch (_) {}
+  sendInput({ t: "touch", phase, id: e.pointerId, x: pt.x, y: pt.y });
+}
+
+screenWrap.addEventListener("pointerup", (e) => finishPointer(e, "up"));
+screenWrap.addEventListener("pointercancel", (e) => finishPointer(e, "cancel"));
+
+screenWrap.addEventListener("wheel", (e) => {
+  if (!current) return;
+  const pt = clientToDisplay(e.clientX, e.clientY, false) || {
+    x: Math.round((display.w || 1080) / 2),
+    y: Math.round((display.h || 2400) / 2),
+  };
+  e.preventDefault();
+  if (current.watch_only) {
+    applyWatchOnlyUi(true);
+    return;
+  }
+  const scale = e.deltaMode === 1 ? 40 : (e.deltaMode === 2 ? 400 : 1);
+  sendInput({
+    t: "scroll",
+    x: pt.x,
+    y: pt.y,
+    dx: Math.round(e.deltaX * scale),
+    dy: Math.round(e.deltaY * scale),
+  });
+}, { passive: false });
+
+document.addEventListener("keydown", (e) => {
+  if (!current || detail.hidden) return;
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  if (document.activeElement && document.activeElement.tagName === "BUTTON" && (e.key === "Enter" || e.key === " ")) {
+    return;
+  }
+  const kc = KEY_MAP[e.key];
+  if (kc) {
+    e.preventDefault();
+    if (!e.repeat) sendInput({ t: "key", code: kc, phase: "down" });
+    return;
+  }
+  if (e.key && e.key.length === 1) {
+    e.preventDefault();
+    sendInput({ t: "text", s: e.key });
+  }
+});
+
+document.addEventListener("keyup", (e) => {
+  if (!current || detail.hidden) return;
+  const kc = KEY_MAP[e.key];
+  if (kc) {
+    e.preventDefault();
+    sendInput({ t: "key", code: kc, phase: "up" });
+  }
+});
+
+function sendKeyPress(code) {
+  sendInput({ t: "key", code, phase: "down" });
+  sendInput({ t: "key", code, phase: "up" });
+  screenWrap.focus({ preventScroll: true });
+}
+
+btnBack.addEventListener("click", () => sendKeyPress("KEYCODE_BACK"));
+btnHome.addEventListener("click", () => sendKeyPress("KEYCODE_HOME"));
+btnRecents.addEventListener("click", () => sendKeyPress("KEYCODE_APP_SWITCH"));
+btnRotate.addEventListener("click", () => {
+  const next = (currentRotation + 1) % 4;
+  if (sendInput({ t: "rotate", rotation: next })) {
+    currentRotation = next;
+  }
+  screenWrap.focus({ preventScroll: true });
+});
+
 $("back").addEventListener("click", closeSession);
-window.addEventListener("pagehide", () => { if (source) source.close(); });
+window.addEventListener("pagehide", () => {
+  closeWs();
+  if (source) source.close();
+});
 refresh();
 if (location.hash.startsWith("#s=")) {
   const wanted = decodeURIComponent(location.hash.slice(3));

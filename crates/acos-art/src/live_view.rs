@@ -685,8 +685,8 @@ impl Inner {
                     {
                         break;
                     }
-                    inner.tap_once();
-                    inner.frame_wake.wait(Duration::from_millis(200));
+                    let wait = inner.tap_once().unwrap_or(Duration::from_millis(200));
+                    inner.frame_wake.wait(wait);
                 }
                 inner.tap_running.store(false, Ordering::Release);
                 // A subscriber may have attached while this thread was exiting;
@@ -704,12 +704,16 @@ impl Inner {
     }
 
     /// One tap step: the cost rule and the capture path.
-    fn tap_once(&self) {
+    ///
+    /// Returns `Some(remaining)` when the rate gate skipped a wake so the tap
+    /// thread sleeps only until the current frame interval expires instead of a
+    /// full 200 ms idle timeout.
+    fn tap_once(&self) -> Option<Duration> {
         self.ticks.fetch_add(1, Ordering::Relaxed);
         // **The cost rule**: with no subscriber this is one atomic load and a
         // return — no lock, no capture, no copy, no encode.
         if self.subscriber_count.load(Ordering::Acquire) == 0 {
-            return;
+            return None;
         }
         // A capture is a full composite of the display (1080x2400 RGBA), so it
         // is rate-limited to the stream's own frame rate: a frame captured more
@@ -720,13 +724,14 @@ impl Inner {
         let last_ms = self.last_capture_ms.load(Ordering::Relaxed);
         if last_ms != 0 && tick_ms.saturating_sub(last_ms) < interval_ms {
             self.captures_rate_limited.fetch_add(1, Ordering::Relaxed);
-            return;
+            let remaining = interval_ms.saturating_sub(tick_ms.saturating_sub(last_ms)).max(1);
+            return Some(Duration::from_millis(remaining));
         }
         self.last_capture_ms.store(tick_ms, Ordering::Relaxed);
         self.source_calls.fetch_add(1, Ordering::Relaxed);
         let source = Arc::clone(&self.source);
         let Some(mut frame) = source() else {
-            return;
+            return None;
         };
         if frame.secure {
             // Defence in depth (VIEW1c L1): whatever the source handed over, a
@@ -758,6 +763,7 @@ impl Inner {
         }
         self.frames_captured.fetch_add(1, Ordering::Relaxed);
         self.notify();
+        None
     }
 
     fn broadcast(&self, message: &[u8], frames: bool) {
@@ -1004,7 +1010,7 @@ impl LiveView {
     /// [`LiveView::bind`]'s own tap thread do it (it exists only while a
     /// subscriber is attached).
     pub fn tick(&self) {
-        self.inner.tap_once();
+        let _ = self.inner.tap_once();
     }
 
     /// Record the command the launcher is about to execute, so its reply's

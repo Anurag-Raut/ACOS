@@ -23,10 +23,10 @@
 
 use std::collections::{BTreeMap, VecDeque};
 use std::io::{self, BufRead, BufReader, ErrorKind, Read, Write};
-use std::net::TcpStream;
+use std::net::{Shutdown, TcpStream};
 use std::os::unix::net::UnixStream;
 use std::path::PathBuf;
-use std::sync::{Arc, Condvar, Mutex};
+use std::sync::{Arc, Condvar, Mutex, Weak};
 use std::time::{Duration, Instant};
 
 use acos_services::input_channel::{
@@ -324,9 +324,9 @@ impl Hub {
         if !std::path::Path::new(&socket).exists() {
             return None;
         }
-        let slot = {
+        let (slot, interactive) = {
             let mut inner = self.inner.lock().expect("hub");
-            if let Some(slot) = inner.slots.get(session_id) {
+            let slot = if let Some(slot) = inner.slots.get(session_id) {
                 *slot.meta.lock().expect("slot meta") = entry.clone();
                 Arc::clone(slot)
             } else {
@@ -335,8 +335,17 @@ impl Hub {
                     .slots
                     .insert(session_id.to_string(), Arc::clone(&slot));
                 slot
-            }
+            };
+            let interactive = if let Some(input_slot) = inner.input_slots.get(session_id) {
+                *input_slot.stream_slot.lock().expect("input stream slot") =
+                    Some(Arc::downgrade(&slot));
+                input_slot.is_interactive()
+            } else {
+                false
+            };
+            (slot, interactive)
         };
+        slot.set_interactive(interactive);
         slot.attach(socket);
         Some(Watcher { slot })
     }
@@ -350,7 +359,8 @@ impl Hub {
         let entry = self.entry(session_id)?;
         let slot = {
             let mut inner = self.inner.lock().expect("hub");
-            if let Some(slot) = inner.input_slots.get(session_id) {
+            let stream_slot = inner.slots.get(session_id).map(Arc::downgrade);
+            let slot = if let Some(slot) = inner.input_slots.get(session_id) {
                 *slot.meta.lock().expect("input slot meta") = entry.clone();
                 Arc::clone(slot)
             } else {
@@ -359,7 +369,11 @@ impl Hub {
                     .input_slots
                     .insert(session_id.to_string(), Arc::clone(&slot));
                 slot
+            };
+            if let Some(weak) = stream_slot {
+                *slot.stream_slot.lock().expect("input stream slot") = Some(weak);
             }
+            slot
         };
         Some(slot.attach_client())
     }
@@ -573,6 +587,9 @@ struct SlotState {
     watchers: usize,
     running: bool,
     stopping: bool,
+    interactive: bool,
+    mode_epoch: u64,
+    active_stream: Option<UnixStream>,
     handle: Option<std::thread::JoinHandle<()>>,
     /// The stream socket the upstream thread connects to (kept so a watcher
     /// that arrives while the last one is detaching can restart the upstream).
@@ -596,6 +613,9 @@ impl Slot {
                 watchers: 0,
                 running: false,
                 stopping: false,
+                interactive: false,
+                mode_epoch: 0,
+                active_stream: None,
                 handle: None,
                 socket: None,
                 connected: false,
@@ -609,6 +629,18 @@ impl Slot {
                 upstream_errors: 0,
             }),
             cv: Condvar::new(),
+        }
+    }
+
+    fn set_interactive(&self, interactive: bool) {
+        let mut state = self.state.lock().expect("slot");
+        if state.interactive != interactive {
+            state.interactive = interactive;
+            state.mode_epoch = state.mode_epoch.wrapping_add(1);
+            if let Some(stream) = state.active_stream.as_ref() {
+                let _ = stream.shutdown(Shutdown::Both);
+            }
+            self.cv.notify_all();
         }
     }
 
@@ -659,6 +691,9 @@ impl Slot {
                 return;
             }
             state.stopping = true;
+            if let Some(stream) = state.active_stream.as_ref() {
+                let _ = stream.shutdown(Shutdown::Both);
+            }
             self.cv.notify_all();
             state.handle.take()
         };
@@ -721,25 +756,37 @@ impl Slot {
                     }
                     let _ = stream.set_read_timeout(Some(READ_TIMEOUT));
                     let _ = stream.set_write_timeout(Some(Duration::from_secs(2)));
-                    {
+                    let (interactive, start_epoch) = {
                         let mut state = self.state.lock().expect("slot");
+                        state.active_stream = stream.try_clone().ok();
                         state.connected = true;
                         state.error = None;
                         state.upstream_connects += 1;
-                    }
+                        (state.interactive, state.mode_epoch)
+                    };
                     self.cv.notify_all();
-                    let outcome = self.pump(&mut stream);
-                    {
+                    let outcome = self.pump(&mut stream, interactive);
+                    let reconfigured = {
                         let mut state = self.state.lock().expect("slot");
-                        state.connected = false;
-                        if let Err(error) = &outcome {
-                            state.error = Some(error.to_string());
-                            state.upstream_errors += 1;
+                        state.active_stream = None;
+                        let reconfigured = state.mode_epoch != start_epoch;
+                        if !reconfigured || state.stopping {
+                            state.connected = false;
+                            if !state.stopping {
+                                if let Err(error) = &outcome {
+                                    state.error = Some(error.to_string());
+                                    state.upstream_errors += 1;
+                                }
+                            }
                         }
-                    }
+                        reconfigured
+                    };
                     self.cv.notify_all();
                     drop(stream); // closing here is what returns the producer to 0
                     backoff = Duration::from_millis(100);
+                    if reconfigured && !self.stopping() {
+                        continue;
+                    }
                 }
                 Err(error) => {
                     let mut state = self.state.lock().expect("slot");
@@ -755,18 +802,32 @@ impl Slot {
     }
 
     /// Protocol v1 client: one subscribe line in, `H`/`F`/`E` out.
-    fn pump(&self, stream: &mut UnixStream) -> io::Result<()> {
+    fn pump(&self, stream: &mut UnixStream, interactive: bool) -> io::Result<()> {
         // One encoder per session: the first subscriber fixes format/scale/fps.
-        let subscribe = json!({
-            "v": 1,
-            "subscribe": {
-                "frames": true,
-                "events": true,
-                "max_fps": 15,
-                "scale": 0.5,
-                "format": "png",
-            }
-        });
+        // Watch-only stays 0.5 PNG @ 15 fps; interactive upgrades to 1.0 JPEG @ 30 fps.
+        let subscribe = if interactive {
+            json!({
+                "v": 1,
+                "subscribe": {
+                    "frames": true,
+                    "events": true,
+                    "max_fps": 30,
+                    "scale": 1.0,
+                    "format": "jpeg",
+                }
+            })
+        } else {
+            json!({
+                "v": 1,
+                "subscribe": {
+                    "frames": true,
+                    "events": true,
+                    "max_fps": 15,
+                    "scale": 0.5,
+                    "format": "png",
+                }
+            })
+        };
         stream.write_all(subscribe.to_string().as_bytes())?;
         stream.write_all(b"\n")?;
         stream.flush()?;
@@ -941,12 +1002,27 @@ impl InputClient {
 
 impl Drop for InputClient {
     fn drop(&mut self) {
-        let mut state = self.slot.state.lock().expect("input slot");
-        state.clients = state.clients.saturating_sub(1);
-        state.queue.push_back(WorkerTask::ClientDisconnected {
-            client_id: self.client_id,
-        });
-        self.slot.cv.notify_one();
+        let should_downgrade = {
+            let mut state = self.slot.state.lock().expect("input slot");
+            state.clients = state.clients.saturating_sub(1);
+            state.queue.push_back(WorkerTask::ClientDisconnected {
+                client_id: self.client_id,
+            });
+            self.slot.cv.notify_one();
+            state.clients == 0
+        };
+        if should_downgrade {
+            if let Some(stream_slot) = self
+                .slot
+                .stream_slot
+                .lock()
+                .expect("input stream slot")
+                .as_ref()
+                .and_then(Weak::upgrade)
+            {
+                stream_slot.set_interactive(false);
+            }
+        }
     }
 }
 
@@ -1004,6 +1080,7 @@ enum WorkerTask {
 
 struct InputSlot {
     meta: Mutex<Entry>,
+    stream_slot: Mutex<Option<Weak<Slot>>>,
     state: Mutex<InputSlotState>,
     cv: Condvar,
 }
@@ -1019,6 +1096,7 @@ impl InputSlot {
     fn new(entry: Entry) -> Self {
         Self {
             meta: Mutex::new(entry),
+            stream_slot: Mutex::new(None),
             state: Mutex::new(InputSlotState {
                 clients: 0,
                 next_client_id: 1,
@@ -1034,18 +1112,40 @@ impl InputSlot {
         state.clients > 0 || state.running
     }
 
+    fn is_interactive(&self) -> bool {
+        if self.meta.lock().expect("input slot meta").watch_only {
+            return false;
+        }
+        let state = self.state.lock().expect("input slot");
+        state.clients > 0
+    }
+
     fn attach_client(self: &Arc<Self>) -> InputClient {
-        let mut state = self.state.lock().expect("input slot");
-        let client_id = state.next_client_id;
-        state.next_client_id += 1;
-        state.clients += 1;
-        if !state.running {
-            state.running = true;
-            let slot = Arc::clone(self);
-            std::thread::Builder::new()
-                .name("acos-view-input".to_string())
-                .spawn(move || InputWorker::new(slot).run())
-                .expect("spawn input worker");
+        let client_id = {
+            let mut state = self.state.lock().expect("input slot");
+            let client_id = state.next_client_id;
+            state.next_client_id += 1;
+            state.clients += 1;
+            if !state.running {
+                state.running = true;
+                let slot = Arc::clone(self);
+                std::thread::Builder::new()
+                    .name("acos-view-input".to_string())
+                    .spawn(move || InputWorker::new(slot).run())
+                    .expect("spawn input worker");
+            }
+            client_id
+        };
+        if !self.meta.lock().expect("input slot meta").watch_only {
+            if let Some(stream_slot) = self
+                .stream_slot
+                .lock()
+                .expect("input stream slot")
+                .as_ref()
+                .and_then(Weak::upgrade)
+            {
+                stream_slot.set_interactive(true);
+            }
         }
         InputClient {
             client_id,
@@ -1596,6 +1696,16 @@ impl InputWorker {
                     .unwrap_or(u64::from(rotation));
                 if width > 0 && height > 0 {
                     self.slot.meta.lock().expect("input slot meta").display = (width, height);
+                    if let Some(stream_slot) = self
+                        .slot
+                        .stream_slot
+                        .lock()
+                        .expect("input stream slot")
+                        .as_ref()
+                        .and_then(Weak::upgrade)
+                    {
+                        stream_slot.meta.lock().expect("slot meta").display = (width, height);
+                    }
                 }
                 json!({
                     "ok": true,
@@ -1772,6 +1882,7 @@ mod tests {
         socket: PathBuf,
         accepts: Arc<AtomicUsize>,
         serving: Arc<AtomicUsize>,
+        subscribes: Arc<Mutex<Vec<Value>>>,
         root: PathBuf,
     }
 
@@ -1790,13 +1901,16 @@ mod tests {
             let listener = UnixListener::bind(&socket).expect("bind fake producer");
             let accepts = Arc::new(AtomicUsize::new(0));
             let serving = Arc::new(AtomicUsize::new(0));
+            let subscribes = Arc::new(Mutex::new(Vec::new()));
             let accepts_for_thread = Arc::clone(&accepts);
             let serving_for_thread = Arc::clone(&serving);
+            let subscribes_for_thread = Arc::clone(&subscribes);
             std::thread::spawn(move || {
                 for stream in listener.incoming() {
                     let Ok(mut stream) = stream else { break };
                     accepts_for_thread.fetch_add(1, Ordering::SeqCst);
                     let serving = Arc::clone(&serving_for_thread);
+                    let subscribes = Arc::clone(&subscribes_for_thread);
                     std::thread::spawn(move || {
                         // Read the one subscribe line, then stream until EOF.
                         let mut reader = BufReader::new(stream.try_clone().expect("clone"));
@@ -1804,6 +1918,9 @@ mod tests {
                         let _ = reader.read_line(&mut line);
                         if !line.contains("\"v\":1") {
                             return;
+                        }
+                        if let Ok(req) = serde_json::from_str::<Value>(&line) {
+                            subscribes.lock().unwrap().push(req);
                         }
                         serving.fetch_add(1, Ordering::SeqCst);
                         let hello = r#"{"v":1,"session":42,"display":{"w":1080,"h":2400},"format":"png","scale":0.5}"#;
@@ -1842,6 +1959,7 @@ mod tests {
                 socket,
                 accepts,
                 serving,
+                subscribes,
                 root,
             }
         }
@@ -2385,5 +2503,75 @@ mod tests {
         wait_until(|| !hub.input_active("s_ver"), "verify input exit");
         let _ = std::fs::remove_dir_all(&registry);
         let _ = std::fs::remove_dir_all(&stream_root);
+    }
+
+    #[test]
+    fn interactive_input_upgrades_stream_subscription_and_reverts_on_disconnect() {
+        let producer = FakeProducer::start("upg");
+        let registry = scratch("upg-reg");
+        publish_input_entry(&registry, "s_upg", None, Some(&producer.socket), false);
+        let hub = Hub::new(registry.clone());
+
+        let watcher = hub.watch("s_upg").expect("watch");
+        wait_until(
+            || producer.subscribes.lock().unwrap().len() == 1,
+            "initial watch subscribe",
+        );
+        let sub0 = producer.subscribes.lock().unwrap()[0]["subscribe"].clone();
+        assert_eq!(sub0["scale"], json!(0.5));
+        assert_eq!(sub0["max_fps"], json!(15));
+        assert_eq!(sub0["format"], json!("png"));
+
+        // Opening input upgrades the active upstream subscription immediately.
+        let client = hub.open_input("s_upg").expect("open input");
+        wait_until(
+            || producer.subscribes.lock().unwrap().len() == 2,
+            "interactive upgrade subscribe",
+        );
+        let sub1 = producer.subscribes.lock().unwrap()[1]["subscribe"].clone();
+        assert_eq!(sub1["scale"], json!(1.0));
+        assert_eq!(sub1["max_fps"], json!(30));
+        assert_eq!(sub1["format"], json!("jpeg"));
+
+        // Dropping the last input client reverts to watch-only 0.5 PNG @ 15fps.
+        drop(client);
+        wait_until(
+            || producer.subscribes.lock().unwrap().len() == 3,
+            "revert after input disconnect",
+        );
+        let sub2 = producer.subscribes.lock().unwrap()[2]["subscribe"].clone();
+        assert_eq!(sub2["scale"], json!(0.5));
+        assert_eq!(sub2["max_fps"], json!(15));
+        assert_eq!(sub2["format"], json!("png"));
+
+        drop(watcher);
+        wait_until(
+            || producer.serving.load(Ordering::SeqCst) == 0,
+            "upstream closes when last watcher leaves",
+        );
+
+        // A watch_only session must NEVER upgrade even if open_input is called.
+        let prod_wo = FakeProducer::start("upg-wo");
+        publish_input_entry(&registry, "s_upg_wo", None, Some(&prod_wo.socket), true);
+        let w_wo = hub.watch("s_upg_wo").expect("watch_only watch");
+        wait_until(
+            || prod_wo.subscribes.lock().unwrap().len() == 1,
+            "watch_only initial subscribe",
+        );
+        let c_wo = hub.open_input("s_upg_wo").expect("open watch_only input");
+        std::thread::sleep(Duration::from_millis(120));
+        assert_eq!(
+            prod_wo.subscribes.lock().unwrap().len(),
+            1,
+            "watch_only session must not reconnect/upgrade"
+        );
+        drop(c_wo);
+        drop(w_wo);
+        wait_until(
+            || prod_wo.serving.load(Ordering::SeqCst) == 0,
+            "watch_only upstream closes",
+        );
+
+        let _ = std::fs::remove_dir_all(&registry);
     }
 }
