@@ -94,6 +94,7 @@ dependencies = [
  "acos-wm",
  "assert_cmd",
  "clap",
+ "image",
  "libc",
  "serde",
  "serde_json",
