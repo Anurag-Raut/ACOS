@@ -324,6 +324,7 @@ impl ServeEngine {
             stream_socket: session
                 .stream_socket()
                 .map(|path| path.display().to_string()),
+            has_home: session.has_home(),
         };
         if let Err(error) = self.live.write(&entry) {
             eprintln!(

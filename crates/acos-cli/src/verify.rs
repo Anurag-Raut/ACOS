@@ -734,6 +734,7 @@ pub fn run(args: VerifyArgs) -> ExitCode {
                     stream_socket: session
                         .stream_socket()
                         .map(|path| path.display().to_string()),
+                    has_home: session.has_home(),
                 };
                 if let Err(error) = registry.write(&entry) {
                     eprintln!(

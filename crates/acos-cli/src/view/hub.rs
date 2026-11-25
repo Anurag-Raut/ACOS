@@ -63,6 +63,7 @@ pub struct Entry {
     pub activity: Option<String>,
     pub display: (u32, u32),
     pub stream_socket: Option<String>,
+    pub has_home: Option<bool>,
 }
 
 impl Entry {
@@ -96,6 +97,7 @@ impl Entry {
             .and_then(Value::as_str)
             .filter(|value| !value.is_empty())
             .map(str::to_string);
+        let has_home = doc.get("has_home").and_then(Value::as_bool);
         Some(Self {
             session_id,
             daemon_pid,
@@ -148,6 +150,7 @@ impl Entry {
                 .and_then(Value::as_str)
                 .filter(|value| !value.is_empty())
                 .map(str::to_string),
+            has_home,
         })
     }
 
@@ -170,6 +173,7 @@ impl Entry {
             "activity": self.activity,
             "display": {"w": self.display.0, "h": self.display.1},
             "stream": self.stream_socket.is_some(),
+            "has_home": self.has_home,
         })
     }
 }
@@ -705,6 +709,7 @@ impl Slot {
         state.stopping = false;
         state.connected = false;
         state.hello = None;
+        state.frame = None;
         // VIEW1c L4: a browser that attached while this detach was joining saw
         // `running == true` and started nothing. Restart the upstream for it,
         // or its stream would stay silently dead.
@@ -2001,6 +2006,7 @@ mod tests {
             activity: Some("dev.acos.fixtures.counter.MainActivity".to_string()),
             display: (1080, 2400),
             stream_socket: Some(socket.display().to_string()),
+            has_home: Some(false),
         };
         crate::live_registry::LiveRegistry::at(dir.to_path_buf())
             .write(&entry)
@@ -2344,6 +2350,7 @@ mod tests {
             activity: Some("dev.acos.fixtures.counter.MainActivity".to_string()),
             display: (1080, 2400),
             stream_socket: stream_socket.map(|p| p.display().to_string()),
+            has_home: Some(false),
         };
         crate::live_registry::LiveRegistry::at(dir.to_path_buf())
             .write(&entry)
@@ -2575,5 +2582,77 @@ mod tests {
         );
 
         let _ = std::fs::remove_dir_all(&registry);
+    }
+
+    #[test]
+    fn detach_clears_cached_frame_so_reattach_waits_for_fresh_frame() {
+        let root = scratch("detach-clr");
+        let socket = root.join("view.sock");
+        let listener = UnixListener::bind(&socket).expect("bind");
+        let gate = Arc::new((Mutex::new(false), Condvar::new()));
+        let gate_t = Arc::clone(&gate);
+        std::thread::spawn(move || {
+            let mut conn_num = 0u64;
+            for stream in listener.incoming() {
+                let Ok(mut stream) = stream else { break };
+                conn_num += 1;
+                let gate_c = Arc::clone(&gate_t);
+                std::thread::spawn(move || {
+                    let mut reader = BufReader::new(stream.try_clone().expect("clone"));
+                    let mut line = String::new();
+                    let _ = reader.read_line(&mut line);
+                    let hello = r#"{"v":1,"session":42,"display":{"w":2,"h":2},"format":"png","scale":0.5}"#;
+                    let _ = send_message(&mut stream, b'H', hello.as_bytes());
+                    if conn_num == 2 {
+                        let (lk, cv) = &*gate_c;
+                        let mut ready = lk.lock().unwrap();
+                        while !*ready {
+                            ready = cv.wait(ready).unwrap();
+                        }
+                    }
+                    let hdr = format!(
+                        "{{\"seq\":{conn_num},\"generation\":{conn_num},\"w\":2,\"h\":2,\"format\":\"png\",\"ts_ms\":{}}}\n",
+                        live_registry::now_ms()
+                    );
+                    let mut payload = hdr.into_bytes();
+                    payload.extend_from_slice(&[0x89, b'P', b'N', b'G', conn_num as u8]);
+                    let _ = send_message(&mut stream, b'F', &payload);
+                    std::thread::sleep(Duration::from_secs(2));
+                });
+            }
+        });
+
+        let registry = scratch("detach-clr-reg");
+        publish(&registry, "s_dclr", &socket);
+        let hub = Hub::new(registry.clone());
+
+        let w1 = hub.watch("s_dclr").expect("watch 1");
+        let f1 = w1
+            .wait_frame(0, Duration::from_secs(5))
+            .expect("first frame");
+        assert_eq!(f1.seq, 1);
+        drop(w1);
+
+        // Reattach while connection 2 has not sent a frame yet: must NOT receive f1!
+        let w2 = hub.watch("s_dclr").expect("watch 2");
+        assert!(
+            w2.wait_frame(0, Duration::from_millis(120)).is_none(),
+            "reattached watcher must not receive stale frame from previous watch"
+        );
+
+        // Unblock connection 2's fresh frame and verify it arrives.
+        {
+            let (lk, cv) = &*gate;
+            *lk.lock().unwrap() = true;
+            cv.notify_all();
+        }
+        let f2 = w2
+            .wait_frame(0, Duration::from_secs(5))
+            .expect("fresh frame on reattach");
+        assert_eq!(f2.seq, 2);
+        drop(w2);
+
+        let _ = std::fs::remove_dir_all(&registry);
+        let _ = std::fs::remove_dir_all(&root);
     }
 }

@@ -135,6 +135,8 @@ pub struct ArtSession {
     /// VIEW1a: the live-view stream socket the ready line reported
     /// (`docs/LIVE_VIEW.md`); `None` when the launcher could not bind one.
     stream_socket: Option<PathBuf>,
+    /// Whether this session has an installed `CATEGORY_HOME` activity.
+    has_home: Option<bool>,
     /// The newest *bound* frame seen (tree and, when the reply carried one,
     /// PNG of one traversal). A tree-only reply updates the tree but never
     /// invents pixels.
@@ -2222,6 +2224,7 @@ impl ArtSession {
             module_rows: std::sync::Arc::new(std::sync::Mutex::new(Vec::new())),
             boot_image: None,
             stream_socket: None,
+            has_home: None,
             cached: None,
             last_pixel: None,
             seen_seq: 0,
@@ -2381,6 +2384,7 @@ impl ArtSession {
                 session.stream_socket = Some(PathBuf::from(path));
             }
         }
+        session.has_home = ready.get("has_home").and_then(|v| v.as_bool());
         // `acos verify` starts the guest before its own step clock, so this is
         // the boot cost the verdict never showed.
         session.session_start_ms = spawned_at.elapsed().as_millis() as u64;
@@ -2604,6 +2608,12 @@ impl ArtSession {
     #[must_use]
     pub fn stream_socket(&self) -> Option<&Path> {
         self.stream_socket.as_deref()
+    }
+
+    /// Whether this session has an installed `CATEGORY_HOME` activity.
+    #[must_use]
+    pub const fn has_home(&self) -> Option<bool> {
+        self.has_home
     }
 
     /// VIEW1a: the launcher (`acos-art`) pid of the current guest, so the live
