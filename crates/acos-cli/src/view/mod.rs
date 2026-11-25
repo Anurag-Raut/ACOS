@@ -1425,6 +1425,34 @@ mod tests {
         assert_eq!(recorded[3].1["action"], json!(3)); // ACTION_CANCEL
     }
 
+    #[test]
+    fn page_contains_interactive_controls_and_verify_banner() {
+        let server = Server::start("page-ui");
+        let page = server.raw(&format!("/?t={}", server.token));
+        assert_eq!(status_of(&page), 200);
+        let html = String::from_utf8_lossy(body_of(&page)).to_string();
+        for needle in [
+            "btn-back",
+            "btn-home",
+            "btn-recents",
+            "btn-rotate",
+            "verify-banner",
+            "watch-only: verify run",
+            "sessionTitle",
+            "/api/input/",
+            "agent &amp; human activity",
+            "KEYCODE_BACK",
+            "KEYCODE_HOME",
+            "KEYCODE_APP_SWITCH",
+        ] {
+            assert!(html.contains(needle), "page missing {needle}");
+        }
+        assert!(
+            !html.contains("view-only · no input reaches the guest"),
+            "stale view-only header pill must be removed"
+        );
+    }
+
     fn send(
         stream: &mut std::os::unix::net::UnixStream,
         kind: u8,
