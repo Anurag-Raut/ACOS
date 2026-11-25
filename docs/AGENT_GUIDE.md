@@ -371,7 +371,7 @@ acos inspect fixtures/build/apps/counter.apk --json
 acos launch fixtures/build/apps/counter.apk --engine art --json
 acos launch fixtures/build/apps/counter.apk --engine art --keep --json   # session survives in the daemon
 acos launch fixtures/build/apps/counter.apk --engine art --service feedback.vibrator:stub --json
-acos launch fixtures/build/apps/counter.apk --engine art --keep --label counter --json  # session survives in the daemon
+acos launch fixtures/build/apps/counter.apk --engine art --keep --label counter --device-name "Counter Lab" --json
 acos observe --tree --json                        # the daemon's live session
 acos observe --tree --apk fixtures/build/apps/counter.apk --json         # one-shot: launch then observe
 acos observe --screenshot out/counter.png --json
@@ -392,6 +392,8 @@ acos verify scenarios/counter.yaml --artifacts out/counter --json
 acos verify scenarios/counter.yaml --artifacts out/counter --overwrite --json  # replace a prior run's evidence
 acos verify scenarios/form-validation.yaml --engine art --json
 acos serve                                       # unix-socket session daemon; stop it when done
+acos view                                        # local interactive browser hub (127.0.0.1 + token)
+acos view --once --json                          # list live view-registry sessions and exit
 acos frame-diff reference.png candidate.png --json
 acos parity --recorded hello-views --acos-tree out/tree.json --json
 acos native-inventory fixtures/build/apps/hello-jni.apk --abi x86_64 --json -
@@ -1046,29 +1048,36 @@ Two session-specific hints worth memorising:
   libhwui asks for a context, and its file digests are cached per host next to
   the provider (`<sysroot>/gles/<tag>/.verified`), re-hashed only when a file's
   size/mtime/inode moves.
-* **Watching a session is view-only and costs nothing when unused.** A live
-  session publishes a registry entry (`$XDG_RUNTIME_DIR/acos/live/`) and a
-  `stream_socket` for local viewers (half-resolution frames + an action feed,
-  ≤ 15 fps). Agents never need it; `docs/LIVE_VIEW.md` has the protocol and the
-  measured cost. Nothing an agent reads or asserts comes from the stream.
-  Agent screenshots (`observe` screenshot / `capture_c1`) do **not** honour
-  `FLAG_SECURE`; only the live stream blanks secure windows.
-  To actually **watch** one (yours, or an agent's, from a browser or T3 Code),
-  run `acos view` in a terminal and open the one line it prints:
+* **Live view (`acos view`) is interactive for normal sessions, watch-only for verify runs, and zero-cost when unused (ADR-0027 + ADR-0033).** A live
+  session publishes a registry entry (`$XDG_RUNTIME_DIR/acos/live/`, using
+  `device_name` when supplied to `acos_launch` / `acos launch --device-name`)
+  and a `stream_socket` for local viewers (half-resolution 0.5× PNG ≤ 15 fps
+  while watching only, automatically upgraded to full-resolution 1.0× PNG @ 30 fps
+  while a human is interacting). With nobody watching, the frame path does a
+  single atomic load and zero encoding. Nothing an agent reads or asserts comes
+  from the stream; agent screenshots (`observe` screenshot / `capture_c1`) do
+  **not** honour `FLAG_SECURE`, whereas the live stream blanks secure windows.
+  To **watch or interact** with a session from a browser or **T3 Code**, run
+  `acos view` in a terminal and open the URL it prints:
 
   ```
   $ acos view
   acos view: http://127.0.0.1:54321/?t=<token>
   ```
 
-  The page lists every live session (agent/client, project, APK, activity, age)
-  and streams the one you click with tap ripples and the action feed. It is
-  127.0.0.1 only and every request needs the token, so treat the URL as a
-  secret: no other route exists, no input reaches the guest, and the frames stop
-  the moment the last tab closes. `acos view --once --json` lists the sessions
-  and exits (for scripts and tests). In **T3 Code**, open that URL in the
-  built-in preview pane (paste it in the pane's address bar); no patch or
-  plugin is needed, per ADR-0027.
+  The page lists every live session (display name, agent/client, project, APK,
+  activity, age). Clicking a session opens its live screen, Back/Home/Recents/Rotate
+  toolbar, tap ripples, and the mixed agent/human action feed. Pointer taps,
+  drags, mouse-wheel scrolls, and keyboard typing are sent over
+  `/api/input/<session_id>?t=<token>` (opened lazily on first interaction) and
+  tagged `source: "panel"` in the event feed alongside `source: "agent"` tool
+  calls. Sessions started by `acos verify` advertise `watch_only: true`, show a
+  `watch-only: verify run` banner, and refuse all input (`VERIFY_WATCH_ONLY`).
+  The server binds `127.0.0.1` only and checks the token and `Host` header on
+  every request (treat the URL as a secret); frames stop the moment the last tab
+  closes. `acos view --once --json` lists the sessions and exits. In **T3 Code**,
+  open that URL in the built-in preview pane (paste it in the pane's address
+  bar); no patch or plugin is needed.
 * **The MCP session tools run real ART by default.** On the first session tool
   call the server starts its **own** private `acos serve --engine art` on a
   private socket under `$XDG_RUNTIME_DIR/acos/mcp-<pid>-…/` and forwards

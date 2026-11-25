@@ -20,8 +20,8 @@ Start here to understand how ACOS works, what is shared on the Host vs private p
 - **[Service Modules](MODULES.md)** — Generated registry of `core` and all 23 attachable modules, profiles, budgets, and control operations.
 - **[Error Codes](ERROR_CODES.md)** — Canonical `ErrorCode` taxonomy and exit statuses.
 - **[Installation](INSTALL.md)** — Installing ACOS, `ACOS_HOME`, boot image extraction, `pasta`, and `chrome-headless-shell`.
-- **[Live View](LIVE_VIEW.md)** — Protocol v1 stream and `acos view` browser hub.
-- **[Interactive live view (plan)](HUMAN_VIEW_SPEC.md)** — HUMANVIEW1: make `acos view` an interactive emulator-like window (awaiting approval).
+- **[Live View](LIVE_VIEW.md)** — Protocol v1 stream and interactive `acos view` browser hub (ADR-0027 + ADR-0033).
+- **[Interactive live view (HUMANVIEW1)](HUMAN_VIEW_SPEC.md)** — Spec and acceptance criteria for interactive `acos view`.
 - **[UI-Tree Parity](PARITY.md)** — Running ACOS vs physical phone scenario parity checks.
 
 ## Security & Confinement
@@ -44,7 +44,7 @@ Start here to understand how ACOS works, what is shared on the Host vs private p
 A small set of root files remain at repo root because tooling or tests reference them directly:
 
 - [`../AGENTS.md`](../AGENTS.md) — Agent entrypoint, crate map, and documentation rules.
-- [`../DECISIONS.md`](../DECISIONS.md) — Full append-only ADR log (ADR-0001 through ADR-0032+).
+- [`../DECISIONS.md`](../DECISIONS.md) — Full append-only ADR log (ADR-0001 through ADR-0033).
 - [`../BENCHMARKS.md`](../BENCHMARKS.md) — Benchmark methodology, metric definitions, and tracked baselines.
 - [`../EXPERIMENTS.md`](../EXPERIMENTS.md) — Experiment log.
 - [`../COMPATIBILITY.md`](../COMPATIBILITY.md) — Compatibility ledger (read by `acos-mcp`).

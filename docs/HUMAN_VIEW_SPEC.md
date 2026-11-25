@@ -1,6 +1,6 @@
 # Interactive live view — spec (HUMANVIEW1)
 
-Status: **plan, awaiting owner approval** (2026-11-24). Owner request: "humans should be
+Status: **implemented** on branch `humanview` (ADR-0033 amends ADR-0027 §5; CP1–CP5 complete, awaiting live T3 browser E2E & owner Gaten check; 2026-11-25). Owner request: "humans should be
 able to interact like a normal emulator". This replaces the T3 Device panel as the
 human path. The adb / T3 compatibility work stays parked in PR #5.
 

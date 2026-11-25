@@ -457,35 +457,42 @@ fling with their own physics instead of jumping.
   refused (`until` explicitly: only ART has settled-observation proof).
 
 
-## 1e. Watching a session (live view)
+## 1e. Watching and interacting with a session (live view)
 
 Every live ART session publishes one small file
-(`$XDG_RUNTIME_DIR/acos/live/<session_id>-<daemon_pid>.json`: client, project
-dir, APK, package, activity, display, and the session's `stream_socket`) and
-streams its screen and an action/event feed to any local viewer that connects to
-that socket. The viewer is **view-only** and optional: with nobody watching the
-session costs what it cost before (ADR-0027). The wire protocol — subscribe
-line, framing, `H`/`F`/`E` messages, cost rules, registry fields, stale
-handling — is `docs/LIVE_VIEW.md`; `tools/view/stream_probe.py` is a stdlib
-reference consumer. The MCP tools themselves are unchanged and do not expose the
-stream.
+(`$XDG_RUNTIME_DIR/acos/live/<session_id>-<daemon_pid>.json`: `device_name`,
+client, project dir, APK, package, activity, display, `watch_only`, and
+`stream_socket`) and streams its screen and an action/event feed to any local
+viewer that connects to that socket. With nobody watching, the session costs
+what it cost before (one atomic load, zero encoding; ADR-0027). The wire
+protocol — subscribe line, framing, `H`/`F`/`E` messages, cost rules, registry
+fields, stale handling — is `docs/LIVE_VIEW.md`; `tools/view/stream_probe.py`
+is a stdlib reference consumer. The MCP session tools remain unchanged except
+`acos_launch` accepts an optional `device_name` displayed by `acos view`.
 
-To watch it, start the browser hub in a terminal:
+To watch or drive a live session interactively, start the browser hub in a terminal:
 
 ```
 $ acos view
 acos view: http://127.0.0.1:54321/?t=<token>
 ```
 
-It binds 127.0.0.1 only, requires that random token on every request (no token
-or a wrong one is `403`), and serves one self-contained page: the grid of live
-sessions (client/agent, project dir, APK, activity, age) and, for the session
-you click, its live screen with tap ripples, the current activity and the recent
-action feed. Open the printed URL in any browser, or paste it into **T3 Code's
-preview pane** (ADR-0027: no patch, no plugin). The page is view-only — no input
-is ever forwarded to a guest — and the hub subscribes to a session's
-`stream_socket` only while a tab has it open, one upstream subscription shared by
-every tab, so an unwatched session still costs nothing. `acos view --once
+It binds `127.0.0.1` only, checks the `Host` header (`127.0.0.1:<port>`) and
+that random 256-bit token on every request (missing or wrong → `403`), and
+serves one self-contained page: the grid of live sessions and, for the session
+you click, its live screen with Back/Home/Recents/Rotate controls, tap ripples,
+the current activity, and the recent action feed. Open the printed URL in any
+browser, or paste it into **T3 Code's preview pane** (no patch, no plugin).
+
+Per **ADR-0033** (amending ADR-0027 §5), interacting with the screen opens a
+per-session WebSocket (`/api/input/<session_id>?t=<token>`) on first input,
+upgrades the session's stream from `0.5` PNG @ `15` fps to `1.0` PNG @ `30` fps
+while interacting, and dispatches touch streams, wheel scrolls, keys, text, and
+rotations through the same `InputDispatch` as agent tools, tagged
+`source: "panel"` alongside `source: "agent"` in `/api/events`. Sessions owned by
+`acos verify` set `watch_only: true` and refuse input (`VERIFY_WATCH_ONLY`).
+When the last input socket or tab closes, the hub reverts/closes the upstream
+subscription so an unwatched session still costs nothing. `acos view --once
 --json` prints the session list and exits. Details: `docs/LIVE_VIEW.md` §8.
 
 ---
