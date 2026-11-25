@@ -804,7 +804,9 @@ impl Slot {
     /// Protocol v1 client: one subscribe line in, `H`/`F`/`E` out.
     fn pump(&self, stream: &mut UnixStream, interactive: bool) -> io::Result<()> {
         // One encoder per session: the first subscriber fixes format/scale/fps.
-        // Watch-only stays 0.5 PNG @ 15 fps; interactive upgrades to 1.0 JPEG @ 30 fps.
+        // Watch-only stays 0.5 PNG @ 15 fps; interactive upgrades to 1.0 PNG @ 30 fps
+        // (fast adaptive PNG is ~10x faster to encode than scalar JPEG on this host
+        // and smaller on flat UI screens).
         let subscribe = if interactive {
             json!({
                 "v": 1,
@@ -813,7 +815,7 @@ impl Slot {
                     "events": true,
                     "max_fps": 30,
                     "scale": 1.0,
-                    "format": "jpeg",
+                    "format": "png",
                 }
             })
         } else {
@@ -2531,7 +2533,7 @@ mod tests {
         let sub1 = producer.subscribes.lock().unwrap()[1]["subscribe"].clone();
         assert_eq!(sub1["scale"], json!(1.0));
         assert_eq!(sub1["max_fps"], json!(30));
-        assert_eq!(sub1["format"], json!("jpeg"));
+        assert_eq!(sub1["format"], json!("png"));
 
         // Dropping the last input client reverts to watch-only 0.5 PNG @ 15fps.
         drop(client);

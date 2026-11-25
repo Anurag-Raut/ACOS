@@ -41,3 +41,4 @@ zip = { version = "2", default-features = false, features = ["deflate"] }
 [dev-dependencies]
 assert_cmd = "2"
 acos-test-support = { path = "../acos-test-support" }
+image = { version = "0.25", default-features = false, features = ["jpeg", "png"] }

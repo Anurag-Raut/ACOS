@@ -727,20 +727,34 @@ impl Inner {
             let remaining = interval_ms.saturating_sub(tick_ms.saturating_sub(last_ms)).max(1);
             return Some(Duration::from_millis(remaining));
         }
-        self.last_capture_ms.store(tick_ms, Ordering::Relaxed);
         self.source_calls.fetch_add(1, Ordering::Relaxed);
         let source = Arc::clone(&self.source);
         let Some(mut frame) = source() else {
             return None;
         };
+        self.last_capture_ms.store(tick_ms, Ordering::Relaxed);
         if frame.secure {
             // Defence in depth (VIEW1c L1): whatever the source handed over, a
             // `FLAG_SECURE` frame's pixels never reach the encoder.
             frame.rgba.fill(0);
         }
         let scale = self.scale();
-        let (width, height, rgba) =
-            downscale_box(&frame.rgba, frame.width, frame.height, frame.stride, scale);
+        let clamped_scale = scale.clamp(0.05, 1.0);
+        let out_w = ((frame.width as f32 * clamped_scale).round() as u32).clamp(1, frame.width.max(1));
+        let out_h = ((frame.height as f32 * clamped_scale).round() as u32).clamp(1, frame.height.max(1));
+        let expected_bytes = frame.width as usize * frame.height as usize * 4;
+        let (width, height, rgba) = if out_w == frame.width
+            && out_h == frame.height
+            && frame.stride == frame.width
+            && frame.rgba.len() >= expected_bytes
+        {
+            if frame.rgba.len() > expected_bytes {
+                frame.rgba.truncate(expected_bytes);
+            }
+            (frame.width, frame.height, frame.rgba)
+        } else {
+            downscale_box(&frame.rgba, frame.width, frame.height, frame.stride, scale)
+        };
         {
             let mut slot = self.slot.lock().unwrap_or_else(|e| e.into_inner());
             if let Some(previous) = slot.as_ref() {
@@ -1489,6 +1503,8 @@ fn writer_loop(inner: Arc<Inner>) {
     let stats_path = std::env::var_os("ACOS_VIEW_STATS_FILE");
     let mut stats_at = Instant::now();
     let mut was_watching = false;
+    let mut rgb_scratch: Vec<u8> = Vec::new();
+    let mut encode_scratch: Vec<u8> = Vec::new();
     loop {
         if inner.shutdown.load(Ordering::Acquire) {
             return;
@@ -1510,8 +1526,14 @@ fn writer_loop(inner: Arc<Inner>) {
         }
         inner.prune_closed_subscribers();
         if inner.subscriber_count.load(Ordering::Acquire) == 0 {
-            // No viewer: block until one attaches (or the session ends). No
-            // periodic wakeup, no work.
+            // No viewer: release scratch buffers and block until a viewer
+            // attaches (or the session ends). No periodic wakeup, no work.
+            if !rgb_scratch.is_empty() || rgb_scratch.capacity() > 0 {
+                rgb_scratch = Vec::new();
+            }
+            if !encode_scratch.is_empty() || encode_scratch.capacity() > 0 {
+                encode_scratch = Vec::new();
+            }
             inner.wait(Duration::from_secs(60));
             continue;
         }
@@ -1551,24 +1573,31 @@ fn writer_loop(inner: Arc<Inner>) {
             continue;
         };
         let started = Instant::now();
-        let encoded = encode(&frame, inner.format(), inner.config.jpeg_quality);
+        let encoded = encode_into(
+            &frame,
+            inner.format(),
+            inner.config.jpeg_quality,
+            &mut rgb_scratch,
+            &mut encode_scratch,
+        );
         let encode_us = started.elapsed().as_micros() as u64;
         inner.last_encoded_seq.store(frame.seq, Ordering::Relaxed);
-        next_at = Instant::now() + inner.interval();
-        let Ok(bytes) = encoded else {
+        next_at = started + inner.interval();
+        if encoded.is_err() {
             continue;
-        };
+        }
+        let encoded_len = encode_scratch.len();
         inner.encodes.fetch_add(1, Ordering::Relaxed);
         inner
             .encode_us_total
             .fetch_add(encode_us, Ordering::Relaxed);
         inner
             .encode_bytes_total
-            .fetch_add(bytes.len() as u64, Ordering::Relaxed);
+            .fetch_add(encoded_len as u64, Ordering::Relaxed);
         inner.last_encode_us.store(encode_us, Ordering::Relaxed);
         inner
             .last_encode_bytes
-            .store(bytes.len() as u64, Ordering::Relaxed);
+            .store(encoded_len as u64, Ordering::Relaxed);
         let header = serde_json::json!({
             "seq": frame.seq,
             "generation": frame.generation,
@@ -1580,11 +1609,15 @@ fn writer_loop(inner: Arc<Inner>) {
             // screen. The bytes are not the app's content.
             "secure": frame.secure,
         });
-        let mut message = Vec::with_capacity(128 + bytes.len());
-        message.extend_from_slice(&header.to_string().into_bytes());
+        let header_str = header.to_string();
+        let payload_len = header_str.len() + 1 + encoded_len;
+        let total_len = (payload_len + 1) as u32;
+        let mut message = Vec::with_capacity(4 + 1 + payload_len);
+        message.extend_from_slice(&total_len.to_be_bytes());
+        message.push(TYPE_FRAME);
+        message.extend_from_slice(header_str.as_bytes());
         message.push(b'\n');
-        message.extend_from_slice(&bytes);
-        let message = frame_message(TYPE_FRAME, &message);
+        message.extend_from_slice(&encode_scratch);
         inner.broadcast(&message, true);
         inner.frames_sent.fetch_add(1, Ordering::Relaxed);
         // Keep draining a viewer that could not take the whole message right
@@ -1686,29 +1719,37 @@ pub fn downscale_box(
     (out_w, out_h, out)
 }
 
-/// Drop the alpha channel: the stream is an opaque display image, and RGB is
-/// both smaller to encode and smaller on the wire.
-fn rgba_to_rgb(rgba: &[u8]) -> Vec<u8> {
-    let mut rgb = Vec::with_capacity(rgba.len() / 4 * 3);
-    for pixel in rgba.chunks_exact(4) {
-        rgb.extend_from_slice(&pixel[..3]);
+/// Drop the alpha channel into a reusable RGB buffer: the stream is an opaque
+/// display image, and RGB is both smaller to encode and smaller on the wire.
+fn copy_rgba_to_rgb(rgba: &[u8], rgb: &mut Vec<u8>) {
+    let needed = (rgba.len() / 4) * 3;
+    rgb.resize(needed, 0);
+    for (dst, src) in rgb.chunks_exact_mut(3).zip(rgba.chunks_exact(4)) {
+        dst[0] = src[0];
+        dst[1] = src[1];
+        dst[2] = src[2];
     }
-    rgb
 }
 
-/// Encode one downscaled frame in the configured format.
-fn encode(frame: &Slot, format: FrameFormat, jpeg_quality: u8) -> io::Result<Vec<u8>> {
-    let rgb = rgba_to_rgb(&frame.rgba);
-    let mut out = Vec::new();
+/// Encode one downscaled frame into reusable `rgb` and `out` buffers.
+fn encode_into(
+    frame: &Slot,
+    format: FrameFormat,
+    jpeg_quality: u8,
+    rgb: &mut Vec<u8>,
+    out: &mut Vec<u8>,
+) -> io::Result<()> {
+    copy_rgba_to_rgb(&frame.rgba, rgb);
+    out.clear();
     match format {
         FrameFormat::Jpeg => {
             let mut encoder = image::codecs::jpeg::JpegEncoder::new_with_quality(
-                &mut out,
+                out,
                 jpeg_quality.clamp(10, 100),
             );
             encoder
                 .encode(
-                    &rgb,
+                    rgb,
                     frame.width,
                     frame.height,
                     image::ExtendedColorType::Rgb8,
@@ -1717,13 +1758,13 @@ fn encode(frame: &Slot, format: FrameFormat, jpeg_quality: u8) -> io::Result<Vec
         }
         FrameFormat::Png => {
             let encoder = image::codecs::png::PngEncoder::new_with_quality(
-                &mut out,
+                out,
                 image::codecs::png::CompressionType::Fast,
                 image::codecs::png::FilterType::Adaptive,
             );
             image::ImageEncoder::write_image(
                 encoder,
-                &rgb,
+                rgb,
                 frame.width,
                 frame.height,
                 image::ExtendedColorType::Rgb8,
@@ -1731,7 +1772,7 @@ fn encode(frame: &Slot, format: FrameFormat, jpeg_quality: u8) -> io::Result<Vec
             .map_err(io::Error::other)?;
         }
     }
-    Ok(out)
+    Ok(())
 }
 
 /// `true` when the probe tree has a **focused** node that is a password field.
@@ -3102,6 +3143,74 @@ mod tests {
         let image =
             image::load_from_memory(&payload[newline + 1..]).expect("decodable PNG frame");
         assert_eq!((image.width(), image.height()), (800, 1200));
+
+        view.shutdown();
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn empty_source_poll_does_not_rate_limit_next_frame() {
+        let dir = scratch_dir("empty-poll");
+        let seq = Arc::new(AtomicU64::new(0));
+        let emitted = Arc::new(AtomicU64::new(0));
+        let seq_src = Arc::clone(&seq);
+        let emitted_src = Arc::clone(&emitted);
+        let source: Arc<dyn Fn() -> Option<SourceFrame> + Send + Sync> = Arc::new(move || {
+            let s = seq_src.load(Ordering::Acquire);
+            if s == 0 || s <= emitted_src.load(Ordering::Acquire) {
+                return None;
+            }
+            emitted_src.store(s, Ordering::Release);
+            Some(SourceFrame {
+                seq: s,
+                generation: s,
+                width: 64,
+                height: 64,
+                stride: 64,
+                rgba: vec![0x80; 64 * 64 * 4],
+                secure: false,
+            })
+        });
+        let view = LiveView::bind(
+            &dir.join("v.sock"),
+            LiveViewConfig::default(),
+            (64, 64),
+            1,
+            source,
+            Arc::new(TestWake::new()),
+        )
+        .expect("bind");
+        let mut client = UnixStream::connect(view.socket_path()).expect("connect");
+        subscribe_line(&mut client, "\"frames\":true,\"format\":\"jpeg\",\"scale\":1.0,\"max_fps\":15,");
+        client
+            .set_read_timeout(Some(Duration::from_secs(2)))
+            .expect("timeout");
+        assert_eq!(read_message(&mut client).expect("hello").0, TYPE_HELLO);
+        assert!(wait_for(|| view.has_subscribers(), Duration::from_secs(2)));
+
+        // Emit frame 1 and wait past the 66 ms (15 fps) interval.
+        seq.store(1, Ordering::Release);
+        view.tick();
+        assert!(wait_for(
+            || view.stats().frames_captured == 1,
+            Duration::from_secs(2)
+        ));
+        std::thread::sleep(Duration::from_millis(80));
+
+        // Empty poll (`seq == 1` already emitted -> None) must NOT stamp `last_capture_ms`.
+        view.tick();
+        assert_eq!(view.stats().frames_captured, 1);
+
+        // Immediate real frame right after empty poll must be captured immediately
+        // without getting rate-limited.
+        seq.store(2, Ordering::Release);
+        view.tick();
+        assert!(wait_for(
+            || view.stats().frames_captured == 2,
+            Duration::from_secs(2)
+        ));
+        let stats = view.stats();
+        assert_eq!(stats.captures_rate_limited, 0);
 
         view.shutdown();
         let _ = std::fs::remove_dir_all(&dir);

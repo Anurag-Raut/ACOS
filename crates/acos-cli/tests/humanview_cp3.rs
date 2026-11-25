@@ -768,15 +768,15 @@ fn cp3_http_sessions_and_frame_upgrade_contract() {
     );
     assert_eq!(p0.h, 1200);
 
-    // Connecting WS /api/input upgrades upstream subscription to 1.0 JPEG @ 30fps.
+    // Connecting WS /api/input upgrades upstream subscription to 1.0 PNG @ 30fps.
     let ws = WsClient::connect(hub.port, &hub.token, "s_cp3");
     let p1 = frames.wait_match(
-        |p| p.content_type == "image/jpeg" && p.w == 1080,
+        |p| p.content_type == "image/png" && p.w == 1080,
         Duration::from_secs(5),
-        "upgraded 1.0 JPEG frame",
+        "upgraded 1.0 PNG frame",
     );
     assert_eq!(p1.h, 2400);
-    assert!(p1.bytes.starts_with(&[0xff, 0xd8]));
+    assert!(p1.bytes.starts_with(&[0x89, b'P', b'N', b'G']));
 
     // Closing WS reverts upstream back to 0.5 PNG @ 15fps.
     drop(ws);
@@ -792,10 +792,11 @@ fn cp3_http_sessions_and_frame_upgrade_contract() {
     assert!(subs.len() >= 3, "expected >=3 subscribes: {subs:#?}");
     assert_eq!(subs[0]["subscribe"]["format"], json!("png"));
     assert_eq!(subs[0]["subscribe"]["scale"], json!(0.5));
-    assert_eq!(subs[1]["subscribe"]["format"], json!("jpeg"));
+    assert_eq!(subs[1]["subscribe"]["format"], json!("png"));
     assert_eq!(subs[1]["subscribe"]["scale"], json!(1.0));
     assert_eq!(subs[1]["subscribe"]["max_fps"], json!(30));
     assert_eq!(subs[2]["subscribe"]["format"], json!("png"));
+    assert_eq!(subs[2]["subscribe"]["scale"], json!(0.5));
 
     drop(hub);
     let _ = std::fs::remove_dir_all(&dir);
@@ -838,17 +839,17 @@ fn cp3_live_drag_fling_long_press_and_rotate() {
     );
     assert!(f_watch.bytes.starts_with(&[0x89, b'P', b'N', b'G']));
 
-    // Opening WS /api/input upgrades to full-resolution 1.0 JPEG (1080x2400).
+    // Opening WS /api/input upgrades to full-resolution 1.0 PNG (1080x2400).
     let sse = SseEvents::connect(hub.port, &hub.token, "cp3-list");
     let mut ws = WsClient::connect(hub.port, &hub.token, "cp3-list");
     let f_interactive = frames.wait_match(
-        |p| p.content_type == "image/jpeg" && p.w == 1080 && p.h == 2400,
+        |p| p.content_type == "image/png" && p.w == 1080 && p.h == 2400,
         Duration::from_secs(10),
-        "live interactive JPEG 1080x2400",
+        "live interactive PNG 1080x2400",
     );
     assert!(
-        f_interactive.bytes.starts_with(&[0xff, 0xd8]),
-        "expected JPEG SOI magic bytes"
+        f_interactive.bytes.starts_with(&[0x89, b'P', b'N', b'G']),
+        "expected PNG magic bytes"
     );
 
     // Drag (slow controlled swipe up over 360 px: 10 MOVE events, low release velocity).
@@ -937,7 +938,7 @@ fn cp3_live_drag_fling_long_press_and_rotate() {
         json!(1080)
     );
     let _f_rot = frames.wait_match(
-        |p| p.content_type == "image/jpeg" && p.w == 2400 && p.h == 1080,
+        |p| p.content_type == "image/png" && p.w == 2400 && p.h == 1080,
         Duration::from_secs(10),
         "rotated 2400x1080 frame",
     );
@@ -1110,7 +1111,7 @@ steps:
         assert_eq!(r["code"], json!("VERIFY_WATCH_ONLY"), "{r:#?}");
     }
 
-    // Event feed records VERIFY_WATCH_ONLY; frame stream never upgrades to JPEG.
+    // Event feed records VERIFY_WATCH_ONLY; frame stream never upgrades to 1.0x.
     let evs = sse.wait_until(
         |evs| evs.iter().any(|e| e["status"] == "VERIFY_WATCH_ONLY"),
         Duration::from_secs(10),
@@ -1120,7 +1121,11 @@ steps:
     for part in frames.drain_seen() {
         assert_eq!(
             part.content_type, "image/png",
-            "verify stream must never upgrade to JPEG"
+            "verify stream must stay PNG"
+        );
+        assert_eq!(
+            part.w, 540,
+            "verify stream must never upgrade to 1.0x resolution"
         );
     }
 
