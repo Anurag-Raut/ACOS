@@ -4202,7 +4202,7 @@ impl ShortSocketDir {
     /// this uid, mode 0700); a candidate that cannot be made private is skipped
     /// rather than used, and `/dev/shm` — which is world-visible by default — is
     /// only ever used through the same 0700 + owner check.
-    fn new_named(kind: &str) -> std::io::Result<Self> {
+    fn candidate_dirs(kind: &str) -> Vec<PathBuf> {
         use std::io::Read;
         use std::sync::atomic::{AtomicU64, Ordering};
         static SEQ: AtomicU64 = AtomicU64::new(0);
@@ -4235,7 +4235,11 @@ impl ShortSocketDir {
             );
         }
         candidates.push(PathBuf::from(format!("/dev/shm/acos-{kind}-{id}")));
-        Self::select_candidate(candidates, kind == "view")
+        candidates
+    }
+
+    fn new_named(kind: &str) -> std::io::Result<Self> {
+        Self::select_candidate(Self::candidate_dirs(kind), kind == "view")
     }
 
     fn select_candidate(candidates: Vec<PathBuf>, is_view: bool) -> std::io::Result<Self> {
@@ -11717,15 +11721,14 @@ mod view_socket_dir_tests {
 
     #[test]
     fn select_candidate_skips_overlong_paths_before_creating_them() {
-        let pid = std::process::id();
-        let base = ShortSocketDir::select_candidate(
-            vec![
-                PathBuf::from(format!("/dev/shm/acos-st-{pid}")),
-                PathBuf::from(format!("/tmp/acos-st-{pid}")),
-            ],
-            true,
-        )
-        .expect("short scratch root");
+        let mut candidates = ShortSocketDir::candidate_dirs("view");
+        candidates.push(PathBuf::from(format!(
+            "/tmp/acos-st-{}",
+            std::process::id()
+        )));
+        candidates.retain(|dir| socket_dir_fits_sun_path(&dir.join("ok")));
+        let base = ShortSocketDir::select_candidate(candidates, true)
+            .expect("short scratch root");
         let too_long = base.0.join("x".repeat(95));
         let fallback = base.0.join("ok");
         assert!(!socket_dir_fits_sun_path(&too_long));
