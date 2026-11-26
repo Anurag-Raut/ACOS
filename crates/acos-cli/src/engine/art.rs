@@ -3091,8 +3091,18 @@ impl ArtSession {
                 .get("error")
                 .and_then(serde_json::Value::as_str)
                 .unwrap_or("panel_key failed");
+            let published = reply
+                .get("published")
+                .and_then(serde_json::Value::as_bool)
+                .unwrap_or(false)
+                || reply.get("code").and_then(serde_json::Value::as_str)
+                    == Some("INPUT_PUBLISHED_ACK_FAILED");
             return Err(BackendError::Error {
-                code: ErrorCode::Internal,
+                code: if published {
+                    ErrorCode::Timeout
+                } else {
+                    ErrorCode::Internal
+                },
                 detail: detail.to_string(),
             });
         }
@@ -10570,6 +10580,76 @@ mod tests {
                 }
             ),
             "pre-publish rejection must map to Protocol(ErrorCode::UnsupportedBackend), got {err_pre:?}"
+        );
+
+        std::env::remove_var("ACOS_ART_BIN");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn panel_key_maps_post_publish_ack_failure_to_ambiguous_timeout() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = scratch_dir("cr8-panel-key-pub");
+        let script = dir.join("fake-acos-art-key-pub.sh");
+        let body = "#!/usr/bin/env bash\n\
+             set -euo pipefail\n\
+             echo '{\"ok\":true,\"cmd\":\"ready\",\"package\":\"dev.cr8\",\"activity\":\"dev.cr8/.Main\",\"width\":100,\"height\":200,\"density\":160}'\n\
+             while IFS= read -r line; do\n\
+               req_id=$(printf '%s' \"$line\" | sed -n 's/.*\"req_id\":\\([0-9][0-9]*\\).*/\\1/p')\n\
+               case \"$line\" in\n\
+                 *'\"cmd\":\"panel_key\"'*)\n\
+                   if [ \"$req_id\" = \"1\" ]; then\n\
+                     echo \"{\\\"ok\\\":false,\\\"cmd\\\":\\\"panel_key\\\",\\\"code\\\":\\\"INPUT_PUBLISHED_ACK_FAILED\\\",\\\"published\\\":true,\\\"error\\\":\\\"key ack failed after publish\\\",\\\"req_id\\\":$req_id}\"\n\
+                   else\n\
+                     echo \"{\\\"ok\\\":false,\\\"cmd\\\":\\\"panel_key\\\",\\\"code\\\":\\\"INPUT_UNAVAILABLE\\\",\\\"published\\\":false,\\\"error\\\":\\\"no key target\\\",\\\"req_id\\\":$req_id}\"\n\
+                   fi\n\
+                   ;;\n\
+                 *'\"cmd\":\"close\"'*)\n\
+                   echo \"{\\\"ok\\\":true,\\\"cmd\\\":\\\"close\\\",\\\"req_id\\\":$req_id}\"\n\
+                   exit 0\n\
+                   ;;\n\
+                 *)\n\
+                   echo \"{\\\"ok\\\":true,\\\"cmd\\\":\\\"noop\\\",\\\"req_id\\\":$req_id}\"\n\
+                   ;;\n\
+               esac\n\
+             done\n";
+        std::fs::write(&script, body).unwrap();
+        let mut perms = std::fs::metadata(&script).unwrap().permissions();
+        perms.set_mode(0o755);
+        std::fs::set_permissions(&script, perms).unwrap();
+
+        let apk = dir.join("fake.apk");
+        std::fs::write(&apk, b"not-a-real-apk").unwrap();
+        let _guard = art_bin_env_lock();
+        std::env::set_var("ACOS_ART_BIN", &script);
+
+        let mut session = ArtSession::start(&apk, &dir).expect("fake session starts");
+        let err_pub = session
+            .panel_key(29, "down", 0, -1)
+            .expect_err("post-publish key ack failure must error");
+        assert!(
+            matches!(
+                err_pub,
+                BackendError::Protocol {
+                    code: ErrorCode::Timeout,
+                    ..
+                }
+            ),
+            "post-publish key ack failure must map to Protocol(ErrorCode::Timeout), got {err_pub:?}"
+        );
+
+        let err_pre = session
+            .panel_key(29, "down", 0, -1)
+            .expect_err("pre-publish key rejection must error");
+        assert!(
+            matches!(
+                err_pre,
+                BackendError::Protocol {
+                    code: ErrorCode::UnsupportedBackend,
+                    ..
+                }
+            ),
+            "pre-publish key rejection must map to Protocol(ErrorCode::UnsupportedBackend), got {err_pre:?}"
         );
 
         std::env::remove_var("ACOS_ART_BIN");

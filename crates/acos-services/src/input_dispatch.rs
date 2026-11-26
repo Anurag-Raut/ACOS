@@ -1306,12 +1306,35 @@ impl InputHost {
         event_time: i64,
         ack_wait: Duration,
     ) -> Result<InjectedGesture> {
-        let (token, gesture) = lock(&self.state).publish_on_focused(|dispatch, token| {
-            dispatch.inject_key_event(
-                token, action, code, meta_state, device_id, down_time, event_time,
-            )
-        })?;
+        self.key_event_checked(
+            action, code, meta_state, device_id, down_time, event_time, ack_wait,
+        )
+        .map_err(|(err, _published)| err)
+    }
+
+    /// Like [`Self::key_event`], except errors also report `published: bool`
+    /// so callers can distinguish pre-publish rejections (`false`) from
+    /// post-publish acknowledgement failures (`true`, where the guest may have
+    /// already applied the key transition).
+    pub fn key_event_checked(
+        &self,
+        action: i32,
+        code: i32,
+        meta_state: i32,
+        device_id: i32,
+        down_time: i64,
+        event_time: i64,
+        ack_wait: Duration,
+    ) -> std::result::Result<InjectedGesture, (ChannelError, bool)> {
+        let (token, gesture) = lock(&self.state)
+            .publish_on_focused(|dispatch, token| {
+                dispatch.inject_key_event(
+                    token, action, code, meta_state, device_id, down_time, event_time,
+                )
+            })
+            .map_err(|err| (err, false))?;
         self.collect(&token, &gesture, ack_wait)
+            .map_err(|err| (err, true))
     }
 
     /// Publish `text` as a real key stroke per character on the focused window
