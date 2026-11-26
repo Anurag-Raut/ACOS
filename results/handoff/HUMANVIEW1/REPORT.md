@@ -456,3 +456,23 @@ Verified and addressed all **6** CodeRabbit Round 3 actionable comments (1 Major
 - Unit & doc suites: `acos-art --lib live_view` (**23 passed, 0 failed**), `acos-cli --bin acos` (**239 passed, 0 failed**), `acos-mcp --test docs --test guide --test documentation_args` (**19 passed, 0 failed**), `acos-services --test surface_client --test modules_doc` (**15 passed, 0 failed**), non-ignored `humanview_cp1..cp4` + `launcher_home_frame` (**13 passed, 0 failed**).
 - Release live-ART suites (`run-exclusive.sh` + `guarded.sh`): `launcher_home_frame` (**1 passed**, 5.57 s), `humanview_cp1` (**2 passed**, 15.07 s), `humanview_cp2` (**1 passed**, 5.54 s), `humanview_cp3` (**2 passed**, 14.20 s), `humanview_cp4` (**1 passed**, 10.87 s; **p50 = 63.46 ms**, **p95 = 64.87 ms**, `mean_encode_ms = 1.83 ms`, `frames_dropped_latest = 0`, `events_dropped = 0`).
 
+---
+
+## 14. Fix Round 7 — CodeRabbit PR #6 Round 4 Review Fixes
+
+Verified and addressed all **3** CodeRabbit Round 4 actionable comments (2 Majors + 1 Minor, 0 false positives):
+
+- **Secondary pointer edges in event feed (`crates/acos-art/src/live_view.rs`):**
+  - Updated `event_from_reply` to mask `action & 0xff` and map `ACTION_POINTER_DOWN` (`5`) → `"down"` and `ACTION_POINTER_UP` (`6`) → `"up"` alongside primary `0`/`1`/`3` while continuing to omit `ACTION_MOVE` (`2`) (`panel_touch_event_from_reply_maps_primary_and_secondary_edges`).
+- **Monotonic `panel_touch` ordering against abandoned-down/cancel races (`crates/acos-cli/src/engine/art.rs`, `crates/acos-cli/src/view/hub.rs`, `docs/LIVE_VIEW.md`):**
+  - Tracked `last_panel_touch_event_time` on `ArtSession` (serialized under `HeldArtSession::session` and preserved across `reset`) so any out-of-order `panel_touch` with `event_time < last` is rejected with `STALE_EVENT` before forwarding to the guest — guaranteeing an abandoned older `ACTION_DOWN` on a dropped connection can never take effect after a newer compensating `ACTION_CANCEL` / `ACTION_POINTER_UP` (`panel_touch_rejects_out_of_order_event_time_without_forwarding`).
+  - Persisted `last_event_time_ns` on `InputSlotState` across `InputWorker` idle-restarts so subsequent scrolls cannot backdate below an earlier touch timestamp.
+- **Keep uncertain touch pointers out of normal gesture dispatch (`crates/acos-cli/src/view/hub.rs`):**
+  - Replaced retaining failed-cancel pointers inside `InputWorker::pointers` with an explicit `PendingTouchRecovery` slot (persisted across worker restarts in `InputSlotState`). Both `TouchPhase::Down` and `handle_scroll` pop/omit uncertain pointers from `self.pointers`, attempt immediate cancellation, and if that also fails, flush recovery (`ACTION_CANCEL` or `ACTION_POINTER_UP`) via `resolve_pending_touch_recovery` before dispatching any subsequent touch/scroll or on client disconnect (`failed_touch_down_recovery_flushes_before_next_client_down_and_scroll`).
+
+**Fresh verification:**
+- `tools/verify/check-layout.sh`: **`check-layout: ok`**.
+- Unit & doc suites: `acos-art --lib live_view` (**24 passed, 0 failed**), `acos-cli --bin acos` (**241 passed, 0 failed**), `acos-mcp --test docs --test guide --test documentation_args` (**19 passed, 0 failed**), `acos-services --test surface_client --test modules_doc` (**15 passed, 0 failed**), non-ignored `humanview_cp1..cp4` + `launcher_home_frame` (**13 passed, 0 failed**).
+- Release live-ART suites (`run-exclusive.sh` + `guarded.sh`): `launcher_home_frame` (**1 passed**), `humanview_cp1` (**2 passed**), `humanview_cp2` (**1 passed**), `humanview_cp3` (**2 passed**), `humanview_cp4` (**1 passed**, 10.75 s; **p50 = 63.51 ms**, **p95 = 64.62 ms**, `mean_encode_ms = 1.83 ms`, `frames_dropped_latest = 0`, `events_dropped = 0`).
+
+

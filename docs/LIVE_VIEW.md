@@ -419,7 +419,11 @@ acos view: http://127.0.0.1:54321/?t=<token>
     over the session's `serve_socket` via the existing `InputDispatch` path
     (`panel_touch`, `panel_key`, `panel_text`, `panel_rotate`), tagging every
     emitted event `source: "panel"` in `/api/events`. A disconnect mid-gesture
-    automatically sends `cancel` for any active pointer.
+    automatically sends `cancel` for any active pointer; ambiguous touch-down
+    failures flush a compensating cancel before any later gesture, and
+    `ArtSession::panel_touch` rejects out-of-order frames whose `event_time`
+    precedes an already-processed `panel_touch` so an abandoned down cannot
+    land after a newer cancel.
   - **Dynamic stream upgrade.** Watch-only stays `0.5` PNG @ `15` fps. While an
     input WebSocket is open, the hub upgrades the upstream subscription to `1.0`
     PNG @ `30` fps and reverts back to `0.5` PNG @ `15` fps when the last input
