@@ -43,8 +43,10 @@ pub fn map_art_code(code: &str) -> ErrorCode {
         | "GUEST_EXIT_AFTER_RESUME"
         | "GUEST_KILLED_BY_SIGNAL"
         | "NONZERO_EXIT" => ErrorCode::GuestExited,
-        // Deadlines and missing fresh evidence.
-        "TIMEOUT" | "NO_ACTIVITY_RESUMED" => ErrorCode::Timeout,
+        // Deadlines and missing fresh evidence (including input published to
+        // the guest channel whose ack later failed, so callers treat its guest
+        // effect as ambiguous and issue a compensating release).
+        "TIMEOUT" | "NO_ACTIVITY_RESUMED" | "INPUT_PUBLISHED_ACK_FAILED" => ErrorCode::Timeout,
         "NO_LIVE_FRAME" | "NO_FRESH_FRAME" | "POST_RESUME_NOT_READY" => ErrorCode::NoFreshFrame,
         // Guest-visible crashes (ART's own fatal reports).
         "ART_CRASH" | "ART_FATAL_CHECK" | "ART_FATAL_LOG" => ErrorCode::AppCrashed,
