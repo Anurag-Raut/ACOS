@@ -49,10 +49,12 @@ over `view.sock`.
 **One encoder per session.** The *first* subscriber fixes `format`, `scale` and
 `max_fps`; the hello says which values are active, and a later subscriber's
 request for different ones is ignored (it still gets `frames`/`events` as it
-asked). This keeps one encode per frame no matter how many viewers watch. A
-session can also pin these from the environment (`ACOS_VIEW_FORMAT`,
-`ACOS_VIEW_SCALE`, `ACOS_VIEW_MAX_FPS`, `ACOS_VIEW_JPEG_QUALITY`), in which case
-the first subscriber's request is only honoured where the environment is silent.
+asked). This keeps one encode per frame no matter how many viewers watch. The
+environment variables `ACOS_VIEW_FORMAT`, `ACOS_VIEW_SCALE`, and
+`ACOS_VIEW_MAX_FPS` set the session's default parameters when a subscriber omits
+those fields, while explicit fields in the first subscriber's `subscribe`
+request override them (`ACOS_VIEW_JPEG_QUALITY` configures JPEG quality when
+JPEG encoding is active).
 
 An unknown `v` is answered with one `E` message carrying `{"v":1,"error":…}` and
 the connection is closed.
@@ -148,8 +150,9 @@ Event kinds:
 
 * `action` — every command the launcher executed (`tap`, `touch`, `scroll`,
   `key`, `text`, `tree`, `screenshot`, `swipe`, `rotate`), with its `source`
-  (`"agent"` or `"panel"`) and result `status`. Emitted for failures and
-  `VERIFY_WATCH_ONLY` refusals too.
+  (`"agent"` or `"panel"`) and result `status`. Continuous `touch` `move`
+  events are intentionally omitted from the feed (only `down`/`up`/`cancel`
+  edges are recorded). Emitted for failures and `VERIFY_WATCH_ONLY` refusals too.
 * `activity` — the focused activity changed (once per distinct value).
 * `lifecycle` — `launch` (the ready line, `status: "ok"` or the failure code),
   `reset`, `close`, `session` (the session ended by itself: guest exit, timeout,
@@ -187,8 +190,9 @@ stats, never a block.
 4. At most 4 subscribers; a fifth connection drops the oldest, so a viewer that
    reconnects is never locked out.
 5. Text and key codes in the feed are masked unless a fresh tree proves a
-   non-password focus, and truncated; the producer never sends full-resolution
-   pixels.
+   non-password focus, and truncated; watch-only subscribers default to `0.5`
+   scale while interactive `acos view` sessions upgrade to `1.0` scale only
+   while `/api/input` is open.
 6. At most `MAX_SUBSCRIBE_THREADS` (8) connections are in the subscribe phase at
    once (a connection beyond the cap is closed at accept, with no thread), and
    the whole subscribe line must arrive within one 5 s deadline: a peer that
@@ -392,7 +396,7 @@ acos view: http://127.0.0.1:54321/?t=<token>
   keep-alive). Overlays are drawn client-side from those events: a tap ripple at
   the event's `x/y` (display space, scaled to the frame), the current activity,
   and the recent actions (`agent` / `panel` source pill, tool, masked text,
-  status). The page is ~29 KB of self-contained inline HTML/CSS/JS: no CDN, no
+  status). The page is ~40 KB of self-contained inline HTML/CSS/JS: no CDN, no
   external request, nothing served from disk, and no path parameter is used as a
   filesystem path (a session id is only matched against the registry).
 * **Interactive input (`/api/input/<session_id>?t=<token>`, ADR-0033).**
@@ -417,8 +421,9 @@ acos view: http://127.0.0.1:54321/?t=<token>
 * **Verify runs stay watch-only.** For sessions owned by `acos verify`
   (`watch_only: true`), the page shows a `watch-only: verify run` banner with
   disabled toolbar buttons, and `/api/input` refuses every message with
-  `{"ok":false,"code":"VERIFY_WATCH_ONLY"}` while recording the refusal in the
-  event feed; the verify verdict and settle rules are unaffected.
+  `{"ok":false,"code":"VERIFY_WATCH_ONLY"}` while recording non-move input
+  refusals (`touch down`, `scroll`, `key`, `text`, `rotate`) in the event feed;
+  the verify verdict and settle rules are unaffected.
 * **One upstream per session, only while watched.** The first browser
   connection to a session makes the hub connect to its `stream_socket` and send
   the one subscribe line; later connections join the same subscription (one

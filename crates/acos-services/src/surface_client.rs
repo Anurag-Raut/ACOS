@@ -318,6 +318,8 @@ pub struct LatestBuffer {
     pub buffer_id: u64,
     /// `cachedBuffer.token` (the owning process's `BufferCache` binder).
     pub cached_token: BinderId,
+    /// Monotonic `SurfaceState::buffer_cache` entry generation (`0` when uncached).
+    pub cache_gen: u64,
     /// `BufferData.producerId`.
     pub producer_id: u32,
     /// `BufferData.crop` if the transaction carried one.
@@ -579,6 +581,8 @@ struct CachedBuffer {
     format: i32,
     /// `GraphicBuffer::getId()`.
     id: u64,
+    /// Monotonic generation assigned when inserted into `SurfaceState::buffer_cache`.
+    cache_gen: u64,
 }
 
 impl CachedBuffer {
@@ -591,6 +595,7 @@ impl CachedBuffer {
             stride: self.stride,
             format: self.format,
             id: self.id,
+            cache_gen: self.cache_gen,
         })
     }
 }
@@ -638,6 +643,9 @@ pub struct SurfaceState {
     buffer_cache: HashMap<(BinderId, u64), CachedBuffer>,
     /// Insertion order for [`SurfaceState::buffer_cache`] (drop-oldest).
     buffer_cache_order: Vec<(BinderId, u64)>,
+    /// Monotonic entry generation for [`SurfaceState::buffer_cache`] so
+    /// destroying an older layer cannot evict a newer replacement entry.
+    next_cache_gen: u64,
     /// Layer-handle binder ids that were destroyed (W42). A transaction that
     /// still names one must not resurrect the record: the auto-insert in
     /// [`apply_layer_state`] is how a destroyed layer would otherwise come back
@@ -678,6 +686,7 @@ impl SurfaceState {
             buffer_generations: 0,
             buffer_cache: HashMap::new(),
             buffer_cache_order: Vec::new(),
+            next_cache_gen: 1,
             destroyed: std::collections::HashSet::new(),
             destroyed_layers: 0,
             released_buffers: 0,
@@ -751,11 +760,23 @@ impl SurfaceState {
             if let Some(buffer) = layer.latest.as_ref() {
                 released += 1;
                 // The client's `BufferCache` holds a second dup of the same
-                // `(token, GraphicBuffer.id)` (see `cache_buffer`). Nothing can
-                // reference it once the layer is gone, so drop that owner's
-                // entry too without touching another process's same buffer id.
+                // `(token, GraphicBuffer.id)` (see `cache_buffer`). Only evict
+                // it when the cache still holds this exact entry generation
+                // (not a newer replacement) and no other live layer retains it.
                 let key = (buffer.cached_token, buffer.buffer_id);
-                if self.buffer_cache.remove(&key).is_some() {
+                let still_shared = self.layers.values().any(|other| {
+                    other.latest.as_ref().is_some_and(|b| {
+                        b.cached_token == buffer.cached_token
+                            && b.buffer_id == buffer.buffer_id
+                            && b.cache_gen == buffer.cache_gen
+                    })
+                });
+                let matches_current = buffer.cache_gen != 0
+                    && self
+                        .buffer_cache
+                        .get(&key)
+                        .is_some_and(|entry| entry.cache_gen == buffer.cache_gen);
+                if matches_current && !still_shared && self.buffer_cache.remove(&key).is_some() {
                     self.buffer_cache_order.retain(|k| *k != key);
                 }
             }
@@ -812,17 +833,18 @@ impl SurfaceState {
     /// `GraphicBuffer::getId()` values (`0x2_0000_0000`, ...), so `owner`
     /// (`cachedBuffer.token`) keeps them separate. On a collision for the same
     /// `(owner, id)` key, the stale entry is replaced with the new buffer.
-    fn cache_buffer(state: &mut SurfaceState, owner: BinderId, meta: &GraphicBufferMeta) {
+    /// Returns the assigned monotonic `cache_gen` (`0` when not cached).
+    fn cache_buffer(state: &mut SurfaceState, owner: BinderId, meta: &GraphicBufferMeta) -> u64 {
         const MAX_CACHED_BUFFERS: usize = 16;
         const MAX_CACHED_BUFFERS_TOTAL: usize = 64;
         if meta.id == 0 {
-            return;
+            return 0;
         }
         // A descriptor limit (EMFILE) must not abort the host: an entry that
         // cannot be duplicated is simply not cached, and a later `client_cache_t`
         // reference to it is the same structured miss as an unknown id.
         let Some(fd) = meta.fd.try_clone().ok() else {
-            return;
+            return 0;
         };
         let key = (owner, meta.id);
         if state.buffer_cache.contains_key(&key) {
@@ -844,6 +866,8 @@ impl SurfaceState {
                 state.buffer_cache.remove(&oldest);
             }
         }
+        let cache_gen = state.next_cache_gen;
+        state.next_cache_gen = state.next_cache_gen.wrapping_add(1).max(1);
         state.buffer_cache_order.push(key);
         state.buffer_cache.insert(
             key,
@@ -854,8 +878,10 @@ impl SurfaceState {
                 stride: meta.stride,
                 format: meta.format,
                 id: meta.id,
+                cache_gen,
             },
         );
+        cache_gen
     }
 
     /// Evict a single `(token, id)` entry requested by `uncacheBuffers`.
@@ -2164,7 +2190,7 @@ fn apply_layer_state(
         // id and whose `token` identifies the client process's `BufferCache`.
         let resolved: Option<CachedBuffer> = match &buffer.buffer {
             Some(meta) => {
-                SurfaceState::cache_buffer(state, buffer.cached_token, meta);
+                let cache_gen = SurfaceState::cache_buffer(state, buffer.cached_token, meta);
                 Some(CachedBuffer {
                     fd: try_clone(meta),
                     width: meta.width,
@@ -2172,6 +2198,7 @@ fn apply_layer_state(
                     stride: meta.stride,
                     format: meta.format,
                     id: meta.id,
+                    cache_gen,
                 })
             }
             None if buffer.cached_buffer_id != 0 => state
@@ -2187,6 +2214,7 @@ fn apply_layer_state(
             stride: cached_stride,
             format: cached_format,
             id: cached_id,
+            cache_gen,
         }) = resolved
         {
             // The generation is reserved before the record is borrowed mutably:
@@ -2221,6 +2249,7 @@ fn apply_layer_state(
                 frame_number: buffer.frame_number,
                 buffer_id: cached_id,
                 cached_token: buffer.cached_token,
+                cache_gen,
                 producer_id: buffer.producer_id,
                 crop: buffer.crop.or(Some(layer.buffer_crop)),
             });

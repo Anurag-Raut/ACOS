@@ -2,21 +2,22 @@
 //!
 //! 1. `cp3_http_sessions_and_frame_upgrade_contract` — verifies `/api/sessions`
 //!    naming fields (`device_name`, `app_label`, `watch_only`), HTTP MJPEG
-//!    `/api/frames/<id>` upgrade from 0.5 PNG to 1.0 JPEG on `/api/input/<id>`
+//!    `/api/frames/<id>` upgrade from 0.5 PNG to 1.0 PNG on `/api/input/<id>`
 //!    connect, revert on WS close, and `watch_only` refusal to upgrade.
 //! 2. `cp3_live_drag_fling_long_press_and_rotate` (`#[ignore]`) — boots real
 //!    ART sessions on `list-scroll.apk` and `touch-probe.apk` under `acos serve`
 //!    + `acos view` and tests:
 //!    - Acceptance 1 (drag scrolls list, long press triggers `GestureDetector.onLongPress`,
 //!      rotate swaps display to 2400x1080 and updates `/api/sessions` + frames)
-//!    - Acceptance 5 (gesture fidelity: monotonic MOVE events + fast swipe fling
-//!      moves list past release point, plus wheel `scroll` works)
-//!    - Live JPEG 1.0x @ 30fps upgrade while `/api/input` is connected
+//!    - Acceptance 5 (gesture fidelity: pipelined MOVE sequence + fast swipe fling
+//!      moves list past release point, plus wheel `scroll` advances the list)
+//!    - Live PNG 1.0x @ 30fps upgrade while `/api/input` is connected
 //! 3. `cp3_verify_run_watch_only_refused_under_view` (`#[ignore]`) — boots
 //!    `acos verify --engine art` alongside `acos view` and tests Acceptance 3:
 //!    `/api/sessions` reports `watch_only: true`, all WS `/api/input` commands
 //!    are refused with `VERIFY_WATCH_ONLY`, `/api/events` records
-//!    `VERIFY_WATCH_ONLY`, `/api/frames` stays 0.5 PNG, and verify passes.
+//!    `VERIFY_WATCH_ONLY`, `/api/frames` stays 0.5 PNG (verified on fresh frames
+//!    while WS is open), and verify passes.
 
 use std::collections::VecDeque;
 use std::io::{BufRead, BufReader, Read, Write};
@@ -203,6 +204,30 @@ impl Drop for ViewHubProc {
     }
 }
 
+struct ChildGuard(Option<Child>);
+
+impl ChildGuard {
+    fn new(child: Child) -> Self {
+        Self(Some(child))
+    }
+
+    fn wait_with_output(mut self) -> std::io::Result<std::process::Output> {
+        self.0
+            .take()
+            .expect("child already awaited")
+            .wait_with_output()
+    }
+}
+
+impl Drop for ChildGuard {
+    fn drop(&mut self) {
+        if let Some(mut child) = self.0.take() {
+            let _ = child.kill();
+            let _ = child.wait();
+        }
+    }
+}
+
 struct Conn {
     reader: BufReader<UnixStream>,
     writer: UnixStream,
@@ -333,6 +358,7 @@ impl WsClient {
 #[derive(Clone, Debug)]
 #[allow(dead_code)]
 struct MjpegPart {
+    stream_idx: u64,
     content_type: String,
     w: u32,
     h: u32,
@@ -379,6 +405,7 @@ impl MjpegStream {
         let handle = std::thread::spawn(move || {
             let mut buf = Vec::new();
             let mut chunk = [0u8; 16 * 1024];
+            let mut idx = 0u64;
             while !stop_t.load(Ordering::Relaxed) {
                 match stream.read(&mut chunk) {
                     Ok(0) => break,
@@ -421,12 +448,14 @@ impl MjpegStream {
                             let bytes = buf[body_start..body_start + content_length].to_vec();
                             buf.drain(..total_need);
                             if !content_type.is_empty() && !bytes.is_empty() {
+                                idx += 1;
                                 let (lock, cv) = &*state_t;
                                 let mut q = lock.lock().unwrap();
                                 while q.len() >= 32 {
                                     q.pop_front();
                                 }
                                 q.push_back(MjpegPart {
+                                    stream_idx: idx,
                                     content_type,
                                     w,
                                     h,
@@ -903,18 +932,29 @@ fn cp3_live_drag_fling_long_press_and_rotate() {
         "fast 720px swipe did not fling past ~5-row drag span: slow_drag={min1} rows, fling_advance={fling_advance} rows (rows_fling={rows_fling:?})"
     );
 
-    // Wheel scroll also advances the list.
+    // Wheel scroll also strictly moves the list (scroll down unless fling
+    // already reached the last row, in which case scroll back up).
+    let at_bottom = rows_fling.contains(&49);
+    let wheel_dy = if at_bottom { -450 } else { 450 };
     assert_eq!(
-        ws.send_json(&json!({"t": "scroll", "x": 540, "y": 1200, "dy": 450}))["ok"],
+        ws.send_json(&json!({"t": "scroll", "x": 540, "y": 1200, "dy": wheel_dy}))["ok"],
         json!(true)
     );
     std::thread::sleep(Duration::from_millis(150));
     let obs_wheel = conn.call("acos_observe", json!({ "base": base_list, "tree": true }));
     let rows_wheel = visible_row_indices(&obs_wheel);
-    assert!(
-        *rows_wheel.first().unwrap_or(&0) >= min_fling,
-        "wheel scroll regressed list position: before={min_fling}, after={rows_wheel:?}"
-    );
+    let min_wheel = *rows_wheel.first().unwrap_or(&0);
+    if at_bottom {
+        assert!(
+            min_wheel < min_fling,
+            "wheel scroll up did not move list: before={min_fling}, after={rows_wheel:?}"
+        );
+    } else {
+        assert!(
+            min_wheel > min_fling,
+            "wheel scroll down did not advance list: before={min_fling}, after={rows_wheel:?}"
+        );
+    }
 
     // Check SSE feed shows panel touch events.
     let feed = sse.wait_until(
@@ -1020,7 +1060,7 @@ fn cp3_verify_run_watch_only_refused_under_view() {
         format!(
             r#"version: 1
 name: watch-only-cp3
-description: Launch counter, hold 8 s under acos view while WS input attempts are refused, and assert count stays 0.
+description: Launch counter, hold under acos view while WS input attempts are refused, tap inc once from scenario to produce a fresh frame, and assert count is 1.
 app: {apk}
 engine: art
 fallback: report-and-escalate
@@ -1044,10 +1084,14 @@ steps:
       selector: {{id: count}}
       timeout_ms: 5000
   - wait:
-      ms: 8000
+      ms: 5000
+  - tap:
+      selector: {{id: inc}}
+  - wait:
+      ms: 3000
   - assert_text:
       selector: {{id: count}}
-      text: {{exact: "0"}}
+      text: {{exact: "1"}}
 "#,
             apk = counter_apk.display()
         ),
@@ -1071,7 +1115,7 @@ steps:
         cmd.env("ACOS_ART_BIN", art);
     }
 
-    let child = cmd.spawn().expect("spawn acos verify");
+    let child = ChildGuard::new(cmd.spawn().expect("spawn acos verify"));
 
     // Wait for session to appear in /api/sessions with watch_only: true.
     let deadline = Instant::now() + Duration::from_secs(60);
@@ -1091,7 +1135,7 @@ steps:
 
     let frames = MjpegStream::connect(hub.port, &hub.token, &session_id);
     let sse = SseEvents::connect(hub.port, &hub.token, &session_id);
-    let _f0 = frames.wait_match(
+    let f0 = frames.wait_match(
         |p| p.content_type == "image/png" && p.w == 540,
         Duration::from_secs(10),
         "verify initial PNG frame",
@@ -1111,13 +1155,26 @@ steps:
         assert_eq!(r["code"], json!("VERIFY_WATCH_ONLY"), "{r:#?}");
     }
 
-    // Event feed records VERIFY_WATCH_ONLY; frame stream never upgrades to 1.0x.
+    // Event feed records VERIFY_WATCH_ONLY; frame stream never upgrades to 1.0x
+    // even when the scenario produces a fresh frame while WS is open.
     let evs = sse.wait_until(
         |evs| evs.iter().any(|e| e["status"] == "VERIFY_WATCH_ONLY"),
         Duration::from_secs(10),
     );
     assert!(evs.iter().any(|e| e["status"] == "VERIFY_WATCH_ONLY"));
-    std::thread::sleep(Duration::from_millis(250));
+    let f_fresh = frames.wait_match(
+        |p| p.stream_idx > f0.stream_idx,
+        Duration::from_secs(12),
+        "fresh verify frame while WS is open",
+    );
+    assert_eq!(
+        f_fresh.content_type, "image/png",
+        "verify stream must stay PNG while WS is open"
+    );
+    assert_eq!(
+        f_fresh.w, 540,
+        "verify stream must never upgrade to 1.0x resolution while WS is open"
+    );
     for part in frames.drain_seen() {
         assert_eq!(
             part.content_type, "image/png",

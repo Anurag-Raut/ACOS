@@ -78,7 +78,8 @@ pub struct LaunchArgs {
     #[arg(long)]
     pub label: Option<String>,
 
-    /// Optional display name for the session in `acos view`. Defaults to
+    /// Optional display name for the session in `acos view` (requires a
+    /// daemon-backed ART session via `--engine art` or `--keep`). Defaults to
     /// `<app label or package> · <session_id>`. Control characters, newlines,
     /// and `=` are stripped and the name is capped at 64 characters.
     #[arg(long = "device-name", value_name = "NAME")]
@@ -259,6 +260,14 @@ pub fn run(args: LaunchArgs) -> ExitCode {
             "launch: --intent-action/--data/--extra are carried by the ART session-start \
              Intent; add `--engine art` (the in-process Rust VM would launch with its own \
              Intent and silently drop them)."
+        );
+        return ExitCode::FAILURE;
+    }
+    if args.device_name.is_some() && !(args.keep || art) {
+        eprintln!(
+            "launch: --device-name labels a live ART session for `acos view`; add \
+             `--engine art` (or `--keep`) — the in-process Rust VM does not publish a live \
+             view session."
         );
         return ExitCode::FAILURE;
     }

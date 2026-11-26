@@ -1621,13 +1621,18 @@ mod tests {
             "response.status === 404",
             "markSessionEnded",
             "session ended",
-            "sessionEverConnected",
-            "connected === false",
+            "SESSION_REPLACED",
+            "heldGuestKeys",
+            "pageshow",
             "retryDelay",
             "Math.min(retryDelay * 2, 5000)",
         ] {
             assert!(html.contains(needle), "page missing {needle}");
         }
+        assert!(
+            !html.contains("Tab: \"KEYCODE_TAB\""),
+            "page must not capture Tab away from keyboard navigation"
+        );
     }
 
     fn send(

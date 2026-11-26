@@ -191,13 +191,13 @@ function afterLoad(fn) {
 let ws = null;
 let wsQueue = [];
 const activePointers = new Map();
+const heldGuestKeys = new Set();
 
 const KEY_MAP = {
   Backspace: "KEYCODE_DEL",
   Delete: "KEYCODE_FORWARD_DEL",
   Enter: "KEYCODE_ENTER",
   Escape: "KEYCODE_BACK",
-  Tab: "KEYCODE_TAB",
   ArrowUp: "KEYCODE_DPAD_UP",
   ArrowDown: "KEYCODE_DPAD_DOWN",
   ArrowLeft: "KEYCODE_DPAD_LEFT",
@@ -361,8 +361,9 @@ async function refresh() {
           disconnectedPolls = 0;
         } else if (updated.connected === false) {
           disconnectedPolls += 1;
-          if (sessionEverConnected || disconnectedPolls >= 2) {
-            markSessionEnded(current.session_id);
+          if (sessionEverConnected && !sessionEnded) {
+            $("dstate").textContent = "reconnecting";
+            $("dstate").className = "pill bad";
           }
         }
         if (!sessionEnded) {
@@ -372,7 +373,11 @@ async function refresh() {
             current.has_home = prevHasHome;
           }
           $("dtitle").textContent = sessionTitle(updated);
-          if (updated.display && updated.display.w && updated.display.h) {
+          if (
+            updated.display && updated.display.w && updated.display.h &&
+            (!frameSize.w || !frameSize.h ||
+              ((updated.display.w < updated.display.h) === (frameSize.w < frameSize.h)))
+          ) {
             display = { w: updated.display.w, h: updated.display.h };
             setAspect(display.w, display.h);
           }
@@ -391,11 +396,19 @@ async function refresh() {
 
 function closeWs() {
   activePointers.clear();
+  heldGuestKeys.clear();
   wsQueue = [];
   if (ws) {
     try { ws.close(); } catch (_) {}
     ws = null;
   }
+}
+
+function isTerminalInput(msg) {
+  if (!msg) return false;
+  if (msg.t === "touch") return msg.phase === "up" || msg.phase === "cancel";
+  if (msg.t === "key") return msg.phase === "up";
+  return false;
 }
 
 function ensureWs() {
@@ -414,7 +427,7 @@ function ensureWs() {
     dinput.textContent = "interactive";
     dinput.className = "pill ok";
     while (wsQueue.length > 0 && sock.readyState === WebSocket.OPEN) {
-      sock.send(wsQueue.shift());
+      sock.send(wsQueue.shift().raw);
     }
   };
   sock.onmessage = (ev) => {
@@ -422,6 +435,10 @@ function ensureWs() {
     let msg = null;
     try { msg = JSON.parse(ev.data); } catch (_) { return; }
     if (!msg) return;
+    if (msg.ok === false && msg.code === "SESSION_REPLACED") {
+      if (current) markSessionEnded(current.session_id);
+      return;
+    }
     if (msg.ok === false && msg.code === "VERIFY_WATCH_ONLY") {
       if (current) current.watch_only = true;
       applyToolbarUi();
@@ -444,6 +461,7 @@ function ensureWs() {
     ws = null;
     wsQueue = [];
     activePointers.clear();
+    heldGuestKeys.clear();
     if (current && !current.watch_only) {
       dinput.textContent = "idle";
       dinput.className = "pill";
@@ -470,7 +488,32 @@ function sendInput(msg) {
   if (sock.readyState === WebSocket.OPEN) {
     sock.send(raw);
   } else if (sock.readyState === WebSocket.CONNECTING) {
-    if (wsQueue.length < 128) wsQueue.push(raw);
+    if (msg.t === "touch" && msg.phase === "move") {
+      for (let i = wsQueue.length - 1; i >= 0; i--) {
+        const prev = wsQueue[i].msg;
+        if (prev && prev.t === "touch" && prev.id === msg.id) {
+          if (prev.phase === "move") {
+            wsQueue[i] = { msg, raw };
+            return true;
+          }
+          break;
+        }
+      }
+    }
+    if (wsQueue.length >= 128) {
+      if (isTerminalInput(msg)) {
+        const evictIdx = wsQueue.findIndex((item) => !isTerminalInput(item.msg));
+        if (evictIdx >= 0) {
+          wsQueue.splice(evictIdx, 1);
+        } else {
+          closeWs();
+          return false;
+        }
+      } else {
+        return false;
+      }
+    }
+    wsQueue.push({ msg, raw });
   }
   return true;
 }
@@ -495,8 +538,15 @@ function renderedImageRect() {
 
 function clientToDisplay(clientX, clientY, clampOutside) {
   const r = renderedImageRect();
-  const dw = display.w || frameSize.w || frame.width || 1080;
-  const dh = display.h || frameSize.h || frame.height || 2400;
+  let dw = display.w || frameSize.w || frame.width || 1080;
+  let dh = display.h || frameSize.h || frame.height || 2400;
+  if (
+    display.w && display.h && frameSize.w && frameSize.h &&
+    ((display.w < display.h) !== (frameSize.w < frameSize.h))
+  ) {
+    dw = display.h;
+    dh = display.w;
+  }
   if (!r.width || !r.height) return null;
   let nx = (clientX - r.left) / r.width;
   let ny = (clientY - r.top) / r.height;
@@ -646,7 +696,7 @@ async function startFrameStream(sid) {
       return;
     }
     const liveEntry = sessions.find((s) => s.session_id === sid);
-    if (hasPolledSessions && (!liveEntry || (sessionEverConnected && liveEntry.connected === false))) {
+    if (hasPolledSessions && !liveEntry) {
       markSessionEnded(sid);
       return;
     }
@@ -754,7 +804,11 @@ function connectEvents(s) {
     try { data = JSON.parse(message.data); } catch (error) { return; }
     const entry = data.entry || {};
     const hello = data.hello || {};
-    if (entry.display && entry.display.w) {
+    if (
+      entry.display && entry.display.w && entry.display.h &&
+      (!frameSize.w || !frameSize.h ||
+        ((entry.display.w < entry.display.h) === (frameSize.w < frameSize.h)))
+    ) {
       display = { w: entry.display.w, h: entry.display.h };
       setAspect(display.w, display.h);
     }
@@ -773,9 +827,6 @@ function connectEvents(s) {
     if (data.connected === true) {
       sessionEverConnected = true;
       disconnectedPolls = 0;
-    } else if (data.connected === false && sessionEverConnected) {
-      markSessionEnded(s.session_id);
-      return;
     }
     $("offline").textContent = "stream offline · reconnecting…";
     $("offline").hidden = !!data.connected;
@@ -906,12 +957,23 @@ screenWrap.addEventListener("pointermove", (e) => {
 function finishPointer(e, phase) {
   if (!activePointers.has(e.pointerId)) return;
   const pt = clientToDisplay(e.clientX, e.clientY, true) || activePointers.get(e.pointerId);
-  activePointers.delete(e.pointerId);
-  try {
-    if (screenWrap.hasPointerCapture && screenWrap.hasPointerCapture(e.pointerId)) {
-      screenWrap.releasePointerCapture(e.pointerId);
+  if (phase === "cancel") {
+    for (const pid of activePointers.keys()) {
+      try {
+        if (screenWrap.hasPointerCapture && screenWrap.hasPointerCapture(pid)) {
+          screenWrap.releasePointerCapture(pid);
+        }
+      } catch (_) {}
     }
-  } catch (_) {}
+    activePointers.clear();
+  } else {
+    activePointers.delete(e.pointerId);
+    try {
+      if (screenWrap.hasPointerCapture && screenWrap.hasPointerCapture(e.pointerId)) {
+        screenWrap.releasePointerCapture(e.pointerId);
+      }
+    } catch (_) {}
+  }
   sendInput({ t: "touch", phase, id: e.pointerId, x: pt.x, y: pt.y });
 }
 
@@ -940,7 +1002,7 @@ screenWrap.addEventListener("wheel", (e) => {
 }, { passive: false });
 
 document.addEventListener("keydown", (e) => {
-  if (!current || detail.hidden) return;
+  if (!current || detail.hidden || current.watch_only || sessionEnded) return;
   if (e.ctrlKey || e.metaKey || e.altKey) return;
   if (document.activeElement && document.activeElement.tagName === "BUTTON" && (e.key === "Enter" || e.key === " ")) {
     return;
@@ -948,7 +1010,11 @@ document.addEventListener("keydown", (e) => {
   const kc = KEY_MAP[e.key];
   if (kc) {
     e.preventDefault();
-    if (!e.repeat) sendInput({ t: "key", code: kc, phase: "down" });
+    if (!e.repeat) {
+      if (sendInput({ t: "key", code: kc, phase: "down" })) {
+        heldGuestKeys.add(kc);
+      }
+    }
     return;
   }
   if (e.key && e.key.length === 1) {
@@ -960,7 +1026,7 @@ document.addEventListener("keydown", (e) => {
 document.addEventListener("keyup", (e) => {
   if (!current || detail.hidden) return;
   const kc = KEY_MAP[e.key];
-  if (kc) {
+  if (kc && heldGuestKeys.delete(kc)) {
     e.preventDefault();
     sendInput({ t: "key", code: kc, phase: "up" });
   }
@@ -990,7 +1056,13 @@ $("back").addEventListener("click", closeSession);
 window.addEventListener("pagehide", () => {
   closeWs();
   stopFrameStream();
-  if (source) source.close();
+  if (source) { source.close(); source = null; }
+});
+window.addEventListener("pageshow", (e) => {
+  if (e.persisted && current && !sessionEnded && current.stream) {
+    connectEvents(current);
+    startFrameStream(current.session_id);
+  }
 });
 refresh();
 if (location.hash.startsWith("#s=")) {

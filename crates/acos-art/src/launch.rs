@@ -8615,6 +8615,7 @@ fn interactive_serve(
                 // the answer.
                 let deadline = Instant::now() + frame_wait;
                 let mut fresh = None;
+                let mut replied = false;
                 while Instant::now() < deadline {
                     if let Some(sample) = latest_probe(probe_state) {
                         if sample.seq > before {
@@ -8629,6 +8630,7 @@ fn interactive_serve(
                         });
                         protocol_write(&reply);
                         evidence.push(reply);
+                        replied = true;
                         break;
                     }
                     std::thread::sleep(Duration::from_millis(10));
@@ -8650,11 +8652,7 @@ fn interactive_serve(
                         // No fresh sample: the rotation did not reach the
                         // guest (no reader, or the guest refused). Fail closed
                         // with a structured error, never a pass.
-                        if !evidence
-                            .last()
-                            .map(|r| r.get("cmd") == Some(&serde_json::json!(cmd)))
-                            .unwrap_or(false)
-                        {
+                        if !replied {
                             let reply = serde_json::json!({
                                 "ok": false, "cmd": cmd, "code": "NO_FRESH_TREE",
                                 "error": "the guest published no probe sample at the rotated size",

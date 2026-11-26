@@ -719,6 +719,7 @@ pub fn run(args: VerifyArgs) -> ExitCode {
                     session_id: id,
                     daemon_pid: std::process::id(),
                     launcher_pid: session.launcher_pid(),
+                    launch_token: None,
                     started_ms: crate::live_registry::now_ms(),
                     client_name: client_name.to_string(),
                     client_version: client_version.to_string(),

@@ -83,6 +83,13 @@ struct HeldArtSession {
     /// replaced by another one can tell that the session is no longer its guest
     /// (and must not destroy it on exit).
     launch_token: Mutex<String>,
+    /// Immutable per-guest-instance token published in `LiveEntry.launch_token`.
+    /// Unlike `launch_token` (which renews on idempotent relaunch of the same
+    /// live guest), `guest_token` changes only when a brand-new guest process
+    /// replaces the session id, letting interactive `acos view` sockets reject
+    /// commands targeted at a replaced guest (`SESSION_REPLACED`) without
+    /// breaking live viewers on idempotent relaunch.
+    guest_token: String,
     /// `Mutex` because two connections may address the same session id; the
     /// guest takes one command at a time.
     session: Mutex<ArtSession>,
@@ -325,6 +332,7 @@ impl ServeEngine {
                 .stream_socket()
                 .map(|path| path.display().to_string()),
             has_home: session.has_home(),
+            launch_token: Some(held.guest_token.clone()),
         };
         if let Err(error) = self.live.write(&entry) {
             eprintln!(
@@ -335,8 +343,11 @@ impl ServeEngine {
     }
 
     /// VIEW1a: refresh a session's `activity` in the registry.
-    fn refresh_live_activity(&self, id: &str, session: &ArtSession) {
-        if let Err(error) = self.live.update_activity(id, session.activity()) {
+    fn refresh_live_activity(&self, id: &str, held: &HeldArtSession, session: &ArtSession) {
+        if let Err(error) =
+            self.live
+                .update_activity_if_token(id, Some(&held.guest_token), session.activity())
+        {
             eprintln!("acos serve: live view: cannot update session {id} activity: {error}");
         }
     }
@@ -969,12 +980,14 @@ impl ServeEngine {
                 None => {
                     // Re-launch on the live session = hand back its bound live
                     // frame (the daemon's whole point); never boot a second
-                    // guest.
+                    // guest. Serialize metadata updates and registry write
+                    // under `held.session` so concurrent relaunches cannot
+                    // interleave `set_device_name` and `publish_live`.
+                    let mut session = held.session.lock().unwrap_or_else(|e| e.into_inner());
                     held.note_launch(&agent_label);
                     if device_name.is_some() {
                         held.set_device_name(device_name.clone());
                     }
-                    let mut session = held.session.lock().unwrap_or_else(|e| e.into_inner());
                     self.publish_live(id, &held, &session);
                     return match session.ensure_launch_tree(settle, pixels) {
                         Ok(tree) => launch_reply(
@@ -1083,6 +1096,7 @@ impl ServeEngine {
                     device_name: Mutex::new(device_name),
                     started_ms: Mutex::new(0),
                     launch_token: Mutex::new(String::new()),
+                    guest_token: new_launch_token(),
                     session: Mutex::new(session),
                 });
                 held.note_launch(&agent_label);
@@ -1138,10 +1152,12 @@ impl ServeEngine {
                 .lock()
                 .unwrap_or_else(|e| e.into_inner())
                 .remove(id);
-            // VIEW1a: the session is gone; its registry entry must not outlive
-            // it (a hub must never dial a socket that no longer exists).
-            self.live.remove(id);
+            // Lock the session before removing its registry entry so an
+            // in-flight `call_art`/`panel_rotate` finishes its registry update
+            // first, and gate removal by `guest_token` so a concurrent
+            // replacement session's registry entry is never deleted.
             let mut session = held.session.lock().unwrap_or_else(|e| e.into_inner());
+            self.live.remove_if_token(id, Some(&held.guest_token));
             let report = session.teardown();
             // GL1: name the destruction path and prove the *session*, not just
             // the spawned process group, is gone. `lifecycle` = the guest ended
@@ -1359,7 +1375,7 @@ impl ServeEngine {
                 label_timing(&mut result, &session, tool, started);
                 // VIEW1a: keep the registry's `activity` in step with the
                 // session's own state (a no-op when it has not changed).
-                self.refresh_live_activity(id, &session);
+                self.refresh_live_activity(id, held, &session);
                 // REL3A §3: an action whose own settle timed out is never a plain
                 // pass. The input was delivered (the reply keeps `state_changed`,
                 // the tree and the frame identity so an agent can still see the
@@ -1411,6 +1427,22 @@ impl ServeEngine {
         args: &Value,
     ) -> Envelope {
         let trust = held.trust;
+        if let Some(expected) = args.get("expected_launch_token").and_then(Value::as_str) {
+            if expected != held.guest_token {
+                return art_failure(
+                    request_id,
+                    Some(id),
+                    trust,
+                    ErrorCode::SessionNotFound,
+                    format!("SESSION_REPLACED: session `{id}` was replaced by a newer guest"),
+                    json!({
+                        "reason": "SESSION_REPLACED",
+                        "tool": tool,
+                        "expected_launch_token": expected,
+                    }),
+                );
+            }
+        }
         let mut session = held.session.lock().unwrap_or_else(|e| e.into_inner());
         if let Some(exit) = session.liveness() {
             return guest_exit_envelope(request_id, id, held, &mut session, tool, &exit);
@@ -1553,9 +1585,13 @@ impl ServeEngine {
         };
         match outcome {
             Ok(result) => {
-                self.refresh_live_activity(id, &session);
+                self.refresh_live_activity(id, held, &session);
                 if tool == "panel_rotate" {
-                    let _ = self.live.update_display(id, session.display_size());
+                    let _ = self.live.update_display_if_token(
+                        id,
+                        Some(&held.guest_token),
+                        session.display_size(),
+                    );
                 }
                 Envelope::pass(
                     request_id,

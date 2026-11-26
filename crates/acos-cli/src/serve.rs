@@ -169,7 +169,19 @@ pub fn run(args: ServeArgs) -> ExitCode {
         artifacts_root.clone(),
         args.auto_started,
     );
-    let serve_socket = std::fs::canonicalize(&socket).unwrap_or_else(|_| socket.clone());
+    let abs_socket = if socket.is_absolute() {
+        socket.clone()
+    } else {
+        std::env::current_dir()
+            .map(|cwd| cwd.join(&socket))
+            .unwrap_or_else(|_| socket.clone())
+    };
+    // Preserve a short absolute symlink alias when its canonical target would
+    // exceed Linux's 107-byte Unix-socket pathname limit (`sun_path` minus NUL).
+    let serve_socket = match std::fs::canonicalize(&abs_socket) {
+        Ok(canon) if canon.as_os_str().len() <= 107 => canon,
+        _ => abs_socket,
+    };
     engine.set_serve_socket(serve_socket);
     let engine = Arc::new(engine);
     let shared = Arc::new(SharedState {

@@ -680,8 +680,9 @@ fn session_tool_spec(name: &str) -> (&'static str, Value) {
                 },
                 "device_name": {
                     "type": "string",
-                    "description": "Display name for this session in `acos view` (for example \
-                                    `Checkout Form`). Defaults to `<app label or package> · <session_id>`. \
+                    "description": "Display name for this ART session in `acos view` (for example \
+                                    `Checkout Form`; ART engine only, ignored by legacy/native \
+                                    launches). Defaults to `<app label or package> · <session_id>`. \
                                     Control characters, newlines, and `=` are stripped and the name \
                                     is capped at 64 characters."
                 },

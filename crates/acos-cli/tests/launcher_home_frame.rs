@@ -538,17 +538,51 @@ fn pressing_home_with_system_launcher_switches_pixels_from_counter_to_launcher()
         "Screenshot after Home stayed stuck on Counter pixels (diff={diff_home})"
     );
 
-    // Live view MJPEG stream must also switch away from Counter's frame.
+    fn downscale_2x2_rgb(w: u32, h: u32, rgb: &[u8]) -> Vec<u8> {
+        let dw = (w / 2) as usize;
+        let dh = (h / 2) as usize;
+        let sw = w as usize;
+        let mut out = vec![0u8; dw * dh * 3];
+        for y in 0..dh {
+            let sy0 = y * 2;
+            let sy1 = sy0 + 1;
+            for x in 0..dw {
+                let sx0 = x * 2;
+                let sx1 = sx0 + 1;
+                let idx00 = (sy0 * sw + sx0) * 3;
+                let idx10 = (sy0 * sw + sx1) * 3;
+                let idx01 = (sy1 * sw + sx0) * 3;
+                let idx11 = (sy1 * sw + sx1) * 3;
+                let dst = (y * dw + x) * 3;
+                for c in 0..3 {
+                    let sum = u32::from(rgb[idx00 + c])
+                        + u32::from(rgb[idx10 + c])
+                        + u32::from(rgb[idx01 + c])
+                        + u32::from(rgb[idx11 + c]);
+                    out[dst + c] = (sum / 4) as u8;
+                }
+            }
+        }
+        out
+    }
+
+    let counter_half_rgb = downscale_2x2_rgb(cw, ch, &counter_rgb);
+    let launcher_half_rgb = downscale_2x2_rgb(lw, lh, &launcher_rgb);
+
+    // Live view MJPEG stream must switch from Counter to Launcher pixels (not just differ).
     let live_launcher = frames.wait_match(
         |f| {
             if f.stream_idx <= live_counter.stream_idx || f.seq <= live_counter.seq {
                 return false;
             }
             let (w, h, rgb) = decode_rgb(&f.bytes);
-            w == 540 && h == 1200 && changed_pixels(&live_counter_rgb, &rgb) > 1_000
+            w == 540
+                && h == 1200
+                && changed_pixels(&live_counter_rgb, &rgb) > 1_000
+                && changed_pixels(&launcher_half_rgb, &rgb) < 2_500
         },
         Duration::from_secs(10),
-        "live MJPEG frame switching from Counter to Launcher",
+        "live MJPEG frame matching Launcher after Home",
     );
     assert!(live_launcher.seq > live_counter.seq);
 
@@ -590,6 +624,23 @@ fn pressing_home_with_system_launcher_switches_pixels_from_counter_to_launcher()
         diff_back_vs_counter < 5_000,
         "Returning to Counter should match Counter's pixels (diff={diff_back_vs_counter})"
     );
+
+    // Live view MJPEG stream must also switch back to Counter's pixels.
+    let live_back = frames.wait_match(
+        |f| {
+            if f.stream_idx <= live_launcher.stream_idx || f.seq <= live_launcher.seq {
+                return false;
+            }
+            let (w, h, rgb) = decode_rgb(&f.bytes);
+            w == 540
+                && h == 1200
+                && changed_pixels(&launcher_half_rgb, &rgb) > 1_000
+                && changed_pixels(&counter_half_rgb, &rgb) < 2_500
+        },
+        Duration::from_secs(10),
+        "live MJPEG frame returning to Counter",
+    );
+    assert!(live_back.seq > live_launcher.seq);
 
     println!(
         "LAUNCHER_HOME_FRAME_OK diff_counter_vs_launcher={} diff_back_vs_launcher={} diff_back_vs_counter={}",
