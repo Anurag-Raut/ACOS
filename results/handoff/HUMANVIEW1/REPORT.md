@@ -516,3 +516,27 @@ Verified and addressed all **4** CodeRabbit Round 6 actionable comments (4 Major
 - `tools/verify/check-layout.sh`: **`check-layout: ok`**.
 - Unit & doc suites: `acos-services --lib input_dispatch` (**17 passed, 0 failed**), `acos-services --test surface_client --test modules_doc` (**15 passed, 0 failed**), `acos-art --lib live_view` (**24 passed, 0 failed**), `acos-cli --bin acos` (**248 passed, 0 failed**), `acos-mcp --test docs --test guide --test documentation_args` (**19 passed, 0 failed**), non-ignored `humanview_cp1..cp4` + `launcher_home_frame` (**13 passed, 0 failed**).
 - Release live-ART suites (`run-exclusive.sh --task HVCR6` + `guarded.sh`): `launcher_home_frame` (**1 passed**, 5.44 s), `humanview_cp1` (**2 passed**, 18.98 s), `humanview_cp2` (**1 passed**, 5.59 s), `humanview_cp3` (**2 passed**, 21.92 s), `humanview_cp4` (**1 passed**, 10.72 s; **p50 = 63.67 ms**, **p95 = 64.92 ms**, `mean_encode_ms = 1.92 ms`, `frames_dropped_latest = 0`, `events_dropped = 0`).
+
+---
+
+## 17. Fix Round 10 — CodeRabbit PR #6 Round 7 Review Fixes
+
+Verified and addressed all **5** CodeRabbit Round 7 actionable comments (3 Majors + 2 Minors, 0 false positives):
+
+- **Idempotent pinned `PanelTouchState` so retried releases never re-hit-test another window (`crates/acos-art/src/launch.rs`):**
+  - Replaced bare `panel_touch_target` in `interactive_serve` with `PanelTouchState` tracking the pinned window `(BinderId, (i32, i32))` and active pointer wire IDs (`HashSet<i32>`).
+  - Retried `ACTION_UP` / `ACTION_CANCEL` after an already-ended gesture and retried `ACTION_POINTER_UP` for an already-released pointer immediately return `Ok(PanelTouchOutcome::AlreadyEnded)` (`{"ok": true, "already_ended": true}`) without calling `touch_frame`—never re-hit-testing another window or failing with `NoTouchTarget`. Releases against a closed pinned window return `Ok(PanelTouchOutcome::TargetClosed)` without retargeting (`retried_up_after_ended_gesture_does_not_retarget_other_window_or_fail_off_window`, `retried_pointer_up_after_already_released_is_noop_without_retargeting`, `release_after_pinned_target_closes_reports_target_closed_without_retargeting`).
+- **Always attempt paired `KEY_ACTION_UP` on `panel_key` press (`crates/acos-art/src/launch.rs`):**
+  - Updated `"panel_key"`'s default `"press"` path to attempt `KEY_ACTION_UP` even when `KEY_ACTION_DOWN` returns `Err` (which can occur during ack collection after publishing `DOWN`) and return `down_res.and(up_res)` so any failure still surfaces without leaving a key stuck down.
+- **Refuse `rotate` / `panel_rotate` before mutating WMS when a secondary process is foreground (`crates/acos-art/src/launch.rs`):**
+  - Guarded `"rotate" | "panel_rotate"` with a `live.top_process` check (returning `UNSUPPORTED_ANDROID_API` when a secondary process is foreground, since secondary processes have `Stdio::null()` and do not receive `ROTATE`) and a `guest_stdin` check (`NO_GUEST_CONTROL`) before calling `WmsState::rotate`, keeping display geometry consistent with the foreground process.
+- **Run due touch recovery even while ordinary input is queued (`crates/acos-cli/src/view/hub.rs`):**
+  - Updated `InputWorker::run` to check whether a scheduled `WorkerTask::ScheduledRecovery` deadline is due before dequeuing ordinary commands, and preserved `next_recovery_at` / `recovery_attempts` while non-recovery commands drain (clearing them once foreground commands resolve pending recovery/releases or when retries were exhausted), so a continuous stream of text/key commands cannot starve pending touch recovery (`due_touch_recovery_runs_even_while_text_commands_are_queued`).
+- **Deterministic foreground recovery test control (`crates/acos-cli/src/view/hub.rs`):**
+  - Added a `#[cfg(test)]` `scheduled_recovery_enabled` flag on `InputSlotState` (`Hub::set_scheduled_recovery_enabled`) and disabled background recovery timers in `failed_touch_down_recovery_flushes_before_next_client_down_and_scroll` and `blocked_release_is_retained_and_applied_after_recovery_before_next_gesture` so foreground `req_idx` ordering cannot race with the 25 ms timer.
+
+**Fresh verification:**
+- `tools/verify/check-layout.sh`: **`check-layout: ok`**.
+- Unit & doc suites: `acos-art --lib panel_touch` (**4 passed, 0 failed**), `acos-art --lib live_view` (**24 passed, 0 failed**), `acos-services --lib input_dispatch` (**17 passed, 0 failed**), `acos-services --test surface_client --test modules_doc` (**15 passed, 0 failed**), `acos-cli --bin acos` (**249 passed, 0 failed**), `acos-mcp --test docs --test guide --test documentation_args` (**19 passed, 0 failed**), non-ignored `humanview_cp1..cp4` + `launcher_home_frame` (**13 passed, 0 failed**).
+- Release live-ART suites (`run-exclusive.sh --task HVCR7` + `guarded.sh`): `launcher_home_frame` (**1 passed**, 5.72 s), `humanview_cp1` (**2 passed**, 18.95 s), `humanview_cp2` (**1 passed**, 5.41 s), `humanview_cp3` (**2 passed**, 22.02 s), `humanview_cp4` (**1 passed**, 10.72 s; **p50 = 62.99 ms**, **p95 = 64.54 ms**, `mean_encode_ms = 2.02 ms`, `frames_dropped_latest = 0`, `events_dropped = 0`).
+

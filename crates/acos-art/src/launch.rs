@@ -7441,6 +7441,199 @@ impl crate::live_view::FrameWake for ProbeTapWake {
     }
 }
 
+/// Tracks the pinned window and active pointer wire IDs for interactive
+/// `panel_touch` gestures so retried `ACTION_UP`/`ACTION_CANCEL`/`ACTION_POINTER_UP`
+/// frames never re-hit-test a different window or fail with `NoTouchTarget` after
+/// the gesture or pointer has already ended.
+#[derive(Debug, Default)]
+struct PanelTouchState {
+    target: Option<(acos_parcel::BinderId, (i32, i32))>,
+    active_pointers: std::collections::HashSet<i32>,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+enum PanelTouchOutcome {
+    Dispatched,
+    TargetClosed,
+    AlreadyEnded,
+}
+
+impl PanelTouchState {
+    fn dispatch(
+        &mut self,
+        input: &acos_services::window_session::input_dispatch::InputHost,
+        action: i32,
+        down_time: i64,
+        event_time: i64,
+        pointers: &[(i32, f32, f32)],
+        touch_wait: Duration,
+    ) -> std::result::Result<PanelTouchOutcome, acos_services::input_channel::ChannelError> {
+        let masked_action = action & 0xff;
+        let pointer_index = ((action >> 8) & 0xff) as usize;
+        match masked_action {
+            acos_services::input_channel::ACTION_DOWN => {
+                self.target = None;
+                self.active_pointers.clear();
+                match input.touch_frame(
+                    action,
+                    &mut self.target,
+                    down_time,
+                    event_time,
+                    pointers,
+                    touch_wait,
+                ) {
+                    Ok((token, origin, _)) => {
+                        self.target = Some((token, origin));
+                        for &(id, _, _) in pointers {
+                            self.active_pointers.insert(id);
+                        }
+                        Ok(PanelTouchOutcome::Dispatched)
+                    }
+                    Err(err) => {
+                        // If `touch_frame` already pinned a target (i.e. published
+                        // before ack collection failed), record the pointer so a
+                        // compensating cancel/up still targets the pinned window.
+                        if self.target.is_some() {
+                            for &(id, _, _) in pointers {
+                                self.active_pointers.insert(id);
+                            }
+                        }
+                        Err(err)
+                    }
+                }
+            }
+            acos_services::input_channel::ACTION_POINTER_DOWN => {
+                if self.target.is_none() {
+                    return Err(acos_services::input_channel::ChannelError::NoTouchTarget(
+                        "panel_touch pointer_down without an active touch target".to_string(),
+                    ));
+                }
+                let ptr_id = pointers.get(pointer_index).map(|p| p.0);
+                match input.touch_frame(
+                    action,
+                    &mut self.target,
+                    down_time,
+                    event_time,
+                    pointers,
+                    touch_wait,
+                ) {
+                    Ok((token, origin, _)) => {
+                        self.target = Some((token, origin));
+                        if let Some(id) = ptr_id {
+                            self.active_pointers.insert(id);
+                        }
+                        Ok(PanelTouchOutcome::Dispatched)
+                    }
+                    Err(err) => {
+                        if self.target.is_some() {
+                            if let Some(id) = ptr_id {
+                                self.active_pointers.insert(id);
+                            }
+                        }
+                        Err(err)
+                    }
+                }
+            }
+            acos_services::input_channel::ACTION_POINTER_UP => {
+                let ptr_id = pointers.get(pointer_index).map(|p| p.0);
+                if self.target.is_none()
+                    || ptr_id.is_some_and(|id| !self.active_pointers.contains(&id))
+                {
+                    return Ok(PanelTouchOutcome::AlreadyEnded);
+                }
+                match input.touch_frame(
+                    action,
+                    &mut self.target,
+                    down_time,
+                    event_time,
+                    pointers,
+                    touch_wait,
+                ) {
+                    Ok((token, origin, _)) => {
+                        self.target = Some((token, origin));
+                        if let Some(id) = ptr_id {
+                            self.active_pointers.remove(&id);
+                        }
+                        Ok(PanelTouchOutcome::Dispatched)
+                    }
+                    Err(err) => {
+                        let target_dead = self.target.is_some_and(|(token, _)| {
+                            matches!(
+                                err,
+                                acos_services::input_channel::ChannelError::PeerClosed
+                            ) || !input.has_channel(token)
+                        });
+                        if target_dead {
+                            if let Some(id) = ptr_id {
+                                self.active_pointers.remove(&id);
+                            }
+                            Ok(PanelTouchOutcome::TargetClosed)
+                        } else {
+                            Err(err)
+                        }
+                    }
+                }
+            }
+            acos_services::input_channel::ACTION_UP
+            | acos_services::input_channel::ACTION_CANCEL => {
+                if self.target.is_none() {
+                    self.active_pointers.clear();
+                    return Ok(PanelTouchOutcome::AlreadyEnded);
+                }
+                match input.touch_frame(
+                    action,
+                    &mut self.target,
+                    down_time,
+                    event_time,
+                    pointers,
+                    touch_wait,
+                ) {
+                    Ok(_) => {
+                        self.target = None;
+                        self.active_pointers.clear();
+                        Ok(PanelTouchOutcome::Dispatched)
+                    }
+                    Err(err) => {
+                        let target_dead = self.target.is_some_and(|(token, _)| {
+                            matches!(
+                                err,
+                                acos_services::input_channel::ChannelError::PeerClosed
+                            ) || !input.has_channel(token)
+                        });
+                        if target_dead {
+                            self.target = None;
+                            self.active_pointers.clear();
+                            Ok(PanelTouchOutcome::TargetClosed)
+                        } else {
+                            Err(err)
+                        }
+                    }
+                }
+            }
+            _ => {
+                if self.target.is_none() {
+                    return Err(acos_services::input_channel::ChannelError::NoTouchTarget(
+                        "panel_touch frame without an active touch target".to_string(),
+                    ));
+                }
+                input
+                    .touch_frame(
+                        action,
+                        &mut self.target,
+                        down_time,
+                        event_time,
+                        pointers,
+                        touch_wait,
+                    )
+                    .map(|(token, origin, _)| {
+                        self.target = Some((token, origin));
+                        PanelTouchOutcome::Dispatched
+                    })
+            }
+        }
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 fn interactive_serve(
     density_dpi: u32,
@@ -7789,7 +7982,7 @@ fn interactive_serve(
     let frame_wait = Duration::from_secs(env_u64("ACOSLAUNCH_FRAME_WAIT_SECS", 15));
     let clean: bool;
     let mut last_capture_fnv: Option<u64> = None;
-    let mut panel_touch_target: Option<(acos_parcel::BinderId, (i32, i32))> = None;
+    let mut panel_touch = PanelTouchState::default();
     loop {
         CURRENT_REQUEST_ID.store(0, std::sync::atomic::Ordering::Release);
         let deadline_left = session_deadline.saturating_duration_since(Instant::now());
@@ -8418,9 +8611,6 @@ fn interactive_serve(
                     continue;
                 };
                 let masked_action = action & 0xff;
-                if masked_action == acos_services::input_channel::ACTION_DOWN {
-                    panel_touch_target = None;
-                }
                 let touch_wait = if matches!(
                     masked_action,
                     acos_services::input_channel::ACTION_MOVE
@@ -8429,23 +8619,15 @@ fn interactive_serve(
                 } else {
                     Duration::from_millis(100)
                 };
-                match live.input.touch_frame(
+                match panel_touch.dispatch(
+                    &live.input,
                     action,
-                    &mut panel_touch_target,
                     down_time,
                     event_time,
                     &pointers,
                     touch_wait,
                 ) {
-                    Ok((token, origin, _)) => {
-                        if masked_action == acos_services::input_channel::ACTION_UP
-                            || masked_action
-                                == acos_services::input_channel::ACTION_CANCEL
-                        {
-                            panel_touch_target = None;
-                        } else {
-                            panel_touch_target = Some((token, origin));
-                        }
+                    Ok(PanelTouchOutcome::Dispatched) => {
                         protocol_write(&serde_json::json!({
                             "ok": true,
                             "cmd": "panel_touch",
@@ -8454,50 +8636,33 @@ fn interactive_serve(
                             "y": pointers[0].2.round() as i64,
                         }));
                     }
+                    Ok(PanelTouchOutcome::TargetClosed) => {
+                        protocol_write(&serde_json::json!({
+                            "ok": true,
+                            "cmd": "panel_touch",
+                            "action": masked_action,
+                            "target_closed": true,
+                            "x": pointers[0].1.round() as i64,
+                            "y": pointers[0].2.round() as i64,
+                        }));
+                    }
+                    Ok(PanelTouchOutcome::AlreadyEnded) => {
+                        protocol_write(&serde_json::json!({
+                            "ok": true,
+                            "cmd": "panel_touch",
+                            "action": masked_action,
+                            "already_ended": true,
+                            "x": pointers[0].1.round() as i64,
+                            "y": pointers[0].2.round() as i64,
+                        }));
+                    }
                     Err(err) => {
-                        let target_dead = panel_touch_target.is_some_and(|(token, _)| {
-                            matches!(
-                                err,
-                                acos_services::input_channel::ChannelError::PeerClosed
-                            ) || !live.input.has_channel(token)
-                        });
-                        let is_release = matches!(
-                            masked_action,
-                            acos_services::input_channel::ACTION_UP
-                                | acos_services::input_channel::ACTION_CANCEL
-                                | acos_services::input_channel::ACTION_POINTER_UP
-                        );
-                        if target_dead && is_release {
-                            // The pinned window's input channel is already gone, so
-                            // no pointer can remain stuck on it. Never fall back to
-                            // hit-testing a different window; clear the pin once the
-                            // final UP/CANCEL closes the gesture.
-                            if masked_action == acos_services::input_channel::ACTION_UP
-                                || masked_action
-                                    == acos_services::input_channel::ACTION_CANCEL
-                            {
-                                panel_touch_target = None;
-                            }
-                            protocol_write(&serde_json::json!({
-                                "ok": true,
-                                "cmd": "panel_touch",
-                                "action": masked_action,
-                                "target_closed": true,
-                                "x": pointers[0].1.round() as i64,
-                                "y": pointers[0].2.round() as i64,
-                            }));
-                        } else {
-                            // Preserve `panel_touch_target` across errors so a
-                            // compensating `ACTION_POINTER_UP` / `ACTION_CANCEL`
-                            // targets the window that received the gesture rather
-                            // than re-hit-testing another window under pointer 0.
-                            protocol_write(&serde_json::json!({
-                                "ok": false,
-                                "cmd": "panel_touch",
-                                "code": "INPUT_UNAVAILABLE",
-                                "error": format!("panel_touch failed: {err}"),
-                            }));
-                        }
+                        protocol_write(&serde_json::json!({
+                            "ok": false,
+                            "cmd": "panel_touch",
+                            "code": "INPUT_UNAVAILABLE",
+                            "error": format!("panel_touch failed: {err}"),
+                        }));
                     }
                 }
             }
@@ -8576,16 +8741,25 @@ fn interactive_serve(
                         now_ns,
                         key_wait,
                     ),
-                    _ => live.input.key_event(
-                        acos_services::input_channel::KEY_ACTION_DOWN,
-                        code,
-                        meta_state,
-                        device_id,
-                        now_ns,
-                        now_ns,
-                        key_wait,
-                    ).and_then(|_| {
-                        live.input.key_event(
+                    _ => {
+                        // Always attempt the paired KEY_ACTION_UP even if
+                        // KEY_ACTION_DOWN returns an error: `key_event` can
+                        // fail during ack collection after already publishing
+                        // KEY_ACTION_DOWN, and leaving the key un-released
+                        // would stick it down in the guest. (If DOWN failed
+                        // pre-publish, UP either fails harmlessly or is a
+                        // no-op on Android.) Return `down_res.and(up_res)` so
+                        // any failure still surfaces.
+                        let down_res = live.input.key_event(
+                            acos_services::input_channel::KEY_ACTION_DOWN,
+                            code,
+                            meta_state,
+                            device_id,
+                            now_ns,
+                            now_ns,
+                            key_wait,
+                        );
+                        let up_res = live.input.key_event(
                             acos_services::input_channel::KEY_ACTION_UP,
                             code,
                             meta_state,
@@ -8593,8 +8767,9 @@ fn interactive_serve(
                             now_ns,
                             now_ns + acos_services::input_channel::DEFAULT_TAP_HOLD_NANOS,
                             key_wait,
-                        )
-                    }),
+                        );
+                        down_res.and(up_res)
+                    }
                 };
                 match res {
                     Ok(_) => protocol_write(&serde_json::json!({"ok": true, "cmd": "panel_key", "code": code})),
@@ -8653,13 +8828,43 @@ fn interactive_serve(
                     evidence.push(reply);
                     continue;
                 };
+                // Secondary processes run with `Stdio::null()` and cannot
+                // receive `ROTATE` over the primary guest's stdin pipe. Refuse
+                // before mutating `WmsState` so display geometry stays
+                // consistent with the foreground process.
+                let foreground = live.top_process.load(std::sync::atomic::Ordering::Relaxed);
+                if foreground != 0 {
+                    let reply = serde_json::json!({
+                        "ok": false,
+                        "cmd": cmd,
+                        "code": "UNSUPPORTED_ANDROID_API",
+                        "error": format!(
+                            "rotate targets foreground secondary process {foreground}; \
+                             rotation is not delivered to secondary processes"
+                        ),
+                    });
+                    protocol_write(&reply);
+                    evidence.push(reply);
+                    continue;
+                }
+                let Some(writer) = guest_stdin.as_mut() else {
+                    let reply = serde_json::json!({
+                        "ok": false,
+                        "cmd": cmd,
+                        "code": "NO_GUEST_CONTROL",
+                        "error": "the guest has no stdin control pipe for rotate",
+                    });
+                    protocol_write(&reply);
+                    evidence.push(reply);
+                    continue;
+                };
                 let display = live
                     .wms
                     .lock()
                     .unwrap_or_else(std::sync::PoisonError::into_inner)
                     .rotate(rotation as u8);
                 let before = latest_probe(probe_state).map(|p| p.seq).unwrap_or(0);
-                if let Some(writer) = guest_stdin.as_mut() {
+                {
                     use std::io::Write;
                     let _ = writeln!(writer, "ROTATE {rotation}");
                     let _ = writer.flush();
@@ -12256,5 +12461,313 @@ mod final_logd_tests {
             .collect();
         assert_eq!(seqs, vec![8, 9]);
         let _ = std::fs::remove_dir_all(&dir);
+    }
+}
+
+#[cfg(test)]
+mod panel_touch_tests {
+    use super::*;
+    use acos_services::input_channel::{
+        ACTION_CANCEL, ACTION_DOWN, ACTION_POINTER_DOWN, ACTION_POINTER_INDEX_SHIFT,
+        ACTION_POINTER_UP, ACTION_UP, LoopbackConsumer, monotonic_nanos,
+    };
+    use acos_services::window_session::input_dispatch::InputHost;
+    use acos_services::wms::WmsState;
+    use acos_wm::display::DEFAULT_INSETS_MODE;
+    use acos_wm::layers::TYPE_APPLICATION;
+
+    const ACTIVITY: u64 = 0x6b01;
+    const DIALOG: u64 = 0x6b02;
+
+    fn host_with_dialog_over_activity() -> (
+        InputHost,
+        Arc<std::sync::Mutex<WmsState>>,
+        LoopbackConsumer,
+        LoopbackConsumer,
+        (f32, f32),
+        (f32, f32),
+    ) {
+        let stack = Arc::new(std::sync::Mutex::new(WmsState::new_with_insets(
+            DEFAULT_INSETS_MODE,
+        )));
+        let (dialog_pt, activity_pt) = {
+            let mut wms = stack.lock().expect("wms");
+            let session = wms.allocate_session();
+            let mut activity = acos_wm::codec::LayoutParams::application("t", "activity");
+            activity.type_ = TYPE_APPLICATION;
+            activity.width = -1;
+            activity.height = -1;
+            wms.wm
+                .add_to_display_as_user(session, acos_parcel::BinderId(ACTIVITY), activity, 0)
+                .expect("add activity");
+
+            let mut dialog = acos_wm::codec::LayoutParams::application("t", "dialog");
+            dialog.type_ = TYPE_APPLICATION;
+            dialog.width = 600;
+            dialog.height = 400;
+            wms.wm
+                .add_to_display_as_user(session, acos_parcel::BinderId(DIALOG), dialog, 0)
+                .expect("add dialog");
+
+            let df = wms.wm.windows[&DIALOG].frame;
+            let af = wms.wm.windows[&ACTIVITY].frame;
+            (
+                ((df.left + 20) as f32, (df.top + 20) as f32),
+                ((af.left + 40) as f32, (af.bottom - 100) as f32),
+            )
+        };
+        let host = InputHost::disabled().with_window_stack(Arc::clone(&stack));
+        {
+            let mut dispatch = host.state().lock().expect("input dispatch");
+            dispatch
+                .register_window(acos_parcel::BinderId(ACTIVITY), "activity")
+                .expect("register activity");
+            dispatch
+                .register_window(acos_parcel::BinderId(DIALOG), "dialog")
+                .expect("register dialog");
+        }
+        let dialog_fd = host
+            .state()
+            .lock()
+            .expect("input dispatch")
+            .duplicate_client_fd(acos_parcel::BinderId(DIALOG))
+            .expect("dialog fd");
+        let activity_fd = host
+            .state()
+            .lock()
+            .expect("input dispatch")
+            .duplicate_client_fd(acos_parcel::BinderId(ACTIVITY))
+            .expect("activity fd");
+        let mut dialog_guest = LoopbackConsumer::new(dialog_fd);
+        let mut activity_guest = LoopbackConsumer::new(activity_fd);
+        while dialog_guest.recv().expect("drain dialog").is_some() {}
+        while activity_guest.recv().expect("drain activity").is_some() {}
+        assert_eq!(
+            host.touch_target(dialog_pt.0, dialog_pt.1)
+                .expect("dialog hit")
+                .token,
+            acos_parcel::BinderId(DIALOG)
+        );
+        assert_eq!(
+            host.touch_target(activity_pt.0, activity_pt.1)
+                .expect("activity hit")
+                .token,
+            acos_parcel::BinderId(ACTIVITY)
+        );
+        (host, stack, dialog_guest, activity_guest, dialog_pt, activity_pt)
+    }
+
+    #[test]
+    fn retried_up_after_ended_gesture_does_not_retarget_other_window_or_fail_off_window() {
+        let (host, _stack, mut dialog_guest, mut activity_guest, dialog_pt, activity_pt) =
+            host_with_dialog_over_activity();
+        let mut state = PanelTouchState::default();
+        let t0 = monotonic_nanos();
+
+        assert_eq!(
+            state
+                .dispatch(
+                    &host,
+                    ACTION_DOWN,
+                    t0,
+                    t0,
+                    &[(0, dialog_pt.0, dialog_pt.1)],
+                    Duration::ZERO,
+                )
+                .expect("down"),
+            PanelTouchOutcome::Dispatched
+        );
+        assert_eq!(
+            state
+                .dispatch(
+                    &host,
+                    ACTION_UP,
+                    t0,
+                    t0 + 1_000,
+                    &[(0, activity_pt.0, activity_pt.1)],
+                    Duration::ZERO,
+                )
+                .expect("first up"),
+            PanelTouchOutcome::Dispatched
+        );
+        // Drain the two expected events (DOWN + UP) from DIALOG.
+        assert!(dialog_guest.recv().expect("dialog down").is_some());
+        assert!(dialog_guest.recv().expect("dialog up").is_some());
+        assert!(dialog_guest.recv().expect("dialog empty").is_none());
+        assert!(activity_guest.recv().expect("activity empty").is_none());
+
+        // Hub lost the reply to ACTION_UP and retries it over ACTIVITY coordinates:
+        // must succeed idempotently as AlreadyEnded and deliver 0 events to ACTIVITY.
+        assert_eq!(
+            state
+                .dispatch(
+                    &host,
+                    ACTION_UP,
+                    t0,
+                    t0 + 2_000,
+                    &[(0, activity_pt.0, activity_pt.1)],
+                    Duration::ZERO,
+                )
+                .expect("retried up over activity"),
+            PanelTouchOutcome::AlreadyEnded
+        );
+        // Same if retried at off-window coordinates (must not fail with NoTouchTarget).
+        assert_eq!(
+            state
+                .dispatch(
+                    &host,
+                    ACTION_CANCEL,
+                    t0,
+                    t0 + 3_000,
+                    &[(0, -500.0, -500.0)],
+                    Duration::ZERO,
+                )
+                .expect("retried cancel off-window"),
+            PanelTouchOutcome::AlreadyEnded
+        );
+        assert!(
+            dialog_guest.recv().expect("dialog still empty").is_none(),
+            "retried release must not duplicate events on DIALOG"
+        );
+        assert!(
+            activity_guest.recv().expect("activity still empty").is_none(),
+            "retried release must never deliver an unpaired UP/CANCEL to ACTIVITY"
+        );
+    }
+
+    #[test]
+    fn retried_pointer_up_after_already_released_is_noop_without_retargeting() {
+        let (host, _stack, mut dialog_guest, mut activity_guest, dialog_pt, activity_pt) =
+            host_with_dialog_over_activity();
+        let mut state = PanelTouchState::default();
+        let t0 = monotonic_nanos();
+
+        assert_eq!(
+            state
+                .dispatch(
+                    &host,
+                    ACTION_DOWN,
+                    t0,
+                    t0,
+                    &[(0, dialog_pt.0, dialog_pt.1)],
+                    Duration::ZERO,
+                )
+                .expect("down"),
+            PanelTouchOutcome::Dispatched
+        );
+        let ptr_down_1 = ACTION_POINTER_DOWN | (1 << ACTION_POINTER_INDEX_SHIFT);
+        let ptr_up_1 = ACTION_POINTER_UP | (1 << ACTION_POINTER_INDEX_SHIFT);
+        assert_eq!(
+            state
+                .dispatch(
+                    &host,
+                    ptr_down_1,
+                    t0,
+                    t0 + 1_000,
+                    &[(0, dialog_pt.0, dialog_pt.1), (1, activity_pt.0, activity_pt.1)],
+                    Duration::ZERO,
+                )
+                .expect("pointer down"),
+            PanelTouchOutcome::Dispatched
+        );
+        assert_eq!(
+            state
+                .dispatch(
+                    &host,
+                    ptr_up_1,
+                    t0,
+                    t0 + 2_000,
+                    &[(0, dialog_pt.0, dialog_pt.1), (1, activity_pt.0, activity_pt.1)],
+                    Duration::ZERO,
+                )
+                .expect("pointer up"),
+            PanelTouchOutcome::Dispatched
+        );
+        // Drain DOWN, POINTER_DOWN, POINTER_UP on DIALOG.
+        for _ in 0..3 {
+            assert!(dialog_guest.recv().expect("dialog msg").is_some());
+        }
+        assert!(dialog_guest.recv().expect("dialog empty").is_none());
+
+        // Retried POINTER_UP for wire_id 1 (already removed) must return AlreadyEnded
+        // without duplicating an event or disturbing pointer 0's pin on DIALOG.
+        assert_eq!(
+            state
+                .dispatch(
+                    &host,
+                    ptr_up_1,
+                    t0,
+                    t0 + 3_000,
+                    &[(0, dialog_pt.0, dialog_pt.1), (1, activity_pt.0, activity_pt.1)],
+                    Duration::ZERO,
+                )
+                .expect("retried pointer up"),
+            PanelTouchOutcome::AlreadyEnded
+        );
+        assert!(dialog_guest.recv().expect("no duplicate pointer up").is_none());
+        assert!(activity_guest.recv().expect("activity untouched").is_none());
+
+        // Pointer 0's final ACTION_UP still dispatches to pinned DIALOG.
+        assert_eq!(
+            state
+                .dispatch(
+                    &host,
+                    ACTION_UP,
+                    t0,
+                    t0 + 4_000,
+                    &[(0, activity_pt.0, activity_pt.1)],
+                    Duration::ZERO,
+                )
+                .expect("final up"),
+            PanelTouchOutcome::Dispatched
+        );
+        assert!(dialog_guest.recv().expect("dialog final up").is_some());
+        assert!(activity_guest.recv().expect("activity untouched").is_none());
+    }
+
+    #[test]
+    fn release_after_pinned_target_closes_reports_target_closed_without_retargeting() {
+        let (host, _stack, dialog_guest, mut activity_guest, dialog_pt, activity_pt) =
+            host_with_dialog_over_activity();
+        let mut state = PanelTouchState::default();
+        let t0 = monotonic_nanos();
+
+        assert_eq!(
+            state
+                .dispatch(
+                    &host,
+                    ACTION_DOWN,
+                    t0,
+                    t0,
+                    &[(0, dialog_pt.0, dialog_pt.1)],
+                    Duration::ZERO,
+                )
+                .expect("down"),
+            PanelTouchOutcome::Dispatched
+        );
+        // Close DIALOG's input channel mid-gesture.
+        drop(dialog_guest);
+        host.state()
+            .lock()
+            .expect("input dispatch")
+            .remove(acos_parcel::BinderId(DIALOG));
+
+        assert_eq!(
+            state
+                .dispatch(
+                    &host,
+                    ACTION_UP,
+                    t0,
+                    t0 + 1_000,
+                    &[(0, activity_pt.0, activity_pt.1)],
+                    Duration::ZERO,
+                )
+                .expect("release on closed dialog"),
+            PanelTouchOutcome::TargetClosed
+        );
+        assert!(
+            activity_guest.recv().expect("activity untouched").is_none(),
+            "release after pinned target closed must never fall back to ACTIVITY"
+        );
     }
 }

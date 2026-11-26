@@ -520,6 +520,21 @@ impl Hub {
             .get(session_id)
             .is_some_and(|slot| slot.is_active())
     }
+
+    /// Test seam to gate the worker's background recovery timer when a test
+    /// asserts deterministic foreground `req_idx` ordering.
+    #[cfg(test)]
+    pub(crate) fn set_scheduled_recovery_enabled(&self, session_id: &str, enabled: bool) {
+        let slot = {
+            let inner = self.inner.lock().expect("hub");
+            inner.input_slots.get(session_id).cloned()
+        };
+        if let Some(slot) = slot {
+            let mut state = slot.state.lock().expect("input slot");
+            state.scheduled_recovery_enabled = enabled;
+            slot.cv.notify_all();
+        }
+    }
 }
 
 /// Counters for one session slot (the hub's own seam for tests).
@@ -1395,6 +1410,8 @@ struct InputSlotState {
     next_client_id: u64,
     running: bool,
     replaced: bool,
+    #[cfg(test)]
+    scheduled_recovery_enabled: bool,
     last_event_time_ns: i64,
     pending_touch_recovery: Option<PendingTouchRecovery>,
     pending_releases: Vec<PendingRelease>,
@@ -1415,6 +1432,8 @@ impl InputSlot {
                 next_client_id: 1,
                 running: false,
                 replaced: false,
+                #[cfg(test)]
+                scheduled_recovery_enabled: true,
                 last_event_time_ns: 0,
                 pending_touch_recovery: None,
                 pending_releases: Vec::new(),
@@ -1709,15 +1728,18 @@ impl InputWorker {
                         next_recovery_at = None;
                         break WorkerTask::ClientDisconnected { client_id };
                     }
-                    if let Some(cmd) = state.queue.pop_front() {
-                        recovery_attempts = 0;
-                        next_recovery_at = None;
-                        break WorkerTask::Command(cmd);
-                    }
                     let needs_recovery = !state.replaced
                         && (self.pending_touch_recovery.is_some()
                             || !self.pending_releases.is_empty());
-                    if needs_recovery && recovery_attempts < RECOVERY_MAX_ATTEMPTS {
+                    #[cfg(test)]
+                    let scheduled_allowed = state.scheduled_recovery_enabled;
+                    #[cfg(not(test))]
+                    let scheduled_allowed = true;
+
+                    let recovery_deadline = if needs_recovery
+                        && scheduled_allowed
+                        && recovery_attempts < RECOVERY_MAX_ATTEMPTS
+                    {
                         let now = Instant::now();
                         let deadline = *next_recovery_at.get_or_insert_with(|| {
                             let shift = recovery_attempts.min(5);
@@ -1731,6 +1753,26 @@ impl InputWorker {
                             next_recovery_at = None;
                             break WorkerTask::ScheduledRecovery;
                         }
+                        Some((now, deadline))
+                    } else {
+                        None
+                    };
+
+                    if let Some(cmd) = state.queue.pop_front() {
+                        // Preserve an armed recovery schedule while queued
+                        // commands (such as text or keystrokes) drain, so a
+                        // continuous command stream cannot starve due touch
+                        // recovery. Reset only when nothing is pending or
+                        // retries were already exhausted (so a new command
+                        // re-arms bounded retries).
+                        if !needs_recovery || recovery_attempts >= RECOVERY_MAX_ATTEMPTS {
+                            recovery_attempts = 0;
+                            next_recovery_at = None;
+                        }
+                        break WorkerTask::Command(cmd);
+                    }
+
+                    if let Some((now, deadline)) = recovery_deadline {
                         let wait_dur = deadline.saturating_duration_since(now);
                         let (new_state, _) = self
                             .slot
@@ -1740,6 +1782,7 @@ impl InputWorker {
                         state = new_state;
                         continue;
                     }
+
                     if state.clients == 0 {
                         state.last_event_time_ns = self.last_event_time_ns;
                         state.pending_touch_recovery = self.pending_touch_recovery.take();
@@ -1768,6 +1811,10 @@ impl InputWorker {
                 }) => {
                     let reply = self.handle_command(client_id, cmd);
                     let _ = super::ws::send_text_locked(&reply_to, &reply.to_string());
+                    if self.pending_touch_recovery.is_none() && self.pending_releases.is_empty() {
+                        recovery_attempts = 0;
+                        next_recovery_at = None;
+                    }
                 }
                 WorkerTask::ClientDisconnected { client_id } => {
                     self.cancel_client(client_id);
@@ -4276,6 +4323,10 @@ mod tests {
         let hub = Hub::new(registry.clone());
         let client_a = hub.open_input("s_tdrec").expect("open A");
         let client_b = hub.open_input("s_tdrec").expect("open B");
+        // This test asserts exact foreground `req_idx` ordering; keep the
+        // background recovery timer disabled so it cannot consume a daemon slot
+        // between foreground steps.
+        hub.set_scheduled_recovery_enabled("s_tdrec", false);
         let (mut rx_a, tx_a) = ws_sink_pair();
         let (mut rx_b, tx_b) = ws_sink_pair();
 
@@ -4571,6 +4622,10 @@ mod tests {
         let client_a = hub.open_input("s_tdrel").expect("open A");
         let client_b = hub.open_input("s_tdrel").expect("open B");
         let client_c = hub.open_input("s_tdrel").expect("open C");
+        // This test asserts exact foreground `req_idx` ordering; keep the
+        // background recovery timer disabled so it cannot consume a daemon slot
+        // between foreground steps.
+        hub.set_scheduled_recovery_enabled("s_tdrel", false);
         let (mut rx_a, tx_a) = ws_sink_pair();
         let (mut rx_b, tx_b) = ws_sink_pair();
         let (mut rx_c, tx_c) = ws_sink_pair();
@@ -4934,6 +4989,101 @@ mod tests {
         assert_eq!(recorded[5], recorded[4]);
 
         drop(client_b);
+        let _ = std::fs::remove_dir_all(&registry);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn due_touch_recovery_runs_even_while_text_commands_are_queued() {
+        let root = scratch("tdqtext");
+        let socket = root.join("serve.sock");
+        let listener = UnixListener::bind(&socket).expect("bind fake daemon");
+        let seen: Arc<Mutex<Vec<(String, Option<i64>)>>> = Arc::new(Mutex::new(Vec::new()));
+        let seen_t = Arc::clone(&seen);
+        let _daemon = std::thread::spawn(move || {
+            let mut req_idx = 0usize;
+            for stream in listener.incoming() {
+                let Ok(mut stream) = stream else { break };
+                let mut reader = BufReader::new(stream.try_clone().unwrap());
+                loop {
+                    let mut line = String::new();
+                    if reader.read_line(&mut line).unwrap_or(0) == 0 {
+                        break;
+                    }
+                    let req: Value = serde_json::from_str(&line).unwrap();
+                    let tool = req["tool"].as_str().unwrap_or("").to_string();
+                    let action = req["args"]["action"].as_i64();
+                    seen_t.lock().unwrap().push((tool.clone(), action));
+                    req_idx += 1;
+                    // req 1: ACTION_DOWN -> drop (ambiguous EOF)
+                    // req 2: immediate ACTION_CANCEL -> drop
+                    // req 3+: daemon recovers; pace panel_text at 10 ms so the
+                    // queue stays continuously non-empty across the 25 ms backoff.
+                    if req_idx <= 2 {
+                        break;
+                    }
+                    if tool == "panel_text" {
+                        std::thread::sleep(Duration::from_millis(10));
+                    }
+                    let resp = json!({
+                        "id": req["id"],
+                        "envelope": { "ok": true, "result": { "ok": true } },
+                    });
+                    if stream.write_all(format!("{resp}\n").as_bytes()).is_err() {
+                        break;
+                    }
+                    let _ = stream.flush();
+                }
+            }
+        });
+
+        let registry = scratch("tdqtext-reg");
+        publish_input_entry(&registry, "s_tdqtext", Some(&socket), None, false);
+        let hub = Hub::new(registry.clone());
+        let client = hub.open_input("s_tdqtext").expect("open");
+        let (mut rx, tx) = ws_sink_pair();
+
+        // Trigger failed touch down + failed immediate cancel so pending_touch_recovery is armed.
+        client.enqueue(
+            r#"{"t":"touch","phase":"down","id":1,"x":200,"y":400}"#,
+            Arc::clone(&tx),
+        );
+        let down_reply = read_server_ws_text(&mut rx);
+        assert_eq!(down_reply["ok"], json!(false));
+        assert_eq!(down_reply["code"], json!("EOF"));
+
+        // Flood 10 queued text commands (~100 ms continuous work without the queue emptying).
+        for i in 0..10 {
+            client.enqueue(
+                &format!(r#"{{"t":"text","text":"k{i}"}}"#),
+                Arc::clone(&tx),
+            );
+        }
+        for _ in 0..10 {
+            let reply = read_server_ws_text(&mut rx);
+            assert_eq!(reply["ok"], json!(true), "text reply failed: {reply}");
+        }
+
+        let recorded = seen.lock().unwrap().clone();
+        // recorded[0] = failed ACTION_DOWN, recorded[1] = failed immediate ACTION_CANCEL.
+        let recovery_pos = recorded
+            .iter()
+            .enumerate()
+            .skip(2)
+            .find(|(_, (tool, action))| {
+                tool == "panel_touch" && *action == Some(i64::from(ACTION_CANCEL))
+            })
+            .map(|(idx, _)| idx);
+        let last_text_pos = recorded
+            .iter()
+            .rposition(|(tool, _)| tool == "panel_text")
+            .expect("panel_text recorded");
+        assert!(
+            recovery_pos.is_some_and(|pos| pos < last_text_pos),
+            "due touch recovery must run before queued text commands drain completely: {recorded:?}"
+        );
+
+        drop(client);
         let _ = std::fs::remove_dir_all(&registry);
         let _ = std::fs::remove_dir_all(&root);
     }
