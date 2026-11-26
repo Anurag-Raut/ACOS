@@ -719,6 +719,9 @@ pub struct ServiceHost {
     /// manager state (`WmsState`), published by `registry::install_*` just like
     /// `atms`, so modules such as `multiwindow` mutate the real WMS state.
     wms: Option<std::sync::Arc<std::sync::Mutex<crate::wms::WmsState>>>,
+    /// Compositor-client state (`SurfaceState`), published when the compositor
+    /// installs so process teardown drops the dead process's cached buffers.
+    compositor: Option<std::sync::Arc<std::sync::Mutex<crate::surface_client::SurfaceState>>>,
     /// MULTIWIN3 (ADR-0029, 2026-11-18 amendment — option A): typed host → guest
     /// commands queued by a module's `control` op. The launcher loop drains this
     /// outbox after each `services` request, writes each command to the owning
@@ -833,6 +836,7 @@ impl ServiceHost {
             overwrites: Vec::new(),
             delivery_wake: None,
             wms: None,
+            compositor: None,
             guest_commands: Vec::new(),
         }
     }
@@ -1768,6 +1772,7 @@ impl ServiceHost {
     /// manager's own `ProcessRecord` teardown, so a dead process can never leave
     /// a caller waiting for a callback that will not come.
     pub fn service_process_died(&mut self, tag: u32) {
+        self.release_process_compositor_buffers(tag, &[]);
         if !self.host_side_services {
             return;
         }
@@ -1796,6 +1801,31 @@ impl ServiceHost {
                 eprintln!("acos-services: process {tag} died: service disconnect failed: {error}");
             }
         }
+    }
+
+    /// Publish the compositor-client state so process teardown drops the dead
+    /// process's `BufferCache` entries.
+    pub fn set_compositor(
+        &mut self,
+        compositor: std::sync::Arc<std::sync::Mutex<crate::surface_client::SurfaceState>>,
+    ) {
+        self.compositor = Some(compositor);
+    }
+
+    /// Release every compositor `BufferCache` entry owned by process `tag` or
+    /// any of its recorded binder tokens.
+    pub fn release_process_compositor_buffers(
+        &mut self,
+        tag: u32,
+        owned_binders: &[BinderId],
+    ) -> usize {
+        let Some(compositor) = &self.compositor else {
+            return 0;
+        };
+        compositor
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .release_process_buffers(tag, owned_binders)
     }
 
     /// The package manager's `ServiceInfo`/`AppInfo` for `package`'s `class`

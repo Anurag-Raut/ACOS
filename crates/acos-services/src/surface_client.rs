@@ -316,6 +316,8 @@ pub struct LatestBuffer {
     pub frame_number: u64,
     /// `GraphicBuffer.id` (the release-callback `bufferId`).
     pub buffer_id: u64,
+    /// `cachedBuffer.token` (the owning process's `BufferCache` binder).
+    pub cached_token: BinderId,
     /// `BufferData.producerId`.
     pub producer_id: u32,
     /// `BufferData.crop` if the transaction carried one.
@@ -627,15 +629,15 @@ pub struct SurfaceState {
     /// the compositor-client's own "a new frame landed" signal (the W10 live
     /// session binds its captures to it).
     buffer_generations: u64,
-    /// `BufferCache` entries by `GraphicBuffer` id (see
-    /// [`SurfaceState::cache_buffer`]). The client strips a buffer it has already
-    /// sent from later parcels and references it as a `client_cache_t`
-    /// (`{token, id}`) instead — `Transaction::cacheBuffers()` in the image's
-    /// `libgui`. A compositor that ignores that reference sees every frame after
-    /// the first few as a *bufferless* transaction (W11: 213 of 215).
-    buffer_cache: HashMap<u64, CachedBuffer>,
+    /// `BufferCache` entries keyed by `(cachedBuffer.token, GraphicBuffer.id)`
+    /// (matching AOSP `ClientCache::getBuffer` on `client_cache_t { token, id }`;
+    /// see [`SurfaceState::cache_buffer`]). Each process runs in its own PID
+    /// namespace, so `GraphicBuffer::getId()` (`pid << 32 | counter`) collides
+    /// across processes (e.g. `0x2_0000_0000` in both Counter and Launcher);
+    /// keying by `(token, id)` keeps each process's memfds isolated.
+    buffer_cache: HashMap<(BinderId, u64), CachedBuffer>,
     /// Insertion order for [`SurfaceState::buffer_cache`] (drop-oldest).
-    buffer_cache_order: Vec<u64>,
+    buffer_cache_order: Vec<(BinderId, u64)>,
     /// Layer-handle binder ids that were destroyed (W42). A transaction that
     /// still names one must not resurrect the record: the auto-insert in
     /// [`apply_layer_state`] is how a destroyed layer would otherwise come back
@@ -749,11 +751,12 @@ impl SurfaceState {
             if let Some(buffer) = layer.latest.as_ref() {
                 released += 1;
                 // The client's `BufferCache` holds a second dup of the same
-                // `GraphicBuffer` id (see `cache_buffer`). Nothing can reference
-                // it once the layer is gone, so drop that entry too: the
-                // destroyed window's memfd must not stay open through the cache.
-                if self.buffer_cache.remove(&buffer.buffer_id).is_some() {
-                    self.buffer_cache_order.retain(|id| *id != buffer.buffer_id);
+                // `(token, GraphicBuffer.id)` (see `cache_buffer`). Nothing can
+                // reference it once the layer is gone, so drop that owner's
+                // entry too without touching another process's same buffer id.
+                let key = (buffer.cached_token, buffer.buffer_id);
+                if self.buffer_cache.remove(&key).is_some() {
+                    self.buffer_cache_order.retain(|k| *k != key);
                 }
             }
             // Dropping `layer.latest` closes this process's memfd dup.
@@ -802,19 +805,17 @@ impl SurfaceState {
     }
 
     /// Remember a buffer the client sent inline so a later `client_cache_t`
-    /// reference to the same `GraphicBuffer` id can be resolved.
+    /// reference to `(owner, GraphicBuffer.id)` can be resolved.
     ///
-    /// The image's client-side `BufferCache` keys on `GraphicBuffer::getId()`
-    /// and its cache id **is** that id (`BufferCache::cache` returns
-    /// `buffer->getId()`), so no separate id space is involved. It holds at most
-    /// `BUFFER_CACHE_MAX_SIZE` buffers, so a small drop-oldest table is enough;
-    /// a miss is a structured error, never a blank frame.
-    fn cache_buffer(state: &mut SurfaceState, meta: &GraphicBufferMeta) {
+    /// Keyed by `(owner, meta.id)` like AOSP `ClientCache::getBuffer` (`{token,
+    /// id}`): separate guest processes in separate PID namespaces mint the same
+    /// `GraphicBuffer::getId()` values (`0x2_0000_0000`, ...), so `owner`
+    /// (`cachedBuffer.token`) keeps them separate. On a collision for the same
+    /// `(owner, id)` key, the stale entry is replaced with the new buffer.
+    fn cache_buffer(state: &mut SurfaceState, owner: BinderId, meta: &GraphicBufferMeta) {
         const MAX_CACHED_BUFFERS: usize = 16;
+        const MAX_CACHED_BUFFERS_TOTAL: usize = 64;
         if meta.id == 0 {
-            return;
-        }
-        if state.buffer_cache.contains_key(&meta.id) {
             return;
         }
         // A descriptor limit (EMFILE) must not abort the host: an entry that
@@ -823,13 +824,29 @@ impl SurfaceState {
         let Some(fd) = meta.fd.try_clone().ok() else {
             return;
         };
-        while state.buffer_cache_order.len() >= MAX_CACHED_BUFFERS {
-            let oldest = state.buffer_cache_order.remove(0);
-            state.buffer_cache.remove(&oldest);
+        let key = (owner, meta.id);
+        if state.buffer_cache.contains_key(&key) {
+            state.buffer_cache_order.retain(|k| *k != key);
+        } else {
+            let owner_count = state
+                .buffer_cache_order
+                .iter()
+                .filter(|(t, _)| *t == owner)
+                .count();
+            if owner_count >= MAX_CACHED_BUFFERS {
+                if let Some(pos) = state.buffer_cache_order.iter().position(|(t, _)| *t == owner) {
+                    let oldest = state.buffer_cache_order.remove(pos);
+                    state.buffer_cache.remove(&oldest);
+                }
+            }
+            while state.buffer_cache_order.len() >= MAX_CACHED_BUFFERS_TOTAL {
+                let oldest = state.buffer_cache_order.remove(0);
+                state.buffer_cache.remove(&oldest);
+            }
         }
-        state.buffer_cache_order.push(meta.id);
+        state.buffer_cache_order.push(key);
         state.buffer_cache.insert(
-            meta.id,
+            key,
             CachedBuffer {
                 fd: Some(fd),
                 width: meta.width,
@@ -839,6 +856,39 @@ impl SurfaceState {
                 id: meta.id,
             },
         );
+    }
+
+    /// Evict a single `(token, id)` entry requested by `uncacheBuffers`.
+    pub fn uncache_buffer(&mut self, owner: BinderId, id: u64) -> bool {
+        let key = (owner, id);
+        if self.buffer_cache.remove(&key).is_some() {
+            self.buffer_cache_order.retain(|k| *k != key);
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Drop every `BufferCache` entry owned by process `tag` or any of its
+    /// recorded binder tokens (AOSP `ClientCache::removeProcess` on death).
+    pub fn release_process_buffers(&mut self, tag: u32, owned_binders: &[BinderId]) -> usize {
+        let mut released = 0usize;
+        self.buffer_cache.retain(|(token, _), _| {
+            let by_token = !token.is_null() && owned_binders.contains(token);
+            let by_tag = token.0 & crate::host::GUEST_BINDER_TAG != 0
+                && crate::atms::process_tag_of(token.0) == tag;
+            if by_token || by_tag {
+                released += 1;
+                false
+            } else {
+                true
+            }
+        });
+        if released > 0 {
+            self.buffer_cache_order
+                .retain(|key| self.buffer_cache.contains_key(key));
+        }
+        released
     }
 
     /// The nearest `z` and dim amount on this layer's ancestor chain.
@@ -1662,6 +1712,7 @@ pub fn install(
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner)
         .client_binder = binder;
+    host.set_compositor(Arc::clone(&state));
     state
 }
 
@@ -1710,6 +1761,11 @@ pub fn apply_transaction_state(
             latch_time,
             &transaction.listener_callbacks,
         );
+    }
+    for &(token, id) in &transaction.uncached_buffers {
+        if id != 0 {
+            s.uncache_buffer(token, id);
+        }
     }
     if dbg {
         eprintln!(
@@ -1824,6 +1880,8 @@ pub struct BufferData {
     pub release_buffer_listener: BinderId,
     /// `releaseBufferEndpoint` binder.
     pub release_buffer_endpoint: BinderId,
+    /// `cachedBuffer.token` (per-process `BufferCache` binder identity).
+    pub cached_token: BinderId,
     /// `cachedBuffer.id`.
     pub cached_buffer_id: u64,
     /// `hasBarrier`.
@@ -1874,6 +1932,8 @@ pub struct TransactionState {
     pub is_auto_timestamp: bool,
     /// `uncacheBuffers` count.
     pub uncache_buffers: usize,
+    /// `(token, id)` entries from `uncacheBuffers`.
+    pub uncached_buffers: Vec<(BinderId, u64)>,
     /// `hasListenerCallbacks`.
     pub has_listener_callbacks: bool,
     /// Top-level `listenerCallbacks`.
@@ -2083,10 +2143,11 @@ fn apply_layer_state(
     if std::env::var_os("ACOS_W5_BUF").is_some() {
         if let Some(b) = &layer.buffer {
             eprintln!(
-                "ACOSDBG BUFFERDATA flags={:#x} has_buffer={} frame={} cached_id={} has_barrier={} barrier_frame={} producer={}",
+                "ACOSDBG BUFFERDATA flags={:#x} has_buffer={} frame={} cached_token={:#x} cached_id={} has_barrier={} barrier_frame={} producer={}",
                 b.flags,
                 b.buffer.is_some(),
                 b.frame_number,
+                b.cached_token.0,
                 b.cached_buffer_id,
                 b.has_barrier,
                 b.barrier_frame_number,
@@ -2099,11 +2160,11 @@ fn apply_layer_state(
     if let Some(buffer) = &layer.buffer {
         // The client strips a `GraphicBuffer` it has already sent from later
         // parcels: `Transaction::cacheBuffers()` replaces it with a
-        // `client_cache_t` whose `id` **is** the `GraphicBuffer` id. Both shapes
-        // are the same frame for a compositor that keeps what it was sent.
+        // `client_cache_t` (`{token, id}`) whose `id` **is** the `GraphicBuffer`
+        // id and whose `token` identifies the client process's `BufferCache`.
         let resolved: Option<CachedBuffer> = match &buffer.buffer {
             Some(meta) => {
-                SurfaceState::cache_buffer(state, meta);
+                SurfaceState::cache_buffer(state, buffer.cached_token, meta);
                 Some(CachedBuffer {
                     fd: try_clone(meta),
                     width: meta.width,
@@ -2115,7 +2176,7 @@ fn apply_layer_state(
             }
             None if buffer.cached_buffer_id != 0 => state
                 .buffer_cache
-                .get(&buffer.cached_buffer_id)
+                .get(&(buffer.cached_token, buffer.cached_buffer_id))
                 .and_then(CachedBuffer::duplicate),
             None => None,
         };
@@ -2159,6 +2220,7 @@ fn apply_layer_state(
                 format: cached_format,
                 frame_number: buffer.frame_number,
                 buffer_id: cached_id,
+                cached_token: buffer.cached_token,
                 producer_id: buffer.producer_id,
                 crop: buffer.crop.or(Some(layer.buffer_crop)),
             });
@@ -2853,9 +2915,14 @@ fn read_transaction_state_body(
         )));
     }
     let uncache_count = uncache_count as usize;
+    let mut uncached_buffers = Vec::with_capacity(uncache_count.min(64));
     for _ in 0..uncache_count {
-        let _token = data.read_strong_binder().map_err(perr)?;
-        let _id = data.read_uint64().map_err(perr)?;
+        let token = data
+            .read_strong_binder()
+            .map_err(perr)?
+            .unwrap_or(BinderId(0));
+        let id = data.read_uint64().map_err(perr)?;
+        uncached_buffers.push((token, id));
     }
 
     if dbg {
@@ -2900,6 +2967,7 @@ fn read_transaction_state_body(
         desired_present_time,
         is_auto_timestamp,
         uncache_buffers: uncache_count,
+        uncached_buffers,
         has_listener_callbacks,
         listener_callbacks,
         transaction_id,
@@ -3247,7 +3315,10 @@ fn read_buffer_data(data: &mut Parcel, crop: Rect) -> SResult<BufferData> {
     if dbg {
         eprintln!("ACOSDBG bd endpoint at {}", data.data_position());
     }
-    let _cached_token = data.read_strong_binder().map_err(perr)?;
+    let cached_token = data
+        .read_strong_binder()
+        .map_err(perr)?
+        .unwrap_or(BinderId(0));
     if dbg {
         eprintln!("ACOSDBG bd cachedtok at {}", data.data_position());
     }
@@ -3264,6 +3335,7 @@ fn read_buffer_data(data: &mut Parcel, crop: Rect) -> SResult<BufferData> {
         frame_number,
         release_buffer_listener,
         release_buffer_endpoint,
+        cached_token,
         cached_buffer_id,
         has_barrier,
         barrier_frame_number,

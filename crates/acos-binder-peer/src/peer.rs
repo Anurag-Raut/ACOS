@@ -973,6 +973,8 @@ impl Peer {
         let window_binders = self.host.binders_of_process(tag);
         let owners = self.host.drop_process_binders(tag);
         self.close_process_window_sessions(tag, &window_binders);
+        self.host
+            .release_process_compositor_buffers(tag, &window_binders);
         // MPROC5c: the activity manager's `ProcessRecord` for the tag goes too
         // (stock `ActivityManagerService.removeProcessLocked`), so an idle-killed
         // process is not reported as running and the next intent respawns it.
