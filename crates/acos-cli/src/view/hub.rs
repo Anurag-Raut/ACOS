@@ -269,6 +269,8 @@ pub struct EventBatch {
 pub struct Hub {
     dir: PathBuf,
     inner: Mutex<Inner>,
+    #[cfg(test)]
+    after_open_input_select: Mutex<Option<Box<dyn FnOnce() + Send>>>,
 }
 
 struct Inner {
@@ -292,6 +294,8 @@ impl Hub {
                 slots: BTreeMap::new(),
                 input_slots: BTreeMap::new(),
             }),
+            #[cfg(test)]
+            after_open_input_select: Mutex::new(None),
         }
     }
 
@@ -505,7 +509,7 @@ impl Hub {
         session_id: &str,
         expected_guest_gen: u64,
     ) -> Result<InputClient, OpenInputError> {
-        let (slot, current_gen) = {
+        let (slot, client) = {
             let mut inner = self.inner.lock().expect("hub");
             self.refresh_locked(&mut inner);
             let entry = inner
@@ -545,9 +549,20 @@ impl Hub {
                 slot
             };
             *slot.stream_slot.lock().expect("input stream slot") = stream_slot;
-            (slot, current_gen)
+            // Register the client before releasing `self.inner` so a concurrent
+            // absent-entry `refresh_locked` cannot evict this idle slot and let
+            // a subsequent open spawn a second worker for the same guest.
+            let client = slot.attach_client_without_sync(current_gen);
+            (slot, client)
         };
-        Ok(slot.attach_client(current_gen))
+        #[cfg(test)]
+        let hook = self.after_open_input_select.lock().expect("hook").take();
+        #[cfg(test)]
+        if let Some(hook) = hook {
+            hook();
+        }
+        slot.sync_interactive();
+        Ok(client)
     }
 
     /// Test convenience wrapper that opens input against the current live guest
@@ -1691,7 +1706,7 @@ impl InputSlot {
         }
     }
 
-    fn attach_client(self: &Arc<Self>, guest_gen: u64) -> InputClient {
+    fn attach_client_without_sync(self: &Arc<Self>, guest_gen: u64) -> InputClient {
         let client_id = {
             let mut state = self.state.lock().expect("input slot");
             let client_id = state.next_client_id;
@@ -1710,7 +1725,6 @@ impl InputSlot {
             }
             client_id
         };
-        self.sync_interactive();
         InputClient {
             client_id,
             guest_gen,
@@ -2984,9 +2998,6 @@ impl InputWorker {
                             "session was replaced by a newer guest",
                         );
                     }
-                    if had_pending_up && matches!(phase, KeyPhase::Up) && meta == 0 {
-                        return json!({ "ok": true, "t": "key", "code": code, "phase": "up" });
-                    }
                 }
                 Err((c, m)) => {
                     if self.pending_key_ups.contains(&code)
@@ -2996,6 +3007,10 @@ impl InputWorker {
                         return err_json(&c, &m);
                     }
                 }
+            }
+            if had_pending_up && !self.pending_key_ups.contains(&code) && matches!(phase, KeyPhase::Up)
+            {
+                return json!({ "ok": true, "t": "key", "code": code, "phase": "up" });
             }
         }
         let event_type = match phase {
@@ -3041,6 +3056,32 @@ impl InputWorker {
                     .held_keys
                     .iter()
                     .any(|&(cid, _, c)| cid == client_id && c == code);
+                let other_holds = self
+                    .held_keys
+                    .iter()
+                    .any(|&(cid, _, c)| cid != client_id && c == code);
+                if other_holds {
+                    if was_held {
+                        self.held_keys
+                            .retain(|&(cid, _, c)| !(cid == client_id && c == code));
+                    }
+                    return json!({
+                        "ok": true,
+                        "t": "key",
+                        "code": code,
+                        "phase": event_type,
+                        "ignored": "held_by_other_client",
+                    });
+                }
+                if !was_held {
+                    return json!({
+                        "ok": true,
+                        "t": "key",
+                        "code": code,
+                        "phase": event_type,
+                        "ignored": "key_not_down",
+                    });
+                }
                 match self.call_daemon("panel_key", payload) {
                     Ok(_) => {
                         self.held_keys
@@ -3050,12 +3091,10 @@ impl InputWorker {
                     Err((c, m)) => {
                         if self.slot.is_replaced() || is_guest_gone_code(&c) {
                             self.clear_guest_key_state();
-                        } else if was_held {
+                        } else {
                             self.held_keys
                                 .retain(|&(cid, _, c)| !(cid == client_id && c == code));
-                            if !self.held_keys.iter().any(|&(_, _, c)| c == code)
-                                && !self.pending_key_ups.contains(&code)
-                            {
+                            if !self.pending_key_ups.contains(&code) {
                                 self.pending_key_ups.push(code);
                                 self.bump_recovery_episode();
                             }
@@ -6866,6 +6905,20 @@ mod tests {
             }
             std::thread::sleep(Duration::from_millis(10));
         }
+        let (still_running, has_saved_cleanup) = {
+            let inner = hub.inner.lock().expect("hub");
+            let slot = inner.input_slots.get("s_ro").expect("slot present");
+            let state = slot.state.lock().expect("slot");
+            (state.running, state.has_saved_cleanup())
+        };
+        assert!(
+            !still_running,
+            "worker must exit before testing saved-cleanup retention"
+        );
+        assert!(
+            has_saved_cleanup,
+            "slot must have saved cleanup state before removing registry entry"
+        );
 
         // Even if the registry entry disappears transiently again while the
         // daemon PID is alive, the hub must retain the slot's unfinished cleanup.
@@ -6932,5 +6985,164 @@ mod tests {
         drop(client3);
         let _ = std::fs::remove_dir_all(&registry);
         let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn open_input_checked_prevents_idle_slot_eviction_on_absent_entry_refresh() {
+        let daemon = FakeDaemon::start("open-evict");
+        let registry = scratch("open-evict-reg");
+        publish_input_entry(&registry, "s_oe", Some(&daemon.socket), None, false);
+        let hub = Arc::new(Hub::new(registry.clone()));
+        let gen1 = hub.list()[0].guest_gen;
+
+        // Open and close a client so `s_oe` sits idle (`running == false`, no
+        // active clients) inside `hub.input_slots`.
+        let warmup = hub.open_input_checked("s_oe", gen1).expect("warmup");
+        drop(warmup);
+        let deadline = Instant::now() + Duration::from_secs(2);
+        while Instant::now() < deadline {
+            let idle = hub
+                .inner
+                .lock()
+                .expect("hub")
+                .input_slots
+                .get("s_oe")
+                .is_some_and(|slot| !slot.is_active());
+            if idle {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        assert!(
+            hub.inner
+                .lock()
+                .expect("hub")
+                .input_slots
+                .get("s_oe")
+                .is_some_and(|slot| !slot.is_active()),
+            "slot must be idle before testing open race"
+        );
+
+        // Install a hook that fires immediately after `open_input_checked`
+        // releases `Hub.inner`: remove the registry entry, force an absent-entry
+        // refresh (`hub.list()`), republish the same guest, and open a second
+        // client on the new generation. Because `client1` was already registered
+        // before releasing `Hub.inner`, the slot must NOT be evicted and both
+        // clients must share the single ordered `InputSlot`.
+        let hub_hook = Arc::clone(&hub);
+        let reg_hook = registry.clone();
+        let sock_hook = daemon.socket.clone();
+        let client2_holder = Arc::new(Mutex::new(None::<InputClient>));
+        let client2_hook = Arc::clone(&client2_holder);
+        *hub.after_open_input_select.lock().expect("hook") = Some(Box::new(move || {
+            for read in live_registry::read_entries(&reg_hook) {
+                std::fs::remove_file(&read.path).expect("remove entry");
+            }
+            assert!(hub_hook.list().is_empty());
+            assert!(
+                hub_hook
+                    .inner
+                    .lock()
+                    .expect("hub")
+                    .input_slots
+                    .contains_key("s_oe"),
+                "selected slot must remain active and must not be evicted by absent-entry refresh"
+            );
+            publish_input_entry(&reg_hook, "s_oe", Some(&sock_hook), None, false);
+            let gen2 = hub_hook.list()[0].guest_gen;
+            assert_ne!(gen2, gen1);
+            let client2 = hub_hook
+                .open_input_checked("s_oe", gen2)
+                .expect("open gen2");
+            *client2_hook.lock().unwrap() = Some(client2);
+        }));
+
+        let client1 = hub.open_input_checked("s_oe", gen1).expect("open gen1");
+        let client2 = client2_holder
+            .lock()
+            .unwrap()
+            .take()
+            .expect("hook must open client2");
+        assert!(
+            Arc::ptr_eq(&client1.slot, &client2.slot),
+            "concurrent absent-entry refresh must not split one guest across two InputSlots/workers"
+        );
+
+        // `client1` is now stale (`gen1 < gen2`) while `client2` succeeds on the single worker.
+        let (mut rx1, tx1) = ws_sink_pair();
+        let (mut rx2, tx2) = ws_sink_pair();
+        client1.enqueue(r#"{"t":"text","s":"stale"}"#, Arc::clone(&tx1));
+        assert_eq!(read_server_ws_text(&mut rx1)["code"], json!("SESSION_REPLACED"));
+        client2.enqueue(r#"{"t":"text","s":"live"}"#, Arc::clone(&tx2));
+        assert_eq!(read_server_ws_text(&mut rx2)["ok"], json!(true));
+
+        drop(client1);
+        drop(client2);
+        let _ = std::fs::remove_dir_all(&registry);
+    }
+
+    #[test]
+    fn key_up_requires_last_owner_and_ignores_unrecorded_release() {
+        let daemon = FakeDaemon::start("key-last-owner");
+        let registry = scratch("key-last-owner-reg");
+        publish_input_entry(&registry, "s_klo", Some(&daemon.socket), None, false);
+        let hub = Hub::new(registry.clone());
+        let client1 = hub.open_input("s_klo").expect("open c1");
+        let client2 = hub.open_input("s_klo").expect("open c2");
+        let client3 = hub.open_input("s_klo").expect("open c3");
+        let (mut rx1, tx1) = ws_sink_pair();
+        let (mut rx2, tx2) = ws_sink_pair();
+        let (mut rx3, tx3) = ws_sink_pair();
+
+        // Both client1 and client2 hold KEYCODE_A (29).
+        client1.enqueue(r#"{"t":"key","code":"KEYCODE_A","phase":"down"}"#, Arc::clone(&tx1));
+        assert_eq!(read_server_ws_text(&mut rx1)["ok"], json!(true));
+        client2.enqueue(r#"{"t":"key","code":"KEYCODE_A","phase":"down"}"#, Arc::clone(&tx2));
+        assert_eq!(read_server_ws_text(&mut rx2)["ok"], json!(true));
+        daemon.calls.lock().unwrap().clear();
+
+        // Client3 (no hold) sends Up -> must NOT send Up to daemon.
+        client3.enqueue(r#"{"t":"key","code":"KEYCODE_A","phase":"up"}"#, Arc::clone(&tx3));
+        let r3 = read_server_ws_text(&mut rx3);
+        assert_eq!(r3["ok"], json!(true));
+        assert_eq!(r3["ignored"], json!("held_by_other_client"));
+        assert!(
+            daemon.calls.lock().unwrap().is_empty(),
+            "unrecorded client Up must not release another client's held key"
+        );
+
+        // Client1 releases its hold while client2 still holds KEYCODE_A -> must NOT send Up yet.
+        client1.enqueue(r#"{"t":"key","code":"KEYCODE_A","phase":"up"}"#, Arc::clone(&tx1));
+        let r1 = read_server_ws_text(&mut rx1);
+        assert_eq!(r1["ok"], json!(true));
+        assert_eq!(r1["ignored"], json!("held_by_other_client"));
+        assert!(
+            daemon.calls.lock().unwrap().is_empty(),
+            "first client Up must not release key while second client still holds it"
+        );
+
+        // Client2 (now the last owner) releases KEYCODE_A -> MUST send Up to daemon.
+        client2.enqueue(r#"{"t":"key","code":"KEYCODE_A","phase":"up"}"#, Arc::clone(&tx2));
+        let r2 = read_server_ws_text(&mut rx2);
+        assert_eq!(r2["ok"], json!(true));
+        assert!(r2.get("ignored").is_none());
+        let calls = daemon.calls.lock().unwrap().clone();
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].0, "panel_key");
+        assert_eq!(calls[0].1["code"], json!(29));
+        assert_eq!(calls[0].1["event_type"], json!("up"));
+
+        // Another unrecorded Up with no owners left -> ignored cleanly without calling daemon.
+        daemon.calls.lock().unwrap().clear();
+        client3.enqueue(r#"{"t":"key","code":"KEYCODE_A","phase":"up"}"#, Arc::clone(&tx3));
+        let r3_again = read_server_ws_text(&mut rx3);
+        assert_eq!(r3_again["ok"], json!(true));
+        assert_eq!(r3_again["ignored"], json!("key_not_down"));
+        assert!(daemon.calls.lock().unwrap().is_empty());
+
+        drop(client1);
+        drop(client2);
+        drop(client3);
+        let _ = std::fs::remove_dir_all(&registry);
     }
 }
