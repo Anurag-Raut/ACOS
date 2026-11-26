@@ -331,8 +331,9 @@ impl Hub {
         let mut replaced_slots = Vec::new();
         for (key, slot) in &inner.slots {
             if let Some(entry) = entries.get(key) {
+                let expected_gen = inner.guest_gens.get(key).copied().unwrap_or(0);
                 let mut meta = slot.meta.lock().expect("slot meta");
-                if meta.same_guest(entry) {
+                if meta.same_guest(entry) && slot.guest_gen == expected_gen {
                     *meta = entry.clone();
                 } else {
                     drop(meta);
@@ -347,8 +348,9 @@ impl Hub {
         let mut replaced_inputs = Vec::new();
         for (key, input_slot) in &inner.input_slots {
             if let Some(entry) = entries.get(key) {
+                let expected_gen = inner.guest_gens.get(key).copied().unwrap_or(0);
                 let mut meta = input_slot.meta.lock().expect("input slot meta");
-                if meta.same_guest(entry) {
+                if meta.same_guest(entry) && input_slot.guest_gen == expected_gen {
                     *meta = entry.clone();
                 } else {
                     drop(meta);
@@ -446,16 +448,27 @@ impl Hub {
             if !std::path::Path::new(&socket).exists() {
                 return Err(WatchError::NotFound);
             }
-            let slot = if let Some(slot) = inner.slots.get(session_id) {
+            let slot = if let Some(slot) = inner
+                .slots
+                .get(session_id)
+                .filter(|slot| slot.guest_gen == guest_gen)
+            {
                 Arc::clone(slot)
             } else {
+                if let Some(stale) = inner.slots.remove(session_id) {
+                    stale.mark_replaced();
+                }
                 let slot = Arc::new(Slot::new(entry, guest_gen));
                 inner
                     .slots
                     .insert(session_id.to_string(), Arc::clone(&slot));
                 slot
             };
-            let input_slot = inner.input_slots.get(session_id).cloned();
+            let input_slot = inner
+                .input_slots
+                .get(session_id)
+                .filter(|slot| slot.guest_gen == guest_gen)
+                .cloned();
             if let Some(ref input_slot) = input_slot {
                 *input_slot.stream_slot.lock().expect("input stream slot") =
                     Some(Arc::downgrade(&slot));
@@ -497,11 +510,22 @@ impl Hub {
             if expected_guest_gen != current_gen {
                 return Err(OpenInputError::Replaced);
             }
-            let stream_slot = inner.slots.get(session_id).map(Arc::downgrade);
-            let slot = if let Some(slot) = inner.input_slots.get(session_id) {
+            let stream_slot = inner
+                .slots
+                .get(session_id)
+                .filter(|slot| slot.guest_gen == current_gen)
+                .map(Arc::downgrade);
+            let slot = if let Some(slot) = inner
+                .input_slots
+                .get(session_id)
+                .filter(|slot| slot.guest_gen == current_gen)
+            {
                 Arc::clone(slot)
             } else {
-                let slot = Arc::new(InputSlot::new(entry));
+                if let Some(stale) = inner.input_slots.remove(session_id) {
+                    stale.mark_replaced();
+                }
+                let slot = Arc::new(InputSlot::new(entry, current_gen));
                 inner
                     .input_slots
                     .insert(session_id.to_string(), Arc::clone(&slot));
@@ -1434,6 +1458,7 @@ const RECOVERY_MAX_BACKOFF_MS: u64 = 500;
 const RECOVERY_MAX_ATTEMPTS: u32 = 12;
 
 struct InputSlot {
+    guest_gen: u64,
     meta: Mutex<Entry>,
     stream_slot: Mutex<Option<Weak<Slot>>>,
     interactive_lock: Mutex<()>,
@@ -1482,8 +1507,9 @@ struct InputSlotState {
 }
 
 impl InputSlot {
-    fn new(entry: Entry) -> Self {
+    fn new(entry: Entry, guest_gen: u64) -> Self {
         Self {
+            guest_gen,
             meta: Mutex::new(entry),
             stream_slot: Mutex::new(None),
             interactive_lock: Mutex::new(()),
