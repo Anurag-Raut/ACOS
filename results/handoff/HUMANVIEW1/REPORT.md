@@ -435,3 +435,24 @@ Verified and addressed all **18** CodeRabbit Round 2 actionable comments (5 Majo
   - `humanview_cp3` (`--ignored`): **2 passed, 0 failed** (14.84 s).
   - `humanview_cp4` (`--release --ignored`): **1 passed, 0 failed** (10.69 s) — arrival-timed (`received_at - t0`): **p50 = 63.38 ms** (≤ 100 ms), **p95 = 64.77 ms** (≤ 200 ms), `min = 60.53 ms`, `max = 65.17 ms`, `mean = 63.06 ms`, `mean_encode_ms = 2.22 ms` (56,266 B/frame avg), `frames_dropped_latest = 0`, `events_dropped = 0`, `min/max_changed_pixels = 147 / 530`.
   - `cr1fix_finish_in_oncreate` (`--release`): **1 passed, 0 failed** (10.60 s).
+
+---
+
+## 13. Fix Round 6 — CodeRabbit PR #6 Round 3 Review Fixes
+
+Verified and addressed all **6** CodeRabbit Round 3 actionable comments (1 Major + 5 Minors, 0 false positives):
+
+- **Producer epoch synchronization (`crates/acos-art/src/live_view.rs`):**
+  - Advanced `attach_epoch` and cleared `last_encoded_seq` inside `attach` while holding both `subscribers` and `slot` (and before incrementing `subscriber_count`), added epoch-checked `broadcast_frame_for_epoch` used by `writer_loop` (resetting `next_at = Instant::now()` when an older encode is dropped so the new viewer gets a fresh frame immediately), waited for `attach_epoch >= 1` in the large-PNG idle flush test, and added `stale_epoch_frame_is_not_broadcast_to_newly_attached_viewer`.
+- **Hub touch/write/rotate safety (`crates/acos-cli/src/view/hub.rs`):**
+  - Added `send_touch_frame_outcome` and updated `TouchPhase::Down` so an ambiguous post-write failure (`may_have_fired == true`) attempts cancellation (`ACTION_CANCEL` / `ACTION_POINTER_UP`) without replaying the down and retains the pointer for later `up`/`cancel` or disconnect cleanup if cancellation fails (`touch_down_cancels_on_ambiguous_eof_and_retains_pointer_on_failed_cancel`).
+  - Tracked bytes accepted in `DaemonConn::call` so only zero-byte write failures classify as `WriteFailed` (retriable), while partial writes or flush failures classify as `PostWriteAmbiguous`.
+  - Tagged `QUEUE_FULL` rejections for `InputCommand::Rotate` with `"t": "rotate"` so `page.rs` immediately clears `pendingRotate` (`rotate_rejected_with_queue_full_includes_rotate_tag`).
+- **Docs (`docs/LIVE_VIEW.md`):**
+  - Qualified the §2 `action` feed description to note that `panel_touch` error replies omitting an `action` field (such as `INPUT_UNAVAILABLE`) are not emitted to the feed.
+
+**Fresh verification:**
+- `tools/verify/check-layout.sh`: **`check-layout: ok`**.
+- Unit & doc suites: `acos-art --lib live_view` (**23 passed, 0 failed**), `acos-cli --bin acos` (**239 passed, 0 failed**), `acos-mcp --test docs --test guide --test documentation_args` (**19 passed, 0 failed**), `acos-services --test surface_client --test modules_doc` (**15 passed, 0 failed**), non-ignored `humanview_cp1..cp4` + `launcher_home_frame` (**13 passed, 0 failed**).
+- Release live-ART suites (`run-exclusive.sh` + `guarded.sh`): `launcher_home_frame` (**1 passed**, 5.57 s), `humanview_cp1` (**2 passed**, 15.07 s), `humanview_cp2` (**1 passed**, 5.54 s), `humanview_cp3` (**2 passed**, 14.20 s), `humanview_cp4` (**1 passed**, 10.87 s; **p50 = 63.46 ms**, **p95 = 64.87 ms**, `mean_encode_ms = 1.83 ms`, `frames_dropped_latest = 0`, `events_dropped = 0`).
+
