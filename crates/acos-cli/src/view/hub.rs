@@ -3026,31 +3026,34 @@ impl InputWorker {
             payload["meta_state"] = json!(meta);
         }
         match phase {
-            KeyPhase::Down => match self.call_daemon_outcome("panel_key", payload) {
-                Ok(_) => {
-                    if !self
-                        .held_keys
-                        .iter()
-                        .any(|&(cid, _, c)| cid == client_id && c == code)
-                    {
-                        self.held_keys.push((client_id, client_gen, code));
-                    }
-                    json!({ "ok": true, "t": "key", "code": code, "phase": event_type })
-                }
-                Err((c, m, may_have_fired)) => {
-                    if self.slot.is_replaced() || is_guest_gone_code(&c) {
-                        self.clear_guest_key_state();
-                    } else if may_have_fired
-                        && !self
+            KeyPhase::Down => {
+                payload["event_time"] = json!(self.next_ts_ns());
+                match self.call_daemon_outcome("panel_key", payload) {
+                    Ok(_) => {
+                        if !self
                             .held_keys
                             .iter()
                             .any(|&(cid, _, c)| cid == client_id && c == code)
-                    {
-                        self.held_keys.push((client_id, client_gen, code));
+                        {
+                            self.held_keys.push((client_id, client_gen, code));
+                        }
+                        json!({ "ok": true, "t": "key", "code": code, "phase": event_type })
                     }
-                    err_json(&c, &m)
+                    Err((c, m, may_have_fired)) => {
+                        if self.slot.is_replaced() || is_guest_gone_code(&c) {
+                            self.clear_guest_key_state();
+                        } else if may_have_fired
+                            && !self
+                                .held_keys
+                                .iter()
+                                .any(|&(cid, _, c)| cid == client_id && c == code)
+                        {
+                            self.held_keys.push((client_id, client_gen, code));
+                        }
+                        err_json(&c, &m)
+                    }
                 }
-            },
+            }
             KeyPhase::Up => {
                 let was_held = self
                     .held_keys
@@ -3082,6 +3085,7 @@ impl InputWorker {
                         "ignored": "key_not_down",
                     });
                 }
+                payload["event_time"] = json!(self.next_ts_ns());
                 match self.call_daemon("panel_key", payload) {
                     Ok(_) => {
                         self.held_keys
@@ -3114,6 +3118,7 @@ impl InputWorker {
                         "cannot press key while another client holds it down",
                     );
                 }
+                payload["event_time"] = json!(self.next_ts_ns());
                 match self.call_daemon_outcome("panel_key", payload) {
                     Ok(_) => {
                         self.held_keys
@@ -3206,11 +3211,13 @@ impl InputWorker {
                 self.clear_guest_key_state();
                 return Ok(());
             }
+            let event_time = self.next_ts_ns();
             match self.call_daemon(
                 "panel_key",
                 json!({
                     "code": code,
                     "event_type": "up",
+                    "event_time": event_time,
                 }),
             ) {
                 Ok(_) => {
@@ -3986,9 +3993,9 @@ mod tests {
         assert_eq!(recorded[6].0, "panel_key");
         assert_eq!(recorded[6].1["event_type"], json!("up"));
 
-        // Monotonic nanosecond timestamps across touch frames.
+        // Monotonic nanosecond timestamps across touch and key panel events.
         let mut prev_ts = 0i64;
-        for idx in [0, 1, 2, 3, 5] {
+        for idx in 0..7 {
             let ts = recorded[idx].1["event_time"].as_i64().unwrap();
             assert!(ts > prev_ts, "non-monotonic event_time at {idx}: {ts} <= {prev_ts}");
             prev_ts = ts;

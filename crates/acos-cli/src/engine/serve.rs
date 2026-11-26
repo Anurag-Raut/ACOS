@@ -1590,7 +1590,14 @@ impl ServeEngine {
                     .and_then(Value::as_i64)
                     .and_then(|v| i32::try_from(v).ok())
                     .unwrap_or(0);
-                session.panel_key(code, event_type, meta_state, device_id)?;
+                let event_time = match args.get("event_time") {
+                    None | Some(Value::Null) => None,
+                    Some(v) => Some(v.as_i64().ok_or_else(|| BackendError::Failed {
+                        code: ErrorCode::InvalidArgument,
+                        detail: "panel_key `event_time` must be an integer".to_string(),
+                    })?),
+                };
+                session.panel_key(code, event_type, meta_state, device_id, event_time)?;
                 Ok(json!({ "ok": true, "session_id": id }))
             })(),
             "panel_text" => (|| {
