@@ -11717,7 +11717,15 @@ mod view_socket_dir_tests {
 
     #[test]
     fn select_candidate_skips_overlong_paths_before_creating_them() {
-        let base = ShortSocketDir::new_named("view").expect("scratch");
+        let pid = std::process::id();
+        let base = ShortSocketDir::select_candidate(
+            vec![
+                PathBuf::from(format!("/dev/shm/acos-st-{pid}")),
+                PathBuf::from(format!("/tmp/acos-st-{pid}")),
+            ],
+            true,
+        )
+        .expect("short scratch root");
         let too_long = base.0.join("x".repeat(95));
         let fallback = base.0.join("ok");
         assert!(!socket_dir_fits_sun_path(&too_long));

@@ -277,7 +277,6 @@ struct Inner {
     entries: BTreeMap<String, Entry>,
     slots: BTreeMap<String, Arc<Slot>>,
     input_slots: BTreeMap<String, Arc<InputSlot>>,
-    retiring_inputs: Vec<(String, Weak<InputSlot>)>,
 }
 
 impl Hub {
@@ -292,7 +291,6 @@ impl Hub {
                 entries: BTreeMap::new(),
                 slots: BTreeMap::new(),
                 input_slots: BTreeMap::new(),
-                retiring_inputs: Vec::new(),
             }),
         }
     }
@@ -348,19 +346,17 @@ impl Hub {
             inner.slots.remove(&key);
         }
         let mut replaced_inputs = Vec::new();
-        let mut newly_retiring = Vec::new();
         for (key, input_slot) in &inner.input_slots {
             if let Some(entry) = entries.get(key) {
                 let expected_gen = inner.guest_gens.get(key).copied().unwrap_or(0);
                 let mut meta = input_slot.meta.lock().expect("input slot meta");
-                if meta.same_guest(entry) && input_slot.guest_gen == expected_gen {
-                    *meta = entry.clone();
-                } else if meta.same_guest(entry) {
+                if meta.same_guest(entry) && !input_slot.is_replaced() {
                     *meta = entry.clone();
                     drop(meta);
-                    input_slot.retire_same_guest();
-                    newly_retiring.push((key.clone(), Arc::downgrade(input_slot)));
-                    replaced_inputs.push(key.clone());
+                    if input_slot.current_guest_gen() != expected_gen {
+                        *input_slot.stream_slot.lock().expect("input stream slot") = None;
+                        input_slot.advance_same_guest_gen(expected_gen);
+                    }
                 } else {
                     drop(meta);
                     input_slot.mark_replaced();
@@ -371,27 +367,16 @@ impl Hub {
         for key in replaced_inputs {
             inner.input_slots.remove(&key);
         }
-        inner.retiring_inputs.extend(newly_retiring);
-        inner.retiring_inputs.retain(|(key, weak)| {
-            let Some(slot) = weak.upgrade() else {
-                return false;
-            };
-            if let Some(entry) = entries.get(key) {
-                if !slot.meta.lock().expect("input slot meta").same_guest(entry) {
-                    slot.mark_replaced();
-                    return false;
-                }
-            }
-            slot.is_active()
-        });
         // Keep a slot while a browser still watches it (the registry entry may
         // be written/removed around a destroy) or while its upstream is alive.
         inner
             .slots
             .retain(|key, slot| entries.contains_key(key) || slot.is_attached());
-        inner
-            .input_slots
-            .retain(|key, slot| entries.contains_key(key) || slot.is_active());
+        inner.input_slots.retain(|key, slot| {
+            entries.contains_key(key)
+                || slot.is_active()
+                || (slot.has_unfinished_cleanup() && slot.daemon_pid_alive())
+        });
         inner.entries = entries;
     }
 
@@ -489,7 +474,7 @@ impl Hub {
             let input_slot = inner
                 .input_slots
                 .get(session_id)
-                .filter(|slot| slot.guest_gen == guest_gen)
+                .filter(|slot| !slot.is_replaced() && slot.current_guest_gen() == guest_gen)
                 .cloned();
             if let Some(ref input_slot) = input_slot {
                 *input_slot.stream_slot.lock().expect("input stream slot") =
@@ -520,7 +505,7 @@ impl Hub {
         session_id: &str,
         expected_guest_gen: u64,
     ) -> Result<InputClient, OpenInputError> {
-        let slot = {
+        let (slot, current_gen) = {
             let mut inner = self.inner.lock().expect("hub");
             self.refresh_locked(&mut inner);
             let entry = inner
@@ -537,36 +522,32 @@ impl Hub {
                 .get(session_id)
                 .filter(|slot| slot.guest_gen == current_gen)
                 .map(Arc::downgrade);
-            let slot = if let Some(slot) = inner
-                .input_slots
-                .get(session_id)
-                .filter(|slot| slot.guest_gen == current_gen)
-            {
+            let slot = if let Some(slot) = inner.input_slots.get(session_id).filter(|slot| {
+                !slot.is_replaced()
+                    && slot
+                        .meta
+                        .lock()
+                        .expect("input slot meta")
+                        .same_guest(&entry)
+            }) {
+                if slot.current_guest_gen() != current_gen {
+                    slot.advance_same_guest_gen(current_gen);
+                }
                 Arc::clone(slot)
             } else {
                 if let Some(stale) = inner.input_slots.remove(session_id) {
-                    let same_guest = stale.meta.lock().expect("input slot meta").same_guest(&entry);
-                    if same_guest {
-                        stale.retire_same_guest();
-                        inner
-                            .retiring_inputs
-                            .push((session_id.to_string(), Arc::downgrade(&stale)));
-                    } else {
-                        stale.mark_replaced();
-                    }
+                    stale.mark_replaced();
                 }
-                let slot = Arc::new(InputSlot::new(entry, current_gen, self.dir.clone()));
+                let slot = Arc::new(InputSlot::new(entry, current_gen));
                 inner
                     .input_slots
                     .insert(session_id.to_string(), Arc::clone(&slot));
                 slot
             };
-            if let Some(weak) = stream_slot {
-                *slot.stream_slot.lock().expect("input stream slot") = Some(weak);
-            }
-            slot
+            *slot.stream_slot.lock().expect("input stream slot") = stream_slot;
+            (slot, current_gen)
         };
-        Ok(slot.attach_client())
+        Ok(slot.attach_client(current_gen))
     }
 
     /// Test convenience wrapper that opens input against the current live guest
@@ -1250,6 +1231,7 @@ fn framing(message: impl std::fmt::Display) -> io::Error {
 /// the worker exit once the last input client disconnects.
 pub struct InputClient {
     client_id: u64,
+    guest_gen: u64,
     terminated: AtomicBool,
     slot: Arc<InputSlot>,
 }
@@ -1295,7 +1277,7 @@ impl InputClient {
         let mut immediate_reply: Option<(Arc<Mutex<TcpStream>>, String)> = None;
         {
             let mut state = self.slot.state.lock().expect("input slot");
-            if state.replaced {
+            if state.replaced || self.guest_gen != state.guest_gen {
                 immediate_reply = Some((
                     reply_to,
                     err_json("SESSION_REPLACED", "session was replaced by a newer guest")
@@ -1391,6 +1373,7 @@ impl InputClient {
                     } else {
                         state.queue.push_back(QueuedCommand {
                             client_id: self.client_id,
+                            client_gen: self.guest_gen,
                             cmd,
                             reply_to,
                         });
@@ -1410,7 +1393,13 @@ impl Drop for InputClient {
     fn drop(&mut self) {
         {
             let mut state = self.slot.state.lock().expect("input slot");
-            state.clients = state.clients.saturating_sub(1);
+            if let Some(pos) = state
+                .active_clients
+                .iter()
+                .position(|&(cid, _)| cid == self.client_id)
+            {
+                state.active_clients.remove(pos);
+            }
             // Drop any unsent commands from this disconnecting client and push
             // its cleanup onto the priority disconnects queue so active
             // pointers/keys release immediately even under backlog.
@@ -1473,6 +1462,7 @@ enum InputCommand {
 
 struct QueuedCommand {
     client_id: u64,
+    client_gen: u64,
     cmd: InputCommand,
     reply_to: Arc<Mutex<TcpStream>>,
 }
@@ -1480,7 +1470,7 @@ struct QueuedCommand {
 enum WorkerTask {
     Command(QueuedCommand),
     ClientDisconnected { client_id: u64 },
-    RetireSameGuest,
+    RetireBeforeGen(u64),
     ScheduledRecovery,
 }
 
@@ -1489,8 +1479,6 @@ const RECOVERY_MAX_BACKOFF_MS: u64 = 500;
 const RECOVERY_MAX_ATTEMPTS: u32 = 12;
 
 struct InputSlot {
-    guest_gen: u64,
-    registry_dir: PathBuf,
     meta: Mutex<Entry>,
     stream_slot: Mutex<Option<Weak<Slot>>>,
     interactive_lock: Mutex<()>,
@@ -1521,12 +1509,13 @@ enum PendingRelease {
 }
 
 struct InputSlotState {
-    clients: usize,
+    guest_gen: u64,
+    active_clients: Vec<(u64, u64)>,
     next_client_id: u64,
     running: bool,
     replaced: bool,
-    guest_changed: bool,
-    retire_cleanup_pending: bool,
+    retire_before_gen: Option<u64>,
+    rearm_recovery: bool,
     #[cfg(test)]
     scheduled_recovery_enabled: bool,
     #[cfg(test)]
@@ -1536,27 +1525,36 @@ struct InputSlotState {
     pending_releases: Vec<PendingRelease>,
     pointers: Vec<ActivePointer>,
     down_time_ns: Option<i64>,
-    held_keys: Vec<(u64, i32)>,
+    held_keys: Vec<(u64, u64, i32)>,
     pending_key_ups: Vec<i32>,
     disconnects: VecDeque<u64>,
     queue: VecDeque<QueuedCommand>,
 }
 
+impl InputSlotState {
+    fn has_saved_cleanup(&self) -> bool {
+        self.pending_touch_recovery.is_some()
+            || !self.pending_releases.is_empty()
+            || !self.pointers.is_empty()
+            || !self.held_keys.is_empty()
+            || !self.pending_key_ups.is_empty()
+    }
+}
+
 impl InputSlot {
-    fn new(entry: Entry, guest_gen: u64, registry_dir: PathBuf) -> Self {
+    fn new(entry: Entry, guest_gen: u64) -> Self {
         Self {
-            guest_gen,
-            registry_dir,
             meta: Mutex::new(entry),
             stream_slot: Mutex::new(None),
             interactive_lock: Mutex::new(()),
             state: Mutex::new(InputSlotState {
-                clients: 0,
+                guest_gen,
+                active_clients: Vec::new(),
                 next_client_id: 1,
                 running: false,
                 replaced: false,
-                guest_changed: false,
-                retire_cleanup_pending: false,
+                retire_before_gen: None,
+                rearm_recovery: false,
                 #[cfg(test)]
                 scheduled_recovery_enabled: true,
                 #[cfg(test)]
@@ -1579,7 +1577,37 @@ impl InputSlot {
 
     fn is_active(&self) -> bool {
         let state = self.state.lock().expect("input slot");
-        state.clients > 0 || state.running
+        !state.active_clients.is_empty() || state.running
+    }
+
+    fn has_unfinished_cleanup(&self) -> bool {
+        let state = self.state.lock().expect("input slot");
+        !state.replaced && state.has_saved_cleanup()
+    }
+
+    fn daemon_pid_alive(&self) -> bool {
+        let pid = self.meta.lock().expect("input slot meta").daemon_pid;
+        let Ok(pid_t) = libc::pid_t::try_from(pid) else {
+            return false;
+        };
+        if pid_t <= 0 {
+            return false;
+        }
+        // SAFETY: kill(pid, 0) checks process existence without sending a signal.
+        let rc = unsafe { libc::kill(pid_t, 0) };
+        if rc == 0 {
+            return true;
+        }
+        std::io::Error::last_os_error().raw_os_error() == Some(libc::EPERM)
+    }
+
+    fn current_guest_gen(&self) -> u64 {
+        self.state.lock().expect("input slot").guest_gen
+    }
+
+    fn is_current_gen(&self, client_gen: u64) -> bool {
+        let state = self.state.lock().expect("input slot");
+        !state.replaced && state.guest_gen == client_gen
     }
 
     /// Hard replacement: a different guest replaced this session (or the daemon
@@ -1588,28 +1616,34 @@ impl InputSlot {
     fn mark_replaced(&self) {
         let mut state = self.state.lock().expect("input slot");
         state.replaced = true;
-        state.guest_changed = true;
-        state.retire_cleanup_pending = false;
+        state.retire_before_gen = None;
+        state.rearm_recovery = false;
+        state.pending_touch_recovery = None;
+        state.pending_releases.clear();
+        state.pointers.clear();
+        state.down_time_ns = None;
+        state.held_keys.clear();
+        state.pending_key_ups.clear();
         self.cv.notify_all();
     }
 
-    /// Same-guest retirement: the unchanged guest reappeared under a new
-    /// `guest_gen`. Rejects all future commands on this slot, and immediately
-    /// triggers the worker to release any held pointers/keys on that unchanged
-    /// guest without waiting for old clients to disconnect.
-    fn retire_same_guest(self: &Arc<Self>) {
+    /// Same-guest generation advance: the unchanged guest reappeared under a new
+    /// `guest_gen`. Rejects future commands from older-generation clients and
+    /// immediately wakes the single ordered worker to release any pointers/keys
+    /// held by older generations without waiting for old clients to disconnect.
+    fn advance_same_guest_gen(self: &Arc<Self>, new_gen: u64) {
         let mut state = self.state.lock().expect("input slot");
-        if state.guest_changed {
+        if state.replaced {
             return;
         }
-        state.replaced = true;
-        state.retire_cleanup_pending = true;
-        let has_saved_input = !state.pointers.is_empty()
-            || state.pending_touch_recovery.is_some()
-            || !state.pending_releases.is_empty()
-            || !state.held_keys.is_empty()
-            || !state.pending_key_ups.is_empty();
-        if !state.running && has_saved_input {
+        state.guest_gen = new_gen;
+        state.retire_before_gen = Some(
+            state
+                .retire_before_gen
+                .map_or(new_gen, |prev| prev.max(new_gen)),
+        );
+        state.rearm_recovery = true;
+        if !state.running && state.has_saved_cleanup() {
             state.running = true;
             let slot = Arc::clone(self);
             std::thread::Builder::new()
@@ -1625,21 +1659,16 @@ impl InputSlot {
         self.state.lock().expect("input slot").replaced
     }
 
-    fn is_cleanup_blocked(&self) -> bool {
-        self.state.lock().expect("input slot").guest_changed
-    }
-
-    fn replacement_flags(&self) -> (bool, bool) {
-        let state = self.state.lock().expect("input slot");
-        (state.replaced, state.guest_changed)
-    }
-
     fn is_interactive(&self) -> bool {
         if self.meta.lock().expect("input slot meta").watch_only {
             return false;
         }
         let state = self.state.lock().expect("input slot");
-        state.clients > 0 && !state.replaced
+        !state.replaced
+            && state
+                .active_clients
+                .iter()
+                .any(|&(_, g)| g == state.guest_gen)
     }
 
     /// Serialize `Slot::set_interactive` transitions across concurrent
@@ -1662,12 +1691,13 @@ impl InputSlot {
         }
     }
 
-    fn attach_client(self: &Arc<Self>) -> InputClient {
+    fn attach_client(self: &Arc<Self>, guest_gen: u64) -> InputClient {
         let client_id = {
             let mut state = self.state.lock().expect("input slot");
             let client_id = state.next_client_id;
             state.next_client_id += 1;
-            state.clients += 1;
+            state.active_clients.push((client_id, guest_gen));
+            state.rearm_recovery = true;
             if !state.running {
                 state.running = true;
                 let slot = Arc::clone(self);
@@ -1683,6 +1713,7 @@ impl InputSlot {
         self.sync_interactive();
         InputClient {
             client_id,
+            guest_gen,
             terminated: AtomicBool::new(false),
             slot: Arc::clone(self),
         }
@@ -1837,6 +1868,7 @@ impl DaemonConn {
 #[derive(Clone)]
 struct ActivePointer {
     client_id: u64,
+    client_gen: u64,
     pointer_id: i32,
     wire_id: i32,
     x: f32,
@@ -1852,7 +1884,7 @@ struct InputWorker {
     pending_touch_recovery: Option<PendingTouchRecovery>,
     pending_releases: Vec<PendingRelease>,
     recovery_episode: u64,
-    held_keys: Vec<(u64, i32)>,
+    held_keys: Vec<(u64, u64, i32)>,
     pending_key_ups: Vec<i32>,
 }
 
@@ -1923,12 +1955,17 @@ impl InputWorker {
             let task = {
                 let mut state = self.slot.state.lock().expect("input slot");
                 loop {
-                    if state.retire_cleanup_pending {
-                        state.retire_cleanup_pending = false;
+                    if state.rearm_recovery {
+                        state.rearm_recovery = false;
                         scheduled_episode = self.recovery_episode;
                         recovery_attempts = 0;
                         next_recovery_at = None;
-                        break WorkerTask::RetireSameGuest;
+                    }
+                    if let Some(before_gen) = state.retire_before_gen.take() {
+                        scheduled_episode = self.recovery_episode;
+                        recovery_attempts = 0;
+                        next_recovery_at = None;
+                        break WorkerTask::RetireBeforeGen(before_gen);
                     }
                     if let Some(client_id) = state.disconnects.pop_front() {
                         scheduled_episode = self.recovery_episode;
@@ -1936,7 +1973,7 @@ impl InputWorker {
                         next_recovery_at = None;
                         break WorkerTask::ClientDisconnected { client_id };
                     }
-                    let needs_recovery = !state.guest_changed && self.has_pending_cleanup();
+                    let needs_recovery = !state.replaced && self.has_pending_cleanup();
                     #[cfg(test)]
                     let scheduled_allowed = state.scheduled_recovery_enabled;
                     #[cfg(not(test))]
@@ -1996,20 +2033,22 @@ impl InputWorker {
                         continue;
                     }
 
-                    if state.clients == 0 {
+                    if state.active_clients.is_empty() {
                         #[cfg(test)]
                         {
                             state.recovery_obs =
                                 (completed_scheduled_recoveries, recovery_attempts, false);
                             self.slot.recovery_obs_cv.notify_all();
                         }
-                        state.last_event_time_ns = self.last_event_time_ns;
-                        state.pending_touch_recovery = self.pending_touch_recovery.take();
-                        state.pending_releases = std::mem::take(&mut self.pending_releases);
-                        state.pointers = std::mem::take(&mut self.pointers);
-                        state.down_time_ns = self.down_time_ns.take();
-                        state.held_keys = std::mem::take(&mut self.held_keys);
-                        state.pending_key_ups = std::mem::take(&mut self.pending_key_ups);
+                        if !state.replaced {
+                            state.last_event_time_ns = self.last_event_time_ns;
+                            state.pending_touch_recovery = self.pending_touch_recovery.take();
+                            state.pending_releases = std::mem::take(&mut self.pending_releases);
+                            state.pointers = std::mem::take(&mut self.pointers);
+                            state.down_time_ns = self.down_time_ns.take();
+                            state.held_keys = std::mem::take(&mut self.held_keys);
+                            state.pending_key_ups = std::mem::take(&mut self.pending_key_ups);
+                        }
                         state.running = false;
                         return;
                     }
@@ -2034,10 +2073,11 @@ impl InputWorker {
             match task {
                 WorkerTask::Command(QueuedCommand {
                     client_id,
+                    client_gen,
                     cmd,
                     reply_to,
                 }) => {
-                    let reply = self.handle_command(client_id, cmd);
+                    let reply = self.handle_command(client_id, client_gen, cmd);
                     let _ = super::ws::send_text_locked(&reply_to, &reply.to_string());
                     // Reset retry budget if this command made recovery progress
                     // (including resolving episode A and starting episode B) or
@@ -2057,8 +2097,8 @@ impl InputWorker {
                         next_recovery_at = None;
                     }
                 }
-                WorkerTask::RetireSameGuest => {
-                    self.retire_all_held_input();
+                WorkerTask::RetireBeforeGen(before_gen) => {
+                    self.retire_clients_before(before_gen);
                     if self.recovery_episode != scheduled_episode || !self.has_pending_cleanup() {
                         scheduled_episode = self.recovery_episode;
                         recovery_attempts = 0;
@@ -2104,30 +2144,15 @@ impl InputWorker {
             .map_err(|(c, m, _)| (c, m))
     }
 
-    fn call_daemon_cleanup(&mut self, tool: &str, args: Value) -> Result<Value, (String, String)> {
-        self.call_daemon_outcome_inner(tool, args, true)
-            .map_err(|(c, m, _)| (c, m))
-    }
-
     /// Call the session daemon and return `Err((code, message, may_have_fired))`.
     /// `may_have_fired` is `true` only when the request bytes were written and
     /// flushed before an ambiguous read/EOF/decode failure occurred.
     fn call_daemon_outcome(
         &mut self,
         tool: &str,
-        args: Value,
-    ) -> Result<Value, (String, String, bool)> {
-        self.call_daemon_outcome_inner(tool, args, false)
-    }
-
-    fn call_daemon_outcome_inner(
-        &mut self,
-        tool: &str,
         mut args: Value,
-        for_cleanup: bool,
     ) -> Result<Value, (String, String, bool)> {
-        let (replaced, guest_changed) = self.slot.replacement_flags();
-        if guest_changed || (!for_cleanup && replaced) {
+        if self.slot.is_replaced() {
             self.conn = None;
             return Err((
                 "SESSION_REPLACED".to_string(),
@@ -2136,41 +2161,6 @@ impl InputWorker {
             ));
         }
         let entry = self.entry();
-        if for_cleanup && replaced {
-            // Same-guest retirement cleanup: re-verify the live registry entry
-            // before sending anything so cleanup can never target a different
-            // guest even if the session was replaced before Hub::refresh_locked ran.
-            let mut found_same = false;
-            for read in live_registry::read_entries(&self.slot.registry_dir) {
-                if read.stale {
-                    continue;
-                }
-                let Some(live) = Entry::from_doc(&read.doc) else {
-                    continue;
-                };
-                if live.session_id == entry.session_id {
-                    if entry.same_guest(&live) {
-                        found_same = true;
-                        break;
-                    }
-                    self.slot.mark_replaced();
-                    self.conn = None;
-                    return Err((
-                        "SESSION_REPLACED".to_string(),
-                        "session was replaced by a newer guest".to_string(),
-                        false,
-                    ));
-                }
-            }
-            if !found_same {
-                self.conn = None;
-                return Err((
-                    "INPUT_UNAVAILABLE".to_string(),
-                    "session is not currently registered for same-guest cleanup".to_string(),
-                    false,
-                ));
-            }
-        }
         let Some(sock) = entry.serve_socket.as_deref() else {
             return Err((
                 "INPUT_UNAVAILABLE".to_string(),
@@ -2244,24 +2234,6 @@ impl InputWorker {
             .map_err(|(c, m, _)| (c, m))
     }
 
-    fn send_touch_frame_cleanup(
-        &mut self,
-        action: i32,
-        down_time: i64,
-        event_time: i64,
-    ) -> Result<Value, (String, String)> {
-        let pointers = self.pointer_wire_list();
-        self.call_daemon_cleanup(
-            "panel_touch",
-            json!({
-                "action": action,
-                "down_time": down_time,
-                "event_time": event_time,
-                "pointers": pointers,
-            }),
-        )
-    }
-
     fn send_touch_frame_outcome(
         &mut self,
         action: i32,
@@ -2280,9 +2252,12 @@ impl InputWorker {
         )
     }
 
-    fn handle_command(&mut self, client_id: u64, cmd: InputCommand) -> Value {
+    fn handle_command(&mut self, client_id: u64, client_gen: u64, cmd: InputCommand) -> Value {
         if self.slot.is_replaced() {
             self.conn = None;
+            return err_json("SESSION_REPLACED", "session was replaced by a newer guest");
+        }
+        if !self.slot.is_current_gen(client_gen) {
             return err_json("SESSION_REPLACED", "session was replaced by a newer guest");
         }
         let entry = self.entry();
@@ -2314,11 +2289,13 @@ impl InputWorker {
 
         match cmd {
             InputCommand::Touch { phase, id, x, y } => {
-                self.handle_touch(client_id, phase, id, x, y)
+                self.handle_touch(client_id, client_gen, phase, id, x, y)
             }
             InputCommand::Scroll { x, y, dx, dy } => self.handle_scroll(&entry, x, y, dx, dy),
             InputCommand::Pinch { x, y, delta } => self.handle_pinch(&entry, x, y, delta),
-            InputCommand::Key { code, phase, meta } => self.handle_key(client_id, code, phase, meta),
+            InputCommand::Key { code, phase, meta } => {
+                self.handle_key(client_id, client_gen, code, phase, meta)
+            }
             InputCommand::Text { s } => self.handle_text(&s),
             InputCommand::Rotate { rotation } => self.handle_rotate(rotation),
         }
@@ -2404,7 +2381,7 @@ impl InputWorker {
         let Some(rec) = self.pending_touch_recovery.clone() else {
             return Ok(());
         };
-        if self.slot.is_cleanup_blocked() {
+        if self.slot.is_replaced() {
             self.clear_guest_touch_state();
             return Ok(());
         }
@@ -2445,14 +2422,14 @@ impl InputWorker {
         if let Some(gesture) = rec.gesture {
             payload["gesture"] = json!(gesture);
         }
-        match self.call_daemon_cleanup("panel_touch", payload) {
+        match self.call_daemon("panel_touch", payload) {
             Ok(_) => {
                 self.pending_touch_recovery = None;
                 self.bump_recovery_episode();
                 Ok(())
             }
             Err((c, m)) => {
-                if self.slot.is_cleanup_blocked() || is_guest_gone_code(&c) {
+                if self.slot.is_replaced() || is_guest_gone_code(&c) {
                     self.clear_guest_touch_state();
                 }
                 Err((c, m))
@@ -2462,7 +2439,7 @@ impl InputWorker {
 
     fn flush_pending_releases(&mut self) -> Result<(), (String, String)> {
         while let Some(release) = self.pending_releases.first().cloned() {
-            if self.slot.is_cleanup_blocked() {
+            if self.slot.is_replaced() {
                 self.clear_guest_touch_state();
                 return Ok(());
             }
@@ -2491,7 +2468,7 @@ impl InputWorker {
                     } else {
                         ACTION_POINTER_UP | ((pos as i32) << ACTION_POINTER_INDEX_SHIFT)
                     };
-                    match self.send_touch_frame_cleanup(action, down_time, ts) {
+                    match self.send_touch_frame(action, down_time, ts) {
                         Ok(_) => {
                             self.pointers.remove(pos);
                             if self.pointers.is_empty() {
@@ -2501,7 +2478,7 @@ impl InputWorker {
                             self.bump_recovery_episode();
                         }
                         Err((c, m)) => {
-                            if self.slot.is_cleanup_blocked() || is_guest_gone_code(&c) {
+                            if self.slot.is_replaced() || is_guest_gone_code(&c) {
                                 self.clear_guest_touch_state();
                             }
                             return Err((c, m));
@@ -2518,7 +2495,7 @@ impl InputWorker {
                     if only_this_client {
                         let ts = self.next_ts_ns();
                         let down_time = self.down_time_ns.unwrap_or(ts);
-                        match self.send_touch_frame_cleanup(ACTION_CANCEL, down_time, ts) {
+                        match self.send_touch_frame(ACTION_CANCEL, down_time, ts) {
                             Ok(_) => {
                                 self.pointers.clear();
                                 self.down_time_ns = None;
@@ -2526,7 +2503,7 @@ impl InputWorker {
                                 self.bump_recovery_episode();
                             }
                             Err((c, m)) => {
-                                if self.slot.is_cleanup_blocked() || is_guest_gone_code(&c) {
+                                if self.slot.is_replaced() || is_guest_gone_code(&c) {
                                     self.clear_guest_touch_state();
                                 }
                                 return Err((c, m));
@@ -2543,7 +2520,7 @@ impl InputWorker {
                             } else {
                                 ACTION_POINTER_UP | ((pos as i32) << ACTION_POINTER_INDEX_SHIFT)
                             };
-                            match self.send_touch_frame_cleanup(action, down_time, ts) {
+                            match self.send_touch_frame(action, down_time, ts) {
                                 Ok(_) => {
                                     self.pointers.remove(pos);
                                     if self.pointers.is_empty() {
@@ -2552,7 +2529,7 @@ impl InputWorker {
                                     self.bump_recovery_episode();
                                 }
                                 Err((c, m)) => {
-                                    if self.slot.is_cleanup_blocked() || is_guest_gone_code(&c) {
+                                    if self.slot.is_replaced() || is_guest_gone_code(&c) {
                                         self.clear_guest_touch_state();
                                     }
                                     return Err((c, m));
@@ -2576,6 +2553,7 @@ impl InputWorker {
     fn handle_touch(
         &mut self,
         client_id: u64,
+        client_gen: u64,
         phase: TouchPhase,
         pointer_id: i32,
         x: Option<f32>,
@@ -2600,7 +2578,12 @@ impl InputWorker {
                     let down_time = self.down_time_ns.unwrap_or(ts);
                     return match self.send_touch_frame(ACTION_MOVE, down_time, ts) {
                         Ok(_) => json!({ "ok": true, "t": "touch", "phase": "move" }),
-                        Err((c, m)) => err_json(&c, &m),
+                        Err((c, m)) => {
+                            if self.slot.is_replaced() || is_guest_gone_code(&c) {
+                                self.clear_guest_touch_state();
+                            }
+                            err_json(&c, &m)
+                        }
                     };
                 }
                 let Some(wire_id) = self.alloc_wire_id() else {
@@ -2608,6 +2591,7 @@ impl InputWorker {
                 };
                 self.pointers.push(ActivePointer {
                     client_id,
+                    client_gen,
                     pointer_id,
                     wire_id,
                     x,
@@ -2982,25 +2966,42 @@ impl InputWorker {
         json!({ "ok": true, "t": "pinch" })
     }
 
-    fn handle_key(&mut self, client_id: u64, code: i32, phase: KeyPhase, meta: i32) -> Value {
+    fn handle_key(
+        &mut self,
+        client_id: u64,
+        client_gen: u64,
+        code: i32,
+        phase: KeyPhase,
+        meta: i32,
+    ) -> Value {
+        let had_pending_up = self.pending_key_ups.contains(&code);
         if !self.pending_key_ups.is_empty() {
-            let _ = self.flush_pending_key_ups();
+            match self.flush_pending_key_ups() {
+                Ok(()) => {
+                    if self.slot.is_replaced() {
+                        return err_json(
+                            "SESSION_REPLACED",
+                            "session was replaced by a newer guest",
+                        );
+                    }
+                    if had_pending_up && matches!(phase, KeyPhase::Up) && meta == 0 {
+                        return json!({ "ok": true, "t": "key", "code": code, "phase": "up" });
+                    }
+                }
+                Err((c, m)) => {
+                    if self.pending_key_ups.contains(&code)
+                        || self.slot.is_replaced()
+                        || is_guest_gone_code(&c)
+                    {
+                        return err_json(&c, &m);
+                    }
+                }
+            }
         }
         let event_type = match phase {
-            KeyPhase::Down => {
-                if !self.held_keys.contains(&(client_id, code)) {
-                    self.held_keys.push((client_id, code));
-                }
-                "down"
-            }
-            KeyPhase::Up => {
-                self.held_keys.retain(|&pair| pair != (client_id, code));
-                "up"
-            }
-            KeyPhase::Press => {
-                self.held_keys.retain(|&pair| pair != (client_id, code));
-                "press"
-            }
+            KeyPhase::Down => "down",
+            KeyPhase::Up => "up",
+            KeyPhase::Press => "press",
         };
         let mut payload = json!({
             "code": code,
@@ -3009,9 +3010,73 @@ impl InputWorker {
         if meta != 0 {
             payload["meta_state"] = json!(meta);
         }
-        match self.call_daemon("panel_key", payload) {
-            Ok(_) => json!({ "ok": true, "t": "key", "code": code, "phase": event_type }),
-            Err((c, m)) => err_json(&c, &m),
+        match phase {
+            KeyPhase::Down => match self.call_daemon_outcome("panel_key", payload) {
+                Ok(_) => {
+                    if !self
+                        .held_keys
+                        .iter()
+                        .any(|&(cid, _, c)| cid == client_id && c == code)
+                    {
+                        self.held_keys.push((client_id, client_gen, code));
+                    }
+                    json!({ "ok": true, "t": "key", "code": code, "phase": event_type })
+                }
+                Err((c, m, may_have_fired)) => {
+                    if self.slot.is_replaced() || is_guest_gone_code(&c) {
+                        self.clear_guest_key_state();
+                    } else if may_have_fired
+                        && !self
+                            .held_keys
+                            .iter()
+                            .any(|&(cid, _, c)| cid == client_id && c == code)
+                    {
+                        self.held_keys.push((client_id, client_gen, code));
+                    }
+                    err_json(&c, &m)
+                }
+            },
+            KeyPhase::Up => {
+                let was_held = self
+                    .held_keys
+                    .iter()
+                    .any(|&(cid, _, c)| cid == client_id && c == code);
+                match self.call_daemon("panel_key", payload) {
+                    Ok(_) => {
+                        self.held_keys
+                            .retain(|&(cid, _, c)| !(cid == client_id && c == code));
+                        json!({ "ok": true, "t": "key", "code": code, "phase": event_type })
+                    }
+                    Err((c, m)) => {
+                        if self.slot.is_replaced() || is_guest_gone_code(&c) {
+                            self.clear_guest_key_state();
+                        } else if was_held {
+                            self.held_keys
+                                .retain(|&(cid, _, c)| !(cid == client_id && c == code));
+                            if !self.held_keys.iter().any(|&(_, _, c)| c == code)
+                                && !self.pending_key_ups.contains(&code)
+                            {
+                                self.pending_key_ups.push(code);
+                                self.bump_recovery_episode();
+                            }
+                        }
+                        err_json(&c, &m)
+                    }
+                }
+            }
+            KeyPhase::Press => match self.call_daemon("panel_key", payload) {
+                Ok(_) => {
+                    self.held_keys
+                        .retain(|&(cid, _, c)| !(cid == client_id && c == code));
+                    json!({ "ok": true, "t": "key", "code": code, "phase": event_type })
+                }
+                Err((c, m)) => {
+                    if self.slot.is_replaced() || is_guest_gone_code(&c) {
+                        self.clear_guest_key_state();
+                    }
+                    err_json(&c, &m)
+                }
+            },
         }
     }
 
@@ -3079,11 +3144,11 @@ impl InputWorker {
 
     fn flush_pending_key_ups(&mut self) -> Result<(), (String, String)> {
         while let Some(&code) = self.pending_key_ups.first() {
-            if self.slot.is_cleanup_blocked() {
+            if self.slot.is_replaced() {
                 self.clear_guest_key_state();
                 return Ok(());
             }
-            match self.call_daemon_cleanup(
+            match self.call_daemon(
                 "panel_key",
                 json!({
                     "code": code,
@@ -3095,7 +3160,7 @@ impl InputWorker {
                     self.bump_recovery_episode();
                 }
                 Err((c, m)) => {
-                    if self.slot.is_cleanup_blocked() || is_guest_gone_code(&c) {
+                    if self.slot.is_replaced() || is_guest_gone_code(&c) {
                         self.clear_guest_key_state();
                     }
                     return Err((c, m));
@@ -3105,21 +3170,34 @@ impl InputWorker {
         Ok(())
     }
 
-    fn retire_all_held_input(&mut self) {
+    fn retire_clients_before(&mut self, before_gen: u64) {
         let entry = self.entry();
-        if entry.watch_only || self.slot.is_cleanup_blocked() {
+        if entry.watch_only || self.slot.is_replaced() {
             self.clear_guest_touch_state();
             self.clear_guest_key_state();
             return;
         }
-        let mut client_ids: Vec<u64> = self.pointers.iter().map(|p| p.client_id).collect();
+        let mut client_ids: Vec<u64> = self
+            .pointers
+            .iter()
+            .filter(|p| p.client_gen < before_gen)
+            .map(|p| p.client_id)
+            .collect();
         client_ids.sort_unstable();
         client_ids.dedup();
         for cid in client_ids {
             self.record_pending_cancel_client(cid);
         }
-        for (_, code) in std::mem::take(&mut self.held_keys) {
-            if !self.pending_key_ups.contains(&code) {
+        let keys_to_release: Vec<i32> = self
+            .held_keys
+            .iter()
+            .filter_map(|&(_, gen, code)| (gen < before_gen).then_some(code))
+            .collect();
+        self.held_keys.retain(|&(_, gen, _)| gen >= before_gen);
+        for code in keys_to_release {
+            if !self.held_keys.iter().any(|&(_, _, c)| c == code)
+                && !self.pending_key_ups.contains(&code)
+            {
                 self.pending_key_ups.push(code);
                 self.bump_recovery_episode();
             }
@@ -3130,14 +3208,14 @@ impl InputWorker {
 
     fn cancel_client(&mut self, client_id: u64) {
         let entry = self.entry();
-        if entry.watch_only || self.slot.is_cleanup_blocked() {
+        if entry.watch_only || self.slot.is_replaced() {
             self.pointers.retain(|p| p.client_id != client_id);
             if self.pointers.is_empty() {
                 self.down_time_ns = None;
             }
             self.pending_touch_recovery = None;
             self.pending_releases.clear();
-            self.held_keys.retain(|&(cid, _)| cid != client_id);
+            self.held_keys.retain(|&(cid, _, _)| cid != client_id);
             self.pending_key_ups.clear();
             return;
         }
@@ -3146,11 +3224,11 @@ impl InputWorker {
         let keys_to_release: Vec<i32> = self
             .held_keys
             .iter()
-            .filter_map(|&(cid, code)| (cid == client_id).then_some(code))
+            .filter_map(|&(cid, _, code)| (cid == client_id).then_some(code))
             .collect();
-        self.held_keys.retain(|&(cid, _)| cid != client_id);
+        self.held_keys.retain(|&(cid, _, _)| cid != client_id);
         for code in keys_to_release {
-            if !self.held_keys.iter().any(|&(_, c)| c == code)
+            if !self.held_keys.iter().any(|&(_, _, c)| c == code)
                 && !self.pending_key_ups.contains(&code)
             {
                 self.pending_key_ups.push(code);
@@ -6553,5 +6631,306 @@ mod tests {
         );
 
         let _ = std::fs::remove_dir_all(&registry);
+    }
+
+    #[test]
+    fn pending_key_up_blocks_newer_down_and_tracks_failed_up_and_ambiguous_down() {
+        let root = scratch("key-pending-up");
+        let socket = root.join("serve.sock");
+        let listener = UnixListener::bind(&socket).expect("bind");
+        // Record (code, event_type, accepted) for every panel_key call.
+        let seen = Arc::new(Mutex::new(Vec::<(i64, String, bool)>::new()));
+        let seen_t = Arc::clone(&seen);
+        // 0 = ok, 1 = INPUT_UNAVAILABLE (definite rejection), 2 = TIMEOUT (ambiguous post-write).
+        let mode = Arc::new(AtomicUsize::new(0));
+        let mode_t = Arc::clone(&mode);
+        std::thread::spawn(move || {
+            for stream in listener.incoming() {
+                let Ok(mut writer) = stream else { break };
+                let reader = BufReader::new(writer.try_clone().expect("clone"));
+                for line in reader.lines() {
+                    let Ok(line) = line else { break };
+                    if line.trim().is_empty() {
+                        continue;
+                    }
+                    let req: Value = serde_json::from_str(&line).expect("req");
+                    let id = req["id"].clone();
+                    let code = req["args"]["code"].as_i64().unwrap_or(-1);
+                    let ev = req["args"]["event_type"]
+                        .as_str()
+                        .unwrap_or("")
+                        .to_string();
+                    let cur_mode = mode_t.load(Ordering::SeqCst);
+                    let envelope = match cur_mode {
+                        1 => {
+                            seen_t.lock().unwrap().push((code, ev, false));
+                            json!({"ok": false, "error": {"code": "INPUT_UNAVAILABLE", "message": "daemon down"}})
+                        }
+                        2 => {
+                            seen_t.lock().unwrap().push((code, ev, false));
+                            json!({"ok": false, "error": {"code": "TIMEOUT", "message": "ambiguous timeout"}})
+                        }
+                        _ => {
+                            seen_t.lock().unwrap().push((code, ev, true));
+                            json!({"ok": true, "result": {"ok": true}})
+                        }
+                    };
+                    let resp = json!({"id": id, "envelope": envelope});
+                    writeln!(writer, "{resp}").ok();
+                    writer.flush().ok();
+                }
+            }
+        });
+
+        let registry = scratch("key-pending-up-reg");
+        publish_input_entry(&registry, "s_kpu", Some(&socket), None, false);
+        let hub = Hub::new(registry.clone());
+        let client1 = hub.open_input("s_kpu").expect("open client1");
+        let client2 = hub.open_input("s_kpu").expect("open client2");
+        let (mut rx1, tx1) = ws_sink_pair();
+        let (mut rx2, tx2) = ws_sink_pair();
+
+        // 1) Client 1 presses KEYCODE_A (29) down successfully.
+        client1.enqueue(r#"{"t":"key","code":"KEYCODE_A","phase":"down"}"#, Arc::clone(&tx1));
+        assert_eq!(read_server_ws_text(&mut rx1)["ok"], json!(true));
+
+        // 2) Daemon rejects with INPUT_UNAVAILABLE; client 1's key-up fails and
+        // must move 29 into `pending_key_ups`.
+        hub.set_scheduled_recovery_enabled("s_kpu", false);
+        mode.store(1, Ordering::SeqCst);
+        client1.enqueue(r#"{"t":"key","code":"KEYCODE_A","phase":"up"}"#, Arc::clone(&tx1));
+        let failed_up = read_server_ws_text(&mut rx1);
+        assert_eq!(failed_up["ok"], json!(false));
+        assert_eq!(failed_up["code"], json!("INPUT_UNAVAILABLE"));
+
+        // 3) While pending up for 29 cannot flush, client 2's newer down for 29
+        // must be blocked (must NOT send a `down` while `up` is still pending).
+        seen.lock().unwrap().clear();
+        client2.enqueue(r#"{"t":"key","code":"KEYCODE_A","phase":"down"}"#, Arc::clone(&tx2));
+        let blocked_down = read_server_ws_text(&mut rx2);
+        assert_eq!(blocked_down["ok"], json!(false));
+        assert_eq!(blocked_down["code"], json!("INPUT_UNAVAILABLE"));
+        assert!(
+            seen.lock()
+                .unwrap()
+                .iter()
+                .all(|&(code, ref ev, _)| !(code == 29 && ev == "down")),
+            "must not dispatch a newer down for key 29 while pending up failed to flush"
+        );
+
+        // 4) Re-enable scheduled recovery and let daemon recover. Client 2's
+        // down for 29 must flush pending `up` strictly BEFORE sending `down`,
+        // and no stale `up` may arrive afterwards.
+        seen.lock().unwrap().clear();
+        mode.store(0, Ordering::SeqCst);
+        hub.set_scheduled_recovery_enabled("s_kpu", true);
+        client2.enqueue(r#"{"t":"key","code":"KEYCODE_A","phase":"down"}"#, Arc::clone(&tx2));
+        assert_eq!(read_server_ws_text(&mut rx2)["ok"], json!(true));
+        std::thread::sleep(Duration::from_millis(80));
+        let after_recover = seen.lock().unwrap().clone();
+        assert_eq!(
+            after_recover,
+            vec![
+                (29, "up".to_string(), true),
+                (29, "down".to_string(), true),
+            ],
+            "pending up must flush strictly before newer down with no trailing stale up: {after_recover:?}"
+        );
+        // Release 29 cleanly on client2.
+        client2.enqueue(r#"{"t":"key","code":"KEYCODE_A","phase":"up"}"#, Arc::clone(&tx2));
+        assert_eq!(read_server_ws_text(&mut rx2)["ok"], json!(true));
+
+        // 5) Definitely-rejected down for KEYCODE_B (30) must NOT be tracked as held,
+        // whereas ambiguous TIMEOUT down for KEYCODE_C (31) MUST be tracked as held
+        // and released when client 1 disconnects.
+        mode.store(1, Ordering::SeqCst);
+        client1.enqueue(r#"{"t":"key","code":"KEYCODE_B","phase":"down"}"#, Arc::clone(&tx1));
+        assert_eq!(read_server_ws_text(&mut rx1)["code"], json!("INPUT_UNAVAILABLE"));
+
+        mode.store(2, Ordering::SeqCst);
+        client1.enqueue(r#"{"t":"key","code":"KEYCODE_C","phase":"down"}"#, Arc::clone(&tx1));
+        assert_eq!(read_server_ws_text(&mut rx1)["code"], json!("TIMEOUT"));
+
+        seen.lock().unwrap().clear();
+        mode.store(0, Ordering::SeqCst);
+        drop(client1);
+        let deadline = Instant::now() + Duration::from_secs(2);
+        while Instant::now() < deadline {
+            if seen
+                .lock()
+                .unwrap()
+                .iter()
+                .any(|&(code, ref ev, ok)| code == 31 && ev == "up" && ok)
+            {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        let disconnect_calls = seen.lock().unwrap().clone();
+        assert!(
+            disconnect_calls
+                .iter()
+                .any(|&(code, ref ev, ok)| code == 31 && ev == "up" && ok),
+            "ambiguous TIMEOUT key down must be released on disconnect: {disconnect_calls:?}"
+        );
+        assert!(
+            !disconnect_calls.iter().any(|&(code, _, _)| code == 30),
+            "definitely-rejected key down must NOT fabricate a release on disconnect: {disconnect_calls:?}"
+        );
+
+        drop(client2);
+        let _ = std::fs::remove_dir_all(&registry);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn same_guest_retirement_preserves_unfinished_cleanup_across_worker_exit_and_orders_before_new_client() {
+        let root = scratch("retire-order");
+        let socket = root.join("serve.sock");
+        let listener = UnixListener::bind(&socket).expect("bind");
+        let accepted = Arc::new(Mutex::new(Vec::<(String, Value)>::new()));
+        let accepted_t = Arc::clone(&accepted);
+        let reject = Arc::new(AtomicBool::new(false));
+        let reject_t = Arc::clone(&reject);
+        std::thread::spawn(move || {
+            for stream in listener.incoming() {
+                let Ok(mut writer) = stream else { break };
+                let reader = BufReader::new(writer.try_clone().expect("clone"));
+                for line in reader.lines() {
+                    let Ok(line) = line else { break };
+                    if line.trim().is_empty() {
+                        continue;
+                    }
+                    let req: Value = serde_json::from_str(&line).expect("req");
+                    let id = req["id"].clone();
+                    let tool = req["tool"].as_str().unwrap_or("").to_string();
+                    let args = req["args"].clone();
+                    let envelope = if reject_t.load(Ordering::SeqCst) {
+                        json!({"ok": false, "error": {"code": "INPUT_UNAVAILABLE", "message": "temporary outage"}})
+                    } else {
+                        accepted_t.lock().unwrap().push((tool, args));
+                        json!({"ok": true, "result": {"ok": true}})
+                    };
+                    let resp = json!({"id": id, "envelope": envelope});
+                    writeln!(writer, "{resp}").ok();
+                    writer.flush().ok();
+                }
+            }
+        });
+
+        let registry = scratch("retire-order-reg");
+        publish_input_entry(&registry, "s_ro", Some(&socket), None, false);
+        let hub = Hub::new(registry.clone());
+        let gen1 = hub.list()[0].guest_gen;
+        let client1 = hub.open_input_checked("s_ro", gen1).expect("open gen1");
+        let (mut rx1, tx1) = ws_sink_pair();
+
+        // Hold pointer 0 and KEYCODE_A (29) on gen1.
+        client1.enqueue(
+            r#"{"t":"touch","phase":"down","id":0,"x":120,"y":240}"#,
+            Arc::clone(&tx1),
+        );
+        assert_eq!(read_server_ws_text(&mut rx1)["ok"], json!(true));
+        client1.enqueue(
+            r#"{"t":"key","code":"KEYCODE_A","phase":"down"}"#,
+            Arc::clone(&tx1),
+        );
+        assert_eq!(read_server_ws_text(&mut rx1)["ok"], json!(true));
+
+        // Simulate daemon outage + scheduled retries disabled, then advance
+        // same-guest generation and disconnect client1 so the worker exits with
+        // unfinished cleanup saved in InputSlotState.
+        hub.set_scheduled_recovery_enabled("s_ro", false);
+        reject.store(true, Ordering::SeqCst);
+        for read in live_registry::read_entries(&registry) {
+            std::fs::remove_file(&read.path).expect("remove");
+        }
+        assert!(hub.list().is_empty());
+        publish_input_entry(&registry, "s_ro", Some(&socket), None, false);
+        let gen2 = hub.list()[0].guest_gen;
+        assert_ne!(gen2, gen1);
+        drop(client1);
+
+        // Wait for the worker to exit with saved unfinished cleanup.
+        let wait_exit = Instant::now() + Duration::from_secs(2);
+        while Instant::now() < wait_exit {
+            let still_running = hub
+                .inner
+                .lock()
+                .expect("hub")
+                .input_slots
+                .get("s_ro")
+                .is_some_and(|slot| slot.state.lock().expect("slot").running);
+            if !still_running {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(10));
+        }
+
+        // Even if the registry entry disappears transiently again while the
+        // daemon PID is alive, the hub must retain the slot's unfinished cleanup.
+        for read in live_registry::read_entries(&registry) {
+            std::fs::remove_file(&read.path).expect("remove 2");
+        }
+        assert!(hub.list().is_empty());
+        assert!(
+            hub.inner.lock().expect("hub").input_slots.contains_key("s_ro"),
+            "hub must retain InputSlot with unfinished cleanup while daemon PID is alive"
+        );
+
+        // Republish same guest -> gen3, daemon recovers, and a new browser
+        // connects and sends touch down + key down. The single ordered slot
+        // must flush gen1's ACTION_CANCEL and key-up strictly BEFORE gen3's input.
+        accepted.lock().unwrap().clear();
+        reject.store(false, Ordering::SeqCst);
+        publish_input_entry(&registry, "s_ro", Some(&socket), None, false);
+        let gen3 = hub.list()[0].guest_gen;
+        assert_ne!(gen3, gen2);
+        let client3 = hub.open_input_checked("s_ro", gen3).expect("open gen3");
+        let (mut rx3, tx3) = ws_sink_pair();
+        client3.enqueue(
+            r#"{"t":"touch","phase":"down","id":0,"x":300,"y":400}"#,
+            Arc::clone(&tx3),
+        );
+        assert_eq!(read_server_ws_text(&mut rx3)["ok"], json!(true));
+        client3.enqueue(
+            r#"{"t":"key","code":"KEYCODE_A","phase":"down"}"#,
+            Arc::clone(&tx3),
+        );
+        assert_eq!(read_server_ws_text(&mut rx3)["ok"], json!(true));
+
+        let calls = accepted.lock().unwrap().clone();
+        let cancel_idx = calls
+            .iter()
+            .position(|(t, a)| t == "panel_touch" && a["action"] == json!(ACTION_CANCEL))
+            .expect("old pointer ACTION_CANCEL must be flushed");
+        let new_down_idx = calls
+            .iter()
+            .position(|(t, a)| t == "panel_touch" && a["action"] == json!(ACTION_DOWN))
+            .expect("new client ACTION_DOWN must be sent");
+        assert!(
+            cancel_idx < new_down_idx,
+            "old ACTION_CANCEL ({cancel_idx}) must precede new ACTION_DOWN ({new_down_idx}): {calls:?}"
+        );
+        let key_up_idx = calls
+            .iter()
+            .position(|(t, a)| {
+                t == "panel_key" && a["code"] == json!(29) && a["event_type"] == json!("up")
+            })
+            .expect("old key-up must be flushed");
+        let new_key_down_idx = calls
+            .iter()
+            .position(|(t, a)| {
+                t == "panel_key" && a["code"] == json!(29) && a["event_type"] == json!("down")
+            })
+            .expect("new client key-down must be sent");
+        assert!(
+            key_up_idx < new_key_down_idx,
+            "old key-up ({key_up_idx}) must precede new key-down ({new_key_down_idx}): {calls:?}"
+        );
+
+        drop(client3);
+        let _ = std::fs::remove_dir_all(&registry);
+        let _ = std::fs::remove_dir_all(&root);
     }
 }
