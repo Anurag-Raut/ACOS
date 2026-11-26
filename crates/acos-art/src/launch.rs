@@ -7458,6 +7458,12 @@ enum PanelTouchOutcome {
     AlreadyEnded,
 }
 
+#[derive(Debug)]
+struct PanelTouchError {
+    err: acos_services::input_channel::ChannelError,
+    published: bool,
+}
+
 impl PanelTouchState {
     fn dispatch(
         &mut self,
@@ -7467,14 +7473,14 @@ impl PanelTouchState {
         event_time: i64,
         pointers: &[(i32, f32, f32)],
         touch_wait: Duration,
-    ) -> std::result::Result<PanelTouchOutcome, acos_services::input_channel::ChannelError> {
+    ) -> std::result::Result<PanelTouchOutcome, PanelTouchError> {
         let masked_action = action & 0xff;
         let pointer_index = ((action >> 8) & 0xff) as usize;
         match masked_action {
             acos_services::input_channel::ACTION_DOWN => {
                 self.target = None;
                 self.active_pointers.clear();
-                match input.touch_frame(
+                match input.touch_frame_checked(
                     action,
                     &mut self.target,
                     down_time,
@@ -7489,27 +7495,27 @@ impl PanelTouchState {
                         }
                         Ok(PanelTouchOutcome::Dispatched)
                     }
-                    Err(err) => {
-                        // If `touch_frame` already pinned a target (i.e. published
-                        // before ack collection failed), record the pointer so a
-                        // compensating cancel/up still targets the pinned window.
-                        if self.target.is_some() {
+                    Err((err, published)) => {
+                        if published && self.target.is_some() {
                             for &(id, _, _) in pointers {
                                 self.active_pointers.insert(id);
                             }
                         }
-                        Err(err)
+                        Err(PanelTouchError { err, published })
                     }
                 }
             }
             acos_services::input_channel::ACTION_POINTER_DOWN => {
                 if self.target.is_none() {
-                    return Err(acos_services::input_channel::ChannelError::NoTouchTarget(
-                        "panel_touch pointer_down without an active touch target".to_string(),
-                    ));
+                    return Err(PanelTouchError {
+                        err: acos_services::input_channel::ChannelError::NoTouchTarget(
+                            "panel_touch pointer_down without an active touch target".to_string(),
+                        ),
+                        published: false,
+                    });
                 }
                 let ptr_id = pointers.get(pointer_index).map(|p| p.0);
-                match input.touch_frame(
+                match input.touch_frame_checked(
                     action,
                     &mut self.target,
                     down_time,
@@ -7524,13 +7530,13 @@ impl PanelTouchState {
                         }
                         Ok(PanelTouchOutcome::Dispatched)
                     }
-                    Err(err) => {
-                        if self.target.is_some() {
+                    Err((err, published)) => {
+                        if published && self.target.is_some() {
                             if let Some(id) = ptr_id {
                                 self.active_pointers.insert(id);
                             }
                         }
-                        Err(err)
+                        Err(PanelTouchError { err, published })
                     }
                 }
             }
@@ -7541,7 +7547,7 @@ impl PanelTouchState {
                 {
                     return Ok(PanelTouchOutcome::AlreadyEnded);
                 }
-                match input.touch_frame(
+                match input.touch_frame_checked(
                     action,
                     &mut self.target,
                     down_time,
@@ -7556,7 +7562,7 @@ impl PanelTouchState {
                         }
                         Ok(PanelTouchOutcome::Dispatched)
                     }
-                    Err(err) => {
+                    Err((err, published)) => {
                         let target_dead = self.target.is_some_and(|(token, _)| {
                             matches!(
                                 err,
@@ -7569,7 +7575,7 @@ impl PanelTouchState {
                             }
                             Ok(PanelTouchOutcome::TargetClosed)
                         } else {
-                            Err(err)
+                            Err(PanelTouchError { err, published })
                         }
                     }
                 }
@@ -7580,7 +7586,7 @@ impl PanelTouchState {
                     self.active_pointers.clear();
                     return Ok(PanelTouchOutcome::AlreadyEnded);
                 }
-                match input.touch_frame(
+                match input.touch_frame_checked(
                     action,
                     &mut self.target,
                     down_time,
@@ -7593,7 +7599,7 @@ impl PanelTouchState {
                         self.active_pointers.clear();
                         Ok(PanelTouchOutcome::Dispatched)
                     }
-                    Err(err) => {
+                    Err((err, published)) => {
                         let target_dead = self.target.is_some_and(|(token, _)| {
                             matches!(
                                 err,
@@ -7605,19 +7611,22 @@ impl PanelTouchState {
                             self.active_pointers.clear();
                             Ok(PanelTouchOutcome::TargetClosed)
                         } else {
-                            Err(err)
+                            Err(PanelTouchError { err, published })
                         }
                     }
                 }
             }
             _ => {
                 if self.target.is_none() {
-                    return Err(acos_services::input_channel::ChannelError::NoTouchTarget(
-                        "panel_touch frame without an active touch target".to_string(),
-                    ));
+                    return Err(PanelTouchError {
+                        err: acos_services::input_channel::ChannelError::NoTouchTarget(
+                            "panel_touch frame without an active touch target".to_string(),
+                        ),
+                        published: false,
+                    });
                 }
                 input
-                    .touch_frame(
+                    .touch_frame_checked(
                         action,
                         &mut self.target,
                         down_time,
@@ -7629,6 +7638,7 @@ impl PanelTouchState {
                         self.target = Some((token, origin));
                         PanelTouchOutcome::Dispatched
                     })
+                    .map_err(|(err, published)| PanelTouchError { err, published })
             }
         }
     }
@@ -8656,11 +8666,16 @@ fn interactive_serve(
                             "y": pointers[0].2.round() as i64,
                         }));
                     }
-                    Err(err) => {
+                    Err(PanelTouchError { err, published }) => {
                         protocol_write(&serde_json::json!({
                             "ok": false,
                             "cmd": "panel_touch",
-                            "code": "INPUT_UNAVAILABLE",
+                            "code": if published {
+                                "INPUT_PUBLISHED_ACK_FAILED"
+                            } else {
+                                "INPUT_UNAVAILABLE"
+                            },
+                            "published": published,
                             "error": format!("panel_touch failed: {err}"),
                         }));
                     }
@@ -12769,5 +12784,97 @@ mod panel_touch_tests {
             activity_guest.recv().expect("activity untouched").is_none(),
             "release after pinned target closed must never fall back to ACTIVITY"
         );
+    }
+
+    #[test]
+    fn post_publish_pointer_down_ack_failure_reports_published_and_allows_compensating_release() {
+        let (host, _stack, mut dialog_guest, mut activity_guest, dialog_pt, activity_pt) =
+            host_with_dialog_over_activity();
+        let mut state = PanelTouchState::default();
+        let t0 = monotonic_nanos();
+
+        // Pre-publish failure (off-window ACTION_DOWN) reports published: false.
+        let pre_err = state
+            .dispatch(
+                &host,
+                ACTION_DOWN,
+                t0,
+                t0,
+                &[(0, -500.0, -500.0)],
+                Duration::ZERO,
+            )
+            .expect_err("off-window down must fail");
+        assert!(!pre_err.published, "pre-publish rejection must have published=false");
+        assert!(state.active_pointers.is_empty());
+
+        // Valid ACTION_DOWN on DIALOG.
+        assert_eq!(
+            state
+                .dispatch(
+                    &host,
+                    ACTION_DOWN,
+                    t0,
+                    t0 + 1_000,
+                    &[(0, dialog_pt.0, dialog_pt.1)],
+                    Duration::ZERO,
+                )
+                .expect("down"),
+            PanelTouchOutcome::Dispatched
+        );
+        assert!(dialog_guest.recv().expect("dialog down").is_some());
+
+        // Inject a malformed reply byte on DIALOG's channel so `collect` fails
+        // AFTER ACTION_POINTER_DOWN for pointer 1 is already published to DIALOG.
+        let malformed_fd = host
+            .state()
+            .lock()
+            .expect("input dispatch")
+            .duplicate_client_fd(acos_parcel::BinderId(DIALOG))
+            .expect("dialog raw fd");
+        {
+            use std::io::Write;
+            let mut raw = std::fs::File::from(malformed_fd);
+            raw.write_all(&[0xffu8; 4]).expect("inject malformed reply");
+        }
+        let ptr_down_1 = ACTION_POINTER_DOWN | (1 << ACTION_POINTER_INDEX_SHIFT);
+        let ptr_up_1 = ACTION_POINTER_UP | (1 << ACTION_POINTER_INDEX_SHIFT);
+        let post_err = state
+            .dispatch(
+                &host,
+                ptr_down_1,
+                t0,
+                t0 + 2_000,
+                &[(0, dialog_pt.0, dialog_pt.1), (1, activity_pt.0, activity_pt.1)],
+                Duration::from_millis(50),
+            )
+            .expect_err("malformed ack must fail after publish");
+        assert!(
+            post_err.published,
+            "post-publish ack failure must report published=true so hub compensates"
+        );
+        assert!(
+            state.active_pointers.contains(&1),
+            "published pointer 1 must stay tracked for compensating POINTER_UP"
+        );
+        // Verify DIALOG actually received ACTION_POINTER_DOWN.
+        assert!(dialog_guest.recv().expect("dialog pointer down").is_some());
+
+        // Hub's compensating ACTION_POINTER_UP dispatches to pinned DIALOG and clears pointer 1.
+        assert_eq!(
+            state
+                .dispatch(
+                    &host,
+                    ptr_up_1,
+                    t0,
+                    t0 + 3_000,
+                    &[(0, dialog_pt.0, dialog_pt.1), (1, activity_pt.0, activity_pt.1)],
+                    Duration::ZERO,
+                )
+                .expect("compensating pointer up"),
+            PanelTouchOutcome::Dispatched
+        );
+        assert!(!state.active_pointers.contains(&1));
+        assert!(dialog_guest.recv().expect("dialog pointer up").is_some());
+        assert!(activity_guest.recv().expect("activity untouched").is_none());
     }
 }

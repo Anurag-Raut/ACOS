@@ -1678,6 +1678,7 @@ struct InputWorker {
     last_event_time_ns: i64,
     pending_touch_recovery: Option<PendingTouchRecovery>,
     pending_releases: Vec<PendingRelease>,
+    recovery_episode: u64,
     held_keys: Vec<(u64, i32)>,
 }
 
@@ -1701,8 +1702,13 @@ impl InputWorker {
             last_event_time_ns,
             pending_touch_recovery,
             pending_releases,
+            recovery_episode: 0,
             held_keys: Vec::new(),
         }
+    }
+
+    fn bump_recovery_episode(&mut self) {
+        self.recovery_episode = self.recovery_episode.wrapping_add(1);
     }
 
     fn next_ts_ns(&mut self) -> i64 {
@@ -1719,11 +1725,13 @@ impl InputWorker {
     fn run(mut self) {
         let mut recovery_attempts: u32 = 0;
         let mut next_recovery_at: Option<Instant> = None;
+        let mut scheduled_episode = self.recovery_episode;
         loop {
             let task = {
                 let mut state = self.slot.state.lock().expect("input slot");
                 loop {
                     if let Some(client_id) = state.disconnects.pop_front() {
+                        scheduled_episode = self.recovery_episode;
                         recovery_attempts = 0;
                         next_recovery_at = None;
                         break WorkerTask::ClientDisconnected { client_id };
@@ -1766,6 +1774,7 @@ impl InputWorker {
                         // retries were already exhausted (so a new command
                         // re-arms bounded retries).
                         if !needs_recovery || recovery_attempts >= RECOVERY_MAX_ATTEMPTS {
+                            scheduled_episode = self.recovery_episode;
                             recovery_attempts = 0;
                             next_recovery_at = None;
                         }
@@ -1794,6 +1803,7 @@ impl InputWorker {
                     }
                     next_recovery_at = None;
                     if !needs_recovery {
+                        scheduled_episode = self.recovery_episode;
                         recovery_attempts = 0;
                     }
                     state = self
@@ -1811,16 +1821,35 @@ impl InputWorker {
                 }) => {
                     let reply = self.handle_command(client_id, cmd);
                     let _ = super::ws::send_text_locked(&reply_to, &reply.to_string());
-                    if self.pending_touch_recovery.is_none() && self.pending_releases.is_empty() {
+                    // Reset retry budget if this command made recovery progress
+                    // (including resolving episode A and starting episode B) or
+                    // left no pending work. Ordinary text/key commands leave
+                    // `recovery_episode` unchanged and preserve the schedule.
+                    if self.recovery_episode != scheduled_episode
+                        || (self.pending_touch_recovery.is_none()
+                            && self.pending_releases.is_empty())
+                    {
+                        scheduled_episode = self.recovery_episode;
                         recovery_attempts = 0;
                         next_recovery_at = None;
                     }
                 }
                 WorkerTask::ClientDisconnected { client_id } => {
                     self.cancel_client(client_id);
+                    if self.recovery_episode != scheduled_episode
+                        || (self.pending_touch_recovery.is_none()
+                            && self.pending_releases.is_empty())
+                    {
+                        scheduled_episode = self.recovery_episode;
+                        recovery_attempts = 0;
+                        next_recovery_at = None;
+                    }
                 }
                 WorkerTask::ScheduledRecovery => {
-                    if self.resolve_pending_touch_recovery_and_releases().is_ok() {
+                    if self.resolve_pending_touch_recovery_and_releases().is_ok()
+                        || self.recovery_episode != scheduled_episode
+                    {
+                        scheduled_episode = self.recovery_episode;
                         recovery_attempts = 0;
                         next_recovery_at = None;
                     }
@@ -1998,6 +2027,9 @@ impl InputWorker {
     }
 
     fn clear_guest_touch_state(&mut self) {
+        if self.pending_touch_recovery.is_some() || !self.pending_releases.is_empty() {
+            self.bump_recovery_episode();
+        }
         self.pending_touch_recovery = None;
         self.pending_releases.clear();
         self.pointers.clear();
@@ -2101,6 +2133,7 @@ impl InputWorker {
         ) {
             Ok(_) => {
                 self.pending_touch_recovery = None;
+                self.bump_recovery_episode();
                 Ok(())
             }
             Err((c, m)) => {
@@ -2131,6 +2164,7 @@ impl InputWorker {
                         .position(|p| p.client_id == client_id && p.pointer_id == pointer_id)
                     else {
                         self.pending_releases.remove(0);
+                        self.bump_recovery_episode();
                         continue;
                     };
                     self.pointers[pos].x = x;
@@ -2149,6 +2183,7 @@ impl InputWorker {
                                 self.down_time_ns = None;
                             }
                             self.pending_releases.remove(0);
+                            self.bump_recovery_episode();
                         }
                         Err((c, m)) => {
                             if self.slot.is_replaced() || is_guest_gone_code(&c) {
@@ -2161,6 +2196,7 @@ impl InputWorker {
                 PendingRelease::CancelClient { client_id } => {
                     if !self.pointers.iter().any(|p| p.client_id == client_id) {
                         self.pending_releases.remove(0);
+                        self.bump_recovery_episode();
                         continue;
                     }
                     let only_this_client = self.pointers.iter().all(|p| p.client_id == client_id);
@@ -2172,6 +2208,7 @@ impl InputWorker {
                                 self.pointers.clear();
                                 self.down_time_ns = None;
                                 self.pending_releases.remove(0);
+                                self.bump_recovery_episode();
                             }
                             Err((c, m)) => {
                                 if self.slot.is_replaced() || is_guest_gone_code(&c) {
@@ -2197,6 +2234,7 @@ impl InputWorker {
                                     if self.pointers.is_empty() {
                                         self.down_time_ns = None;
                                     }
+                                    self.bump_recovery_episode();
                                 }
                                 Err((c, m)) => {
                                     if self.slot.is_replaced() || is_guest_gone_code(&c) {
@@ -2207,6 +2245,7 @@ impl InputWorker {
                             }
                         }
                         self.pending_releases.remove(0);
+                        self.bump_recovery_episode();
                     }
                 }
             }
@@ -5000,6 +5039,14 @@ mod tests {
         let listener = UnixListener::bind(&socket).expect("bind fake daemon");
         let seen: Arc<Mutex<Vec<(String, Option<i64>)>>> = Arc::new(Mutex::new(Vec::new()));
         let seen_t = Arc::clone(&seen);
+        // Gate req 2 (the immediate ACTION_CANCEL inside TouchPhase::Down) until
+        // the test has enqueued all 10 text commands, so the queue is guaranteed
+        // non-empty before TouchPhase::Down returns and before any recovery timer
+        // can run. An idle-only recovery implementation cannot pass this test.
+        let cancel_in_flight = Arc::new((Mutex::new(false), Condvar::new()));
+        let cancel_in_flight_t = Arc::clone(&cancel_in_flight);
+        let text_queued_gate = Arc::new((Mutex::new(false), Condvar::new()));
+        let text_queued_gate_t = Arc::clone(&text_queued_gate);
         let _daemon = std::thread::spawn(move || {
             let mut req_idx = 0usize;
             for stream in listener.incoming() {
@@ -5016,10 +5063,25 @@ mod tests {
                     seen_t.lock().unwrap().push((tool.clone(), action));
                     req_idx += 1;
                     // req 1: ACTION_DOWN -> drop (ambiguous EOF)
-                    // req 2: immediate ACTION_CANCEL -> drop
+                    // req 2: immediate ACTION_CANCEL -> hold until texts are queued, then drop
                     // req 3+: daemon recovers; pace panel_text at 10 ms so the
                     // queue stays continuously non-empty across the 25 ms backoff.
-                    if req_idx <= 2 {
+                    if req_idx == 1 {
+                        break;
+                    }
+                    if req_idx == 2 {
+                        {
+                            let (lock, cv) = &*cancel_in_flight_t;
+                            *lock.lock().unwrap() = true;
+                            cv.notify_all();
+                        }
+                        {
+                            let (lock, cv) = &*text_queued_gate_t;
+                            let mut ready = lock.lock().unwrap();
+                            while !*ready {
+                                ready = cv.wait(ready).unwrap();
+                            }
+                        }
                         break;
                     }
                     if tool == "panel_text" {
@@ -5043,22 +5105,40 @@ mod tests {
         let client = hub.open_input("s_tdqtext").expect("open");
         let (mut rx, tx) = ws_sink_pair();
 
-        // Trigger failed touch down + failed immediate cancel so pending_touch_recovery is armed.
+        // Trigger failed touch down; wait until the worker is blocked in the
+        // immediate cancel (req 2) so TouchPhase::Down has not yet returned.
         client.enqueue(
             r#"{"t":"touch","phase":"down","id":1,"x":200,"y":400}"#,
             Arc::clone(&tx),
         );
-        let down_reply = read_server_ws_text(&mut rx);
-        assert_eq!(down_reply["ok"], json!(false));
-        assert_eq!(down_reply["code"], json!("EOF"));
+        {
+            let (lock, cv) = &*cancel_in_flight;
+            let guard = lock.lock().unwrap();
+            let (guard, _) = cv
+                .wait_timeout_while(guard, Duration::from_secs(3), |in_flight| !*in_flight)
+                .unwrap();
+            assert!(*guard, "worker must reach immediate cancel on req 2");
+        }
 
-        // Flood 10 queued text commands (~100 ms continuous work without the queue emptying).
+        // Pre-fill the queue with 10 text commands (~100 ms continuous work)
+        // BEFORE releasing req 2, guaranteeing the queue is non-empty when the
+        // worker returns to its scheduling loop.
         for i in 0..10 {
             client.enqueue(
                 &format!(r#"{{"t":"text","text":"k{i}"}}"#),
                 Arc::clone(&tx),
             );
         }
+        {
+            let (lock, cv) = &*text_queued_gate;
+            *lock.lock().unwrap() = true;
+            cv.notify_all();
+        }
+
+        let down_reply = read_server_ws_text(&mut rx);
+        assert_eq!(down_reply["ok"], json!(false));
+        assert_eq!(down_reply["code"], json!("EOF"));
+
         for _ in 0..10 {
             let reply = read_server_ws_text(&mut rx);
             assert_eq!(reply["ok"], json!(true), "text reply failed: {reply}");
@@ -5074,14 +5154,164 @@ mod tests {
                 tool == "panel_touch" && *action == Some(i64::from(ACTION_CANCEL))
             })
             .map(|(idx, _)| idx);
+        let first_text_pos = recorded
+            .iter()
+            .position(|(tool, _)| tool == "panel_text")
+            .expect("first panel_text recorded");
         let last_text_pos = recorded
             .iter()
             .rposition(|(tool, _)| tool == "panel_text")
-            .expect("panel_text recorded");
+            .expect("last panel_text recorded");
         assert!(
-            recovery_pos.is_some_and(|pos| pos < last_text_pos),
-            "due touch recovery must run before queued text commands drain completely: {recorded:?}"
+            recovery_pos.is_some_and(|pos| pos > first_text_pos && pos < last_text_pos),
+            "due touch recovery must preempt queued text commands rather than waiting for idle: {recorded:?}"
         );
+
+        drop(client);
+        let _ = std::fs::remove_dir_all(&registry);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn new_recovery_episode_after_resolving_previous_gets_fresh_retry_budget() {
+        let root = scratch("tdep");
+        let socket = root.join("serve.sock");
+        let listener = UnixListener::bind(&socket).expect("bind fake daemon");
+        let seen: Arc<Mutex<Vec<(i64, Value)>>> = Arc::new(Mutex::new(Vec::new()));
+        let seen_t = Arc::clone(&seen);
+        let hit_11 = Arc::new((Mutex::new(false), Condvar::new()));
+        let hit_11_t = Arc::clone(&hit_11);
+        let down_b_queued = Arc::new((Mutex::new(false), Condvar::new()));
+        let down_b_queued_t = Arc::clone(&down_b_queued);
+        let episode_b_recovered = Arc::new((Mutex::new(false), Condvar::new()));
+        let episode_b_recovered_t = Arc::clone(&episode_b_recovered);
+        let _daemon = std::thread::spawn(move || {
+            let mut req_idx = 0usize;
+            for stream in listener.incoming() {
+                let Ok(mut stream) = stream else { break };
+                let mut reader = BufReader::new(stream.try_clone().unwrap());
+                loop {
+                    let mut line = String::new();
+                    if reader.read_line(&mut line).unwrap_or(0) == 0 {
+                        break;
+                    }
+                    let req: Value = serde_json::from_str(&line).unwrap();
+                    if let Some(a) = req["args"]["action"].as_i64() {
+                        seen_t
+                            .lock()
+                            .unwrap()
+                            .push((a, req["args"]["pointers"].clone()));
+                    }
+                    req_idx += 1;
+                    // req 1: Episode A ACTION_DOWN -> drop
+                    // req 2: Episode A immediate ACTION_CANCEL -> drop
+                    // req 3..=13: 11 scheduled retries for Episode A -> drop
+                    // (hold req 13 until Down B is queued so attempt 12 cannot race ahead of it)
+                    if req_idx <= 13 {
+                        if req_idx == 13 {
+                            {
+                                let (lock, cv) = &*hit_11_t;
+                                *lock.lock().unwrap() = true;
+                                cv.notify_all();
+                            }
+                            {
+                                let (lock, cv) = &*down_b_queued_t;
+                                let mut ready = lock.lock().unwrap();
+                                while !*ready {
+                                    ready = cv.wait(ready).unwrap();
+                                }
+                            }
+                        }
+                        break;
+                    }
+                    // req 14: Foreground Down resolves Episode A's ACTION_CANCEL -> ok
+                    // req 15: Episode B ACTION_DOWN -> drop
+                    // req 16: Episode B immediate ACTION_CANCEL -> drop
+                    // req 17: Episode B scheduled retry #1 -> drop (would exhaust old budget of 12 if not reset!)
+                    // req 18: Episode B scheduled retry #2 -> ok (proves B got a fresh retry budget)
+                    if matches!(req_idx, 15 | 16 | 17) {
+                        break;
+                    }
+                    let resp = json!({
+                        "id": req["id"],
+                        "envelope": { "ok": true, "result": { "ok": true } },
+                    });
+                    if stream.write_all(format!("{resp}\n").as_bytes()).is_err() {
+                        break;
+                    }
+                    let _ = stream.flush();
+                    if req_idx == 18 {
+                        let (lock, cv) = &*episode_b_recovered_t;
+                        *lock.lock().unwrap() = true;
+                        cv.notify_all();
+                        return;
+                    }
+                }
+            }
+        });
+
+        let registry = scratch("tdep-reg");
+        publish_input_entry(&registry, "s_tdep", Some(&socket), None, false);
+        let hub = Hub::new(registry.clone());
+        let client = hub.open_input("s_tdep").expect("open");
+        let (mut rx, tx) = ws_sink_pair();
+
+        // Start Episode A and wait until the 11th scheduled retry (req 13) is in flight.
+        client.enqueue(
+            r#"{"t":"touch","phase":"down","id":1,"x":100,"y":200}"#,
+            Arc::clone(&tx),
+        );
+        let reply_a = read_server_ws_text(&mut rx);
+        assert_eq!(reply_a["ok"], json!(false));
+        assert_eq!(reply_a["code"], json!("EOF"));
+        {
+            let (lock, cv) = &*hit_11;
+            let guard = lock.lock().unwrap();
+            let (guard, _) = cv
+                .wait_timeout_while(guard, Duration::from_secs(10), |done| !*done)
+                .unwrap();
+            assert!(*guard, "Episode A must reach 11 scheduled retry attempts");
+        }
+
+        // Queue Down B BEFORE releasing req 13 so Down B runs at recovery_attempts == 11
+        // before attempt 12 can ever fire, resolving Episode A (req 14) and starting B (req 15 + 16).
+        client.enqueue(
+            r#"{"t":"touch","phase":"down","id":2,"x":300,"y":400}"#,
+            Arc::clone(&tx),
+        );
+        {
+            let (lock, cv) = &*down_b_queued;
+            *lock.lock().unwrap() = true;
+            cv.notify_all();
+        }
+        let reply_b = read_server_ws_text(&mut rx);
+        assert_eq!(reply_b["ok"], json!(false));
+        assert_eq!(reply_b["code"], json!("EOF"));
+
+        // Episode B fails its first scheduled retry (req 17) and MUST still perform
+        // scheduled retry #2 (req 18) instead of inheriting Episode A's 11-attempt count.
+        {
+            let (lock, cv) = &*episode_b_recovered;
+            let guard = lock.lock().unwrap();
+            let (guard, _) = cv
+                .wait_timeout_while(guard, Duration::from_secs(3), |done| !*done)
+                .unwrap();
+            assert!(
+                *guard,
+                "Episode B must receive a fresh scheduled retry budget after Episode A resolved"
+            );
+        }
+
+        let recorded = seen.lock().unwrap().clone();
+        assert_eq!(recorded.len(), 18, "unexpected recorded frames: {recorded:?}");
+        assert_eq!(recorded[13].0, i64::from(ACTION_CANCEL));
+        assert_eq!(recorded[13].1, json!([[0, 100.0, 200.0]]));
+        assert_eq!(recorded[14].0, i64::from(ACTION_DOWN));
+        assert_eq!(recorded[14].1, json!([[0, 300.0, 400.0]]));
+        assert_eq!(recorded[16].0, i64::from(ACTION_CANCEL));
+        assert_eq!(recorded[16].1, json!([[0, 300.0, 400.0]]));
+        assert_eq!(recorded[17].0, i64::from(ACTION_CANCEL));
+        assert_eq!(recorded[17].1, json!([[0, 300.0, 400.0]]));
 
         drop(client);
         let _ = std::fs::remove_dir_all(&registry);

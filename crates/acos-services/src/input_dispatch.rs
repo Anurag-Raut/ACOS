@@ -1198,8 +1198,25 @@ impl InputHost {
         pointers: &[(i32, f32, f32)],
         ack_wait: Duration,
     ) -> Result<(BinderId, (i32, i32), InjectedGesture)> {
+        self.touch_frame_checked(action, pinned_target, down_time, event_time, pointers, ack_wait)
+            .map_err(|(err, _published)| err)
+    }
+
+    /// Like [`Self::touch_frame`], except errors also report `published: bool`
+    /// so callers can distinguish pre-publish rejections (`false`) from
+    /// post-publish acknowledgement failures (`true`, where the guest may have
+    /// already applied the pointer transition and needs compensating recovery).
+    pub fn touch_frame_checked(
+        &self,
+        action: i32,
+        pinned_target: &mut Option<(BinderId, (i32, i32))>,
+        down_time: i64,
+        event_time: i64,
+        pointers: &[(i32, f32, f32)],
+        ack_wait: Duration,
+    ) -> std::result::Result<(BinderId, (i32, i32), InjectedGesture), (ChannelError, bool)> {
         if pointers.is_empty() {
-            return Err(ChannelError::BadPointerCount(0));
+            return Err((ChannelError::BadPointerCount(0), false));
         }
         let ((token, origin), local_pointers, gesture) = if let Some((token, origin)) =
             *pinned_target
@@ -1208,40 +1225,36 @@ impl InputHost {
                 .iter()
                 .map(|&(id, x, y)| (id, x - origin.0 as f32, y - origin.1 as f32))
                 .collect();
-            let gesture = lock(&self.state).inject_motion_frame(
-                token,
-                action,
-                down_time,
-                event_time,
-                &local,
-            )?;
+            let gesture = lock(&self.state)
+                .inject_motion_frame(token, action, down_time, event_time, &local)
+                .map_err(|err| (err, false))?;
             ((token, origin), local, gesture)
         } else if self.stack.is_some() {
             let Some(target) = self.touch_target(pointers[0].1, pointers[0].2) else {
-                return Err(no_touch_target(pointers[0].1, pointers[0].2));
+                return Err((no_touch_target(pointers[0].1, pointers[0].2), false));
             };
             let local: Vec<(i32, f32, f32)> = pointers
                 .iter()
                 .map(|&(id, x, y)| (id, x - target.origin.0 as f32, y - target.origin.1 as f32))
                 .collect();
-            let gesture = lock(&self.state).inject_motion_frame(
-                target.token,
-                action,
-                down_time,
-                event_time,
-                &local,
-            )?;
+            let gesture = lock(&self.state)
+                .inject_motion_frame(target.token, action, down_time, event_time, &local)
+                .map_err(|err| (err, false))?;
             *pinned_target = Some((target.token, target.origin));
             ((target.token, target.origin), local, gesture)
         } else {
-            let (token, gesture) = lock(&self.state).publish_on_live(|dispatch, token| {
-                dispatch.inject_motion_frame(token, action, down_time, event_time, pointers)
-            })?;
+            let (token, gesture) = lock(&self.state)
+                .publish_on_live(|dispatch, token| {
+                    dispatch.inject_motion_frame(token, action, down_time, event_time, pointers)
+                })
+                .map_err(|err| (err, false))?;
             *pinned_target = Some((token, (0, 0)));
             ((token, (0, 0)), pointers.to_vec(), gesture)
         };
         let _ = local_pointers;
-        let injected = self.collect(&token, &gesture, ack_wait)?;
+        let injected = self
+            .collect(&token, &gesture, ack_wait)
+            .map_err(|err| (err, true))?;
         Ok((token, origin, injected))
     }
 
