@@ -254,6 +254,14 @@ pub struct ArtSession {
     /// `ack_ms`, `first_change_ms`, `frame_ms`, `state_changed`). Opaque JSON:
     /// it is guest-reported and copied, never synthesised.
     last_input_settle: Option<serde_json::Value>,
+    /// HUMANVIEW1: highest `event_time` already processed by `panel_touch` on
+    /// this session. Because `acos serve` handles each Unix socket connection
+    /// on its own thread behind `HeldArtSession::session`, a compensating
+    /// `ACTION_CANCEL` sent on a fresh connection after an ambiguous timeout
+    /// can acquire the session mutex before the abandoned `ACTION_DOWN`.
+    /// Rejecting any `panel_touch` with `event_time < last` guarantees an
+    /// abandoned older down can never land after a newer cancel.
+    last_panel_touch_event_time: Option<i64>,
     /// P1: `"fast"` or `"strict"` for the next input command. Serve sets it per
     /// verb; the default is strict.
     settle_mode: &'static str,
@@ -2255,6 +2263,7 @@ impl ArtSession {
             last_input_timing: None,
             last_phase: None,
             last_input_settle: None,
+            last_panel_touch_event_time: None,
             settle_mode: "strict",
             observation_settle: "strict",
             last_tree_settle: None,
@@ -2970,6 +2979,11 @@ impl ArtSession {
     }
 
     /// Send a panel touch frame (`action`, `down_time`, `event_time`, `pointers`).
+    ///
+    /// Rejects stale out-of-order frames (`event_time < last_panel_touch_event_time`)
+    /// before forwarding to the guest so an abandoned earlier `ACTION_DOWN` on a
+    /// dropped socket thread cannot take effect after a newer compensating
+    /// `ACTION_CANCEL` / `ACTION_POINTER_UP`.
     pub(crate) fn panel_touch(
         &mut self,
         action: i32,
@@ -2977,6 +2991,17 @@ impl ArtSession {
         event_time: i64,
         pointers: &[(i32, f32, f32)],
     ) -> Result<(), BackendError> {
+        if let Some(last) = self.last_panel_touch_event_time {
+            if event_time < last {
+                return Err(BackendError::Failed {
+                    code: ErrorCode::InvalidArgument,
+                    detail: format!(
+                        "STALE_EVENT: panel_touch event_time {event_time} precedes last processed {last}"
+                    ),
+                });
+            }
+        }
+        self.last_panel_touch_event_time = Some(event_time);
         let ptr_json: Vec<serde_json::Value> = pointers
             .iter()
             .map(|&(id, x, y)| serde_json::json!([id, x, y]))
@@ -6114,6 +6139,7 @@ impl SessionBackend for ArtSession {
         }
         let bind_ms = bind_started.elapsed().as_millis() as u64;
         fresh.last_input = None;
+        fresh.last_panel_touch_event_time = self.last_panel_touch_event_time;
         *self = fresh;
         // P4 (trace-only, env-gated): reset's phase split on the host clock.
         // Inert unless `DM6_RESET_TRACE` names a file; no reply or control
@@ -10215,6 +10241,81 @@ mod tests {
             ),
             "unexpected dead error: {dead_err}"
         );
+
+        std::env::remove_var("ACOS_ART_BIN");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn panel_touch_rejects_out_of_order_event_time_without_forwarding() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = scratch_dir("cr4-panel-touch-order");
+        let log_path = dir.join("panel_touch.log");
+        let script = dir.join("fake-art-cr4");
+        let mut body = String::new();
+        body.push_str("#!/usr/bin/env bash\nset -e\n");
+        body.push_str(
+            "echo '{\"ok\":true,\"cmd\":\"ready\",\"package\":\"dev.cr4\",\
+             \"activity\":\"dev.cr4/.Main\",\"width\":100,\"height\":200,\"density\":160}'\n",
+        );
+        body.push_str("while IFS= read -r line; do\n");
+        body.push_str("  case \"$line\" in\n");
+        body.push_str("    *'\"cmd\":\"panel_touch\"'*)\n");
+        body.push_str(&format!(
+            "      printf '%s\\n' \"$line\" >> '{}'\n",
+            log_path.display()
+        ));
+        body.push_str("      echo '{\"ok\":true,\"cmd\":\"panel_touch\",\"action\":0}'\n");
+        body.push_str("      ;;\n");
+        body.push_str("    *'\"cmd\":\"close\"'*)\n");
+        body.push_str("      echo '{\"ok\":true,\"cmd\":\"close\"}'\n");
+        body.push_str("      exit 0\n");
+        body.push_str("      ;;\n");
+        body.push_str(
+            "    *) echo '{\"ok\":false,\"code\":\"BAD_REQUEST\",\"error\":\"bad\"}'; ;;\n",
+        );
+        body.push_str("  esac\n");
+        body.push_str("done\n");
+        std::fs::write(&script, body).unwrap();
+        let mut perms = std::fs::metadata(&script).unwrap().permissions();
+        perms.set_mode(0o755);
+        std::fs::set_permissions(&script, perms).unwrap();
+
+        let apk = dir.join("fake.apk");
+        std::fs::write(&apk, b"not-a-real-apk").unwrap();
+        let _guard = art_bin_env_lock();
+        std::env::set_var("ACOS_ART_BIN", &script);
+
+        let mut session = ArtSession::start(&apk, &dir).expect("fake session starts");
+
+        // Compensating ACTION_CANCEL(event_time=200) arrives before abandoned ACTION_DOWN(100).
+        session
+            .panel_touch(3, 100, 200, &[(0, 10.0, 20.0)])
+            .expect("compensating cancel succeeds");
+
+        // Abandoned older ACTION_DOWN(event_time=100 < 200) must be rejected without reaching guest.
+        let err = session
+            .panel_touch(0, 100, 100, &[(0, 10.0, 20.0)])
+            .expect_err("stale down after newer cancel must be rejected");
+        assert!(
+            err.to_string().contains("STALE_EVENT"),
+            "expected STALE_EVENT rejection, got: {err}"
+        );
+
+        // A newer ACTION_DOWN(event_time=300) still succeeds normally.
+        session
+            .panel_touch(0, 300, 300, &[(0, 30.0, 40.0)])
+            .expect("newer down succeeds");
+
+        let logged = std::fs::read_to_string(&log_path).expect("log written");
+        let lines: Vec<&str> = logged.lines().collect();
+        assert_eq!(
+            lines.len(),
+            2,
+            "stale abandoned down must never reach guest launcher: {lines:?}"
+        );
+        assert!(lines[0].contains("\"event_time\":200"));
+        assert!(lines[1].contains("\"event_time\":300"));
 
         std::env::remove_var("ACOS_ART_BIN");
         let _ = std::fs::remove_dir_all(&dir);

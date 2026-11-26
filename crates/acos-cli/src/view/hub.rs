@@ -1364,11 +1364,21 @@ struct InputSlot {
     cv: Condvar,
 }
 
+#[derive(Clone, Debug)]
+struct PendingTouchRecovery {
+    wire_id: i32,
+    x: f32,
+    y: f32,
+    down_time_ns: i64,
+}
+
 struct InputSlotState {
     clients: usize,
     next_client_id: u64,
     running: bool,
     replaced: bool,
+    last_event_time_ns: i64,
+    pending_touch_recovery: Option<PendingTouchRecovery>,
     disconnects: VecDeque<u64>,
     queue: VecDeque<QueuedCommand>,
 }
@@ -1384,6 +1394,8 @@ impl InputSlot {
                 next_client_id: 1,
                 running: false,
                 replaced: false,
+                last_event_time_ns: 0,
+                pending_touch_recovery: None,
                 disconnects: VecDeque::new(),
                 queue: VecDeque::new(),
             }),
@@ -1606,17 +1618,23 @@ struct InputWorker {
     pointers: Vec<ActivePointer>,
     down_time_ns: Option<i64>,
     last_event_time_ns: i64,
+    pending_touch_recovery: Option<PendingTouchRecovery>,
     held_keys: Vec<(u64, i32)>,
 }
 
 impl InputWorker {
     fn new(slot: Arc<InputSlot>) -> Self {
+        let (last_event_time_ns, pending_touch_recovery) = {
+            let mut state = slot.state.lock().expect("input slot");
+            (state.last_event_time_ns, state.pending_touch_recovery.take())
+        };
         Self {
             slot,
             conn: None,
             pointers: Vec::new(),
             down_time_ns: None,
-            last_event_time_ns: 0,
+            last_event_time_ns,
+            pending_touch_recovery,
             held_keys: Vec::new(),
         }
     }
@@ -1644,6 +1662,8 @@ impl InputWorker {
                         break WorkerTask::Command(cmd);
                     }
                     if state.clients == 0 {
+                        state.last_event_time_ns = self.last_event_time_ns;
+                        state.pending_touch_recovery = self.pending_touch_recovery.take();
                         state.running = false;
                         return;
                     }
@@ -1838,6 +1858,59 @@ impl InputWorker {
         }
     }
 
+    /// Flush an unconfirmed touch pointer left behind by an ambiguous failure
+    /// whose immediate compensating cancel also failed. Keeping the uncertain
+    /// pointer here (out of `self.pointers`) prevents subsequent clients'
+    /// gestures from dispatching `ACTION_POINTER_DOWN` or failing scroll checks
+    /// against an unconfirmed pointer, while still guaranteeing a compensating
+    /// cancel runs before any new gesture on the same guest.
+    fn resolve_pending_touch_recovery(&mut self) -> Result<(), (String, String)> {
+        let Some(rec) = self.pending_touch_recovery.clone() else {
+            return Ok(());
+        };
+        if self.slot.is_replaced() {
+            self.pending_touch_recovery = None;
+            return Ok(());
+        }
+        let ts = self.next_ts_ns();
+        let (action, down_time, pointers) = if self.pointers.is_empty() {
+            (
+                ACTION_CANCEL,
+                rec.down_time_ns,
+                vec![json!([rec.wire_id, rec.x, rec.y])],
+            )
+        } else {
+            let mut ptrs = self.pointer_wire_list();
+            let idx = ptrs.len() as i32;
+            ptrs.push(json!([rec.wire_id, rec.x, rec.y]));
+            (
+                ACTION_POINTER_UP | (idx << ACTION_POINTER_INDEX_SHIFT),
+                self.down_time_ns.unwrap_or(rec.down_time_ns),
+                ptrs,
+            )
+        };
+        match self.call_daemon(
+            "panel_touch",
+            json!({
+                "action": action,
+                "down_time": down_time,
+                "event_time": ts,
+                "pointers": pointers,
+            }),
+        ) {
+            Ok(_) => {
+                self.pending_touch_recovery = None;
+                Ok(())
+            }
+            Err((c, m)) => {
+                if self.slot.is_replaced() {
+                    self.pending_touch_recovery = None;
+                }
+                Err((c, m))
+            }
+        }
+    }
+
     fn handle_touch(
         &mut self,
         client_id: u64,
@@ -1851,6 +1924,9 @@ impl InputWorker {
                 let (Some(x), Some(y)) = (x, y) else {
                     return err_json("INVALID_ARGUMENT", "touch down requires x and y");
                 };
+                if let Err((c, m)) = self.resolve_pending_touch_recovery() {
+                    return err_json(&c, &m);
+                }
                 if let Some(pos) = self
                     .pointers
                     .iter()
@@ -1890,33 +1966,24 @@ impl InputWorker {
                 match self.send_touch_frame_outcome(action, down_time, ts) {
                     Ok(_) => json!({ "ok": true, "t": "touch", "phase": "down" }),
                     Err((c, m, may_have_fired)) => {
-                        if may_have_fired {
-                            // The guest may already have received the down;
-                            // attempt cancellation against the same guest
-                            // without replaying the down, and retain the
-                            // pointer for later up/cancel or disconnect cleanup
-                            // if cancellation itself cannot be confirmed.
-                            let cancel_ts = self.next_ts_ns();
-                            let cancel_action = if is_first {
-                                ACTION_CANCEL
-                            } else {
-                                let idx = (self.pointers.len() - 1) as i32;
-                                ACTION_POINTER_UP | (idx << ACTION_POINTER_INDEX_SHIFT)
-                            };
-                            if self
-                                .send_touch_frame(cancel_action, down_time, cancel_ts)
-                                .is_ok()
-                                || self.slot.is_replaced()
-                            {
-                                self.pointers.pop();
-                                if self.pointers.is_empty() {
-                                    self.down_time_ns = None;
-                                }
-                            }
-                        } else {
-                            self.pointers.pop();
-                            if self.pointers.is_empty() {
-                                self.down_time_ns = None;
+                        let popped = self.pointers.pop();
+                        if self.pointers.is_empty() {
+                            self.down_time_ns = None;
+                        }
+                        if may_have_fired && !self.slot.is_replaced() {
+                            if let Some(ptr) = popped {
+                                // The guest may already have received the down;
+                                // keep the uncertain pointer out of `self.pointers`
+                                // and attempt immediate cancellation now. If that
+                                // fails, `pending_touch_recovery` will flush it
+                                // before the next touch/scroll or on disconnect.
+                                self.pending_touch_recovery = Some(PendingTouchRecovery {
+                                    wire_id: ptr.wire_id,
+                                    x: ptr.x,
+                                    y: ptr.y,
+                                    down_time_ns: down_time,
+                                });
+                                let _ = self.resolve_pending_touch_recovery();
                             }
                         }
                         err_json(&c, &m)
@@ -1927,6 +1994,9 @@ impl InputWorker {
                 let (Some(x), Some(y)) = (x, y) else {
                     return err_json("INVALID_ARGUMENT", "touch move requires x and y");
                 };
+                if let Err((c, m)) = self.resolve_pending_touch_recovery() {
+                    return err_json(&c, &m);
+                }
                 let Some(pos) = self
                     .pointers
                     .iter()
@@ -1947,6 +2017,9 @@ impl InputWorker {
                 let (Some(x), Some(y)) = (x, y) else {
                     return err_json("INVALID_ARGUMENT", "touch up requires x and y");
                 };
+                if let Err((c, m)) = self.resolve_pending_touch_recovery() {
+                    return err_json(&c, &m);
+                }
                 let Some(pos) = self
                     .pointers
                     .iter()
@@ -1974,6 +2047,9 @@ impl InputWorker {
                 }
             }
             TouchPhase::Cancel => {
+                if let Err((c, m)) = self.resolve_pending_touch_recovery() {
+                    return err_json(&c, &m);
+                }
                 if let (Some(x), Some(y)) = (x, y) {
                     if let Some(pos) = self
                         .pointers
@@ -2028,6 +2104,9 @@ impl InputWorker {
     }
 
     fn handle_scroll(&mut self, entry: &Entry, x: f32, y: f32, dx: f32, dy: f32) -> Value {
+        if let Err((c, m)) = self.resolve_pending_touch_recovery() {
+            return err_json(&c, &m);
+        }
         if !self.pointers.is_empty() {
             return err_json("INVALID_STATE", "cannot scroll while a touch pointer is active");
         }
@@ -2101,17 +2180,16 @@ impl InputWorker {
                     }
                 }
                 Err((c, m, may_have_fired)) => {
-                    if sent_down || (action == ACTION_DOWN && may_have_fired) {
-                        let cancel_ts = self.next_ts_ns();
-                        let _ = self.call_daemon(
-                            "panel_touch",
-                            json!({
-                                "action": ACTION_CANCEL,
-                                "down_time": down_time,
-                                "event_time": cancel_ts,
-                                "pointers": [[0, px, py]],
-                            }),
-                        );
+                    if (sent_down || (action == ACTION_DOWN && may_have_fired))
+                        && !self.slot.is_replaced()
+                    {
+                        self.pending_touch_recovery = Some(PendingTouchRecovery {
+                            wire_id: 0,
+                            x: px,
+                            y: py,
+                            down_time_ns: down_time,
+                        });
+                        let _ = self.resolve_pending_touch_recovery();
                     }
                     return err_json(&c, &m);
                 }
@@ -2210,9 +2288,11 @@ impl InputWorker {
             if self.pointers.is_empty() {
                 self.down_time_ns = None;
             }
+            self.pending_touch_recovery = None;
             self.held_keys.retain(|&(cid, _)| cid != client_id);
             return;
         }
+        let _ = self.resolve_pending_touch_recovery();
         let _ = self.cancel_client_pointers(client_id);
         let keys_to_release: Vec<i32> = self
             .held_keys
@@ -3917,5 +3997,140 @@ mod tests {
             "1e308 overflows f32 to inf and must be rejected"
         );
         assert_eq!(finite_opt_f32(Some(&json!(42.5)), "x").unwrap(), Some(42.5));
+    }
+
+    #[test]
+    fn failed_touch_down_recovery_flushes_before_next_client_down_and_scroll() {
+        let root = scratch("tdrec");
+        let socket = root.join("serve.sock");
+        let listener = UnixListener::bind(&socket).expect("bind fake daemon");
+        let seen: Arc<Mutex<Vec<(i64, Value)>>> = Arc::new(Mutex::new(Vec::new()));
+        let seen_t = Arc::clone(&seen);
+        let _daemon = std::thread::spawn(move || {
+            let mut req_idx = 0usize;
+            for stream in listener.incoming() {
+                let Ok(mut stream) = stream else { break };
+                let mut reader = BufReader::new(stream.try_clone().unwrap());
+                loop {
+                    let mut line = String::new();
+                    if reader.read_line(&mut line).unwrap_or(0) == 0 {
+                        break;
+                    }
+                    let req: Value = serde_json::from_str(&line).unwrap();
+                    if let Some(a) = req["args"]["action"].as_i64() {
+                        seen_t
+                            .lock()
+                            .unwrap()
+                            .push((a, req["args"]["pointers"].clone()));
+                    }
+                    req_idx += 1;
+                    // Drop connections on:
+                    // - req 1 (Client A ACTION_DOWN) & req 2 (immediate ACTION_CANCEL)
+                    // - req 3 (Client B recovery ACTION_CANCEL retry #1)
+                    // - req 7 (Client A second ACTION_DOWN) & req 8 (immediate ACTION_CANCEL)
+                    if matches!(req_idx, 1 | 2 | 3 | 7 | 8) {
+                        break;
+                    }
+                    let resp = json!({
+                        "id": req["id"],
+                        "envelope": { "ok": true, "result": { "ok": true } },
+                    });
+                    if stream.write_all(format!("{resp}\n").as_bytes()).is_err() {
+                        break;
+                    }
+                    let _ = stream.flush();
+                }
+            }
+        });
+
+        let registry = scratch("tdrec-reg");
+        publish_input_entry(&registry, "s_tdrec", Some(&socket), None, false);
+        let hub = Hub::new(registry.clone());
+        let client_a = hub.open_input("s_tdrec").expect("open A");
+        let client_b = hub.open_input("s_tdrec").expect("open B");
+        let (mut rx_a, tx_a) = ws_sink_pair();
+        let (mut rx_b, tx_b) = ws_sink_pair();
+
+        // 1. Client A touch down fails ambiguously (req 1) and immediate cancel also fails (req 2).
+        client_a.enqueue(
+            r#"{"t":"touch","phase":"down","id":1,"x":200,"y":400}"#,
+            Arc::clone(&tx_a),
+        );
+        let reply_a = read_server_ws_text(&mut rx_a);
+        assert_eq!(reply_a["ok"], json!(false));
+        assert_eq!(reply_a["code"], json!("EOF"));
+
+        // 2. While Client A stays connected, Client B touch down attempts recovery first (req 3 -> EOF)
+        //    and MUST NOT emit ACTION_POINTER_DOWN.
+        client_b.enqueue(
+            r#"{"t":"touch","phase":"down","id":1,"x":500,"y":600}"#,
+            Arc::clone(&tx_b),
+        );
+        let reply_b1 = read_server_ws_text(&mut rx_b);
+        assert_eq!(reply_b1["ok"], json!(false));
+        assert_eq!(reply_b1["code"], json!("EOF"));
+
+        // 3. Daemon recovers: Client B touch down flushes ACTION_CANCEL (req 4) and then dispatches
+        //    a fresh primary ACTION_DOWN (req 5) with ONLY Client B's pointer.
+        client_b.enqueue(
+            r#"{"t":"touch","phase":"down","id":1,"x":500,"y":600}"#,
+            Arc::clone(&tx_b),
+        );
+        let reply_b2 = read_server_ws_text(&mut rx_b);
+        assert_eq!(reply_b2["ok"], json!(true), "{reply_b2}");
+        assert_eq!(reply_b2["phase"], json!("down"));
+
+        // Release Client B's pointer cleanly (req 6 = ACTION_UP).
+        client_b.enqueue(
+            r#"{"t":"touch","phase":"up","id":1,"x":500,"y":600}"#,
+            Arc::clone(&tx_b),
+        );
+        let reply_b_up = read_server_ws_text(&mut rx_b);
+        assert_eq!(reply_b_up["ok"], json!(true), "{reply_b_up}");
+
+        // 4. Trigger another failed touch down + failed immediate cancel on Client A (req 7, 8),
+        //    then verify Client B scroll flushes recovery ACTION_CANCEL (req 9) and succeeds
+        //    instead of failing with INVALID_STATE ("touch pointer is active").
+        client_a.enqueue(
+            r#"{"t":"touch","phase":"down","id":2,"x":150,"y":350}"#,
+            Arc::clone(&tx_a),
+        );
+        let reply_a2 = read_server_ws_text(&mut rx_a);
+        assert_eq!(reply_a2["ok"], json!(false));
+        assert_eq!(reply_a2["code"], json!("EOF"));
+
+        client_b.enqueue(
+            r#"{"t":"scroll","x":540,"y":1200,"dy":250}"#,
+            Arc::clone(&tx_b),
+        );
+        let reply_scroll = read_server_ws_text(&mut rx_b);
+        assert_eq!(
+            reply_scroll["ok"],
+            json!(true),
+            "scroll after pending touch recovery must flush cancel and succeed: {reply_scroll}"
+        );
+
+        let recorded = seen.lock().unwrap().clone();
+        assert_eq!(recorded[0].0, i64::from(ACTION_DOWN));
+        assert_eq!(recorded[1].0, i64::from(ACTION_CANCEL));
+        assert_eq!(recorded[2].0, i64::from(ACTION_CANCEL));
+        assert_eq!(recorded[3].0, i64::from(ACTION_CANCEL));
+        assert_eq!(recorded[3].1, json!([[0, 200.0, 400.0]]));
+        assert_eq!(
+            recorded[4].0,
+            i64::from(ACTION_DOWN),
+            "Client B must get a fresh primary ACTION_DOWN, never ACTION_POINTER_DOWN"
+        );
+        assert_eq!(recorded[4].1, json!([[0, 500.0, 600.0]]));
+        assert_eq!(recorded[5].0, i64::from(ACTION_UP));
+        assert_eq!(recorded[6].0, i64::from(ACTION_DOWN));
+        assert_eq!(recorded[7].0, i64::from(ACTION_CANCEL));
+        assert_eq!(recorded[8].0, i64::from(ACTION_CANCEL));
+        assert_eq!(recorded[9].0, i64::from(ACTION_DOWN));
+
+        drop(client_b);
+        drop(client_a);
+        let _ = std::fs::remove_dir_all(&registry);
+        let _ = std::fs::remove_dir_all(&root);
     }
 }

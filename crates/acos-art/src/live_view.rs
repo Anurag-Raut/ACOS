@@ -1952,9 +1952,13 @@ pub fn event_from_reply(reply: &serde_json::Value, masked: bool) -> Option<serde
         "panel_touch" | "panel_key" | "panel_text" | "panel_rotate" => {
             let wire_cmd = match cmd {
                 "panel_touch" => {
-                    let phase = match reply.get("action").and_then(serde_json::Value::as_i64) {
-                        Some(0) => "down",
-                        Some(1) => "up",
+                    let phase = match reply
+                        .get("action")
+                        .and_then(serde_json::Value::as_i64)
+                        .map(|a| a & 0xff)
+                    {
+                        Some(0) | Some(5) => "down",
+                        Some(1) | Some(6) => "up",
                         Some(3) => "cancel",
                         _ => return None,
                     };
@@ -3366,5 +3370,38 @@ mod tests {
 
         view.shutdown();
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn panel_touch_event_from_reply_maps_primary_and_secondary_edges() {
+        for (action, expected_phase) in [
+            (0_i64, Some("down")),
+            (5_i64, Some("down")),
+            ((1 << 8) | 5_i64, Some("down")),
+            (1_i64, Some("up")),
+            (6_i64, Some("up")),
+            ((1 << 8) | 6_i64, Some("up")),
+            (3_i64, Some("cancel")),
+            (2_i64, None),
+        ] {
+            let reply = serde_json::json!({
+                "ok": true,
+                "cmd": "panel_touch",
+                "action": action,
+                "x": 120,
+                "y": 240,
+            });
+            let ev = event_from_reply(&reply, true);
+            match expected_phase {
+                Some(phase) => {
+                    let ev = ev.unwrap_or_else(|| panic!("expected event for action {action}"));
+                    assert_eq!(ev["kind"], "action");
+                    assert_eq!(ev["cmd"], "touch");
+                    assert_eq!(ev["source"], "panel");
+                    assert_eq!(ev["phase"], phase);
+                }
+                None => assert!(ev.is_none(), "action {action} should be omitted: {ev:?}"),
+            }
+        }
     }
 }
