@@ -211,14 +211,44 @@ struct WsClient {
 }
 
 impl WsClient {
+    fn fetch_guest_gen(port: u16, token: &str, session_id: &str) -> u64 {
+        let mut s = TcpStream::connect((Ipv4Addr::LOCALHOST, port)).expect("connect /api/sessions");
+        s.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
+        write!(
+            s,
+            "GET /api/sessions?t={token} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nConnection: close\r\n\r\n"
+        )
+        .unwrap();
+        s.flush().unwrap();
+        let mut raw = Vec::new();
+        let _ = s.read_to_end(&mut raw);
+        let text = String::from_utf8_lossy(&raw);
+        let body = text
+            .split_once("\r\n\r\n")
+            .map(|(_, b)| b)
+            .expect("HTTP response body from /api/sessions");
+        let doc: Value = serde_json::from_str(body).expect("JSON from /api/sessions");
+        doc["sessions"]
+            .as_array()
+            .and_then(|arr| {
+                arr.iter()
+                    .find(|item| item["session_id"].as_str() == Some(session_id))
+            })
+            .and_then(|item| item["guest_gen"].as_u64())
+            .unwrap_or_else(|| {
+                panic!("guest_gen not found for session {session_id} in /api/sessions: {doc}")
+            })
+    }
+
     fn connect(port: u16, token: &str, session_id: &str) -> Self {
+        let guest_gen = Self::fetch_guest_gen(port, token, session_id);
         let mut stream = TcpStream::connect((Ipv4Addr::LOCALHOST, port)).expect("connect ws");
         stream
             .set_read_timeout(Some(Duration::from_secs(10)))
             .unwrap();
         write!(
             stream,
-            "GET /api/input/{session_id}?t={token} HTTP/1.1\r\n\
+            "GET /api/input/{session_id}?t={token}&g={guest_gen} HTTP/1.1\r\n\
              Host: 127.0.0.1:{port}\r\n\
              Upgrade: websocket\r\n\
              Connection: Upgrade\r\n\
@@ -600,15 +630,23 @@ fn cp2_ws_input_auth_host_and_cap_enforced() {
 
     // Dropping the held sockets frees the cap and subsequent requests succeed.
     drop(holders);
-    std::thread::sleep(Duration::from_millis(150));
-    assert_eq!(
-        http_status(
+    let recovery_deadline = Instant::now() + Duration::from_secs(5);
+    let mut recovered = false;
+    while Instant::now() < recovery_deadline {
+        if http_status(
             hub.port,
             &host,
-            &format!("GET /api/sessions?t={} HTTP/1.1\r\n", hub.token)
-        ),
-        200,
-        "hub did not recover after held connections closed"
+            &format!("GET /api/sessions?t={} HTTP/1.1\r\n", hub.token),
+        ) == 200
+        {
+            recovered = true;
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(25));
+    }
+    assert!(
+        recovered,
+        "hub did not recover with HTTP 200 within 5 s after held connections closed"
     );
 
     drop(hub);

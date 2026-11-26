@@ -5651,9 +5651,12 @@ public final class LaunchMain {
                     Thread.sleep(200);
                     synchronized (sFinishPrevious) {
                         Object prevActivity = activityForToken(previous);
+                        Object currentActivity = activityForToken(token);
                         if (sCurrentToken == previous
+                                || sPendingResumeTokens.contains(previous)
                                 || (prevActivity != null && Boolean.TRUE.equals(get(prevActivity, "mResumed")))
-                                || (sCurrentToken == token && Boolean.TRUE.equals(get(activity, "mFinished")))) {
+                                || (sCurrentToken == token && currentActivity != null
+                                        && Boolean.TRUE.equals(get(currentActivity, "mFinished")))) {
                             return;
                         }
                         Class<?> stopCls = Class.forName("android.app.servertransaction.StopActivityItem");
@@ -5707,6 +5710,13 @@ public final class LaunchMain {
      */
     private static final java.util.Map<IBinder, IBinder> sFinishPrevious =
             java.util.Collections.synchronizedMap(new java.util.HashMap<IBinder, IBinder>());
+    /**
+     * Tracks a previous Activity token whose finish-handoff resume is in flight
+     * so the stop guard avoids stopping it without updating `sCurrentToken` before
+     * resume scheduling succeeds.
+     */
+    private static final java.util.Set<IBinder> sPendingResumeTokens =
+            new java.util.HashSet<IBinder>();
     private static final java.util.Set<IBinder> sTopFinishHandled =
             java.util.Collections.synchronizedSet(new java.util.HashSet<IBinder>());
     private static final java.util.concurrent.atomic.AtomicBoolean sTopFinishWatcherStarted =
@@ -6078,16 +6088,29 @@ public final class LaunchMain {
         Class<?> destroyCls = Class.forName("android.app.servertransaction.DestroyActivityItem");
         Class<?> resumeCls = Class.forName("android.app.servertransaction.ResumeActivityItem");
         synchronized (sFinishPrevious) {
-            sCurrentToken = previous;
+            if (previous != null) {
+                sPendingResumeTokens.add(previous);
+            }
+        }
+        try {
             scheduleLocal(lifecycleTransaction(token,
                     obtainPrimitiveItem(pauseCls, new boolean[]{true, false, false})));
+            long pdl = System.currentTimeMillis() + 5000;
+            while (System.currentTimeMillis() < pdl && activity != null
+                    && Boolean.TRUE.equals(get(activity, "mResumed"))) {
+                Thread.sleep(5);
+            }
+            scheduleLocal(lifecycleTransaction(previous, obtainResume(resumeCls)));
+            synchronized (sFinishPrevious) {
+                sCurrentToken = previous;
+            }
+        } finally {
+            synchronized (sFinishPrevious) {
+                if (previous != null) {
+                    sPendingResumeTokens.remove(previous);
+                }
+            }
         }
-        long pdl = System.currentTimeMillis() + 5000;
-        while (System.currentTimeMillis() < pdl && activity != null
-                && Boolean.TRUE.equals(get(activity, "mResumed"))) {
-            Thread.sleep(5);
-        }
-        scheduleLocal(lifecycleTransaction(previous, obtainResume(resumeCls)));
         System.out.println("ACOSLAUNCH MARK activity-resumed-after-finish token=binder:"
                 + Integer.toHexString(System.identityHashCode(previous)));
         long rdl = System.currentTimeMillis() + 10000;

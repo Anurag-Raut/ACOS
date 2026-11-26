@@ -171,9 +171,12 @@ const verifyBanner = $("verify-banner"), dinput = $("dinput");
 
 let sessions = [];
 let current = null;
+let currentGuestGen = null;
 let source = null;       // EventSource
 let display = { w: 0, h: 0 };
 let frameSize = { w: 0, h: 0 };
+let lastFrameSeq = 0;
+let pendingRotate = null;
 let currentRotation = 0;
 let pollTimer = null;
 let streamAbort = null;
@@ -355,7 +358,16 @@ async function refresh() {
       const updated = sessions.find((s) => s.session_id === current.session_id);
       if (!updated) {
         markSessionEnded(current.session_id);
+      } else if (
+        currentGuestGen !== null &&
+        typeof updated.guest_gen === "number" &&
+        updated.guest_gen !== currentGuestGen
+      ) {
+        markSessionEnded(current.session_id);
       } else {
+        if (currentGuestGen === null && typeof updated.guest_gen === "number" && updated.guest_gen > 0) {
+          currentGuestGen = updated.guest_gen;
+        }
         if (updated.connected === true) {
           sessionEverConnected = true;
           disconnectedPolls = 0;
@@ -374,6 +386,7 @@ async function refresh() {
           }
           $("dtitle").textContent = sessionTitle(updated);
           if (
+            !pendingRotate &&
             updated.display && updated.display.w && updated.display.h &&
             (!frameSize.w || !frameSize.h ||
               ((updated.display.w < updated.display.h) === (frameSize.w < frameSize.h)))
@@ -397,6 +410,7 @@ async function refresh() {
 function closeWs() {
   activePointers.clear();
   heldGuestKeys.clear();
+  pendingRotate = null;
   wsQueue = [];
   if (ws) {
     try { ws.close(); } catch (_) {}
@@ -411,13 +425,49 @@ function isTerminalInput(msg) {
   return false;
 }
 
+function isRotationPending() {
+  if (pendingRotate !== null) return true;
+  if (display.w && display.h && frameSize.w && frameSize.h) {
+    return (display.w < display.h) !== (frameSize.w < frameSize.h);
+  }
+  return false;
+}
+
+function cancelActivePointers() {
+  if (activePointers.size === 0) return;
+  const entries = Array.from(activePointers.entries());
+  for (const [pid] of entries) {
+    try {
+      if (screenWrap.hasPointerCapture && screenWrap.hasPointerCapture(pid)) {
+        screenWrap.releasePointerCapture(pid);
+      }
+    } catch (_) {}
+  }
+  activePointers.clear();
+  const [firstId, firstPt] = entries[0];
+  if (firstPt) {
+    sendInput({ t: "touch", phase: "cancel", id: firstId, x: firstPt.x, y: firstPt.y });
+  }
+}
+
+function releaseHeldGuestKeys() {
+  if (heldGuestKeys.size === 0) return;
+  const keys = Array.from(heldGuestKeys);
+  heldGuestKeys.clear();
+  for (const kc of keys) {
+    sendInput({ t: "key", code: kc, phase: "up" });
+  }
+}
+
 function ensureWs() {
   if (!current || current.watch_only || sessionEnded) return null;
+  if (!(typeof currentGuestGen === "number" && currentGuestGen > 0)) return null;
   if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
     return ws;
   }
   const proto = location.protocol === "https:" ? "wss://" : "ws://";
-  const url = proto + location.host + auth("/api/input/" + encodeURIComponent(current.session_id));
+  const path = "/api/input/" + encodeURIComponent(current.session_id) + "?g=" + encodeURIComponent(currentGuestGen);
+  const url = proto + location.host + auth(path);
   const sock = new WebSocket(url);
   ws = sock;
   dinput.textContent = "connecting…";
@@ -439,6 +489,10 @@ function ensureWs() {
       if (current) markSessionEnded(current.session_id);
       return;
     }
+    if (msg.ok === false && msg.code === "QUEUE_FULL" && msg.disconnected) {
+      closeWs();
+      return;
+    }
     if (msg.ok === false && msg.code === "VERIFY_WATCH_ONLY") {
       if (current) current.watch_only = true;
       applyToolbarUi();
@@ -450,16 +504,42 @@ function ensureWs() {
       applyToolbarUi();
       return;
     }
-    if (msg.ok && msg.t === "rotate" && msg.width > 0 && msg.height > 0) {
-      display = { w: msg.width, h: msg.height };
+    if (msg.ok === false && msg.t === "rotate") {
+      pendingRotate = null;
+      return;
+    }
+    if (msg.ok && msg.t === "rotate") {
+      cancelActivePointers();
+      if (msg.width > 0 && msg.height > 0) {
+        display = { w: msg.width, h: msg.height };
+        setAspect(display.w, display.h);
+      }
       if (typeof msg.rotation === "number") currentRotation = msg.rotation;
-      setAspect(display.w, display.h);
+      const targetSeq = Math.max(
+        pendingRotate ? pendingRotate.minSeq : lastFrameSeq + 1,
+        typeof msg.frame_seq === "number" ? msg.frame_seq : 0
+      );
+      const orientOk = !(msg.width > 0 && msg.height > 0) || (
+        frameSize.w > 0 && frameSize.h > 0 &&
+        ((msg.width < msg.height) === (frameSize.w < frameSize.h))
+      );
+      if (lastFrameSeq >= targetSeq && orientOk) {
+        pendingRotate = null;
+      } else {
+        pendingRotate = {
+          minSeq: targetSeq,
+          expectedW: msg.width || 0,
+          expectedH: msg.height || 0,
+          awaitingReply: false,
+        };
+      }
     }
   };
   sock.onclose = () => {
     if (ws !== sock) return;
     ws = null;
     wsQueue = [];
+    pendingRotate = null;
     activePointers.clear();
     heldGuestKeys.clear();
     if (current && !current.watch_only) {
@@ -488,21 +568,21 @@ function sendInput(msg) {
   if (sock.readyState === WebSocket.OPEN) {
     sock.send(raw);
   } else if (sock.readyState === WebSocket.CONNECTING) {
-    if (msg.t === "touch" && msg.phase === "move") {
-      for (let i = wsQueue.length - 1; i >= 0; i--) {
-        const prev = wsQueue[i].msg;
-        if (prev && prev.t === "touch" && prev.id === msg.id) {
-          if (prev.phase === "move") {
-            wsQueue[i] = { msg, raw };
-            return true;
-          }
-          break;
-        }
+    // Coalesce only when the queue tail itself is a touch move for the same
+    // pointer; never scan past intervening commands such as rotate.
+    if (msg.t === "touch" && msg.phase === "move" && wsQueue.length > 0) {
+      const tail = wsQueue[wsQueue.length - 1].msg;
+      if (tail && tail.t === "touch" && tail.phase === "move" && tail.id === msg.id) {
+        wsQueue[wsQueue.length - 1] = { msg, raw };
+        return true;
       }
     }
     if (wsQueue.length >= 128) {
       if (isTerminalInput(msg)) {
-        const evictIdx = wsQueue.findIndex((item) => !isTerminalInput(item.msg));
+        // Only evict a queued touch move; never evict a queued down/press.
+        const evictIdx = wsQueue.findIndex(
+          (item) => item.msg && item.msg.t === "touch" && item.msg.phase === "move"
+        );
         if (evictIdx >= 0) {
           wsQueue.splice(evictIdx, 1);
         } else {
@@ -537,16 +617,10 @@ function renderedImageRect() {
 }
 
 function clientToDisplay(clientX, clientY, clampOutside) {
+  if (isRotationPending()) return null;
   const r = renderedImageRect();
-  let dw = display.w || frameSize.w || frame.width || 1080;
-  let dh = display.h || frameSize.h || frame.height || 2400;
-  if (
-    display.w && display.h && frameSize.w && frameSize.h &&
-    ((display.w < display.h) !== (frameSize.w < frameSize.h))
-  ) {
-    dw = display.h;
-    dh = display.w;
-  }
+  const dw = display.w || frameSize.w || frame.width || 1080;
+  const dh = display.h || frameSize.h || frame.height || 2400;
   if (!r.width || !r.height) return null;
   let nx = (clientX - r.left) / r.width;
   let ny = (clientY - r.top) / r.height;
@@ -592,6 +666,7 @@ function stopFrameStream() {
 
 function clearFrameCanvas() {
   frameSize = { w: 0, h: 0 };
+  lastFrameSeq = 0;
   if (frameCtx && frame.width && frame.height) {
     frameCtx.clearRect(0, 0, frame.width, frame.height);
   }
@@ -606,18 +681,35 @@ async function drawDecodedFrame(part, sid, gen, ctrl) {
     bmp.close();
     return;
   }
+  const prevOrientationFlipped =
+    frameSize.w > 0 && frameSize.h > 0 &&
+    ((frameSize.w < frameSize.h) !== (bmp.width < bmp.height));
+  if (prevOrientationFlipped) {
+    cancelActivePointers();
+  }
   if (frame.width !== bmp.width || frame.height !== bmp.height) {
     frame.width = bmp.width;
     frame.height = bmp.height;
   }
   frameSize = { w: bmp.width, h: bmp.height };
+  if (typeof part.frameSeq === "number" && part.frameSeq > lastFrameSeq) {
+    lastFrameSeq = part.frameSeq;
+  }
   if (frameCtx) {
     frameCtx.drawImage(bmp, 0, 0);
   }
   bmp.close();
   markLive();
   setAspect(frameSize.w, frameSize.h);
-  if (display.w && display.h && ((display.w < display.h) !== (frameSize.w < frameSize.h))) {
+  if (pendingRotate && !pendingRotate.awaitingReply) {
+    const orientOk =
+      !(pendingRotate.expectedW > 0 && pendingRotate.expectedH > 0) ||
+      ((pendingRotate.expectedW < pendingRotate.expectedH) === (frameSize.w < frameSize.h));
+    if (lastFrameSeq >= pendingRotate.minSeq && orientOk) {
+      pendingRotate = null;
+    }
+  }
+  if (!pendingRotate && display.w && display.h && ((display.w < display.h) !== (frameSize.w < frameSize.h))) {
     display = { w: display.h, h: display.w };
   }
 }
@@ -658,6 +750,7 @@ async function startFrameStream(sid) {
           const hdrText = decoder.decode(buf.subarray(0, hdrEnd));
           let contentType = "image/png";
           let contentLength = -1;
+          let frameSeq = 0;
           for (const line of hdrText.split(/\r?\n/)) {
             const colon = line.indexOf(":");
             if (colon <= 0) continue;
@@ -665,6 +758,7 @@ async function startFrameStream(sid) {
             const v = line.slice(colon + 1).trim();
             if (k === "content-type") contentType = v;
             else if (k === "content-length") contentLength = Number.parseInt(v, 10);
+            else if (k === "x-frame-seq") frameSeq = Number.parseInt(v, 10) || 0;
           }
           const bodyStart = hdrEnd + 4;
           if (!(contentLength > 0)) {
@@ -678,7 +772,7 @@ async function startFrameStream(sid) {
             nextStart += 2;
           }
           buf = buf.slice(nextStart);
-          latest = { contentType, payload };
+          latest = { contentType, payload, frameSeq };
         }
         if (latest) {
           retryDelay = 400;
@@ -696,7 +790,13 @@ async function startFrameStream(sid) {
       return;
     }
     const liveEntry = sessions.find((s) => s.session_id === sid);
-    if (hasPolledSessions && !liveEntry) {
+    if (
+      hasPolledSessions &&
+      (!liveEntry ||
+        (currentGuestGen !== null &&
+          typeof liveEntry.guest_gen === "number" &&
+          liveEntry.guest_gen !== currentGuestGen))
+    ) {
       markSessionEnded(sid);
       return;
     }
@@ -725,6 +825,8 @@ function openSession(s) {
   sessionEverConnected = false;
   disconnectedPolls = 0;
   current = s;
+  currentGuestGen = (typeof s.guest_gen === "number" && s.guest_gen > 0) ? s.guest_gen : null;
+  pendingRotate = null;
   display = { w: (s.display && s.display.w) || 0, h: (s.display && s.display.h) || 0 };
   currentRotation = (display.w > display.h) ? 1 : 0;
   grid.hidden = true;
@@ -764,6 +866,8 @@ function closeSession() {
   clearFrameCanvas();
   overlay.textContent = "";
   current = null;
+  currentGuestGen = null;
+  pendingRotate = null;
   detail.hidden = true;
   grid.hidden = false;
   document.body.classList.remove("watching");
@@ -798,13 +902,24 @@ function markSessionEnded(sid) {
 
 function connectEvents(s) {
   source = new EventSource(auth("/api/events/" + encodeURIComponent(s.session_id)));
+  source.addEventListener("replaced", () => {
+    if (current) markSessionEnded(current.session_id);
+  });
   source.addEventListener("state", (message) => {
     if (sessionEnded) return;
     let data = {};
     try { data = JSON.parse(message.data); } catch (error) { return; }
+    if (typeof data.guest_gen === "number" && data.guest_gen > 0) {
+      if (currentGuestGen !== null && data.guest_gen !== currentGuestGen) {
+        if (current) markSessionEnded(current.session_id);
+        return;
+      }
+      currentGuestGen = data.guest_gen;
+    }
     const entry = data.entry || {};
     const hello = data.hello || {};
     if (
+      !pendingRotate &&
       entry.display && entry.display.w && entry.display.h &&
       (!frameSize.w || !frameSize.h ||
         ((entry.display.w < entry.display.h) === (frameSize.w < frameSize.h)))
@@ -870,6 +985,21 @@ function onEvent(event, kind) {
     $("dactivity").textContent = event.activity;
     addEvent(event, "activity");
     return;
+  }
+  if (event.kind === "action" && event.cmd === "rotate" && event.status === "ok") {
+    cancelActivePointers();
+    if (
+      typeof event.frame_seq === "number" &&
+      event.frame_seq > lastFrameSeq &&
+      (!pendingRotate || !pendingRotate.awaitingReply)
+    ) {
+      pendingRotate = {
+        minSeq: event.frame_seq,
+        expectedW: 0,
+        expectedH: 0,
+        awaitingReply: false,
+      };
+    }
   }
   if (event.kind === "action" && typeof event.x === "number" && typeof event.y === "number") {
     ripple(event);
@@ -982,6 +1112,7 @@ screenWrap.addEventListener("pointercancel", (e) => finishPointer(e, "cancel"));
 
 screenWrap.addEventListener("wheel", (e) => {
   if (!current) return;
+  if (isRotationPending()) return;
   const pt = clientToDisplay(e.clientX, e.clientY, false) || {
     x: Math.round((display.w || 1080) / 2),
     y: Math.round((display.h || 2400) / 2),
@@ -1045,14 +1176,23 @@ btnHome.addEventListener("click", () => {
 });
 btnRecents.addEventListener("click", () => sendKeyPress("KEYCODE_APP_SWITCH"));
 btnRotate.addEventListener("click", () => {
+  cancelActivePointers();
   const next = (currentRotation + 1) % 4;
+  const preSeq = lastFrameSeq;
   if (sendInput({ t: "rotate", rotation: next })) {
+    pendingRotate = {
+      minSeq: preSeq + 1,
+      expectedW: 0,
+      expectedH: 0,
+      awaitingReply: true,
+    };
     currentRotation = next;
   }
   screenWrap.focus({ preventScroll: true });
 });
 
 $("back").addEventListener("click", closeSession);
+window.addEventListener("blur", releaseHeldGuestKeys);
 window.addEventListener("pagehide", () => {
   closeWs();
   stopFrameStream();

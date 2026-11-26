@@ -387,4 +387,51 @@ Triaged all CodeRabbit PR #6 inline/overflow findings and pre-PR verification no
   - `humanview_cp4` (`--ignored`): **1 passed, 0 failed** (10.68 s) — arrival-timed (`received_at - t0`): **p50 = 63.06 ms** (≤ 100 ms), **p95 = 64.39 ms** (≤ 200 ms), `min = 61.12 ms`, `max = 66.54 ms`, `mean = 63.12 ms`, `mean_encode_ms = 2.03 ms` (56,220 B/frame avg), `frames_dropped_latest = 0`, `events_dropped = 0`, `min/max_changed_pixels = 147 / 530`, exact `count` TextView == `"53"`.
   - `cr1fix_finish_in_oncreate`: **1 passed, 0 failed** (11.15 s).
 
+---
 
+## 12. Fix Round 5 — CodeRabbit PR #6 Round 2 Review Fixes
+
+Verified and addressed all **18** CodeRabbit Round 2 actionable comments (5 Majors + 13 Minors, 0 false positives):
+
+### 12.1 Addressed Issues
+
+- **ART guest & live-view producer (`crates/acos-art/guest/java/dev/acos/art/LaunchMain.java`, `crates/acos-art/src/{live_view.rs,launch.rs}`):**
+  - Re-resolved `activityForToken(token)` inside `synchronized (sFinishPrevious)` in the delayed stop guard (`LaunchMain.java`) so a same-token relaunch checks the live `Activity` instance's `mFinished`.
+  - Tracked pending return-to-previous handoffs separately via `sPendingResumeTokens` and updated `sCurrentToken = previous` only after scheduling the resume transaction succeeds (`LaunchMain.java`).
+  - Tagged every captured `Slot` in `live_view.rs` with `attach_epoch` (read before `self.scale()` in `tap_once`) and filtered out stale-epoch slots in `writer_loop`.
+  - Added `"frame_seq": latest_generation(live)` to the `"rotate" | "panel_rotate"` reply (`launch.rs`) so clients can gate post-rotation input on frame generation.
+- **Hub & HTTP/WebSocket server (`crates/acos-cli/src/view/{hub.rs,mod.rs}`):**
+  - Added a non-secret monotonic `guest_gen: u64` per guest instance (`SessionView`, `Watcher`, SSE `state` + `replaced` events) and required `?g=<guest_gen>` on `/api/input/<session_id>` via `Hub::open_input_checked` (`400` if missing/invalid, `409 Conflict` with `SESSION_REPLACED` if stale; marks replaced watchers so SSE/MJPEG end cleanly).
+  - Validated `Sec-WebSocket-Version: 13` in `handle_input_ws` before opening input, rejecting unsupported versions with `426 Upgrade Required` + `Sec-WebSocket-Version: 13`.
+  - Serialized the no-input branch of `Hub::watch` (`slot.set_interactive(false)`) under `self.inner` so it cannot overwrite a concurrent `open_input` upgrade.
+  - Restricted `InputClient::enqueue` touch-move coalescing to `state.queue.back_mut()` only (never scanning past intervening commands).
+  - Updated `InputClient::enqueue` so if a terminal release (`Touch Up/Cancel`, `Key Up`) cannot be admitted at `INPUT_QUEUE_LIMIT` (128), the hub marks the client terminated, prunes its queued entries, schedules priority disconnect cleanup, replies `QUEUE_FULL` with `"disconnected": true`, and closes the WebSocket.
+  - Distinguished pre-write vs post-write ambiguous errors (`DaemonCallErr::PostWriteAmbiguous`) in `InputWorker::call_daemon_outcome`; `handle_scroll` sends best-effort `ACTION_CANCEL` on ambiguous `ACTION_DOWN` EOF without replaying `ACTION_DOWN`.
+  - Replaced the 40 ms sleep in `input_queue_coalesces_moves_and_bounds_backlog` with explicit Condvar synchronization (`received_first`) and added 4 new hub unit tests + `426`/`400`/`409` WS handler tests.
+- **Browser page (`crates/acos-cli/src/view/page.rs`):**
+  - Tracked `currentGuestGen` across `/api/sessions`, SSE `state`/`replaced`, frame stream reconnects, and `/api/input/<id>?t=<tok>&g=<guest_gen>` so replaced sessions end cleanly instead of routing clicks to a new guest.
+  - Restricted connecting-queue (`wsQueue`) touch-move coalescing to the queue tail only and restricted overflow eviction to queued `touch move` entries (falling back to `closeWs()` rather than evicting a queued press).
+  - Gated pointer and wheel input on post-rotation frame confirmation (`pendingRotate` using `X-Frame-Seq`, `frame_seq`, and orientation checks — covering 180° rotations too) and cancelled active pointers across rotation transitions.
+  - Added `window.addEventListener("blur", releaseHeldGuestKeys)` to release held keys on window focus loss, and closed WS on `QUEUE_FULL` with `disconnected: true`.
+- **Tests & Docs (`crates/acos-cli/tests/{humanview_cp2,humanview_cp3,humanview_cp4}.rs`, `docs/LIVE_VIEW.md`):**
+  - Updated `WsClient::connect` in `humanview_cp2`–`cp4` to fetch `guest_gen` from `/api/sessions` and pass `&g=<guest_gen>`.
+  - Replaced the single 150 ms sleep in `cp2` connection-cap recovery with bounded 5 s polling for HTTP `200`.
+  - Failed `cp3` wheel-scroll verification with `obs_wheel` if no row is observed instead of defaulting to row `0`, and updated `cp3_verify_run_watch_only_refused_under_view` to wait for the SSE `tap ok` event and a post-tap changed frame while WS is still open before asserting half-scale PNG.
+  - Aligned `docs/LIVE_VIEW.md` §2 and §8 to list exact verify watch-only marker phases (`touch down`, `scroll`, `key down`/`press`, `text`, `rotate`), qualify earlier JSON/queue errors, and document `Sec-WebSocket-Version: 13` and `&g=<guest_gen>`.
+
+### 12.2 Fresh Verification (Exact Observed Counts)
+
+- `tools/verify/check-layout.sh`: **`check-layout: ok`**.
+- Non-ignored unit, doc & integration suites:
+  - `cargo test --offline -p acos-art --lib live_view`: **22 passed, 0 failed** (190 filtered).
+  - `env -u TMPDIR cargo test --offline -p acos-cli --bin acos`: **237 passed, 0 failed** (+4 new hub regression tests + `426`/`400`/`409` WS checks).
+  - `cargo test --offline -p acos-mcp --lib`: **97 passed, 0 failed**; `--test docs --test guide --test documentation_args`: **19 passed, 0 failed** (1 + 14 + 4).
+  - `cargo test --offline -p acos-services --test surface_client --test modules_doc`: **15 passed, 0 failed** (13 + 2).
+  - `humanview_cp1`–`cp4` & `launcher_home_frame` (non-ignored): `cp1` **3 passed** (2 ignored), `cp2` **3 passed** (1 ignored), `cp3` **3 passed** (2 ignored), `cp4` **2 passed** (1 ignored), `launcher_home_frame` **2 passed** (1 ignored).
+- Live ART integration suites (`env -u TMPDIR tools/art-runtime/run-exclusive.sh --task HVCR2 -- tools/guard/guarded.sh --mem 12G --time 300 -- ...`):
+  - `launcher_home_frame` (`--ignored`): **1 passed, 0 failed** (9.68 s).
+  - `humanview_cp1` (`--ignored`): **2 passed, 0 failed** (15.75 s).
+  - `humanview_cp2` (`--ignored`): **1 passed, 0 failed** (6.06 s).
+  - `humanview_cp3` (`--ignored`): **2 passed, 0 failed** (14.84 s).
+  - `humanview_cp4` (`--release --ignored`): **1 passed, 0 failed** (10.69 s) — arrival-timed (`received_at - t0`): **p50 = 63.38 ms** (≤ 100 ms), **p95 = 64.77 ms** (≤ 200 ms), `min = 60.53 ms`, `max = 65.17 ms`, `mean = 63.06 ms`, `mean_encode_ms = 2.22 ms` (56,266 B/frame avg), `frames_dropped_latest = 0`, `events_dropped = 0`, `min/max_changed_pixels = 147 / 530`.
+  - `cr1fix_finish_in_oncreate` (`--release`): **1 passed, 0 failed** (10.60 s).

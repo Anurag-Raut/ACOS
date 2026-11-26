@@ -304,6 +304,8 @@ pub trait FrameWake: Send + Sync {
 struct Slot {
     seq: u64,
     generation: u64,
+    /// Attachment epoch, read before the capture scale.
+    epoch: u64,
     width: u32,
     height: u32,
     ts_ms: u64,
@@ -748,6 +750,7 @@ impl Inner {
             // `FLAG_SECURE` frame's pixels never reach the encoder.
             frame.rgba.fill(0);
         }
+        let epoch = self.attach_epoch.load(Ordering::Acquire);
         let scale = self.scale();
         let clamped_scale = scale.clamp(0.05, 1.0);
         let out_w = ((frame.width as f32 * clamped_scale).round() as u32).clamp(1, frame.width.max(1));
@@ -778,6 +781,7 @@ impl Inner {
             *slot = Some(Slot {
                 seq: frame.seq,
                 generation: frame.generation,
+                epoch,
                 width,
                 height,
                 ts_ms: now_ms(),
@@ -1569,7 +1573,7 @@ fn writer_loop(inner: Arc<Inner>) {
             let epoch = inner.attach_epoch.load(Ordering::Acquire);
             let frame = match slot.as_ref() {
                 Some(frame) if frame.seq > inner.last_encoded_seq.load(Ordering::Acquire) => {
-                    slot.take()
+                    slot.take().filter(|taken| taken.epoch == epoch)
                 }
                 _ => None,
             };
