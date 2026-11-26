@@ -1179,3 +1179,291 @@ fn a_tag_shaped_frame_rate_group_is_rejected() {
         "the rejection must be a structured error, got {err:?}"
     );
 }
+
+fn solid_memfd(rgba: [u8; 4]) -> OwnedFd {
+    use std::io::Write as _;
+    let dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../.cache/surface-client-tests");
+    std::fs::create_dir_all(&dir).expect("scratch dir");
+    let path = dir.join(format!(
+        "acos-c1-solid-{}-{}-{}.rgba",
+        std::process::id(),
+        rgba[0],
+        rgba[2]
+    ));
+    let mut file = std::fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(true)
+        .open(&path)
+        .expect("temp solid buffer");
+    let mut bytes = Vec::with_capacity(64 * 48 * 4);
+    for _ in 0..(64 * 48) {
+        bytes.extend_from_slice(&rgba);
+    }
+    file.write_all(&bytes).expect("write pixels");
+    let _ = std::fs::remove_file(&path);
+    file.into()
+}
+
+#[allow(clippy::too_many_arguments)]
+fn token_buffer_txn(
+    handle: BinderId,
+    layer_id: i32,
+    cached_token: BinderId,
+    fd: Option<&OwnedFd>,
+    frame_number: u64,
+    buffer_id: u64,
+    listener: BinderId,
+    txn_id: u64,
+) -> Parcel {
+    let mut data = Parcel::new();
+    data.write_interface_token(ISURFACE_COMPOSER_LEGACY)
+        .expect("token");
+    write_light_blob(&mut data, &[0, 0, 0, 0, 0, 1]);
+    data.write_uint32(1); // composers
+    data.write_strong_binder(handle);
+    data.write_int32(layer_id);
+    data.write_uint64(surface_client::what::BUFFER | surface_client::what::LAYER);
+    data.write_float(0.0);
+    data.write_float(0.0);
+    data.write_int32(0);
+    data.write_uint32(0);
+    data.write_uint32(0);
+    data.write_uint32(0);
+    for _ in 0..4 {
+        data.write_float(0.0);
+    }
+    write_rect(&mut data, [0, 0, 0, 0]);
+    data.write_bool(false);
+    data.write_bool(false);
+    for _ in 0..4 {
+        data.write_float(0.0);
+    }
+    data.write_int32(0);
+    write_light_blob(&mut data, &[0]);
+    data.write_uint32(0);
+    data.write_bool(false);
+    data.write_bool(false);
+    data.write_float(0.0);
+    for _ in 0..4 {
+        data.write_float(0.0);
+    }
+    data.write_uint32(0);
+    write_light_blob(&mut data, &[0]);
+    write_light_blob(&mut data, &[0]);
+    data.write_int32(0);
+    data.write_bool(false);
+    for _ in 0..16 {
+        data.write_float(0.0);
+    }
+    data.write_float(0.0);
+    data.write_uint32(0);
+    data.write_int32(1);
+    data.write_int32(0);
+    for _ in 0..4 {
+        data.write_float(0.0);
+    }
+    data.write_uint32(0);
+    data.write_bool(false);
+    data.write_int32(0);
+    data.write_float(0.0);
+    data.write_int32(0);
+    data.write_float(60.0);
+    data.write_byte(0);
+    data.write_byte(0);
+    data.write_byte(0);
+    data.write_uint32(0);
+    data.write_bool(false);
+    data.write_bool(false);
+    data.write_uint32(0);
+    for _ in 0..10 {
+        data.write_float(0.0);
+    }
+    write_rect(&mut data, [0, 0, 0, 0]);
+    write_rect(&mut data, [0, 0, 0, 0]);
+    data.write_bool(false);
+    data.write_uint32(0);
+    data.write_bool(true); // has BufferData
+    data.write_int32(1); // non-null BufferData
+    data.write_int32(0x04 | 0x02 | 0x01);
+    data.write_bool(fd.is_some());
+    if let Some(fd) = fd {
+        write_graphic_buffer(&mut data, fd, 64, 48, 64, 1, buffer_id);
+    }
+    data.write_bool(false);
+    data.write_uint64(frame_number);
+    data.write_strong_binder(listener);
+    data.write_strong_binder(BinderId(0));
+    data.write_strong_binder(cached_token);
+    data.write_uint64(buffer_id);
+    data.write_bool(false);
+    data.write_uint64(0);
+    data.write_uint32(1);
+    data.write_int32(1);
+    data.write_int32(16);
+    data.write_float(-1.0);
+    data.write_float(-1.0);
+    data.write_int32(0);
+    data.write_int32(1);
+    data.write_strong_binder(BinderId(0));
+    data.write_int32(-1);
+    data.write_float(1.0);
+    data.write_float(1.0);
+    data.write_int32(0);
+    data.write_uint32(0);
+    data.write_uint32(0);
+    data.write_strong_binder_opt(None);
+    data.write_int32(0);
+    data.write_int32(0);
+    data.write_int64(0);
+    data.write_bool(true);
+    data.write_uint32(0);
+    data.write_bool(false);
+    data.write_int32(0);
+    data.write_uint64(txn_id);
+    data.write_uint32(0);
+    data.set_data_position(0);
+    data
+}
+
+#[test]
+fn two_owners_with_same_buffer_id_keep_separate_cached_buffers() {
+    let mut host = ServiceHost::new();
+    let (_pool, state) = compositor_client::install_full(&mut host, DisplayDescriptor::reference());
+    let sf = composer(&mut host);
+    let client_a = create_connection(&mut host, sf);
+    let (handle_a, layer_a) = create_surface(&mut host, client_a, "counter");
+    let (handle_b, layer_b) = create_surface(&mut host, client_a, "launcher");
+    let listener = host.register_aux(ITRANSACTION_LISTENER);
+
+    // Two distinct process BufferCache tokens (tag 0 vs tag 1, same wire handle 5)
+    // minting the identical GraphicBuffer::getId() (0x2_0000_0000) in separate
+    // PID namespaces.
+    let token_a = BinderId((1 << 32) | 5);
+    let token_b = BinderId((1 << 32) | (1 << 34) | 5);
+    let shared_id = 0x2_0000_0000u64;
+
+    let red = [240u8, 16, 16, 255];
+    let blue = [16u8, 16, 240, 255];
+    let green = [16u8, 240, 16, 255];
+
+    let red_fd = solid_memfd(red);
+    let mut parcel = token_buffer_txn(
+        handle_a,
+        layer_a,
+        token_a,
+        Some(&red_fd),
+        1,
+        shared_id,
+        listener,
+        1,
+    );
+    transact(&mut host, sf, SET_TRANSACTION_STATE, 0, &mut parcel).expect("owner A inline");
+
+    let blue_fd = solid_memfd(blue);
+    let mut parcel = token_buffer_txn(
+        handle_b,
+        layer_b,
+        token_b,
+        Some(&blue_fd),
+        1,
+        shared_id,
+        listener,
+        2,
+    );
+    transact(&mut host, sf, SET_TRANSACTION_STATE, 0, &mut parcel).expect("owner B inline");
+
+    fn first_pixel(s: &SurfaceState, handle: BinderId) -> [u8; 4] {
+        use std::os::unix::fs::FileExt as _;
+        let buf = s.latest_buffer(handle).expect("latest buffer");
+        let file = std::fs::File::from(buf.fd().try_clone_to_owned().expect("dup"));
+        let mut px = [0u8; 4];
+        file.read_exact_at(&mut px, 0).expect("read pixel");
+        px
+    }
+
+    // Both layers submit cached-id lookups with the same buffer_id under their
+    // own tokens; each must resolve its own memfd rather than colliding.
+    let mut parcel = token_buffer_txn(
+        handle_b, layer_b, token_b, None, 2, shared_id, listener, 3,
+    );
+    transact(&mut host, sf, SET_TRANSACTION_STATE, 0, &mut parcel).expect("owner B cached");
+    {
+        let s = score_state(&state);
+        assert_eq!(s.latest_generation(), 3);
+        assert_eq!(first_pixel(&s, handle_b), blue);
+        assert_eq!(&s.capture_latest().expect("latest B").rgba[..4], &blue);
+        assert_eq!(s.latest_buffer(handle_b).unwrap().cached_token, token_b);
+    }
+
+    let mut parcel = token_buffer_txn(
+        handle_a, layer_a, token_a, None, 2, shared_id, listener, 4,
+    );
+    transact(&mut host, sf, SET_TRANSACTION_STATE, 0, &mut parcel).expect("owner A cached");
+    {
+        let mut s = score_state(&state);
+        assert_eq!(s.latest_generation(), 4);
+        assert_eq!(first_pixel(&s, handle_a), red);
+        assert_eq!(first_pixel(&s, handle_b), blue);
+        assert_eq!(s.latest_buffer(handle_a).unwrap().cached_token, token_a);
+        // Hiding B exposes A in the composite: A's cached frame really holds red.
+        assert!(s.set_layer_hidden(handle_b, true));
+        assert_eq!(&s.capture_latest().expect("composite A").rgba[..4], &red);
+        assert!(s.set_layer_hidden(handle_b, false));
+    }
+
+    // Same-key collision replaces the stale entry instead of skipping it,
+    // without disturbing owner B's entry for the same buffer_id.
+    let green_fd = solid_memfd(green);
+    let mut parcel = token_buffer_txn(
+        handle_a,
+        layer_a,
+        token_a,
+        Some(&green_fd),
+        3,
+        shared_id,
+        listener,
+        5,
+    );
+    transact(&mut host, sf, SET_TRANSACTION_STATE, 0, &mut parcel).expect("owner A collision");
+
+    let mut parcel = token_buffer_txn(
+        handle_a, layer_a, token_a, None, 4, shared_id, listener, 6,
+    );
+    transact(&mut host, sf, SET_TRANSACTION_STATE, 0, &mut parcel).expect("owner A after replace");
+    {
+        let mut s = score_state(&state);
+        assert_eq!(s.latest_generation(), 6);
+        assert_eq!(first_pixel(&s, handle_a), green);
+        assert_eq!(first_pixel(&s, handle_b), blue);
+        assert!(s.set_layer_hidden(handle_b, true));
+        assert_eq!(&s.capture_latest().expect("composite green").rgba[..4], &green);
+        assert!(s.set_layer_hidden(handle_b, false));
+    }
+
+    // Process death for tag 1 releases only owner B's cache entry.
+    host.service_process_died(1);
+    let mut parcel = token_buffer_txn(
+        handle_b, layer_b, token_b, None, 3, shared_id, listener, 7,
+    );
+    transact(&mut host, sf, SET_TRANSACTION_STATE, 0, &mut parcel).expect("dead owner miss");
+    let mut parcel = token_buffer_txn(
+        handle_a, layer_a, token_a, None, 5, shared_id, listener, 8,
+    );
+    transact(&mut host, sf, SET_TRANSACTION_STATE, 0, &mut parcel).expect("live owner hit");
+    {
+        let s = score_state(&state);
+        assert_eq!(
+            s.latest_buffer(handle_b).unwrap().frame_number,
+            2,
+            "owner B's cache entry must be gone after process 1 died"
+        );
+        assert_eq!(
+            s.latest_buffer(handle_a).unwrap().frame_number,
+            5,
+            "owner A's cache entry must survive process 1 death"
+        );
+    }
+}

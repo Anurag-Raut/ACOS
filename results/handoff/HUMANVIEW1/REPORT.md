@@ -279,3 +279,68 @@ Addressed the two LOW findings from re-verification:
 - `cargo test --offline -p acos-mcp --test docs --test guide --test documentation_args`: **docs 1 passed**, **documentation_args 4 passed**, **guide 14 passed**, **0 failed**.
 - `tools/verify/check-layout.sh`: **`check-layout: ok`**.
 
+---
+
+## 10. Fix Round 3 — Multi-Process `BufferCache` Collision (`system.launcher:real` + App)
+
+Fixed a pre-existing compositor bug (also present on `v0.4.1`) where launching `counter.apk` with `--service system.launcher:real` and pressing Home (`acos_key home` or `#btn-home` in `acos view`) switched the UI tree to `ACOS Home` while every screenshot and live-view frame remained stuck on Counter's pixels.
+
+### 10.1 Root Cause & Fix (`file:line`)
+
+- **Root cause:** Counter (`tag=0`) and Launcher (`tag=1`) run in separate `bwrap` PID namespaces, so `getpid()` matches and `GraphicBuffer::getId()` produces identical IDs (`0x2_0000_0000`, `0x2_0000_0001`, …) in both processes. `SurfaceState::buffer_cache` was keyed only by `u64` buffer id, `read_buffer_data` discarded `client_cache_t.token`, `cache_buffer` skipped insertion when the id already existed, and `apply_layer_state` resolved Launcher's cached-id submissions to Counter's cached `memfd`.
+- **Compositor cache keying, collision replacement & `uncacheBuffers`** (`crates/acos-services/src/surface_client.rs`):
+  - Added `cached_token: BinderId` to `LatestBuffer` (`:320`) and `BufferData` (`:1884`), and `uncached_buffers: Vec<(BinderId, u64)>` to `TransactionState` (`:1936`).
+  - Keyed `SurfaceState::buffer_cache` (`:638`) and `buffer_cache_order` (`:640`) by `(BinderId, u64)` (`(cached_token, buffer_id)`), matching AOSP `ClientCache::getBuffer` (`{token, id}`).
+  - Updated `destroy_layer_tree` (`:757-760`) to evict by `(buffer.cached_token, buffer.buffer_id)`.
+  - Updated `SurfaceState::cache_buffer(state, owner, meta)` (`:815-859`) to replace stale entries on same-key collision instead of returning early, while bounding entries (`16` per owner, `64` total).
+  - Added `SurfaceState::uncache_buffer` (`:862-870`), populated `uncached_buffers` in `read_transaction_state_body` (`:2918-2926,2970`), and applied evictions in `apply_transaction_state` (`:1765-1769`).
+  - Retained `cached_token` in `read_buffer_data` (`:3318-3338`) and resolved/stored `(buffer.cached_token, buffer.cached_buffer_id)` in `apply_layer_state` (`:2167-2223`).
+- **Process death / disconnect release:**
+  - `SurfaceState::release_process_buffers` (`crates/acos-services/src/surface_client.rs:874-891`), registered via `install` -> `host.set_compositor` (`:1715`).
+  - `ServiceHost::set_compositor` & `release_process_compositor_buffers` (`crates/acos-services/src/host.rs:1808-1829`), called from `ServiceHost::service_process_died` (`:1775`) and `Peer::disconnect_process` (`crates/acos-binder-peer/src/peer.rs:976-977`).
+
+### 10.2 Automated Tests & `cp4` Latency (Exact Counts)
+
+- **New unit test (`crates/acos-services/tests/surface_client.rs:1183-1469`):** `two_owners_with_same_buffer_id_keep_separate_cached_buffers` verifies separate cached `memfd`s for two owners with the same `buffer_id`, independent cached-id lookups, same-key replacement, and per-process cache release on `service_process_died`.
+- **New live regression test (`crates/acos-cli/tests/launcher_home_frame.rs:429-604`, `#[ignore]`):** `pressing_home_with_system_launcher_switches_pixels_from_counter_to_launcher` launches `counter.apk` + `system.launcher:real`, asserts both `acos_observe` PNG and live `/api/frames` MJPEG switch from Counter to `ACOS Home` on `acos_key home` (`diff_counter_vs_launcher=115689` pixels), and switch back to Counter on tapping `app_row_0` (`diff_back_vs_launcher=115689`, `diff_back_vs_counter=0`).
+- **Non-ignored suites:**
+  - `cargo test --offline -p acos-services`: **782 passed, 0 failed** (lib 193 + integration crates incl. `surface_client` **13 passed**, `b1b_kernel_placement` 2, `display_events` 11, `sandbox_c1` 9, `w35_composite` 8, `w42_layer_lifetime` 6, `w54_dialog_surface_insets` 2, `window_surface_layer` 2, `mproc*` / `sysui*` / `launcher` / `binderpid` suites; 2 ignored doctests).
+  - `cargo test --offline -p acos-binder-peer`: **62 passed, 0 failed**.
+  - `env -u TMPDIR cargo test --offline -p acos-art --lib live_view`: **22 passed, 0 failed** (190 filtered).
+  - `env -u TMPDIR cargo test --offline -p acos-cli --bin acos`: **228 passed, 0 failed**.
+  - `env -u TMPDIR cargo test --offline -p acos-mcp --test docs --test guide --test documentation_args`: **19 passed, 0 failed** (1 + 14 + 4).
+  - `humanview_cp1`–`cp4` & `launcher_home_frame` (non-ignored): `cp1` **3 passed** (2 ignored), `cp2` **3 passed** (1 ignored), `cp3` **3 passed** (2 ignored), `cp4` **2 passed** (1 ignored), `launcher_home_frame` **2 passed** (1 ignored).
+- **Release live-ART suites (`run-exclusive.sh` + `guarded.sh`, `--ignored --test-threads=1`):**
+  - `launcher_home_frame`: **1 passed, 0 failed** (5.49 s).
+  - `humanview_cp1`: **2 passed, 0 failed** (19.02 s); `humanview_cp2`: **1 passed, 0 failed** (5.54 s); `humanview_cp3`: **2 passed, 0 failed** (20.32 s).
+  - `humanview_cp4`: **1 passed, 0 failed** (10.86 s) — **p50 = 66.81 ms** (≤ 100 ms), **p95 = 68.68 ms** (≤ 200 ms), mean = 66.63 ms, min = 62.97 ms, max = 69.03 ms, `mean_encode_ms = 1.90 ms`, `frames_dropped_latest = 0`, `events_dropped = 0`.
+  - `cr1fix_finish_in_oncreate`: **1 passed, 0 failed** (10.74 s).
+- **Live ART scenarios (`acos verify --engine art`):** `launcher-home.yaml`, `mproc3-two-process.yaml`, `mproc8-bind-only.yaml`, `mproc1-multi-package.yaml`, `mproc1-intents.yaml` all **pass** (`negative/launcher-home-wrong.yaml` fails at step 4 `ASSERTION_FAILED`, exit 1 as expected).
+
+### 10.3 Benchmarks (`--phases "latency memory" --animations on --reps 2 --fast-reps 40`)
+
+Pooled across 2 clean reps (`0/4` noisy phases) on binary `736296e4...`:
+
+| Metric | `v0.4.1` (CP4) | `humanview` (CP4) | `humanview` (Fix 3) | vs CP4 | vs `v0.4.1` |
+|---|---:|---:|---:|---|---|
+| `m1_idle_mem_mib` | 57.72 MiB | 57.50 MiB | 57.84 MiB | +0.6% (`within-noise`) | +0.22% (`within-noise`) |
+| `m1_idle_pss_mib` | 239.7 MiB | 241.3 MiB | 241.9 MiB | +0.2% (`within-noise`) | +0.92% (`within-noise`) |
+| `m2_per_session_anon_shmem_n1` | 55.74 MiB | 55.51 MiB | 55.86 MiB | +0.6% (`within-noise`) | +0.23% (`within-noise`) |
+| `m2_per_session_anon_shmem_n5` | 56.21 MiB | 55.94 MiB | 55.82 MiB | -0.2% (`within-noise`) | -0.70% (`within-noise`) |
+| `m2_per_session_anon_shmem_n10` | 56.19 MiB | 56.27 MiB | 55.98 MiB | -0.5% (`within-noise`) | -0.38% (`within-noise`) |
+| `m2_per_session_pss_n1` | 219.7 MiB | 221.1 MiB | 216.7 MiB | -2.0% (`within-noise`) | -1.35% (`within-noise`) |
+| `m2_per_session_pss_n5` | 73.70 MiB | 74.05 MiB | 72.96 MiB | -1.5% (`within-noise`) | -1.01% (`within-noise`) |
+| `m2_per_session_pss_n10` | 55.11 MiB | 55.48 MiB | 54.71 MiB | -1.4% (`within-noise`) | -0.72% (`within-noise`) |
+| `m5_screenshot_ms` | 11.62 ms | 12.14 ms | 11.87 ms | -1.2% (`within-noise`) | +2.15% (`within-noise`) |
+| `m8_tap_counter_strict_ms` | 948.9 ms | 949.7 ms | 934.6 ms | -1.0% (`within-noise`) | -1.51% (`within-noise`) |
+| `m8_tap_counter_fast_ms` | 24.64 ms | 24.69 ms | 24.24 ms | -0.3% (`within-noise`) | -1.64% (`within-noise`) |
+| `m8_tap_form_strict_ms` | 931.1 ms | 924.7 ms | 923.3 ms | -0.1% (`within-noise`) | -0.84% (`within-noise`) |
+| `m8_tap_form_fast_ms` | 27.99 ms | 29.08 ms | 30.09 ms | +2.7% (`within-noise`) | +1.90 ms trimmed (`within-noise`¹) |
+
+¹ Against CP4 (`humanview-baseline.json`), `ab-compare.py` passes **32/32** old-gate metrics and **4/4** lattice metrics (`ab_rc = 0`). Against pre-reboot `v0.4.1-baseline.json`, `ab-compare.py` lattice gate passes **4/4** fast metrics (`m8_tap_form_fast_ms` +1.90 ms < 2.00 ms floor, 100% slot-0 in both), while non-interleaved old-gate `acos_bench.py --compare` flagged `m8_tap_form_fast_ms` (+2.10 ms pooled vs 2.00 ms floor) and `cpu_active_tap_strict_pct` (38.59% → 45.13%, +16.96% vs `v0.4.1`'s ±10% threshold; +5.9% `within-noise` vs CP4's 42.60%).
+
+### 10.4 Live Browser Home Check (`system.launcher:real` + `counter.apk`)
+
+- **T3 preview tab:** Opened `acos view` via `preview_open` (`127.0.0.1:<port>/?t=<token>`), drove card open + `#btn-home` click via `preview_evaluate`, and confirmed `#frame` switched pixels from Counter (`631,260` non-black) to Launcher (`2,523,960` non-black, `diff = 277,085` pixels), matching `acos_observe` (`ACOS Home` + `observe-2.png`). `preview_snapshot` and `preview_act` timed out at `15000ms` while T3's Electron preview pane reported `visible: false`, so the tab was closed with `t3_preview_close` and full mouse-driven browser verification was completed in headless Chromium (`playwright-core`, `errors: []`): Counter (`1`, `1080x2400`) → `#btn-home` → `ACOS Launcher / ACOS Home / Counter` → tap `Counter` row → `Counter (1)`.
+- **Pre-existing unrelated note:** If the lazily spawned `com.acos.launcher` process (`tag=1`) sits idle long enough (~71 s) to be reaped by MPROC5c idle kill, a subsequent Home key calls `start_activity_from_host` → `enqueue_pending_resumes` for dead `tag=1` (`UNSUPPORTED_ANDROID_API: idle delivery to process 1 dropped`) rather than respawning the launcher task.
+
