@@ -152,7 +152,10 @@ Event kinds:
   `key`, `text`, `tree`, `screenshot`, `swipe`, `rotate`), with its `source`
   (`"agent"` or `"panel"`) and result `status`. Continuous `touch` `move`
   events are intentionally omitted from the feed (only `down`/`up`/`cancel`
-  edges are recorded). Emitted for failures and `VERIFY_WATCH_ONLY` refusals too.
+  edges are recorded). Emitted for failures and for valid verify-run
+  `VERIFY_WATCH_ONLY` refusals that reach the watch-only check on `touch down`,
+  `scroll`, `key down`/`press`, `text`, or `rotate` (not `touch move`/`up`,
+  `key up`, malformed JSON, or queue-admission rejections).
 * `activity` — the focused activity changed (once per distinct value).
 * `lifecycle` — `launch` (the ready line, `status: "ok"` or the failure code),
   `reset`, `close`, `session` (the session ended by itself: guest exit, timeout,
@@ -399,10 +402,12 @@ acos view: http://127.0.0.1:54321/?t=<token>
   status). The page is ~40 KB of self-contained inline HTML/CSS/JS: no CDN, no
   external request, nothing served from disk, and no path parameter is used as a
   filesystem path (a session id is only matched against the registry).
-* **Interactive input (`/api/input/<session_id>?t=<token>`, ADR-0033).**
+* **Interactive input (`/api/input/<session_id>?t=<token>&g=<guest_gen>`, ADR-0033).**
   - Opened **lazily** on the first human pointer, wheel, keyboard, or toolbar
-    (`Back`, `Home`, `Recents`, `Rotate`) interaction over an RFC 6455 WebSocket
-    with the same `Host`, constant-time token, and 64-connection cap checks.
+    (`Back`, `Home`, `Recents`, `Rotate`) interaction over an RFC 6455
+    (`Sec-WebSocket-Version: 13`) WebSocket with the same `Host`, constant-time
+    token, guest-generation (`g`, rejecting stale generations with `409`), and
+    64-connection cap checks.
   - Messages are JSON in display coordinates:
     - `{"t":"touch","phase":"down|move|up|cancel","id":0,"x":540,"y":1200}`
     - `{"t":"scroll","x":540,"y":1200,"dx":0,"dy":450}`
@@ -420,10 +425,13 @@ acos view: http://127.0.0.1:54321/?t=<token>
     socket closes.
 * **Verify runs stay watch-only.** For sessions owned by `acos verify`
   (`watch_only: true`), the page shows a `watch-only: verify run` banner with
-  disabled toolbar buttons, and `/api/input` refuses every message with
-  `{"ok":false,"code":"VERIFY_WATCH_ONLY"}` while recording non-move input
-  refusals (`touch down`, `scroll`, `key`, `text`, `rotate`) in the event feed;
-  the verify verdict and settle rules are unaffected.
+  disabled toolbar buttons, and `/api/input` refuses every valid message that
+  reaches the watch-only check with `{"ok":false,"code":"VERIFY_WATCH_ONLY"}`
+  (malformed JSON and messages rejected earlier at queue admission return their
+  own error codes and emit no watch-only marker). Refusals for `touch down`,
+  `scroll`, `key down`/`press`, `text`, and `rotate` (not `touch move`/`up` or
+  `key up`) are recorded in the event feed; the verify verdict and settle rules
+  are unaffected.
 * **One upstream per session, only while watched.** The first browser
   connection to a session makes the hub connect to its `stream_socket` and send
   the one subscribe line; later connections join the same subscription (one

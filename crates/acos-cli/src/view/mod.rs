@@ -331,10 +331,11 @@ fn handle(mut connection: TcpStream, token: &str, hub: &Arc<Hub>, port: u16) {
     }
 }
 
-/// WebSocket endpoint `/api/input/<session_id>?t=<token>` (HUMANVIEW1).
+/// WebSocket endpoint `/api/input/<session_id>?t=<token>&g=<guest_gen>` (HUMANVIEW1).
 ///
-/// Enforces WebSocket upgrade headers, looks up the live session, upgrades the
-/// TCP stream to RFC 6455, and forwards JSON input messages to the session's
+/// Enforces WebSocket upgrade headers (including `Sec-WebSocket-Version: 13`),
+/// verifies the session and non-secret `guest_gen` binding, upgrades the TCP
+/// stream to RFC 6455, and forwards JSON input messages to the session's
 /// ordered input worker until close/EOF (which cancels active pointers/keys).
 fn handle_input_ws(
     mut connection: TcpStream,
@@ -365,6 +366,17 @@ fn handle_input_ws(
         return;
     };
 
+    // RFC 6455 §4.2.1 / §4.4: validate Sec-WebSocket-Version before upgrading
+    // or allocating an input client, advertising supported version 13 on 426.
+    let ws_version_ok = request
+        .sec_websocket_version
+        .as_deref()
+        .is_some_and(|v| v.trim() == "13");
+    if !ws_version_ok {
+        let _ = respond_ws_version_required(&mut connection);
+        return;
+    }
+
     if session_id.is_empty() {
         let _ = respond(
             &mut connection,
@@ -375,14 +387,46 @@ fn handle_input_ws(
         return;
     }
 
-    let Some(client) = hub.open_input(&session_id) else {
+    let Some(expected_guest_gen) = request
+        .param("g")
+        .and_then(|v| v.trim().parse::<u64>().ok())
+        .filter(|&g| g > 0)
+    else {
         let _ = respond(
             &mut connection,
-            404,
+            400,
             "text/plain; charset=utf-8",
-            b"404 no live session for that session_id\n",
+            b"400 bad request: missing or invalid guest generation parameter g\n",
         );
         return;
+    };
+
+    let client = match hub.open_input_checked(&session_id, expected_guest_gen) {
+        Ok(client) => client,
+        Err(hub::OpenInputError::NotFound) => {
+            let _ = respond(
+                &mut connection,
+                404,
+                "text/plain; charset=utf-8",
+                b"404 no live session for that session_id\n",
+            );
+            return;
+        }
+        Err(hub::OpenInputError::Replaced) => {
+            let body = json!({
+                "ok": false,
+                "code": "SESSION_REPLACED",
+                "error": "session was replaced by a newer guest; reopen detail view",
+            })
+            .to_string();
+            let _ = respond(
+                &mut connection,
+                409,
+                "application/json; charset=utf-8",
+                body.as_bytes(),
+            );
+            return;
+        }
     };
 
     if ws::write_handshake_response(&mut connection, ws_key).is_err() {
@@ -397,7 +441,9 @@ fn handle_input_ws(
     loop {
         match ws::read_message_with_writer(&mut connection, &writer) {
             Ok(Some(ws::WsMessage::Text(text))) => {
-                client.enqueue(&text, Arc::clone(&writer));
+                if !client.enqueue(&text, Arc::clone(&writer)) {
+                    break;
+                }
             }
             Ok(Some(ws::WsMessage::Binary(_))) => {
                 let err = json!({
@@ -443,6 +489,9 @@ fn stream_frames(mut connection: TcpStream, hub: &Arc<Hub>, session_id: String) 
     let mut cursor = 0u64;
     let mut first = true;
     loop {
+        if watcher.is_replaced() {
+            break;
+        }
         match watcher.wait_frame(cursor, EOF_POLL) {
             Some(frame) => {
                 cursor = frame.index;
@@ -474,7 +523,7 @@ fn stream_frames(mut connection: TcpStream, hub: &Arc<Hub>, session_id: String) 
                 }
             }
             None => {
-                if peer_closed(&connection) {
+                if watcher.is_replaced() || peer_closed(&connection) {
                     break;
                 }
             }
@@ -511,6 +560,7 @@ fn stream_events(mut connection: TcpStream, hub: &Arc<Hub>, session_id: String) 
 
     let state = json!({
         "entry": watcher.entry().to_json(),
+        "guest_gen": watcher.guest_gen(),
         "hello": watcher.hello(),
         "connected": watcher.stream_state().0,
     });
@@ -520,6 +570,11 @@ fn stream_events(mut connection: TcpStream, hub: &Arc<Hub>, session_id: String) 
 
     let mut cursor = watcher.event_cursor();
     loop {
+        if watcher.is_replaced() {
+            let replaced = json!({ "code": "SESSION_REPLACED", "guest_gen": watcher.guest_gen() });
+            let _ = send_event(&mut connection, "replaced", &replaced.to_string());
+            break;
+        }
         let batch = watcher.wait_events(cursor, Duration::from_secs(5));
         if batch.missed > 0 {
             let missed = json!({"missed": batch.missed});
@@ -528,6 +583,12 @@ fn stream_events(mut connection: TcpStream, hub: &Arc<Hub>, session_id: String) 
             }
         }
         if batch.events.is_empty() {
+            if watcher.is_replaced() {
+                let replaced =
+                    json!({ "code": "SESSION_REPLACED", "guest_gen": watcher.guest_gen() });
+                let _ = send_event(&mut connection, "replaced", &replaced.to_string());
+                break;
+            }
             // Keep-alive: also how a vanished browser is noticed on a quiet feed.
             if connection.write_all(b": keepalive\n\n").is_err() || connection.flush().is_err() {
                 break;
@@ -585,6 +646,24 @@ fn peer_closed(connection: &TcpStream) -> bool {
     io::Error::last_os_error().kind() != ErrorKind::WouldBlock
 }
 
+fn respond_ws_version_required(connection: &mut TcpStream) -> io::Result<()> {
+    let body = b"426 upgrade required: Sec-WebSocket-Version 13 required\n";
+    write!(
+        connection,
+        "HTTP/1.1 426 Upgrade Required\r\n\
+         Sec-WebSocket-Version: 13\r\n\
+         Content-Type: text/plain; charset=utf-8\r\n\
+         Content-Length: {}\r\n\
+         Cache-Control: no-store\r\n\
+         X-Content-Type-Options: nosniff\r\n\
+         Referrer-Policy: no-referrer\r\n\
+         Connection: close\r\n\r\n",
+        body.len()
+    )?;
+    connection.write_all(body)?;
+    connection.flush()
+}
+
 fn respond(
     connection: &mut TcpStream,
     status: u16,
@@ -597,6 +676,7 @@ fn respond(
         403 => "Forbidden",
         404 => "Not Found",
         405 => "Method Not Allowed",
+        409 => "Conflict",
         _ => "Error",
     };
     write!(
@@ -622,6 +702,7 @@ struct Request {
     upgrade: Option<String>,
     connection: Option<String>,
     sec_websocket_key: Option<String>,
+    sec_websocket_version: Option<String>,
 }
 
 impl Request {
@@ -674,6 +755,7 @@ fn read_request(connection: &mut TcpStream) -> Option<Request> {
     let mut upgrade = None;
     let mut conn_hdr = None;
     let mut sec_websocket_key = None;
+    let mut sec_websocket_version = None;
     for header_line in text.lines().skip(1).take_while(|line| !line.is_empty()) {
         let Some((name, value)) = header_line.split_once(':') else {
             continue;
@@ -688,6 +770,8 @@ fn read_request(connection: &mut TcpStream) -> Option<Request> {
             conn_hdr = Some(value);
         } else if name.eq_ignore_ascii_case("sec-websocket-key") {
             sec_websocket_key = Some(value);
+        } else if name.eq_ignore_ascii_case("sec-websocket-version") {
+            sec_websocket_version = Some(value);
         }
     }
     Some(Request {
@@ -698,6 +782,7 @@ fn read_request(connection: &mut TcpStream) -> Option<Request> {
         upgrade,
         connection: conn_hdr,
         sec_websocket_key,
+        sec_websocket_version,
     })
 }
 
@@ -740,6 +825,7 @@ impl SessionView {
     pub fn to_json(&self) -> serde_json::Value {
         let mut doc = self.entry.to_json();
         if let Some(object) = doc.as_object_mut() {
+            object.insert("guest_gen".to_string(), json!(self.guest_gen));
             object.insert("watchers".to_string(), json!(self.watchers));
             object.insert("connected".to_string(), json!(self.connected));
             object.insert("age_ms".to_string(), json!(age_ms(&self.entry)));
@@ -1109,7 +1195,6 @@ mod tests {
         let accepts_thread = Arc::clone(&accepts);
         let serving_thread = Arc::clone(&serving);
         std::thread::spawn(move || {
-            use std::io::Write;
             for stream in listener.incoming() {
                 let Ok(mut stream) = stream else { break };
                 accepts_thread.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
@@ -1353,13 +1438,49 @@ mod tests {
             status_of(&server.raw(&format!("/api/input/s_ws?t={}", server.token))),
             400
         );
+        // 3b. Unsupported Sec-WebSocket-Version (12) -> 426 advertising 13.
+        let mut bad_ver = TcpStream::connect((Ipv4Addr::LOCALHOST, server.port)).unwrap();
+        write!(
+            bad_ver,
+            "GET /api/input/s_ws?t={}&g=1 HTTP/1.1\r\nHost: 127.0.0.1:{}\r\n\
+             Upgrade: websocket\r\nConnection: Upgrade\r\n\
+             Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\
+             Sec-WebSocket-Version: 12\r\n\r\n",
+            server.token, server.port
+        )
+        .unwrap();
+        let mut resp426 = Vec::new();
+        let _ = bad_ver.read_to_end(&mut resp426);
+        assert_eq!(status_of(&resp426), 426);
+        let text426 = String::from_utf8_lossy(&resp426);
+        assert!(
+            text426.contains("Sec-WebSocket-Version: 13"),
+            "426 response must advertise supported version 13: {text426}"
+        );
+
+        // 3c. Missing guest generation `g` -> 400.
+        let mut missing_g = TcpStream::connect((Ipv4Addr::LOCALHOST, server.port)).unwrap();
+        write!(
+            missing_g,
+            "GET /api/input/s_ws?t={} HTTP/1.1\r\nHost: 127.0.0.1:{}\r\n\
+             Upgrade: websocket\r\nConnection: Upgrade\r\n\
+             Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\
+             Sec-WebSocket-Version: 13\r\n\r\n",
+            server.token, server.port
+        )
+        .unwrap();
+        let mut resp400g = Vec::new();
+        let _ = missing_g.read_to_end(&mut resp400g);
+        assert_eq!(status_of(&resp400g), 400);
+
         // 4. Valid WS upgrade for missing session -> 404.
         let mut missing = TcpStream::connect((Ipv4Addr::LOCALHOST, server.port)).unwrap();
         write!(
             missing,
-            "GET /api/input/nope?t={} HTTP/1.1\r\nHost: 127.0.0.1:{}\r\n\
+            "GET /api/input/nope?t={}&g=1 HTTP/1.1\r\nHost: 127.0.0.1:{}\r\n\
              Upgrade: websocket\r\nConnection: Upgrade\r\n\
-             Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\r\n",
+             Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\
+             Sec-WebSocket-Version: 13\r\n\r\n",
             server.token, server.port
         )
         .unwrap();
@@ -1367,15 +1488,38 @@ mod tests {
         let _ = missing.read_to_end(&mut resp404);
         assert_eq!(status_of(&resp404), 404);
 
+        // 4b. Mismatched guest generation -> 409 SESSION_REPLACED.
+        let guest_gen = server.hub.list()[0].guest_gen;
+        let mut stale_g = TcpStream::connect((Ipv4Addr::LOCALHOST, server.port)).unwrap();
+        write!(
+            stale_g,
+            "GET /api/input/s_ws?t={}&g={} HTTP/1.1\r\nHost: 127.0.0.1:{}\r\n\
+             Upgrade: websocket\r\nConnection: Upgrade\r\n\
+             Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\
+             Sec-WebSocket-Version: 13\r\n\r\n",
+            server.token,
+            guest_gen + 99,
+            server.port
+        )
+        .unwrap();
+        let mut resp409 = Vec::new();
+        let _ = stale_g.read_to_end(&mut resp409);
+        assert_eq!(status_of(&resp409), 409);
+        assert!(
+            String::from_utf8_lossy(&resp409).contains("SESSION_REPLACED"),
+            "409 must report SESSION_REPLACED"
+        );
+
         // 5. Real WS upgrade + input messages + mid-gesture drop -> ACTION_CANCEL.
         let mut ws_cli = TcpStream::connect((Ipv4Addr::LOCALHOST, server.port)).unwrap();
         let _ = ws_cli.set_read_timeout(Some(Duration::from_secs(5)));
         write!(
             ws_cli,
-            "GET /api/input/s_ws?t={} HTTP/1.1\r\nHost: 127.0.0.1:{}\r\n\
+            "GET /api/input/s_ws?t={}&g={} HTTP/1.1\r\nHost: 127.0.0.1:{}\r\n\
              Upgrade: websocket\r\nConnection: Upgrade\r\n\
-             Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\r\n",
-            server.token, server.port
+             Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\
+             Sec-WebSocket-Version: 13\r\n\r\n",
+            server.token, guest_gen, server.port
         )
         .unwrap();
         let head = read_response_head(&mut ws_cli);

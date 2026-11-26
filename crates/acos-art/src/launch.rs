@@ -8643,6 +8643,7 @@ fn interactive_serve(
                             "width": display.frame.width(),
                             "height": display.frame.height(),
                             "probe_seq": sample.seq,
+                            "frame_seq": latest_generation(live),
                             "tree": sample.tree,
                         });
                         protocol_write(&reply);

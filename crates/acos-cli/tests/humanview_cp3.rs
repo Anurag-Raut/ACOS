@@ -267,14 +267,44 @@ struct WsClient {
 }
 
 impl WsClient {
+    fn fetch_guest_gen(port: u16, token: &str, session_id: &str) -> u64 {
+        let mut s = TcpStream::connect((Ipv4Addr::LOCALHOST, port)).expect("connect /api/sessions");
+        s.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
+        write!(
+            s,
+            "GET /api/sessions?t={token} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nConnection: close\r\n\r\n"
+        )
+        .unwrap();
+        s.flush().unwrap();
+        let mut raw = Vec::new();
+        let _ = s.read_to_end(&mut raw);
+        let text = String::from_utf8_lossy(&raw);
+        let body = text
+            .split_once("\r\n\r\n")
+            .map(|(_, b)| b)
+            .expect("HTTP response body from /api/sessions");
+        let doc: Value = serde_json::from_str(body).expect("JSON from /api/sessions");
+        doc["sessions"]
+            .as_array()
+            .and_then(|arr| {
+                arr.iter()
+                    .find(|item| item["session_id"].as_str() == Some(session_id))
+            })
+            .and_then(|item| item["guest_gen"].as_u64())
+            .unwrap_or_else(|| {
+                panic!("guest_gen not found for session {session_id} in /api/sessions: {doc}")
+            })
+    }
+
     fn connect(port: u16, token: &str, session_id: &str) -> Self {
+        let guest_gen = Self::fetch_guest_gen(port, token, session_id);
         let mut stream = TcpStream::connect((Ipv4Addr::LOCALHOST, port)).expect("connect ws");
         stream
             .set_read_timeout(Some(Duration::from_secs(10)))
             .unwrap();
         write!(
             stream,
-            "GET /api/input/{session_id}?t={token} HTTP/1.1\r\n\
+            "GET /api/input/{session_id}?t={token}&g={guest_gen} HTTP/1.1\r\n\
              Host: 127.0.0.1:{port}\r\n\
              Upgrade: websocket\r\n\
              Connection: Upgrade\r\n\
@@ -943,7 +973,9 @@ fn cp3_live_drag_fling_long_press_and_rotate() {
     std::thread::sleep(Duration::from_millis(150));
     let obs_wheel = conn.call("acos_observe", json!({ "base": base_list, "tree": true }));
     let rows_wheel = visible_row_indices(&obs_wheel);
-    let min_wheel = *rows_wheel.first().unwrap_or(&0);
+    let min_wheel = *rows_wheel
+        .first()
+        .unwrap_or_else(|| panic!("wheel scroll observation contained no rows: {obs_wheel:#?}"));
     if at_bottom {
         assert!(
             min_wheel < min_fling,
@@ -1156,24 +1188,35 @@ steps:
     }
 
     // Event feed records VERIFY_WATCH_ONLY; frame stream never upgrades to 1.0x
-    // even when the scenario produces a fresh frame while WS is open.
+    // even when the scenario's tap produces a new frame while WS is open.
     let evs = sse.wait_until(
-        |evs| evs.iter().any(|e| e["status"] == "VERIFY_WATCH_ONLY"),
-        Duration::from_secs(10),
+        |evs| {
+            evs.iter().any(|e| e["status"] == "VERIFY_WATCH_ONLY")
+                && evs.iter().any(|e| e["cmd"] == "tap" && e["status"] == "ok")
+        },
+        Duration::from_secs(15),
     );
     assert!(evs.iter().any(|e| e["status"] == "VERIFY_WATCH_ONLY"));
-    let f_fresh = frames.wait_match(
-        |p| p.stream_idx > f0.stream_idx,
+    let tap_frame_seq = evs
+        .iter()
+        .find(|e| e["cmd"] == "tap" && e["status"] == "ok")
+        .and_then(|e| e.get("frame_seq"))
+        .and_then(|v| v.as_u64());
+    let min_tap_seq = tap_frame_seq
+        .map(|s| s.max(f0.seq + 1))
+        .unwrap_or(f0.seq + 1);
+    let f_tap = frames.wait_match(
+        |p| p.stream_idx > f0.stream_idx && p.seq >= min_tap_seq && p.bytes != f0.bytes,
         Duration::from_secs(12),
-        "fresh verify frame while WS is open",
+        "scenario tap-produced verify frame while WS is open",
     );
     assert_eq!(
-        f_fresh.content_type, "image/png",
-        "verify stream must stay PNG while WS is open"
+        f_tap.content_type, "image/png",
+        "verify stream must stay PNG on tap-produced frame while WS is open"
     );
     assert_eq!(
-        f_fresh.w, 540,
-        "verify stream must never upgrade to 1.0x resolution while WS is open"
+        f_tap.w, 540,
+        "verify stream must never upgrade to 1.0x resolution on tap-produced frame while WS is open"
     );
     for part in frames.drain_seen() {
         assert_eq!(
