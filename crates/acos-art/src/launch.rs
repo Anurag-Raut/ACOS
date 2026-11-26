@@ -4235,10 +4235,24 @@ impl ShortSocketDir {
             );
         }
         candidates.push(PathBuf::from(format!("/dev/shm/acos-{kind}-{id}")));
+        Self::select_candidate(candidates, kind == "view")
+    }
+
+    fn select_candidate(candidates: Vec<PathBuf>, is_view: bool) -> std::io::Result<Self> {
         let mut last = None;
         for dir in candidates {
+            if !socket_dir_fits_sun_path(&dir) {
+                last = Some(std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    format!(
+                        "socket dir {} exceeds unix sun_path limit",
+                        dir.display()
+                    ),
+                ));
+                continue;
+            }
             match private_dir(&dir) {
-                Ok(()) => return Ok(Self(dir, kind == "view")),
+                Ok(()) => return Ok(Self(dir, is_view)),
                 Err(e) => last = Some(e),
             }
         }
@@ -4256,6 +4270,24 @@ impl ShortSocketDir {
         private_dir(dir)?;
         Ok(Self(dir.to_path_buf(), false))
     }
+}
+
+/// True when `dir/<socket-leaf>` fits within the platform's `sockaddr_un::sun_path`
+/// buffer (including the separating `/` and trailing NUL byte).
+fn socket_dir_fits_sun_path(dir: &Path) -> bool {
+    use std::os::unix::ffi::OsStrExt;
+    // Covers every socket leaf bound inside ShortSocketDir (`webview.sock` = 12,
+    // `peer.sock` = 9, `view.sock` = 9, `dnsproxyd` = 9, `logdw` = 5) with headroom.
+    const MAX_SOCKET_LEAF_BYTES: usize = 16;
+    // SAFETY: zeroed `sockaddr_un` is valid; only inspecting `sun_path` array length.
+    let sun_path_cap = unsafe { std::mem::zeroed::<libc::sockaddr_un>() }
+        .sun_path
+        .len();
+    dir.as_os_str()
+        .as_bytes()
+        .len()
+        .saturating_add(1 + MAX_SOCKET_LEAF_BYTES + 1)
+        <= sun_path_cap
 }
 
 /// Create (or verify) a directory that only this uid may use: 0700 and ours.
@@ -11681,6 +11713,27 @@ mod view_socket_dir_tests {
             private_dir(&link).is_err(),
             "a symlink is refused, not followed"
         );
+    }
+
+    #[test]
+    fn select_candidate_skips_overlong_paths_before_creating_them() {
+        let base = ShortSocketDir::new_named("view").expect("scratch");
+        let too_long = base.0.join("x".repeat(95));
+        let fallback = base.0.join("ok");
+        assert!(!socket_dir_fits_sun_path(&too_long));
+        assert!(socket_dir_fits_sun_path(&fallback));
+        let selected = ShortSocketDir::select_candidate(
+            vec![too_long.clone(), fallback.clone()],
+            true,
+        )
+        .expect("fallback should be selected");
+        assert_eq!(selected.0, fallback);
+        assert!(
+            !too_long.exists(),
+            "overlong candidate must be skipped before private_dir creates it"
+        );
+        // If all candidates are overlong, selection fails cleanly.
+        assert!(ShortSocketDir::select_candidate(vec![too_long], true).is_err());
     }
 }
 
