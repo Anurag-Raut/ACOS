@@ -8838,7 +8838,7 @@ fn interactive_serve(
                 let now_ns = acos_services::input_channel::monotonic_nanos();
                 let key_wait = Duration::from_millis(250);
                 let res = match event_type {
-                    "down" => live.input.key_event(
+                    "down" => live.input.key_event_checked(
                         acos_services::input_channel::KEY_ACTION_DOWN,
                         code,
                         meta_state,
@@ -8847,7 +8847,7 @@ fn interactive_serve(
                         now_ns,
                         key_wait,
                     ),
-                    "up" => live.input.key_event(
+                    "up" => live.input.key_event_checked(
                         acos_services::input_channel::KEY_ACTION_UP,
                         code,
                         meta_state,
@@ -8857,15 +8857,11 @@ fn interactive_serve(
                         key_wait,
                     ),
                     _ => {
-                        // Always attempt the paired KEY_ACTION_UP even if
-                        // KEY_ACTION_DOWN returns an error: `key_event` can
-                        // fail during ack collection after already publishing
-                        // KEY_ACTION_DOWN, and leaving the key un-released
-                        // would stick it down in the guest. (If DOWN failed
-                        // pre-publish, UP either fails harmlessly or is a
-                        // no-op on Android.) Return `down_res.and(up_res)` so
-                        // any failure still surfaces.
-                        let down_res = live.input.key_event(
+                        // Attempt the paired KEY_ACTION_UP whenever KEY_ACTION_DOWN
+                        // was published (even if ack collection failed), so the key
+                        // is not left stuck down in the guest. If DOWN failed
+                        // pre-publish, surface the rejection without a spurious UP.
+                        let down_res = live.input.key_event_checked(
                             acos_services::input_channel::KEY_ACTION_DOWN,
                             code,
                             meta_state,
@@ -8874,22 +8870,49 @@ fn interactive_serve(
                             now_ns,
                             key_wait,
                         );
-                        let up_res = live.input.key_event(
-                            acos_services::input_channel::KEY_ACTION_UP,
-                            code,
-                            meta_state,
-                            device_id,
-                            now_ns,
-                            now_ns + acos_services::input_channel::DEFAULT_TAP_HOLD_NANOS,
-                            key_wait,
-                        );
-                        down_res.and(up_res)
+                        match down_res {
+                            Err((err, false)) => Err((err, false)),
+                            Ok(_) => live
+                                .input
+                                .key_event_checked(
+                                    acos_services::input_channel::KEY_ACTION_UP,
+                                    code,
+                                    meta_state,
+                                    device_id,
+                                    now_ns,
+                                    now_ns + acos_services::input_channel::DEFAULT_TAP_HOLD_NANOS,
+                                    key_wait,
+                                )
+                                .map_err(|(up_err, _)| (up_err, true)),
+                            Err((down_err, true)) => {
+                                let up_res = live.input.key_event_checked(
+                                    acos_services::input_channel::KEY_ACTION_UP,
+                                    code,
+                                    meta_state,
+                                    device_id,
+                                    now_ns,
+                                    now_ns + acos_services::input_channel::DEFAULT_TAP_HOLD_NANOS,
+                                    key_wait,
+                                );
+                                match up_res {
+                                    Ok(_) => Err((down_err, false)),
+                                    Err((up_err, _)) => Err((up_err, true)),
+                                }
+                            }
+                        }
                     }
                 };
                 match res {
                     Ok(_) => protocol_write(&serde_json::json!({"ok": true, "cmd": "panel_key", "code": code})),
-                    Err(err) => protocol_write(&serde_json::json!({
-                        "ok": false, "cmd": "panel_key", "code": "INPUT_UNAVAILABLE",
+                    Err((err, published)) => protocol_write(&serde_json::json!({
+                        "ok": false,
+                        "cmd": "panel_key",
+                        "code": if published {
+                            "INPUT_PUBLISHED_ACK_FAILED"
+                        } else {
+                            "INPUT_UNAVAILABLE"
+                        },
+                        "published": published,
                         "error": format!("panel_key failed: {err}"),
                     })),
                 }
@@ -11721,13 +11744,44 @@ mod view_socket_dir_tests {
 
     #[test]
     fn select_candidate_skips_overlong_paths_before_creating_them() {
+        use std::os::unix::fs::DirBuilderExt;
         let mut candidates = ShortSocketDir::candidate_dirs("view");
-        candidates.push(PathBuf::from(format!(
-            "/tmp/acos-st-{}",
-            std::process::id()
-        )));
         candidates.retain(|dir| socket_dir_fits_sun_path(&dir.join("ok")));
         let base = ShortSocketDir::select_candidate(candidates, true)
+            .or_else(|_| -> std::io::Result<ShortSocketDir> {
+                let mut last = None;
+                let base_nonce = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|d| d.as_nanos() as u64)
+                    .unwrap_or(0);
+                for attempt in 0u64..16 {
+                    let dir = PathBuf::from(format!(
+                        "/tmp/acos-st-{}-{:08x}",
+                        std::process::id(),
+                        (base_nonce ^ attempt) as u32
+                    ));
+                    if !socket_dir_fits_sun_path(&dir.join("ok")) {
+                        continue;
+                    }
+                    match fs::DirBuilder::new().mode(0o700).create(&dir) {
+                        Ok(()) => match private_dir(&dir) {
+                            Ok(()) => return Ok(ShortSocketDir(dir, true)),
+                            Err(e) => {
+                                let _ = fs::remove_dir(&dir);
+                                return Err(e);
+                            }
+                        },
+                        Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => last = Some(e),
+                        Err(e) => return Err(e),
+                    }
+                }
+                Err(last.unwrap_or_else(|| {
+                    std::io::Error::new(
+                        std::io::ErrorKind::AlreadyExists,
+                        "failed to allocate unique scratch root under /tmp",
+                    )
+                }))
+            })
             .expect("short scratch root");
         let too_long = base.0.join("x".repeat(95));
         let fallback = base.0.join("ok");

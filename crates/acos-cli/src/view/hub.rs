@@ -3103,19 +3103,38 @@ impl InputWorker {
                     }
                 }
             }
-            KeyPhase::Press => match self.call_daemon("panel_key", payload) {
-                Ok(_) => {
-                    self.held_keys
-                        .retain(|&(cid, _, c)| !(cid == client_id && c == code));
-                    json!({ "ok": true, "t": "key", "code": code, "phase": event_type })
+            KeyPhase::Press => {
+                if self
+                    .held_keys
+                    .iter()
+                    .any(|&(cid, _, c)| cid != client_id && c == code)
+                {
+                    return err_json(
+                        "INVALID_STATE",
+                        "cannot press key while another client holds it down",
+                    );
                 }
-                Err((c, m)) => {
-                    if self.slot.is_replaced() || is_guest_gone_code(&c) {
-                        self.clear_guest_key_state();
+                match self.call_daemon_outcome("panel_key", payload) {
+                    Ok(_) => {
+                        self.held_keys
+                            .retain(|&(cid, _, c)| !(cid == client_id && c == code));
+                        json!({ "ok": true, "t": "key", "code": code, "phase": event_type })
                     }
-                    err_json(&c, &m)
+                    Err((c, m, may_have_fired)) => {
+                        if self.slot.is_replaced() || is_guest_gone_code(&c) {
+                            self.clear_guest_key_state();
+                        } else if may_have_fired {
+                            self.held_keys
+                                .retain(|&(cid, _, c)| !(cid == client_id && c == code));
+                            if !self.pending_key_ups.contains(&code) {
+                                self.pending_key_ups.push(code);
+                                self.bump_recovery_episode();
+                            }
+                        }
+                        err_json(&c, &m)
+                    }
                 }
-            },
+            }
         }
     }
 
@@ -7121,6 +7140,17 @@ mod tests {
             "first client Up must not release key while second client still holds it"
         );
 
+        // Client3 sends Press while client2 still holds KEYCODE_A -> must reject with INVALID_STATE
+        // without forwarding Down+Up to the daemon (which would release client2's hold).
+        client3.enqueue(r#"{"t":"key","code":"KEYCODE_A","phase":"press"}"#, Arc::clone(&tx3));
+        let r3_press = read_server_ws_text(&mut rx3);
+        assert_eq!(r3_press["ok"], json!(false));
+        assert_eq!(r3_press["code"], json!("INVALID_STATE"));
+        assert!(
+            daemon.calls.lock().unwrap().is_empty(),
+            "Press from another client must not release a held key"
+        );
+
         // Client2 (now the last owner) releases KEYCODE_A -> MUST send Up to daemon.
         client2.enqueue(r#"{"t":"key","code":"KEYCODE_A","phase":"up"}"#, Arc::clone(&tx2));
         let r2 = read_server_ws_text(&mut rx2);
@@ -7131,6 +7161,17 @@ mod tests {
         assert_eq!(calls[0].0, "panel_key");
         assert_eq!(calls[0].1["code"], json!(29));
         assert_eq!(calls[0].1["event_type"], json!("up"));
+
+        // Once no other client holds KEYCODE_A, client3's Press succeeds and forwards to daemon.
+        daemon.calls.lock().unwrap().clear();
+        client3.enqueue(r#"{"t":"key","code":"KEYCODE_A","phase":"press"}"#, Arc::clone(&tx3));
+        let r3_press_ok = read_server_ws_text(&mut rx3);
+        assert_eq!(r3_press_ok["ok"], json!(true));
+        let press_calls = daemon.calls.lock().unwrap().clone();
+        assert_eq!(press_calls.len(), 1);
+        assert_eq!(press_calls[0].0, "panel_key");
+        assert_eq!(press_calls[0].1["code"], json!(29));
+        assert_eq!(press_calls[0].1["event_type"], json!("press"));
 
         // Another unrecorded Up with no owners left -> ignored cleanly without calling daemon.
         daemon.calls.lock().unwrap().clear();
