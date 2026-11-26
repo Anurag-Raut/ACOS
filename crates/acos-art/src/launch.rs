@@ -7465,6 +7465,7 @@ struct PanelTouchError {
 }
 
 impl PanelTouchState {
+    #[cfg(test)]
     fn dispatch(
         &mut self,
         input: &acos_services::window_session::input_dispatch::InputHost,
@@ -7474,15 +7475,29 @@ impl PanelTouchState {
         pointers: &[(i32, f32, f32)],
         touch_wait: Duration,
     ) -> std::result::Result<PanelTouchOutcome, PanelTouchError> {
+        self.dispatch_with_hit_point(input, action, down_time, event_time, pointers, None, touch_wait)
+    }
+
+    fn dispatch_with_hit_point(
+        &mut self,
+        input: &acos_services::window_session::input_dispatch::InputHost,
+        action: i32,
+        down_time: i64,
+        event_time: i64,
+        pointers: &[(i32, f32, f32)],
+        hit_point: Option<(f32, f32)>,
+        touch_wait: Duration,
+    ) -> std::result::Result<PanelTouchOutcome, PanelTouchError> {
         let masked_action = action & 0xff;
         let pointer_index = ((action >> 8) & 0xff) as usize;
         match masked_action {
             acos_services::input_channel::ACTION_DOWN => {
                 self.target = None;
                 self.active_pointers.clear();
-                match input.touch_frame_checked(
+                match input.touch_frame_checked_with_hit_point(
                     action,
                     &mut self.target,
+                    hit_point,
                     down_time,
                     event_time,
                     pointers,
@@ -8620,6 +8635,44 @@ fn interactive_serve(
                     }));
                     continue;
                 };
+                let target: Option<(f32, f32)> = match request.get("target") {
+                    None | Some(serde_json::Value::Null) => None,
+                    Some(v) => {
+                        let parsed = v.as_array().and_then(|arr| {
+                            if arr.len() != 2 {
+                                return None;
+                            }
+                            let tx = arr[0].as_f64()? as f32;
+                            let ty = arr[1].as_f64()? as f32;
+                            if tx.is_finite() && ty.is_finite() {
+                                Some((tx, ty))
+                            } else {
+                                None
+                            }
+                        });
+                        let Some(pt) = parsed else {
+                            protocol_write(&serde_json::json!({
+                                "ok": false, "cmd": "panel_touch", "code": "BAD_REQUEST",
+                                "error": "panel_touch target must be [x, y]",
+                            }));
+                            continue;
+                        };
+                        Some(pt)
+                    }
+                };
+                let gesture = match request.get("gesture") {
+                    None | Some(serde_json::Value::Null) => None,
+                    Some(v) => match v.as_str() {
+                        Some(g @ ("scroll" | "pinch")) => Some(g),
+                        _ => {
+                            protocol_write(&serde_json::json!({
+                                "ok": false, "cmd": "panel_touch", "code": "BAD_REQUEST",
+                                "error": "panel_touch gesture must be \"scroll\" or \"pinch\"",
+                            }));
+                            continue;
+                        }
+                    },
+                };
                 let masked_action = action & 0xff;
                 let touch_wait = if matches!(
                     masked_action,
@@ -8629,42 +8682,38 @@ fn interactive_serve(
                 } else {
                     Duration::from_millis(100)
                 };
-                match panel_touch.dispatch(
+                match panel_touch.dispatch_with_hit_point(
                     &live.input,
                     action,
                     down_time,
                     event_time,
                     &pointers,
+                    target,
                     touch_wait,
                 ) {
-                    Ok(PanelTouchOutcome::Dispatched) => {
-                        protocol_write(&serde_json::json!({
+                    Ok(outcome) => {
+                        let mut reply = serde_json::json!({
                             "ok": true,
                             "cmd": "panel_touch",
                             "action": masked_action,
                             "x": pointers[0].1.round() as i64,
                             "y": pointers[0].2.round() as i64,
-                        }));
-                    }
-                    Ok(PanelTouchOutcome::TargetClosed) => {
-                        protocol_write(&serde_json::json!({
-                            "ok": true,
-                            "cmd": "panel_touch",
-                            "action": masked_action,
-                            "target_closed": true,
-                            "x": pointers[0].1.round() as i64,
-                            "y": pointers[0].2.round() as i64,
-                        }));
-                    }
-                    Ok(PanelTouchOutcome::AlreadyEnded) => {
-                        protocol_write(&serde_json::json!({
-                            "ok": true,
-                            "cmd": "panel_touch",
-                            "action": masked_action,
-                            "already_ended": true,
-                            "x": pointers[0].1.round() as i64,
-                            "y": pointers[0].2.round() as i64,
-                        }));
+                        });
+                        if let Some(map) = reply.as_object_mut() {
+                            match outcome {
+                                PanelTouchOutcome::Dispatched => {}
+                                PanelTouchOutcome::TargetClosed => {
+                                    map.insert("target_closed".into(), serde_json::json!(true));
+                                }
+                                PanelTouchOutcome::AlreadyEnded => {
+                                    map.insert("already_ended".into(), serde_json::json!(true));
+                                }
+                            }
+                            if let Some(g) = gesture {
+                                map.insert("gesture".into(), serde_json::json!(g));
+                            }
+                        }
+                        protocol_write(&reply);
                     }
                     Err(PanelTouchError { err, published }) => {
                         protocol_write(&serde_json::json!({
@@ -12876,5 +12925,51 @@ mod panel_touch_tests {
         assert!(!state.active_pointers.contains(&1));
         assert!(dialog_guest.recv().expect("dialog pointer up").is_some());
         assert!(activity_guest.recv().expect("activity untouched").is_none());
+    }
+
+    #[test]
+    fn hit_point_pins_window_under_cursor_even_when_pointer_zero_starts_outside() {
+        let (host, _stack, mut dialog_guest, mut activity_guest, dialog_pt, activity_pt) =
+            host_with_dialog_over_activity();
+        let mut state = PanelTouchState::default();
+        let t0 = monotonic_nanos();
+
+        // Pointer 0 starts over ACTIVITY (as in a wide zoom-out pinch whose cursor
+        // is inside DIALOG), while `hit_point` is inside DIALOG.
+        assert_eq!(
+            state
+                .dispatch_with_hit_point(
+                    &host,
+                    ACTION_DOWN,
+                    t0,
+                    t0,
+                    &[(0, activity_pt.0, activity_pt.1)],
+                    Some(dialog_pt),
+                    Duration::ZERO,
+                )
+                .expect("down"),
+            PanelTouchOutcome::Dispatched
+        );
+        let ptr_down_1 = ACTION_POINTER_DOWN | (1 << ACTION_POINTER_INDEX_SHIFT);
+        assert_eq!(
+            state
+                .dispatch_with_hit_point(
+                    &host,
+                    ptr_down_1,
+                    t0,
+                    t0 + 1_000,
+                    &[(0, activity_pt.0, activity_pt.1), (1, dialog_pt.0, dialog_pt.1)],
+                    None,
+                    Duration::ZERO,
+                )
+                .expect("pointer down"),
+            PanelTouchOutcome::Dispatched
+        );
+        assert!(dialog_guest.recv().expect("dialog down").is_some());
+        assert!(dialog_guest.recv().expect("dialog pointer down").is_some());
+        assert!(
+            activity_guest.recv().expect("activity untouched").is_none(),
+            "gesture with cursor hit_point inside DIALOG must not hit ACTIVITY"
+        );
     }
 }

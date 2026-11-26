@@ -1796,6 +1796,9 @@ mod tests {
             "KEYCODE_VOLUME_UP",
             "KEYCODE_POWER",
             "KEYCODE_A",
+            "Power key",
+            "Send KEYCODE_POWER key event",
+            "producerGesture",
             "mirrorDisplayPoint",
             "addEventListener(\"paste\"",
             "t: \"pinch\"",
@@ -1804,6 +1807,14 @@ mod tests {
         ] {
             assert!(html.contains(needle), "page missing {needle}");
         }
+        assert!(
+            !html.contains("lastLocalGestureHint"),
+            "page must classify gestures from SSE stream, not client-local hints"
+        );
+        assert!(
+            !html.contains("Power / Wake"),
+            "page must not promise display wake/sleep for KEYCODE_POWER"
+        );
     }
 
     fn send(

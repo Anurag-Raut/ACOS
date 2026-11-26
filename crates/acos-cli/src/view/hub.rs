@@ -1416,9 +1416,7 @@ struct InputSlot {
 
 #[derive(Clone, Debug)]
 struct PendingTouchRecovery {
-    wire_id: i32,
-    x: f32,
-    y: f32,
+    pointers: Vec<(i32, f32, f32)>,
     down_time_ns: i64,
 }
 
@@ -2174,15 +2172,26 @@ impl InputWorker {
         }
         let ts = self.next_ts_ns();
         let (action, down_time, pointers) = if self.pointers.is_empty() {
-            (
-                ACTION_CANCEL,
-                rec.down_time_ns,
-                vec![json!([rec.wire_id, rec.x, rec.y])],
-            )
+            if rec.pointers.is_empty() {
+                self.pending_touch_recovery = None;
+                self.bump_recovery_episode();
+                return Ok(());
+            }
+            let ptrs: Vec<Value> = rec
+                .pointers
+                .iter()
+                .map(|&(wire_id, x, y)| json!([wire_id, x, y]))
+                .collect();
+            (ACTION_CANCEL, rec.down_time_ns, ptrs)
         } else {
+            let Some(&(wire_id, x, y)) = rec.pointers.first() else {
+                self.pending_touch_recovery = None;
+                self.bump_recovery_episode();
+                return Ok(());
+            };
             let mut ptrs = self.pointer_wire_list();
             let idx = ptrs.len() as i32;
-            ptrs.push(json!([rec.wire_id, rec.x, rec.y]));
+            ptrs.push(json!([wire_id, x, y]));
             (
                 ACTION_POINTER_UP | (idx << ACTION_POINTER_INDEX_SHIFT),
                 self.down_time_ns.unwrap_or(rec.down_time_ns),
@@ -2395,9 +2404,7 @@ impl InputWorker {
                                 // before the next touch/scroll or via bounded
                                 // scheduled retries.
                                 self.pending_touch_recovery = Some(PendingTouchRecovery {
-                                    wire_id: ptr.wire_id,
-                                    x: ptr.x,
-                                    y: ptr.y,
+                                    pointers: vec![(ptr.wire_id, ptr.x, ptr.y)],
                                     down_time_ns: down_time,
                                 });
                                 let _ = self.resolve_pending_touch_recovery();
@@ -2551,6 +2558,7 @@ impl InputWorker {
                     "down_time": down_time,
                     "event_time": event_time,
                     "pointers": [[0, px, py]],
+                    "gesture": "scroll",
                 }),
             ) {
                 Ok(_) => {
@@ -2564,9 +2572,7 @@ impl InputWorker {
                         && !is_guest_gone_code(&c)
                     {
                         self.pending_touch_recovery = Some(PendingTouchRecovery {
-                            wire_id: 0,
-                            x: px,
-                            y: py,
+                            pointers: vec![(0, px, py)],
                             down_time_ns: down_time,
                         });
                         let _ = self.resolve_pending_touch_recovery();
@@ -2617,6 +2623,8 @@ impl InputWorker {
             // Positive wheel delta (scroll down / trackpad pinch) zooms out.
             (mid_axis + travel, mid_axis - travel)
         };
+        let hit_x = x.clamp(0.0, (w - 1.0).max(0.0));
+        let hit_y = y.clamp(0.0, (h - 1.0).max(0.0));
         let a_max = a_start.max(a_end);
         let cx = x.clamp(4.0 + a_max, (w - 4.0 - a_max).max(4.0 + a_max));
         let cy = y.clamp(4.0 + a_max, (h - 4.0 - a_max).max(4.0 + a_max));
@@ -2628,7 +2636,7 @@ impl InputWorker {
         let end_now = monotonic_nanos();
         let down_time = (end_now - span_ns).max(self.last_event_time_ns + 1);
 
-        let mut frames: Vec<(i32, Vec<Value>, (f32, f32), i64)> = Vec::with_capacity(total_frames);
+        let mut frames: Vec<(i32, Vec<(i32, f32, f32)>, i64)> = Vec::with_capacity(total_frames);
         let p0_start = (cx - a_start, cy - a_start);
         let p1_start = (cx + a_start, cy + a_start);
         let p0_end = (cx - a_end, cy - a_end);
@@ -2636,17 +2644,12 @@ impl InputWorker {
 
         frames.push((
             ACTION_DOWN,
-            vec![json!([0, p0_start.0, p0_start.1])],
-            p0_start,
+            vec![(0, p0_start.0, p0_start.1)],
             down_time,
         ));
         frames.push((
             ACTION_POINTER_DOWN | (1 << ACTION_POINTER_INDEX_SHIFT),
-            vec![
-                json!([0, p0_start.0, p0_start.1]),
-                json!([1, p1_start.0, p1_start.1]),
-            ],
-            p0_start,
+            vec![(0, p0_start.0, p0_start.1), (1, p1_start.0, p1_start.1)],
             down_time + STEP_NS,
         ));
         for step in 1..=MOVE_STEPS {
@@ -2656,50 +2659,76 @@ impl InputWorker {
             let p1 = (cx + a, cy + a);
             frames.push((
                 ACTION_MOVE,
-                vec![json!([0, p0.0, p0.1]), json!([1, p1.0, p1.1])],
-                p0,
+                vec![(0, p0.0, p0.1), (1, p1.0, p1.1)],
                 down_time + ((step as i64) + 1) * STEP_NS,
             ));
         }
         frames.push((
             ACTION_POINTER_UP | (1 << ACTION_POINTER_INDEX_SHIFT),
-            vec![json!([0, p0_end.0, p0_end.1]), json!([1, p1_end.0, p1_end.1])],
-            p0_end,
+            vec![(0, p0_end.0, p0_end.1), (1, p1_end.0, p1_end.1)],
             down_time + ((MOVE_STEPS as i64) + 2) * STEP_NS,
         ));
         frames.push((
             ACTION_UP,
-            vec![json!([0, p0_end.0, p0_end.1])],
-            p0_end,
+            vec![(0, p0_end.0, p0_end.1)],
             down_time + ((MOVE_STEPS as i64) + 3) * STEP_NS,
         ));
 
-        let mut sent_down = false;
-        for (action, pointers, (p0x, p0y), event_time) in frames {
+        let mut active_contacts: Vec<(i32, f32, f32)> = Vec::new();
+        for (action, contacts, event_time) in frames {
             self.last_event_time_ns = event_time;
-            match self.call_daemon_outcome(
-                "panel_touch",
-                json!({
-                    "action": action,
-                    "down_time": down_time,
-                    "event_time": event_time,
-                    "pointers": pointers,
-                }),
-            ) {
-                Ok(_) => {
-                    if action == ACTION_DOWN {
-                        sent_down = true;
+            let pointers: Vec<Value> = contacts
+                .iter()
+                .map(|&(id, px, py)| json!([id, px, py]))
+                .collect();
+            let mut payload = json!({
+                "action": action,
+                "down_time": down_time,
+                "event_time": event_time,
+                "pointers": pointers,
+                "gesture": "pinch",
+            });
+            if action == ACTION_DOWN {
+                payload["target"] = json!([hit_x, hit_y]);
+            }
+            let masked_action = action & 0xff;
+            match self.call_daemon_outcome("panel_touch", payload) {
+                Ok(_) => match masked_action {
+                    ACTION_DOWN | ACTION_POINTER_DOWN | ACTION_MOVE => {
+                        active_contacts = contacts;
                     }
-                }
+                    ACTION_POINTER_UP => {
+                        active_contacts = contacts.into_iter().take(1).collect();
+                    }
+                    ACTION_UP => {
+                        active_contacts.clear();
+                    }
+                    _ => {}
+                },
                 Err((c, m, may_have_fired)) => {
-                    if (sent_down || (action == ACTION_DOWN && may_have_fired))
+                    let cancel_contacts = match masked_action {
+                        ACTION_DOWN => {
+                            if may_have_fired {
+                                contacts
+                            } else {
+                                Vec::new()
+                            }
+                        }
+                        ACTION_POINTER_DOWN | ACTION_MOVE => {
+                            if may_have_fired {
+                                contacts
+                            } else {
+                                active_contacts
+                            }
+                        }
+                        _ => active_contacts,
+                    };
+                    if !cancel_contacts.is_empty()
                         && !self.slot.is_replaced()
                         && !is_guest_gone_code(&c)
                     {
                         self.pending_touch_recovery = Some(PendingTouchRecovery {
-                            wire_id: 0,
-                            x: p0x,
-                            y: p0y,
+                            pointers: cancel_contacts,
                             down_time_ns: down_time,
                         });
                         let _ = self.resolve_pending_touch_recovery();
@@ -5854,6 +5883,13 @@ mod tests {
         assert_eq!(calls_in.len(), 10, "down + p_down + 6 moves + p_up + up");
         assert_eq!(calls_in[0].0, "panel_touch");
         assert_eq!(calls_in[0].1["action"], json!(ACTION_DOWN));
+        assert_eq!(
+            calls_in[0].1["target"],
+            json!([540.0, 1200.0]),
+            "ACTION_DOWN must pin hit-test target to the pinch cursor point"
+        );
+        assert_eq!(calls_in[0].1["gesture"], json!("pinch"));
+        assert!(calls_in[1].1.get("target").is_none());
         assert_eq!(calls_in[1].1["action"], json!(ACTION_POINTER_DOWN | (1 << ACTION_POINTER_INDEX_SHIFT)));
         for step in 2..8 {
             assert_eq!(calls_in[step].1["action"], json!(ACTION_MOVE));
@@ -5876,6 +5912,7 @@ mod tests {
 
         let mut prev_ts = 0i64;
         for (_, args) in &calls_in {
+            assert_eq!(args["gesture"], json!("pinch"));
             let ts = args["event_time"].as_i64().unwrap();
             assert!(ts > prev_ts, "timestamps must strictly advance");
             prev_ts = ts;
@@ -5887,18 +5924,25 @@ mod tests {
             }
         }
 
-        // Positive delta near edge -> zoom out (clamped inside bounds, fingers converge).
+        // Positive delta near edge -> zoom out (clamped inside bounds, fingers converge,
+        // hit-test target stays at the cursor point).
         daemon.calls.lock().unwrap().clear();
         client.enqueue(r#"{"t":"pinch","x":10,"y":10,"delta":120}"#, Arc::clone(&tx));
         let reply_out = read_server_ws_text(&mut rx);
         assert_eq!(reply_out["ok"], json!(true));
         let calls_out = daemon.calls.lock().unwrap().clone();
         assert_eq!(calls_out.len(), 10);
+        assert_eq!(
+            calls_out[0].1["target"],
+            json!([10.0, 10.0]),
+            "zoom-out ACTION_DOWN must also pin hit-test target to cursor point"
+        );
         assert!(
             span(&calls_out[8].1) < span(&calls_out[1].1),
             "positive delta must pinch fingers inward (zoom out)"
         );
         for (_, args) in &calls_out {
+            assert_eq!(args["gesture"], json!("pinch"));
             for p in args["pointers"].as_array().unwrap() {
                 let px = p[1].as_f64().unwrap();
                 let py = p[2].as_f64().unwrap();
@@ -5916,10 +5960,12 @@ mod tests {
         let root = scratch("pinch-fail");
         let socket = root.join("serve.sock");
         let listener = UnixListener::bind(&socket).expect("bind");
-        let seen = Arc::new(Mutex::new(Vec::<(String, Option<i64>)>::new()));
+        let seen = Arc::new(Mutex::new(Vec::<(String, Option<i64>, Value)>::new()));
         let seen_t = Arc::clone(&seen);
-        let fail_on_move = Arc::new(AtomicBool::new(true));
-        let fail_t = Arc::clone(&fail_on_move);
+        // 1 = fail ACTION_MOVE (INPUT_UNAVAILABLE), 2 = fail ACTION_POINTER_DOWN (INPUT_UNAVAILABLE),
+        // 3 = fail ACTION_POINTER_DOWN (TIMEOUT / ambiguous post-publish), 0 = pass.
+        let fail_mode = Arc::new(AtomicUsize::new(1));
+        let fail_t = Arc::clone(&fail_mode);
         std::thread::spawn(move || {
             for stream in listener.incoming() {
                 let Ok(mut writer) = stream else { break };
@@ -5933,12 +5979,28 @@ mod tests {
                     let id = req["id"].clone();
                     let tool = req["tool"].as_str().unwrap_or("").to_string();
                     let action = req["args"]["action"].as_i64();
-                    seen_t.lock().unwrap().push((tool.clone(), action));
+                    let ptrs = req["args"]["pointers"].clone();
+                    seen_t.lock().unwrap().push((tool.clone(), action, ptrs));
+                    let mode = fail_t.load(Ordering::SeqCst);
+                    let masked = action.map(|a| a & 0xff);
                     let envelope = if tool == "panel_touch"
-                        && action == Some(i64::from(ACTION_MOVE))
-                        && fail_t.swap(false, Ordering::SeqCst)
+                        && mode == 1
+                        && masked == Some(i64::from(ACTION_MOVE))
                     {
+                        fail_t.store(0, Ordering::SeqCst);
                         json!({"ok": false, "error": {"code": "INPUT_UNAVAILABLE", "message": "injected move error"}})
+                    } else if tool == "panel_touch"
+                        && mode == 2
+                        && masked == Some(i64::from(ACTION_POINTER_DOWN))
+                    {
+                        fail_t.store(0, Ordering::SeqCst);
+                        json!({"ok": false, "error": {"code": "INPUT_UNAVAILABLE", "message": "injected pre-publish pointer_down error"}})
+                    } else if tool == "panel_touch"
+                        && mode == 3
+                        && masked == Some(i64::from(ACTION_POINTER_DOWN))
+                    {
+                        fail_t.store(0, Ordering::SeqCst);
+                        json!({"ok": false, "error": {"code": "TIMEOUT", "message": "injected ambiguous pointer_down timeout"}})
                     } else {
                         json!({"ok": true, "result": {"ok": true}})
                     };
@@ -5965,17 +6027,55 @@ mod tests {
         client.enqueue(r#"{"t":"touch","phase":"up","id":1,"x":200,"y":300}"#, Arc::clone(&tx));
         assert_eq!(read_server_ws_text(&mut rx)["ok"], json!(true));
 
-        // Failure mid-pinch triggers immediate ACTION_CANCEL recovery.
+        // Failure mid-pinch on ACTION_MOVE triggers ACTION_CANCEL with BOTH pointers 0 and 1.
         seen.lock().unwrap().clear();
         client.enqueue(r#"{"t":"pinch","x":540,"y":1200,"delta":-100}"#, Arc::clone(&tx));
         let failed = read_server_ws_text(&mut rx);
         assert_eq!(failed["ok"], json!(false));
         assert_eq!(failed["code"], json!("INPUT_UNAVAILABLE"));
         let recorded = seen.lock().unwrap().clone();
+        let last = recorded.last().expect("cancel recorded");
+        assert_eq!(last.0, "panel_touch");
+        assert_eq!(last.1, Some(i64::from(ACTION_CANCEL)));
+        let cancel_ids: Vec<i64> = last.2.as_array().unwrap().iter().map(|p| p[0].as_i64().unwrap()).collect();
         assert_eq!(
-            recorded.last(),
-            Some(&("panel_touch".to_string(), Some(i64::from(ACTION_CANCEL)))),
-            "mid-pinch error must cancel active guest touch: {recorded:?}"
+            cancel_ids,
+            vec![0, 1],
+            "mid-pinch ACTION_MOVE cancel must include both active fingers: {recorded:?}"
+        );
+
+        // Pre-publish ACTION_POINTER_DOWN failure cancels ONLY pointer 0.
+        seen.lock().unwrap().clear();
+        fail_mode.store(2, Ordering::SeqCst);
+        client.enqueue(r#"{"t":"pinch","x":540,"y":1200,"delta":-100}"#, Arc::clone(&tx));
+        let failed_pdown = read_server_ws_text(&mut rx);
+        assert_eq!(failed_pdown["ok"], json!(false));
+        assert_eq!(failed_pdown["code"], json!("INPUT_UNAVAILABLE"));
+        let recorded = seen.lock().unwrap().clone();
+        let last = recorded.last().expect("cancel recorded");
+        assert_eq!(last.1, Some(i64::from(ACTION_CANCEL)));
+        let cancel_ids: Vec<i64> = last.2.as_array().unwrap().iter().map(|p| p[0].as_i64().unwrap()).collect();
+        assert_eq!(
+            cancel_ids,
+            vec![0],
+            "pre-publish ACTION_POINTER_DOWN failure must cancel only pointer 0: {recorded:?}"
+        );
+
+        // Ambiguous post-publish ACTION_POINTER_DOWN failure (TIMEOUT) cancels BOTH pointers 0 and 1.
+        seen.lock().unwrap().clear();
+        fail_mode.store(3, Ordering::SeqCst);
+        client.enqueue(r#"{"t":"pinch","x":540,"y":1200,"delta":-100}"#, Arc::clone(&tx));
+        let failed_timeout = read_server_ws_text(&mut rx);
+        assert_eq!(failed_timeout["ok"], json!(false));
+        assert_eq!(failed_timeout["code"], json!("TIMEOUT"));
+        let recorded = seen.lock().unwrap().clone();
+        let last = recorded.last().expect("cancel recorded");
+        assert_eq!(last.1, Some(i64::from(ACTION_CANCEL)));
+        let cancel_ids: Vec<i64> = last.2.as_array().unwrap().iter().map(|p| p[0].as_i64().unwrap()).collect();
+        assert_eq!(
+            cancel_ids,
+            vec![0, 1],
+            "ambiguous ACTION_POINTER_DOWN failure must cancel both pointers 0 and 1: {recorded:?}"
         );
 
         // Watch-only session blocks pinch with VERIFY_WATCH_ONLY.
