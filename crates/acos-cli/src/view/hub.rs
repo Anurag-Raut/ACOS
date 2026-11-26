@@ -1262,10 +1262,11 @@ impl InputClient {
                                 .to_string(),
                             ));
                         } else {
-                            immediate_reply = Some((
-                                reply_to,
-                                err_json("QUEUE_FULL", "input queue full").to_string(),
-                            ));
+                            let mut reply = err_json("QUEUE_FULL", "input queue full");
+                            if matches!(cmd, InputCommand::Rotate { .. }) {
+                                reply["t"] = json!("rotate");
+                            }
+                            immediate_reply = Some((reply_to, reply.to_string()));
                         }
                     } else {
                         state.queue.push_back(QueuedCommand {
@@ -1517,10 +1518,32 @@ impl DaemonConn {
         })
         .to_string()
             + "\n";
+        let bytes = line.as_bytes();
+        let mut written = 0usize;
+        while written < bytes.len() {
+            match self.writer.write(&bytes[written..]) {
+                Ok(0) => {
+                    let msg = "failed to write request to daemon".to_string();
+                    return Err(if written == 0 {
+                        DaemonCallErr::WriteFailed("IO_ERROR".to_string(), msg)
+                    } else {
+                        DaemonCallErr::PostWriteAmbiguous("IO_ERROR".to_string(), msg)
+                    });
+                }
+                Ok(n) => written += n,
+                Err(e) if e.kind() == io::ErrorKind::Interrupted => continue,
+                Err(e) => {
+                    return Err(if written == 0 {
+                        DaemonCallErr::WriteFailed("IO_ERROR".to_string(), e.to_string())
+                    } else {
+                        DaemonCallErr::PostWriteAmbiguous("IO_ERROR".to_string(), e.to_string())
+                    });
+                }
+            }
+        }
         self.writer
-            .write_all(line.as_bytes())
-            .and_then(|()| self.writer.flush())
-            .map_err(|e| DaemonCallErr::WriteFailed("IO_ERROR".to_string(), e.to_string()))?;
+            .flush()
+            .map_err(|e| DaemonCallErr::PostWriteAmbiguous("IO_ERROR".to_string(), e.to_string()))?;
         let mut resp_line = String::new();
         let n = self
             .reader
@@ -1755,8 +1778,18 @@ impl InputWorker {
         down_time: i64,
         event_time: i64,
     ) -> Result<Value, (String, String)> {
+        self.send_touch_frame_outcome(action, down_time, event_time)
+            .map_err(|(c, m, _)| (c, m))
+    }
+
+    fn send_touch_frame_outcome(
+        &mut self,
+        action: i32,
+        down_time: i64,
+        event_time: i64,
+    ) -> Result<Value, (String, String, bool)> {
         let pointers = self.pointer_wire_list();
-        self.call_daemon(
+        self.call_daemon_outcome(
             "panel_touch",
             json!({
                 "action": action,
@@ -1854,12 +1887,37 @@ impl InputWorker {
                     let idx = (self.pointers.len() - 1) as i32;
                     ACTION_POINTER_DOWN | (idx << ACTION_POINTER_INDEX_SHIFT)
                 };
-                match self.send_touch_frame(action, down_time, ts) {
+                match self.send_touch_frame_outcome(action, down_time, ts) {
                     Ok(_) => json!({ "ok": true, "t": "touch", "phase": "down" }),
-                    Err((c, m)) => {
-                        self.pointers.pop();
-                        if self.pointers.is_empty() {
-                            self.down_time_ns = None;
+                    Err((c, m, may_have_fired)) => {
+                        if may_have_fired {
+                            // The guest may already have received the down;
+                            // attempt cancellation against the same guest
+                            // without replaying the down, and retain the
+                            // pointer for later up/cancel or disconnect cleanup
+                            // if cancellation itself cannot be confirmed.
+                            let cancel_ts = self.next_ts_ns();
+                            let cancel_action = if is_first {
+                                ACTION_CANCEL
+                            } else {
+                                let idx = (self.pointers.len() - 1) as i32;
+                                ACTION_POINTER_UP | (idx << ACTION_POINTER_INDEX_SHIFT)
+                            };
+                            if self
+                                .send_touch_frame(cancel_action, down_time, cancel_ts)
+                                .is_ok()
+                                || self.slot.is_replaced()
+                            {
+                                self.pointers.pop();
+                                if self.pointers.is_empty() {
+                                    self.down_time_ns = None;
+                                }
+                            }
+                        } else {
+                            self.pointers.pop();
+                            if self.pointers.is_empty() {
+                                self.down_time_ns = None;
+                            }
                         }
                         err_json(&c, &m)
                     }
@@ -3681,6 +3739,171 @@ mod tests {
             "ambiguous ACTION_DOWN EOF must emit ACTION_CANCEL without replaying ACTION_DOWN"
         );
 
+        drop(client);
+        let _ = std::fs::remove_dir_all(&registry);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn touch_down_cancels_on_ambiguous_eof_and_retains_pointer_on_failed_cancel() {
+        let root = scratch("tdcan");
+        let socket = root.join("serve.sock");
+        let listener = UnixListener::bind(&socket).expect("bind fake daemon");
+        let seen_actions = Arc::new(Mutex::new(Vec::<i64>::new()));
+        let seen_t = Arc::clone(&seen_actions);
+        let cancel_done = Arc::new((Mutex::new(false), Condvar::new()));
+        let cancel_done_t = Arc::clone(&cancel_done);
+        let _daemon = std::thread::spawn(move || {
+            let mut req_idx = 0usize;
+            for stream in listener.incoming() {
+                let Ok(mut stream) = stream else { break };
+                let mut reader = BufReader::new(stream.try_clone().unwrap());
+                let mut line = String::new();
+                if reader.read_line(&mut line).unwrap_or(0) == 0 {
+                    continue;
+                }
+                let req: Value = serde_json::from_str(&line).unwrap();
+                if let Some(a) = req["args"]["action"].as_i64() {
+                    seen_t.lock().unwrap().push(a);
+                }
+                req_idx += 1;
+                if req_idx <= 2 {
+                    // Request 1 (ACTION_DOWN): drop right after reading (ambiguous EOF).
+                    // Request 2 (immediate ACTION_CANCEL): also drop so pointer must stay
+                    // tracked for disconnect cleanup.
+                    continue;
+                }
+                // Request 3 (disconnect cleanup ACTION_CANCEL): succeed.
+                let resp = json!({
+                    "id": req["id"],
+                    "envelope": { "ok": true, "result": { "ok": true } },
+                });
+                let _ = stream.write_all(format!("{resp}\n").as_bytes());
+                let _ = stream.flush();
+                let (lock, cv) = &*cancel_done_t;
+                *lock.lock().unwrap() = true;
+                cv.notify_all();
+                break;
+            }
+        });
+
+        let registry = scratch("tdcan-reg");
+        publish_input_entry(&registry, "s_tdcan", Some(&socket), None, false);
+        let hub = Hub::new(registry.clone());
+        let client = hub.open_input("s_tdcan").expect("open");
+        let (mut rx, tx) = ws_sink_pair();
+
+        client.enqueue(
+            r#"{"t":"touch","phase":"down","id":1,"x":200,"y":400}"#,
+            Arc::clone(&tx),
+        );
+        let reply = read_server_ws_text(&mut rx);
+        assert_eq!(reply["ok"], json!(false));
+        assert_eq!(reply["code"], json!("EOF"));
+
+        // Dropping the client must emit disconnect cleanup ACTION_CANCEL because
+        // the immediate cancel also failed.
+        drop(client);
+        let (lock, cv) = &*cancel_done;
+        let guard = lock.lock().unwrap();
+        let (guard, _) = cv
+            .wait_timeout_while(guard, Duration::from_secs(3), |done| !*done)
+            .unwrap();
+        assert!(*guard, "expected disconnect cleanup ACTION_CANCEL");
+
+        let actions = seen_actions.lock().unwrap().clone();
+        assert_eq!(
+            actions,
+            vec![
+                i64::from(ACTION_DOWN),
+                i64::from(ACTION_CANCEL),
+                i64::from(ACTION_CANCEL),
+            ],
+            "ambiguous touch down must attempt ACTION_CANCEL without replaying ACTION_DOWN and retain pointer if cancel fails"
+        );
+
+        let _ = std::fs::remove_dir_all(&registry);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn rotate_rejected_with_queue_full_includes_rotate_tag() {
+        let root = scratch("rotqf");
+        let socket = root.join("serve.sock");
+        let listener = UnixListener::bind(&socket).expect("bind fake daemon");
+        let received_first = Arc::new((Mutex::new(false), Condvar::new()));
+        let release = Arc::new((Mutex::new(false), Condvar::new()));
+        let rf_t = Arc::clone(&received_first);
+        let rel_t = Arc::clone(&release);
+        let _daemon = std::thread::spawn(move || {
+            for stream in listener.incoming() {
+                let Ok(mut stream) = stream else { break };
+                let mut reader = BufReader::new(stream.try_clone().unwrap());
+                loop {
+                    let mut line = String::new();
+                    if reader.read_line(&mut line).unwrap_or(0) == 0 {
+                        break;
+                    }
+                    let req: Value = serde_json::from_str(&line).unwrap();
+                    {
+                        let (lock, cv) = &*rf_t;
+                        let mut seen = lock.lock().unwrap();
+                        if !*seen {
+                            *seen = true;
+                            cv.notify_all();
+                        }
+                    }
+                    {
+                        let (lock, cv) = &*rel_t;
+                        let mut open = lock.lock().unwrap();
+                        while !*open {
+                            open = cv.wait(open).unwrap();
+                        }
+                    }
+                    let resp = json!({
+                        "id": req["id"],
+                        "envelope": { "ok": true, "result": { "ok": true } },
+                    });
+                    if stream.write_all(format!("{resp}\n").as_bytes()).is_err() {
+                        break;
+                    }
+                    let _ = stream.flush();
+                }
+            }
+        });
+
+        let registry = scratch("rotqf-reg");
+        publish_input_entry(&registry, "s_rotqf", Some(&socket), None, false);
+        let hub = Hub::new(registry.clone());
+        let client = hub.open_input("s_rotqf").expect("open");
+        let (mut rx, tx) = ws_sink_pair();
+
+        // Block worker on first command.
+        client.enqueue(r#"{"t":"text","s":"a"}"#, Arc::clone(&tx));
+        {
+            let (lock, cv) = &*received_first;
+            let guard = lock.lock().unwrap();
+            let (guard, _) = cv
+                .wait_timeout_while(guard, Duration::from_secs(3), |seen| !*seen)
+                .unwrap();
+            assert!(*guard, "daemon did not receive initial command");
+        }
+        // Fill normal queue capacity.
+        for _ in 0..INPUT_QUEUE_NORMAL_LIMIT {
+            assert!(client.enqueue(r#"{"t":"text","s":"x"}"#, Arc::clone(&tx)));
+        }
+        // Next rotate hits QUEUE_FULL and must carry `"t": "rotate"` so the page clears pendingRotate.
+        assert!(client.enqueue(r#"{"t":"rotate","rotation":1}"#, Arc::clone(&tx)));
+        let reply = read_server_ws_text(&mut rx);
+        assert_eq!(reply["ok"], json!(false));
+        assert_eq!(reply["code"], json!("QUEUE_FULL"));
+        assert_eq!(reply["t"], json!("rotate"));
+
+        {
+            let (lock, cv) = &*release;
+            *lock.lock().unwrap() = true;
+            cv.notify_all();
+        }
         drop(client);
         let _ = std::fs::remove_dir_all(&registry);
         let _ = std::fs::remove_dir_all(&root);

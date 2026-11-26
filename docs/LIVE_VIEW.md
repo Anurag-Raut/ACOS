@@ -152,10 +152,11 @@ Event kinds:
   `key`, `text`, `tree`, `screenshot`, `swipe`, `rotate`), with its `source`
   (`"agent"` or `"panel"`) and result `status`. Continuous `touch` `move`
   events are intentionally omitted from the feed (only `down`/`up`/`cancel`
-  edges are recorded). Emitted for failures and for valid verify-run
-  `VERIFY_WATCH_ONLY` refusals that reach the watch-only check on `touch down`,
-  `scroll`, `key down`/`press`, `text`, or `rotate` (not `touch move`/`up`,
-  `key up`, malformed JSON, or queue-admission rejections).
+  edges are recorded). Emitted for failures (except `panel_touch` error replies
+  that omit an `action` field, such as `INPUT_UNAVAILABLE`) and for valid
+  verify-run `VERIFY_WATCH_ONLY` refusals that reach the watch-only check on
+  `touch down`, `scroll`, `key down`/`press`, `text`, or `rotate` (not
+  `touch move`/`up`, `key up`, malformed JSON, or queue-admission rejections).
 * `activity` — the focused activity changed (once per distinct value).
 * `lifecycle` — `launch` (the ready line, `status: "ok"` or the failure code),
   `reset`, `close`, `session` (the session ended by itself: guest exit, timeout,

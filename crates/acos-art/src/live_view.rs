@@ -611,21 +611,25 @@ impl Inner {
                 .lock()
                 .unwrap_or_else(|e| e.into_inner()) = None;
         }
-        subscribers.push(subscriber);
-        self.subscriber_count.fetch_add(1, Ordering::AcqRel);
-        drop(subscribers);
         // A viewer that arrives after another one left (or joins a running
         // stream) must see the screen *now*, not at the next redraw: the encoder
         // only sends a frame newer than the last one it sent, so on an idle
         // screen the newcomer would stare at black until something repainted.
-        // Incrementing `attach_epoch` and clearing `last_encoded_seq` under
-        // `slot` prevents an in-flight encode from an earlier attachment from
-        // overwriting the reset and hiding the initial frame.
+        // Advancing `attach_epoch` and clearing `last_encoded_seq` while holding
+        // `subscribers` and `slot` (and BEFORE incrementing `subscriber_count`)
+        // guarantees:
+        // 1. An in-flight encode from an earlier epoch cannot update
+        //    `last_encoded_seq` OR broadcast its stale frame to this viewer;
+        // 2. `has_subscribers()` only becomes true once the new `attach_epoch`
+        //    is committed for `tap_once` and `writer_loop`.
         {
             let _slot = self.slot.lock().unwrap_or_else(|e| e.into_inner());
             self.attach_epoch.fetch_add(1, Ordering::AcqRel);
             self.last_encoded_seq.store(0, Ordering::Release);
         }
+        subscribers.push(subscriber);
+        self.subscriber_count.fetch_add(1, Ordering::AcqRel);
+        drop(subscribers);
         self.notify();
         // The tap thread exists only while someone watches: with no subscriber
         // the session runs exactly as it did before the viewer existed.
@@ -816,6 +820,35 @@ impl Inner {
             self.subscriber_count.fetch_sub(1, Ordering::AcqRel);
             self.subscribers_dropped.fetch_add(1, Ordering::Relaxed);
         }
+    }
+
+    /// Deliver an encoded frame only while `attach_epoch` still matches
+    /// `frame_epoch` under `self.subscribers`, so an in-flight encode started
+    /// for an earlier attachment (e.g. `0.5` scale) can never be written to a
+    /// newly attached viewer (e.g. `1.0` scale).
+    fn broadcast_frame_for_epoch(&self, message: &[u8], frame_epoch: u64) -> bool {
+        let mut subscribers = self.subscribers.lock().unwrap_or_else(|e| e.into_inner());
+        if self.attach_epoch.load(Ordering::Acquire) != frame_epoch {
+            return false;
+        }
+        if subscribers.is_empty() {
+            return false;
+        }
+        let mut dead: Vec<usize> = Vec::new();
+        for (index, subscriber) in subscribers.iter_mut().enumerate() {
+            if !subscriber.wants_frames {
+                continue;
+            }
+            if subscriber.send(message).is_err() {
+                dead.push(index);
+            }
+        }
+        for index in dead.into_iter().rev() {
+            subscribers.remove(index);
+            self.subscriber_count.fetch_sub(1, Ordering::AcqRel);
+            self.subscribers_dropped.fetch_add(1, Ordering::Relaxed);
+        }
+        true
     }
 
     /// Remove any subscriber whose client socket was closed, so `subscriber_count`
@@ -1640,8 +1673,13 @@ fn writer_loop(inner: Arc<Inner>) {
         message.extend_from_slice(header_str.as_bytes());
         message.push(b'\n');
         message.extend_from_slice(&encode_scratch);
-        inner.broadcast(&message, true);
-        inner.frames_sent.fetch_add(1, Ordering::Relaxed);
+        if inner.broadcast_frame_for_epoch(&message, frame_epoch) {
+            inner.frames_sent.fetch_add(1, Ordering::Relaxed);
+        } else {
+            // Attachment epoch changed while encoding; encode the new viewer's
+            // frame immediately without waiting for the previous interval.
+            next_at = Instant::now();
+        }
         // Keep draining a viewer that could not take the whole message right
         // away: a frame larger than `SO_SNDBUF` is delivered across a few
         // writes, and the loop below retries while anything is still queued.
@@ -3137,7 +3175,10 @@ mod tests {
             .set_read_timeout(Some(Duration::from_secs(2)))
             .expect("timeout");
         assert_eq!(read_message(&mut client).expect("hello").0, TYPE_HELLO);
-        assert!(wait_for(|| view.has_subscribers(), Duration::from_secs(2)));
+        assert!(wait_for(
+            || view.has_subscribers() && view.attach_epoch().load(Ordering::Acquire) >= 1,
+            Duration::from_secs(2)
+        ));
 
         // Emit one frame and then keep the screen completely idle (`source` returns None).
         view.tick();
@@ -3276,6 +3317,54 @@ mod tests {
 
         view.shutdown();
         wake.release();
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn stale_epoch_frame_is_not_broadcast_to_newly_attached_viewer() {
+        let dir = scratch_dir("stale-epoch-bcast");
+        let source: Arc<dyn Fn() -> Option<SourceFrame> + Send + Sync> = Arc::new(|| None);
+        let view = LiveView::bind(
+            &dir.join("v.sock"),
+            LiveViewConfig::default(),
+            (64, 64),
+            1,
+            source,
+            Arc::new(TestWake::new()),
+        )
+        .expect("bind");
+        let mut client = UnixStream::connect(view.socket_path()).expect("connect");
+        subscribe_line(
+            &mut client,
+            "\"frames\":true,\"format\":\"png\",\"scale\":1.0,\"max_fps\":30,",
+        );
+        client
+            .set_read_timeout(Some(Duration::from_millis(200)))
+            .expect("timeout");
+        assert_eq!(read_message(&mut client).expect("hello").0, TYPE_HELLO);
+        assert!(wait_for(
+            || view.has_subscribers() && view.attach_epoch().load(Ordering::Acquire) >= 1,
+            Duration::from_secs(2)
+        ));
+        let current_epoch = view.attach_epoch().load(Ordering::Acquire);
+        let stale_msg = frame_message(TYPE_FRAME, b"{\"seq\":1}\nSTALE");
+        assert!(
+            !view
+                .inner
+                .broadcast_frame_for_epoch(&stale_msg, current_epoch - 1),
+            "stale-epoch frame must not be broadcast to newer attachment"
+        );
+        let fresh_msg = frame_message(TYPE_FRAME, b"{\"seq\":2}\nFRESH");
+        assert!(
+            view.inner
+                .broadcast_frame_for_epoch(&fresh_msg, current_epoch),
+            "current-epoch frame must be broadcast"
+        );
+        let (kind, payload) = read_message(&mut client).expect("fresh frame");
+        assert_eq!(kind, TYPE_FRAME);
+        assert_eq!(payload, b"{\"seq\":2}\nFRESH");
+
+        view.shutdown();
         let _ = std::fs::remove_dir_all(&dir);
     }
 }
