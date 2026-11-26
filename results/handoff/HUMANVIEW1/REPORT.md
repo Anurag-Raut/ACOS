@@ -475,4 +475,25 @@ Verified and addressed all **3** CodeRabbit Round 4 actionable comments (2 Major
 - Unit & doc suites: `acos-art --lib live_view` (**24 passed, 0 failed**), `acos-cli --bin acos` (**241 passed, 0 failed**), `acos-mcp --test docs --test guide --test documentation_args` (**19 passed, 0 failed**), `acos-services --test surface_client --test modules_doc` (**15 passed, 0 failed**), non-ignored `humanview_cp1..cp4` + `launcher_home_frame` (**13 passed, 0 failed**).
 - Release live-ART suites (`run-exclusive.sh` + `guarded.sh`): `launcher_home_frame` (**1 passed**), `humanview_cp1` (**2 passed**), `humanview_cp2` (**1 passed**), `humanview_cp3` (**2 passed**), `humanview_cp4` (**1 passed**, 10.75 s; **p50 = 63.51 ms**, **p95 = 64.62 ms**, `mean_encode_ms = 1.83 ms`, `frames_dropped_latest = 0`, `events_dropped = 0`).
 
+---
+
+## 15. Fix Round 8 — CodeRabbit PR #6 Round 5 Review Fixes
+
+Verified and addressed all **4** CodeRabbit Round 5 actionable comments (2 Majors + 2 Minors, 0 false positives):
+
+- **Treat post-write `TIMEOUT` / `APP_NOT_RESPONDING` replies as ambiguous (`crates/acos-cli/src/view/hub.rs`):**
+  - Updated `DaemonConn::call` so `TIMEOUT` / `APP_NOT_RESPONDING` error envelopes classify as `DaemonCallErr::PostWriteAmbiguous` (`may_have_fired = true`) instead of `DaemonRejected`, triggering compensating cancellation without replaying the down (`touch_down_timeout_envelope_is_treated_as_ambiguous_and_cancels`).
+- **Bounded post-disconnect recovery retries (`crates/acos-cli/src/view/hub.rs`):**
+  - Added `WorkerTask::ScheduledRecovery` to `InputWorker::run` so when the last client disconnects with pending touch recovery or retained releases, the worker keeps retrying with bounded exponential backoff (`25 ms`..`500 ms`, up to 12 attempts) until recovery succeeds, the guest is replaced/exits (`SESSION_REPLACED` / `SESSION_NOT_FOUND`), or the retry budget is exhausted (`disconnect_schedules_bounded_recovery_until_daemon_recovers`).
+- **Retain releases blocked by pending touch recovery (`crates/acos-cli/src/view/hub.rs`):**
+  - Added `PendingRelease` (`Up` / `CancelClient`) and `flush_pending_releases` so `TouchPhase::Up`, `TouchPhase::Cancel`, and disconnect cleanup blocked by an unrecovered pointer retain their terminal release intent and apply it immediately after compensation succeeds—before any subsequent gesture starts—while preserving the immediate release fast path when no recovery is pending (`blocked_release_is_retained_and_applied_after_recovery_before_next_gesture`).
+- **Docs (`docs/LIVE_VIEW.md`):**
+  - Clarified disconnect cleanup attempts vs delivered cancels, multi-client indexed `ACTION_POINTER_UP` vs single-client `ACTION_CANCEL`, `TIMEOUT` ambiguity, retained releases, and bounded retry exhaustion.
+
+**Fresh verification:**
+- `tools/verify/check-layout.sh`: **`check-layout: ok`**.
+- Unit & doc suites: `acos-art --lib live_view` (**24 passed, 0 failed**), `acos-cli --bin acos` (**244 passed, 0 failed**), `acos-mcp --test docs --test guide --test documentation_args` (**19 passed, 0 failed**), `acos-services --test surface_client --test modules_doc` (**15 passed, 0 failed**), non-ignored `humanview_cp1..cp4` + `launcher_home_frame` (**13 passed, 0 failed**).
+- Release live-ART suites (`run-exclusive.sh` + `guarded.sh`): `launcher_home_frame` (**1 passed**, 5.50 s), `humanview_cp1` (**2 passed**, 15.10 s), `humanview_cp2` (**1 passed**, 5.44 s), `humanview_cp3` (**2 passed**, 14.24 s), `humanview_cp4` (**1 passed**, 10.72 s; **p50 = 63.24 ms**, **p95 = 64.43 ms**, `mean_encode_ms = 1.83 ms`, `frames_dropped_latest = 0`, `events_dropped = 0`).
+
+
 
