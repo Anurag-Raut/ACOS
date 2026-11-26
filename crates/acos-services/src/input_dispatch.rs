@@ -1179,14 +1179,20 @@ impl InputHost {
         self.collect(&token, &gesture, ack_wait)
     }
 
+    /// True while `token` still has an open, registered input channel.
+    pub fn has_channel(&self, token: BinderId) -> bool {
+        lock(&self.state).registry.publisher(token).is_some()
+    }
+
     /// Publish one raw multi-pointer touch frame (for live interactive panel
-    /// input). On `ACTION_DOWN` (`pinned_target` is `None`), resolves the window
-    /// under `pointers[0]` and returns the resolved `(token, origin)` so the
-    /// caller can pin subsequent `MOVE`/`UP` frames to the same window.
+    /// input). On `ACTION_DOWN` (`*pinned_target` is `None`), resolves the window
+    /// under `pointers[0]` and writes `(token, origin)` into `pinned_target` as
+    /// soon as the event is published — before waiting for acks — so even a
+    /// post-publish error preserves the target pin for compensating releases.
     pub fn touch_frame(
         &self,
         action: i32,
-        pinned_target: Option<(BinderId, (i32, i32))>,
+        pinned_target: &mut Option<(BinderId, (i32, i32))>,
         down_time: i64,
         event_time: i64,
         pointers: &[(i32, f32, f32)],
@@ -1196,7 +1202,7 @@ impl InputHost {
             return Err(ChannelError::BadPointerCount(0));
         }
         let ((token, origin), local_pointers, gesture) = if let Some((token, origin)) =
-            pinned_target
+            *pinned_target
         {
             let local: Vec<(i32, f32, f32)> = pointers
                 .iter()
@@ -1225,11 +1231,13 @@ impl InputHost {
                 event_time,
                 &local,
             )?;
+            *pinned_target = Some((target.token, target.origin));
             ((target.token, target.origin), local, gesture)
         } else {
             let (token, gesture) = lock(&self.state).publish_on_live(|dispatch, token| {
                 dispatch.inject_motion_frame(token, action, down_time, event_time, pointers)
             })?;
+            *pinned_target = Some((token, (0, 0)));
             ((token, (0, 0)), pointers.to_vec(), gesture)
         };
         let _ = local_pointers;
@@ -1908,6 +1916,137 @@ mod touch_target_tests {
         );
         assert!(injected.seqs.len() >= 3, "DOWN, MOVEs, UP");
     }
+
+    #[test]
+    fn touch_frame_preserves_pinned_target_after_post_publish_error() {
+        use crate::input_channel::{InputMessage, LoopbackConsumer};
+        let (host, stack) = host_with_stack();
+        let (dialog_frame, activity_frame) = {
+            let wms = stack.lock().expect("wms");
+            (wms.wm.windows[&DIALOG].frame, wms.wm.windows[&ACTIVITY].frame)
+        };
+        let dialog_fd = host
+            .state
+            .lock()
+            .expect("state")
+            .duplicate_client_fd(BinderId(DIALOG))
+            .expect("dialog fd");
+        let activity_fd = host
+            .state
+            .lock()
+            .expect("state")
+            .duplicate_client_fd(BinderId(ACTIVITY))
+            .expect("activity fd");
+        let mut dialog_guest = LoopbackConsumer::new(dialog_fd);
+        let mut activity_guest = LoopbackConsumer::new(activity_fd);
+        // Drain initial focus/registration messages.
+        while dialog_guest.recv().expect("dialog drain").is_some() {}
+        while activity_guest.recv().expect("activity drain").is_some() {}
+
+        let dialog_pt = ((dialog_frame.left + 20) as f32, (dialog_frame.top + 20) as f32);
+        let activity_pt = (
+            (activity_frame.left + 40) as f32,
+            (activity_frame.bottom - 100) as f32,
+        );
+        // Confirm activity_pt really hit-tests to ACTIVITY, not DIALOG.
+        assert_eq!(
+            host.touch_target(activity_pt.0, activity_pt.1)
+                .expect("activity target")
+                .token,
+            BinderId(ACTIVITY)
+        );
+
+        let down_time = crate::input_channel::monotonic_nanos();
+        let mut pinned = None;
+        let (token, origin, _) = host
+            .touch_frame(
+                crate::input_channel::ACTION_DOWN,
+                &mut pinned,
+                down_time,
+                down_time,
+                &[(0, dialog_pt.0, dialog_pt.1)],
+                Duration::ZERO,
+            )
+            .expect("pointer A down on dialog");
+        assert_eq!(token, BinderId(DIALOG));
+        assert_eq!(pinned, Some((BinderId(DIALOG), origin)));
+
+        // Inject a malformed reply byte on the dialog channel so `collect` fails
+        // AFTER `ACTION_POINTER_DOWN` for pointer B is published to DIALOG.
+        let malformed_fd = host
+            .state
+            .lock()
+            .expect("state")
+            .duplicate_client_fd(BinderId(DIALOG))
+            .expect("dialog raw fd");
+        rustix::io::write(&malformed_fd, &[0xff, 0xff, 0xff, 0xff]).expect("write malformed");
+
+        // Pointer A has moved over ACTIVITY while pointer B goes down.
+        let action_p2_down = crate::input_channel::ACTION_POINTER_DOWN
+            | (1 << crate::input_channel::ACTION_POINTER_INDEX_SHIFT);
+        let err = host
+            .touch_frame(
+                action_p2_down,
+                &mut pinned,
+                down_time,
+                down_time + 10_000_000,
+                &[
+                    (0, activity_pt.0, activity_pt.1),
+                    (1, dialog_pt.0 + 10.0, dialog_pt.1 + 10.0),
+                ],
+                Duration::from_millis(50),
+            )
+            .expect_err("malformed ack should surface as collect error");
+        assert!(matches!(err, ChannelError::Malformed(_)), "got {err:?}");
+        // Pinned target MUST remain DIALOG despite the post-publish error.
+        assert_eq!(pinned, Some((BinderId(DIALOG), origin)));
+
+        // Compensating ACTION_POINTER_UP for B with A still over ACTIVITY MUST
+        // reach DIALOG (never ACTIVITY).
+        let action_p2_up = crate::input_channel::ACTION_POINTER_UP
+            | (1 << crate::input_channel::ACTION_POINTER_INDEX_SHIFT);
+        let (up_token, _, _) = host
+            .touch_frame(
+                action_p2_up,
+                &mut pinned,
+                down_time,
+                down_time + 20_000_000,
+                &[
+                    (0, activity_pt.0, activity_pt.1),
+                    (1, dialog_pt.0 + 10.0, dialog_pt.1 + 10.0),
+                ],
+                Duration::ZERO,
+            )
+            .expect("compensating pointer up succeeds on pinned dialog");
+        assert_eq!(up_token, BinderId(DIALOG));
+
+        let mut dialog_actions = Vec::new();
+        while let Some(msg) = dialog_guest.recv().expect("dialog recv") {
+            if let InputMessage::Motion { event, .. } = msg {
+                dialog_actions.push(event.action);
+            }
+        }
+        assert_eq!(
+            dialog_actions,
+            vec![
+                crate::input_channel::ACTION_DOWN,
+                action_p2_down,
+                action_p2_up,
+            ],
+            "DIALOG must receive A down, B pointer-down, and compensating B pointer-up"
+        );
+
+        let mut activity_motions = Vec::new();
+        while let Some(msg) = activity_guest.recv().expect("activity recv") {
+            if let InputMessage::Motion { event, .. } = msg {
+                activity_motions.push(event.action);
+            }
+        }
+        assert!(
+            activity_motions.is_empty(),
+            "ACTIVITY must never receive DIALOG's compensating POINTER_UP: {activity_motions:?}"
+        );
+    }
 }
 
 #[cfg(test)]
@@ -2285,10 +2424,11 @@ mod swipe_stream_tests {
         };
 
         let down_time = crate::input_channel::monotonic_nanos();
+        let mut pinned = None;
         let (token, origin, _) = host
             .touch_frame(
                 crate::input_channel::ACTION_DOWN,
-                None,
+                &mut pinned,
                 down_time,
                 down_time,
                 &[(0, 100.0, 200.0)],
@@ -2296,11 +2436,12 @@ mod swipe_stream_tests {
             )
             .expect("down");
         assert_eq!(token, TOKEN);
+        assert_eq!(pinned, Some((token, origin)));
         let action_p2 = crate::input_channel::ACTION_POINTER_DOWN
             | (1 << crate::input_channel::ACTION_POINTER_INDEX_SHIFT);
         host.touch_frame(
             action_p2,
-            Some((token, origin)),
+            &mut pinned,
             down_time,
             down_time + 10_000_000,
             &[(0, 100.0, 200.0), (1, 150.0, 260.0)],

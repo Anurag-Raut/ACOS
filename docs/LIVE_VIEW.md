@@ -424,16 +424,20 @@ acos view: http://127.0.0.1:54321/?t=<token>
     still hold active pointers rather than canceling the whole gesture, or
     `ACTION_CANCEL` when no other client has active pointers. Ambiguous
     touch-down failures (including post-write I/O errors and `TIMEOUT`
-    replies) trigger a compensating cancel without replaying the down; any
-    blocked `up`/`cancel` release is retained to run immediately after
-    recovery succeeds, and if recovery fails on the last client's disconnect,
-    the worker retries with bounded backoff for the same guest (stopping on
-    confirmation, guest replacement/exit, or retry exhaustion, leaving
+    replies) trigger a compensating cancel without replaying the down; failed
+    initial or blocked `up`/`cancel`/disconnect releases are retained and only
+    removed once confirmed (or once the guest is replaced/exits), and any
+    pending recovery or release is retried with bounded backoff both while
+    browsers remain connected and after the last client disconnects (stopping
+    on confirmation, guest replacement/exit, or retry exhaustion, leaving
     recovery pending for the next gesture if the daemon stayed unreachable—so
     a disconnect does not by itself prove the guest released the pointer).
-    `ArtSession::panel_touch` also rejects out-of-order frames whose
-    `event_time` precedes an already-processed `panel_touch` so an abandoned
-    down cannot land after a newer cancel.
+    `ArtSession` stamps monotonic `req_id`s echoed by `acos-art` so late
+    replies from timed-out commands are discarded rather than mistaken for
+    cancel confirmations, rejects out-of-order `panel_touch` frames whose
+    `event_time` precedes an already-processed `panel_touch`, and `acos-art`
+    preserves the pinned target window across transient `touch_frame` errors
+    so compensating releases still hit the original window.
   - **Dynamic stream upgrade.** Watch-only stays `0.5` PNG @ `15` fps. While an
     input WebSocket is open, the hub upgrades the upstream subscription to `1.0`
     PNG @ `30` fps and reverts back to `0.5` PNG @ `15` fps when the last input

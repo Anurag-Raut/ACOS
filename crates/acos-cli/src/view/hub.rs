@@ -1357,9 +1357,9 @@ enum WorkerTask {
     ScheduledRecovery,
 }
 
-const DISCONNECT_RECOVERY_INITIAL_BACKOFF_MS: u64 = 25;
-const DISCONNECT_RECOVERY_MAX_BACKOFF_MS: u64 = 500;
-const DISCONNECT_RECOVERY_MAX_ATTEMPTS: u32 = 12;
+const RECOVERY_INITIAL_BACKOFF_MS: u64 = 25;
+const RECOVERY_MAX_BACKOFF_MS: u64 = 500;
+const RECOVERY_MAX_ATTEMPTS: u32 = 12;
 
 struct InputSlot {
     meta: Mutex<Entry>,
@@ -1698,51 +1698,49 @@ impl InputWorker {
     }
 
     fn run(mut self) {
-        let mut disconnect_recovery_attempts: u32 = 0;
+        let mut recovery_attempts: u32 = 0;
         let mut next_recovery_at: Option<Instant> = None;
         loop {
             let task = {
                 let mut state = self.slot.state.lock().expect("input slot");
                 loop {
                     if let Some(client_id) = state.disconnects.pop_front() {
-                        disconnect_recovery_attempts = 0;
+                        recovery_attempts = 0;
                         next_recovery_at = None;
                         break WorkerTask::ClientDisconnected { client_id };
                     }
                     if let Some(cmd) = state.queue.pop_front() {
-                        disconnect_recovery_attempts = 0;
+                        recovery_attempts = 0;
                         next_recovery_at = None;
                         break WorkerTask::Command(cmd);
                     }
-                    if state.clients == 0 {
-                        let needs_recovery = !state.replaced
-                            && (self.pending_touch_recovery.is_some()
-                                || !self.pending_releases.is_empty());
-                        if needs_recovery
-                            && disconnect_recovery_attempts < DISCONNECT_RECOVERY_MAX_ATTEMPTS
-                        {
-                            let now = Instant::now();
-                            let deadline = *next_recovery_at.get_or_insert_with(|| {
-                                let shift = disconnect_recovery_attempts.min(5);
-                                let ms = DISCONNECT_RECOVERY_INITIAL_BACKOFF_MS
-                                    .saturating_mul(1u64 << shift)
-                                    .min(DISCONNECT_RECOVERY_MAX_BACKOFF_MS);
-                                now + Duration::from_millis(ms)
-                            });
-                            if now >= deadline {
-                                disconnect_recovery_attempts += 1;
-                                next_recovery_at = None;
-                                break WorkerTask::ScheduledRecovery;
-                            }
-                            let wait_dur = deadline.saturating_duration_since(now);
-                            let (new_state, _) = self
-                                .slot
-                                .cv
-                                .wait_timeout(state, wait_dur)
-                                .unwrap_or_else(|poison| poison.into_inner());
-                            state = new_state;
-                            continue;
+                    let needs_recovery = !state.replaced
+                        && (self.pending_touch_recovery.is_some()
+                            || !self.pending_releases.is_empty());
+                    if needs_recovery && recovery_attempts < RECOVERY_MAX_ATTEMPTS {
+                        let now = Instant::now();
+                        let deadline = *next_recovery_at.get_or_insert_with(|| {
+                            let shift = recovery_attempts.min(5);
+                            let ms = RECOVERY_INITIAL_BACKOFF_MS
+                                .saturating_mul(1u64 << shift)
+                                .min(RECOVERY_MAX_BACKOFF_MS);
+                            now + Duration::from_millis(ms)
+                        });
+                        if now >= deadline {
+                            recovery_attempts += 1;
+                            next_recovery_at = None;
+                            break WorkerTask::ScheduledRecovery;
                         }
+                        let wait_dur = deadline.saturating_duration_since(now);
+                        let (new_state, _) = self
+                            .slot
+                            .cv
+                            .wait_timeout(state, wait_dur)
+                            .unwrap_or_else(|poison| poison.into_inner());
+                        state = new_state;
+                        continue;
+                    }
+                    if state.clients == 0 {
                         state.last_event_time_ns = self.last_event_time_ns;
                         state.pending_touch_recovery = self.pending_touch_recovery.take();
                         state.pending_releases = std::mem::take(&mut self.pending_releases);
@@ -1751,8 +1749,10 @@ impl InputWorker {
                         state.running = false;
                         return;
                     }
-                    disconnect_recovery_attempts = 0;
                     next_recovery_at = None;
+                    if !needs_recovery {
+                        recovery_attempts = 0;
+                    }
                     state = self
                         .slot
                         .cv
@@ -1774,7 +1774,7 @@ impl InputWorker {
                 }
                 WorkerTask::ScheduledRecovery => {
                     if self.resolve_pending_touch_recovery_and_releases().is_ok() {
-                        disconnect_recovery_attempts = 0;
+                        recovery_attempts = 0;
                         next_recovery_at = None;
                     }
                 }
@@ -2231,14 +2231,16 @@ impl InputWorker {
                         if self.pointers.is_empty() {
                             self.down_time_ns = None;
                         }
-                        if may_have_fired && !self.slot.is_replaced() && !is_guest_gone_code(&c) {
+                        if self.slot.is_replaced() || is_guest_gone_code(&c) {
+                            self.clear_guest_touch_state();
+                        } else if may_have_fired {
                             if let Some(ptr) = popped {
                                 // The guest may already have received the down;
                                 // keep the uncertain pointer out of `self.pointers`
                                 // and attempt immediate cancellation now. If that
                                 // fails, `pending_touch_recovery` will flush it
                                 // before the next touch/scroll or via bounded
-                                // post-disconnect retries.
+                                // scheduled retries.
                                 self.pending_touch_recovery = Some(PendingTouchRecovery {
                                     wire_id: ptr.wire_id,
                                     x: ptr.x,
@@ -2272,44 +2274,42 @@ impl InputWorker {
                 let down_time = self.down_time_ns.unwrap_or(ts);
                 match self.send_touch_frame(ACTION_MOVE, down_time, ts) {
                     Ok(_) => json!({ "ok": true, "t": "touch", "phase": "move" }),
-                    Err((c, m)) => err_json(&c, &m),
+                    Err((c, m)) => {
+                        if self.slot.is_replaced() || is_guest_gone_code(&c) {
+                            self.clear_guest_touch_state();
+                        }
+                        err_json(&c, &m)
+                    }
                 }
             }
             TouchPhase::Up => {
                 let (Some(x), Some(y)) = (x, y) else {
                     return err_json("INVALID_ARGUMENT", "touch up requires x and y");
                 };
-                if let Err((c, m)) = self.resolve_pending_touch_recovery_and_releases() {
-                    self.record_pending_up(client_id, pointer_id, x, y);
-                    return err_json(&c, &m);
+                if self.slot.is_replaced() {
+                    self.clear_guest_touch_state();
+                    return err_json("SESSION_REPLACED", "session was replaced by a newer guest");
                 }
-                let Some(pos) = self
+                let had_pointer = self
                     .pointers
                     .iter()
-                    .position(|p| p.client_id == client_id && p.pointer_id == pointer_id)
-                else {
+                    .any(|p| p.client_id == client_id && p.pointer_id == pointer_id);
+                if had_pointer {
+                    self.record_pending_up(client_id, pointer_id, x, y);
+                }
+                if let Err((c, m)) = self.resolve_pending_touch_recovery_and_releases() {
+                    return err_json(&c, &m);
+                }
+                if !had_pointer {
                     return json!({ "ok": true, "t": "touch", "ignored": "pointer_not_down" });
-                };
-                self.pointers[pos].x = x;
-                self.pointers[pos].y = y;
-                let ts = self.next_ts_ns();
-                let down_time = self.down_time_ns.unwrap_or(ts);
-                let action = if self.pointers.len() == 1 {
-                    ACTION_UP
-                } else {
-                    ACTION_POINTER_UP | ((pos as i32) << ACTION_POINTER_INDEX_SHIFT)
-                };
-                let res = self.send_touch_frame(action, down_time, ts);
-                self.pointers.remove(pos);
-                if self.pointers.is_empty() {
-                    self.down_time_ns = None;
                 }
-                match res {
-                    Ok(_) => json!({ "ok": true, "t": "touch", "phase": "up" }),
-                    Err((c, m)) => err_json(&c, &m),
-                }
+                json!({ "ok": true, "t": "touch", "phase": "up" })
             }
             TouchPhase::Cancel => {
+                if self.slot.is_replaced() {
+                    self.clear_guest_touch_state();
+                    return err_json("SESSION_REPLACED", "session was replaced by a newer guest");
+                }
                 if let (Some(x), Some(y)) = (x, y) {
                     if let Some(pos) = self
                         .pointers
@@ -2320,50 +2320,12 @@ impl InputWorker {
                         self.pointers[pos].y = y;
                     }
                 }
+                self.record_pending_cancel_client(client_id);
                 if let Err((c, m)) = self.resolve_pending_touch_recovery_and_releases() {
-                    self.record_pending_cancel_client(client_id);
                     return err_json(&c, &m);
                 }
-                self.cancel_client_pointers(client_id)
+                json!({ "ok": true, "t": "touch", "phase": "cancel" })
             }
-        }
-    }
-
-    fn cancel_client_pointers(&mut self, client_id: u64) -> Value {
-        let has_client_ptr = self.pointers.iter().any(|p| p.client_id == client_id);
-        if !has_client_ptr {
-            return json!({ "ok": true, "t": "touch", "phase": "cancel" });
-        }
-        let only_this_client = self.pointers.iter().all(|p| p.client_id == client_id);
-        if only_this_client {
-            let ts = self.next_ts_ns();
-            let down_time = self.down_time_ns.unwrap_or(ts);
-            let res = self.send_touch_frame(ACTION_CANCEL, down_time, ts);
-            self.pointers.clear();
-            self.down_time_ns = None;
-            return match res {
-                Ok(_) => json!({ "ok": true, "t": "touch", "phase": "cancel" }),
-                Err((c, m)) => err_json(&c, &m),
-            };
-        }
-        let mut last_res = Ok(Value::Null);
-        while let Some(pos) = self.pointers.iter().position(|p| p.client_id == client_id) {
-            let ts = self.next_ts_ns();
-            let down_time = self.down_time_ns.unwrap_or(ts);
-            let action = if self.pointers.len() == 1 {
-                ACTION_CANCEL
-            } else {
-                ACTION_POINTER_UP | ((pos as i32) << ACTION_POINTER_INDEX_SHIFT)
-            };
-            last_res = self.send_touch_frame(action, down_time, ts);
-            self.pointers.remove(pos);
-        }
-        if self.pointers.is_empty() {
-            self.down_time_ns = None;
-        }
-        match last_res {
-            Ok(_) => json!({ "ok": true, "t": "touch", "phase": "cancel" }),
-            Err((c, m)) => err_json(&c, &m),
         }
     }
 
@@ -2558,11 +2520,8 @@ impl InputWorker {
             self.held_keys.retain(|&(cid, _)| cid != client_id);
             return;
         }
-        if self.resolve_pending_touch_recovery_and_releases().is_err() {
-            self.record_pending_cancel_client(client_id);
-        } else {
-            let _ = self.cancel_client_pointers(client_id);
-        }
+        self.record_pending_cancel_client(client_id);
+        let _ = self.resolve_pending_touch_recovery_and_releases();
         let keys_to_release: Vec<i32> = self
             .held_keys
             .iter()
@@ -4674,6 +4633,307 @@ mod tests {
         drop(client_c);
         drop(client_b);
         drop(client_a);
+        let _ = std::fs::remove_dir_all(&registry);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn connected_browser_schedules_bounded_recovery_for_failed_up() {
+        let root = scratch("tdconnup");
+        let socket = root.join("serve.sock");
+        let listener = UnixListener::bind(&socket).expect("bind fake daemon");
+        let seen_actions = Arc::new(Mutex::new(Vec::<i64>::new()));
+        let seen_t = Arc::clone(&seen_actions);
+        let recovered = Arc::new((Mutex::new(false), Condvar::new()));
+        let recovered_t = Arc::clone(&recovered);
+        let _daemon = std::thread::spawn(move || {
+            let mut req_idx = 0usize;
+            for stream in listener.incoming() {
+                let Ok(mut stream) = stream else { break };
+                let mut reader = BufReader::new(stream.try_clone().unwrap());
+                loop {
+                    let mut line = String::new();
+                    if reader.read_line(&mut line).unwrap_or(0) == 0 {
+                        break;
+                    }
+                    let req: Value = serde_json::from_str(&line).unwrap();
+                    if let Some(a) = req["args"]["action"].as_i64() {
+                        seen_t.lock().unwrap().push(a);
+                    }
+                    req_idx += 1;
+                    // req 1: ACTION_DOWN -> ok
+                    // req 2: initial ACTION_UP -> drop (transient EOF)
+                    // req 3: scheduled retry ACTION_UP while browser is STILL connected -> ok
+                    if req_idx == 2 {
+                        break;
+                    }
+                    let resp = json!({
+                        "id": req["id"],
+                        "envelope": { "ok": true, "result": { "ok": true } },
+                    });
+                    if stream.write_all(format!("{resp}\n").as_bytes()).is_err() {
+                        break;
+                    }
+                    let _ = stream.flush();
+                    if req_idx >= 3 {
+                        let (lock, cv) = &*recovered_t;
+                        *lock.lock().unwrap() = true;
+                        cv.notify_all();
+                        return;
+                    }
+                }
+            }
+        });
+
+        let registry = scratch("tdconnup-reg");
+        publish_input_entry(&registry, "s_tdconnup", Some(&socket), None, false);
+        let hub = Hub::new(registry.clone());
+        let client = hub.open_input("s_tdconnup").expect("open");
+        let (mut rx, tx) = ws_sink_pair();
+
+        // 1. Confirmed Down succeeds.
+        client.enqueue(
+            r#"{"t":"touch","phase":"down","id":1,"x":200,"y":400}"#,
+            Arc::clone(&tx),
+        );
+        assert_eq!(read_server_ws_text(&mut rx)["ok"], json!(true));
+
+        // 2. Direct Up fails on first send; browser stays connected and sends NO more commands.
+        client.enqueue(
+            r#"{"t":"touch","phase":"up","id":1,"x":205,"y":405}"#,
+            Arc::clone(&tx),
+        );
+        let up_reply = read_server_ws_text(&mut rx);
+        assert_eq!(up_reply["ok"], json!(false));
+        assert_eq!(up_reply["code"], json!("EOF"));
+
+        // 3. Without disconnecting or sending another command, scheduled recovery must retry
+        //    and deliver the retained ACTION_UP automatically.
+        let (lock, cv) = &*recovered;
+        let guard = lock.lock().unwrap();
+        let (guard, _) = cv
+            .wait_timeout_while(guard, Duration::from_secs(3), |done| !*done)
+            .unwrap();
+        assert!(
+            *guard,
+            "connected browser with retained failed Up must auto-retry ACTION_UP"
+        );
+
+        let actions = seen_actions.lock().unwrap().clone();
+        assert_eq!(
+            actions,
+            vec![
+                i64::from(ACTION_DOWN),
+                i64::from(ACTION_UP),
+                i64::from(ACTION_UP),
+            ],
+            "failed direct Up must be retained and retried while browser remains connected"
+        );
+
+        drop(client);
+        let _ = std::fs::remove_dir_all(&registry);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn disconnect_retains_confirmed_pointer_release_when_initial_cancel_fails() {
+        let root = scratch("tddisc");
+        let socket = root.join("serve.sock");
+        let listener = UnixListener::bind(&socket).expect("bind fake daemon");
+        let seen_actions = Arc::new(Mutex::new(Vec::<i64>::new()));
+        let seen_t = Arc::clone(&seen_actions);
+        let recovered = Arc::new((Mutex::new(false), Condvar::new()));
+        let recovered_t = Arc::clone(&recovered);
+        let _daemon = std::thread::spawn(move || {
+            let mut req_idx = 0usize;
+            for stream in listener.incoming() {
+                let Ok(mut stream) = stream else { break };
+                let mut reader = BufReader::new(stream.try_clone().unwrap());
+                loop {
+                    let mut line = String::new();
+                    if reader.read_line(&mut line).unwrap_or(0) == 0 {
+                        break;
+                    }
+                    let req: Value = serde_json::from_str(&line).unwrap();
+                    if let Some(a) = req["args"]["action"].as_i64() {
+                        seen_t.lock().unwrap().push(a);
+                    }
+                    req_idx += 1;
+                    // req 1: ACTION_DOWN -> ok
+                    // req 2: disconnect initial ACTION_CANCEL -> drop (transient failure)
+                    // req 3: scheduled retry ACTION_CANCEL -> ok
+                    if req_idx == 2 {
+                        break;
+                    }
+                    let resp = json!({
+                        "id": req["id"],
+                        "envelope": { "ok": true, "result": { "ok": true } },
+                    });
+                    if stream.write_all(format!("{resp}\n").as_bytes()).is_err() {
+                        break;
+                    }
+                    let _ = stream.flush();
+                    if req_idx >= 3 {
+                        let (lock, cv) = &*recovered_t;
+                        *lock.lock().unwrap() = true;
+                        cv.notify_all();
+                        return;
+                    }
+                }
+            }
+        });
+
+        let registry = scratch("tddisc-reg");
+        publish_input_entry(&registry, "s_tddisc", Some(&socket), None, false);
+        let hub = Hub::new(registry.clone());
+        let client = hub.open_input("s_tddisc").expect("open");
+        let (mut rx, tx) = ws_sink_pair();
+
+        // Confirmed pointer down (no pending_touch_recovery).
+        client.enqueue(
+            r#"{"t":"touch","phase":"down","id":1,"x":150,"y":250}"#,
+            Arc::clone(&tx),
+        );
+        assert_eq!(read_server_ws_text(&mut rx)["ok"], json!(true));
+
+        // Disconnect the only browser; first ACTION_CANCEL fails, scheduled backoff must retry.
+        drop(client);
+        let (lock, cv) = &*recovered;
+        let guard = lock.lock().unwrap();
+        let (guard, _) = cv
+            .wait_timeout_while(guard, Duration::from_secs(3), |done| !*done)
+            .unwrap();
+        assert!(
+            *guard,
+            "disconnect with failed initial ACTION_CANCEL must retain pointer and retry"
+        );
+
+        let actions = seen_actions.lock().unwrap().clone();
+        assert_eq!(
+            actions,
+            vec![
+                i64::from(ACTION_DOWN),
+                i64::from(ACTION_CANCEL),
+                i64::from(ACTION_CANCEL),
+            ],
+            "failed initial disconnect cancel must be retried until accepted"
+        );
+
+        let _ = std::fs::remove_dir_all(&registry);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn disconnect_multi_pointer_partial_failure_retains_remaining_release() {
+        let root = scratch("tdmpdisc");
+        let socket = root.join("serve.sock");
+        let listener = UnixListener::bind(&socket).expect("bind fake daemon");
+        let seen: Arc<Mutex<Vec<(i64, Value)>>> = Arc::new(Mutex::new(Vec::new()));
+        let seen_t = Arc::clone(&seen);
+        let recovered = Arc::new((Mutex::new(false), Condvar::new()));
+        let recovered_t = Arc::clone(&recovered);
+        let _daemon = std::thread::spawn(move || {
+            let mut req_idx = 0usize;
+            for stream in listener.incoming() {
+                let Ok(mut stream) = stream else { break };
+                let mut reader = BufReader::new(stream.try_clone().unwrap());
+                loop {
+                    let mut line = String::new();
+                    if reader.read_line(&mut line).unwrap_or(0) == 0 {
+                        break;
+                    }
+                    let req: Value = serde_json::from_str(&line).unwrap();
+                    if let Some(a) = req["args"]["action"].as_i64() {
+                        seen_t
+                            .lock()
+                            .unwrap()
+                            .push((a, req["args"]["pointers"].clone()));
+                    }
+                    req_idx += 1;
+                    // req 1: Client A ptr 1 DOWN -> ok
+                    // req 2: Client A ptr 2 POINTER_DOWN -> ok
+                    // req 3: Client B ptr 1 POINTER_DOWN -> ok
+                    // req 4: Client A disconnect -> release ptr 1 POINTER_UP -> ok
+                    // req 5: Client A disconnect -> release ptr 2 POINTER_UP -> drop!
+                    // req 6: scheduled retry -> release remaining ptr 2 POINTER_UP -> ok
+                    if req_idx == 5 {
+                        break;
+                    }
+                    let resp = json!({
+                        "id": req["id"],
+                        "envelope": { "ok": true, "result": { "ok": true } },
+                    });
+                    if stream.write_all(format!("{resp}\n").as_bytes()).is_err() {
+                        break;
+                    }
+                    let _ = stream.flush();
+                    if req_idx >= 6 {
+                        let (lock, cv) = &*recovered_t;
+                        *lock.lock().unwrap() = true;
+                        cv.notify_all();
+                        return;
+                    }
+                }
+            }
+        });
+
+        let registry = scratch("tdmpdisc-reg");
+        publish_input_entry(&registry, "s_tdmpdisc", Some(&socket), None, false);
+        let hub = Hub::new(registry.clone());
+        let client_a = hub.open_input("s_tdmpdisc").expect("open A");
+        let client_b = hub.open_input("s_tdmpdisc").expect("open B");
+        let (mut rx_a, tx_a) = ws_sink_pair();
+        let (mut rx_b, tx_b) = ws_sink_pair();
+
+        client_a.enqueue(
+            r#"{"t":"touch","phase":"down","id":1,"x":100,"y":100}"#,
+            Arc::clone(&tx_a),
+        );
+        assert_eq!(read_server_ws_text(&mut rx_a)["ok"], json!(true));
+        client_a.enqueue(
+            r#"{"t":"touch","phase":"down","id":2,"x":200,"y":200}"#,
+            Arc::clone(&tx_a),
+        );
+        assert_eq!(read_server_ws_text(&mut rx_a)["ok"], json!(true));
+        client_b.enqueue(
+            r#"{"t":"touch","phase":"down","id":1,"x":300,"y":300}"#,
+            Arc::clone(&tx_b),
+        );
+        assert_eq!(read_server_ws_text(&mut rx_b)["ok"], json!(true));
+
+        // Disconnect A while B stays connected; A's second pointer release fails on req 5
+        // and must be retried on req 6 without re-releasing ptr 1 or touching B's pointer.
+        drop(client_a);
+        let (lock, cv) = &*recovered;
+        let guard = lock.lock().unwrap();
+        let (guard, _) = cv
+            .wait_timeout_while(guard, Duration::from_secs(3), |done| !*done)
+            .unwrap();
+        assert!(
+            *guard,
+            "partial failure during multi-pointer disconnect must retry remaining pointer"
+        );
+
+        let recorded = seen.lock().unwrap().clone();
+        assert_eq!(recorded.len(), 6, "unexpected recorded frames: {recorded:?}");
+        // req 4: released wire_id 0 (3 pointers -> 2 pointers remaining: wire_id 1 and 2)
+        assert_eq!(
+            recorded[3].0,
+            i64::from(ACTION_POINTER_UP | (0 << ACTION_POINTER_INDEX_SHIFT))
+        );
+        assert_eq!(
+            recorded[3].1,
+            json!([[0, 100.0, 100.0], [1, 200.0, 200.0], [2, 300.0, 300.0]])
+        );
+        // req 5 (failed) and req 6 (retry): both release wire_id 1 with [wire_id 1, wire_id 2]
+        assert_eq!(
+            recorded[4].0,
+            i64::from(ACTION_POINTER_UP | (0 << ACTION_POINTER_INDEX_SHIFT))
+        );
+        assert_eq!(recorded[4].1, json!([[1, 200.0, 200.0], [2, 300.0, 300.0]]));
+        assert_eq!(recorded[5], recorded[4]);
+
+        drop(client_b);
         let _ = std::fs::remove_dir_all(&registry);
         let _ = std::fs::remove_dir_all(&root);
     }
