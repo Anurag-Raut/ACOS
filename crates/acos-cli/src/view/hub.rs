@@ -1370,9 +1370,15 @@ enum InputCommand {
         dx: f32,
         dy: f32,
     },
+    Pinch {
+        x: f32,
+        y: f32,
+        delta: f32,
+    },
     Key {
         code: i32,
         phase: KeyPhase,
+        meta: i32,
     },
     Text {
         s: String,
@@ -2052,6 +2058,7 @@ impl InputWorker {
                     phase: TouchPhase::Down,
                     ..
                 } | InputCommand::Scroll { .. }
+                    | InputCommand::Pinch { .. }
                     | InputCommand::Key {
                         phase: KeyPhase::Down | KeyPhase::Press,
                         ..
@@ -2074,7 +2081,8 @@ impl InputWorker {
                 self.handle_touch(client_id, phase, id, x, y)
             }
             InputCommand::Scroll { x, y, dx, dy } => self.handle_scroll(&entry, x, y, dx, dy),
-            InputCommand::Key { code, phase } => self.handle_key(client_id, code, phase),
+            InputCommand::Pinch { x, y, delta } => self.handle_pinch(&entry, x, y, delta),
+            InputCommand::Key { code, phase, meta } => self.handle_key(client_id, code, phase, meta),
             InputCommand::Text { s } => self.handle_text(&s),
             InputCommand::Rotate { rotation } => self.handle_rotate(rotation),
         }
@@ -2570,7 +2578,140 @@ impl InputWorker {
         json!({ "ok": true, "t": "scroll" })
     }
 
-    fn handle_key(&mut self, client_id: u64, code: i32, phase: KeyPhase) -> Value {
+    fn handle_pinch(&mut self, entry: &Entry, x: f32, y: f32, delta: f32) -> Value {
+        if let Err((c, m)) = self.resolve_pending_touch_recovery_and_releases() {
+            return err_json(&c, &m);
+        }
+        if !self.pointers.is_empty() {
+            return err_json("INVALID_STATE", "cannot pinch while a touch pointer is active");
+        }
+        if delta == 0.0 {
+            return json!({ "ok": true, "t": "pinch", "ignored": "zero_delta" });
+        }
+        let w = if entry.display.0 > 0 {
+            entry.display.0 as f32
+        } else {
+            1080.0
+        };
+        let h = if entry.display.1 > 0 {
+            entry.display.1 as f32
+        } else {
+            2400.0
+        };
+        let max_axis = ((w.min(h) - 8.0) * 0.5).max(0.0);
+        if max_axis < 4.0 {
+            return json!({ "ok": true, "t": "pinch", "ignored": "clamped_zero" });
+        }
+        let mid_axis = (w.min(h) * 0.18).clamp(24.0, 200.0).min(max_axis * 0.65);
+        let travel = (delta.abs() * 0.35)
+            .clamp(16.0, 160.0)
+            .min((max_axis - mid_axis).max(0.0))
+            .min((mid_axis - 8.0).max(0.0));
+        if travel < 1.0 {
+            return json!({ "ok": true, "t": "pinch", "ignored": "clamped_zero" });
+        }
+        let (a_start, a_end) = if delta < 0.0 {
+            // Negative wheel delta (scroll up / trackpad spread) zooms in.
+            (mid_axis - travel, mid_axis + travel)
+        } else {
+            // Positive wheel delta (scroll down / trackpad pinch) zooms out.
+            (mid_axis + travel, mid_axis - travel)
+        };
+        let a_max = a_start.max(a_end);
+        let cx = x.clamp(4.0 + a_max, (w - 4.0 - a_max).max(4.0 + a_max));
+        let cy = y.clamp(4.0 + a_max, (h - 4.0 - a_max).max(4.0 + a_max));
+
+        const MOVE_STEPS: usize = 6;
+        const STEP_NS: i64 = 8_000_000;
+        let total_frames = MOVE_STEPS + 4; // down, p_down, moves..., p_up, up
+        let span_ns = (total_frames as i64 - 1) * STEP_NS;
+        let end_now = monotonic_nanos();
+        let down_time = (end_now - span_ns).max(self.last_event_time_ns + 1);
+
+        let mut frames: Vec<(i32, Vec<Value>, (f32, f32), i64)> = Vec::with_capacity(total_frames);
+        let p0_start = (cx - a_start, cy - a_start);
+        let p1_start = (cx + a_start, cy + a_start);
+        let p0_end = (cx - a_end, cy - a_end);
+        let p1_end = (cx + a_end, cy + a_end);
+
+        frames.push((
+            ACTION_DOWN,
+            vec![json!([0, p0_start.0, p0_start.1])],
+            p0_start,
+            down_time,
+        ));
+        frames.push((
+            ACTION_POINTER_DOWN | (1 << ACTION_POINTER_INDEX_SHIFT),
+            vec![
+                json!([0, p0_start.0, p0_start.1]),
+                json!([1, p1_start.0, p1_start.1]),
+            ],
+            p0_start,
+            down_time + STEP_NS,
+        ));
+        for step in 1..=MOVE_STEPS {
+            let t = step as f32 / MOVE_STEPS as f32;
+            let a = a_start + (a_end - a_start) * t;
+            let p0 = (cx - a, cy - a);
+            let p1 = (cx + a, cy + a);
+            frames.push((
+                ACTION_MOVE,
+                vec![json!([0, p0.0, p0.1]), json!([1, p1.0, p1.1])],
+                p0,
+                down_time + ((step as i64) + 1) * STEP_NS,
+            ));
+        }
+        frames.push((
+            ACTION_POINTER_UP | (1 << ACTION_POINTER_INDEX_SHIFT),
+            vec![json!([0, p0_end.0, p0_end.1]), json!([1, p1_end.0, p1_end.1])],
+            p0_end,
+            down_time + ((MOVE_STEPS as i64) + 2) * STEP_NS,
+        ));
+        frames.push((
+            ACTION_UP,
+            vec![json!([0, p0_end.0, p0_end.1])],
+            p0_end,
+            down_time + ((MOVE_STEPS as i64) + 3) * STEP_NS,
+        ));
+
+        let mut sent_down = false;
+        for (action, pointers, (p0x, p0y), event_time) in frames {
+            self.last_event_time_ns = event_time;
+            match self.call_daemon_outcome(
+                "panel_touch",
+                json!({
+                    "action": action,
+                    "down_time": down_time,
+                    "event_time": event_time,
+                    "pointers": pointers,
+                }),
+            ) {
+                Ok(_) => {
+                    if action == ACTION_DOWN {
+                        sent_down = true;
+                    }
+                }
+                Err((c, m, may_have_fired)) => {
+                    if (sent_down || (action == ACTION_DOWN && may_have_fired))
+                        && !self.slot.is_replaced()
+                        && !is_guest_gone_code(&c)
+                    {
+                        self.pending_touch_recovery = Some(PendingTouchRecovery {
+                            wire_id: 0,
+                            x: p0x,
+                            y: p0y,
+                            down_time_ns: down_time,
+                        });
+                        let _ = self.resolve_pending_touch_recovery();
+                    }
+                    return err_json(&c, &m);
+                }
+            }
+        }
+        json!({ "ok": true, "t": "pinch" })
+    }
+
+    fn handle_key(&mut self, client_id: u64, code: i32, phase: KeyPhase, meta: i32) -> Value {
         let event_type = match phase {
             KeyPhase::Down => {
                 if !self.held_keys.contains(&(client_id, code)) {
@@ -2587,13 +2728,14 @@ impl InputWorker {
                 "press"
             }
         };
-        match self.call_daemon(
-            "panel_key",
-            json!({
-                "code": code,
-                "event_type": event_type,
-            }),
-        ) {
+        let mut payload = json!({
+            "code": code,
+            "event_type": event_type,
+        });
+        if meta != 0 {
+            payload["meta_state"] = json!(meta);
+        }
+        match self.call_daemon("panel_key", payload) {
             Ok(_) => json!({ "ok": true, "t": "key", "code": code, "phase": event_type }),
             Err((c, m)) => err_json(&c, &m),
         }
@@ -2744,6 +2886,15 @@ fn parse_input_command(raw_json: &str) -> Result<InputCommand, String> {
                 dy: dy.unwrap_or(0.0),
             })
         }
+        "pinch" => {
+            let x = finite_opt_f32(val.get("x"), "x")?
+                .ok_or_else(|| "pinch requires numeric `x`".to_string())?;
+            let y = finite_opt_f32(val.get("y"), "y")?
+                .ok_or_else(|| "pinch requires numeric `y`".to_string())?;
+            let delta = finite_opt_f32(val.get("delta"), "delta")?
+                .ok_or_else(|| "pinch requires numeric `delta`".to_string())?;
+            Ok(InputCommand::Pinch { x, y, delta })
+        }
         "key" => {
             let code = match val.get("code") {
                 Some(Value::String(name)) => super::keycodes::parse_keycode(name)
@@ -2765,7 +2916,15 @@ fn parse_input_command(raw_json: &str) -> Result<InputCommand, String> {
                     ))
                 }
             };
-            Ok(InputCommand::Key { code, phase })
+            let meta = match val.get("meta") {
+                None | Some(Value::Null) => 0,
+                Some(v) => v
+                    .as_i64()
+                    .and_then(|n| i32::try_from(n).ok())
+                    .filter(|&n| n >= 0)
+                    .ok_or_else(|| "key `meta` must be a non-negative integer".to_string())?,
+            };
+            Ok(InputCommand::Key { code, phase, meta })
         }
         "text" => {
             let s = val
@@ -5664,5 +5823,215 @@ mod tests {
         drop(client);
         let _ = std::fs::remove_dir_all(&registry);
         let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn pinch_dispatches_two_finger_zoom_in_and_zoom_out_sequences() {
+        let daemon = FakeDaemon::start("pinch-seq");
+        let registry = scratch("pinch-seq-reg");
+        publish_input_entry(&registry, "s_pinch", Some(&daemon.socket), None, false);
+        let hub = Hub::new(registry.clone());
+        let client = hub.open_input("s_pinch").expect("open");
+        let (mut rx, tx) = ws_sink_pair();
+
+        // Zero delta is ignored cleanly without dispatching touch frames.
+        client.enqueue(r#"{"t":"pinch","x":540,"y":1200,"delta":0}"#, Arc::clone(&tx));
+        let ignored = read_server_ws_text(&mut rx);
+        assert_eq!(ignored["ok"], json!(true));
+        assert_eq!(ignored["ignored"], json!("zero_delta"));
+        assert!(daemon.calls.lock().unwrap().is_empty());
+
+        // Negative delta -> zoom in (two fingers spread outward).
+        client.enqueue(
+            r#"{"t":"pinch","x":540,"y":1200,"delta":-120}"#,
+            Arc::clone(&tx),
+        );
+        let reply_in = read_server_ws_text(&mut rx);
+        assert_eq!(reply_in["ok"], json!(true));
+        assert_eq!(reply_in["t"], json!("pinch"));
+
+        let calls_in = daemon.calls.lock().unwrap().clone();
+        assert_eq!(calls_in.len(), 10, "down + p_down + 6 moves + p_up + up");
+        assert_eq!(calls_in[0].0, "panel_touch");
+        assert_eq!(calls_in[0].1["action"], json!(ACTION_DOWN));
+        assert_eq!(calls_in[1].1["action"], json!(ACTION_POINTER_DOWN | (1 << ACTION_POINTER_INDEX_SHIFT)));
+        for step in 2..8 {
+            assert_eq!(calls_in[step].1["action"], json!(ACTION_MOVE));
+        }
+        assert_eq!(calls_in[8].1["action"], json!(ACTION_POINTER_UP | (1 << ACTION_POINTER_INDEX_SHIFT)));
+        assert_eq!(calls_in[9].1["action"], json!(ACTION_UP));
+
+        let span = |args: &Value| -> f64 {
+            let ptrs = args["pointers"].as_array().expect("pointers");
+            let x0 = ptrs[0][1].as_f64().unwrap();
+            let y0 = ptrs[0][2].as_f64().unwrap();
+            let x1 = ptrs[1][1].as_f64().unwrap();
+            let y1 = ptrs[1][2].as_f64().unwrap();
+            ((x1 - x0).powi(2) + (y1 - y0).powi(2)).sqrt()
+        };
+        assert!(
+            span(&calls_in[8].1) > span(&calls_in[1].1),
+            "negative delta must spread fingers apart (zoom in)"
+        );
+
+        let mut prev_ts = 0i64;
+        for (_, args) in &calls_in {
+            let ts = args["event_time"].as_i64().unwrap();
+            assert!(ts > prev_ts, "timestamps must strictly advance");
+            prev_ts = ts;
+            for p in args["pointers"].as_array().unwrap() {
+                let px = p[1].as_f64().unwrap();
+                let py = p[2].as_f64().unwrap();
+                assert!((4.0..=1076.0).contains(&px), "px in bounds: {px}");
+                assert!((4.0..=2396.0).contains(&py), "py in bounds: {py}");
+            }
+        }
+
+        // Positive delta near edge -> zoom out (clamped inside bounds, fingers converge).
+        daemon.calls.lock().unwrap().clear();
+        client.enqueue(r#"{"t":"pinch","x":10,"y":10,"delta":120}"#, Arc::clone(&tx));
+        let reply_out = read_server_ws_text(&mut rx);
+        assert_eq!(reply_out["ok"], json!(true));
+        let calls_out = daemon.calls.lock().unwrap().clone();
+        assert_eq!(calls_out.len(), 10);
+        assert!(
+            span(&calls_out[8].1) < span(&calls_out[1].1),
+            "positive delta must pinch fingers inward (zoom out)"
+        );
+        for (_, args) in &calls_out {
+            for p in args["pointers"].as_array().unwrap() {
+                let px = p[1].as_f64().unwrap();
+                let py = p[2].as_f64().unwrap();
+                assert!((4.0..=1076.0).contains(&px), "edge-clamped px in bounds: {px}");
+                assert!((4.0..=2396.0).contains(&py), "edge-clamped py in bounds: {py}");
+            }
+        }
+
+        drop(client);
+        let _ = std::fs::remove_dir_all(&registry);
+    }
+
+    #[test]
+    fn pinch_rejects_while_touch_active_and_watch_only_and_cancels_on_failure() {
+        let root = scratch("pinch-fail");
+        let socket = root.join("serve.sock");
+        let listener = UnixListener::bind(&socket).expect("bind");
+        let seen = Arc::new(Mutex::new(Vec::<(String, Option<i64>)>::new()));
+        let seen_t = Arc::clone(&seen);
+        let fail_on_move = Arc::new(AtomicBool::new(true));
+        let fail_t = Arc::clone(&fail_on_move);
+        std::thread::spawn(move || {
+            for stream in listener.incoming() {
+                let Ok(mut writer) = stream else { break };
+                let reader = BufReader::new(writer.try_clone().expect("clone"));
+                for line in reader.lines() {
+                    let Ok(line) = line else { break };
+                    if line.trim().is_empty() {
+                        continue;
+                    }
+                    let req: Value = serde_json::from_str(&line).expect("req");
+                    let id = req["id"].clone();
+                    let tool = req["tool"].as_str().unwrap_or("").to_string();
+                    let action = req["args"]["action"].as_i64();
+                    seen_t.lock().unwrap().push((tool.clone(), action));
+                    let envelope = if tool == "panel_touch"
+                        && action == Some(i64::from(ACTION_MOVE))
+                        && fail_t.swap(false, Ordering::SeqCst)
+                    {
+                        json!({"ok": false, "error": {"code": "INPUT_UNAVAILABLE", "message": "injected move error"}})
+                    } else {
+                        json!({"ok": true, "result": {"ok": true}})
+                    };
+                    let resp = json!({"id": id, "envelope": envelope});
+                    writeln!(writer, "{resp}").ok();
+                    writer.flush().ok();
+                }
+            }
+        });
+
+        let registry = scratch("pinch-fail-reg");
+        publish_input_entry(&registry, "s_pf", Some(&socket), None, false);
+        let hub = Hub::new(registry.clone());
+        let client = hub.open_input("s_pf").expect("open");
+        let (mut rx, tx) = ws_sink_pair();
+
+        // Active pointer blocks pinch with INVALID_STATE.
+        client.enqueue(r#"{"t":"touch","phase":"down","id":1,"x":200,"y":300}"#, Arc::clone(&tx));
+        assert_eq!(read_server_ws_text(&mut rx)["ok"], json!(true));
+        client.enqueue(r#"{"t":"pinch","x":540,"y":1200,"delta":-100}"#, Arc::clone(&tx));
+        let busy = read_server_ws_text(&mut rx);
+        assert_eq!(busy["ok"], json!(false));
+        assert_eq!(busy["code"], json!("INVALID_STATE"));
+        client.enqueue(r#"{"t":"touch","phase":"up","id":1,"x":200,"y":300}"#, Arc::clone(&tx));
+        assert_eq!(read_server_ws_text(&mut rx)["ok"], json!(true));
+
+        // Failure mid-pinch triggers immediate ACTION_CANCEL recovery.
+        seen.lock().unwrap().clear();
+        client.enqueue(r#"{"t":"pinch","x":540,"y":1200,"delta":-100}"#, Arc::clone(&tx));
+        let failed = read_server_ws_text(&mut rx);
+        assert_eq!(failed["ok"], json!(false));
+        assert_eq!(failed["code"], json!("INPUT_UNAVAILABLE"));
+        let recorded = seen.lock().unwrap().clone();
+        assert_eq!(
+            recorded.last(),
+            Some(&("panel_touch".to_string(), Some(i64::from(ACTION_CANCEL)))),
+            "mid-pinch error must cancel active guest touch: {recorded:?}"
+        );
+
+        // Watch-only session blocks pinch with VERIFY_WATCH_ONLY.
+        publish_input_entry(&registry, "s_pf_ro", Some(&socket), None, true);
+        let ro_client = hub.open_input("s_pf_ro").expect("open ro");
+        let (mut rx_ro, tx_ro) = ws_sink_pair();
+        ro_client.enqueue(r#"{"t":"pinch","x":540,"y":1200,"delta":-100}"#, Arc::clone(&tx_ro));
+        let ro_reply = read_server_ws_text(&mut rx_ro);
+        assert_eq!(ro_reply["ok"], json!(false));
+        assert_eq!(ro_reply["code"], json!("VERIFY_WATCH_ONLY"));
+
+        drop(ro_client);
+        drop(client);
+        let _ = std::fs::remove_dir_all(&registry);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn key_with_meta_forwards_meta_state_and_omits_when_zero() {
+        let daemon = FakeDaemon::start("key-meta");
+        let registry = scratch("key-meta-reg");
+        publish_input_entry(&registry, "s_km", Some(&daemon.socket), None, false);
+        let hub = Hub::new(registry.clone());
+        let client = hub.open_input("s_km").expect("open");
+        let (mut rx, tx) = ws_sink_pair();
+
+        // Plain key press omits meta_state.
+        client.enqueue(r#"{"t":"key","code":"KEYCODE_VOLUME_UP","phase":"press"}"#, Arc::clone(&tx));
+        assert_eq!(read_server_ws_text(&mut rx)["ok"], json!(true));
+
+        // Key press with Ctrl meta forwards meta_state.
+        client.enqueue(
+            r#"{"t":"key","code":"KEYCODE_A","phase":"press","meta":12288}"#,
+            Arc::clone(&tx),
+        );
+        assert_eq!(read_server_ws_text(&mut rx)["ok"], json!(true));
+
+        // Negative meta is rejected cleanly.
+        client.enqueue(
+            r#"{"t":"key","code":"KEYCODE_A","phase":"press","meta":-1}"#,
+            Arc::clone(&tx),
+        );
+        let bad = read_server_ws_text(&mut rx);
+        assert_eq!(bad["ok"], json!(false));
+        assert_eq!(bad["code"], json!("INVALID_ARGUMENT"));
+
+        let calls = daemon.calls.lock().unwrap().clone();
+        assert_eq!(calls.len(), 2);
+        assert_eq!(calls[0].0, "panel_key");
+        assert_eq!(calls[0].1["code"], json!(24));
+        assert!(calls[0].1.get("meta_state").is_none());
+        assert_eq!(calls[1].0, "panel_key");
+        assert_eq!(calls[1].1["code"], json!(29));
+        assert_eq!(calls[1].1["meta_state"], json!(12288));
+
+        drop(client);
+        let _ = std::fs::remove_dir_all(&registry);
     }
 }

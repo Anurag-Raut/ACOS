@@ -54,8 +54,10 @@ pub const PAGE: &str = r##"<!doctype html>
   .bar button { background: var(--panel); color: var(--text); border: 1px solid var(--line);
     border-radius: 8px; padding: 5px 11px; cursor: pointer; font-size: 12px; }
   .bar button:hover:not(:disabled) { border-color: var(--accent); }
+  .bar button.active { border-color: var(--accent); background: rgba(79, 156, 249, .18); color: var(--accent); }
   .bar button:disabled { opacity: .45; cursor: not-allowed; }
-  .bar .actions { display: flex; gap: 6px; align-items: center; }
+  .bar .actions { display: flex; gap: 5px; align-items: center; flex-wrap: wrap; }
+  .bar .sep { width: 1px; height: 18px; background: var(--line); margin: 0 2px; }
   .bar .spacer { flex: 1; }
   .bar .titles { min-width: 0; max-width: 320px; }
   .bar .titles .big { font-weight: 600; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -71,9 +73,18 @@ pub const PAGE: &str = r##"<!doctype html>
   .screenwrap.watchonly { cursor: default; }
   #frame { display: block; width: 100%; height: 100%; object-fit: contain;
     pointer-events: none; -webkit-user-drag: none; user-select: none; }
+  #gesture-svg { position: absolute; inset: 0; width: 100%; height: 100%;
+    pointer-events: none; z-index: 2; overflow: hidden; }
   #offline { position: absolute; inset: auto 0 0 0; background: rgba(13,17,23,.82);
-    color: var(--warn); font-size: 12px; padding: 6px 10px; z-index: 3; }
-  #overlay { position: absolute; inset: 0; pointer-events: none; z-index: 2; overflow: hidden; }
+    color: var(--warn); font-size: 12px; padding: 6px 10px; z-index: 4; }
+  #overlay { position: absolute; inset: 0; pointer-events: none; z-index: 3; overflow: hidden; }
+  .touch-dot { position: absolute; width: 26px; height: 26px; margin: -13px 0 0 -13px;
+    border: 2px solid var(--ok); background: rgba(63, 185, 80, .18); border-radius: 50%;
+    pointer-events: none; }
+  .touch-dot.mirror { border-color: var(--accent); background: rgba(79, 156, 249, .18); }
+  .pinch-pivot { position: absolute; width: 8px; height: 8px; margin: -4px 0 0 -4px;
+    border-radius: 50%; background: var(--accent); opacity: .8; pointer-events: none; }
+  .trail-fade { transition: opacity .45s ease-out; opacity: 0; }
   .ripple { position: absolute; width: 44px; height: 44px; margin: -22px 0 0 -22px;
     border: 2px solid var(--accent); border-radius: 50%; opacity: .95;
     animation: ripple .9s ease-out forwards; }
@@ -138,6 +149,13 @@ pub const PAGE: &str = r##"<!doctype html>
       <button id="btn-home" type="button" title="Home">Home</button>
       <button id="btn-recents" type="button" title="Recents">Recents</button>
       <button id="btn-rotate" type="button" title="Rotate 90°">Rotate</button>
+      <span class="sep" aria-hidden="true"></span>
+      <button id="btn-vol-down" type="button" title="Volume down">Vol−</button>
+      <button id="btn-vol-up" type="button" title="Volume up">Vol+</button>
+      <button id="btn-power" type="button" title="Power / Wake">Power</button>
+      <span class="sep" aria-hidden="true"></span>
+      <button id="btn-pinch" type="button" aria-pressed="false" title="Two-finger pinch mode (or Alt + drag, or Ctrl + wheel)">Pinch</button>
+      <button id="btn-shot" type="button" title="Save PNG screenshot" disabled>Shot</button>
     </div>
     <span class="spacer"></span>
     <span class="pill" id="dinput">idle</span>
@@ -146,6 +164,7 @@ pub const PAGE: &str = r##"<!doctype html>
   <div class="stage">
     <div class="screenwrap" id="screenwrap" tabindex="0">
       <canvas id="frame" width="0" height="0" aria-label="live screen"></canvas>
+      <svg id="gesture-svg" aria-hidden="true"></svg>
       <div id="overlay"></div>
       <div id="offline" hidden>stream offline · reconnecting…</div>
     </div>
@@ -154,8 +173,7 @@ pub const PAGE: &str = r##"<!doctype html>
       <div class="mono" id="dactivity" style="font-size:12px;color:var(--muted);margin-bottom:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">-</div>
       <h2>agent &amp; human activity</h2>
       <ol id="events" reversed></ol>
-      <div class="note">Click or type on the screen to interact (source: panel).
-        Watch-only until first input; verify sessions stay read-only.</div>
+      <div class="note">Click: tap · Drag: swipe/fling · Hold: long-press · Wheel: scroll · Alt+drag / Ctrl+wheel: pinch · Type / Ctrl+V: text. Verify sessions stay read-only.</div>
     </aside>
   </div>
 </section>
@@ -165,9 +183,11 @@ const token = new URLSearchParams(location.search).get("t") || "";
 const auth = (path) => path + (path.includes("?") ? "&" : "?") + "t=" + encodeURIComponent(token);
 const $ = (id) => document.getElementById(id);
 const grid = $("grid"), detail = $("detail"), statusPill = $("status");
-const frame = $("frame"), frameCtx = frame.getContext("2d"), screenWrap = $("screenwrap"), overlay = $("overlay"), eventsList = $("events");
+const frame = $("frame"), frameCtx = frame.getContext("2d"), screenWrap = $("screenwrap"), gestureSvg = $("gesture-svg"), overlay = $("overlay"), eventsList = $("events");
 const btnBack = $("btn-back"), btnHome = $("btn-home"), btnRecents = $("btn-recents"), btnRotate = $("btn-rotate");
+const btnVolDown = $("btn-vol-down"), btnVolUp = $("btn-vol-up"), btnPower = $("btn-power"), btnPinch = $("btn-pinch"), btnShot = $("btn-shot");
 const verifyBanner = $("verify-banner"), dinput = $("dinput");
+const SVG_NS = "http://www.w3.org/2000/svg";
 
 let sessions = [];
 let current = null;
@@ -195,6 +215,9 @@ let ws = null;
 let wsQueue = [];
 const activePointers = new Map();
 const heldGuestKeys = new Set();
+let pinchMode = false;
+let lastLocalGestureHint = null;
+let panelTouchState = { active: 0, maxPointers: 0, startX: 0, startY: 0, startTs: 0 };
 
 const KEY_MAP = {
   Backspace: "KEYCODE_DEL",
@@ -209,6 +232,23 @@ const KEY_MAP = {
   End: "KEYCODE_MOVE_END",
   PageUp: "KEYCODE_PAGE_UP",
   PageDown: "KEYCODE_PAGE_DOWN",
+};
+
+const KEY_NAMES = {
+  3: "Home",
+  4: "Back",
+  19: "Up",
+  20: "Down",
+  21: "Left",
+  22: "Right",
+  24: "Vol+",
+  25: "Vol−",
+  26: "Power",
+  29: "A",
+  66: "Enter",
+  67: "Del",
+  112: "FwdDel",
+  187: "Recents",
 };
 
 function el(tag, cls, text) {
@@ -248,22 +288,44 @@ function projectName(path) {
 function applyToolbarUi() {
   const isWatchOnly = !!(current && current.watch_only);
   const noLauncher = !!(current && current.has_home === false);
+  const inputBlocked = isWatchOnly || sessionEnded;
   verifyBanner.hidden = !isWatchOnly;
   screenWrap.classList.toggle("watchonly", isWatchOnly);
 
-  btnBack.disabled = isWatchOnly;
+  btnBack.disabled = inputBlocked;
   btnBack.title = isWatchOnly ? "watch-only: verify run" : "Back (Escape)";
 
-  btnHome.disabled = isWatchOnly || noLauncher;
+  btnHome.disabled = inputBlocked || noLauncher;
   btnHome.title = isWatchOnly
     ? "watch-only: verify run"
     : (noLauncher ? "no launcher in this session" : "Home");
 
-  btnRecents.disabled = isWatchOnly;
+  btnRecents.disabled = inputBlocked;
   btnRecents.title = isWatchOnly ? "watch-only: verify run" : "Recents";
 
-  btnRotate.disabled = isWatchOnly;
+  btnRotate.disabled = inputBlocked;
   btnRotate.title = isWatchOnly ? "watch-only: verify run" : "Rotate 90°";
+
+  btnVolDown.disabled = inputBlocked;
+  btnVolDown.title = isWatchOnly ? "watch-only: verify run" : "Volume down";
+
+  btnVolUp.disabled = inputBlocked;
+  btnVolUp.title = isWatchOnly ? "watch-only: verify run" : "Volume up";
+
+  btnPower.disabled = inputBlocked;
+  btnPower.title = isWatchOnly ? "watch-only: verify run" : "Power / Wake";
+
+  if (inputBlocked && pinchMode) {
+    pinchMode = false;
+  }
+  btnPinch.disabled = inputBlocked;
+  btnPinch.classList.toggle("active", pinchMode);
+  btnPinch.setAttribute("aria-pressed", String(pinchMode));
+  btnPinch.title = isWatchOnly
+    ? "watch-only: verify run"
+    : "Two-finger pinch mode (or Alt + drag, or Ctrl + wheel)";
+
+  btnShot.disabled = !(frame.width > 0 && frame.height > 0);
 
   if (isWatchOnly) {
     dinput.textContent = "watch-only";
@@ -407,7 +469,38 @@ async function refresh() {
   pollTimer = setTimeout(refresh, 2000);
 }
 
+function resetPanelTouchState() {
+  panelTouchState = { active: 0, maxPointers: 0, startX: 0, startY: 0, startTs: 0 };
+  lastLocalGestureHint = null;
+}
+
+function clearPointerVisuals(entry, fadeTrail) {
+  if (!entry) return;
+  if (entry.dotEl) { entry.dotEl.remove(); entry.dotEl = null; }
+  if (entry.mirrorDotEl) { entry.mirrorDotEl.remove(); entry.mirrorDotEl = null; }
+  if (entry.pivotEl) { entry.pivotEl.remove(); entry.pivotEl = null; }
+  if (entry.pinchLineEl) { entry.pinchLineEl.remove(); entry.pinchLineEl = null; }
+  if (entry.trailEl) {
+    const trail = entry.trailEl;
+    entry.trailEl = null;
+    if (fadeTrail) {
+      requestAnimationFrame(() => trail.classList.add("trail-fade"));
+      setTimeout(() => trail.remove(), 480);
+    } else {
+      trail.remove();
+    }
+  }
+}
+
+function clearAllPointerVisuals() {
+  for (const entry of activePointers.values()) {
+    clearPointerVisuals(entry, false);
+  }
+  gestureSvg.textContent = "";
+}
+
 function closeWs() {
+  clearAllPointerVisuals();
   activePointers.clear();
   heldGuestKeys.clear();
   pendingRotate = null;
@@ -436,7 +529,8 @@ function isRotationPending() {
 function cancelActivePointers() {
   if (activePointers.size === 0) return;
   const entries = Array.from(activePointers.entries());
-  for (const [pid] of entries) {
+  for (const [pid, entry] of entries) {
+    clearPointerVisuals(entry, false);
     try {
       if (screenWrap.hasPointerCapture && screenWrap.hasPointerCapture(pid)) {
         screenWrap.releasePointerCapture(pid);
@@ -444,9 +538,9 @@ function cancelActivePointers() {
     } catch (_) {}
   }
   activePointers.clear();
-  const [firstId, firstPt] = entries[0];
-  if (firstPt) {
-    sendInput({ t: "touch", phase: "cancel", id: firstId, x: firstPt.x, y: firstPt.y });
+  const [firstId, firstEntry] = entries[0];
+  if (firstEntry) {
+    sendInput({ t: "touch", phase: "cancel", id: firstId, x: firstEntry.x, y: firstEntry.y });
   }
 }
 
@@ -540,6 +634,7 @@ function ensureWs() {
     ws = null;
     wsQueue = [];
     pendingRotate = null;
+    clearAllPointerVisuals();
     activePointers.clear();
     heldGuestKeys.clear();
     if (current && !current.watch_only) {
@@ -672,6 +767,7 @@ function clearFrameCanvas() {
   }
   frame.width = 0;
   frame.height = 0;
+  btnShot.disabled = true;
 }
 
 async function drawDecodedFrame(part, sid, gen, ctrl) {
@@ -699,6 +795,7 @@ async function drawDecodedFrame(part, sid, gen, ctrl) {
     frameCtx.drawImage(bmp, 0, 0);
   }
   bmp.close();
+  btnShot.disabled = !(frame.width > 0 && frame.height > 0);
   markLive();
   setAspect(frameSize.w, frameSize.h);
   if (pendingRotate && !pendingRotate.awaitingReply) {
@@ -821,6 +918,10 @@ function openSession(s) {
   stopFrameStream();
   if (source) { source.close(); source = null; }
   clearFrameCanvas();
+  resetPanelTouchState();
+  pinchMode = false;
+  overlay.textContent = "";
+  gestureSvg.textContent = "";
   sessionEnded = false;
   sessionEverConnected = false;
   disconnectedPolls = 0;
@@ -860,11 +961,14 @@ function closeSession() {
   sessionEnded = false;
   sessionEverConnected = false;
   disconnectedPolls = 0;
+  pinchMode = false;
+  resetPanelTouchState();
   closeWs();
   stopFrameStream();
   if (source) { source.close(); source = null; }
   clearFrameCanvas();
   overlay.textContent = "";
+  gestureSvg.textContent = "";
   current = null;
   currentGuestGen = null;
   pendingRotate = null;
@@ -891,9 +995,12 @@ function markLive() {
 function markSessionEnded(sid) {
   if (!current || (sid && current.session_id !== sid)) return;
   sessionEnded = true;
+  pinchMode = false;
+  resetPanelTouchState();
   closeWs();
   stopFrameStream();
   if (source) { source.close(); source = null; }
+  applyToolbarUi();
   $("offline").textContent = "session ended";
   $("offline").hidden = false;
   $("dstate").textContent = "session ended";
@@ -957,6 +1064,7 @@ function connectEvents(s) {
   });
   source.addEventListener("lag", (message) => {
     if (sessionEnded) return;
+    resetPanelTouchState();
     let data = {};
     try { data = JSON.parse(message.data); } catch (error) { return; }
     if (data.missed) addEvent({ cmd: "…", status: "", text: data.missed + " earlier events dropped" }, "lag");
@@ -973,6 +1081,74 @@ function connectEvents(s) {
     $("dstate").textContent = "reconnecting";
     $("dstate").className = "pill bad";
   };
+}
+
+function displayToOverlayPx(pt) {
+  const dw = display.w || frameSize.w || frame.width || 1080;
+  const dh = display.h || frameSize.h || frame.height || 2400;
+  const imgRect = renderedImageRect();
+  const ovRect = overlay.getBoundingClientRect();
+  if (!imgRect.width || !imgRect.height || !ovRect.width || !ovRect.height) return null;
+  return {
+    x: (imgRect.left - ovRect.left) + (pt.x / dw) * imgRect.width,
+    y: (imgRect.top - ovRect.top) + (pt.y / dh) * imgRect.height,
+  };
+}
+
+function mirrorDisplayPoint(pt) {
+  const dw = display.w || frameSize.w || frame.width || 1080;
+  const dh = display.h || frameSize.h || frame.height || 2400;
+  const cx = (dw - 1) / 2;
+  const cy = (dh - 1) / 2;
+  return {
+    x: Math.max(0, Math.min(dw - 1, Math.round(2 * cx - pt.x))),
+    y: Math.max(0, Math.min(dh - 1, Math.round(2 * cy - pt.y))),
+  };
+}
+
+function syntheticMirrorId(pid) {
+  return 1000000 + (Math.abs(Number(pid) || 0) % 100000);
+}
+
+function svgEl(tag, attrs) {
+  const node = document.createElementNS(SVG_NS, tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    node.setAttribute(k, String(v));
+  }
+  return node;
+}
+
+function updatePointerVisuals(entry) {
+  const p = displayToOverlayPx(entry);
+  if (!p) return;
+  if (entry.dotEl) {
+    entry.dotEl.style.left = p.x + "px";
+    entry.dotEl.style.top = p.y + "px";
+  }
+  if (entry.trailEl) {
+    entry.overlayPts.push(p.x.toFixed(1) + "," + p.y.toFixed(1));
+    if (entry.overlayPts.length > 256) entry.overlayPts.shift();
+    entry.trailEl.setAttribute("points", entry.overlayPts.join(" "));
+  }
+  if (entry.mirrorPt) {
+    const mp = displayToOverlayPx(entry.mirrorPt);
+    if (mp) {
+      if (entry.mirrorDotEl) {
+        entry.mirrorDotEl.style.left = mp.x + "px";
+        entry.mirrorDotEl.style.top = mp.y + "px";
+      }
+      if (entry.pinchLineEl) {
+        entry.pinchLineEl.setAttribute("x1", p.x.toFixed(1));
+        entry.pinchLineEl.setAttribute("y1", p.y.toFixed(1));
+        entry.pinchLineEl.setAttribute("x2", mp.x.toFixed(1));
+        entry.pinchLineEl.setAttribute("y2", mp.y.toFixed(1));
+      }
+      if (entry.pivotEl) {
+        entry.pivotEl.style.left = ((p.x + mp.x) / 2) + "px";
+        entry.pivotEl.style.top = ((p.y + mp.y) / 2) + "px";
+      }
+    }
+  }
 }
 
 function onEvent(event, kind) {
@@ -1001,6 +1177,78 @@ function onEvent(event, kind) {
       };
     }
   }
+  if (event.kind === "action" && event.source === "panel" && event.cmd === "touch") {
+    const ok = !event.status || event.status === "ok";
+    if (!ok) {
+      if (typeof event.x === "number" && typeof event.y === "number") ripple(event);
+      addEvent(event, kind);
+      if (event.phase === "up" || event.phase === "cancel") resetPanelTouchState();
+      return;
+    }
+    if (event.phase === "down") {
+      const evTs = event.ts_ms || Date.now();
+      if (panelTouchState.active > 0 && panelTouchState.startTs > 0 && (evTs - panelTouchState.startTs) > 30000) {
+        panelTouchState.active = 0;
+        panelTouchState.maxPointers = 0;
+        panelTouchState.startTs = 0;
+      }
+      panelTouchState.active += 1;
+      if (panelTouchState.active === 1) {
+        panelTouchState.maxPointers = 1;
+        panelTouchState.startX = typeof event.x === "number" ? event.x : 0;
+        panelTouchState.startY = typeof event.y === "number" ? event.y : 0;
+        panelTouchState.startTs = evTs;
+      } else {
+        panelTouchState.maxPointers = Math.max(panelTouchState.maxPointers, panelTouchState.active);
+      }
+      return;
+    }
+    if (event.phase === "up") {
+      panelTouchState.active = Math.max(0, panelTouchState.active - 1);
+      if (panelTouchState.active > 0) return;
+      const ex = typeof event.x === "number" ? event.x : panelTouchState.startX;
+      const ey = typeof event.y === "number" ? event.y : panelTouchState.startY;
+      const hasStart = panelTouchState.startTs > 0;
+      const sx = hasStart ? panelTouchState.startX : ex;
+      const sy = hasStart ? panelTouchState.startY : ey;
+      const dt = hasStart ? Math.max(0, (event.ts_ms || Date.now()) - panelTouchState.startTs) : 0;
+      const dist = Math.hypot(ex - sx, ey - sy);
+      const hint = lastLocalGestureHint && (Date.now() - lastLocalGestureHint.ts) < 800
+        ? lastLocalGestureHint.kind : null;
+      let gestureCmd = "tap";
+      if (panelTouchState.maxPointers >= 2 || hint === "pinch") {
+        gestureCmd = "pinch";
+      } else if (hint === "scroll" && dist >= 20) {
+        gestureCmd = "scroll";
+      } else if (dist >= 24) {
+        gestureCmd = "drag";
+      } else if (dt >= 450) {
+        gestureCmd = "long-press";
+      }
+      panelTouchState.startTs = 0;
+      panelTouchState.maxPointers = 0;
+      const summary = Object.assign({}, event, { cmd: gestureCmd });
+      if (gestureCmd === "drag" || gestureCmd === "scroll" || gestureCmd === "pinch") {
+        summary.x = sx;
+        summary.y = sy;
+        summary.x2 = ex;
+        summary.y2 = ey;
+      } else {
+        summary.x = ex;
+        summary.y = ey;
+      }
+      if (typeof summary.x === "number" && typeof summary.y === "number") {
+        ripple(summary);
+      }
+      addEvent(summary, kind);
+      return;
+    }
+    if (event.phase === "cancel") {
+      resetPanelTouchState();
+      addEvent(Object.assign({}, event, { cmd: "touch cancel" }), kind);
+      return;
+    }
+  }
   if (event.kind === "action" && typeof event.x === "number" && typeof event.y === "number") {
     ripple(event);
   }
@@ -1008,26 +1256,46 @@ function onEvent(event, kind) {
 }
 
 function ripple(event) {
-  const dw = display.w || frameSize.w || frame.width || 1080;
-  const dh = display.h || frameSize.h || frame.height || 2400;
-  const imgRect = renderedImageRect();
-  const ovRect = overlay.getBoundingClientRect();
-  if (!imgRect.width || !imgRect.height || !ovRect.width || !ovRect.height) return;
-  const leftPx = (imgRect.left - ovRect.left) + (event.x / dw) * imgRect.width;
-  const topPx = (imgRect.top - ovRect.top) + (event.y / dh) * imgRect.height;
+  const p1 = displayToOverlayPx({ x: event.x, y: event.y });
+  if (!p1) return;
   const ok = !event.status || event.status === "ok";
   const srcCls = event.source === "panel" ? " panel" : "";
+  const hasEnd = typeof event.x2 === "number" && typeof event.y2 === "number";
+  const p2 = hasEnd ? displayToOverlayPx({ x: event.x2, y: event.y2 }) : null;
+  const isPath = p2 && Math.hypot(p2.x - p1.x, p2.y - p1.y) >= 12;
+
+  if (isPath) {
+    const color = !ok ? "#f85149" : (event.source === "panel" ? "#3fb950" : "#4f9cf9");
+    const line = svgEl("line", {
+      x1: p1.x.toFixed(1),
+      y1: p1.y.toFixed(1),
+      x2: p2.x.toFixed(1),
+      y2: p2.y.toFixed(1),
+      stroke: color,
+      "stroke-width": "3",
+      "stroke-linecap": "round",
+      "stroke-opacity": "0.85",
+    });
+    gestureSvg.appendChild(line);
+    requestAnimationFrame(() => line.classList.add("trail-fade"));
+    setTimeout(() => line.remove(), 900);
+  }
+
+  const endPx = isPath ? p2 : p1;
   const dot = el("div", "ripple" + srcCls + (ok ? "" : " bad"));
-  dot.style.left = leftPx + "px";
-  dot.style.top = topPx + "px";
+  dot.style.left = endPx.x + "px";
+  dot.style.top = endPx.y + "px";
   overlay.appendChild(dot);
   const srcPrefix = event.source ? event.source + " " : "";
-  const tag = el("div", "rip-tag", srcPrefix + (event.cmd || "tap") + " " + event.x + "," + event.y
+  const coordText = isPath
+    ? (event.x + "," + event.y + " → " + event.x2 + "," + event.y2)
+    : (event.x + "," + event.y);
+  const tag = el("div", "rip-tag", srcPrefix + (event.cmd || "tap") + " " + coordText
     + (ok ? "" : " · " + event.status));
-  tag.style.left = leftPx + "px";
-  tag.style.top = topPx + "px";
+  tag.style.left = endPx.x + "px";
+  tag.style.top = endPx.y + "px";
   overlay.appendChild(tag);
-  setTimeout(() => { dot.remove(); tag.remove(); }, 1400);
+  setTimeout(() => { dot.remove(); tag.remove(); }, 1200);
 }
 
 function addEvent(event, kind) {
@@ -1049,7 +1317,10 @@ function addEvent(event, kind) {
     what.appendChild(el("span", "txt", " @ " + event.x + "," + event.y
       + (typeof event.x2 === "number" ? " → " + event.x2 + "," + event.y2 : "")));
   }
-  if (event.key !== undefined && event.key !== null) what.appendChild(el("span", "txt", " key " + event.key));
+  if (event.key !== undefined && event.key !== null) {
+    const kname = KEY_NAMES[event.key];
+    what.appendChild(el("span", "txt", " key " + (kname ? kname + " (" + event.key + ")" : event.key)));
+  }
   if (event.text) what.appendChild(el("span", "txt", " “" + event.text + "”"));
   if (event.note) what.appendChild(el("span", "txt", " · " + event.note));
   if (event.activity && event.kind === "activity") what.appendChild(el("span", "txt", " " + event.activity));
@@ -1059,7 +1330,7 @@ function addEvent(event, kind) {
 }
 
 screenWrap.addEventListener("pointerdown", (e) => {
-  if (!current) return;
+  if (!current || sessionEnded) return;
   if (e.pointerType === "mouse" && e.button !== 0) return;
   const pt = clientToDisplay(e.clientX, e.clientY, false);
   if (!pt) return;
@@ -1069,26 +1340,100 @@ screenWrap.addEventListener("pointerdown", (e) => {
     applyToolbarUi();
     return;
   }
+  if (!sendInput({ t: "touch", phase: "down", id: e.pointerId, x: pt.x, y: pt.y })) {
+    return;
+  }
   try { screenWrap.setPointerCapture(e.pointerId); } catch (_) {}
-  activePointers.set(e.pointerId, pt);
-  sendInput({ t: "touch", phase: "down", id: e.pointerId, x: pt.x, y: pt.y });
+
+  const usePinch = (e.altKey || pinchMode) && activePointers.size === 0 && e.pointerType !== "touch";
+  let mirrorId = null;
+  let mirrorPt = null;
+  if (usePinch) {
+    const candId = syntheticMirrorId(e.pointerId);
+    const candPt = mirrorDisplayPoint(pt);
+    if (sendInput({ t: "touch", phase: "down", id: candId, x: candPt.x, y: candPt.y })) {
+      mirrorId = candId;
+      mirrorPt = candPt;
+      lastLocalGestureHint = { kind: "pinch", ts: Date.now() };
+    }
+  } else {
+    lastLocalGestureHint = null;
+  }
+
+  const dotEl = el("div", "touch-dot");
+  overlay.appendChild(dotEl);
+  let trailEl = null;
+  let mirrorDotEl = null;
+  let pinchLineEl = null;
+  let pivotEl = null;
+  if (mirrorId !== null) {
+    mirrorDotEl = el("div", "touch-dot mirror");
+    overlay.appendChild(mirrorDotEl);
+    pivotEl = el("div", "pinch-pivot");
+    overlay.appendChild(pivotEl);
+    pinchLineEl = svgEl("line", {
+      stroke: "#4f9cf9",
+      "stroke-width": "2",
+      "stroke-dasharray": "5 4",
+      "stroke-opacity": "0.85",
+    });
+    gestureSvg.appendChild(pinchLineEl);
+  } else {
+    trailEl = svgEl("polyline", {
+      fill: "none",
+      stroke: "#3fb950",
+      "stroke-width": "3",
+      "stroke-linecap": "round",
+      "stroke-linejoin": "round",
+      "stroke-opacity": "0.8",
+    });
+    gestureSvg.appendChild(trailEl);
+  }
+
+  const entry = {
+    x: pt.x,
+    y: pt.y,
+    startX: pt.x,
+    startY: pt.y,
+    mirrorId,
+    mirrorPt,
+    overlayPts: [],
+    dotEl,
+    mirrorDotEl,
+    pivotEl,
+    pinchLineEl,
+    trailEl,
+  };
+  activePointers.set(e.pointerId, entry);
+  updatePointerVisuals(entry);
 });
 
 screenWrap.addEventListener("pointermove", (e) => {
-  if (!activePointers.has(e.pointerId)) return;
+  const entry = activePointers.get(e.pointerId);
+  if (!entry) return;
   const pt = clientToDisplay(e.clientX, e.clientY, true);
   if (!pt) return;
-  const prev = activePointers.get(e.pointerId);
-  if (prev && prev.x === pt.x && prev.y === pt.y) return;
-  activePointers.set(e.pointerId, pt);
+  if (entry.x === pt.x && entry.y === pt.y) return;
+  entry.x = pt.x;
+  entry.y = pt.y;
   sendInput({ t: "touch", phase: "move", id: e.pointerId, x: pt.x, y: pt.y });
+  if (entry.mirrorId !== null) {
+    const mpt = mirrorDisplayPoint(pt);
+    if (!entry.mirrorPt || entry.mirrorPt.x !== mpt.x || entry.mirrorPt.y !== mpt.y) {
+      entry.mirrorPt = mpt;
+      sendInput({ t: "touch", phase: "move", id: entry.mirrorId, x: mpt.x, y: mpt.y });
+    }
+  }
+  updatePointerVisuals(entry);
 });
 
 function finishPointer(e, phase) {
-  if (!activePointers.has(e.pointerId)) return;
-  const pt = clientToDisplay(e.clientX, e.clientY, true) || activePointers.get(e.pointerId);
+  const entry = activePointers.get(e.pointerId);
+  if (!entry) return;
+  const pt = clientToDisplay(e.clientX, e.clientY, true) || { x: entry.x, y: entry.y };
   if (phase === "cancel") {
-    for (const pid of activePointers.keys()) {
+    for (const [pid, item] of activePointers.entries()) {
+      clearPointerVisuals(item, false);
       try {
         if (screenWrap.hasPointerCapture && screenWrap.hasPointerCapture(pid)) {
           screenWrap.releasePointerCapture(pid);
@@ -1096,23 +1441,30 @@ function finishPointer(e, phase) {
       } catch (_) {}
     }
     activePointers.clear();
-  } else {
-    activePointers.delete(e.pointerId);
-    try {
-      if (screenWrap.hasPointerCapture && screenWrap.hasPointerCapture(e.pointerId)) {
-        screenWrap.releasePointerCapture(e.pointerId);
-      }
-    } catch (_) {}
+    sendInput({ t: "touch", phase: "cancel", id: e.pointerId, x: pt.x, y: pt.y });
+    return;
   }
-  sendInput({ t: "touch", phase, id: e.pointerId, x: pt.x, y: pt.y });
+  const dragged = Math.hypot(pt.x - entry.startX, pt.y - entry.startY) >= 24;
+  activePointers.delete(e.pointerId);
+  try {
+    if (screenWrap.hasPointerCapture && screenWrap.hasPointerCapture(e.pointerId)) {
+      screenWrap.releasePointerCapture(e.pointerId);
+    }
+  } catch (_) {}
+  clearPointerVisuals(entry, dragged);
+  if (entry.mirrorId !== null) {
+    const mpt = mirrorDisplayPoint(pt);
+    sendInput({ t: "touch", phase: "up", id: entry.mirrorId, x: mpt.x, y: mpt.y });
+  }
+  sendInput({ t: "touch", phase: "up", id: e.pointerId, x: pt.x, y: pt.y });
 }
 
 screenWrap.addEventListener("pointerup", (e) => finishPointer(e, "up"));
 screenWrap.addEventListener("pointercancel", (e) => finishPointer(e, "cancel"));
 
 screenWrap.addEventListener("wheel", (e) => {
-  if (!current) return;
-  if (isRotationPending()) return;
+  if (!current || sessionEnded) return;
+  if (isRotationPending() || activePointers.size > 0) return;
   const pt = clientToDisplay(e.clientX, e.clientY, false) || {
     x: Math.round((display.w || 1080) / 2),
     y: Math.round((display.h || 2400) / 2),
@@ -1123,6 +1475,14 @@ screenWrap.addEventListener("wheel", (e) => {
     return;
   }
   const scale = e.deltaMode === 1 ? 40 : (e.deltaMode === 2 ? 400 : 1);
+  if (e.ctrlKey) {
+    const delta = Math.round(e.deltaY * scale);
+    if (!delta) return;
+    lastLocalGestureHint = { kind: "pinch", ts: Date.now() };
+    sendInput({ t: "pinch", x: pt.x, y: pt.y, delta });
+    return;
+  }
+  lastLocalGestureHint = { kind: "scroll", ts: Date.now() };
   sendInput({
     t: "scroll",
     x: pt.x,
@@ -1134,6 +1494,14 @@ screenWrap.addEventListener("wheel", (e) => {
 
 document.addEventListener("keydown", (e) => {
   if (!current || detail.hidden || current.watch_only || sessionEnded) return;
+  if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey) {
+    if (e.key && e.key.toLowerCase() === "a" && document.activeElement === screenWrap) {
+      e.preventDefault();
+      // Android META_CTRL_ON (0x1000) | META_CTRL_LEFT_ON (0x2000)
+      sendInput({ t: "key", code: "KEYCODE_A", phase: "press", meta: 0x3000 });
+    }
+    return;
+  }
   if (e.ctrlKey || e.metaKey || e.altKey) return;
   if (document.activeElement && document.activeElement.tagName === "BUTTON" && (e.key === "Enter" || e.key === " ")) {
     return;
@@ -1163,6 +1531,33 @@ document.addEventListener("keyup", (e) => {
   }
 });
 
+document.addEventListener("paste", (e) => {
+  if (!current || detail.hidden || current.watch_only || sessionEnded) return;
+  const raw = (e.clipboardData && e.clipboardData.getData("text/plain")) || "";
+  if (!raw) return;
+  e.preventDefault();
+  const normalized = raw.replace(/\r\n?/g, "\n");
+  const asciiOnly = normalized.replace(/[^\x20-\x7e\n\t]/g, "");
+  const dropped = normalized.length - asciiOnly.length;
+  const MAX_PASTE_CHARS = 2048;
+  const PASTE_CHUNK = 64;
+  const truncated = asciiOnly.length > MAX_PASTE_CHARS;
+  const toSend = asciiOnly.slice(0, MAX_PASTE_CHARS);
+  if (!toSend) {
+    addEvent({ source: "panel", cmd: "paste", status: "bad", note: "ASCII text only" }, "action");
+    return;
+  }
+  for (let i = 0; i < toSend.length; i += PASTE_CHUNK) {
+    sendInput({ t: "text", s: toSend.slice(i, i + PASTE_CHUNK) });
+  }
+  if (dropped > 0 || truncated) {
+    const notes = [];
+    if (dropped > 0) notes.push(dropped + " non-ASCII skipped");
+    if (truncated) notes.push("capped at " + MAX_PASTE_CHARS + " chars");
+    addEvent({ source: "panel", cmd: "paste", status: "ok", note: notes.join(", ") }, "action");
+  }
+});
+
 function sendKeyPress(code) {
   sendInput({ t: "key", code, phase: "down" });
   sendInput({ t: "key", code, phase: "up" });
@@ -1175,6 +1570,33 @@ btnHome.addEventListener("click", () => {
   sendKeyPress("KEYCODE_HOME");
 });
 btnRecents.addEventListener("click", () => sendKeyPress("KEYCODE_APP_SWITCH"));
+btnVolDown.addEventListener("click", () => sendKeyPress("KEYCODE_VOLUME_DOWN"));
+btnVolUp.addEventListener("click", () => sendKeyPress("KEYCODE_VOLUME_UP"));
+btnPower.addEventListener("click", () => sendKeyPress("KEYCODE_POWER"));
+btnPinch.addEventListener("click", () => {
+  if (!current || current.watch_only || sessionEnded) return;
+  pinchMode = !pinchMode;
+  applyToolbarUi();
+  screenWrap.focus({ preventScroll: true });
+});
+btnShot.addEventListener("click", () => {
+  if (!(frame.width > 0 && frame.height > 0)) return;
+  const sid = current ? String(current.session_id).replace(/[^a-zA-Z0-9._-]+/g, "_") : "screen";
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const filename = "acos-" + sid + "-" + stamp + ".png";
+  frame.toBlob((blob) => {
+    if (!blob) return;
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }, "image/png");
+  screenWrap.focus({ preventScroll: true });
+});
 btnRotate.addEventListener("click", () => {
   cancelActivePointers();
   const next = (currentRotation + 1) % 4;
@@ -1192,7 +1614,16 @@ btnRotate.addEventListener("click", () => {
 });
 
 $("back").addEventListener("click", closeSession);
-window.addEventListener("blur", releaseHeldGuestKeys);
+window.addEventListener("blur", () => {
+  releaseHeldGuestKeys();
+  cancelActivePointers();
+});
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) {
+    releaseHeldGuestKeys();
+    cancelActivePointers();
+  }
+});
 window.addEventListener("pagehide", () => {
   closeWs();
   stopFrameStream();
