@@ -43,6 +43,12 @@ pub const EVENT_RING: usize = 128;
 pub const MAX_MESSAGE: u32 = 64 * 1024 * 1024;
 /// Upstream read slice: short enough that a stopping hub closes the socket fast.
 const READ_TIMEOUT: Duration = Duration::from_millis(250);
+/// Hard cap on queued WebSocket input commands per session (CWE-770 bound).
+const INPUT_QUEUE_LIMIT: usize = 128;
+/// Cap for non-terminal commands, reserving 16 slots for `touch up/cancel` and `key up`.
+const INPUT_QUEUE_NORMAL_LIMIT: usize = 112;
+/// Maximum simultaneous active pointers tracked across all clients on one session.
+const MAX_POINTERS: i32 = 32;
 
 /// One published session, parsed from a registry entry (`docs/LIVE_VIEW.md` §5).
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -64,9 +70,22 @@ pub struct Entry {
     pub display: (u32, u32),
     pub stream_socket: Option<String>,
     pub has_home: Option<bool>,
+    pub launch_token: Option<String>,
 }
 
 impl Entry {
+    /// Whether two registry snapshots refer to the same live guest instance.
+    #[must_use]
+    pub fn same_guest(&self, other: &Self) -> bool {
+        self.session_id == other.session_id
+            && self.daemon_pid == other.daemon_pid
+            && self.launcher_pid == other.launcher_pid
+            && self.launch_token == other.launch_token
+            && self.stream_socket == other.stream_socket
+            && self.serve_socket == other.serve_socket
+            && self.watch_only == other.watch_only
+    }
+
     /// Parse a registry document; a document without a session id or a daemon
     /// pid is not a session.
     #[must_use]
@@ -98,6 +117,11 @@ impl Entry {
             .filter(|value| !value.is_empty())
             .map(str::to_string);
         let has_home = doc.get("has_home").and_then(Value::as_bool);
+        let launch_token = doc
+            .get("launch_token")
+            .and_then(Value::as_str)
+            .filter(|value| !value.is_empty())
+            .map(str::to_string);
         Some(Self {
             session_id,
             daemon_pid,
@@ -151,11 +175,13 @@ impl Entry {
                 .filter(|value| !value.is_empty())
                 .map(str::to_string),
             has_home,
+            launch_token,
         })
     }
 
     /// The JSON shape the page consumes (the registry entry plus what the hub
-    /// knows about the stream). Note `serve_socket` stays internal to the hub.
+    /// knows about the stream). Note `serve_socket` and `launch_token` stay
+    /// internal to the hub.
     #[must_use]
     pub fn to_json(&self) -> Value {
         json!({
@@ -250,7 +276,8 @@ impl Hub {
         &self.dir
     }
 
-    /// Re-read the registry: hide (and delete) stale entries, refresh metadata.
+    /// Re-read the registry: hide (and delete) stale entries, refresh metadata,
+    /// and evict slots whose session id was replaced by a newer guest instance.
     fn refresh_locked(&self, inner: &mut Inner) {
         let mut entries = BTreeMap::new();
         for read in live_registry::read_entries(&self.dir) {
@@ -263,15 +290,35 @@ impl Hub {
                 entries.insert(entry.session_id.clone(), entry);
             }
         }
+        let mut replaced_slots = Vec::new();
         for (key, slot) in &inner.slots {
             if let Some(entry) = entries.get(key) {
-                *slot.meta.lock().expect("slot meta") = entry.clone();
+                let mut meta = slot.meta.lock().expect("slot meta");
+                if meta.same_guest(entry) {
+                    *meta = entry.clone();
+                } else {
+                    replaced_slots.push(key.clone());
+                }
             }
         }
+        for key in replaced_slots {
+            inner.slots.remove(&key);
+        }
+        let mut replaced_inputs = Vec::new();
         for (key, input_slot) in &inner.input_slots {
             if let Some(entry) = entries.get(key) {
-                *input_slot.meta.lock().expect("input slot meta") = entry.clone();
+                let mut meta = input_slot.meta.lock().expect("input slot meta");
+                if meta.same_guest(entry) {
+                    *meta = entry.clone();
+                } else {
+                    drop(meta);
+                    input_slot.mark_replaced();
+                    replaced_inputs.push(key.clone());
+                }
             }
+        }
+        for key in replaced_inputs {
+            inner.input_slots.remove(&key);
         }
         // Keep a slot while a browser still watches it (the registry entry may
         // be written/removed around a destroy) or while its upstream is alive.
@@ -323,15 +370,15 @@ impl Hub {
     /// only entry).
     #[must_use]
     pub fn watch(&self, session_id: &str) -> Option<Watcher> {
-        let entry = self.entry(session_id)?;
-        let socket = entry.stream_socket.clone()?;
-        if !std::path::Path::new(&socket).exists() {
-            return None;
-        }
-        let (slot, interactive) = {
+        let (slot, socket, input_slot) = {
             let mut inner = self.inner.lock().expect("hub");
+            self.refresh_locked(&mut inner);
+            let entry = inner.entries.get(session_id)?.clone();
+            let socket = entry.stream_socket.clone()?;
+            if !std::path::Path::new(&socket).exists() {
+                return None;
+            }
             let slot = if let Some(slot) = inner.slots.get(session_id) {
-                *slot.meta.lock().expect("slot meta") = entry.clone();
                 Arc::clone(slot)
             } else {
                 let slot = Arc::new(Slot::new(entry));
@@ -340,16 +387,18 @@ impl Hub {
                     .insert(session_id.to_string(), Arc::clone(&slot));
                 slot
             };
-            let interactive = if let Some(input_slot) = inner.input_slots.get(session_id) {
+            let input_slot = inner.input_slots.get(session_id).cloned();
+            if let Some(ref input_slot) = input_slot {
                 *input_slot.stream_slot.lock().expect("input stream slot") =
                     Some(Arc::downgrade(&slot));
-                input_slot.is_interactive()
-            } else {
-                false
-            };
-            (slot, interactive)
+            }
+            (slot, socket, input_slot)
         };
-        slot.set_interactive(interactive);
+        if let Some(input_slot) = input_slot {
+            input_slot.sync_interactive();
+        } else {
+            slot.set_interactive(false);
+        }
         slot.attach(socket);
         Some(Watcher { slot })
     }
@@ -360,12 +409,12 @@ impl Hub {
     /// Returns `None` when the session is not live in the registry.
     #[must_use]
     pub fn open_input(&self, session_id: &str) -> Option<InputClient> {
-        let entry = self.entry(session_id)?;
         let slot = {
             let mut inner = self.inner.lock().expect("hub");
+            self.refresh_locked(&mut inner);
+            let entry = inner.entries.get(session_id)?.clone();
             let stream_slot = inner.slots.get(session_id).map(Arc::downgrade);
             let slot = if let Some(slot) = inner.input_slots.get(session_id) {
-                *slot.meta.lock().expect("input slot meta") = entry.clone();
                 Arc::clone(slot)
             } else {
                 let slot = Arc::new(InputSlot::new(entry));
@@ -419,7 +468,7 @@ pub struct SlotStats {
 }
 
 /// A browser's subscription to one session. Dropping it detaches; the last
-/// detach closes the upstream socket (and joeins its thread) before returning.
+/// detach closes the upstream socket (and joins its thread) before returning.
 pub struct Watcher {
     slot: Arc<Slot>,
 }
@@ -695,6 +744,9 @@ impl Slot {
                 return;
             }
             state.stopping = true;
+            state.connected = false;
+            state.hello = None;
+            state.frame = None;
             if let Some(stream) = state.active_stream.as_ref() {
                 let _ = stream.shutdown(Shutdown::Both);
             }
@@ -774,14 +826,12 @@ impl Slot {
                     let reconfigured = {
                         let mut state = self.state.lock().expect("slot");
                         state.active_stream = None;
+                        state.connected = false;
                         let reconfigured = state.mode_epoch != start_epoch;
-                        if !reconfigured || state.stopping {
-                            state.connected = false;
-                            if !state.stopping {
-                                if let Err(error) = &outcome {
-                                    state.error = Some(error.to_string());
-                                    state.upstream_errors += 1;
-                                }
+                        if !reconfigured && !state.stopping {
+                            if let Err(error) = &outcome {
+                                state.error = Some(error.to_string());
+                                state.upstream_errors += 1;
                             }
                         }
                         reconfigured
@@ -854,8 +904,12 @@ impl Slot {
                 b'H' => {
                     let hello: Value = serde_json::from_slice(payload)
                         .map_err(|error| framing(format!("hello json: {error}")))?;
-                    self.state.lock().expect("slot").hello = Some(hello);
-                    self.cv.notify_all();
+                    let mut state = self.state.lock().expect("slot");
+                    if !state.stopping {
+                        state.hello = Some(hello);
+                        drop(state);
+                        self.cv.notify_all();
+                    }
                 }
                 b'F' => self.push_frame(payload)?,
                 b'E' => self.push_event(payload)?,
@@ -883,6 +937,9 @@ impl Slot {
             .unwrap_or("png")
             .to_string();
         let mut state = self.state.lock().expect("slot");
+        if state.stopping {
+            return Ok(());
+        }
         state.frame_index += 1;
         state.frame = Some(Arc::new(Frame {
             index: state.frame_index,
@@ -976,60 +1033,131 @@ pub struct InputClient {
 impl InputClient {
     /// Current session metadata snapshot.
     #[must_use]
+    #[cfg_attr(not(test), allow(dead_code))]
     pub fn entry(&self) -> Entry {
         self.slot.meta.lock().expect("input slot meta").clone()
     }
 
     /// Parse one raw WebSocket JSON text message and enqueue it onto the
-    /// session's ordered worker. Invalid JSON/arguments reply immediately on
-    /// `reply_to` without hitting the worker.
+    /// session's ordered worker. Invalid JSON/arguments, replaced sessions, and
+    /// queue-overflow rejections reply immediately on `reply_to` without
+    /// hitting the worker.
     pub fn enqueue(&self, raw_json: &str, reply_to: Arc<Mutex<TcpStream>>) {
-        match parse_input_command(raw_json) {
-            Ok(cmd) => {
-                let mut state = self.slot.state.lock().expect("input slot");
-                state.queue.push_back(WorkerTask::Command {
-                    client_id: self.client_id,
-                    cmd,
-                    reply_to,
-                });
-                self.slot.cv.notify_one();
-            }
+        let cmd = match parse_input_command(raw_json) {
+            Ok(cmd) => cmd,
             Err(err_msg) => {
-                let reply = json!({
-                    "ok": false,
-                    "code": "INVALID_ARGUMENT",
-                    "error": err_msg,
-                })
-                .to_string();
+                let reply = err_json("INVALID_ARGUMENT", &err_msg).to_string();
                 let _ = super::ws::send_text_locked(&reply_to, &reply);
+                return;
             }
+        };
+
+        let mut immediate_reply: Option<(Arc<Mutex<TcpStream>>, String)> = None;
+        {
+            let mut state = self.slot.state.lock().expect("input slot");
+            if state.replaced {
+                immediate_reply = Some((
+                    reply_to,
+                    err_json("SESSION_REPLACED", "session was replaced by a newer guest")
+                        .to_string(),
+                ));
+            } else {
+                // Coalesce consecutive pending `touch move` commands for the
+                // same `(client_id, pointer_id)` when no other touch phase for
+                // that pointer sits after it.
+                let mut coalesced = false;
+                if let InputCommand::Touch {
+                    phase: TouchPhase::Move,
+                    id,
+                    x,
+                    y,
+                } = &cmd
+                {
+                    for pending in state.queue.iter_mut().rev() {
+                        if pending.client_id != self.client_id {
+                            continue;
+                        }
+                        if let InputCommand::Touch {
+                            phase: prev_phase,
+                            id: prev_id,
+                            x: prev_x,
+                            y: prev_y,
+                        } = &mut pending.cmd
+                        {
+                            if *prev_id == *id {
+                                if matches!(prev_phase, TouchPhase::Move) {
+                                    *prev_x = *x;
+                                    *prev_y = *y;
+                                    let superseded =
+                                        std::mem::replace(&mut pending.reply_to, reply_to.clone());
+                                    immediate_reply = Some((
+                                        superseded,
+                                        json!({
+                                            "ok": true,
+                                            "t": "touch",
+                                            "phase": "move",
+                                            "coalesced": true,
+                                        })
+                                        .to_string(),
+                                    ));
+                                    coalesced = true;
+                                }
+                                break;
+                            }
+                        }
+                    }
+                }
+                if !coalesced {
+                    let is_terminal = matches!(
+                        cmd,
+                        InputCommand::Touch {
+                            phase: TouchPhase::Up | TouchPhase::Cancel,
+                            ..
+                        } | InputCommand::Key {
+                            phase: KeyPhase::Up,
+                            ..
+                        }
+                    );
+                    let limit = if is_terminal {
+                        INPUT_QUEUE_LIMIT
+                    } else {
+                        INPUT_QUEUE_NORMAL_LIMIT
+                    };
+                    if state.queue.len() >= limit {
+                        immediate_reply = Some((
+                            reply_to,
+                            err_json("QUEUE_FULL", "input queue full").to_string(),
+                        ));
+                    } else {
+                        state.queue.push_back(QueuedCommand {
+                            client_id: self.client_id,
+                            cmd,
+                            reply_to,
+                        });
+                        self.slot.cv.notify_one();
+                    }
+                }
+            }
+        }
+        if let Some((target, payload)) = immediate_reply {
+            let _ = super::ws::send_text_locked(&target, &payload);
         }
     }
 }
 
 impl Drop for InputClient {
     fn drop(&mut self) {
-        let should_downgrade = {
+        {
             let mut state = self.slot.state.lock().expect("input slot");
             state.clients = state.clients.saturating_sub(1);
-            state.queue.push_back(WorkerTask::ClientDisconnected {
-                client_id: self.client_id,
-            });
+            // Drop any unsent commands from this disconnecting client and push
+            // its cleanup onto the priority disconnects queue so active
+            // pointers/keys release immediately even under backlog.
+            state.queue.retain(|task| task.client_id != self.client_id);
+            state.disconnects.push_back(self.client_id);
             self.slot.cv.notify_one();
-            state.clients == 0
-        };
-        if should_downgrade {
-            if let Some(stream_slot) = self
-                .slot
-                .stream_slot
-                .lock()
-                .expect("input stream slot")
-                .as_ref()
-                .and_then(Weak::upgrade)
-            {
-                stream_slot.set_interactive(false);
-            }
         }
+        self.slot.sync_interactive();
     }
 }
 
@@ -1074,20 +1202,21 @@ enum InputCommand {
     },
 }
 
+struct QueuedCommand {
+    client_id: u64,
+    cmd: InputCommand,
+    reply_to: Arc<Mutex<TcpStream>>,
+}
+
 enum WorkerTask {
-    Command {
-        client_id: u64,
-        cmd: InputCommand,
-        reply_to: Arc<Mutex<TcpStream>>,
-    },
-    ClientDisconnected {
-        client_id: u64,
-    },
+    Command(QueuedCommand),
+    ClientDisconnected { client_id: u64 },
 }
 
 struct InputSlot {
     meta: Mutex<Entry>,
     stream_slot: Mutex<Option<Weak<Slot>>>,
+    interactive_lock: Mutex<()>,
     state: Mutex<InputSlotState>,
     cv: Condvar,
 }
@@ -1096,7 +1225,9 @@ struct InputSlotState {
     clients: usize,
     next_client_id: u64,
     running: bool,
-    queue: VecDeque<WorkerTask>,
+    replaced: bool,
+    disconnects: VecDeque<u64>,
+    queue: VecDeque<QueuedCommand>,
 }
 
 impl InputSlot {
@@ -1104,10 +1235,13 @@ impl InputSlot {
         Self {
             meta: Mutex::new(entry),
             stream_slot: Mutex::new(None),
+            interactive_lock: Mutex::new(()),
             state: Mutex::new(InputSlotState {
                 clients: 0,
                 next_client_id: 1,
                 running: false,
+                replaced: false,
+                disconnects: VecDeque::new(),
                 queue: VecDeque::new(),
             }),
             cv: Condvar::new(),
@@ -1119,12 +1253,42 @@ impl InputSlot {
         state.clients > 0 || state.running
     }
 
+    fn mark_replaced(&self) {
+        let mut state = self.state.lock().expect("input slot");
+        state.replaced = true;
+        self.cv.notify_all();
+    }
+
+    fn is_replaced(&self) -> bool {
+        self.state.lock().expect("input slot").replaced
+    }
+
     fn is_interactive(&self) -> bool {
         if self.meta.lock().expect("input slot meta").watch_only {
             return false;
         }
         let state = self.state.lock().expect("input slot");
-        state.clients > 0
+        state.clients > 0 && !state.replaced
+    }
+
+    /// Serialize `Slot::set_interactive` transitions across concurrent
+    /// `attach_client`, `InputClient::drop`, and `Hub::watch` calls so the
+    /// stream slot always converges on the true current interactive state.
+    fn sync_interactive(&self) {
+        let _guard = self
+            .interactive_lock
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        let interactive = self.is_interactive();
+        let stream_slot = self
+            .stream_slot
+            .lock()
+            .expect("input stream slot")
+            .as_ref()
+            .and_then(Weak::upgrade);
+        if let Some(stream_slot) = stream_slot {
+            stream_slot.set_interactive(interactive);
+        }
     }
 
     fn attach_client(self: &Arc<Self>) -> InputClient {
@@ -1143,20 +1307,27 @@ impl InputSlot {
             }
             client_id
         };
-        if !self.meta.lock().expect("input slot meta").watch_only {
-            if let Some(stream_slot) = self
-                .stream_slot
-                .lock()
-                .expect("input stream slot")
-                .as_ref()
-                .and_then(Weak::upgrade)
-            {
-                stream_slot.set_interactive(true);
-            }
-        }
+        self.sync_interactive();
         InputClient {
             client_id,
             slot: Arc::clone(self),
+        }
+    }
+}
+
+enum DaemonCallErr {
+    /// Failed while writing the request line (safe to retry once on a stale
+    /// keep-alive connection since the daemon did not receive the command).
+    WriteFailed(String, String),
+    /// Failed after the request was written (read error / EOF / daemon error);
+    /// must NOT be blindly replayed because the input may already have fired.
+    Other(String, String),
+}
+
+impl DaemonCallErr {
+    fn into_pair(self) -> (String, String) {
+        match self {
+            Self::WriteFailed(c, m) | Self::Other(c, m) => (c, m),
         }
     }
 }
@@ -1190,7 +1361,7 @@ impl DaemonConn {
         })
     }
 
-    fn call(&mut self, tool: &str, args: Value) -> Result<Value, (String, String)> {
+    fn call(&mut self, tool: &str, args: Value) -> Result<Value, DaemonCallErr> {
         let id = self.next_id;
         self.next_id += 1;
         let line = json!({
@@ -1203,19 +1374,23 @@ impl DaemonConn {
         self.writer
             .write_all(line.as_bytes())
             .and_then(|()| self.writer.flush())
-            .map_err(|e| ("IO_ERROR".to_string(), e.to_string()))?;
+            .map_err(|e| DaemonCallErr::WriteFailed("IO_ERROR".to_string(), e.to_string()))?;
         let mut resp_line = String::new();
         let n = self
             .reader
             .read_line(&mut resp_line)
-            .map_err(|e| ("IO_ERROR".to_string(), e.to_string()))?;
+            .map_err(|e| DaemonCallErr::Other("IO_ERROR".to_string(), e.to_string()))?;
         if n == 0 {
-            return Err(("EOF".to_string(), "daemon closed socket".to_string()));
+            return Err(DaemonCallErr::Other(
+                "EOF".to_string(),
+                "daemon closed socket".to_string(),
+            ));
         }
-        let resp: Value = serde_json::from_str(&resp_line)
-            .map_err(|e| ("BAD_REPLY".to_string(), format!("invalid daemon JSON: {e}")))?;
+        let resp: Value = serde_json::from_str(&resp_line).map_err(|e| {
+            DaemonCallErr::Other("BAD_REPLY".to_string(), format!("invalid daemon JSON: {e}"))
+        })?;
         let envelope = resp.get("envelope").ok_or_else(|| {
-            (
+            DaemonCallErr::Other(
                 "BAD_REPLY".to_string(),
                 "daemon response missing envelope".to_string(),
             )
@@ -1223,17 +1398,24 @@ impl DaemonConn {
         if envelope.get("ok").and_then(Value::as_bool) == Some(true) {
             Ok(envelope.get("result").cloned().unwrap_or(Value::Null))
         } else {
-            let code = envelope
-                .pointer("/error/code")
-                .and_then(Value::as_str)
-                .unwrap_or("INPUT_FAILED")
-                .to_string();
+            let reason = envelope
+                .pointer("/error/details/reason")
+                .and_then(Value::as_str);
+            let code = if reason == Some("SESSION_REPLACED") {
+                "SESSION_REPLACED".to_string()
+            } else {
+                envelope
+                    .pointer("/error/code")
+                    .and_then(Value::as_str)
+                    .unwrap_or("INPUT_FAILED")
+                    .to_string()
+            };
             let message = envelope
                 .pointer("/error/message")
                 .and_then(Value::as_str)
                 .unwrap_or("panel input rejected")
                 .to_string();
-            Err((code, message))
+            Err(DaemonCallErr::Other(code, message))
         }
     }
 }
@@ -1241,6 +1423,7 @@ impl DaemonConn {
 struct ActivePointer {
     client_id: u64,
     pointer_id: i32,
+    wire_id: i32,
     x: f32,
     y: f32,
 }
@@ -1273,13 +1456,20 @@ impl InputWorker {
         ts
     }
 
+    fn alloc_wire_id(&self) -> Option<i32> {
+        (0..MAX_POINTERS).find(|id| !self.pointers.iter().any(|p| p.wire_id == *id))
+    }
+
     fn run(mut self) {
         loop {
             let task = {
                 let mut state = self.slot.state.lock().expect("input slot");
                 loop {
-                    if let Some(task) = state.queue.pop_front() {
-                        break task;
+                    if let Some(client_id) = state.disconnects.pop_front() {
+                        break WorkerTask::ClientDisconnected { client_id };
+                    }
+                    if let Some(cmd) = state.queue.pop_front() {
+                        break WorkerTask::Command(cmd);
                     }
                     if state.clients == 0 {
                         state.running = false;
@@ -1293,11 +1483,11 @@ impl InputWorker {
                 }
             };
             match task {
-                WorkerTask::Command {
+                WorkerTask::Command(QueuedCommand {
                     client_id,
                     cmd,
                     reply_to,
-                } => {
+                }) => {
                     let reply = self.handle_command(client_id, cmd);
                     let _ = super::ws::send_text_locked(&reply_to, &reply.to_string());
                 }
@@ -1326,6 +1516,13 @@ impl InputWorker {
     }
 
     fn call_daemon(&mut self, tool: &str, mut args: Value) -> Result<Value, (String, String)> {
+        if self.slot.is_replaced() {
+            self.conn = None;
+            return Err((
+                "SESSION_REPLACED".to_string(),
+                "session was replaced by a newer guest".to_string(),
+            ));
+        }
         let entry = self.entry();
         let Some(sock) = entry.serve_socket.as_deref() else {
             return Err((
@@ -1338,6 +1535,9 @@ impl InputWorker {
                 "base".to_string(),
                 json!({ "session_id": entry.session_id }),
             );
+            if let Some(token) = entry.launch_token.as_deref() {
+                obj.insert("expected_launch_token".to_string(), json!(token));
+            }
         }
         let need_new = self
             .conn
@@ -1346,24 +1546,36 @@ impl InputWorker {
         if need_new {
             self.conn = Some(DaemonConn::connect(sock)?);
         }
-        let first_err = match self.conn.as_mut().expect("conn").call(tool, args.clone()) {
-            Ok(res) => return Ok(res),
-            Err(err) => err,
-        };
-        if first_err.0 == "IO_ERROR" || first_err.0 == "EOF" {
-            self.conn = None;
-            let mut fresh = DaemonConn::connect(sock)?;
-            let res = fresh.call(tool, args)?;
-            self.conn = Some(fresh);
-            return Ok(res);
+        let reused_conn = !need_new;
+        match self.conn.as_mut().expect("conn").call(tool, args.clone()) {
+            Ok(res) => Ok(res),
+            Err(DaemonCallErr::WriteFailed(c, m)) => {
+                self.conn = None;
+                if reused_conn {
+                    let mut fresh = DaemonConn::connect(sock)?;
+                    let res = fresh.call(tool, args).map_err(DaemonCallErr::into_pair)?;
+                    self.conn = Some(fresh);
+                    Ok(res)
+                } else {
+                    Err((c, m))
+                }
+            }
+            Err(DaemonCallErr::Other(c, m)) => {
+                if c == "IO_ERROR" || c == "EOF" || c == "SESSION_REPLACED" {
+                    self.conn = None;
+                }
+                if c == "SESSION_REPLACED" {
+                    self.slot.mark_replaced();
+                }
+                Err((c, m))
+            }
         }
-        Err(first_err)
     }
 
     fn pointer_wire_list(&self) -> Vec<Value> {
         self.pointers
             .iter()
-            .map(|p| json!([p.pointer_id, p.x, p.y]))
+            .map(|p| json!([p.wire_id, p.x, p.y]))
             .collect()
     }
 
@@ -1450,9 +1662,13 @@ impl InputWorker {
                         Err((c, m)) => err_json(&c, &m),
                     };
                 }
+                let Some(wire_id) = self.alloc_wire_id() else {
+                    return err_json("TOO_MANY_POINTERS", "too many simultaneous active pointers");
+                };
                 self.pointers.push(ActivePointer {
                     client_id,
                     pointer_id,
+                    wire_id,
                     x,
                     y,
                 });
@@ -1614,6 +1830,9 @@ impl InputWorker {
         };
         let ex = (sx + step_x).clamp(4.0, (w - 4.0).max(4.0));
         let ey = (sy + step_y).clamp(4.0, (h - 4.0).max(4.0));
+        if (ex - sx).abs() < 1.0 && (ey - sy).abs() < 1.0 {
+            return json!({ "ok": true, "t": "scroll", "ignored": "clamped_zero" });
+        }
 
         const MOVE_STEPS: usize = 6;
         const STEP_NS: i64 = 8_000_000;
@@ -1636,6 +1855,7 @@ impl InputWorker {
             (action, px, py, event_time)
         });
 
+        let mut sent_down = false;
         for (action, px, py, event_time) in frames {
             self.last_event_time_ns = event_time;
             if let Err((c, m)) = self.call_daemon(
@@ -1647,7 +1867,22 @@ impl InputWorker {
                     "pointers": [[0, px, py]],
                 }),
             ) {
+                if sent_down {
+                    let cancel_ts = self.next_ts_ns();
+                    let _ = self.call_daemon(
+                        "panel_touch",
+                        json!({
+                            "action": ACTION_CANCEL,
+                            "down_time": down_time,
+                            "event_time": cancel_ts,
+                            "pointers": [[0, px, py]],
+                        }),
+                    );
+                }
                 return err_json(&c, &m);
+            }
+            if action == ACTION_DOWN {
+                sent_down = true;
             }
         }
         json!({ "ok": true, "t": "scroll" })
@@ -1869,10 +2104,11 @@ fn finite_opt_f32(val: Option<&Value>, field: &str) -> Result<Option<f32>, Strin
     let f = v
         .as_f64()
         .ok_or_else(|| format!("field `{field}` must be a number"))?;
-    if !f.is_finite() {
+    let narrowed = f as f32;
+    if !f.is_finite() || !narrowed.is_finite() {
         return Err(format!("field `{field}` must be finite"));
     }
-    Ok(Some(f as f32))
+    Ok(Some(narrowed))
 }
 
 #[cfg(test)]
@@ -2007,6 +2243,7 @@ mod tests {
             display: (1080, 2400),
             stream_socket: Some(socket.display().to_string()),
             has_home: Some(false),
+            launch_token: None,
         };
         crate::live_registry::LiveRegistry::at(dir.to_path_buf())
             .write(&entry)
@@ -2351,6 +2588,7 @@ mod tests {
             display: (1080, 2400),
             stream_socket: stream_socket.map(|p| p.display().to_string()),
             has_home: Some(false),
+            launch_token: None,
         };
         crate::live_registry::LiveRegistry::at(dir.to_path_buf())
             .write(&entry)
@@ -2654,5 +2892,245 @@ mod tests {
 
         let _ = std::fs::remove_dir_all(&registry);
         let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn session_replacement_rejects_stale_input_client_without_retargeting() {
+        let daemon_a = FakeDaemon::start("rep-a");
+        let daemon_b = FakeDaemon::start("rep-b");
+        let registry = scratch("rep-reg");
+        let write_entry = |sock: &std::path::Path, token: &str| {
+            let entry = crate::live_registry::LiveEntry {
+                session_id: "s_rep".to_string(),
+                daemon_pid: std::process::id(),
+                launcher_pid: Some(std::process::id()),
+                started_ms: live_registry::now_ms(),
+                client_name: "hub-test".to_string(),
+                client_version: "1".to_string(),
+                project_dir: "/home/Qui/Projects/acos".to_string(),
+                apk: "fixtures/build/apps/counter.apk".to_string(),
+                package: "dev.acos.fixtures.counter".to_string(),
+                app_label: Some("Counter".to_string()),
+                device_name: None,
+                watch_only: false,
+                serve_socket: Some(sock.display().to_string()),
+                activity: Some("Main".to_string()),
+                display: (1080, 2400),
+                stream_socket: None,
+                has_home: Some(false),
+                launch_token: Some(token.to_string()),
+            };
+            crate::live_registry::LiveRegistry::at(registry.clone())
+                .write(&entry)
+                .unwrap();
+        };
+
+        write_entry(&daemon_a.socket, "tok-a");
+        let hub = Hub::new(registry.clone());
+        let old_client = hub.open_input("s_rep").expect("open old client");
+        let (mut old_rx, old_tx) = ws_sink_pair();
+        old_client.enqueue(r#"{"t":"text","s":"hi"}"#, Arc::clone(&old_tx));
+        assert_eq!(read_server_ws_text(&mut old_rx)["ok"], json!(true));
+        assert_eq!(daemon_a.calls.lock().unwrap().len(), 1);
+        assert_eq!(
+            daemon_a.calls.lock().unwrap()[0].1["expected_launch_token"],
+            json!("tok-a")
+        );
+
+        // Replace the session id with a brand-new guest (token B, daemon B).
+        write_entry(&daemon_b.socket, "tok-b");
+        let _ = hub.list();
+
+        // Stale client must be rejected with SESSION_REPLACED and never touch daemon B.
+        old_client.enqueue(r#"{"t":"text","s":"stale"}"#, Arc::clone(&old_tx));
+        let rejected = read_server_ws_text(&mut old_rx);
+        assert_eq!(rejected["ok"], json!(false));
+        assert_eq!(rejected["code"], json!("SESSION_REPLACED"));
+        assert_eq!(daemon_b.calls.lock().unwrap().len(), 0);
+
+        // A freshly opened client targets daemon B with token B.
+        let new_client = hub.open_input("s_rep").expect("open new client");
+        let (mut new_rx, new_tx) = ws_sink_pair();
+        new_client.enqueue(r#"{"t":"text","s":"fresh"}"#, Arc::clone(&new_tx));
+        assert_eq!(read_server_ws_text(&mut new_rx)["ok"], json!(true));
+        assert_eq!(daemon_b.calls.lock().unwrap().len(), 1);
+        assert_eq!(
+            daemon_b.calls.lock().unwrap()[0].1["expected_launch_token"],
+            json!("tok-b")
+        );
+
+        drop(old_client);
+        drop(new_client);
+        let _ = std::fs::remove_dir_all(&registry);
+    }
+
+    #[test]
+    fn two_clients_with_same_pointer_id_get_distinct_wire_ids() {
+        let daemon = FakeDaemon::start("wid-d");
+        let registry = scratch("wid-reg");
+        publish_input_entry(&registry, "s_wid", Some(&daemon.socket), None, false);
+        let hub = Hub::new(registry.clone());
+
+        let c1 = hub.open_input("s_wid").expect("c1");
+        let c2 = hub.open_input("s_wid").expect("c2");
+        let (mut rx1, tx1) = ws_sink_pair();
+        let (mut rx2, tx2) = ws_sink_pair();
+
+        c1.enqueue(
+            r#"{"t":"touch","phase":"down","id":1,"x":100,"y":200}"#,
+            Arc::clone(&tx1),
+        );
+        assert_eq!(read_server_ws_text(&mut rx1)["ok"], json!(true));
+        c2.enqueue(
+            r#"{"t":"touch","phase":"down","id":1,"x":300,"y":400}"#,
+            Arc::clone(&tx2),
+        );
+        assert_eq!(read_server_ws_text(&mut rx2)["ok"], json!(true));
+
+        let calls = daemon.calls.lock().unwrap();
+        assert_eq!(calls.len(), 2);
+        let ptrs = calls[1].1["pointers"].as_array().expect("pointers array");
+        assert_eq!(ptrs.len(), 2);
+        assert_ne!(
+            ptrs[0][0], ptrs[1][0],
+            "two clients using pointer_id=1 must get distinct Android wire pointer IDs"
+        );
+        drop(calls);
+
+        drop(c1);
+        drop(c2);
+        let _ = std::fs::remove_dir_all(&registry);
+    }
+
+    #[test]
+    fn post_write_eof_does_not_replay_command() {
+        let root = scratch("eof-d");
+        let socket = root.join("serve.sock");
+        let listener = UnixListener::bind(&socket).expect("bind eof daemon");
+        let received = Arc::new(AtomicUsize::new(0));
+        let received_t = Arc::clone(&received);
+        std::thread::spawn(move || {
+            for stream in listener.incoming() {
+                let Ok(stream) = stream else { break };
+                let mut reader = BufReader::new(stream);
+                let mut line = String::new();
+                if reader.read_line(&mut line).unwrap_or(0) > 0 {
+                    received_t.fetch_add(1, Ordering::SeqCst);
+                }
+                // Close immediately after reading the request without replying.
+            }
+        });
+
+        let registry = scratch("eof-reg");
+        publish_input_entry(&registry, "s_eof", Some(&socket), None, false);
+        let hub = Hub::new(registry.clone());
+        let client = hub.open_input("s_eof").expect("open");
+        let (mut rx, tx) = ws_sink_pair();
+
+        client.enqueue(r#"{"t":"text","s":"once"}"#, Arc::clone(&tx));
+        let reply = read_server_ws_text(&mut rx);
+        assert_eq!(reply["ok"], json!(false));
+        assert_eq!(reply["code"], json!("EOF"));
+        assert_eq!(
+            received.load(Ordering::SeqCst),
+            1,
+            "post-write EOF must not replay non-idempotent input command"
+        );
+
+        drop(client);
+        let _ = std::fs::remove_dir_all(&registry);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn input_queue_coalesces_moves_and_bounds_backlog() {
+        let root = scratch("qcap-d");
+        let socket = root.join("serve.sock");
+        let listener = UnixListener::bind(&socket).expect("bind slow daemon");
+        let gate = Arc::new((Mutex::new(false), Condvar::new()));
+        let gate_t = Arc::clone(&gate);
+        std::thread::spawn(move || {
+            for stream in listener.incoming() {
+                let Ok(mut stream) = stream else { break };
+                let gate_c = Arc::clone(&gate_t);
+                std::thread::spawn(move || {
+                    let mut reader = BufReader::new(stream.try_clone().unwrap());
+                    let mut line = String::new();
+                    while reader.read_line(&mut line).unwrap_or(0) > 0 {
+                        let req: Value = serde_json::from_str(&line).unwrap();
+                        line.clear();
+                        let (lk, cv) = &*gate_c;
+                        let mut open = lk.lock().unwrap();
+                        while !*open {
+                            open = cv.wait(open).unwrap();
+                        }
+                        drop(open);
+                        let resp = json!({
+                            "id": req["id"],
+                            "envelope": { "ok": true, "result": { "ok": true } },
+                        });
+                        let _ = stream.write_all(format!("{resp}\n").as_bytes());
+                        let _ = stream.flush();
+                    }
+                });
+            }
+        });
+
+        let registry = scratch("qcap-reg");
+        publish_input_entry(&registry, "s_qcap", Some(&socket), None, false);
+        let hub = Hub::new(registry.clone());
+        let client = hub.open_input("s_qcap").expect("open");
+        let (mut rx, tx) = ws_sink_pair();
+
+        // First command blocks in the slow daemon.
+        client.enqueue(
+            r#"{"t":"touch","phase":"down","id":1,"x":10,"y":10}"#,
+            Arc::clone(&tx),
+        );
+        std::thread::sleep(Duration::from_millis(40));
+
+        // Two consecutive moves for the same pointer coalesce, replying immediately
+        // to the superseded move.
+        client.enqueue(
+            r#"{"t":"touch","phase":"move","id":1,"x":20,"y":20}"#,
+            Arc::clone(&tx),
+        );
+        client.enqueue(
+            r#"{"t":"touch","phase":"move","id":1,"x":30,"y":30}"#,
+            Arc::clone(&tx),
+        );
+        let coalesced = read_server_ws_text(&mut rx);
+        assert_eq!(coalesced["ok"], json!(true));
+        assert_eq!(coalesced["coalesced"], json!(true));
+
+        // Fill up to INPUT_QUEUE_NORMAL_LIMIT (1 slot already holds the coalesced move).
+        for _ in 1..INPUT_QUEUE_NORMAL_LIMIT {
+            client.enqueue(r#"{"t":"text","s":"x"}"#, Arc::clone(&tx));
+        }
+        // Next normal command must be rejected immediately with QUEUE_FULL.
+        client.enqueue(r#"{"t":"text","s":"overflow"}"#, Arc::clone(&tx));
+        let full = read_server_ws_text(&mut rx);
+        assert_eq!(full["ok"], json!(false));
+        assert_eq!(full["code"], json!("QUEUE_FULL"));
+
+        // Release daemon and drop client.
+        {
+            let (lk, cv) = &*gate;
+            *lk.lock().unwrap() = true;
+            cv.notify_all();
+        }
+        drop(client);
+        let _ = std::fs::remove_dir_all(&registry);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn finite_opt_f32_rejects_f32_overflow() {
+        let huge = json!(1e308_f64);
+        assert!(
+            finite_opt_f32(Some(&huge), "x").is_err(),
+            "1e308 overflows f32 to inf and must be rejected"
+        );
+        assert_eq!(finite_opt_f32(Some(&json!(42.5)), "x").unwrap(), Some(42.5));
     }
 }

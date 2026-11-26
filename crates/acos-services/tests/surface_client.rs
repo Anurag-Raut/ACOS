@@ -1466,4 +1466,43 @@ fn two_owners_with_same_buffer_id_keep_separate_cached_buffers() {
             "owner A's cache entry must survive process 1 death"
         );
     }
+
+    // Regression (RC#11): destroying layer A after layer C replaced `(token_a, shared_id)`
+    // with a newer inline buffer must NOT evict layer C's replacement from `buffer_cache`.
+    let (handle_c, layer_c) = create_surface(&mut host, client_a, "layer_c");
+    let yellow = [0xf0, 0xd0, 0x10, 0xff];
+    let yellow_fd = solid_memfd(yellow);
+    let mut parcel = token_buffer_txn(
+        handle_c,
+        layer_c,
+        token_a,
+        Some(&yellow_fd),
+        1,
+        shared_id,
+        listener,
+        9,
+    );
+    transact(&mut host, sf, SET_TRANSACTION_STATE, 0, &mut parcel).expect("layer C replaces key");
+
+    // Destroy layer A (which still points at the older generation of `(token_a, shared_id)`).
+    {
+        let mut s = score_state(&state);
+        assert_eq!(s.destroy_layer_tree(handle_a), 1);
+    }
+
+    // Layer C submits a cached-id frame under `(token_a, shared_id)` and must still hit yellow.
+    let mut parcel = token_buffer_txn(
+        handle_c, layer_c, token_a, None, 2, shared_id, listener, 10,
+    );
+    transact(&mut host, sf, SET_TRANSACTION_STATE, 0, &mut parcel)
+        .expect("layer C cached hit after layer A destroy");
+    {
+        let s = score_state(&state);
+        let buf_c = s.latest_buffer(handle_c).expect("layer C buffer");
+        assert_eq!(
+            buf_c.frame_number, 2,
+            "layer C's cached frame must advance even after older layer A was destroyed"
+        );
+        assert_eq!(first_pixel(&s, handle_c), yellow);
+    }
 }

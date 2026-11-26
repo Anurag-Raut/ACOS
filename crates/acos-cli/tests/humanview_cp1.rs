@@ -142,6 +142,30 @@ impl Drop for Daemon {
     }
 }
 
+struct ChildGuard(Option<Child>);
+
+impl ChildGuard {
+    fn new(child: Child) -> Self {
+        Self(Some(child))
+    }
+
+    fn wait_with_output(mut self) -> std::io::Result<std::process::Output> {
+        self.0
+            .take()
+            .expect("child already awaited")
+            .wait_with_output()
+    }
+}
+
+impl Drop for ChildGuard {
+    fn drop(&mut self) {
+        if let Some(mut child) = self.0.take() {
+            let _ = child.kill();
+            let _ = child.wait();
+        }
+    }
+}
+
 struct Conn {
     reader: BufReader<UnixStream>,
     writer: UnixStream,
@@ -235,26 +259,46 @@ impl EventProbe {
         let events_t = Arc::clone(&events);
 
         let handle = std::thread::spawn(move || {
+            fn read_exact_interruptible(
+                stream: &mut UnixStream,
+                buf: &mut [u8],
+                stop: &AtomicBool,
+            ) -> bool {
+                let mut filled = 0;
+                while filled < buf.len() {
+                    if stop.load(Ordering::Relaxed) {
+                        return false;
+                    }
+                    match stream.read(&mut buf[filled..]) {
+                        Ok(0) => return false,
+                        Ok(n) => filled += n,
+                        Err(e)
+                            if matches!(
+                                e.kind(),
+                                std::io::ErrorKind::WouldBlock
+                                    | std::io::ErrorKind::TimedOut
+                                    | std::io::ErrorKind::Interrupted
+                            ) =>
+                        {
+                            continue;
+                        }
+                        Err(_) => return false,
+                    }
+                }
+                true
+            }
+
             let mut len_buf = [0u8; 4];
             while !stop_t.load(Ordering::Relaxed) {
-                match stream.read_exact(&mut len_buf) {
-                    Ok(()) => {}
-                    Err(e)
-                        if matches!(
-                            e.kind(),
-                            std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut
-                        ) =>
-                    {
-                        continue;
-                    }
-                    Err(_) => break,
+                if !read_exact_interruptible(&mut stream, &mut len_buf, &stop_t) {
+                    break;
                 }
                 let total_len = u32::from_be_bytes(len_buf) as usize;
                 if total_len == 0 || total_len > 16 * 1024 * 1024 {
                     break;
                 }
                 let mut buf = vec![0u8; total_len];
-                if stream.read_exact(&mut buf).is_err() {
+                if !read_exact_interruptible(&mut stream, &mut buf, &stop_t) {
                     break;
                 }
                 if buf[0] == b'E' {
@@ -670,7 +714,7 @@ steps:
         cmd.env("ACOS_ART_BIN", art);
     }
 
-    let child = cmd.spawn().expect("spawn acos verify");
+    let child = ChildGuard::new(cmd.spawn().expect("spawn acos verify"));
     let entry = wait_registry_entry(&viewreg, Duration::from_secs(60));
     assert_eq!(entry["watch_only"], json!(true), "{entry:#?}");
     assert!(

@@ -2,7 +2,7 @@
 //!
 //! 1. `cp4_latency_tap_to_changed_frame_50_reps` (`#[ignore]`) — boots a real
 //!    ART `counter.apk` session under `acos serve` + `acos view`, upgrades to
-//!    full-size 1.0x JPEG @ 30fps via WebSocket `/api/input/<id>`, sends 50
+//!    full-size 1.0x PNG @ 30fps via WebSocket `/api/input/<id>`, sends 50
 //!    measured taps, decodes MJPEG frames from `/api/frames/<id>`, waits for
 //!    each frame whose decoded pixels actually change, and asserts p50 <= 100 ms
 //!    and p95 <= 200 ms (§4.2, §6 item 6).
@@ -301,6 +301,7 @@ struct MjpegPart {
     w: u32,
     h: u32,
     seq: u64,
+    received_at: Instant,
     bytes: Vec<u8>,
 }
 
@@ -393,6 +394,7 @@ impl MjpegStream {
                             let bytes = buf[body_start..body_start + content_length].to_vec();
                             buf.drain(..body_start + content_length + 2);
                             if !content_type.is_empty() && !bytes.is_empty() {
+                                let received_at = Instant::now();
                                 idx += 1;
                                 let (lock, cv) = &*state_t;
                                 let mut q = lock.lock().unwrap();
@@ -405,6 +407,7 @@ impl MjpegStream {
                                     w,
                                     h,
                                     seq,
+                                    received_at,
                                     bytes,
                                 });
                                 cv.notify_all();
@@ -431,14 +434,27 @@ impl MjpegStream {
         }
     }
 
+    fn drain_all(&self) -> Vec<MjpegPart> {
+        let (lock, _) = &*self.state;
+        lock.lock().unwrap().drain(..).collect()
+    }
+
     fn wait_match(
         &self,
         pred: impl Fn(&MjpegPart) -> bool,
         timeout: Duration,
         label: &str,
     ) -> MjpegPart {
+        self.wait_match_until(pred, Instant::now() + timeout, label)
+    }
+
+    fn wait_match_until(
+        &self,
+        pred: impl Fn(&MjpegPart) -> bool,
+        deadline: Instant,
+        label: &str,
+    ) -> MjpegPart {
         let (lock, cv) = &*self.state;
-        let deadline = Instant::now() + timeout;
         let mut q = lock.lock().unwrap();
         loop {
             while let Some(part) = q.pop_front() {
@@ -607,7 +623,25 @@ fn cp4_latency_tap_to_changed_frame_50_reps() {
          base_seq: &mut u64,
          base_rgb: &mut Vec<u8>|
          -> (f64, usize, u64) {
+            // Drain any pre-tap buffered frames so `base_idx`/`base_seq`/`base_rgb`
+            // reflect the latest frame already on the wire before `t0`.
+            let drained = frames.drain_all();
+            if let Some(last) = drained
+                .iter()
+                .rev()
+                .find(|f| f.content_type == "image/png" && f.w == 1080 && f.h == 2400)
+            {
+                if last.stream_idx > *base_idx {
+                    *base_idx = last.stream_idx;
+                    *base_seq = (*base_seq).max(last.seq);
+                    let (w, h, rgb) = decode_rgb(&last.bytes);
+                    assert_eq!((w, h), (1080, 2400));
+                    *base_rgb = rgb;
+                }
+            }
+
             let t0 = Instant::now();
+            let deadline = t0 + Duration::from_secs(5);
             ws.send_only(&json!({ "t": "touch", "phase": "down", "id": 0, "x": cx, "y": cy }));
             let ack1 = ws.read_json();
             ws.send_only(&json!({ "t": "touch", "phase": "up", "id": 0, "x": cx, "y": cy }));
@@ -616,15 +650,16 @@ fn cp4_latency_tap_to_changed_frame_50_reps() {
             assert_eq!(ack2["ok"], json!(true), "up ack: {ack2}");
 
             let (next_part, changed_count) = loop {
-                let candidate = frames.wait_match(
+                let candidate = frames.wait_match_until(
                     |f| {
                         f.content_type == "image/png"
                             && f.w == 1080
                             && f.h == 2400
                             && f.stream_idx > *base_idx
                             && f.seq > *base_seq
+                            && f.received_at >= t0
                     },
-                    Duration::from_secs(5),
+                    deadline,
                     "changed PNG frame after tap",
                 );
                 *base_idx = candidate.stream_idx;
@@ -637,13 +672,13 @@ fn cp4_latency_tap_to_changed_frame_50_reps() {
                     break (candidate, diff);
                 }
             };
-            let elapsed_ms = t0.elapsed().as_secs_f64() * 1000.0;
+            let elapsed_ms = next_part.received_at.duration_since(t0).as_secs_f64() * 1000.0;
             (elapsed_ms, changed_count, next_part.seq)
         };
 
     let mut base_idx = current_part.stream_idx;
     let mut base_seq = current_part.seq;
-    // 3 warmup taps so JPEG encoder / WS / C1 / guest render paths are warm.
+    // 3 warmup taps so PNG encoder / WS / C1 / guest render paths are warm.
     for i in 0..3 {
         let _ = send_tap_wait_changed_frame(
             100 + i,
@@ -684,9 +719,43 @@ fn cp4_latency_tap_to_changed_frame_50_reps() {
         json!({ "base": { "session_id": session_id }, "tree": true, "settle": "strict" }),
     );
     assert_eq!(final_obs["ok"], json!(true), "final_obs: {final_obs}");
-    assert!(
-        find_in_tree(&final_obs, Some("53"), Some("TextView")).is_some(),
-        "count mismatch after 53 taps: {final_obs:#?}"
+    fn find_count_node(node: &Value) -> Option<Value> {
+        if node.is_object() {
+            let is_count_id = ["resource_id", "resource-id", "id"].iter().any(|field| {
+                node.get(field)
+                    .and_then(Value::as_str)
+                    .is_some_and(|rid| rid == "count" || rid.ends_with(":id/count"))
+            });
+            let is_text_view = node
+                .get("class")
+                .and_then(Value::as_str)
+                .is_some_and(|s| s.ends_with("TextView"));
+            if is_count_id && is_text_view {
+                return Some(node.clone());
+            }
+        }
+        for key in ["result", "tree", "nodes", "children", "root"] {
+            if let Some(child) = node.get(key) {
+                if let Some(found) = find_count_node(child) {
+                    return Some(found);
+                }
+            }
+        }
+        if let Some(arr) = node.as_array() {
+            for item in arr {
+                if let Some(found) = find_count_node(item) {
+                    return Some(found);
+                }
+            }
+        }
+        None
+    }
+    let count_node = find_count_node(&final_obs)
+        .unwrap_or_else(|| panic!("count TextView missing in {final_obs:#?}"));
+    assert_eq!(
+        count_node.get("text").and_then(Value::as_str),
+        Some("53"),
+        "count mismatch after 53 taps: {count_node:#?}"
     );
 
     let mut sorted = samples_ms.clone();

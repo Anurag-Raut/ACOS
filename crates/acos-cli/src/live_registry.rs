@@ -18,6 +18,7 @@
 use std::io;
 use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 /// Registry document version.
@@ -41,6 +42,10 @@ pub struct LiveEntry {
     pub daemon_pid: u32,
     /// The `acos-art` launcher pid of the guest, when known.
     pub launcher_pid: Option<u32>,
+    /// Per-launch guest identity token (`HeldArtSession::launch_token`), used
+    /// to reject stale panel input or stale registry updates if a session id is
+    /// destroyed and relaunched.
+    pub launch_token: Option<String>,
     /// When the session reached ready (host wall clock, ms since the epoch).
     pub started_ms: u64,
     /// The client that drives the session (`acos-cli`, or the MCP client name).
@@ -76,7 +81,7 @@ impl LiveEntry {
     /// The document written to disk.
     #[must_use]
     pub fn to_json(&self) -> serde_json::Value {
-        serde_json::json!({
+        let mut doc = serde_json::json!({
             "v": REGISTRY_VERSION,
             "session_id": self.session_id,
             "daemon_pid": self.daemon_pid,
@@ -94,7 +99,11 @@ impl LiveEntry {
             "display": {"w": self.display.0, "h": self.display.1},
             "stream_socket": self.stream_socket,
             "has_home": self.has_home,
-        })
+        });
+        if let Some(token) = &self.launch_token {
+            doc["launch_token"] = serde_json::json!(token);
+        }
+        doc
     }
 }
 
@@ -105,6 +114,7 @@ pub struct LiveRegistry {
     client_name: String,
     client_version: String,
     project_dir: String,
+    io_lock: Arc<Mutex<()>>,
 }
 
 impl LiveRegistry {
@@ -130,6 +140,7 @@ impl LiveRegistry {
             client_name,
             client_version,
             project_dir,
+            io_lock: Arc::new(Mutex::new(())),
         }
     }
 
@@ -167,6 +178,7 @@ impl LiveRegistry {
 
     /// Publish (or refresh) a session's entry, atomically.
     pub fn write(&self, entry: &LiveEntry) -> io::Result<PathBuf> {
+        let _guard = self.io_lock.lock().unwrap_or_else(|e| e.into_inner());
         self.prepare_dir()?;
         let path = self
             .dir
@@ -176,7 +188,20 @@ impl LiveRegistry {
     }
 
     /// Update `activity` in an existing entry (no-op when the file is gone).
+    #[cfg_attr(not(test), allow(dead_code))]
     pub fn update_activity(&self, session_id: &str, activity: Option<&str>) -> io::Result<bool> {
+        self.update_activity_if_token(session_id, None, activity)
+    }
+
+    /// Update `activity` in an existing entry only when `expected_launch_token`
+    /// matches (if provided), serialized with `write`/`remove_if_token`.
+    pub fn update_activity_if_token(
+        &self,
+        session_id: &str,
+        expected_launch_token: Option<&str>,
+        activity: Option<&str>,
+    ) -> io::Result<bool> {
+        let _guard = self.io_lock.lock().unwrap_or_else(|e| e.into_inner());
         let path = self
             .dir
             .join(self.file_name(session_id, std::process::id()));
@@ -186,6 +211,11 @@ impl LiveRegistry {
         let Ok(mut doc) = serde_json::from_str::<serde_json::Value>(&text) else {
             return Ok(false);
         };
+        if let Some(expected) = expected_launch_token {
+            if doc.get("launch_token").and_then(serde_json::Value::as_str) != Some(expected) {
+                return Ok(false);
+            }
+        }
         let current = doc
             .get("activity")
             .and_then(|value| value.as_str())
@@ -208,7 +238,21 @@ impl LiveRegistry {
     }
 
     /// Update the `display` size in the session's registry entry (e.g. after rotate).
+    #[allow(dead_code)]
     pub fn update_display(&self, session_id: &str, display: (u32, u32)) -> io::Result<bool> {
+        self.update_display_if_token(session_id, None, display)
+    }
+
+    /// Update the `display` size in the session's registry entry, serialized
+    /// with `remove`/`write`, and refusing if `expected_launch_token` is given
+    /// and does not match the on-disk entry.
+    pub fn update_display_if_token(
+        &self,
+        session_id: &str,
+        expected_launch_token: Option<&str>,
+        display: (u32, u32),
+    ) -> io::Result<bool> {
+        let _guard = self.io_lock.lock().unwrap_or_else(|e| e.into_inner());
         let path = self
             .dir
             .join(self.file_name(session_id, std::process::id()));
@@ -218,6 +262,11 @@ impl LiveRegistry {
         let Ok(mut doc) = serde_json::from_str::<serde_json::Value>(&text) else {
             return Ok(false);
         };
+        if let Some(expected) = expected_launch_token {
+            if doc.get("launch_token").and_then(serde_json::Value::as_str) != Some(expected) {
+                return Ok(false);
+            }
+        }
         let current_w = doc
             .pointer("/display/w")
             .and_then(serde_json::Value::as_u64)
@@ -242,14 +291,34 @@ impl LiveRegistry {
 
     /// Remove one session's entry (destroy/close). Missing is success.
     pub fn remove(&self, session_id: &str) {
+        self.remove_if_token(session_id, None);
+    }
+
+    /// Remove one session's entry only if `expected_launch_token` matches (when
+    /// provided), serialized with `write`/`update_display` so a late rotate
+    /// cannot recreate a destroyed entry and a late destroy cannot remove a
+    /// replacement session's entry.
+    pub fn remove_if_token(&self, session_id: &str, expected_launch_token: Option<&str>) {
+        let _guard = self.io_lock.lock().unwrap_or_else(|e| e.into_inner());
         let path = self
             .dir
             .join(self.file_name(session_id, std::process::id()));
+        if let Some(expected) = expected_launch_token {
+            let Ok(text) = std::fs::read_to_string(&path) else {
+                return;
+            };
+            if let Ok(doc) = serde_json::from_str::<serde_json::Value>(&text) {
+                if doc.get("launch_token").and_then(serde_json::Value::as_str) != Some(expected) {
+                    return;
+                }
+            }
+        }
         let _ = std::fs::remove_file(path);
     }
 
     /// Remove every entry this daemon published (daemon exit).
     pub fn remove_all(&self) {
+        let _guard = self.io_lock.lock().unwrap_or_else(|e| e.into_inner());
         let pid = std::process::id();
         let Ok(entries) = std::fs::read_dir(&self.dir) else {
             return;
@@ -656,6 +725,7 @@ mod tests {
             display: (1080, 2400),
             stream_socket: Some("/run/user/1000/acos-art-1-0/view.sock".to_string()),
             has_home: Some(false),
+            launch_token: None,
         }
     }
 

@@ -568,7 +568,7 @@ impl Inner {
         if was_empty {
             // Once all viewers detach, the next viewer starts fresh and may
             // negotiate a different format/scale/max_fps (e.g. watch-only PNG
-            // @ 0.5 vs. interactive JPEG @ 1.0).
+            // @ 0.5 vs. interactive PNG @ 1.0).
             self.active_format.store(0, Ordering::Release);
             self.active_scale.store(0, Ordering::Release);
             self.active_max_fps.store(0, Ordering::Release);
@@ -616,11 +616,14 @@ impl Inner {
         // stream) must see the screen *now*, not at the next redraw: the encoder
         // only sends a frame newer than the last one it sent, so on an idle
         // screen the newcomer would stare at black until something repainted.
-        // Incrementing `attach_epoch` lets `live_view_source` emit the latest
-        // composited frame once even when `seq` has not advanced, and forgetting
-        // `last_encoded_seq` lets the writer loop push it.
-        self.attach_epoch.fetch_add(1, Ordering::AcqRel);
-        self.last_encoded_seq.store(0, Ordering::Relaxed);
+        // Incrementing `attach_epoch` and clearing `last_encoded_seq` under
+        // `slot` prevents an in-flight encode from an earlier attachment from
+        // overwriting the reset and hiding the initial frame.
+        {
+            let _slot = self.slot.lock().unwrap_or_else(|e| e.into_inner());
+            self.attach_epoch.fetch_add(1, Ordering::AcqRel);
+            self.last_encoded_seq.store(0, Ordering::Release);
+        }
         self.notify();
         // The tap thread exists only while someone watches: with no subscriber
         // the session runs exactly as it did before the viewer existed.
@@ -1561,14 +1564,16 @@ fn writer_loop(inner: Arc<Inner>) {
             inner.wait(wait);
             continue;
         }
-        let pending = {
+        let (pending, frame_epoch) = {
             let mut slot = inner.slot.lock().unwrap_or_else(|e| e.into_inner());
-            match slot.as_ref() {
-                Some(frame) if frame.seq > inner.last_encoded_seq.load(Ordering::Relaxed) => {
+            let epoch = inner.attach_epoch.load(Ordering::Acquire);
+            let frame = match slot.as_ref() {
+                Some(frame) if frame.seq > inner.last_encoded_seq.load(Ordering::Acquire) => {
                     slot.take()
                 }
                 _ => None,
-            }
+            };
+            (frame, epoch)
         };
         let Some(frame) = pending else {
             let wait = if inner.flush_pending() {
@@ -1579,16 +1584,22 @@ fn writer_loop(inner: Arc<Inner>) {
             inner.wait(wait);
             continue;
         };
+        let format = inner.format();
         let started = Instant::now();
         let encoded = encode_into(
             &frame,
-            inner.format(),
+            format,
             inner.config.jpeg_quality,
             &mut rgb_scratch,
             &mut encode_scratch,
         );
         let encode_us = started.elapsed().as_micros() as u64;
-        inner.last_encoded_seq.store(frame.seq, Ordering::Relaxed);
+        {
+            let _slot = inner.slot.lock().unwrap_or_else(|e| e.into_inner());
+            if inner.attach_epoch.load(Ordering::Acquire) == frame_epoch {
+                inner.last_encoded_seq.store(frame.seq, Ordering::Release);
+            }
+        }
         next_at = started + inner.interval();
         if encoded.is_err() {
             continue;
@@ -1610,7 +1621,7 @@ fn writer_loop(inner: Arc<Inner>) {
             "generation": frame.generation,
             "w": frame.width,
             "h": frame.height,
-            "format": inner.format().as_str(),
+            "format": format.as_str(),
             "ts_ms": frame.ts_ms,
             // A blank placeholder published while a `FLAG_SECURE` window is on
             // screen. The bytes are not the app's content.

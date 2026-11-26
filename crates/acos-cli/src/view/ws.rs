@@ -54,6 +54,7 @@ use std::sync::Mutex;
 
 /// Read one complete text or binary message, answering Ping with Pong and
 /// handling Close cleanly. Returns `Ok(None)` on Close or EOF.
+#[cfg_attr(not(test), allow(dead_code))]
 pub fn read_message(stream: &mut TcpStream) -> io::Result<Option<WsMessage>> {
     let mut writer = stream.try_clone()?;
     read_message_inner(stream, &mut |opcode, payload| {

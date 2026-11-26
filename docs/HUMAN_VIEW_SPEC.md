@@ -73,7 +73,8 @@ inside T3 with no T3-side support and nothing to configure.
 - **Changes.**
   - Add `scale: 1.0` and a `max_fps` of up to 30, chosen when a human is interacting.
     Watch-only stays 0.5 scale at 15 fps.
-  - Prefer JPEG at full size, to save encode time and bandwidth.
+  - Prefer fast adaptive PNG at full size (measured ~10× cheaper to encode than
+    scalar JPEG while staying lossless at 1080×2400 @ 30 fps; JPEG remains selectable).
   - Paint immediately on input. The producer is already change-driven, so a frame
     follows within one frame interval.
 - **Target.** Input-to-visible-frame **p50 ≤ 100 ms, p95 ≤ 200 ms** on this host
@@ -145,7 +146,7 @@ hub URL in T3's browser tab):
 | 1 | Branch from `main`; port source labels, verify watch-only and `device_name` from PR #5 with their tests | ported unit tests pass; `cp3_event_feed_source_labels`-equivalent passes without adb |
 | 2 | Hub `/api/input` WebSocket: auth, Host check, cap, per-session ordered worker → InputDispatch (tap/touch stream/key/text/rotate) | acceptance 1 (tap, text, BACK), 2, 4 |
 | 3 | Page UI: pointer→touch stream, wheel→scroll, keyboard→key/text, toolbar, session names, verify banner; full-size frames while interacting | acceptance 1 (drag, long press, rotate), 3, 5 |
-| 4 | Latency harness + tuning (JPEG full size, fps 30 while interacting); benchmarks | acceptance 6, 7 |
+| 4 | Latency harness + tuning (full-size 1.0x PNG, fps 30 while interacting); benchmarks | acceptance 6, 7 |
 | 5 | ADR (amends ADR-0027 §5: `acos view` accepts input, local + token-gated, labelled `panel`); docs (LIVE_VIEW.md §8, agent guide); report `results/handoff/HUMANVIEW1/REPORT.md`; live E2E in T3's browser tab; open PR to `main` (not draft, not merged by agents) | acceptance 8 + E2E screenshots |
 
 ## 8. Decision changes

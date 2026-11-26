@@ -5650,8 +5650,10 @@ public final class LaunchMain {
                     // Let `handleResumeActivity` and the first traversal finish.
                     Thread.sleep(200);
                     synchronized (sFinishPrevious) {
-                        if (sCurrentToken != token
-                                || Boolean.TRUE.equals(get(activity, "mFinished"))) {
+                        Object prevActivity = activityForToken(previous);
+                        if (sCurrentToken == previous
+                                || (prevActivity != null && Boolean.TRUE.equals(get(prevActivity, "mResumed")))
+                                || (sCurrentToken == token && Boolean.TRUE.equals(get(activity, "mFinished")))) {
                             return;
                         }
                         Class<?> stopCls = Class.forName("android.app.servertransaction.StopActivityItem");

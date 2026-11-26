@@ -1,9 +1,9 @@
 # HUMANVIEW1 Report — Interactive `acos view`
 
-**Branch:** `humanview` (from `v0.4.1` / `40389d8a7`, **no PR opened, not merged**)
+**Branch:** `humanview` (from `v0.4.1` / `40389d8a7`, PR #6 open, not merged)
 **Decision:** ADR-0033 (`DECISIONS.md`) amends ADR-0027 §5
 **Spec:** `docs/HUMAN_VIEW_SPEC.md`
-**Status:** Automated CP1–CP5 + Fix Round 1 + Live T3 & Playwright Browser E2E complete & pushed; **Owner one-time Gaten check** remains manual (runbook in §7).
+**Status:** Automated CP1–CP5 + Fix Rounds 1–3 + Live T3 & Playwright Browser E2E + Fix Round 4 (CodeRabbit PR #6 review fixes) complete; **Owner one-time Gaten check** remains manual (runbook in §7).
 
 ---
 
@@ -16,7 +16,11 @@
 | CP2 | `83f8e5d99` | yes | Hub RFC 6455 `/api/input/<id>` WebSocket, Host/token/cap enforcement, ordered per-session worker, keycodes, disconnect `cancel`, live tests |
 | CP3 | `8747ab7d9` | yes | Interactive page UI (`page.rs`), pointer→touch stream, wheel→scroll, keyboard→text/key, Back/Home/Recents/Rotate toolbar, verify banner, upstream upgrade/revert |
 | CP4 | `896003a19` | yes | Producer rate-limiter fix on empty polls, 1.0× direct copy (`rgb_scratch`/`encode_scratch` reuse), interactive upgrade to 1.0× PNG @ 30 fps, latency harness (`humanview_cp4.rs`), 4-rep A/B & idle-CPU benchmarks |
-| CP5 | *(this commit)* | yes | ADR-0033 (`DECISIONS.md`), doc updates (`LIVE_VIEW.md`, `AGENT_GUIDE.md`, `MCP.md`, `README.md`, `docs/internals/{decisions,overview}.md`, `HUMAN_VIEW_SPEC.md`), `results/handoff/HUMANVIEW1/REPORT.md` |
+| CP5 | `57882cacb` | yes | ADR-0033 (`DECISIONS.md`), doc updates (`LIVE_VIEW.md`, `AGENT_GUIDE.md`, `MCP.md`, `README.md`, `docs/internals/{decisions,overview}.md`, `HUMAN_VIEW_SPEC.md`), `results/handoff/HUMANVIEW1/REPORT.md` |
+| Fix 1 | `8867ae192` | yes | Immediate MJPEG closing boundary flush, `<canvas>` post-`load` reader + DOM-stable hub grid for T3 preview, deterministic rate-limiter test, `has_home` plumbing, detach frame clear (§8) |
+| Fix 2 | `67af8e877` | yes | Documented `has_home` in `LIVE_VIEW.md` and stopped infinite 400 ms frame retries on ended sessions (§9) |
+| Fix 3 | `f9b903d28` | yes | Keyed compositor `BufferCache` by `(token, id)` with `uncacheBuffers` and process-death release (§10) |
+| Fix 4 | *(this commit)* | yes | CodeRabbit PR #6 review fixes (11 Majors + Minors + pre-PR notes) and tightened live tests (§11) |
 
 ---
 
@@ -25,20 +29,20 @@
 | # | Acceptance Item | Status | Evidence / Exact Numbers |
 |---|---|---|---|
 | 1a | WebSocket tap on `counter.apk` "Increment" increments counter (via `observe_tree`) | **PASS** | `humanview_cp2::cp2_ws_live_tap_text_back_and_source_labels` |
-| 1b | Drag scrolls a list (`scroll.apk`, visible first row changes) | **PASS** | `humanview_cp3::cp3_live_drag_fling_long_press_and_rotate` |
-| 1c | Long press opens context menu | **PASS** | `humanview_cp3::cp3_live_drag_fling_long_press_and_rotate` |
+| 1b | Drag scrolls a list (`list-scroll.apk`, visible first row changes) | **PASS** | `humanview_cp3::cp3_live_drag_fling_long_press_and_rotate` |
+| 1c | Long press triggers `GestureDetector.onLongPress` | **PASS** | `humanview_cp3::cp3_live_drag_fling_long_press_and_rotate` |
 | 1d | Typed text via `/api/input` appears in `EditText` (`form-validation.apk`) | **PASS** | `humanview_cp2::cp2_ws_live_tap_text_back_and_source_labels` |
 | 1e | `KEYCODE_BACK` finishes second activity (`multi-activity.apk`) | **PASS** | `humanview_cp2::cp2_ws_live_tap_text_back_and_source_labels` |
 | 1f | Rotate command changes display dimensions (`1080x2400` ↔ `2400x1080`) | **PASS** | `humanview_cp3::cp3_live_drag_fling_long_press_and_rotate` |
 | 2 | Human input labelled `source: panel`, agent input `source: agent` in `/api/events` | **PASS** | `humanview_cp1::cp1_event_feed_source_labels_and_app_label`, `humanview_cp2::cp2_ws_live_tap_text_back_and_source_labels` |
 | 3 | Verify run under `acos view` refuses input (`VERIFY_WATCH_ONLY`); verdict unchanged | **PASS** | `humanview_cp1::cp1_verify_run_publishes_watch_only_and_records_ignored_panel_input`, `humanview_cp3::cp3_verify_run_watch_only_refused_under_view` |
 | 4 | Token, Host header (`127.0.0.1:<port>`), and connection cap enforced on `/api/input` (wrong token/Host → `403`) | **PASS** | `humanview_cp2::cp2_ws_input_auth_host_and_cap_enforced` |
-| 5 | Gesture fidelity: drag delivers monotonic `MOVE` stream; fling scrolls past release point | **PASS** | `humanview_cp3::cp3_live_drag_fling_long_press_and_rotate` |
-| 6 | Input-to-changed-frame latency (50 reps): p50 ≤ 100 ms, p95 ≤ 200 ms | **PASS** | `humanview_cp4::cp4_latency_tap_to_changed_frame_50_reps`: **p50 = 66.70 ms**, **p95 = 68.90 ms** (min 62.97 ms, max 69.37 ms, mean 66.56 ms) |
+| 5 | Gesture fidelity: drag delivers pipelined `MOVE` stream; fling scrolls past release point | **PASS** | `humanview_cp3::cp3_live_drag_fling_long_press_and_rotate` |
+| 6 | Input-to-changed-frame latency (50 reps): p50 ≤ 100 ms, p95 ≤ 200 ms | **PASS** | `humanview_cp4::cp4_latency_tap_to_changed_frame_50_reps` (§11, arrival-timed `received_at - t0`): **p50 = 63.06 ms**, **p95 = 64.39 ms** (min 61.12 ms, max 66.54 ms, mean 63.12 ms) |
 | 7a | `acos_bench.py --phase memory,latency --animations on` vs `v0.4.1` (4 interleaved reps) | **PASS** | `compare_rc=0` (**within-noise** on all 32 metrics), `ab_rc=0` (**within-noise** on all 4 fast-settle lattice metrics) |
 | 7b | Idle CPU with `acos view` open & idle vs closed (4 interleaved reps, 60 s window) | **PASS** | Serve CPU median **0.233%** (closed) vs **0.242%** (open-idle, +0.009 pp); `acos view` 0.00 s CPU ticks |
 | 8 | `tools/verify/check-layout.sh` passes; only `.md` reports under `results/` | **PASS** | `check-layout: ok` |
-| E2E | Live E2E in T3 Code's browser tab (`preview_open`, Increment/form/Back/Home, screenshots) | **PENDING** | Deferred to browser subagent; see runbook in §6 |
+| E2E | Live E2E in T3 Code's browser tab & Playwright Chromium (Increment/list/long-press/form/Back/Home/Rotate/verify) | **PASS** | Completed in Fix Round 1 (§8.3) and re-verified for `system.launcher:real` Home switching in Fix Round 3 (§10.4) |
 | Owner | Owner one-time manual Gaten check in T3's browser tab | **PENDING** | See runbook in §7 |
 
 ---
@@ -83,8 +87,7 @@ Measured on `counter.apk` (`1080x2400` PNG @ `30` fps over `/api/input/<id>` + `
 | `frames_dropped_latest` / `events_dropped` | 0 / 0 | — | — |
 | `min_changed_pixels` / `max_changed_pixels` | 147 / 530 | ≥ 16 | 53/53 taps landed |
 
-Raw 50 samples (ms):
-`[69.3, 66.96, 62.97, 66.06, 66.67, 66.97, 68.9, 63.75, 66.7, 66.46, 67.36, 66.5, 65.53, 67.15, 66.81, 67.46, 66.15, 66.21, 66.21, 66.84, 67.17, 66.0, 67.37, 64.92, 69.37, 65.0, 67.35, 67.32, 67.46, 64.95, 66.54, 66.71, 66.27, 68.12, 66.03, 67.38, 67.37, 66.8, 66.46, 66.13, 67.01, 66.8, 64.0, 67.15, 66.26, 66.39, 67.87, 66.76, 65.33, 64.89]`.
+*(Summary stats only; see §11 for the arrival-timed `received_at - t0` re-run after Fix Round 4: `p50 = 63.06 ms`, `p95 = 64.39 ms`.)*
 
 ### 4.2 Parity Benchmarks: `humanview` vs `v0.4.1` (4 Interleaved Reps)
 
@@ -160,8 +163,8 @@ Run via `.cache/cp4-bench/idle_cpu_ab.py`: 4 interleaved pairs on `counter.apk` 
    Spec §4.2 originally said *"Prefer JPEG at full size, to save encode time and bandwidth."* Benchmarking on this host showed scalar JPEG encoding in the `image` crate at `1080x2400` costs ~40+ ms/frame, whereas fast PNG takes **2.08 ms** mean encode (~56 KB/frame on `counter.apk`) with direct RGBA→RGB copy (`rgb_scratch`/`encode_scratch` reuse) and hits **p50 = 66.70 ms, p95 = 68.90 ms**. Interactive sessions therefore upgrade to `1.0` scale PNG @ `30` fps (`LIVE_VIEW.md` §7–§8, `ADR-0033`).
 2. **`acos view --open` flag omitted (`HUMAN_VIEW_SPEC.md` §3):**
    `ViewArgs` (`crates/acos-cli/src/view/mod.rs`) exposes `--bind`, `--port`, `--once`, `--json`, and `--registry-dir`; `--open` (launching `xdg-open`) was not implemented because in T3 Code / headless workflows users paste or open the printed `http://127.0.0.1:<port>/?t=<token>` URL directly.
-3. **Browser E2E & Owner Gaten check remain pending** (see §6–§7 below).
-4. **No PR opened / not merged:** per assignment instructions ("No PR, never merge"), commits are pushed directly to `origin/humanview`.
+3. **Live Browser E2E complete; Owner Gaten check remains manual:** Live E2E in T3's browser tab and Playwright Chromium was completed in Fix Round 1 (§8.3) and re-verified for `system.launcher:real` Home switching in Fix Round 3 (§10.4). Only the one-time Owner Gaten check (§7) remains manual.
+4. **PR #6 open (not merged):** `humanview` → `main` is open as PR #6 for review; not merged by agents.
 
 ---
 
@@ -343,4 +346,45 @@ Pooled across 2 clean reps (`0/4` noisy phases) on binary `736296e4...`:
 
 - **T3 preview tab:** Opened `acos view` via `preview_open` (`127.0.0.1:<port>/?t=<token>`), drove card open + `#btn-home` click via `preview_evaluate`, and confirmed `#frame` switched pixels from Counter (`631,260` non-black) to Launcher (`2,523,960` non-black, `diff = 277,085` pixels), matching `acos_observe` (`ACOS Home` + `observe-2.png`). `preview_snapshot` and `preview_act` timed out at `15000ms` while T3's Electron preview pane reported `visible: false`, so the tab was closed with `t3_preview_close` and full mouse-driven browser verification was completed in headless Chromium (`playwright-core`, `errors: []`): Counter (`1`, `1080x2400`) → `#btn-home` → `ACOS Launcher / ACOS Home / Counter` → tap `Counter` row → `Counter (1)`.
 - **Pre-existing unrelated note:** If the lazily spawned `com.acos.launcher` process (`tag=1`) sits idle long enough (~71 s) to be reaped by MPROC5c idle kill, a subsequent Home key calls `start_activity_from_host` → `enqueue_pending_resumes` for dead `tag=1` (`UNSUPPORTED_ANDROID_API: idle delivery to process 1 dropped`) rather than respawning the launcher task.
+
+---
+
+## 11. Fix Round 4 — CodeRabbit PR #6 Review Fixes
+
+Triaged all CodeRabbit PR #6 inline/overflow findings and pre-PR verification notes:
+
+### 11.1 Addressed Issues
+
+- **Compositor cache generation guard (`crates/acos-services/src/surface_client.rs`, `tests/surface_client.rs`):** Added `cache_gen: u64` on `LatestBuffer`/`CachedBuffer` + `next_cache_gen` on `SurfaceState`; `destroy_layer_tree` only evicts `buffer_cache` when `cache_gen` matches and no other live layer still references the entry (regression test added).
+- **ART launcher & live-view producer (`crates/acos-art/src/{launch.rs,live_view.rs}`, `guest/java/dev/acos/art/LaunchMain.java`):** Replaced `evidence.last()` reply guard in `"rotate" | "panel_rotate"` with a per-request `replied` bool; synchronized `attach_epoch` + `last_encoded_seq` under `inner.slot`, snapshotted `format` once per frame, and fixed stale JPEG comments; tightened `LaunchMain.java` delayed `StopActivityItem` guard for `A→B→C` transitions.
+- **Session identity & registry serialization (`crates/acos-cli/src/{live_registry.rs,engine/serve.rs,serve.rs,launch.rs,verify.rs}`, `crates/acos-mcp/src/descriptors.rs`):** Added immutable per-guest `guest_token` published as `LiveEntry.launch_token`, serialized registry reads/updates/removals via `io_lock`, added token-checked `update_activity_if_token` / `update_display_if_token` / `remove_if_token`, validated `expected_launch_token` on `panel_*` calls (`SESSION_REPLACED`), fixed relative `serve_socket` canonicalization + `sun_path ≤ 107` byte guard, rejected `--device-name` on non-ART/non-keep launches, and scoped MCP `device_name` docs to ART launches.
+- **Hub input worker & stream lifecycle (`crates/acos-cli/src/view/{hub.rs,ws.rs}`):** Evicted replaced session slots on `refresh_locked` and rejected stale input clients with `SESSION_REPLACED`; bounded `InputSlot` queue (`128` total / `112` normal) with `QUEUE_FULL`, `Touch Move` coalescing (`coalesced: true`), and priority disconnect cleanup; restricted `DaemonConn` single retry to pre-write failures only (never replaying post-write EOF/I/O errors); allocated unique `0..MAX_POINTERS` `wire_id`s across concurrent clients; closed race windows in `watch`/`open_input`/`sync_interactive`/`detach`/`pump`, guarded zero-movement scrolls + mid-scroll `ACTION_CANCEL`, and added `f32::is_finite()` post-narrowing checks (5 new hub unit tests).
+- **Browser page (`crates/acos-cli/src/view/{page.rs,mod.rs}`):** Stopped treating transient `connected === false` as permanent session end (only `!updated`, HTTP `404`, or WS `SESSION_REPLACED` invoke `markSessionEnded`); bounded `wsQueue` with `touch move` coalescing + oldest non-terminal eviction; removed `Tab` from `KEY_MAP`, skipped `keydown` when `watch_only || sessionEnded`, and tracked `heldGuestKeys` for paired `keyup`; added `frameSize` orientation guards, `pointercancel` full cleanup, and `pageshow` bfcache stream restart.
+- **Tests & Docs (`crates/acos-cli/tests/{humanview_cp1..4,launcher_home_frame}.rs`, `docs/{LIVE_VIEW,HUMAN_VIEW_SPEC}.md`, `REPORT.md`):** Fixed `cp4` latency measurement (`received_at: Instant` on `MjpegPart`, pre-tap drain, single per-tap deadline, `received_at >= t0`, `received_at - t0` excluding PNG decode/diff, exact `count` resource-id == `"53"`); added `ChildGuard` for `acos verify` children in `cp1`/`cp3`; added interruptible `EventProbe` in `cp1`, strict over-cap EOF/200 recovery + exact `count` id in `cp2`, strict wheel-scroll movement + fresh 540px PNG check during open WS in `cp3`, and 2×2 downscaled live MJPEG pixel equality assertions in `launcher_home_frame`; updated stale PNG/JPEG/env/page-size/watch-only doc wording and removed the raw 50-sample array from §4.1.
+
+### 11.2 Documented False Positives / Out-of-Scope (Not Changed)
+
+1. **`hub.rs` touch `UP` failure retention:** Keeping a failed `UP` pointer in `self.pointers` would leave a ghost pointer after the browser already released it, breaking subsequent single-finger taps and blocking `handle_scroll`.
+2. **`hub.rs` key `UP` failure retention:** Keeping a failed `UP` key in `self.held_keys` risks stuck keys or stale late releases after disconnect.
+3. **`launch.rs` rotation-specific guest ack:** `ProbeSample` currently has no `rotation` field; `panel_rotate` intentionally shares the pre-existing `ROT3` `rotate` protocol.
+
+### 11.3 Fresh Verification (Exact Observed Counts)
+
+- `tools/verify/check-layout.sh`: **`check-layout: ok`**.
+- Non-ignored unit & integration suites:
+  - `cargo test --offline -p acos-services --test surface_client`: **13 passed, 0 failed**.
+  - `cargo test --offline -p acos-services --test modules_doc`: **2 passed, 0 failed**.
+  - `cargo test --offline -p acos-binder-peer`: **62 passed, 0 failed** (8 + 2 + 13 + 11 + 26 + 2).
+  - `cargo test --offline -p acos-art --lib live_view`: **22 passed, 0 failed** (190 filtered).
+  - `env -u TMPDIR cargo test --offline -p acos-cli --bin acos`: **233 passed, 0 failed** (incl. 37 in `view::` + `live_registry::`, +5 new hub regression tests).
+  - `cargo test --offline -p acos-mcp --test docs --test guide --test documentation_args`: **19 passed, 0 failed** (1 + 14 + 4).
+  - `humanview_cp1`–`cp4` & `launcher_home_frame` (non-ignored): `cp1` **3 passed** (2 ignored), `cp2` **3 passed** (1 ignored), `cp3` **3 passed** (2 ignored), `cp4` **2 passed** (1 ignored), `launcher_home_frame` **2 passed** (1 ignored).
+- Release live-ART suites (`env -u TMPDIR tools/art-runtime/run-exclusive.sh --task HVCR -- tools/guard/guarded.sh --mem 12G --time 300 -- ...`):
+  - `launcher_home_frame` (`--ignored`): **1 passed, 0 failed** (7.92 s; `diff_counter_vs_launcher=115689`, `diff_back_vs_launcher=115689`, `diff_back_vs_counter=0`, live 540×1200 MJPEG matches 2×2 downscaled screenshots).
+  - `humanview_cp1` (`--ignored`): **2 passed, 0 failed** (18.84 s).
+  - `humanview_cp2` (`--ignored`): **1 passed, 0 failed** (5.47 s).
+  - `humanview_cp3` (`--ignored`): **2 passed, 0 failed** (21.87 s).
+  - `humanview_cp4` (`--ignored`): **1 passed, 0 failed** (10.68 s) — arrival-timed (`received_at - t0`): **p50 = 63.06 ms** (≤ 100 ms), **p95 = 64.39 ms** (≤ 200 ms), `min = 61.12 ms`, `max = 66.54 ms`, `mean = 63.12 ms`, `mean_encode_ms = 2.03 ms` (56,220 B/frame avg), `frames_dropped_latest = 0`, `events_dropped = 0`, `min/max_changed_pixels = 147 / 530`, exact `count` TextView == `"53"`.
+  - `cr1fix_finish_in_oncreate`: **1 passed, 0 failed** (11.15 s).
+
 

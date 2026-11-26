@@ -466,6 +466,34 @@ fn center_of(node: &Value) -> (i64, i64) {
     ((l + r) / 2, (t + bt) / 2)
 }
 
+fn find_in_tree_by_id(node: &Value, id_suffix: &str) -> Option<Value> {
+    if node.is_object() {
+        let matches_id = node
+            .get("id")
+            .or_else(|| node.get("resource_id"))
+            .and_then(Value::as_str)
+            .is_some_and(|s| s == id_suffix || s.ends_with(&format!(":id/{id_suffix}")) || s.ends_with(&format!("/{id_suffix}")));
+        if matches_id {
+            return Some(node.clone());
+        }
+    }
+    for key in ["result", "tree", "nodes", "children", "root"] {
+        if let Some(child) = node.get(key) {
+            if let Some(found) = find_in_tree_by_id(child, id_suffix) {
+                return Some(found);
+            }
+        }
+    }
+    if let Some(arr) = node.as_array() {
+        for item in arr {
+            if let Some(found) = find_in_tree_by_id(item, id_suffix) {
+                return Some(found);
+            }
+        }
+    }
+    None
+}
+
 #[test]
 fn cp2_ws_input_auth_host_and_cap_enforced() {
     let dir = scratch("auth");
@@ -539,7 +567,7 @@ fn cp2_ws_input_auth_host_and_cap_enforced() {
         400
     );
 
-    // Connection cap (MAX_CONNECTIONS = 64): hold 64 sockets, 65th gets closed without response.
+    // Connection cap (MAX_CONNECTIONS = 64): hold 64 sockets, 65th gets closed immediately without response.
     let mut holders = Vec::new();
     for _ in 0..64 {
         holders.push(TcpStream::connect((Ipv4Addr::LOCALHOST, hub.port)).unwrap());
@@ -555,10 +583,34 @@ fn cp2_ws_input_auth_host_and_cap_enforced() {
         hub.token
     );
     let mut buf = Vec::new();
-    let _ = over_cap.read_to_end(&mut buf);
+    let read_res = over_cap.read_to_end(&mut buf);
+    match read_res {
+        Ok(0) => {}
+        Err(e)
+            if matches!(
+                e.kind(),
+                std::io::ErrorKind::ConnectionReset | std::io::ErrorKind::BrokenPipe
+            ) => {}
+        other => panic!(
+            "expected immediate EOF/reset on over-cap socket, got {other:?} (buf len={})",
+            buf.len()
+        ),
+    }
     assert!(buf.is_empty(), "over-cap /api/input request was served");
 
+    // Dropping the held sockets frees the cap and subsequent requests succeed.
     drop(holders);
+    std::thread::sleep(Duration::from_millis(150));
+    assert_eq!(
+        http_status(
+            hub.port,
+            &host,
+            &format!("GET /api/sessions?t={} HTTP/1.1\r\n", hub.token)
+        ),
+        200,
+        "hub did not recover after held connections closed"
+    );
+
     drop(hub);
     let _ = std::fs::remove_dir_all(&dir);
 }
@@ -597,16 +649,22 @@ fn cp2_ws_live_tap_text_back_and_source_labels() {
     assert_eq!(r2["ok"], json!(true), "{r2:#?}");
 
     let obs1 = conn.call("acos_observe", json!({ "base": base_counter, "tree": true }));
-    assert!(
-        find_in_tree(&obs1, Some("1"), Some("TextView")).is_some(),
+    let count1 = find_in_tree_by_id(&obs1, "count")
+        .and_then(|n| n["text"].as_str().map(str::to_string));
+    assert_eq!(
+        count1.as_deref(),
+        Some("1"),
         "counter did not increment to 1 after WS tap: {obs1:#?}"
     );
 
     let agent_tap = conn.call("acos_tap", json!({ "base": base_counter, "x": ix, "y": iy }));
     assert_eq!(agent_tap["ok"], json!(true), "{agent_tap:#?}");
     let obs2 = conn.call("acos_observe", json!({ "base": base_counter, "tree": true }));
-    assert!(
-        find_in_tree(&obs2, Some("2"), Some("TextView")).is_some(),
+    let count2 = find_in_tree_by_id(&obs2, "count")
+        .and_then(|n| n["text"].as_str().map(str::to_string));
+    assert_eq!(
+        count2.as_deref(),
+        Some("2"),
         "counter did not increment to 2 after agent tap: {obs2:#?}"
     );
 
