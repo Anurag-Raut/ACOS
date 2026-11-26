@@ -249,6 +249,14 @@ pub enum OpenInputError {
     Replaced,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum WatchError {
+    /// No live session or stream socket exists for this `session_id`.
+    NotFound,
+    /// A newer guest replaced the expected `guest_gen` for this `session_id`.
+    Replaced,
+}
+
 /// A batch of events and the cursor to ask from next time.
 #[derive(Clone, Debug, Default)]
 pub struct EventBatch {
@@ -408,14 +416,35 @@ impl Hub {
     /// only entry).
     #[must_use]
     pub fn watch(&self, session_id: &str) -> Option<Watcher> {
+        self.watch_checked(session_id, None).ok()
+    }
+
+    /// Like [`Self::watch`], optionally enforcing that the live session still
+    /// matches `expected_guest_gen`. Returns [`WatchError::Replaced`] when a
+    /// newer guest has replaced `expected_guest_gen` under the same `session_id`
+    /// so stale detail views cannot receive frames from the replacement guest.
+    pub fn watch_checked(
+        &self,
+        session_id: &str,
+        expected_guest_gen: Option<u64>,
+    ) -> Result<Watcher, WatchError> {
         let (slot, socket, input_slot) = {
             let mut inner = self.inner.lock().expect("hub");
             self.refresh_locked(&mut inner);
-            let entry = inner.entries.get(session_id)?.clone();
+            let entry = inner
+                .entries
+                .get(session_id)
+                .ok_or(WatchError::NotFound)?
+                .clone();
             let guest_gen = inner.guest_gens.get(session_id).copied().unwrap_or(0);
-            let socket = entry.stream_socket.clone()?;
+            if let Some(expected) = expected_guest_gen {
+                if expected != guest_gen {
+                    return Err(WatchError::Replaced);
+                }
+            }
+            let socket = entry.stream_socket.clone().ok_or(WatchError::NotFound)?;
             if !std::path::Path::new(&socket).exists() {
-                return None;
+                return Err(WatchError::NotFound);
             }
             let slot = if let Some(slot) = inner.slots.get(session_id) {
                 Arc::clone(slot)
@@ -442,7 +471,7 @@ impl Hub {
             input_slot.sync_interactive();
         }
         slot.attach(socket);
-        Some(Watcher { slot })
+        Ok(Watcher { slot })
     }
 
     /// Open an interactive input client on `session_id` bound to `expected_guest_gen`,
@@ -1418,6 +1447,7 @@ struct InputSlot {
 struct PendingTouchRecovery {
     pointers: Vec<(i32, f32, f32)>,
     down_time_ns: i64,
+    gesture: Option<&'static str>,
 }
 
 #[derive(Clone, Debug)]
@@ -2198,15 +2228,16 @@ impl InputWorker {
                 ptrs,
             )
         };
-        match self.call_daemon(
-            "panel_touch",
-            json!({
-                "action": action,
-                "down_time": down_time,
-                "event_time": ts,
-                "pointers": pointers,
-            }),
-        ) {
+        let mut payload = json!({
+            "action": action,
+            "down_time": down_time,
+            "event_time": ts,
+            "pointers": pointers,
+        });
+        if let Some(gesture) = rec.gesture {
+            payload["gesture"] = json!(gesture);
+        }
+        match self.call_daemon("panel_touch", payload) {
             Ok(_) => {
                 self.pending_touch_recovery = None;
                 self.bump_recovery_episode();
@@ -2406,6 +2437,7 @@ impl InputWorker {
                                 self.pending_touch_recovery = Some(PendingTouchRecovery {
                                     pointers: vec![(ptr.wire_id, ptr.x, ptr.y)],
                                     down_time_ns: down_time,
+                                    gesture: None,
                                 });
                                 let _ = self.resolve_pending_touch_recovery();
                             }
@@ -2574,6 +2606,7 @@ impl InputWorker {
                         self.pending_touch_recovery = Some(PendingTouchRecovery {
                             pointers: vec![(0, px, py)],
                             down_time_ns: down_time,
+                            gesture: Some("scroll"),
                         });
                         let _ = self.resolve_pending_touch_recovery();
                     }
@@ -2730,6 +2763,7 @@ impl InputWorker {
                         self.pending_touch_recovery = Some(PendingTouchRecovery {
                             pointers: cancel_contacts,
                             down_time_ns: down_time,
+                            gesture: Some("pinch"),
                         });
                         let _ = self.resolve_pending_touch_recovery();
                     }
@@ -4310,16 +4344,25 @@ mod tests {
             "old watcher must be marked replaced after guest swap"
         );
 
-        // Opening input with guest A's stale generation must fail with Replaced.
+        // Opening input or watching frames with guest A's stale generation must fail with Replaced.
         assert_eq!(
             hub.open_input_checked("s_gen", gen_a).err(),
             Some(OpenInputError::Replaced)
         );
-        // Opening input with guest B's generation succeeds.
+        assert_eq!(
+            hub.watch_checked("s_gen", Some(gen_a)).err(),
+            Some(WatchError::Replaced)
+        );
+        // Opening input and watching frames with guest B's generation succeed.
+        let watcher_b = hub
+            .watch_checked("s_gen", Some(gen_b))
+            .expect("watch guest B");
+        assert_eq!(watcher_b.guest_gen(), gen_b);
         let client_b = hub
             .open_input_checked("s_gen", gen_b)
             .expect("open guest B");
         drop(client_b);
+        drop(watcher_b);
         drop(watcher);
         let _ = std::fs::remove_dir_all(&registry);
         let _ = std::fs::remove_dir_all(&root);
@@ -4330,7 +4373,7 @@ mod tests {
         let root = scratch("scrcan-d");
         let socket = root.join("serve.sock");
         let listener = UnixListener::bind(&socket).expect("bind eof daemon");
-        let seen_actions: Arc<Mutex<Vec<i64>>> = Arc::new(Mutex::new(Vec::new()));
+        let seen_actions: Arc<Mutex<Vec<(i64, Option<String>)>>> = Arc::new(Mutex::new(Vec::new()));
         let seen_t = Arc::clone(&seen_actions);
         std::thread::spawn(move || {
             let mut first = true;
@@ -4343,7 +4386,8 @@ mod tests {
                 }
                 let req: Value = serde_json::from_str(&line).unwrap();
                 if let Some(a) = req["args"]["action"].as_i64() {
-                    seen_t.lock().unwrap().push(a);
+                    let g = req["args"]["gesture"].as_str().map(str::to_string);
+                    seen_t.lock().unwrap().push((a, g));
                 }
                 if first {
                     first = false;
@@ -4376,8 +4420,11 @@ mod tests {
         let actions = seen_actions.lock().unwrap().clone();
         assert_eq!(
             actions,
-            vec![i64::from(ACTION_DOWN), i64::from(ACTION_CANCEL)],
-            "ambiguous ACTION_DOWN EOF must emit ACTION_CANCEL without replaying ACTION_DOWN"
+            vec![
+                (i64::from(ACTION_DOWN), Some("scroll".to_string())),
+                (i64::from(ACTION_CANCEL), Some("scroll".to_string())),
+            ],
+            "ambiguous ACTION_DOWN EOF must emit scroll-tagged ACTION_CANCEL without replaying ACTION_DOWN"
         );
 
         drop(client);
@@ -5960,7 +6007,7 @@ mod tests {
         let root = scratch("pinch-fail");
         let socket = root.join("serve.sock");
         let listener = UnixListener::bind(&socket).expect("bind");
-        let seen = Arc::new(Mutex::new(Vec::<(String, Option<i64>, Value)>::new()));
+        let seen = Arc::new(Mutex::new(Vec::<(String, Option<i64>, Value, Option<String>)>::new()));
         let seen_t = Arc::clone(&seen);
         // 1 = fail ACTION_MOVE (INPUT_UNAVAILABLE), 2 = fail ACTION_POINTER_DOWN (INPUT_UNAVAILABLE),
         // 3 = fail ACTION_POINTER_DOWN (TIMEOUT / ambiguous post-publish), 0 = pass.
@@ -5980,7 +6027,8 @@ mod tests {
                     let tool = req["tool"].as_str().unwrap_or("").to_string();
                     let action = req["args"]["action"].as_i64();
                     let ptrs = req["args"]["pointers"].clone();
-                    seen_t.lock().unwrap().push((tool.clone(), action, ptrs));
+                    let gesture = req["args"]["gesture"].as_str().map(str::to_string);
+                    seen_t.lock().unwrap().push((tool.clone(), action, ptrs, gesture));
                     let mode = fail_t.load(Ordering::SeqCst);
                     let masked = action.map(|a| a & 0xff);
                     let envelope = if tool == "panel_touch"
@@ -6037,6 +6085,7 @@ mod tests {
         let last = recorded.last().expect("cancel recorded");
         assert_eq!(last.0, "panel_touch");
         assert_eq!(last.1, Some(i64::from(ACTION_CANCEL)));
+        assert_eq!(last.3.as_deref(), Some("pinch"));
         let cancel_ids: Vec<i64> = last.2.as_array().unwrap().iter().map(|p| p[0].as_i64().unwrap()).collect();
         assert_eq!(
             cancel_ids,
@@ -6054,6 +6103,7 @@ mod tests {
         let recorded = seen.lock().unwrap().clone();
         let last = recorded.last().expect("cancel recorded");
         assert_eq!(last.1, Some(i64::from(ACTION_CANCEL)));
+        assert_eq!(last.3.as_deref(), Some("pinch"));
         let cancel_ids: Vec<i64> = last.2.as_array().unwrap().iter().map(|p| p[0].as_i64().unwrap()).collect();
         assert_eq!(
             cancel_ids,
@@ -6071,6 +6121,7 @@ mod tests {
         let recorded = seen.lock().unwrap().clone();
         let last = recorded.last().expect("cancel recorded");
         assert_eq!(last.1, Some(i64::from(ACTION_CANCEL)));
+        assert_eq!(last.3.as_deref(), Some("pinch"));
         let cancel_ids: Vec<i64> = last.2.as_array().unwrap().iter().map(|p| p[0].as_i64().unwrap()).collect();
         assert_eq!(
             cancel_ids,

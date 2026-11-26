@@ -316,7 +316,7 @@ fn handle(mut connection: TcpStream, token: &str, hub: &Arc<Hub>, port: u16) {
             body.as_bytes(),
         );
     } else if let Some(session_id) = path.strip_prefix("/api/frames/") {
-        stream_frames(connection, hub, decode_component(session_id));
+        stream_frames(connection, &request, hub, decode_component(session_id));
     } else if let Some(session_id) = path.strip_prefix("/api/events/") {
         stream_events(connection, hub, decode_component(session_id));
     } else if let Some(session_id) = path.strip_prefix("/api/input/") {
@@ -461,15 +461,53 @@ fn handle_input_ws(
 }
 
 /// MJPEG: the newest frame, repeatedly, on one multipart response.
-fn stream_frames(mut connection: TcpStream, hub: &Arc<Hub>, session_id: String) {
-    let Some(watcher) = hub.watch(&session_id) else {
-        let _ = respond(
-            &mut connection,
-            404,
-            "text/plain; charset=utf-8",
-            b"404 no live stream for that session\n",
-        );
-        return;
+fn stream_frames(
+    mut connection: TcpStream,
+    request: &Request,
+    hub: &Arc<Hub>,
+    session_id: String,
+) {
+    let expected_guest_gen = match request.param("g") {
+        None => None,
+        Some(raw) => match raw.trim().parse::<u64>().ok().filter(|&g| g > 0) {
+            Some(g) => Some(g),
+            None => {
+                let _ = respond(
+                    &mut connection,
+                    400,
+                    "text/plain; charset=utf-8",
+                    b"400 bad request: invalid guest generation parameter g\n",
+                );
+                return;
+            }
+        },
+    };
+    let watcher = match hub.watch_checked(&session_id, expected_guest_gen) {
+        Ok(watcher) => watcher,
+        Err(hub::WatchError::NotFound) => {
+            let _ = respond(
+                &mut connection,
+                404,
+                "text/plain; charset=utf-8",
+                b"404 no live stream for that session\n",
+            );
+            return;
+        }
+        Err(hub::WatchError::Replaced) => {
+            let body = json!({
+                "ok": false,
+                "code": "SESSION_REPLACED",
+                "error": "session was replaced by a newer guest; reopen detail view",
+            })
+            .to_string();
+            let _ = respond(
+                &mut connection,
+                409,
+                "application/json; charset=utf-8",
+                body.as_bytes(),
+            );
+            return;
+        }
     };
     let _ = connection.set_write_timeout(Some(WRITE_TIMEOUT));
     if write!(
@@ -478,7 +516,9 @@ fn stream_frames(mut connection: TcpStream, hub: &Arc<Hub>, session_id: String) 
          Content-Type: multipart/x-mixed-replace; boundary=acosframe\r\n\
          Cache-Control: no-store\r\n\
          X-Content-Type-Options: nosniff\r\n\
-         Connection: close\r\n\r\n"
+         X-Guest-Gen: {}\r\n\
+         Connection: close\r\n\r\n",
+        watcher.guest_gen()
     )
     .is_err()
     {
@@ -1799,6 +1839,8 @@ mod tests {
             "Power key",
             "Send KEYCODE_POWER key event",
             "producerGesture",
+            "hasDecodedFrame",
+            "X-Guest-Gen",
             "mirrorDisplayPoint",
             "addEventListener(\"paste\"",
             "t: \"pinch\"",
@@ -1814,6 +1856,77 @@ mod tests {
         assert!(
             !html.contains("Power / Wake"),
             "page must not promise display wake/sleep for KEYCODE_POWER"
+        );
+    }
+
+    #[test]
+    fn frames_stream_enforces_guest_gen_binding() {
+        let server = Server::start("frames-gen");
+        let stream_sock = server.registry.join("fg.sock");
+        let listener = UnixListener::bind(&stream_sock).expect("bind fake guest");
+        let _guest = std::thread::spawn(move || {
+            for incoming in listener.incoming().take(1) {
+                let Ok(mut stream) = incoming else { break };
+                let _ = stream.set_read_timeout(Some(Duration::from_secs(2)));
+                let mut reader = std::io::BufReader::new(stream.try_clone().expect("clone"));
+                let mut line = String::new();
+                let _ = reader.read_line(&mut line);
+                let hello = json!({"v": 1, "kind": "hello", "session_id": "s_fg", "display": {"w": 1080, "h": 2400}});
+                let _ = send(&mut stream, 2, hello.to_string().as_bytes());
+                let mut frame = Vec::new();
+                let header = json!({"ts_ms": 1, "seq": 1, "w": 1080, "h": 2400, "format": "png"});
+                let hdr_bytes = header.to_string().into_bytes();
+                frame.extend_from_slice(&(hdr_bytes.len() as u32).to_be_bytes());
+                frame.extend_from_slice(&hdr_bytes);
+                frame.extend_from_slice(b"PNGDATA");
+                let _ = send(&mut stream, 1, &frame);
+                std::thread::sleep(Duration::from_millis(250));
+            }
+        });
+
+        let doc = json!({
+            "v": 1,
+            "session_id": "s_fg",
+            "daemon_pid": std::process::id(),
+            "launcher_pid": std::process::id(),
+            "started_ms": crate::live_registry::now_ms(),
+            "stream_socket": stream_sock.to_string_lossy(),
+            "display": {"w": 1080, "h": 2400},
+        });
+        std::fs::write(server.registry.join("s_fg.json"), doc.to_string()).expect("write");
+
+        let guest_gen = server.hub.list()[0].guest_gen;
+        assert!(guest_gen > 0);
+
+        // Invalid guest generation parameter is rejected with 400.
+        let bad = server.raw(&format!("/api/frames/s_fg?t={}&g=0", server.token));
+        assert_eq!(status_of(&bad), 400);
+
+        // Stale guest generation is rejected with 409 SESSION_REPLACED.
+        let stale = server.raw(&format!(
+            "/api/frames/s_fg?t={}&g={}",
+            server.token,
+            guest_gen + 42
+        ));
+        assert_eq!(status_of(&stale), 409);
+        let stale_body: serde_json::Value =
+            serde_json::from_slice(body_of(&stale)).expect("stale json");
+        assert_eq!(stale_body["code"], "SESSION_REPLACED");
+
+        // Matching guest generation streams 200 OK with X-Guest-Gen header.
+        let mut conn = TcpStream::connect((Ipv4Addr::LOCALHOST, server.port)).expect("connect");
+        let _ = conn.set_read_timeout(Some(Duration::from_secs(3)));
+        write!(
+            conn,
+            "GET /api/frames/s_fg?t={}&g={} HTTP/1.1\r\nHost: 127.0.0.1:{}\r\n\r\n",
+            server.token, guest_gen, server.port
+        )
+        .expect("write");
+        let head = read_response_head(&mut conn);
+        assert!(head.starts_with("HTTP/1.1 200 OK"), "expected 200 OK: {head}");
+        assert!(
+            head.contains(&format!("X-Guest-Gen: {guest_gen}\r\n")),
+            "expected X-Guest-Gen header in {head}"
         );
     }
 
