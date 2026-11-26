@@ -535,6 +535,28 @@ impl Hub {
             slot.cv.notify_all();
         }
     }
+
+    /// Test seam to wait until the input worker has completed at least
+    /// `min_completed` scheduled recovery attempts and settled its next wait
+    /// decision, returning `(completed, recovery_attempts, retry_scheduled)`.
+    #[cfg(test)]
+    pub(crate) fn wait_for_scheduled_recovery_settled(
+        &self,
+        session_id: &str,
+        min_completed: u64,
+        timeout: Duration,
+    ) -> Option<(u64, u32, bool)> {
+        let slot = {
+            let inner = self.inner.lock().expect("hub");
+            inner.input_slots.get(session_id).cloned()
+        }?;
+        let state = slot.state.lock().expect("input slot");
+        let (state, _) = slot
+            .recovery_obs_cv
+            .wait_timeout_while(state, timeout, |s| s.recovery_obs.0 < min_completed)
+            .unwrap_or_else(|poison| poison.into_inner());
+        (state.recovery_obs.0 >= min_completed).then_some(state.recovery_obs)
+    }
 }
 
 /// Counters for one session slot (the hub's own seam for tests).
@@ -1382,6 +1404,8 @@ struct InputSlot {
     interactive_lock: Mutex<()>,
     state: Mutex<InputSlotState>,
     cv: Condvar,
+    #[cfg(test)]
+    recovery_obs_cv: Condvar,
 }
 
 #[derive(Clone, Debug)]
@@ -1412,6 +1436,8 @@ struct InputSlotState {
     replaced: bool,
     #[cfg(test)]
     scheduled_recovery_enabled: bool,
+    #[cfg(test)]
+    recovery_obs: (u64, u32, bool),
     last_event_time_ns: i64,
     pending_touch_recovery: Option<PendingTouchRecovery>,
     pending_releases: Vec<PendingRelease>,
@@ -1434,6 +1460,8 @@ impl InputSlot {
                 replaced: false,
                 #[cfg(test)]
                 scheduled_recovery_enabled: true,
+                #[cfg(test)]
+                recovery_obs: (0, 0, false),
                 last_event_time_ns: 0,
                 pending_touch_recovery: None,
                 pending_releases: Vec::new(),
@@ -1443,6 +1471,8 @@ impl InputSlot {
                 queue: VecDeque::new(),
             }),
             cv: Condvar::new(),
+            #[cfg(test)]
+            recovery_obs_cv: Condvar::new(),
         }
     }
 
@@ -1726,6 +1756,8 @@ impl InputWorker {
         let mut recovery_attempts: u32 = 0;
         let mut next_recovery_at: Option<Instant> = None;
         let mut scheduled_episode = self.recovery_episode;
+        #[cfg(test)]
+        let mut completed_scheduled_recoveries: u64 = 0;
         loop {
             let task = {
                 let mut state = self.slot.state.lock().expect("input slot");
@@ -1782,6 +1814,12 @@ impl InputWorker {
                     }
 
                     if let Some((now, deadline)) = recovery_deadline {
+                        #[cfg(test)]
+                        {
+                            state.recovery_obs =
+                                (completed_scheduled_recoveries, recovery_attempts, true);
+                            self.slot.recovery_obs_cv.notify_all();
+                        }
                         let wait_dur = deadline.saturating_duration_since(now);
                         let (new_state, _) = self
                             .slot
@@ -1793,6 +1831,12 @@ impl InputWorker {
                     }
 
                     if state.clients == 0 {
+                        #[cfg(test)]
+                        {
+                            state.recovery_obs =
+                                (completed_scheduled_recoveries, recovery_attempts, false);
+                            self.slot.recovery_obs_cv.notify_all();
+                        }
                         state.last_event_time_ns = self.last_event_time_ns;
                         state.pending_touch_recovery = self.pending_touch_recovery.take();
                         state.pending_releases = std::mem::take(&mut self.pending_releases);
@@ -1805,6 +1849,12 @@ impl InputWorker {
                     if !needs_recovery {
                         scheduled_episode = self.recovery_episode;
                         recovery_attempts = 0;
+                    }
+                    #[cfg(test)]
+                    {
+                        state.recovery_obs =
+                            (completed_scheduled_recoveries, recovery_attempts, false);
+                        self.slot.recovery_obs_cv.notify_all();
                     }
                     state = self
                         .slot
@@ -1852,6 +1902,10 @@ impl InputWorker {
                         scheduled_episode = self.recovery_episode;
                         recovery_attempts = 0;
                         next_recovery_at = None;
+                    }
+                    #[cfg(test)]
+                    {
+                        completed_scheduled_recoveries += 1;
                     }
                 }
             }
@@ -5588,8 +5642,17 @@ mod tests {
             assert!(*guard, "attempt 12 must still fire");
         }
 
-        // Wait well past the 25 ms initial backoff of a rearmed schedule; no 13th retry may fire.
-        std::thread::sleep(Duration::from_millis(180));
+        // Wait until the worker finishes handling request 16's failure and
+        // settles its next retry decision; duplicate Up must leave attempt 12
+        // exhausted with no further retry scheduled.
+        let settled = hub
+            .wait_for_scheduled_recovery_settled("s_dup_nr", 12, Duration::from_secs(3))
+            .expect("worker must settle after attempt 12 failure");
+        assert_eq!(
+            settled,
+            (12, RECOVERY_MAX_ATTEMPTS, false),
+            "duplicate Up must not rearm recovery or schedule a 13th retry"
+        );
         let recorded = seen.lock().unwrap().clone();
         assert_eq!(
             recorded.len(),
