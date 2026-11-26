@@ -1779,6 +1779,33 @@ mod tests {
         );
     }
 
+    #[test]
+    fn page_contains_phone_controls_pinch_paste_and_gesture_visuals() {
+        let server = Server::start("page-phone-ops");
+        let page = server.raw(&format!("/?t={}", server.token));
+        assert_eq!(status_of(&page), 200);
+        let html = String::from_utf8_lossy(body_of(&page)).to_string();
+        for needle in [
+            "btn-vol-down",
+            "btn-vol-up",
+            "btn-power",
+            "btn-pinch",
+            "btn-shot",
+            "gesture-svg",
+            "KEYCODE_VOLUME_DOWN",
+            "KEYCODE_VOLUME_UP",
+            "KEYCODE_POWER",
+            "KEYCODE_A",
+            "mirrorDisplayPoint",
+            "addEventListener(\"paste\"",
+            "t: \"pinch\"",
+            "long-press",
+            "touch-dot",
+        ] {
+            assert!(html.contains(needle), "page missing {needle}");
+        }
+    }
+
     fn send(
         stream: &mut std::os::unix::net::UnixStream,
         kind: u8,
