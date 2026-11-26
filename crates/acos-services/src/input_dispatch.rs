@@ -1215,6 +1215,32 @@ impl InputHost {
         pointers: &[(i32, f32, f32)],
         ack_wait: Duration,
     ) -> std::result::Result<(BinderId, (i32, i32), InjectedGesture), (ChannelError, bool)> {
+        self.touch_frame_checked_with_hit_point(
+            action,
+            pinned_target,
+            None,
+            down_time,
+            event_time,
+            pointers,
+            ack_wait,
+        )
+    }
+
+    /// Like [`Self::touch_frame_checked`], with an optional `hit_point` override
+    /// used only when resolving the initial target window (`*pinned_target` is
+    /// `None`). Synthetic multi-finger gestures such as `Ctrl`+wheel pinch pass
+    /// the cursor point here so zoom-in and zoom-out always target the same
+    /// window under the cursor even when finger 0 starts offset from it.
+    pub fn touch_frame_checked_with_hit_point(
+        &self,
+        action: i32,
+        pinned_target: &mut Option<(BinderId, (i32, i32))>,
+        hit_point: Option<(f32, f32)>,
+        down_time: i64,
+        event_time: i64,
+        pointers: &[(i32, f32, f32)],
+        ack_wait: Duration,
+    ) -> std::result::Result<(BinderId, (i32, i32), InjectedGesture), (ChannelError, bool)> {
         if pointers.is_empty() {
             return Err((ChannelError::BadPointerCount(0), false));
         }
@@ -1230,8 +1256,9 @@ impl InputHost {
                 .map_err(|err| (err, false))?;
             ((token, origin), local, gesture)
         } else if self.stack.is_some() {
-            let Some(target) = self.touch_target(pointers[0].1, pointers[0].2) else {
-                return Err((no_touch_target(pointers[0].1, pointers[0].2), false));
+            let (hit_x, hit_y) = hit_point.unwrap_or((pointers[0].1, pointers[0].2));
+            let Some(target) = self.touch_target(hit_x, hit_y) else {
+                return Err((no_touch_target(hit_x, hit_y), false));
             };
             let local: Vec<(i32, f32, f32)> = pointers
                 .iter()

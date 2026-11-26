@@ -2995,12 +2995,25 @@ impl ArtSession {
     /// before forwarding to the guest so an abandoned earlier `ACTION_DOWN` on a
     /// dropped socket thread cannot take effect after a newer compensating
     /// `ACTION_CANCEL` / `ACTION_POINTER_UP`.
+    #[cfg(test)]
     pub(crate) fn panel_touch(
         &mut self,
         action: i32,
         down_time: i64,
         event_time: i64,
         pointers: &[(i32, f32, f32)],
+    ) -> Result<(), BackendError> {
+        self.panel_touch_with_opts(action, down_time, event_time, pointers, None, None)
+    }
+
+    pub(crate) fn panel_touch_with_opts(
+        &mut self,
+        action: i32,
+        down_time: i64,
+        event_time: i64,
+        pointers: &[(i32, f32, f32)],
+        target: Option<(f32, f32)>,
+        gesture: Option<&str>,
     ) -> Result<(), BackendError> {
         if let Some(last) = self.last_panel_touch_event_time {
             if event_time < last {
@@ -3017,13 +3030,20 @@ impl ArtSession {
             .iter()
             .map(|&(id, x, y)| serde_json::json!([id, x, y]))
             .collect();
-        let reply = self.command(serde_json::json!({
+        let mut req = serde_json::json!({
             "cmd": "panel_touch",
             "action": action,
             "down_time": down_time,
             "event_time": event_time,
             "pointers": ptr_json,
-        }))?;
+        });
+        if let Some((tx, ty)) = target {
+            req["target"] = serde_json::json!([tx, ty]);
+        }
+        if let Some(g) = gesture {
+            req["gesture"] = serde_json::json!(g);
+        }
+        let reply = self.command(req)?;
         if reply.get("ok").and_then(serde_json::Value::as_bool) != Some(true) {
             let detail = reply
                 .get("error")

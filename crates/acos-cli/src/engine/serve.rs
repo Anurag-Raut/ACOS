@@ -1507,7 +1507,51 @@ impl ServeEngine {
                         detail: "panel_touch pointer entry must be [id, x, y]".to_string(),
                     });
                 }
-                session.panel_touch(action, down_time, event_time, &pointers)?;
+                let target: Option<(f32, f32)> = match args.get("target") {
+                    None | Some(Value::Null) => None,
+                    Some(v) => {
+                        let parsed = v.as_array().and_then(|arr| {
+                            if arr.len() != 2 {
+                                return None;
+                            }
+                            let tx = arr[0].as_f64()? as f32;
+                            let ty = arr[1].as_f64()? as f32;
+                            if tx.is_finite() && ty.is_finite() {
+                                Some((tx, ty))
+                            } else {
+                                None
+                            }
+                        });
+                        let Some(pt) = parsed else {
+                            return Err(BackendError::Failed {
+                                code: ErrorCode::InvalidArgument,
+                                detail: "panel_touch `target` must be [x, y]".to_string(),
+                            });
+                        };
+                        Some(pt)
+                    }
+                };
+                let gesture = match args.get("gesture") {
+                    None | Some(Value::Null) => None,
+                    Some(v) => match v.as_str() {
+                        Some(g @ ("scroll" | "pinch")) => Some(g),
+                        _ => {
+                            return Err(BackendError::Failed {
+                                code: ErrorCode::InvalidArgument,
+                                detail: "panel_touch `gesture` must be \"scroll\" or \"pinch\""
+                                    .to_string(),
+                            });
+                        }
+                    },
+                };
+                session.panel_touch_with_opts(
+                    action,
+                    down_time,
+                    event_time,
+                    &pointers,
+                    target,
+                    gesture,
+                )?;
                 Ok(json!({ "ok": true, "session_id": id }))
             })(),
             "panel_key" => (|| {

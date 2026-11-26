@@ -152,7 +152,7 @@ pub const PAGE: &str = r##"<!doctype html>
       <span class="sep" aria-hidden="true"></span>
       <button id="btn-vol-down" type="button" title="Volume down">Vol−</button>
       <button id="btn-vol-up" type="button" title="Volume up">Vol+</button>
-      <button id="btn-power" type="button" title="Power / Wake">Power</button>
+      <button id="btn-power" type="button" title="Send KEYCODE_POWER key event">Power key</button>
       <span class="sep" aria-hidden="true"></span>
       <button id="btn-pinch" type="button" aria-pressed="false" title="Two-finger pinch mode (or Alt + drag, or Ctrl + wheel)">Pinch</button>
       <button id="btn-shot" type="button" title="Save PNG screenshot" disabled>Shot</button>
@@ -216,8 +216,7 @@ let wsQueue = [];
 const activePointers = new Map();
 const heldGuestKeys = new Set();
 let pinchMode = false;
-let lastLocalGestureHint = null;
-let panelTouchState = { active: 0, maxPointers: 0, startX: 0, startY: 0, startTs: 0 };
+let panelTouchState = { active: 0, maxPointers: 0, startX: 0, startY: 0, startTs: 0, gesture: null };
 
 const KEY_MAP = {
   Backspace: "KEYCODE_DEL",
@@ -313,7 +312,7 @@ function applyToolbarUi() {
   btnVolUp.title = isWatchOnly ? "watch-only: verify run" : "Volume up";
 
   btnPower.disabled = inputBlocked;
-  btnPower.title = isWatchOnly ? "watch-only: verify run" : "Power / Wake";
+  btnPower.title = isWatchOnly ? "watch-only: verify run" : "Send KEYCODE_POWER key event";
 
   if (inputBlocked && pinchMode) {
     pinchMode = false;
@@ -470,8 +469,7 @@ async function refresh() {
 }
 
 function resetPanelTouchState() {
-  panelTouchState = { active: 0, maxPointers: 0, startX: 0, startY: 0, startTs: 0 };
-  lastLocalGestureHint = null;
+  panelTouchState = { active: 0, maxPointers: 0, startX: 0, startY: 0, startTs: 0, gesture: null };
 }
 
 function clearPointerVisuals(entry, fadeTrail) {
@@ -1191,6 +1189,7 @@ function onEvent(event, kind) {
         panelTouchState.active = 0;
         panelTouchState.maxPointers = 0;
         panelTouchState.startTs = 0;
+        panelTouchState.gesture = null;
       }
       panelTouchState.active += 1;
       if (panelTouchState.active === 1) {
@@ -1198,8 +1197,12 @@ function onEvent(event, kind) {
         panelTouchState.startX = typeof event.x === "number" ? event.x : 0;
         panelTouchState.startY = typeof event.y === "number" ? event.y : 0;
         panelTouchState.startTs = evTs;
+        panelTouchState.gesture = typeof event.gesture === "string" ? event.gesture : null;
       } else {
         panelTouchState.maxPointers = Math.max(panelTouchState.maxPointers, panelTouchState.active);
+        if (typeof event.gesture === "string" && !panelTouchState.gesture) {
+          panelTouchState.gesture = event.gesture;
+        }
       }
       return;
     }
@@ -1213,12 +1216,12 @@ function onEvent(event, kind) {
       const sy = hasStart ? panelTouchState.startY : ey;
       const dt = hasStart ? Math.max(0, (event.ts_ms || Date.now()) - panelTouchState.startTs) : 0;
       const dist = Math.hypot(ex - sx, ey - sy);
-      const hint = lastLocalGestureHint && (Date.now() - lastLocalGestureHint.ts) < 800
-        ? lastLocalGestureHint.kind : null;
+      const producerGesture = (typeof event.gesture === "string" ? event.gesture : null)
+        || panelTouchState.gesture;
       let gestureCmd = "tap";
-      if (panelTouchState.maxPointers >= 2 || hint === "pinch") {
+      if (panelTouchState.maxPointers >= 2 || producerGesture === "pinch") {
         gestureCmd = "pinch";
-      } else if (hint === "scroll" && dist >= 20) {
+      } else if (producerGesture === "scroll") {
         gestureCmd = "scroll";
       } else if (dist >= 24) {
         gestureCmd = "drag";
@@ -1227,6 +1230,7 @@ function onEvent(event, kind) {
       }
       panelTouchState.startTs = 0;
       panelTouchState.maxPointers = 0;
+      panelTouchState.gesture = null;
       const summary = Object.assign({}, event, { cmd: gestureCmd });
       if (gestureCmd === "drag" || gestureCmd === "scroll" || gestureCmd === "pinch") {
         summary.x = sx;
@@ -1354,10 +1358,7 @@ screenWrap.addEventListener("pointerdown", (e) => {
     if (sendInput({ t: "touch", phase: "down", id: candId, x: candPt.x, y: candPt.y })) {
       mirrorId = candId;
       mirrorPt = candPt;
-      lastLocalGestureHint = { kind: "pinch", ts: Date.now() };
     }
-  } else {
-    lastLocalGestureHint = null;
   }
 
   const dotEl = el("div", "touch-dot");
@@ -1478,11 +1479,9 @@ screenWrap.addEventListener("wheel", (e) => {
   if (e.ctrlKey) {
     const delta = Math.round(e.deltaY * scale);
     if (!delta) return;
-    lastLocalGestureHint = { kind: "pinch", ts: Date.now() };
     sendInput({ t: "pinch", x: pt.x, y: pt.y, delta });
     return;
   }
-  lastLocalGestureHint = { kind: "scroll", ts: Date.now() };
   sendInput({
     t: "scroll",
     x: pt.x,

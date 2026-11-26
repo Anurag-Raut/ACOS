@@ -1963,6 +1963,12 @@ pub fn event_from_reply(reply: &serde_json::Value, masked: bool) -> Option<serde
                         _ => return None,
                     };
                     map.insert("phase".into(), serde_json::json!(phase));
+                    if let Some(gesture) = reply.get("gesture").and_then(serde_json::Value::as_str)
+                    {
+                        if matches!(gesture, "scroll" | "pinch") {
+                            map.insert("gesture".into(), serde_json::json!(gesture));
+                        }
+                    }
                     "touch"
                 }
                 "panel_key" => "key",
@@ -3403,5 +3409,47 @@ mod tests {
                 None => assert!(ev.is_none(), "action {action} should be omitted: {ev:?}"),
             }
         }
+
+        let scroll = event_from_reply(
+            &serde_json::json!({
+                "ok": true,
+                "cmd": "panel_touch",
+                "action": 1,
+                "x": 120,
+                "y": 240,
+                "gesture": "scroll",
+            }),
+            false,
+        )
+        .expect("scroll event");
+        assert_eq!(scroll["gesture"], "scroll");
+
+        let pinch = event_from_reply(
+            &serde_json::json!({
+                "ok": true,
+                "cmd": "panel_touch",
+                "action": 0,
+                "x": 120,
+                "y": 240,
+                "gesture": "pinch",
+            }),
+            false,
+        )
+        .expect("pinch event");
+        assert_eq!(pinch["gesture"], "pinch");
+
+        let unknown = event_from_reply(
+            &serde_json::json!({
+                "ok": true,
+                "cmd": "panel_touch",
+                "action": 0,
+                "x": 120,
+                "y": 240,
+                "gesture": "bogus",
+            }),
+            false,
+        )
+        .expect("unknown gesture omitted");
+        assert!(unknown.get("gesture").is_none());
     }
 }
