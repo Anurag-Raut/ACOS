@@ -576,3 +576,18 @@ Verified and addressed the **1** CodeRabbit Round 9 actionable comment (1 Minor,
 - `tools/verify/check-layout.sh`: **`check-layout: ok`**.
 - Unit & doc suites: `acos-services --lib input_dispatch` (**17 passed, 0 failed**), `acos-services --test surface_client --test modules_doc` (**15 passed, 0 failed**), `acos-art --lib panel_touch` (**5 passed, 0 failed**), `acos-art --lib live_view` (**24 passed, 0 failed**), `acos-cli --bin acos` (**253 passed, 0 failed**), `acos-mcp --test docs --test guide --test documentation_args` (**19 passed, 0 failed**), non-ignored `humanview_cp1..cp4` + `launcher_home_frame` (**13 passed, 0 failed**).
 - Release live-ART suites (`run-exclusive.sh --task HVCR9` + `guarded.sh`): `launcher_home_frame` (**1 passed**, 6.51 s), `humanview_cp1` (**2 passed**, 14.97 s), `humanview_cp2` (**1 passed**, 5.47 s), `humanview_cp3` (**2 passed**, 14.10 s), `humanview_cp4` (**1 passed**, 10.79 s; **p50 = 63.48 ms**, **p95 = 80.38 ms**, `mean_encode_ms = 1.75 ms`, `frames_dropped_latest = 0`, `events_dropped = 0`).
+
+---
+
+## 20. Fix Round 13 — CodeRabbit PR #6 Round 10 Test-Determinism Fix
+
+Verified and addressed the **1** CodeRabbit Round 10 actionable comment (1 Minor, test-only, 0 production findings):
+
+- **Observe settled worker retry state instead of sleeping in `duplicate_pending_up_at_attempt_11_does_not_rearm_recovery` (`crates/acos-cli/src/view/hub.rs`):**
+  - Added a `#[cfg(test)]`-only observation seam (`InputSlot::recovery_obs_cv`, `InputSlotState::recovery_obs`, and `Hub::wait_for_scheduled_recovery_settled`) recording `(completed_scheduled_recoveries, recovery_attempts, retry_scheduled)` whenever `InputWorker::run` finishes a scheduled recovery and settles into its next wait state.
+  - Replaced the fixed 180 ms `thread::sleep` in `duplicate_pending_up_at_attempt_11_does_not_rearm_recovery` with `hub.wait_for_scheduled_recovery_settled("s_dup_nr", 12, Duration::from_secs(3))` asserting `(12, RECOVERY_MAX_ATTEMPTS, false)` and `recorded.len() == 16`.
+
+**Fresh verification:**
+- `tools/verify/check-layout.sh`: **`check-layout: ok`**.
+- `env -u TMPDIR cargo test --offline -p acos-cli --bin acos`: **253 passed, 0 failed**.
+- `cargo build --offline --release -p acos-cli`: **ok** (test-only `#[cfg(test)]` change; zero release code diff).
