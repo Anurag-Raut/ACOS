@@ -1201,7 +1201,7 @@ function onEvent(event, kind) {
     if (
       typeof event.frame_seq === "number" &&
       event.frame_seq > lastFrameSeq &&
-      (!pendingRotate || !pendingRotate.awaitingReply)
+      (!pendingRotate || (!pendingRotate.awaitingReply && event.frame_seq > pendingRotate.minSeq))
     ) {
       pendingRotate = {
         minSeq: event.frame_seq,
@@ -1209,6 +1209,7 @@ function onEvent(event, kind) {
         expectedH: 0,
         awaitingReply: false,
       };
+      applyToolbarUi();
     }
   }
   if (event.kind === "action" && event.source === "panel" && event.cmd === "touch") {
@@ -1502,10 +1503,8 @@ screenWrap.addEventListener("pointercancel", (e) => finishPointer(e, "cancel"));
 screenWrap.addEventListener("wheel", (e) => {
   if (!current || sessionEnded) return;
   if (!hasDecodedFrame() || isRotationPending() || activePointers.size > 0) return;
-  const pt = clientToDisplay(e.clientX, e.clientY, false) || {
-    x: Math.round((display.w || 1080) / 2),
-    y: Math.round((display.h || 2400) / 2),
-  };
+  const pt = clientToDisplay(e.clientX, e.clientY, false);
+  if (!pt) return;
   e.preventDefault();
   if (current.watch_only) {
     applyToolbarUi();
@@ -1644,7 +1643,6 @@ btnRotate.addEventListener("click", () => {
       expectedH: 0,
       awaitingReply: true,
     };
-    currentRotation = next;
     applyToolbarUi();
   }
   screenWrap.focus({ preventScroll: true });

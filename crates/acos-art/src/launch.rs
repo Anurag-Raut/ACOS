@@ -4188,24 +4188,39 @@ impl ShortSocketDir {
         Self::new_named("art")
     }
 
-    /// A fresh short socket directory named `acos-<kind>-<pid>-<seq>`.
+    /// A fresh short socket directory named `acos-<kind>-<pid>-<seq>-<nonce>`.
     ///
     /// `kind = "art"` is the session's socket directory (bind-mounted into the
     /// guest at `/dev/socket`), `kind = "view"` is the live-view directory, which
     /// is **never** mounted anywhere and must stay host-only.
+    ///
+    /// The random hex nonce prevents a reconnecting live-view watcher from
+    /// attaching to a different guest if the OS reuses a prior launcher PID
+    /// with the same in-process sequence counter.
     ///
     /// Every candidate is created 0700 and then verified (a directory, owned by
     /// this uid, mode 0700); a candidate that cannot be made private is skipped
     /// rather than used, and `/dev/shm` — which is world-visible by default — is
     /// only ever used through the same 0700 + owner check.
     fn new_named(kind: &str) -> std::io::Result<Self> {
+        use std::io::Read;
         use std::sync::atomic::{AtomicU64, Ordering};
         static SEQ: AtomicU64 = AtomicU64::new(0);
-        let id = format!(
-            "{}-{}",
-            std::process::id(),
-            SEQ.fetch_add(1, Ordering::Relaxed)
-        );
+        let seq = SEQ.fetch_add(1, Ordering::Relaxed);
+        let mut nonce_bytes = [0u8; 8];
+        let got_random = fs::File::open("/dev/urandom")
+            .and_then(|mut f| f.read_exact(&mut nonce_bytes))
+            .is_ok();
+        let nonce = if got_random {
+            u64::from_le_bytes(nonce_bytes)
+        } else {
+            let nanos = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos() as u64)
+                .unwrap_or(0);
+            nanos ^ ((std::process::id() as u64) << 32) ^ seq.wrapping_mul(0x9e37_79b9_7f4a_7c15)
+        };
+        let id = format!("{}-{}-{:016x}", std::process::id(), seq, nonce);
         let uid = unsafe { libc::getuid() };
         let runtime = PathBuf::from(format!("/run/user/{uid}"));
         let mut candidates = Vec::new();

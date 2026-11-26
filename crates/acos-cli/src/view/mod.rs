@@ -1865,25 +1865,26 @@ mod tests {
         let stream_sock = server.registry.join("fg.sock");
         let listener = UnixListener::bind(&stream_sock).expect("bind fake guest");
         let _guest = std::thread::spawn(move || {
-            for incoming in listener.incoming().take(1) {
+            for incoming in listener.incoming().take(3) {
                 let Ok(mut stream) = incoming else { break };
                 let _ = stream.set_read_timeout(Some(Duration::from_secs(2)));
                 let mut reader = std::io::BufReader::new(stream.try_clone().expect("clone"));
                 let mut line = String::new();
                 let _ = reader.read_line(&mut line);
                 let hello = json!({"v": 1, "kind": "hello", "session_id": "s_fg", "display": {"w": 1080, "h": 2400}});
-                let _ = send(&mut stream, 2, hello.to_string().as_bytes());
+                let _ = send(&mut stream, b'H', hello.to_string().as_bytes());
                 let mut frame = Vec::new();
                 let header = json!({"ts_ms": 1, "seq": 1, "w": 1080, "h": 2400, "format": "png"});
                 let hdr_bytes = header.to_string().into_bytes();
-                frame.extend_from_slice(&(hdr_bytes.len() as u32).to_be_bytes());
                 frame.extend_from_slice(&hdr_bytes);
+                frame.push(b'\n');
                 frame.extend_from_slice(b"PNGDATA");
-                let _ = send(&mut stream, 1, &frame);
+                let _ = send(&mut stream, b'F', &frame);
                 std::thread::sleep(Duration::from_millis(250));
             }
         });
 
+        let entry_path = server.registry.join("s_fg.json");
         let doc = json!({
             "v": 1,
             "session_id": "s_fg",
@@ -1893,7 +1894,7 @@ mod tests {
             "stream_socket": stream_sock.to_string_lossy(),
             "display": {"w": 1080, "h": 2400},
         });
-        std::fs::write(server.registry.join("s_fg.json"), doc.to_string()).expect("write");
+        std::fs::write(&entry_path, doc.to_string()).expect("write");
 
         let guest_gen = server.hub.list()[0].guest_gen;
         assert!(guest_gen > 0);
@@ -1913,7 +1914,7 @@ mod tests {
             serde_json::from_slice(body_of(&stale)).expect("stale json");
         assert_eq!(stale_body["code"], "SESSION_REPLACED");
 
-        // Matching guest generation streams 200 OK with X-Guest-Gen header.
+        // Matching guest generation streams 200 OK with X-Guest-Gen and PNGDATA part.
         let mut conn = TcpStream::connect((Ipv4Addr::LOCALHOST, server.port)).expect("connect");
         let _ = conn.set_read_timeout(Some(Duration::from_secs(3)));
         write!(
@@ -1928,6 +1929,59 @@ mod tests {
             head.contains(&format!("X-Guest-Gen: {guest_gen}\r\n")),
             "expected X-Guest-Gen header in {head}"
         );
+        let mut body = Vec::new();
+        let mut buf = [0u8; 2048];
+        let deadline = std::time::Instant::now() + Duration::from_secs(3);
+        while std::time::Instant::now() < deadline {
+            if let Ok(n) = conn.read(&mut buf) {
+                if n == 0 {
+                    break;
+                }
+                body.extend_from_slice(&buf[..n]);
+                if body.windows(b"PNGDATA".len()).any(|w| w == b"PNGDATA") {
+                    break;
+                }
+            }
+        }
+        assert!(
+            body.windows(b"PNGDATA".len()).any(|w| w == b"PNGDATA"),
+            "expected multipart frame containing PNGDATA, got {:?}",
+            String::from_utf8_lossy(&body)
+        );
+
+        // While a watcher (`conn`) is still attached, remove and republish the exact same
+        // registry entry; `refresh_locked` assigns a new generation and must replace the
+        // retained slot so `X-Guest-Gen` matches the newly accepted generation.
+        std::fs::remove_file(&entry_path).expect("remove entry");
+        assert!(server.hub.list().is_empty());
+        std::fs::write(&entry_path, doc.to_string()).expect("republish entry");
+        let new_gen = server.hub.list()[0].guest_gen;
+        assert_ne!(new_gen, guest_gen, "republished entry must advance guest_gen");
+
+        // Old generation is now rejected with 409.
+        let old_again = server.raw(&format!(
+            "/api/frames/s_fg?t={}&g={}",
+            server.token, guest_gen
+        ));
+        assert_eq!(status_of(&old_again), 409);
+
+        // New generation succeeds and emits X-Guest-Gen == new_gen (not stale guest_gen).
+        let mut conn2 = TcpStream::connect((Ipv4Addr::LOCALHOST, server.port)).expect("connect 2");
+        let _ = conn2.set_read_timeout(Some(Duration::from_secs(3)));
+        write!(
+            conn2,
+            "GET /api/frames/s_fg?t={}&g={} HTTP/1.1\r\nHost: 127.0.0.1:{}\r\n\r\n",
+            server.token, new_gen, server.port
+        )
+        .expect("write 2");
+        let head2 = read_response_head(&mut conn2);
+        assert!(head2.starts_with("HTTP/1.1 200 OK"), "expected 200 OK: {head2}");
+        assert!(
+            head2.contains(&format!("X-Guest-Gen: {new_gen}\r\n")),
+            "expected refreshed X-Guest-Gen: {new_gen} in {head2}"
+        );
+        drop(conn2);
+        drop(conn);
     }
 
     fn send(
