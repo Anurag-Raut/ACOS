@@ -495,5 +495,24 @@ Verified and addressed all **4** CodeRabbit Round 5 actionable comments (2 Major
 - Unit & doc suites: `acos-art --lib live_view` (**24 passed, 0 failed**), `acos-cli --bin acos` (**244 passed, 0 failed**), `acos-mcp --test docs --test guide --test documentation_args` (**19 passed, 0 failed**), `acos-services --test surface_client --test modules_doc` (**15 passed, 0 failed**), non-ignored `humanview_cp1..cp4` + `launcher_home_frame` (**13 passed, 0 failed**).
 - Release live-ART suites (`run-exclusive.sh` + `guarded.sh`): `launcher_home_frame` (**1 passed**, 5.50 s), `humanview_cp1` (**2 passed**, 15.10 s), `humanview_cp2` (**1 passed**, 5.44 s), `humanview_cp3` (**2 passed**, 14.24 s), `humanview_cp4` (**1 passed**, 10.72 s; **p50 = 63.24 ms**, **p95 = 64.43 ms**, `mean_encode_ms = 1.83 ms`, `frames_dropped_latest = 0`, `events_dropped = 0`).
 
+---
 
+## 16. Fix Round 9 — CodeRabbit PR #6 Round 6 Review Fixes
 
+Verified and addressed all **4** CodeRabbit Round 6 actionable comments (4 Majors, 0 false positives):
+
+- **Request-ID reply correlation across launcher timeouts (`crates/acos-art/src/launch.rs`, `crates/acos-cli/src/engine/art.rs`):**
+  - Added `CURRENT_REQUEST_ID` + `"req_id"` reply echoing in `acos-art`'s `protocol_write` (cleared on every serve-loop iteration so unsolicited `"cmd": "session"` notices never inherit a request id).
+  - Added monotonic `next_req_id` and `unmatched_timeouts` tracking in `ArtSession::command_raw`, looping within the command deadline to discard late replies from earlier timed-out requests (while surfacing unsolicited `"cmd": "session"` terminal notices immediately) so a late `ACTION_DOWN` `ok: true` reply can never be mistaken for confirmation of a compensating `ACTION_CANCEL` (`panel_touch_discards_late_reply_from_timed_out_down_before_confirming_cancel`).
+- **Scheduled recovery retries while a browser remains connected (`crates/acos-cli/src/view/hub.rs`):**
+  - Moved the bounded exponential backoff (`25 ms`..`500 ms`, up to 12 attempts) check in `InputWorker::run` ahead of the `state.clients == 0` branch so pending touch recovery or retained releases retry automatically even when browsers stay connected and send no further commands, while keeping an untimed `cv.wait` when nothing is pending (`connected_browser_schedules_bounded_recovery_for_failed_up`).
+- **Preserve pinned touch target across transient launcher errors (`crates/acos-services/src/input_dispatch.rs`, `crates/acos-art/src/launch.rs`):**
+  - Updated `InputHost::touch_frame` to accept `&mut Option<(BinderId, (i32, i32))>` and write the resolved `(token, origin)` immediately upon `inject_motion_frame` publish (before `collect`), plus added `InputHost::has_channel`.
+  - Stopped wiping `panel_touch_target` on `touch_frame` errors in `launch.rs` so compensating `ACTION_POINTER_UP` / `ACTION_CANCEL` frames still target the window that received the gesture rather than re-hit-testing pointer 0 over another window (and short-circuited releases when the pinned window's channel is already closed without delivering to any other window) (`touch_frame_preserves_pinned_target_after_post_publish_error`).
+- **Unified release bookkeeping for initial sends and retries (`crates/acos-cli/src/view/hub.rs`, `docs/LIVE_VIEW.md`):**
+  - Routed `TouchPhase::Up`, `TouchPhase::Cancel`, and disconnect `cancel_client` through `record_pending_up` / `record_pending_cancel_client` + `resolve_pending_touch_recovery_and_releases()` and removed `cancel_client_pointers`, ensuring each pointer is removed only after its release succeeds (or once the guest is confirmed replaced/gone) and failed initial or partial multi-pointer releases are retained for bounded retry (`disconnect_retains_confirmed_pointer_release_when_initial_cancel_fails`, `disconnect_multi_pointer_partial_failure_retains_remaining_release`).
+
+**Fresh verification:**
+- `tools/verify/check-layout.sh`: **`check-layout: ok`**.
+- Unit & doc suites: `acos-services --lib input_dispatch` (**17 passed, 0 failed**), `acos-services --test surface_client --test modules_doc` (**15 passed, 0 failed**), `acos-art --lib live_view` (**24 passed, 0 failed**), `acos-cli --bin acos` (**248 passed, 0 failed**), `acos-mcp --test docs --test guide --test documentation_args` (**19 passed, 0 failed**), non-ignored `humanview_cp1..cp4` + `launcher_home_frame` (**13 passed, 0 failed**).
+- Release live-ART suites (`run-exclusive.sh --task HVCR6` + `guarded.sh`): `launcher_home_frame` (**1 passed**, 5.44 s), `humanview_cp1` (**2 passed**, 18.98 s), `humanview_cp2` (**1 passed**, 5.59 s), `humanview_cp3` (**2 passed**, 21.92 s), `humanview_cp4` (**1 passed**, 10.72 s; **p50 = 63.67 ms**, **p95 = 64.92 ms**, `mean_encode_ms = 1.92 ms`, `frames_dropped_latest = 0`, `events_dropped = 0`).

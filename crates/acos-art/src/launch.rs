@@ -5400,8 +5400,14 @@ fn protocol_write(value: &serde_json::Value) {
     // with. `animations:"off"` is evidence the functional result is not an
     // animation; `"on"` is the default real behaviour.
     let mut value = value.clone();
-    if let (Some(state), Some(object)) = (animations_state(), value.as_object_mut()) {
-        object.insert("animations".into(), serde_json::json!(state));
+    let req_id = CURRENT_REQUEST_ID.swap(0, std::sync::atomic::Ordering::AcqRel);
+    if let Some(object) = value.as_object_mut() {
+        if req_id != 0 {
+            object.insert("req_id".into(), serde_json::json!(req_id));
+        }
+        if let Some(state) = animations_state() {
+            object.insert("animations".into(), serde_json::json!(state));
+        }
     }
     // VIEW1a: one place turns every reply this session writes into a live-view
     // event (action/lifecycle/activity/settle), so no command path can miss the
@@ -5413,6 +5419,13 @@ fn protocol_write(value: &serde_json::Value) {
     let _ = writeln!(out, "{value}");
     let _ = out.flush();
 }
+
+/// HUMANVIEW1: correlation id of the serve-loop request currently being
+/// handled (`0` when idle or emitting an unsolicited session notice).
+/// `protocol_write` swaps it back to `0` and echoes `"req_id"` onto the reply
+/// so `ArtSession::command_raw` can discard late replies from earlier timed-out
+/// requests instead of mistaking them for confirmation of a compensating cancel.
+static CURRENT_REQUEST_ID: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
 /// VIEW1a: the live-view producer of this process, set once by an interactive
 /// session. `None` in a one-shot launch (no viewer can attach to a session that
@@ -7778,6 +7791,7 @@ fn interactive_serve(
     let mut last_capture_fnv: Option<u64> = None;
     let mut panel_touch_target: Option<(acos_parcel::BinderId, (i32, i32))> = None;
     loop {
+        CURRENT_REQUEST_ID.store(0, std::sync::atomic::Ordering::Release);
         let deadline_left = session_deadline.saturating_duration_since(Instant::now());
         // A secondary guest that ended by itself is evidence, not a running
         // process: reap it before the next event is served.
@@ -7887,6 +7901,11 @@ fn interactive_serve(
                 continue;
             }
         };
+        let req_id = request
+            .get("req_id")
+            .and_then(serde_json::Value::as_u64)
+            .unwrap_or(0);
+        CURRENT_REQUEST_ID.store(req_id, std::sync::atomic::Ordering::Release);
         let cmd = request.get("cmd").and_then(|v| v.as_str()).unwrap_or("");
         // VIEW1a: the event feed reports the *request*'s coordinates/key/text
         // (a reply need not echo them); no-op with no viewer attached.
@@ -8412,7 +8431,7 @@ fn interactive_serve(
                 };
                 match live.input.touch_frame(
                     action,
-                    panel_touch_target,
+                    &mut panel_touch_target,
                     down_time,
                     event_time,
                     &pointers,
@@ -8436,13 +8455,49 @@ fn interactive_serve(
                         }));
                     }
                     Err(err) => {
-                        panel_touch_target = None;
-                        protocol_write(&serde_json::json!({
-                            "ok": false,
-                            "cmd": "panel_touch",
-                            "code": "INPUT_UNAVAILABLE",
-                            "error": format!("panel_touch failed: {err}"),
-                        }));
+                        let target_dead = panel_touch_target.is_some_and(|(token, _)| {
+                            matches!(
+                                err,
+                                acos_services::input_channel::ChannelError::PeerClosed
+                            ) || !live.input.has_channel(token)
+                        });
+                        let is_release = matches!(
+                            masked_action,
+                            acos_services::input_channel::ACTION_UP
+                                | acos_services::input_channel::ACTION_CANCEL
+                                | acos_services::input_channel::ACTION_POINTER_UP
+                        );
+                        if target_dead && is_release {
+                            // The pinned window's input channel is already gone, so
+                            // no pointer can remain stuck on it. Never fall back to
+                            // hit-testing a different window; clear the pin once the
+                            // final UP/CANCEL closes the gesture.
+                            if masked_action == acos_services::input_channel::ACTION_UP
+                                || masked_action
+                                    == acos_services::input_channel::ACTION_CANCEL
+                            {
+                                panel_touch_target = None;
+                            }
+                            protocol_write(&serde_json::json!({
+                                "ok": true,
+                                "cmd": "panel_touch",
+                                "action": masked_action,
+                                "target_closed": true,
+                                "x": pointers[0].1.round() as i64,
+                                "y": pointers[0].2.round() as i64,
+                            }));
+                        } else {
+                            // Preserve `panel_touch_target` across errors so a
+                            // compensating `ACTION_POINTER_UP` / `ACTION_CANCEL`
+                            // targets the window that received the gesture rather
+                            // than re-hit-testing another window under pointer 0.
+                            protocol_write(&serde_json::json!({
+                                "ok": false,
+                                "cmd": "panel_touch",
+                                "code": "INPUT_UNAVAILABLE",
+                                "error": format!("panel_touch failed: {err}"),
+                            }));
+                        }
                     }
                 }
             }

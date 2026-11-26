@@ -262,6 +262,15 @@ pub struct ArtSession {
     /// Rejecting any `panel_touch` with `event_time < last` guarantees an
     /// abandoned older down can never land after a newer cancel.
     last_panel_touch_event_time: Option<i64>,
+    /// HUMANVIEW1: monotonic per-launcher-process request id stamped onto every
+    /// `command_raw` request and echoed back by `acos-art`'s `protocol_write`
+    /// so a late reply from an earlier timed-out command cannot be mistaken for
+    /// confirmation of a subsequent compensating cancel/release.
+    next_req_id: u64,
+    /// Number of prior commands on this launcher process that timed out before
+    /// receiving a reply; also lets `command_raw` drain stale replies from
+    /// legacy peers that do not echo `req_id`.
+    unmatched_timeouts: usize,
     /// P1: `"fast"` or `"strict"` for the next input command. Serve sets it per
     /// verb; the default is strict.
     settle_mode: &'static str,
@@ -2264,6 +2273,8 @@ impl ArtSession {
             last_phase: None,
             last_input_settle: None,
             last_panel_touch_event_time: None,
+            next_req_id: 1,
+            unmatched_timeouts: 0,
             settle_mode: "strict",
             observation_settle: "strict",
             last_tree_settle: None,
@@ -3094,13 +3105,22 @@ impl ArtSession {
     }
 
     fn read_line(&mut self, timeout: Duration, context: &str) -> Result<String, BackendError> {
-        match self.lines.recv_timeout(timeout) {
+        self.read_line_with_budget(timeout, timeout, context)
+    }
+
+    fn read_line_with_budget(
+        &mut self,
+        wait: Duration,
+        reported_budget: Duration,
+        context: &str,
+    ) -> Result<String, BackendError> {
+        match self.lines.recv_timeout(wait) {
             Ok(Ok(line)) => Ok(line),
             Ok(Err(error)) => Err(self.session_lost_mut(context, &error.to_string())),
             Err(RecvTimeoutError::Timeout) => Err(BackendError::Timeout {
                 detail: format!(
                     "{context}: no reply from acos-art within {}s; stderr tail: {}",
-                    timeout.as_secs(),
+                    reported_budget.as_secs(),
                     self.stderr_tail()
                 ),
             }),
@@ -3168,7 +3188,7 @@ impl ArtSession {
     /// and the raw reply in `details.reply` (W46).
     fn command_raw(
         &mut self,
-        request: serde_json::Value,
+        mut request: serde_json::Value,
     ) -> Result<serde_json::Value, acos_protocol::ProtocolError> {
         let artifacts = self.artifacts.clone();
         if self.stdin.is_none() {
@@ -3178,6 +3198,11 @@ impl ArtSession {
             return Err(self
                 .session_lost_mut("command", "the ART session stdin is closed")
                 .to_protocol_error());
+        }
+        let req_id = self.next_req_id;
+        self.next_req_id = self.next_req_id.wrapping_add(1).max(1);
+        if let Some(obj) = request.as_object_mut() {
+            obj.insert("req_id".to_string(), serde_json::json!(req_id));
         }
         let stdin = self.stdin.as_mut().expect("checked above");
         let line = request.to_string();
@@ -3223,9 +3248,59 @@ impl ArtSession {
             );
         }
         let timeout = self.timeout;
-        let reply = self
-            .read_line(timeout, "command")
-            .map_err(|error| error.to_protocol_error())?;
+        let deadline = Instant::now() + timeout;
+        let (reply, reply_len): (serde_json::Value, usize) = loop {
+            let remaining = deadline.saturating_duration_since(Instant::now());
+            let raw = match self.read_line_with_budget(remaining, timeout, "command") {
+                Ok(line) => line,
+                Err(error) => {
+                    if matches!(error, BackendError::Timeout { .. }) {
+                        self.unmatched_timeouts = self.unmatched_timeouts.saturating_add(1);
+                    }
+                    return Err(error.to_protocol_error());
+                }
+            };
+            let parsed: serde_json::Value = serde_json::from_str(&raw).map_err(|error| {
+                acos_protocol::ProtocolError::new(
+                    ErrorCode::Internal,
+                    format!("acos-art reply is not JSON: {error}"),
+                )
+                .with_hint(
+                    "The line-JSON protocol is broken (a guest or harness wrote a non-JSON line). \
+                     Capture the session's stderr tail and report the harness bug.",
+                )
+            })?;
+            match parsed.get("req_id").and_then(|v| v.as_u64()) {
+                Some(id) if id < req_id => {
+                    // Late reply for an earlier command that already timed out;
+                    // discard it and continue waiting for `req_id` within our deadline.
+                    self.unmatched_timeouts = self.unmatched_timeouts.saturating_sub(1);
+                    continue;
+                }
+                Some(id) if id == req_id => break (parsed, raw.len()),
+                Some(id) => {
+                    return Err(acos_protocol::ProtocolError::new(
+                        ErrorCode::Internal,
+                        format!(
+                            "acos-art protocol desync: expected reply req_id {req_id}, got {id}"
+                        ),
+                    ));
+                }
+                None => {
+                    // Unsolicited terminal session notifications (`cmd: "session"`)
+                    // have no `req_id` and must surface immediately.
+                    let is_session_notice =
+                        parsed.get("cmd").and_then(|v| v.as_str()) == Some("session");
+                    if !is_session_notice && self.unmatched_timeouts > 0 {
+                        // Legacy peer without `req_id` echoing: drain one stale
+                        // reply per earlier timed-out request.
+                        self.unmatched_timeouts -= 1;
+                        continue;
+                    }
+                    break (parsed, raw.len());
+                }
+            }
+        };
         let t_reply = m5_now_us();
         m5_trace(
             "cli.art_cmd_wait",
@@ -3237,7 +3312,7 @@ impl ArtSession {
             "cli.art_cmd_roundtrip",
             t_write,
             t_reply,
-            &format!("cmd={cmd} reply_bytes={}", reply.len()),
+            &format!("cmd={cmd} reply_bytes={reply_len}"),
         );
         if cmd == "tree" && p3_enabled() {
             p3_trace(
@@ -3245,19 +3320,9 @@ impl ArtSession {
                 "cli.cmd_wait",
                 t_written,
                 t_reply,
-                &format!("reply_bytes={}", reply.len()),
+                &format!("reply_bytes={reply_len}"),
             );
         }
-        let reply: serde_json::Value = serde_json::from_str(&reply).map_err(|error| {
-            acos_protocol::ProtocolError::new(
-                ErrorCode::Internal,
-                format!("acos-art reply is not JSON: {error}"),
-            )
-            .with_hint(
-                "The line-JSON protocol is broken (a guest or harness wrote a non-JSON line). \
-                 Capture the session's stderr tail and report the harness bug.",
-            )
-        })?;
         let t_parsed = m5_now_us();
         if cmd == "tree" && p3_enabled() {
             p3_trace(
@@ -10316,6 +10381,92 @@ mod tests {
         );
         assert!(lines[0].contains("\"event_time\":200"));
         assert!(lines[1].contains("\"event_time\":300"));
+
+        std::env::remove_var("ACOS_ART_BIN");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn panel_touch_discards_late_reply_from_timed_out_down_before_confirming_cancel() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = scratch_dir("cr6-req-id-corr");
+        let script = dir.join("fake-art-cr6");
+        let mut body = String::new();
+        body.push_str("#!/usr/bin/env bash\nset -e\n");
+        body.push_str(
+            "echo '{\"ok\":true,\"cmd\":\"ready\",\"package\":\"dev.cr6\",\
+             \"activity\":\"dev.cr6/.Main\",\"width\":100,\"height\":200,\"density\":160}'\n",
+        );
+        body.push_str("count=0\n");
+        body.push_str("while IFS= read -r line; do\n");
+        body.push_str("  req_id=$(printf '%s' \"$line\" | sed -n 's/.*\"req_id\":\\([0-9][0-9]*\\).*/\\1/p')\n");
+        body.push_str("  case \"$line\" in\n");
+        body.push_str("    *'\"cmd\":\"panel_touch\"'*)\n");
+        body.push_str("      count=$((count + 1))\n");
+        body.push_str("      if [ \"$count\" -eq 1 ]; then\n");
+        // Slow ACTION_DOWN: arrives after ArtSession's 100ms timeout, then writes late ok:true.
+        body.push_str("        sleep 0.25\n");
+        body.push_str("        echo \"{\\\"ok\\\":true,\\\"cmd\\\":\\\"panel_touch\\\",\\\"action\\\":0,\\\"req_id\\\":$req_id}\"\n");
+        body.push_str("      elif [ \"$count\" -eq 2 ]; then\n");
+        // First ACTION_CANCEL actually fails; must NOT be masked by request 1's late ok:true!
+        body.push_str("        echo \"{\\\"ok\\\":false,\\\"cmd\\\":\\\"panel_touch\\\",\\\"code\\\":\\\"INPUT_UNAVAILABLE\\\",\\\"error\\\":\\\"cancel_failed_on_req2\\\",\\\"req_id\\\":$req_id}\"\n");
+        body.push_str("      else\n");
+        // Retry ACTION_CANCEL succeeds.
+        body.push_str("        echo \"{\\\"ok\\\":true,\\\"cmd\\\":\\\"panel_touch\\\",\\\"action\\\":3,\\\"req_id\\\":$req_id}\"\n");
+        body.push_str("      fi\n");
+        body.push_str("      ;;\n");
+        body.push_str("    *'\"cmd\":\"close\"'*)\n");
+        body.push_str("      echo \"{\\\"ok\\\":true,\\\"cmd\\\":\\\"close\\\",\\\"req_id\\\":$req_id}\"\n");
+        body.push_str("      exit 0\n");
+        body.push_str("      ;;\n");
+        body.push_str(
+            "    *) echo \"{\\\"ok\\\":false,\\\"code\\\":\\\"BAD_REQUEST\\\",\\\"error\\\":\\\"bad\\\",\\\"req_id\\\":$req_id}\"; ;;\n",
+        );
+        body.push_str("  esac\n");
+        body.push_str("done\n");
+        std::fs::write(&script, body).unwrap();
+        let mut perms = std::fs::metadata(&script).unwrap().permissions();
+        perms.set_mode(0o755);
+        std::fs::set_permissions(&script, perms).unwrap();
+
+        let apk = dir.join("fake.apk");
+        std::fs::write(&apk, b"not-a-real-apk").unwrap();
+        let _guard = art_bin_env_lock();
+        std::env::set_var("ACOS_ART_BIN", &script);
+
+        let mut session = ArtSession::start(&apk, &dir).expect("fake session starts");
+        // Short timeout so req 1 (ACTION_DOWN) times out while the fake launcher is still busy.
+        session.timeout = Duration::from_millis(100);
+        let err1 = session
+            .panel_touch(0, 100, 100, &[(0, 10.0, 20.0)])
+            .expect_err("slow ACTION_DOWN must time out");
+        assert!(
+            matches!(
+                err1,
+                BackendError::Timeout { .. }
+                    | BackendError::Protocol {
+                        code: ErrorCode::Timeout,
+                        ..
+                    }
+            ),
+            "expected Timeout, got {err1:?}"
+        );
+
+        // Give the subsequent compensating ACTION_CANCEL enough budget to drain the late
+        // req 1 reply AND receive req 2's actual failure reply.
+        session.timeout = Duration::from_secs(2);
+        let err2 = session
+            .panel_touch(3, 100, 200, &[(0, 10.0, 20.0)])
+            .expect_err("late ok:true from req 1 must not mask req 2 cancel failure");
+        assert!(
+            err2.to_string().contains("cancel_failed_on_req2"),
+            "expected req 2's actual cancel failure, got: {err2}"
+        );
+
+        // Retry ACTION_CANCEL (req 3) succeeds cleanly.
+        session
+            .panel_touch(3, 100, 300, &[(0, 10.0, 20.0)])
+            .expect("retry cancel succeeds on matching req_id");
 
         std::env::remove_var("ACOS_ART_BIN");
         let _ = std::fs::remove_dir_all(&dir);
