@@ -560,3 +560,19 @@ Verified and addressed all **3** CodeRabbit Round 8 actionable comments (2 Major
 - `tools/verify/check-layout.sh`: **`check-layout: ok`**.
 - Unit & doc suites: `acos-services --lib input_dispatch` (**17 passed, 0 failed**), `acos-services --test surface_client --test modules_doc` (**15 passed, 0 failed**), `acos-art --lib panel_touch` (**5 passed, 0 failed**), `acos-art --lib live_view` (**24 passed, 0 failed**), `acos-cli --bin acos` (**251 passed, 0 failed**), `acos-mcp --test docs --test guide --test documentation_args` (**19 passed, 0 failed**), non-ignored `humanview_cp1..cp4` + `launcher_home_frame` (**13 passed, 0 failed**).
 - Release live-ART suites (`run-exclusive.sh --task HVCR8` + `guarded.sh`): `launcher_home_frame` (**1 passed**, 5.46 s), `humanview_cp1` (**2 passed**, 15.22 s), `humanview_cp2` (**1 passed**, 5.47 s), `humanview_cp3` (**2 passed**, 14.16 s), `humanview_cp4` (**1 passed**, 10.69 s; **p50 = 62.78 ms**, **p95 = 64.78 ms**, `mean_encode_ms = 1.95 ms`, `frames_dropped_latest = 0`, `events_dropped = 0`).
+
+---
+
+## 19. Fix Round 12 — CodeRabbit PR #6 Round 9 Review Fix
+
+Verified and addressed the **1** CodeRabbit Round 9 actionable comment (1 Minor, 0 Majors, 0 false positives):
+
+- **Rearm recovery budget when a distinct release joins `pending_releases` (`crates/acos-cli/src/view/hub.rs`):**
+  - Updated `InputWorker::record_pending_up` to call `bump_recovery_episode()` when pushing a new distinct `PendingRelease::Up` entry, while leaving duplicate `Up` updates (in-place coordinate update) and existing queue order unchanged.
+  - Updated `InputWorker::record_pending_cancel_client` to return early without bumping or reordering when `PendingRelease::CancelClient { client_id }` is already queued, and to call `bump_recovery_episode()` when recording a new `CancelClient` entry.
+  - Added two deterministic tests: `distinct_pending_release_at_attempt_11_rearms_recovery_and_preserves_order` (proving a second distinct `Up` arriving at scheduled retry #11 rearms retries past attempt 12 and flushes both pointers in original order) and `duplicate_pending_up_at_attempt_11_does_not_rearm_recovery` (proving a duplicate `Up` at attempt 11 does not rearm past attempt 12).
+
+**Fresh verification:**
+- `tools/verify/check-layout.sh`: **`check-layout: ok`**.
+- Unit & doc suites: `acos-services --lib input_dispatch` (**17 passed, 0 failed**), `acos-services --test surface_client --test modules_doc` (**15 passed, 0 failed**), `acos-art --lib panel_touch` (**5 passed, 0 failed**), `acos-art --lib live_view` (**24 passed, 0 failed**), `acos-cli --bin acos` (**253 passed, 0 failed**), `acos-mcp --test docs --test guide --test documentation_args` (**19 passed, 0 failed**), non-ignored `humanview_cp1..cp4` + `launcher_home_frame` (**13 passed, 0 failed**).
+- Release live-ART suites (`run-exclusive.sh --task HVCR9` + `guarded.sh`): `launcher_home_frame` (**1 passed**, 6.51 s), `humanview_cp1` (**2 passed**, 14.97 s), `humanview_cp2` (**1 passed**, 5.47 s), `humanview_cp3` (**2 passed**, 14.10 s), `humanview_cp4` (**1 passed**, 10.79 s; **p50 = 63.48 ms**, **p95 = 80.38 ms**, `mean_encode_ms = 1.75 ms`, `frames_dropped_latest = 0`, `events_dropped = 0`).

@@ -2073,22 +2073,27 @@ impl InputWorker {
             x,
             y,
         });
+        self.bump_recovery_episode();
     }
 
     fn record_pending_cancel_client(&mut self, client_id: u64) {
         if !self.pointers.iter().any(|p| p.client_id == client_id) {
             return;
         }
+        if self.pending_releases.iter().any(|r| {
+            matches!(r, PendingRelease::CancelClient { client_id: cid } if *cid == client_id)
+        }) {
+            return;
+        }
         self.pending_releases.retain(|r| {
             !matches!(
                 r,
-                PendingRelease::Up { client_id: cid, .. }
-                    | PendingRelease::CancelClient { client_id: cid }
-                    if *cid == client_id
+                PendingRelease::Up { client_id: cid, .. } if *cid == client_id
             )
         });
         self.pending_releases
             .push(PendingRelease::CancelClient { client_id });
+        self.bump_recovery_episode();
     }
 
     /// Flush an unconfirmed touch pointer left behind by an ambiguous failure
@@ -5312,6 +5317,286 @@ mod tests {
         assert_eq!(recorded[16].1, json!([[0, 300.0, 400.0]]));
         assert_eq!(recorded[17].0, i64::from(ACTION_CANCEL));
         assert_eq!(recorded[17].1, json!([[0, 300.0, 400.0]]));
+
+        drop(client);
+        let _ = std::fs::remove_dir_all(&registry);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn distinct_pending_release_at_attempt_11_rearms_recovery_and_preserves_order() {
+        let root = scratch("rel-rearm");
+        let socket = root.join("serve.sock");
+        let listener = UnixListener::bind(&socket).expect("bind fake daemon");
+        let seen: Arc<Mutex<Vec<(i64, Value)>>> = Arc::new(Mutex::new(Vec::new()));
+        let seen_t = Arc::clone(&seen);
+        let hit_11 = Arc::new((Mutex::new(false), Condvar::new()));
+        let hit_11_t = Arc::clone(&hit_11);
+        let up1_queued = Arc::new((Mutex::new(false), Condvar::new()));
+        let up1_queued_t = Arc::clone(&up1_queued);
+        let both_released = Arc::new((Mutex::new(false), Condvar::new()));
+        let both_released_t = Arc::clone(&both_released);
+        let _daemon = std::thread::spawn(move || {
+            let mut req_idx = 0usize;
+            for stream in listener.incoming() {
+                let Ok(mut stream) = stream else { break };
+                let mut reader = BufReader::new(stream.try_clone().unwrap());
+                loop {
+                    let mut line = String::new();
+                    if reader.read_line(&mut line).unwrap_or(0) == 0 {
+                        break;
+                    }
+                    let req: Value = serde_json::from_str(&line).unwrap();
+                    if let Some(a) = req["args"]["action"].as_i64() {
+                        seen_t
+                            .lock()
+                            .unwrap()
+                            .push((a, req["args"]["pointers"].clone()));
+                    }
+                    req_idx += 1;
+                    // req 1, 2: Down(1) and Down(2) succeed.
+                    // req 3: initial Up(2) fails.
+                    // req 4..=14: 11 scheduled retries for Up(2) fail (hold req 14 until Up(1) is queued).
+                    // req 15: foreground Up(1) flushes Up(2) first (order preserved) -> fail.
+                    // req 16: scheduled retry #1 after rearm -> fail (would exhaust old budget of 12).
+                    // req 17: scheduled retry #2 after rearm -> Up(2) succeeds.
+                    // req 18: immediate follow-up flush in same pass -> Up(1) succeeds.
+                    if (3..=16).contains(&req_idx) {
+                        if req_idx == 14 {
+                            {
+                                let (lock, cv) = &*hit_11_t;
+                                *lock.lock().unwrap() = true;
+                                cv.notify_all();
+                            }
+                            {
+                                let (lock, cv) = &*up1_queued_t;
+                                let mut ready = lock.lock().unwrap();
+                                while !*ready {
+                                    ready = cv.wait(ready).unwrap();
+                                }
+                            }
+                        }
+                        break;
+                    }
+                    let resp = json!({
+                        "id": req["id"],
+                        "envelope": { "ok": true, "result": { "ok": true } },
+                    });
+                    if stream.write_all(format!("{resp}\n").as_bytes()).is_err() {
+                        break;
+                    }
+                    let _ = stream.flush();
+                    if req_idx == 18 {
+                        let (lock, cv) = &*both_released_t;
+                        *lock.lock().unwrap() = true;
+                        cv.notify_all();
+                        return;
+                    }
+                }
+            }
+        });
+
+        let registry = scratch("rel-rearm-reg");
+        publish_input_entry(&registry, "s_rel_rearm", Some(&socket), None, false);
+        let hub = Hub::new(registry.clone());
+        let client = hub.open_input("s_rel_rearm").expect("open");
+        let (mut rx, tx) = ws_sink_pair();
+
+        client.enqueue(
+            r#"{"t":"touch","phase":"down","id":1,"x":100,"y":200}"#,
+            Arc::clone(&tx),
+        );
+        assert_eq!(read_server_ws_text(&mut rx)["ok"], json!(true));
+        client.enqueue(
+            r#"{"t":"touch","phase":"down","id":2,"x":300,"y":400}"#,
+            Arc::clone(&tx),
+        );
+        assert_eq!(read_server_ws_text(&mut rx)["ok"], json!(true));
+
+        // First Up(2) fails and enters pending_releases.
+        client.enqueue(
+            r#"{"t":"touch","phase":"up","id":2,"x":310,"y":410}"#,
+            Arc::clone(&tx),
+        );
+        assert_eq!(read_server_ws_text(&mut rx)["ok"], json!(false));
+
+        // Wait until scheduled retry #11 (req 14) is in flight.
+        {
+            let (lock, cv) = &*hit_11;
+            let guard = lock.lock().unwrap();
+            let (guard, _) = cv
+                .wait_timeout_while(guard, Duration::from_secs(10), |done| !*done)
+                .unwrap();
+            assert!(*guard, "first Up must reach 11 scheduled retries");
+        }
+
+        // Enqueue distinct Up(1) before releasing req 14 so it joins pending_releases at attempt 11.
+        client.enqueue(
+            r#"{"t":"touch","phase":"up","id":1,"x":110,"y":210}"#,
+            Arc::clone(&tx),
+        );
+        {
+            let (lock, cv) = &*up1_queued;
+            *lock.lock().unwrap() = true;
+            cv.notify_all();
+        }
+        assert_eq!(read_server_ws_text(&mut rx)["ok"], json!(false));
+
+        // Rearmed recovery must continue past attempt 12 and release both pointers in order.
+        {
+            let (lock, cv) = &*both_released;
+            let guard = lock.lock().unwrap();
+            let (guard, _) = cv
+                .wait_timeout_while(guard, Duration::from_secs(3), |done| !*done)
+                .unwrap();
+            assert!(
+                *guard,
+                "distinct pending release must rearm recovery budget and flush both pointers"
+            );
+        }
+
+        let recorded = seen.lock().unwrap().clone();
+        let ptr_up_1 = i64::from(ACTION_POINTER_UP | (1 << ACTION_POINTER_INDEX_SHIFT));
+        assert_eq!(recorded.len(), 18, "unexpected recorded frames: {recorded:?}");
+        assert_eq!(recorded[14].0, ptr_up_1, "existing Up(2) must stay first in queue");
+        assert_eq!(recorded[15].0, ptr_up_1);
+        assert_eq!(recorded[16].0, ptr_up_1);
+        assert_eq!(recorded[17].0, i64::from(ACTION_UP));
+        assert_eq!(recorded[17].1, json!([[0, 110.0, 210.0]]));
+
+        drop(client);
+        let _ = std::fs::remove_dir_all(&registry);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn duplicate_pending_up_at_attempt_11_does_not_rearm_recovery() {
+        let root = scratch("dup-no-rearm");
+        let socket = root.join("serve.sock");
+        let listener = UnixListener::bind(&socket).expect("bind fake daemon");
+        let seen: Arc<Mutex<Vec<(i64, Value)>>> = Arc::new(Mutex::new(Vec::new()));
+        let seen_t = Arc::clone(&seen);
+        let hit_11 = Arc::new((Mutex::new(false), Condvar::new()));
+        let hit_11_t = Arc::clone(&hit_11);
+        let dup_queued = Arc::new((Mutex::new(false), Condvar::new()));
+        let dup_queued_t = Arc::clone(&dup_queued);
+        let hit_12 = Arc::new((Mutex::new(false), Condvar::new()));
+        let hit_12_t = Arc::clone(&hit_12);
+        let _daemon = std::thread::spawn(move || {
+            let mut req_idx = 0usize;
+            for stream in listener.incoming() {
+                let Ok(mut stream) = stream else { break };
+                let mut reader = BufReader::new(stream.try_clone().unwrap());
+                loop {
+                    let mut line = String::new();
+                    if reader.read_line(&mut line).unwrap_or(0) == 0 {
+                        break;
+                    }
+                    let req: Value = serde_json::from_str(&line).unwrap();
+                    if let Some(a) = req["args"]["action"].as_i64() {
+                        seen_t
+                            .lock()
+                            .unwrap()
+                            .push((a, req["args"]["pointers"].clone()));
+                    }
+                    req_idx += 1;
+                    if req_idx <= 2 {
+                        let resp = json!({
+                            "id": req["id"],
+                            "envelope": { "ok": true, "result": { "ok": true } },
+                        });
+                        if stream.write_all(format!("{resp}\n").as_bytes()).is_err() {
+                            break;
+                        }
+                        let _ = stream.flush();
+                        continue;
+                    }
+                    if req_idx == 14 {
+                        {
+                            let (lock, cv) = &*hit_11_t;
+                            *lock.lock().unwrap() = true;
+                            cv.notify_all();
+                        }
+                        {
+                            let (lock, cv) = &*dup_queued_t;
+                            let mut ready = lock.lock().unwrap();
+                            while !*ready {
+                                ready = cv.wait(ready).unwrap();
+                            }
+                        }
+                    } else if req_idx == 16 {
+                        let (lock, cv) = &*hit_12_t;
+                        *lock.lock().unwrap() = true;
+                        cv.notify_all();
+                    }
+                    break;
+                }
+            }
+        });
+
+        let registry = scratch("dup-no-rearm-reg");
+        publish_input_entry(&registry, "s_dup_nr", Some(&socket), None, false);
+        let hub = Hub::new(registry.clone());
+        let client = hub.open_input("s_dup_nr").expect("open");
+        let (mut rx, tx) = ws_sink_pair();
+
+        client.enqueue(
+            r#"{"t":"touch","phase":"down","id":1,"x":100,"y":200}"#,
+            Arc::clone(&tx),
+        );
+        assert_eq!(read_server_ws_text(&mut rx)["ok"], json!(true));
+        client.enqueue(
+            r#"{"t":"touch","phase":"down","id":2,"x":300,"y":400}"#,
+            Arc::clone(&tx),
+        );
+        assert_eq!(read_server_ws_text(&mut rx)["ok"], json!(true));
+
+        client.enqueue(
+            r#"{"t":"touch","phase":"up","id":2,"x":310,"y":410}"#,
+            Arc::clone(&tx),
+        );
+        assert_eq!(read_server_ws_text(&mut rx)["ok"], json!(false));
+
+        {
+            let (lock, cv) = &*hit_11;
+            let guard = lock.lock().unwrap();
+            let (guard, _) = cv
+                .wait_timeout_while(guard, Duration::from_secs(10), |done| !*done)
+                .unwrap();
+            assert!(*guard, "first Up must reach 11 scheduled retries");
+        }
+
+        // Send a duplicate Up(2) at attempt 11: updates coordinates in place without rearming.
+        client.enqueue(
+            r#"{"t":"touch","phase":"up","id":2,"x":320,"y":420}"#,
+            Arc::clone(&tx),
+        );
+        {
+            let (lock, cv) = &*dup_queued;
+            *lock.lock().unwrap() = true;
+            cv.notify_all();
+        }
+        assert_eq!(read_server_ws_text(&mut rx)["ok"], json!(false));
+
+        // Attempt 12 (req 16) is the final scheduled retry.
+        {
+            let (lock, cv) = &*hit_12;
+            let guard = lock.lock().unwrap();
+            let (guard, _) = cv
+                .wait_timeout_while(guard, Duration::from_secs(3), |done| !*done)
+                .unwrap();
+            assert!(*guard, "attempt 12 must still fire");
+        }
+
+        // Wait well past the 25 ms initial backoff of a rearmed schedule; no 13th retry may fire.
+        std::thread::sleep(Duration::from_millis(180));
+        let recorded = seen.lock().unwrap().clone();
+        assert_eq!(
+            recorded.len(),
+            16,
+            "duplicate Up must not rearm recovery past attempt 12: {recorded:?}"
+        );
+        assert_eq!(recorded[14].1, json!([[0, 100.0, 200.0], [1, 320.0, 420.0]]));
 
         drop(client);
         let _ = std::fs::remove_dir_all(&registry);
