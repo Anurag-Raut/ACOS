@@ -262,6 +262,12 @@ pub struct ArtSession {
     /// Rejecting any `panel_touch` with `event_time < last` guarantees an
     /// abandoned older down can never land after a newer cancel.
     last_panel_touch_event_time: Option<i64>,
+    /// HUMANVIEW1: highest `event_time` already processed by `panel_key` on
+    /// this session. Rejecting any `panel_key` whose `event_time` does not
+    /// advance past `last` guarantees an abandoned timed-out Press/Down/Up
+    /// waiting on `HeldArtSession::session` cannot execute after a newer
+    /// compensating Up or another client's subsequent Down.
+    last_panel_key_event_time: Option<i64>,
     /// HUMANVIEW1: monotonic per-launcher-process request id stamped onto every
     /// `command_raw` request and echoed back by `acos-art`'s `protocol_write`
     /// so a late reply from an earlier timed-out command cannot be mistaken for
@@ -2273,6 +2279,7 @@ impl ArtSession {
             last_phase: None,
             last_input_settle: None,
             last_panel_touch_event_time: None,
+            last_panel_key_event_time: None,
             next_req_id: 1,
             unmatched_timeouts: 0,
             settle_mode: "strict",
@@ -3072,13 +3079,31 @@ impl ArtSession {
     }
 
     /// Send a panel key event (`down` | `up` | `press`).
+    /// Rejects stale out-of-order events (`event_time <= last_panel_key_event_time`)
+    /// before forwarding to the guest so an abandoned timed-out Press/Down/Up
+    /// waiting on the session lock cannot execute after a newer compensating Up
+    /// or another client's subsequent Down.
     pub(crate) fn panel_key(
         &mut self,
         code: i32,
         event_type: &str,
         meta_state: i32,
         device_id: i32,
+        event_time: Option<i64>,
     ) -> Result<(), BackendError> {
+        if let Some(event_time) = event_time {
+            if let Some(last) = self.last_panel_key_event_time {
+                if event_time <= last {
+                    return Err(BackendError::Failed {
+                        code: ErrorCode::InvalidArgument,
+                        detail: format!(
+                            "STALE_EVENT: panel_key event_time {event_time} does not advance past last processed {last}"
+                        ),
+                    });
+                }
+            }
+            self.last_panel_key_event_time = Some(event_time);
+        }
         let reply = self.command(serde_json::json!({
             "cmd": "panel_key",
             "code": code,
@@ -6249,6 +6274,7 @@ impl SessionBackend for ArtSession {
         let bind_ms = bind_started.elapsed().as_millis() as u64;
         fresh.last_input = None;
         fresh.last_panel_touch_event_time = self.last_panel_touch_event_time;
+        fresh.last_panel_key_event_time = self.last_panel_key_event_time;
         *self = fresh;
         // P4 (trace-only, env-gated): reset's phase split on the host clock.
         // Inert unless `DM6_RESET_TRACE` names a file; no reply or control
@@ -10625,7 +10651,7 @@ mod tests {
 
         let mut session = ArtSession::start(&apk, &dir).expect("fake session starts");
         let err_pub = session
-            .panel_key(29, "down", 0, -1)
+            .panel_key(29, "down", 0, -1, Some(100))
             .expect_err("post-publish key ack failure must error");
         assert!(
             matches!(
@@ -10639,7 +10665,7 @@ mod tests {
         );
 
         let err_pre = session
-            .panel_key(29, "down", 0, -1)
+            .panel_key(29, "down", 0, -1, Some(200))
             .expect_err("pre-publish key rejection must error");
         assert!(
             matches!(
@@ -10651,6 +10677,92 @@ mod tests {
             ),
             "pre-publish key rejection must map to Protocol(ErrorCode::UnsupportedBackend), got {err_pre:?}"
         );
+
+        std::env::remove_var("ACOS_ART_BIN");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn panel_key_rejects_out_of_order_event_time_without_forwarding() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = scratch_dir("cr8-panel-key-order");
+        let log_path = dir.join("forwarded.log");
+        let script = dir.join("fake-acos-art-key-order.sh");
+        let body = format!(
+            "#!/usr/bin/env bash\n\
+             set -euo pipefail\n\
+             echo '{{\"ok\":true,\"cmd\":\"ready\",\"package\":\"dev.cr8\",\"activity\":\"dev.cr8/.Main\",\"width\":100,\"height\":200,\"density\":160}}'\n\
+             while IFS= read -r line; do\n\
+               req_id=$(printf '%s' \"$line\" | sed -n 's/.*\"req_id\":\\([0-9][0-9]*\\).*/\\1/p')\n\
+               case \"$line\" in\n\
+                 *'\"cmd\":\"panel_key\"'*)\n\
+                   printf '%s\\n' \"$line\" >> \"{}\"\n\
+                   echo \"{{\\\"ok\\\":true,\\\"cmd\\\":\\\"panel_key\\\",\\\"req_id\\\":$req_id}}\"\n\
+                   ;;\n\
+                 *'\"cmd\":\"close\"'*)\n\
+                   echo \"{{\\\"ok\\\":true,\\\"cmd\\\":\\\"close\\\",\\\"req_id\\\":$req_id}}\"\n\
+                   exit 0\n\
+                   ;;\n\
+                 *)\n\
+                   echo \"{{\\\"ok\\\":true,\\\"cmd\\\":\\\"noop\\\",\\\"req_id\\\":$req_id}}\"\n\
+                   ;;\n\
+               esac\n\
+             done\n",
+            log_path.display()
+        );
+        std::fs::write(&script, body).unwrap();
+        let mut perms = std::fs::metadata(&script).unwrap().permissions();
+        perms.set_mode(0o755);
+        std::fs::set_permissions(&script, perms).unwrap();
+
+        let apk = dir.join("fake.apk");
+        std::fs::write(&apk, b"not-a-real-apk").unwrap();
+        let _guard = art_bin_env_lock();
+        std::env::set_var("ACOS_ART_BIN", &script);
+
+        let mut session = ArtSession::start(&apk, &dir).expect("fake session starts");
+        // Compensating UP (event_time=200) arrives before an abandoned timed-out PRESS (100).
+        session
+            .panel_key(29, "up", 0, -1, Some(200))
+            .expect("compensating up succeeds");
+        // Newer client DOWN (event_time=300) succeeds.
+        session
+            .panel_key(29, "down", 0, -1, Some(300))
+            .expect("subsequent down succeeds");
+        // Abandoned older PRESS (event_time=100 <= 300) must be rejected without reaching guest.
+        let err_old = session
+            .panel_key(29, "press", 0, -1, Some(100))
+            .expect_err("abandoned older press must be rejected");
+        assert!(
+            matches!(
+                err_old,
+                BackendError::Failed {
+                    code: ErrorCode::InvalidArgument,
+                    ref detail,
+                } if detail.contains("STALE_EVENT")
+            ),
+            "expected STALE_EVENT, got {err_old:?}"
+        );
+        // Duplicate event_time (300 <= 300) is also rejected without forwarding.
+        let err_dup = session
+            .panel_key(29, "press", 0, -1, Some(300))
+            .expect_err("duplicate event_time must be rejected");
+        assert!(
+            matches!(
+                err_dup,
+                BackendError::Failed {
+                    code: ErrorCode::InvalidArgument,
+                    ref detail,
+                } if detail.contains("STALE_EVENT")
+            ),
+            "expected STALE_EVENT on duplicate ts, got {err_dup:?}"
+        );
+
+        let forwarded = std::fs::read_to_string(&log_path).expect("forwarded log");
+        let lines: Vec<&str> = forwarded.lines().collect();
+        assert_eq!(lines.len(), 2, "only up(200) and down(300) must reach guest: {lines:?}");
+        assert!(lines[0].contains("\"event_type\":\"up\""));
+        assert!(lines[1].contains("\"event_type\":\"down\""));
 
         std::env::remove_var("ACOS_ART_BIN");
         let _ = std::fs::remove_dir_all(&dir);
