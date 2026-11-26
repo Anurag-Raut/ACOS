@@ -302,8 +302,11 @@ function applyToolbarUi() {
   btnRecents.disabled = inputBlocked;
   btnRecents.title = isWatchOnly ? "watch-only: verify run" : "Recents";
 
-  btnRotate.disabled = inputBlocked;
-  btnRotate.title = isWatchOnly ? "watch-only: verify run" : "Rotate 90°";
+  const rotatePending = isRotationPending();
+  btnRotate.disabled = inputBlocked || rotatePending;
+  btnRotate.title = isWatchOnly
+    ? "watch-only: verify run"
+    : (rotatePending ? "Waiting for rotated frame…" : "Rotate 90°");
 
   btnVolDown.disabled = inputBlocked;
   btnVolDown.title = isWatchOnly ? "watch-only: verify run" : "Volume down";
@@ -324,7 +327,7 @@ function applyToolbarUi() {
     ? "watch-only: verify run"
     : "Two-finger pinch mode (or Alt + drag, or Ctrl + wheel)";
 
-  btnShot.disabled = !(frame.width > 0 && frame.height > 0);
+  btnShot.disabled = !hasDecodedFrame();
 
   if (isWatchOnly) {
     dinput.textContent = "watch-only";
@@ -516,6 +519,10 @@ function isTerminalInput(msg) {
   return false;
 }
 
+function hasDecodedFrame() {
+  return frameSize.w > 0 && frameSize.h > 0 && frame.width > 0 && frame.height > 0;
+}
+
 function isRotationPending() {
   if (pendingRotate !== null) return true;
   if (display.w && display.h && frameSize.w && frameSize.h) {
@@ -598,6 +605,7 @@ function ensureWs() {
     }
     if (msg.ok === false && msg.t === "rotate") {
       pendingRotate = null;
+      applyToolbarUi();
       return;
     }
     if (msg.ok && msg.t === "rotate") {
@@ -625,6 +633,7 @@ function ensureWs() {
           awaitingReply: false,
         };
       }
+      applyToolbarUi();
     }
   };
   sock.onclose = () => {
@@ -635,6 +644,7 @@ function ensureWs() {
     clearAllPointerVisuals();
     activePointers.clear();
     heldGuestKeys.clear();
+    if (current) applyToolbarUi();
     if (current && !current.watch_only) {
       dinput.textContent = "idle";
       dinput.className = "pill";
@@ -710,7 +720,7 @@ function renderedImageRect() {
 }
 
 function clientToDisplay(clientX, clientY, clampOutside) {
-  if (isRotationPending()) return null;
+  if (!hasDecodedFrame() || isRotationPending()) return null;
   const r = renderedImageRect();
   const dw = display.w || frameSize.w || frame.width || 1080;
   const dh = display.h || frameSize.h || frame.height || 2400;
@@ -771,7 +781,15 @@ function clearFrameCanvas() {
 async function drawDecodedFrame(part, sid, gen, ctrl) {
   const blob = new Blob([part.payload], { type: part.contentType || "image/png" });
   const bmp = await createImageBitmap(blob);
-  if (ctrl.signal.aborted || streamAbort !== ctrl || frameGeneration !== gen || !current || current.session_id !== sid) {
+  if (
+    ctrl.signal.aborted ||
+    streamAbort !== ctrl ||
+    frameGeneration !== gen ||
+    sessionEnded ||
+    !current ||
+    current.session_id !== sid ||
+    (currentGuestGen !== null && part.guestGen && part.guestGen !== currentGuestGen)
+  ) {
     bmp.close();
     return;
   }
@@ -793,9 +811,10 @@ async function drawDecodedFrame(part, sid, gen, ctrl) {
     frameCtx.drawImage(bmp, 0, 0);
   }
   bmp.close();
-  btnShot.disabled = !(frame.width > 0 && frame.height > 0);
+  btnShot.disabled = !hasDecodedFrame();
   markLive();
   setAspect(frameSize.w, frameSize.h);
+  const wasRotatePending = isRotationPending();
   if (pendingRotate && !pendingRotate.awaitingReply) {
     const orientOk =
       !(pendingRotate.expectedW > 0 && pendingRotate.expectedH > 0) ||
@@ -806,6 +825,9 @@ async function drawDecodedFrame(part, sid, gen, ctrl) {
   }
   if (!pendingRotate && display.w && display.h && ((display.w < display.h) !== (frameSize.w < frameSize.h))) {
     display = { w: display.h, h: display.w };
+  }
+  if (wasRotatePending !== isRotationPending()) {
+    applyToolbarUi();
   }
 }
 
@@ -820,17 +842,31 @@ async function startFrameStream(sid) {
   while (!ctrl.signal.aborted && streamAbort === ctrl && current && current.session_id === sid && !sessionEnded) {
     let reader = null;
     try {
-      const response = await fetch(auth("/api/frames/" + encodeURIComponent(sid)), {
+      const expectedGen = (typeof currentGuestGen === "number" && currentGuestGen > 0)
+        ? currentGuestGen
+        : null;
+      const framePath = "/api/frames/" + encodeURIComponent(sid)
+        + (expectedGen !== null ? "?g=" + encodeURIComponent(expectedGen) : "");
+      const response = await fetch(auth(framePath), {
         cache: "no-store",
         signal: ctrl.signal,
       });
-      if (response.status === 404) {
+      if (response.status === 404 || response.status === 409) {
         markSessionEnded(sid);
         return;
       }
       if (!response.ok || !response.body) {
         throw new Error("HTTP " + response.status);
       }
+      const headerGen = Number.parseInt(response.headers.get("X-Guest-Gen") || "", 10) || 0;
+      if (headerGen > 0) {
+        if (currentGuestGen !== null && headerGen !== currentGuestGen) {
+          markSessionEnded(sid);
+          return;
+        }
+        currentGuestGen = headerGen;
+      }
+      const streamGuestGen = headerGen || expectedGen || 0;
       reader = response.body.getReader();
       let buf = new Uint8Array(0);
       while (!ctrl.signal.aborted && streamAbort === ctrl && !sessionEnded) {
@@ -867,7 +903,7 @@ async function startFrameStream(sid) {
             nextStart += 2;
           }
           buf = buf.slice(nextStart);
-          latest = { contentType, payload, frameSeq };
+          latest = { contentType, payload, frameSeq, guestGen: streamGuestGen };
         }
         if (latest) {
           retryDelay = 400;
@@ -1465,7 +1501,7 @@ screenWrap.addEventListener("pointercancel", (e) => finishPointer(e, "cancel"));
 
 screenWrap.addEventListener("wheel", (e) => {
   if (!current || sessionEnded) return;
-  if (isRotationPending() || activePointers.size > 0) return;
+  if (!hasDecodedFrame() || isRotationPending() || activePointers.size > 0) return;
   const pt = clientToDisplay(e.clientX, e.clientY, false) || {
     x: Math.round((display.w || 1080) / 2),
     y: Math.round((display.h || 2400) / 2),
@@ -1579,7 +1615,7 @@ btnPinch.addEventListener("click", () => {
   screenWrap.focus({ preventScroll: true });
 });
 btnShot.addEventListener("click", () => {
-  if (!(frame.width > 0 && frame.height > 0)) return;
+  if (!hasDecodedFrame()) return;
   const sid = current ? String(current.session_id).replace(/[^a-zA-Z0-9._-]+/g, "_") : "screen";
   const stamp = new Date().toISOString().replace(/[:.]/g, "-");
   const filename = "acos-" + sid + "-" + stamp + ".png";
@@ -1597,6 +1633,7 @@ btnShot.addEventListener("click", () => {
   screenWrap.focus({ preventScroll: true });
 });
 btnRotate.addEventListener("click", () => {
+  if (!current || current.watch_only || sessionEnded || isRotationPending()) return;
   cancelActivePointers();
   const next = (currentRotation + 1) % 4;
   const preSeq = lastFrameSeq;
@@ -1608,6 +1645,7 @@ btnRotate.addEventListener("click", () => {
       awaitingReply: true,
     };
     currentRotation = next;
+    applyToolbarUi();
   }
   screenWrap.focus({ preventScroll: true });
 });
