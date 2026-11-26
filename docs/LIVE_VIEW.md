@@ -418,12 +418,22 @@ acos view: http://127.0.0.1:54321/?t=<token>
   - **Ordering & safety.** One ordered worker per session routes each message
     over the session's `serve_socket` via the existing `InputDispatch` path
     (`panel_touch`, `panel_key`, `panel_text`, `panel_rotate`), tagging every
-    emitted event `source: "panel"` in `/api/events`. A disconnect mid-gesture
-    automatically sends `cancel` for any active pointer; ambiguous touch-down
-    failures flush a compensating cancel before any later gesture, and
-    `ArtSession::panel_touch` rejects out-of-order frames whose `event_time`
-    precedes an already-processed `panel_touch` so an abandoned down cannot
-    land after a newer cancel.
+    emitted event `source: "panel"` in `/api/events`. On a mid-gesture
+    disconnect, the worker attempts cleanup for the departing client's active
+    pointers—sending indexed `ACTION_POINTER_UP` frames when other clients
+    still hold active pointers rather than canceling the whole gesture, or
+    `ACTION_CANCEL` when no other client has active pointers. Ambiguous
+    touch-down failures (including post-write I/O errors and `TIMEOUT`
+    replies) trigger a compensating cancel without replaying the down; any
+    blocked `up`/`cancel` release is retained to run immediately after
+    recovery succeeds, and if recovery fails on the last client's disconnect,
+    the worker retries with bounded backoff for the same guest (stopping on
+    confirmation, guest replacement/exit, or retry exhaustion, leaving
+    recovery pending for the next gesture if the daemon stayed unreachable—so
+    a disconnect does not by itself prove the guest released the pointer).
+    `ArtSession::panel_touch` also rejects out-of-order frames whose
+    `event_time` precedes an already-processed `panel_touch` so an abandoned
+    down cannot land after a newer cancel.
   - **Dynamic stream upgrade.** Watch-only stays `0.5` PNG @ `15` fps. While an
     input WebSocket is open, the hub upgrades the upstream subscription to `1.0`
     PNG @ `30` fps and reverts back to `0.5` PNG @ `15` fps when the last input
