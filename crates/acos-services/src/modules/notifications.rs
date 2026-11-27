@@ -89,6 +89,8 @@ pub const SHADE_EXTRA_TAPPED: &str = "acos.shade.tapped";
 pub const SHADE_APK_CONFIG: &str = "shade_apk";
 /// Environment override for the shade system app.
 pub const SHADE_APK_ENV: &str = "ACOS_SYSTEMUI_APK";
+/// Installed image-relative system-app APK (`tools/release/install.sh`).
+pub const SHADE_APK_IMAGE_REL: &str = ".cache/boot/android-34/system-apps/com.android.systemui.apk";
 /// Workspace-relative default build output.
 pub const SHADE_APK_REL: &str = "fixtures/build/apps/systemui.apk";
 
@@ -1202,22 +1204,74 @@ mod tests {
         manifest_ref().validate().expect("valid manifest");
         assert_eq!(manifest_ref().replaces, &["notification"]);
     }
+
+    #[test]
+    fn resolves_installed_prefix_before_checkout_and_respects_overrides() {
+        let env = crate::test_env::EnvGuard::new(&["ACOS_HOME", SHADE_APK_ENV]);
+        let home = crate::test_env::TempDir::new("notifications-home");
+        let installed_apk = home.path().join(SHADE_APK_IMAGE_REL);
+        std::fs::create_dir_all(installed_apk.parent().expect("parent"))
+            .expect("create system-apps dir");
+        std::fs::write(&installed_apk, b"fake-apk").expect("write installed systemui apk");
+
+        env.set("ACOS_HOME", home.path());
+        env.remove(SHADE_APK_ENV);
+
+        let default_cfg = ModuleConfig::default();
+        assert_eq!(shade_apk(&default_cfg), installed_apk);
+        assert_eq!(
+            system_app_apk(MODULE_ID, SHADE_PACKAGE, &default_cfg),
+            Some(installed_apk.clone())
+        );
+        assert_eq!(system_app_apk(MODULE_ID, "com.other", &default_cfg), None);
+
+        let empty_cfg =
+            ModuleConfig::from_json(MODULE_ID, &json!({ SHADE_APK_CONFIG: "" }))
+                .expect("empty cfg");
+        env.set(SHADE_APK_ENV, "");
+        assert_eq!(shade_apk(&empty_cfg), installed_apk);
+
+        let env_override = home.path().join("env-override.apk");
+        env.set(SHADE_APK_ENV, &env_override);
+        assert_eq!(shade_apk(&default_cfg), env_override);
+
+        let cfg_override = home.path().join("cfg-override.apk");
+        let cfg = ModuleConfig::from_json(
+            MODULE_ID,
+            &json!({ SHADE_APK_CONFIG: cfg_override.to_string_lossy() }),
+        )
+        .expect("cfg");
+        assert_eq!(shade_apk(&cfg), cfg_override);
+    }
+}
+
+/// Resolve the host APK path for `system.notifications`'s shade app.
+///
+/// Order: `config: {"shade_apk": ...}`, then `ACOS_SYSTEMUI_APK`, then the
+/// installed image path (`SHADE_APK_IMAGE_REL` via `workspace_path`, checking
+/// `$ACOS_HOME` first), then the workspace fixture build (`SHADE_APK_REL`).
+#[must_use]
+pub fn shade_apk(config: &ModuleConfig) -> std::path::PathBuf {
+    if let Some(path) = config
+        .string(SHADE_APK_CONFIG)
+        .filter(|path| !path.is_empty())
+    {
+        return std::path::PathBuf::from(path);
+    }
+    if let Some(path) = std::env::var_os(SHADE_APK_ENV) {
+        if !path.is_empty() {
+            return std::path::PathBuf::from(path);
+        }
+    }
+    if let Some(image) = crate::workspace_path(SHADE_APK_IMAGE_REL) {
+        return image;
+    }
+    crate::workspace_path(SHADE_APK_REL).unwrap_or_else(|| std::path::PathBuf::from(SHADE_APK_REL))
 }
 
 /// The host APK a module's declared **system app** installs
 /// (`crate::module::system_apks`). The shade app is SYSUI1's system app.
 #[must_use]
 pub fn system_app_apk(module: &str, app: &str, config: &ModuleConfig) -> Option<std::path::PathBuf> {
-    if module != MODULE_ID || app != SHADE_PACKAGE {
-        return None;
-    }
-    if let Some(path) = config.string(SHADE_APK_CONFIG).filter(|path| !path.is_empty()) {
-        return Some(std::path::PathBuf::from(path));
-    }
-    if let Some(path) = std::env::var_os(SHADE_APK_ENV) {
-        if !path.is_empty() {
-            return Some(std::path::PathBuf::from(path));
-        }
-    }
-    Some(crate::workspace_path(SHADE_APK_REL).unwrap_or_else(|| std::path::PathBuf::from(SHADE_APK_REL)))
+    (module == MODULE_ID && app == SHADE_PACKAGE).then(|| shade_apk(config))
 }

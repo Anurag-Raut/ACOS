@@ -60,7 +60,7 @@ Layout (under <prefix>/share/acos/<version>/):
   libexec/pasta                   the pinned static transport (ADR-0030)
   share/doc/acos/pasta/           pasta GPL-2.0-or-later licence + SOURCE.md (when pasta is shipped)
   .cache/art/sysroot              read-only ART sysroot (the framework)
-  .cache/boot/android-34          fonts, overlays, bootclasspath
+  .cache/boot/android-34          fonts, overlays, bootclasspath, system-apps
   crates/acos-art/guest/java      guest Java sources (compiled at run time)
   VERSION MANIFEST.txt            what this root contains
 
@@ -199,6 +199,71 @@ ensure_webview_provider() {
         "$(stat -c '%s' "$DEST/$PROVIDER_REL")"
 }
 ensure_webview_provider
+
+# ------------------------------------------------- system-app APKs (v0.6.0)
+# System-app modules (`system.launcher`, `system.settings`, `system.permissions`,
+# `system.notifications`) resolve their guest APKs from `$ACOS_HOME/.cache/boot/
+# android-34/system-apps/<pkg>.apk` first, mirroring the WebView provider above.
+# An installed prefix has no checkout `fixtures/build/apps/`, so stage all four
+# into `$DEST/.cache/boot/android-34/system-apps/` (building any missing ones
+# once with `tools/build/build-apps.sh`) and fail closed if any is absent.
+SYSTEM_APPS_DIR_REL=".cache/boot/android-34/system-apps"
+SYSTEM_APP_SPECS=(
+    "launcher:com.acos.launcher.apk"
+    "settings:com.android.settings.apk"
+    "permissioncontroller:com.android.permissioncontroller.apk"
+    "systemui:com.android.systemui.apk"
+)
+ensure_system_apps() {
+    local spec src_name pkg_apk dst_rel src
+    local -a missing_dest=()
+    local -a missing_build=()
+
+    for spec in "${SYSTEM_APP_SPECS[@]}"; do
+        src_name=${spec%%:*}
+        pkg_apk=${spec#*:}
+        dst_rel="$SYSTEM_APPS_DIR_REL/$pkg_apk"
+        if [ -f "$DEST/$dst_rel" ]; then
+            printf 'system app: %s (%s bytes)\n' "$dst_rel" \
+                "$(stat -c '%s' "$DEST/$dst_rel")"
+            continue
+        fi
+        missing_dest+=("$spec")
+        src=$(readlink -f -- "$REPO/fixtures/build/apps/${src_name}.apk" 2>/dev/null || true)
+        if [ -z "$src" ] || [ ! -f "$src" ]; then
+            missing_build+=("$src_name")
+        fi
+    done
+
+    if [ "${#missing_dest[@]}" -eq 0 ]; then
+        return 0
+    fi
+
+    if [ "${#missing_build[@]}" -gt 0 ]; then
+        printf 'system apps: building missing fixtures (%s)\n' "${missing_build[*]}"
+        [ -x "$REPO/tools/build/build-apps.sh" ] ||
+            die "missing system-app APKs (${missing_build[*]}) and $REPO/tools/build/build-apps.sh is missing"
+        ACOS_APP_ONLY="${missing_build[*]}" "$REPO/tools/build/build-apps.sh" ||
+            die "building system-app APKs (${missing_build[*]}) failed"
+    fi
+
+    mkdir -p "$DEST/$SYSTEM_APPS_DIR_REL"
+    for spec in "${missing_dest[@]}"; do
+        src_name=${spec%%:*}
+        pkg_apk=${spec#*:}
+        dst_rel="$SYSTEM_APPS_DIR_REL/$pkg_apk"
+        src=$(readlink -f -- "$REPO/fixtures/build/apps/${src_name}.apk" 2>/dev/null || true)
+        [ -n "$src" ] && [ -f "$src" ] ||
+            die "system app $src_name APK still missing at $REPO/fixtures/build/apps/${src_name}.apk after build"
+        install -m 0644 -- "$src" "$DEST/$dst_rel" ||
+            die "failed to stage $src -> $DEST/$dst_rel"
+        [ -f "$DEST/$dst_rel" ] ||
+            die "staged system app missing at $DEST/$dst_rel"
+        printf 'system app: %s (%s bytes, staged from %s)\n' "$dst_rel" \
+            "$(stat -c '%s' "$DEST/$dst_rel")" "$src"
+    done
+}
+ensure_system_apps
 
 # ------------------------------------------------- ADR-0030's transport (pasta)
 # The `network` module's `real` profile runs the session's traffic through one
@@ -409,6 +474,15 @@ printf '%s\n' "$VERSION" >"$DEST/VERSION"
     printf 'assets:\n'
     ( cd "$DEST" && find "${MANIFEST_ROOTS[@]}" -type f -print | LC_ALL=C sort )
 } >"$DEST/MANIFEST.txt"
+
+for rel in "$PROVIDER_REL" \
+    "$SYSTEM_APPS_DIR_REL/com.acos.launcher.apk" \
+    "$SYSTEM_APPS_DIR_REL/com.android.settings.apk" \
+    "$SYSTEM_APPS_DIR_REL/com.android.permissioncontroller.apk" \
+    "$SYSTEM_APPS_DIR_REL/com.android.systemui.apk"; do
+    grep -Fxq "$rel" "$DEST/MANIFEST.txt" ||
+        die "installed MANIFEST.txt is missing required system app $rel"
+done
 
 # -------------------------------------------------------------- wrappers
 # ACOS_HOME names the *versioned* root, not `current`, so an install that
