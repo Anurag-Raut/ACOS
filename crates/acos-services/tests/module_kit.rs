@@ -177,6 +177,11 @@ fn the_multiwindow_module_passes_the_conformance_kit() {
 }
 
 #[test]
+fn the_keystore_module_passes_the_conformance_kit() {
+    run_in_quiet_process("security.keystore");
+}
+
+#[test]
 fn a_gap_name_answers_a_structured_tombstone_naming_the_module_and_the_attach_call() {
     let mut host = ServiceHost::new();
     let mut registry = ModuleRegistry::standard();

@@ -675,6 +675,9 @@ struct SecondaryShared {
     /// secondary process (e.g. Launcher resolving `ResolveInfo.loadLabel`) can
     /// read other installed packages' resources.
     session_apks: Vec<(PathBuf, String)>,
+    /// Value to forward as `ACOS_ART_KEYSTORE` (from `security.keystore` module
+    /// spec or legacy env fallback when the module spec omits it).
+    keystore_env: Option<String>,
 }
 
 impl SecondaryShared {
@@ -783,6 +786,9 @@ impl SecondaryShared {
         if self.live_probe {
             sb.env("ACOSLAUNCH_LIVE_PROBE", "1");
         }
+        if let Some(v) = &self.keystore_env {
+            sb.env(acos_services::modules::keystore::KEYSTORE_ENV, v);
+        }
         let mut argv: Vec<String> = Vec::new();
         if self.image.is_some() {
             argv.push("-Ximage:/data/img/boot.art".into());
@@ -793,6 +799,23 @@ impl SecondaryShared {
         argv.push(GUEST_CLASS.into());
         argv.extend(self.guest_args(spec));
         sb.command("/system/apex/com.android.art/bin/dalvikvm64", &argv)
+    }
+}
+
+/// Resolve the guest `ACOS_ART_KEYSTORE` env value from the session's module
+/// specs, preserving explicit `off` override over any inherited host variable.
+fn resolve_keystore_env(
+    specs: &[acos_services::module::ModuleSpec],
+    inherited: Option<&str>,
+) -> Option<String> {
+    use acos_services::module::Profile;
+    match acos_services::modules::keystore::requested_profile(specs) {
+        Some(Profile::Real) => Some("on".to_string()),
+        Some(_) => None,
+        None => inherited
+            .map(str::trim)
+            .filter(|v| !v.is_empty())
+            .map(str::to_string),
     }
 }
 
@@ -2388,6 +2411,8 @@ pub(crate) fn launch_session(
             run_root,
         });
     }
+    let inherited_keystore = std::env::var(acos_services::modules::keystore::KEYSTORE_ENV).ok();
+    let keystore_env = resolve_keystore_env(&module_specs, inherited_keystore.as_deref());
     let secondary_shared = SecondaryShared {
         root: root.clone(),
         image: boot_image.as_ref().map(|image| image.dir.clone()),
@@ -2413,6 +2438,7 @@ pub(crate) fn launch_session(
         session_apks: std::iter::once((apk.clone(), guest_apk.clone()))
             .chain(extras.iter().map(|e| (e.staged.clone(), e.guest_path.clone())))
             .collect(),
+        keystore_env: keystore_env.clone(),
     };
     let mut secondary_pool =
         SecondaryPool::new(
@@ -2829,12 +2855,13 @@ pub(crate) fn launch_session(
     // device; ACOS's WMS runs no transition animations, so there is nothing to
     // scale beyond the app-side animator scale.
     sb.env("ACOS_ANIMATIONS", opts.animations.as_str());
-    // K5: the software AndroidKeyStore seam (`on` enables the opt-in shim;
-    // unset/`off` keeps the honest K4 failure). The guest environment is
-    // cleared by bwrap, so every `System.getenv` the launch guest reads must be
-    // listed here explicitly.
-    if let Ok(v) = std::env::var("ACOS_ART_KEYSTORE") {
-        sb.env("ACOS_ART_KEYSTORE", &v);
+    // K5 / ADR-0029 `security.keystore`: `real` enables the software
+    // AndroidKeyStore JCA provider (`ACOS_ART_KEYSTORE=on`); explicit `off`
+    // suppresses any inherited host env; omitting the module preserves legacy
+    // `ACOS_ART_KEYSTORE` env compatibility and defaults to `off` (honest
+    // `AndroidKeyStore not found` + diagnostic log breadcrumb).
+    if let Some(v) = &keystore_env {
+        sb.env(acos_services::modules::keystore::KEYSTORE_ENV, v);
     }
     // K5b: the keystore probe's mode and its list of paths to reach for
     // (`fixtures/apps/keystore-probe`). Test-only names: nothing else reads
@@ -13103,6 +13130,39 @@ mod panel_touch_tests {
         assert!(
             activity_guest.recv().expect("activity untouched").is_none(),
             "gesture with cursor hit_point inside DIALOG must not hit ACTIVITY"
+        );
+    }
+
+    #[test]
+    fn resolve_keystore_env_handles_real_explicit_off_and_inherited() {
+        use acos_services::module::{ModuleConfig, ModuleSpec, Profile};
+        use acos_services::modules::keystore::MODULE_ID;
+
+        let real = vec![ModuleSpec {
+            id: MODULE_ID.to_string(),
+            profile: Profile::Real,
+            config: ModuleConfig::default(),
+        }];
+        assert_eq!(resolve_keystore_env(&real, None).as_deref(), Some("on"));
+        assert_eq!(
+            resolve_keystore_env(&real, Some("off")).as_deref(),
+            Some("on")
+        );
+
+        let off = vec![ModuleSpec {
+            id: MODULE_ID.to_string(),
+            profile: Profile::Off,
+            config: ModuleConfig::default(),
+        }];
+        assert_eq!(resolve_keystore_env(&off, Some("on")), None);
+        assert_eq!(resolve_keystore_env(&off, None), None);
+
+        // Omitting the module falls back to legacy ACOS_ART_KEYSTORE if non-empty.
+        assert_eq!(resolve_keystore_env(&[], None), None);
+        assert_eq!(resolve_keystore_env(&[], Some("   ")), None);
+        assert_eq!(
+            resolve_keystore_env(&[], Some("on")).as_deref(),
+            Some("on")
         );
     }
 }

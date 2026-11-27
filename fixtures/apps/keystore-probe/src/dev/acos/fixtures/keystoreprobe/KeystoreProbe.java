@@ -101,7 +101,9 @@ public final class KeystoreProbe {
         System.out.flush();
         // The provider install call is the same one LaunchMain.main makes
         // before app code, with the same session-private directory.
-        if (!"default_off".equals(mode)) {
+        // In `launch_fidelity`, LaunchMain must have already installed it via
+        // the `security.keystore` module — never call install() ourselves there.
+        if (!"default_off".equals(mode) && !"launch_fidelity".equals(mode)) {
             mkdirs(dataDir);
             dev.acos.art.SoftwareKeyStore.install(dataDir.getParentFile().getPath());
         }
@@ -114,6 +116,8 @@ public final class KeystoreProbe {
                 defaultOff();
             } else if ("retention".equals(mode)) {
                 retention();
+            } else if ("launch_fidelity".equals(mode)) {
+                fidelityChecks();
             } else {
                 fidelity();
             }
@@ -127,6 +131,10 @@ public final class KeystoreProbe {
             t.printStackTrace(System.out);
             throw new RuntimeException(t);
         }
+    }
+
+    String summaryText(String mode) {
+        return TAG + " mode=" + mode + " pass=" + pass + " fail=" + fail;
     }
 
     // ------------------------------------------------------------------ modes
@@ -281,6 +289,14 @@ public final class KeystoreProbe {
     // -------------------------------------------------------------- fidelity
 
     private void fidelity() throws Exception {
+        fidelityChecks();
+        // The run root (and with it the on-disk keystore file) is removed at
+        // teardown, so the driver needs a window to measure it from the host
+        // while this session is alive. The guest's own checks are complete.
+        Thread.sleep(15_000L);
+    }
+
+    private void fidelityChecks() throws Exception {
         check("fidelity.provider", java.security.Security.getProvider("AndroidKeyStore") != null,
                 "providers=" + providerNames());
         KeyStore ks = KeyStore.getInstance("AndroidKeyStore");
@@ -297,6 +313,11 @@ public final class KeystoreProbe {
                         KeyProperties.ENCRYPTION_PADDING_PKCS7)
                 .build());
         SecretKey aes = kg.generateKey();
+        KeyStore.Entry aesEntry = ks.getEntry("k_aes", null);
+        check("fidelity.get_entry.secret",
+                aesEntry instanceof KeyStore.SecretKeyEntry
+                        && ((KeyStore.SecretKeyEntry) aesEntry).getSecretKey() != null,
+                String.valueOf(aesEntry));
         SecretKeyFactory skf = SecretKeyFactory.getInstance("AES", "AndroidKeyStore");
         KeyInfo info = (KeyInfo) skf.getKeySpec(aes, KeyInfo.class);
         check("fidelity.keyinfo.size", info.getKeySize() == 256, "size=" + info.getKeySize());
@@ -320,15 +341,25 @@ public final class KeystoreProbe {
         check("fidelity.creation_date", ks.getCreationDate("k_aes") != null,
                 String.valueOf(ks.getCreationDate("k_aes")));
 
-        // AES roundtrip must still work (the guard is not over-blocking).
+        // AES roundtrip (including AAD and AlgorithmParameters GCM) must work.
+        byte[] aad = "acos-aad".getBytes("UTF-8");
         Cipher c = Cipher.getInstance("AES/GCM/NoPadding");
         c.init(Cipher.ENCRYPT_MODE, aes);
+        c.updateAAD(aad);
         byte[] iv = c.getIV();
+        java.security.AlgorithmParameters gcmParams = c.getParameters();
         byte[] ct = c.doFinal("acos".getBytes("UTF-8"));
         Cipher d = Cipher.getInstance("AES/GCM/NoPadding");
         d.init(Cipher.DECRYPT_MODE, aes, new javax.crypto.spec.GCMParameterSpec(128, iv));
+        d.updateAAD(aad);
         check("fidelity.cipher.roundtrip", "acos".equals(new String(d.doFinal(ct), "UTF-8")),
                 "ct=" + ct.length + " iv=" + iv.length);
+        Cipher dParams = Cipher.getInstance("AES/GCM/NoPadding");
+        dParams.init(Cipher.DECRYPT_MODE, aes, gcmParams);
+        dParams.updateAAD(aad);
+        check("fidelity.cipher.gcm_alg_params",
+                "acos".equals(new String(dParams.doFinal(ct), "UTF-8")),
+                "algParams=" + (gcmParams != null ? gcmParams.getAlgorithm() : "null"));
 
         // --- purposes are enforced ---------------------------------------
         // AOSP validates purposes against the algorithm at generation
@@ -467,9 +498,15 @@ public final class KeystoreProbe {
         java.security.Signature signer = java.security.Signature.getInstance("SHA256withRSA");
         signer.initSign(signPair.getPrivate());
         signer.update("payload".getBytes("UTF-8"));
-        boolean signOk = signer.sign().length > 0;
+        byte[] sigBytes = signer.sign();
+        boolean signOk = sigBytes.length > 0;
         check("fidelity.purpose.rsa_sign_only_allows_sign", signOk,
                 "signature bytes=" + (signOk ? ">0" : "0"));
+        java.security.Signature verifier = java.security.Signature.getInstance("SHA256withRSA");
+        verifier.initVerify(signPair.getPublic());
+        verifier.update("payload".getBytes("UTF-8"));
+        check("fidelity.verify.store_public_key", verifier.verify(sigBytes),
+                "verified signature with StorePublicKey");
         check("fidelity.opaque.private",
                 signPair.getPrivate().getEncoded() == null
                         && signPair.getPrivate().getFormat() == null,
@@ -690,6 +727,19 @@ public final class KeystoreProbe {
                         && !anyGroupOrOther(dirPerms),
                 "file=" + filePerms);
 
+        // --- certificate entries work through getCertificate / getEntry ------
+        if (chainOk) {
+            ks.setCertificateEntry("k_cert", chain[0]);
+            Certificate fetchedCert = ks.getCertificate("k_cert");
+            KeyStore.Entry certEntry = ks.getEntry("k_cert", null);
+            check("fidelity.certificate_entry",
+                    fetchedCert != null
+                            && ks.isCertificateEntry("k_cert")
+                            && ks.entryInstanceOf("k_cert", KeyStore.TrustedCertificateEntry.class)
+                            && certEntry instanceof KeyStore.TrustedCertificateEntry,
+                    String.valueOf(certEntry));
+        }
+
         // --- absence is structured, not a crash --------------------------
         check("fidelity.absent_alias", ks.getKey("no-such-alias", null) == null,
                 "getKey returned null");
@@ -702,10 +752,6 @@ public final class KeystoreProbe {
         }
         check("fidelity.unsupported_algorithm", unknownAlg,
                 "DESede refused with NoSuchAlgorithmException");
-        // The run root (and with it the on-disk keystore file) is removed at
-        // teardown, so the driver needs a window to measure it from the host
-        // while this session is alive. The guest's own checks are complete.
-        Thread.sleep(15_000L);
     }
 
     // --------------------------------------------------------------- helpers
@@ -836,7 +882,8 @@ public final class KeystoreProbe {
         }
     }
 
-    private void check(String name, boolean ok, String detail) {        if (ok) {
+    private void check(String name, boolean ok, String detail) {
+        if (ok) {
             pass++;
         } else {
             fail++;
@@ -846,7 +893,7 @@ public final class KeystoreProbe {
         lines.add(line);
         System.out.println(TAG + " " + line);
         System.out.flush();
-        System.out.flush();
+        log(line);
     }
 
     private void finish(String mode) {
@@ -854,6 +901,7 @@ public final class KeystoreProbe {
                 + "\",\"pass\":" + pass + ",\"fail\":" + fail + "}";
         System.out.println(TAG + " " + summary);
         System.out.flush();
+        log("SUMMARY " + summary);
         try {
             File dir = new File(dataDir, "keystore-probe");
             mkdirs(dir);
@@ -870,6 +918,13 @@ public final class KeystoreProbe {
             out.setWritable(true, true);
         } catch (Throwable t) {
             System.out.println(TAG + " WARN cannot write result: " + t);
+        }
+    }
+
+    private static void log(String msg) {
+        try {
+            android.util.Log.i(TAG, msg);
+        } catch (Throwable ignored) {
         }
     }
 
