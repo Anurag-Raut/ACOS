@@ -25,10 +25,19 @@ public final class MainActivity extends Activity {
     protected void onCreate(Bundle state) {
         super.onCreate(state);
         TextView v = new TextView(this);
-        v.setText("keystore probe");
+        v.setId(android.R.id.text1);
         setContentView(v);
         String mode = System.getenv("ACOS_ART_KEYPROBE_MODE");
-        new KeystoreProbe(getFilesDir(), getPackageName())
-                .run(mode == null || mode.trim().isEmpty() ? "default_off" : mode.trim());
+        if (mode == null || mode.trim().isEmpty()) {
+            mode = java.security.Security.getProvider("AndroidKeyStore") != null
+                    ? "launch_fidelity" : "default_off";
+        } else {
+            mode = mode.trim();
+        }
+        KeystoreProbe probe = new KeystoreProbe(getFilesDir(), getPackageName());
+        probe.run(mode);
+        String summary = probe.summaryText(mode);
+        v.setText(summary);
+        android.util.Log.i("KeystoreProbe", summary);
     }
 }

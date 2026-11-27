@@ -218,6 +218,8 @@ public final class LaunchMain {
             String mode = ks == null ? "" : ks.trim();
             if ("on".equalsIgnoreCase(mode) || "1".equals(mode) || "software".equalsIgnoreCase(mode)) {
                 SoftwareKeyStore.install("/data/app-data/" + sPkg);
+            } else {
+                SoftwareKeyStore.installDiagnosticOff();
             }
         } catch (Throwable t) {
             System.out.println("ACOSLAUNCH WARN keystore install: " + t);
