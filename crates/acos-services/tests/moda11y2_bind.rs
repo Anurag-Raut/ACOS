@@ -145,16 +145,23 @@ fn add_client_creates_and_binds_the_enabled_service() {
         .lock()
         .unwrap()
         .set_app_thread(app_thread.0);
-    let _ = host.take_deliveries();
+    // The settings observer's drain binds the enabled service as soon as the
+    // app thread exists (the bind is already in flight).
+    let deliveries = host.take_deliveries();
 
-    // The app's real `AccessibilityManager` calls `addClient` on start-up.
+    // The app's real `AccessibilityManager` calls `addClient` on start-up: a
+    // bind to the same component is already pending, so no second bind (and no
+    // second token that would orphan the first service instance) is started.
     let _ = transact(
         &mut host,
         MANAGER,
         3,
         vec![Value::Binder(Some(BinderId(1 << 32 | 0x21))), Value::Int(0)],
     );
-    let deliveries = host.take_deliveries();
+    assert!(
+        host.take_deliveries().is_empty(),
+        "addClient must not start a second bind while one is pending"
+    );
     assert_eq!(
         deliveries.len(),
         2,

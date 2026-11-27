@@ -290,6 +290,43 @@ pub const ENV_ART_BOOT_IMAGE: &str = crate::boot_image::ENV_BOOT_IMAGE;
 /// image it always did.
 pub const ENV_SHARED_BOOT_IMAGE: &str = crate::boot_image::ENV_SHARED_BOOT_IMAGE;
 
+/// Reject a hot-attached APK whose staged file name is already used by the
+/// launched APK or an existing session extra (same rule as initial staging):
+/// `stage_apk` would otherwise overwrite that APK's staged bytes.
+fn hot_apk_name_collision(
+    session_apks: &[(PathBuf, String)],
+    apk: &Path,
+    name: &str,
+) -> Result<()> {
+    let guest = format!("/data/app/{name}");
+    if let Some((staged, _)) = session_apks.iter().find(|(_, g)| *g == guest) {
+        return Err(Error::Layout(format!(
+            "hot system APK {}: file name {name} collides with an APK already staged in this session ({})",
+            apk.display(),
+            staged.display()
+        )));
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod hot_apk_collision_tests {
+    use super::*;
+
+    #[test]
+    fn hot_apk_name_collision_rejects_existing_name_and_names_it() {
+        let apks = vec![(
+            PathBuf::from("/run/app/settings.apk"),
+            "/data/app/settings.apk".to_string(),
+        )];
+        let err = hot_apk_name_collision(&apks, Path::new("/x/settings.apk"), "settings.apk")
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("settings.apk"), "{err}");
+        assert!(hot_apk_name_collision(&apks, Path::new("/x/other.apk"), "other.apk").is_ok());
+    }
+}
+
 /// Validate `ACOS_SHARED_BOOT_IMAGE` for the B3 compatibility tests (the launch
 /// path now goes through [`crate::boot_image::resolve`]).
 #[cfg(test)]
@@ -1111,6 +1148,7 @@ impl SecondaryPool {
                     apk.display()
                 ))
             })?;
+        hot_apk_name_collision(&self.shared.session_apks, apk, &name)?;
         let extra_package = crate::app::apk_package(apk)?;
         let app_dir = self.run_root.join("app");
         fs::create_dir_all(&app_dir)?;
@@ -9847,7 +9885,7 @@ fn interactive_serve(
                                 );
                                 let deadline =
                                     Instant::now() + frame_wait.min(Duration::from_secs(5));
-                                let mut settled = false;
+                                let mut frame_advanced = false;
                                 while Instant::now() < deadline {
                                     drain_pending_spawns(
                                         Some((&pending_spawns, secondary)),
@@ -9855,13 +9893,15 @@ fn interactive_serve(
                                         &live.compositor,
                                     );
                                     if latest_generation(live) > g0 {
-                                        settled = true;
+                                        frame_advanced = true;
                                         break;
                                     }
                                     std::thread::sleep(Duration::from_millis(15));
                                 }
                                 if let Some(obj) = reply.as_object_mut() {
-                                    obj.insert("settled".into(), serde_json::json!(settled));
+                                    // Frame advance only: a session-wide frame after the replay, not
+                                    // proof the replayed activity is visible or settled (ADR-0032).
+                                    obj.insert("frame_advanced".into(), serde_json::json!(frame_advanced));
                                 }
                             }
                         }

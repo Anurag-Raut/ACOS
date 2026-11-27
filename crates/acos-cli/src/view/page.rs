@@ -222,6 +222,8 @@ const btnVolDown = $("btn-vol-down"), btnVolUp = $("btn-vol-up"), btnPower = $("
 const verifyBanner = $("verify-banner"), dinput = $("dinput");
 const SVG_NS = "http://www.w3.org/2000/svg";
 const capabilityCards = new Map();
+// prompt_seq of capability actions sent (or queued) but not yet answered.
+const pendingCapabilities = new Set();
 
 let sessions = [];
 let current = null;
@@ -679,6 +681,7 @@ function ensureWs() {
     ws = null;
     wsQueue = [];
     pendingRotate = null;
+    failPendingCapabilities();
     clearAllPointerVisuals();
     activePointers.clear();
     heldGuestKeys.clear();
@@ -1227,6 +1230,7 @@ function updatePointerVisuals(entry) {
 
 function clearCapabilityPrompts() {
   capabilityCards.clear();
+  pendingCapabilities.clear();
   if (capTray) capTray.textContent = "";
 }
 
@@ -1323,6 +1327,7 @@ function showCapabilityPrompt(prompt) {
         statusEl.hidden = false;
         statusEl.className = "cap-status";
         statusEl.textContent = "Enabling…";
+        pendingCapabilities.add(prompt.seq);
         const ok = sendInput({
           t: "capability",
           prompt_seq: prompt.seq,
@@ -1332,6 +1337,7 @@ function showCapabilityPrompt(prompt) {
           replay_intent: typeof opt.replay_intent === "number" ? opt.replay_intent : null,
         });
         if (!ok) {
+          pendingCapabilities.delete(prompt.seq);
           for (const b of buttons) b.disabled = !!(current && current.watch_only);
           statusEl.className = "cap-status bad";
           statusEl.textContent = "Could not send request (session not interactive).";
@@ -1373,8 +1379,24 @@ function showCapabilityPrompt(prompt) {
   capabilityCards.set(prompt.seq, { card, buttons, statusEl, prompt });
 }
 
+// Socket closed with capability actions unanswered: the action may or may not
+// have been dispatched. Re-enable the card for an explicit retry; never replay.
+function failPendingCapabilities() {
+  for (const seq of pendingCapabilities) {
+    const rec = capabilityCards.get(seq);
+    if (!rec) continue;
+    for (const b of rec.buttons) b.disabled = !!(current && current.watch_only);
+    rec.statusEl.hidden = false;
+    rec.statusEl.className = "cap-status bad";
+    rec.statusEl.textContent =
+      "Connection lost: the result is uncertain (the action may have been applied). Check the session, then retry if needed.";
+  }
+  pendingCapabilities.clear();
+}
+
 function handleCapabilityReply(msg) {
   const seq = typeof msg.prompt_seq === "number" ? msg.prompt_seq : null;
+  if (seq !== null) pendingCapabilities.delete(seq);
   const rec = seq !== null ? capabilityCards.get(seq) : null;
   if (msg.ok) {
     addEvent({
