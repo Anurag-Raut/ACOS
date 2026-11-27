@@ -93,8 +93,7 @@ enum {
 };
 
 #define MAX_HANDLES 512
-#define MAX_MAPS 64
-#define MAX_MAPS_PER_HANDLE 4
+#define MAX_MAPS 512
 
 static pthread_mutex_t g_lock = PTHREAD_MUTEX_INITIALIZER;
 
@@ -108,6 +107,7 @@ static struct {
     const nh_t *h;
     void *addr;
     size_t size;
+    int refcount;
 } g_maps[MAX_MAPS];
 
 static int verbose(void) {
@@ -168,6 +168,7 @@ static void unmap_all_locked(const nh_t *h) {
             g_maps[i].h = NULL;
             g_maps[i].addr = NULL;
             g_maps[i].size = 0;
+            g_maps[i].refcount = 0;
         }
     }
 }
@@ -443,6 +444,23 @@ static int32_t do_lock(const nh_t *nh, void **vaddr, int32_t *outBpp, int32_t *o
     int fd = handle_fd(nh);
     if (fd < 0) return -22;
 
+    pthread_mutex_lock(&g_lock);
+    for (int i = 0; i < MAX_MAPS; i++) {
+        if (g_maps[i].h == nh) {
+            g_maps[i].refcount++;
+            void *existing = g_maps[i].addr;
+            int refs = g_maps[i].refcount;
+            pthread_mutex_unlock(&g_lock);
+            *vaddr = existing;
+            if (outBpp) *outBpp = bpp;
+            if (outStride) *outStride = in[NH_STRIDE] * bpp;
+            LOG("lock: nh=%p fd=%d addr=%p (reused, refs=%d)",
+                (const void *)nh, fd, existing, refs);
+            return 0;
+        }
+    }
+    pthread_mutex_unlock(&g_lock);
+
     void *addr = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
     if (addr == MAP_FAILED) {
         LOGE("lock: mmap(%zu): %s", size, strerror(errno));
@@ -452,7 +470,20 @@ static int32_t do_lock(const nh_t *nh, void **vaddr, int32_t *outBpp, int32_t *o
     pthread_mutex_lock(&g_lock);
     int slot = -1;
     for (int i = 0; i < MAX_MAPS; i++) {
-        if (!g_maps[i].h) { slot = i; break; }
+        if (g_maps[i].h == nh) {
+            g_maps[i].refcount++;
+            void *existing = g_maps[i].addr;
+            int refs = g_maps[i].refcount;
+            pthread_mutex_unlock(&g_lock);
+            munmap(addr, size);
+            *vaddr = existing;
+            if (outBpp) *outBpp = bpp;
+            if (outStride) *outStride = in[NH_STRIDE] * bpp;
+            LOG("lock: nh=%p fd=%d addr=%p (race-reused, refs=%d)",
+                (const void *)nh, fd, existing, refs);
+            return 0;
+        }
+        if (slot < 0 && !g_maps[i].h) slot = i;
     }
     if (slot < 0) {
         pthread_mutex_unlock(&g_lock);
@@ -463,12 +494,15 @@ static int32_t do_lock(const nh_t *nh, void **vaddr, int32_t *outBpp, int32_t *o
     g_maps[slot].h = nh;
     g_maps[slot].addr = addr;
     g_maps[slot].size = size;
+    g_maps[slot].refcount = 1;
     pthread_mutex_unlock(&g_lock);
 
     *vaddr = addr;
     if (outBpp) *outBpp = bpp;
     if (outStride) *outStride = in[NH_STRIDE] * bpp; /* libui wants BYTES per row */
-    LOG("lock: mmap %zu B (stride %d B)", size, in[NH_STRIDE] * bpp);
+    LOG("lock: nh=%p fd=%d addr=%p..%p (%zu B, %dx%d stride=%d px/%d B, refs=1)",
+        (const void *)nh, fd, addr, (void *)((char *)addr + size), size,
+        in[NH_W], in[NH_H], in[NH_STRIDE], in[NH_STRIDE] * bpp);
     return 0;
 }
 
@@ -571,20 +605,38 @@ int32_t mapper_get_pixel_format_requested(void *self, const nh_t *nh, int32_t *o
 
 static int32_t do_unlock(const nh_t *nh) {
     if (!nh) return 0;
-    pthread_mutex_lock(&g_lock);
+    void *unmap_addr = NULL;
+    size_t unmap_size = 0;
     int found = 0;
+    int rem_refs = 0;
+    pthread_mutex_lock(&g_lock);
     for (int i = 0; i < MAX_MAPS; i++) {
         if (g_maps[i].h == nh) {
-            munmap(g_maps[i].addr, g_maps[i].size);
-            g_maps[i].h = NULL;
-            g_maps[i].addr = NULL;
-            g_maps[i].size = 0;
             found = 1;
+            if (g_maps[i].refcount > 1) {
+                g_maps[i].refcount--;
+                rem_refs = g_maps[i].refcount;
+            } else {
+                unmap_addr = g_maps[i].addr;
+                unmap_size = g_maps[i].size;
+                g_maps[i].h = NULL;
+                g_maps[i].addr = NULL;
+                g_maps[i].size = 0;
+                g_maps[i].refcount = 0;
+            }
             break;
         }
     }
     pthread_mutex_unlock(&g_lock);
-    if (!found) LOG("unlock: no mapping for handle (already unlocked)");
+    if (unmap_addr) {
+        munmap(unmap_addr, unmap_size);
+        LOG("unlock: nh=%p munmap %p..%p (%zu B)", (const void *)nh,
+            unmap_addr, (void *)((char *)unmap_addr + unmap_size), unmap_size);
+    } else if (found) {
+        LOG("unlock: nh=%p kept mapped (refs=%d)", (const void *)nh, rem_refs);
+    } else {
+        LOG("unlock: no mapping for handle %p (already unlocked)", (const void *)nh);
+    }
     return 0;
 }
 
@@ -696,13 +748,18 @@ int32_t mapper_is_supported(void *self, uint32_t w, uint32_t h, int32_t format, 
 }
 
 /* ------------------------------------------------- per-buffer metadata -------
- * libgui's BufferQueueConsumer sets these on every queued buffer (they are the
- * only mapper methods libgui itself calls through its PLT). They must not run
- * the HAL code path -- there is no mMapper in the object the shim constructed
- * -- so they are handled here. Dataspace is *kept* (a consumer that reads it
- * back gets what was set); the HDR payloads are accepted and dropped, which is
- * the honest behaviour for a software consumer: nothing in this stack can
- * display them.
+ * libgui's BufferQueueConsumer sets dataspace/HDR metadata on queued buffers,
+ * and libnativewindow (AHardwareBuffer_getDataSpace -> Readback/PixelCopy on
+ * RenderThread) and libui read metadata back through GraphicBufferMapper.
+ * Because the shim skips HAL discovery in GraphicBufferMapper::ctor(), the
+ * stock libui.so object has mMapper == NULL, so ANY un-interposed virtual
+ * thunk in libui.so loads (%rdi)==NULL and SIGSEGVs at offset +3.
+ *
+ * Dataspace is *kept* (a consumer that reads it back gets what was set, or
+ * HAL_DATASPACE_UNKNOWN=0 from allocation); geometry/usage/protected-content
+ * come from our own handle ints; HDR/compression/layout queries that have no
+ * software-memfd pipeline return -ENOSYS (-38, Android INVALID_OPERATION)
+ * instead of touching mMapper.
  *
  * ABI note: Dataspace is a plain enum (int, GPR). optional<Smpte2086> and
  * optional<Cta861_3> are trivially copyable and <= 16 B, so they arrive in
@@ -710,6 +767,27 @@ int32_t mapper_is_supported(void *self, uint32_t w, uint32_t h, int32_t format, 
  * Itanium C++ ABI passes it by invisible reference -- hence `const void*`.
  * All the payloads are opaque to us, so the exact field layout does not matter,
  * only the shape; each shim only reads `self` and the handle. */
+static int is_shim_handle(const nh_t *nh) {
+    return nh && nh->version == (int)sizeof(nh_t) && nh->numFds >= 0 && nh->numInts >= NH_NINTS;
+}
+
+int32_t mapper_get_dataspace(void *self, const nh_t *nh, int32_t *outDataspace)
+    __asm__("_ZN7android19GraphicBufferMapper12getDataspaceEPK13native_handlePNS_8hardware8graphics6common4V1_29DataspaceE");
+int32_t mapper_get_dataspace(void *self, const nh_t *nh, int32_t *outDataspace) {
+    (void)self;
+    if (!nh || !outDataspace) return -22;
+    int32_t ds = 0; /* HAL_DATASPACE_UNKNOWN */
+    pthread_mutex_lock(&g_lock);
+    int i = registry_find(nh);
+    if (i >= 0 || is_shim_handle(nh)) {
+        ds = handle_ints(nh)[NH_DATASPACE];
+    }
+    pthread_mutex_unlock(&g_lock);
+    *outDataspace = ds;
+    LOG("getDataspace -> 0x%x", (unsigned)ds);
+    return 0;
+}
+
 int32_t mapper_set_dataspace(void *self, const nh_t *nh, int32_t dataspace)
     __asm__("_ZN7android19GraphicBufferMapper12setDataspaceEPK13native_handleNS_8hardware8graphics6common4V1_29DataspaceE");
 int32_t mapper_set_dataspace(void *self, const nh_t *nh, int32_t dataspace) {
@@ -723,12 +801,162 @@ int32_t mapper_set_dataspace(void *self, const nh_t *nh, int32_t dataspace) {
     return 0;
 }
 
+int32_t mapper_get_buffer_id(void *self, const nh_t *nh, uint64_t *outBufferId)
+    __asm__("_ZN7android19GraphicBufferMapper11getBufferIdEPK13native_handlePm");
+int32_t mapper_get_buffer_id(void *self, const nh_t *nh, uint64_t *outBufferId) {
+    (void)self; (void)outBufferId;
+    if (!nh || !outBufferId) return -22;
+    return -38; /* INVALID_OPERATION (-ENOSYS) */
+}
+
+int32_t mapper_get_name(void *self, const nh_t *nh, void *outName)
+    __asm__("_ZN7android19GraphicBufferMapper7getNameEPK13native_handlePNSt3__112basic_stringIcNS4_11char_traitsIcEENS4_9allocatorIcEEEE");
+int32_t mapper_get_name(void *self, const nh_t *nh, void *outName) {
+    (void)self; (void)outName;
+    if (!nh || !outName) return -22;
+    return -38;
+}
+
+int32_t mapper_get_width(void *self, const nh_t *nh, uint64_t *outWidth)
+    __asm__("_ZN7android19GraphicBufferMapper8getWidthEPK13native_handlePm");
+int32_t mapper_get_width(void *self, const nh_t *nh, uint64_t *outWidth) {
+    (void)self;
+    if (!nh || !outWidth || !is_shim_handle(nh)) return -22;
+    *outWidth = (uint64_t)(uint32_t)handle_ints(nh)[NH_W];
+    return 0;
+}
+
+int32_t mapper_get_height(void *self, const nh_t *nh, uint64_t *outHeight)
+    __asm__("_ZN7android19GraphicBufferMapper9getHeightEPK13native_handlePm");
+int32_t mapper_get_height(void *self, const nh_t *nh, uint64_t *outHeight) {
+    (void)self;
+    if (!nh || !outHeight || !is_shim_handle(nh)) return -22;
+    *outHeight = (uint64_t)(uint32_t)handle_ints(nh)[NH_H];
+    return 0;
+}
+
+int32_t mapper_get_layer_count(void *self, const nh_t *nh, uint64_t *outLayers)
+    __asm__("_ZN7android19GraphicBufferMapper13getLayerCountEPK13native_handlePm");
+int32_t mapper_get_layer_count(void *self, const nh_t *nh, uint64_t *outLayers) {
+    (void)self;
+    if (!nh || !outLayers || !is_shim_handle(nh)) return -22;
+    int l = handle_ints(nh)[NH_LAYERS];
+    *outLayers = (uint64_t)(uint32_t)(l > 0 ? l : 1);
+    return 0;
+}
+
+int32_t mapper_get_usage(void *self, const nh_t *nh, uint64_t *outUsage)
+    __asm__("_ZN7android19GraphicBufferMapper8getUsageEPK13native_handlePm");
+int32_t mapper_get_usage(void *self, const nh_t *nh, uint64_t *outUsage) {
+    (void)self;
+    if (!nh || !outUsage || !is_shim_handle(nh)) return -22;
+    const int *in = handle_ints(nh);
+    *outUsage = ((uint64_t)(uint32_t)in[NH_USAGE_HI] << 32) | (uint32_t)in[NH_USAGE_LO];
+    return 0;
+}
+
+int32_t mapper_get_protected_content(void *self, const nh_t *nh, uint64_t *outProtected)
+    __asm__("_ZN7android19GraphicBufferMapper19getProtectedContentEPK13native_handlePm");
+int32_t mapper_get_protected_content(void *self, const nh_t *nh, uint64_t *outProtected) {
+    (void)self;
+    if (!nh || !outProtected) return -22;
+    *outProtected = 0;
+    return 0;
+}
+
+int32_t mapper_get_pixel_format_fourcc(void *self, const nh_t *nh, uint32_t *outFourcc)
+    __asm__("_ZN7android19GraphicBufferMapper20getPixelFormatFourCCEPK13native_handlePj");
+int32_t mapper_get_pixel_format_fourcc(void *self, const nh_t *nh, uint32_t *outFourcc) {
+    (void)self;
+    if (!nh || !outFourcc) return -22;
+    return -38;
+}
+
+int32_t mapper_get_pixel_format_modifier(void *self, const nh_t *nh, uint64_t *outMod)
+    __asm__("_ZN7android19GraphicBufferMapper22getPixelFormatModifierEPK13native_handlePm");
+int32_t mapper_get_pixel_format_modifier(void *self, const nh_t *nh, uint64_t *outMod) {
+    (void)self;
+    if (!nh || !outMod) return -22;
+    *outMod = 0; /* DRM_FORMAT_MOD_LINEAR */
+    return 0;
+}
+
+int32_t mapper_get_compression_ext(void *self, const nh_t *nh, void *out)
+    __asm__("_ZN7android19GraphicBufferMapper14getCompressionEPK13native_handlePN4aidl7android8hardware8graphics6common14ExtendableTypeE");
+int32_t mapper_get_compression_ext(void *self, const nh_t *nh, void *out) {
+    (void)self; (void)nh; (void)out;
+    return -38;
+}
+
+int32_t mapper_get_compression(void *self, const nh_t *nh, void *out)
+    __asm__("_ZN7android19GraphicBufferMapper14getCompressionEPK13native_handlePN4aidl7android8hardware8graphics6common11CompressionE");
+int32_t mapper_get_compression(void *self, const nh_t *nh, void *out) {
+    (void)self; (void)nh; (void)out;
+    return -38;
+}
+
+int32_t mapper_get_interlaced_ext(void *self, const nh_t *nh, void *out)
+    __asm__("_ZN7android19GraphicBufferMapper13getInterlacedEPK13native_handlePN4aidl7android8hardware8graphics6common14ExtendableTypeE");
+int32_t mapper_get_interlaced_ext(void *self, const nh_t *nh, void *out) {
+    (void)self; (void)nh; (void)out;
+    return -38;
+}
+
+int32_t mapper_get_interlaced(void *self, const nh_t *nh, void *out)
+    __asm__("_ZN7android19GraphicBufferMapper13getInterlacedEPK13native_handlePN4aidl7android8hardware8graphics6common10InterlacedE");
+int32_t mapper_get_interlaced(void *self, const nh_t *nh, void *out) {
+    (void)self; (void)nh; (void)out;
+    return -38;
+}
+
+int32_t mapper_get_chroma_siting_ext(void *self, const nh_t *nh, void *out)
+    __asm__("_ZN7android19GraphicBufferMapper15getChromaSitingEPK13native_handlePN4aidl7android8hardware8graphics6common14ExtendableTypeE");
+int32_t mapper_get_chroma_siting_ext(void *self, const nh_t *nh, void *out) {
+    (void)self; (void)nh; (void)out;
+    return -38;
+}
+
+int32_t mapper_get_chroma_siting(void *self, const nh_t *nh, void *out)
+    __asm__("_ZN7android19GraphicBufferMapper15getChromaSitingEPK13native_handlePN4aidl7android8hardware8graphics6common12ChromaSitingE");
+int32_t mapper_get_chroma_siting(void *self, const nh_t *nh, void *out) {
+    (void)self; (void)nh; (void)out;
+    return -38;
+}
+
+int32_t mapper_get_plane_layouts(void *self, const nh_t *nh, void *out)
+    __asm__("_ZN7android19GraphicBufferMapper15getPlaneLayoutsEPK13native_handlePNSt3__16vectorIN4aidl7android8hardware8graphics6common11PlaneLayoutENS4_9allocatorISB_EEEE");
+int32_t mapper_get_plane_layouts(void *self, const nh_t *nh, void *out) {
+    (void)self; (void)nh; (void)out;
+    return -38;
+}
+
+int32_t mapper_get_blend_mode(void *self, const nh_t *nh, int32_t *out)
+    __asm__("_ZN7android19GraphicBufferMapper12getBlendModeEPK13native_handlePN4aidl7android8hardware8graphics6common9BlendModeE");
+int32_t mapper_get_blend_mode(void *self, const nh_t *nh, int32_t *out) {
+    (void)self; (void)nh; (void)out;
+    return -38;
+}
+
+int32_t mapper_get_smpte2086(void *self, const nh_t *nh, void *out)
+    __asm__("_ZN7android19GraphicBufferMapper12getSmpte2086EPK13native_handlePNSt3__18optionalIN4aidl7android8hardware8graphics6common9Smpte2086EEE");
+int32_t mapper_get_smpte2086(void *self, const nh_t *nh, void *out) {
+    (void)self; (void)nh; (void)out;
+    return -38;
+}
+
 int32_t mapper_set_smpte2086(void *self, const nh_t *nh, const void *meta_by_value)
     __asm__("_ZN7android19GraphicBufferMapper12setSmpte2086EPK13native_handleNSt3__18optionalIN4aidl7android8hardware8graphics6common9Smpte2086EEE");
 int32_t mapper_set_smpte2086(void *self, const nh_t *nh, const void *meta_by_value) {
     (void)self; (void)nh; (void)meta_by_value;
     LOG("setSmpte2086 (accepted, no display pipeline)");
     return 0;
+}
+
+int32_t mapper_get_cta861_3(void *self, const nh_t *nh, void *out)
+    __asm__("_ZN7android19GraphicBufferMapper11getCta861_3EPK13native_handlePNSt3__18optionalIN4aidl7android8hardware8graphics6common8Cta861_3EEE");
+int32_t mapper_get_cta861_3(void *self, const nh_t *nh, void *out) {
+    (void)self; (void)nh; (void)out;
+    return -38;
 }
 
 int32_t mapper_set_cta861_3(void *self, const nh_t *nh, const void *meta_by_value)
@@ -739,6 +967,13 @@ int32_t mapper_set_cta861_3(void *self, const nh_t *nh, const void *meta_by_valu
     return 0;
 }
 
+int32_t mapper_get_smpte2094_40(void *self, const nh_t *nh, void *out)
+    __asm__("_ZN7android19GraphicBufferMapper15getSmpte2094_40EPK13native_handlePNSt3__18optionalINS4_6vectorIhNS4_9allocatorIhEEEEEE");
+int32_t mapper_get_smpte2094_40(void *self, const nh_t *nh, void *out) {
+    (void)self; (void)nh; (void)out;
+    return -38;
+}
+
 /* optional<vector<uint8_t>> by value -> invisible reference on the stack. */
 int32_t mapper_set_smpte2094_40(void *self, const nh_t *nh, const void *meta_by_ref)
     __asm__("_ZN7android19GraphicBufferMapper15setSmpte2094_40EPK13native_handleNSt3__18optionalINS4_6vectorIhNS4_9allocatorIhEEEEEE");
@@ -746,4 +981,25 @@ int32_t mapper_set_smpte2094_40(void *self, const nh_t *nh, const void *meta_by_
     (void)self; (void)nh; (void)meta_by_ref;
     LOG("setSmpte2094_40 (accepted, no display pipeline)");
     return 0;
+}
+
+int32_t mapper_get_smpte2094_10(void *self, const nh_t *nh, void *out)
+    __asm__("_ZN7android19GraphicBufferMapper15getSmpte2094_10EPK13native_handlePNSt3__18optionalINS4_6vectorIhNS4_9allocatorIhEEEEEE");
+int32_t mapper_get_smpte2094_10(void *self, const nh_t *nh, void *out) {
+    (void)self; (void)nh; (void)out;
+    return -38;
+}
+
+int32_t mapper_set_smpte2094_10(void *self, const nh_t *nh, const void *meta_by_ref)
+    __asm__("_ZN7android19GraphicBufferMapper15setSmpte2094_10EPK13native_handleNSt3__18optionalINS4_6vectorIhNS4_9allocatorIhEEEEEE");
+int32_t mapper_set_smpte2094_10(void *self, const nh_t *nh, const void *meta_by_ref) {
+    (void)self; (void)nh; (void)meta_by_ref;
+    LOG("setSmpte2094_10 (accepted, no display pipeline)");
+    return 0;
+}
+
+void mapper_dump_buffer(const void *self, const nh_t *nh, void *outStr, int less)
+    __asm__("_ZNK7android19GraphicBufferMapper10dumpBufferEPK13native_handleRNSt3__112basic_stringIcNS4_11char_traitsIcEENS4_9allocatorIcEEEEb");
+void mapper_dump_buffer(const void *self, const nh_t *nh, void *outStr, int less) {
+    (void)self; (void)nh; (void)outStr; (void)less;
 }
