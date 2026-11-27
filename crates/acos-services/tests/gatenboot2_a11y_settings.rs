@@ -359,3 +359,33 @@ fn the_modules_disable_op_unbinds_through_the_same_reconciliation() {
     );
     assert!(a11y_state(&mut host).lock().unwrap().bound_service.is_none());
 }
+
+/// Multi-process regression: hot-attaching `com.android.settings` causes a
+/// second process to call `attachApplication`. Enabling the primary app's
+/// accessibility service from Settings must still target the primary app's
+/// `IApplicationThread`, never `com.android.settings`'s.
+#[test]
+fn secondary_process_attach_does_not_redirect_primary_a11y_bind() {
+    let (mut host, _registry) = attached_without_enabled_services();
+    let primary_thread = BinderId(1 << 32 | 0x77);
+    let settings_thread = BinderId(5 << 32 | 0x11);
+    {
+        let state = a11y_state(&mut host);
+        let mut state = state.lock().unwrap();
+        state.app_thread = None;
+        state.set_app_thread_for_package(PACKAGE, primary_thread.0);
+        state.set_app_thread_for_package("com.android.settings", settings_thread.0);
+    }
+
+    enable_set(&mut host, &[COMPONENT]);
+    let deliveries = host.take_deliveries();
+    assert_eq!(
+        methods(&deliveries),
+        vec!["scheduleCreateService", "scheduleBindService"]
+    );
+    assert!(
+        deliveries.iter().all(|d| d.target == primary_thread),
+        "bind must target primary package thread {primary_thread:?}, got {:?}",
+        deliveries.iter().map(|d| d.target).collect::<Vec<_>>()
+    );
+}

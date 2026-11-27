@@ -28,6 +28,13 @@
         android:textSize="16sp"
         android:text="" />
 
+    <LinearLayout
+        android:id="@+id/settings_dynamic_container"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:paddingTop="16dp" />
+
     <Button
         android:id="@+id/settings_back"
         android:layout_width="wrap_content"

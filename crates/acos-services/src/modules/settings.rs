@@ -41,8 +41,8 @@ const CONTROL_OPS: [ControlOp; 1] = [ControlOp {
 fn manifest_ref() -> &'static ModuleManifest {
     static MANIFEST: ModuleManifest = ModuleManifest {
         id: MODULE_ID,
-        version: "1.0.0",
-        summary: "guest Settings stub system app (`com.android.settings`) answering ACTION_SETTINGS, ACTION_APPLICATION_DETAILS_SETTINGS, and ACTION_WIFI_SETTINGS",
+        version: "1.1.0",
+        summary: "guest Settings system app (`com.android.settings`) answering SETTINGS, APPLICATION_DETAILS_SETTINGS, WIFI_SETTINGS, ACCESSIBILITY_SETTINGS, MANAGE_OVERLAY_PERMISSION, and APP_NOTIFICATION_SETTINGS",
         services: &[],
         replaces: &[],
         process_initializers: &[],
@@ -58,7 +58,7 @@ fn manifest_ref() -> &'static ModuleManifest {
             ram_mib: 1,
             startup_ms: 1,
         },
-        attach: AttachMode::AtLaunch,
+        attach: AttachMode::Hot,
         controls: &CONTROL_OPS,
         security: SecurityClass::InProcess,
     };
@@ -173,7 +173,7 @@ impl Module for SettingsModule {
         let mut report = ModuleReport::of(manifest_ref(), self.profile);
         if self.profile.is_attached() {
             report.reason = Some(format!(
-                "real guest Settings stub `{SETTINGS_PACKAGE}` staged for SETTINGS / APPLICATION_DETAILS_SETTINGS / WIFI_SETTINGS"
+                "real guest Settings app `{SETTINGS_PACKAGE}` staged for SETTINGS / APPLICATION_DETAILS_SETTINGS / WIFI_SETTINGS / ACCESSIBILITY_SETTINGS / MANAGE_OVERLAY_PERMISSION / APP_NOTIFICATION_SETTINGS"
             ));
         }
         report
@@ -185,9 +185,9 @@ mod tests {
     use super::*;
 
     #[test]
-    fn manifest_is_valid_and_at_launch() {
+    fn manifest_is_valid_and_hot() {
         manifest_ref().validate().expect("valid manifest");
-        assert_eq!(manifest_ref().attach, AttachMode::AtLaunch);
+        assert_eq!(manifest_ref().attach, AttachMode::Hot);
         assert_eq!(manifest_ref().system_apps, &[SETTINGS_PACKAGE]);
     }
 

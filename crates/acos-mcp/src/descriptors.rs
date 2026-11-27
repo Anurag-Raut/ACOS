@@ -1035,13 +1035,15 @@ fn session_tool_spec(name: &str) -> (&'static str, Value) {
         ),
         "acos_services" => (
             "ADR-0029 item 4: the service modules of a live session. `op: \"list\"` (default) \
-             returns `attached` and the honest per-module `modules` rows; `status` is the same \
-             set with the session's allow/refuse detail; `attach`/`detach` change the session \
-             and answer with the new set. Only `hot` modules can change on a live session: an \
+             returns `attached`, honest per-module `modules` rows, and any `capability_prompts` \
+             recorded during the session; `status` is the same set with allow/refuse detail; \
+             `attach`/`detach` change the session and answer with the new set. Only `hot` modules \
+             can change on a live session (including `system.settings` and `accessibility`): an \
              `at-launch` module (e.g. `core`) is refused with the launch call in the message, \
              never silently ignored. `ctl` drives a scripted module's control operation \
              (`location`: `set_location`, `play_track`, ...) and answers the module's own result; \
-             `acos_capabilities` with `session_id` shows the same set.",
+             `replay_intent` replays a previously missed `intent_id` from `capability_prompts` \
+             after hot-attaching its module; `acos_capabilities` with `session_id` shows the same set.",
             json!({
                 "type": "object",
                 "additionalProperties": false,
@@ -1049,14 +1051,15 @@ fn session_tool_spec(name: &str) -> (&'static str, Value) {
                 "properties": {
                     "op": {
                         "type": "string",
-                        "enum": ["list", "status", "attach", "detach", "ctl"],
-                        "description": "`list`/`status` are read-only. `attach`/`detach`/`ctl` need `id`; `attach`/`detach` are refused for an `at-launch` module."
+                        "enum": ["list", "status", "attach", "detach", "ctl", "replay_intent"],
+                        "description": "`list`/`status` are read-only. `attach`/`detach`/`ctl` need `id`; `replay_intent` needs `intent_id`; `attach`/`detach` are refused for an `at-launch` module."
                     },
-                    "id": {"type": "string", "minLength": 1, "description": "Module id for attach/detach/ctl (`location`)."},
+                    "id": {"type": "string", "minLength": 1, "description": "Module id for attach/detach/ctl (`location`, `system.settings`, `accessibility`)."},
                     "profile": {"type": "string", "enum": ["off", "stub", "scripted", "real"], "description": "attach: requested profile; omit for the module's default."},
                     "config": {"type": "object", "description": "attach: module configuration object."},
                     "ctl_op": {"type": "string", "minLength": 1, "description": "ctl: the module control operation (`set_location`). The module's `controls` in `acos_capabilities` lists them."},
                     "args": {"type": "object", "description": "ctl: operation arguments (`{lat, lng}` for `set_location`)."},
+                    "intent_id": {"type": "integer", "minimum": 1, "description": "replay_intent: saved intent id from a `capability_prompts` option's `replay_intent` field."},
                     "base": base.clone()
                 }
             }),

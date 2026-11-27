@@ -223,9 +223,6 @@ pub fn plan_bind(state: &mut A11yState) -> Result<Vec<PendingDelivery>> {
     if state.bound_service.is_some() {
         return Ok(Vec::new());
     }
-    let app_thread = state.app_thread.ok_or_else(|| {
-        rejected("no IApplicationThread yet: attachApplication has not arrived, so the bind has no target")
-    })?;
     let component = state.enabled_services[0].clone();
     let (package, class) = component
         .split_once('/')
@@ -235,6 +232,11 @@ pub fn plan_bind(state: &mut A11yState) -> Result<Vec<PendingDelivery>> {
     } else {
         class.to_string()
     };
+    let app_thread = state.app_thread_for(package).ok_or_else(|| {
+        rejected(format!(
+            "no IApplicationThread yet for {package}: attachApplication has not arrived, so the bind has no target"
+        ))
+    })?;
     let (service_info, app_info) = {
         let pms = state.pms.as_ref().ok_or_else(|| {
             rejected("no package manager: the installed service record cannot be read")
@@ -1778,7 +1780,7 @@ pub fn plan_unbind(state: &mut A11yState) -> Vec<PendingDelivery> {
             )
         })
         .unwrap_or_else(|| (component.clone(), component.clone()));
-    let Some(app_thread) = state.app_thread else {
+    let Some(app_thread) = state.app_thread_for(&package) else {
         return Vec::new();
     };
     let mut out = Vec::new();
@@ -1884,9 +1886,12 @@ pub fn sync_enabled_services(state: &mut A11yState) -> Vec<PendingDelivery> {
     {
         return Vec::new();
     }
+    let prev_flags = state.flags();
+    let prev_services = state.enabled_services.clone();
     state.observed_secure_generation = Some(generation);
     state.enabled = enabled;
     state.enabled_services = services;
+    let new_flags = state.flags();
     // A service that is no longer enabled (or was replaced by another one) is
     // unbound first: `setEnabledServices` unbinds the services that left the
     // set before it binds the ones that joined it.
@@ -1901,7 +1906,10 @@ pub fn sync_enabled_services(state: &mut A11yState) -> Vec<PendingDelivery> {
         .or_else(|| state.pending_bind.as_ref().map(|bind| bind.component.clone()));
     let mut deliveries = Vec::new();
     if let Some(bound) = bound {
-        if keep.as_deref() != Some(bound.as_str()) {
+        let matches = keep
+            .as_deref()
+            .is_some_and(|k| crate::misc::same_component(k, &bound));
+        if !matches {
             deliveries.extend(plan_unbind(state));
         }
     }
@@ -1916,6 +1924,41 @@ pub fn sync_enabled_services(state: &mut A11yState) -> Vec<PendingDelivery> {
                 if !state.unsupported.contains(&reason) {
                     state.unsupported.push(reason);
                 }
+            }
+        }
+    }
+    // Notify already-connected `IAccessibilityManagerClient`s (e.g. an app
+    // process that called `addClient` before the user toggled the service in
+    // Settings) so `AccessibilityManager.isEnabled()` and service-state
+    // listeners update live without restarting the app.
+    if (new_flags != prev_flags || state.enabled_services != prev_services)
+        && !state.clients.is_empty()
+    {
+        const MANAGER_CLIENT: &str = "android.view.accessibility.IAccessibilityManagerClient";
+        for &client in &state.clients {
+            if new_flags != prev_flags {
+                let mut set_state = Parcel::new();
+                if set_state.write_interface_token(MANAGER_CLIENT).is_ok() {
+                    set_state.write_int32(new_flags);
+                    deliveries.push(PendingDelivery {
+                        target: BinderId(client),
+                        interface: MANAGER_CLIENT.to_string(),
+                        code: 1,
+                        method: "setState".into(),
+                        data: set_state,
+                    });
+                }
+            }
+            let mut notify = Parcel::new();
+            if notify.write_interface_token(MANAGER_CLIENT).is_ok() {
+                notify.write_int64(0);
+                deliveries.push(PendingDelivery {
+                    target: BinderId(client),
+                    interface: MANAGER_CLIENT.to_string(),
+                    code: 2,
+                    method: "notifyServicesStateChanged".into(),
+                    data: notify,
+                });
             }
         }
     }

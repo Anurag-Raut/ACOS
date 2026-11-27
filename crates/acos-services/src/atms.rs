@@ -2458,6 +2458,21 @@ impl AtmsService {
         state.ams.manifests.add_apk(apk, uid)
     }
 
+    /// Remove a hot-detached extra package's manifest entries from ATMS.
+    pub fn remove_manifest_package(&mut self, package: &str) -> bool {
+        let mut state = self.state.lock().unwrap();
+        state.ams.manifests.remove_package(package)
+    }
+
+    /// Replay a previously missed intent saved by `CapabilityPromptState`
+    /// once the missing module (e.g. `system.settings`) has been attached.
+    pub fn replay_saved_intent(&mut self, intent_id: u64) -> Result<i32> {
+        let mut state = self.state.lock().unwrap();
+        let code = state.ams.replay_saved_intent(intent_id)?;
+        state.enqueue_pending_resumes();
+        Ok(code)
+    }
+
     /// The dynamic receiver registrations recorded so far, oldest first, with
     /// the decoded `IntentFilter` facts (W28).
     #[must_use]

@@ -118,6 +118,38 @@ pub const PAGE: &str = r##"<!doctype html>
   #events .st.bad { color: var(--bad); }
   #events .txt { color: var(--muted); font-family: var(--mono); }
   .note { color: var(--muted); font-size: 11px; margin-top: 8px; flex-shrink: 0; }
+  #cap-tray { position: fixed; left: 22px; bottom: 22px; z-index: 30;
+    display: flex; flex-direction: column; gap: 10px; max-width: min(420px, calc(100vw - 44px));
+    pointer-events: none; }
+  .cap-card { pointer-events: auto; background: rgba(22, 27, 34, .97);
+    border: 1px solid #7d5913; border-left: 3px solid var(--warn); border-radius: 10px;
+    padding: 12px 14px; box-shadow: 0 12px 32px rgba(0, 0, 0, .55);
+    backdrop-filter: blur(8px); animation: cap-in .18s ease-out; }
+  .cap-card.info { border-color: #264f78; border-left-color: var(--accent); }
+  @keyframes cap-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+  .cap-head { display: flex; align-items: flex-start; gap: 8px; }
+  .cap-badge { font: 10px/1.3 var(--mono); text-transform: uppercase; letter-spacing: .04em;
+    border-radius: 4px; padding: 1px 6px; color: var(--warn); border: 1px solid #7d5913;
+    background: rgba(210, 153, 34, .12); white-space: nowrap; flex-shrink: 0; }
+  .cap-card.info .cap-badge { color: var(--accent); border-color: #264f78; background: rgba(79, 156, 249, .12); }
+  .cap-title { font-weight: 600; font-size: 13px; flex: 1; min-width: 0; }
+  .cap-x { background: transparent; border: 0; color: var(--muted); cursor: pointer;
+    font-size: 16px; line-height: 1; padding: 0 2px; }
+  .cap-x:hover { color: var(--text); }
+  .cap-msg { color: var(--text); font-size: 12px; margin: 6px 0 6px; line-height: 1.45; }
+  .cap-req { font: 11px/1.35 var(--mono); color: var(--muted); background: rgba(13, 17, 23, .7);
+    border: 1px solid var(--line); border-radius: 6px; padding: 4px 7px;
+    overflow-wrap: anywhere; margin-bottom: 10px; }
+  .cap-actions { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+  .cap-btn { background: var(--bg); color: var(--text); border: 1px solid var(--line);
+    border-radius: 7px; padding: 5px 10px; cursor: pointer; font-size: 12px; font-weight: 500; }
+  .cap-btn:hover:not(:disabled) { border-color: var(--accent); }
+  .cap-btn.primary { background: rgba(79, 156, 249, .18); border-color: var(--accent); color: #cde3ff; }
+  .cap-btn.primary:hover:not(:disabled) { background: rgba(79, 156, 249, .28); }
+  .cap-btn:disabled { opacity: .5; cursor: not-allowed; }
+  .cap-status { font: 11px/1.3 var(--mono); margin-top: 7px; color: var(--muted); }
+  .cap-status.ok { color: var(--ok); }
+  .cap-status.bad { color: var(--bad); }
   body.watching { height: 100vh; overflow: hidden; }
   body.watching header { display: none; }
   @media (max-width: 820px) {
@@ -176,6 +208,7 @@ pub const PAGE: &str = r##"<!doctype html>
       <div class="note">Click: tap · Drag: swipe/fling · Hold: long-press · Wheel: scroll · Alt+drag / Ctrl+wheel: pinch · Type / Ctrl+V: text. Verify sessions stay read-only.</div>
     </aside>
   </div>
+  <div id="cap-tray" aria-live="polite"></div>
 </section>
 <script>
 "use strict";
@@ -183,11 +216,12 @@ const token = new URLSearchParams(location.search).get("t") || "";
 const auth = (path) => path + (path.includes("?") ? "&" : "?") + "t=" + encodeURIComponent(token);
 const $ = (id) => document.getElementById(id);
 const grid = $("grid"), detail = $("detail"), statusPill = $("status");
-const frame = $("frame"), frameCtx = frame.getContext("2d"), screenWrap = $("screenwrap"), gestureSvg = $("gesture-svg"), overlay = $("overlay"), eventsList = $("events");
+const frame = $("frame"), frameCtx = frame.getContext("2d"), screenWrap = $("screenwrap"), gestureSvg = $("gesture-svg"), overlay = $("overlay"), eventsList = $("events"), capTray = $("cap-tray");
 const btnBack = $("btn-back"), btnHome = $("btn-home"), btnRecents = $("btn-recents"), btnRotate = $("btn-rotate");
 const btnVolDown = $("btn-vol-down"), btnVolUp = $("btn-vol-up"), btnPower = $("btn-power"), btnPinch = $("btn-pinch"), btnShot = $("btn-shot");
 const verifyBanner = $("verify-banner"), dinput = $("dinput");
 const SVG_NS = "http://www.w3.org/2000/svg";
+const capabilityCards = new Map();
 
 let sessions = [];
 let current = null;
@@ -608,6 +642,10 @@ function ensureWs() {
       applyToolbarUi();
       return;
     }
+    if (msg.t === "capability") {
+      handleCapabilityReply(msg);
+      return;
+    }
     if (msg.ok && msg.t === "rotate") {
       cancelActivePointers();
       if (msg.width > 0 && msg.height > 0) {
@@ -956,6 +994,7 @@ function openSession(s) {
   pinchMode = false;
   overlay.textContent = "";
   gestureSvg.textContent = "";
+  clearCapabilityPrompts();
   sessionEnded = false;
   sessionEverConnected = false;
   disconnectedPolls = 0;
@@ -1003,6 +1042,7 @@ function closeSession() {
   clearFrameCanvas();
   overlay.textContent = "";
   gestureSvg.textContent = "";
+  clearCapabilityPrompts();
   current = null;
   currentGuestGen = null;
   pendingRotate = null;
@@ -1185,7 +1225,201 @@ function updatePointerVisuals(entry) {
   }
 }
 
+function clearCapabilityPrompts() {
+  capabilityCards.clear();
+  if (capTray) capTray.textContent = "";
+}
+
+function copyTextToClipboard(text, button, fallbackLabel) {
+  const done = () => {
+    const prev = button.textContent;
+    button.textContent = "Copied";
+    setTimeout(() => { button.textContent = fallbackLabel || prev; }, 1400);
+  };
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(done).catch(() => {
+      try {
+        const ta = document.createElement("textarea");
+        ta.value = text;
+        ta.style.position = "fixed";
+        ta.style.opacity = "0";
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand("copy");
+        ta.remove();
+        done();
+      } catch (_) {}
+    });
+  } else {
+    try {
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      ta.style.position = "fixed";
+      ta.style.opacity = "0";
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      ta.remove();
+      done();
+    } catch (_) {}
+  }
+}
+
+function dismissCapabilityPrompt(seq) {
+  const rec = capabilityCards.get(seq);
+  if (!rec) return;
+  capabilityCards.delete(seq);
+  rec.card.remove();
+}
+
+function showCapabilityPrompt(prompt) {
+  if (!capTray || !prompt || typeof prompt.seq !== "number") return;
+  if (capabilityCards.has(prompt.seq)) return;
+  while (capabilityCards.size >= 3) {
+    const oldest = capabilityCards.keys().next().value;
+    if (oldest === undefined) break;
+    dismissCapabilityPrompt(oldest);
+  }
+  const isInfo = prompt.trigger === "intent_captured";
+  const card = el("div", "cap-card" + (isInfo ? " info" : ""));
+  const head = el("div", "cap-head");
+  const badgeLabel = isInfo ? "external intent" : "capability off";
+  head.appendChild(el("span", "cap-badge", badgeLabel));
+  head.appendChild(el("div", "cap-title", prompt.title || "Capability needed"));
+  const closeBtn = el("button", "cap-x", "×");
+  closeBtn.type = "button";
+  closeBtn.title = "Dismiss";
+  closeBtn.addEventListener("click", () => dismissCapabilityPrompt(prompt.seq));
+  head.appendChild(closeBtn);
+  card.appendChild(head);
+
+  if (prompt.message) {
+    card.appendChild(el("div", "cap-msg", prompt.message));
+  }
+  if (prompt.request) {
+    card.appendChild(el("div", "cap-req", prompt.request));
+  }
+
+  const actions = el("div", "cap-actions");
+  const statusEl = el("div", "cap-status");
+  statusEl.hidden = true;
+  const buttons = [];
+  const opts = Array.isArray(prompt.options) ? prompt.options : [];
+  let primaryUsed = false;
+
+  for (const opt of opts) {
+    if (!opt || typeof opt !== "object") continue;
+    if (opt.kind === "hot_attach") {
+      const btn = el("button", "cap-btn" + (!primaryUsed ? " primary" : ""), opt.label || "Enable");
+      primaryUsed = true;
+      btn.type = "button";
+      if (current && current.watch_only) {
+        btn.disabled = true;
+        btn.title = "watch-only: verify run";
+      }
+      btn.addEventListener("click", () => {
+        if (current && current.watch_only) return;
+        for (const b of buttons) b.disabled = true;
+        statusEl.hidden = false;
+        statusEl.className = "cap-status";
+        statusEl.textContent = "Enabling…";
+        const ok = sendInput({
+          t: "capability",
+          prompt_seq: prompt.seq,
+          option_id: opt.id || null,
+          modules: Array.isArray(opt.modules) ? opt.modules : [],
+          control: opt.control || null,
+          replay_intent: typeof opt.replay_intent === "number" ? opt.replay_intent : null,
+        });
+        if (!ok) {
+          for (const b of buttons) b.disabled = !!(current && current.watch_only);
+          statusEl.className = "cap-status bad";
+          statusEl.textContent = "Could not send request (session not interactive).";
+        }
+      });
+      buttons.push(btn);
+      actions.appendChild(btn);
+    } else if (opt.kind === "relaunch_required") {
+      const specs = Array.isArray(opt.modules)
+        ? opt.modules.map((m) => (m.id || "") + ":" + (m.profile || "real")).filter(Boolean).join(",")
+        : "";
+      const flag = specs ? "--services " + specs : "";
+      const btn = el("button", "cap-btn", opt.label || "Copy launch flag");
+      btn.type = "button";
+      btn.title = flag || "Requires relaunching with this module enabled";
+      btn.addEventListener("click", () => {
+        if (flag) copyTextToClipboard(flag, btn, opt.label || "Copy launch flag");
+      });
+      actions.appendChild(btn);
+    } else if (opt.kind === "info_only" && opt.url) {
+      const btn = el("button", "cap-btn primary", opt.label || "Copy URL");
+      btn.type = "button";
+      btn.title = opt.url;
+      btn.addEventListener("click", () => {
+        copyTextToClipboard(opt.url, btn, opt.label || "Copy URL");
+      });
+      actions.appendChild(btn);
+    }
+  }
+
+  const dismissBtn = el("button", "cap-btn", "Dismiss");
+  dismissBtn.type = "button";
+  dismissBtn.addEventListener("click", () => dismissCapabilityPrompt(prompt.seq));
+  actions.appendChild(dismissBtn);
+
+  card.appendChild(actions);
+  card.appendChild(statusEl);
+  capTray.appendChild(card);
+  capabilityCards.set(prompt.seq, { card, buttons, statusEl, prompt });
+}
+
+function handleCapabilityReply(msg) {
+  const seq = typeof msg.prompt_seq === "number" ? msg.prompt_seq : null;
+  const rec = seq !== null ? capabilityCards.get(seq) : null;
+  if (msg.ok) {
+    addEvent({
+      source: "panel",
+      cmd: "capability",
+      status: "ok",
+      text: rec && rec.prompt ? rec.prompt.title : (msg.option_id || "enabled"),
+      ts_ms: Date.now(),
+    }, "capability");
+    if (rec) {
+      rec.statusEl.hidden = false;
+      rec.statusEl.className = "cap-status ok";
+      rec.statusEl.textContent = "Enabled.";
+      setTimeout(() => dismissCapabilityPrompt(seq), 750);
+    }
+  } else {
+    addEvent({
+      source: "panel",
+      cmd: "capability",
+      status: msg.code || "error",
+      note: msg.error || "capability action failed",
+      ts_ms: Date.now(),
+    }, "capability");
+    if (rec) {
+      for (const b of rec.buttons) b.disabled = !!(current && current.watch_only);
+      rec.statusEl.hidden = false;
+      rec.statusEl.className = "cap-status bad";
+      rec.statusEl.textContent = msg.error || msg.code || "Failed to enable capability.";
+    }
+  }
+}
+
 function onEvent(event, kind) {
+  if (event.kind === "capability_prompt" && event.prompt) {
+    showCapabilityPrompt(event.prompt);
+    addEvent({
+      source: "acos",
+      cmd: "capability",
+      status: event.prompt.trigger || "prompt",
+      text: event.prompt.title || "",
+      note: event.prompt.request || "",
+      ts_ms: event.prompt.utc_ms || Date.now(),
+    }, "capability_prompt");
+    return;
+  }
   if (kind === "activity") {
     $("dactivity").textContent = event.activity || "-";
     addEvent(event, kind);

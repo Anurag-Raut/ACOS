@@ -1509,6 +1509,29 @@ impl PmsState {
         Ok(uid)
     }
 
+    /// Remove a non-primary installed package (used when hot-detaching a
+    /// system-app module such as `system.settings`). Returns `true` if a
+    /// package was removed.
+    pub fn remove_package(&mut self, package: &str) -> bool {
+        let Some(idx) = self
+            .packages
+            .iter()
+            .position(|p| p.package.package_name == package)
+        else {
+            return false;
+        };
+        if idx == self.primary {
+            return false;
+        }
+        self.packages.remove(idx);
+        if idx < self.primary {
+            self.primary -= 1;
+        }
+        self.uid_packages.retain(|(_, pkg)| pkg != package);
+        self.publish_uid_grants();
+        true
+    }
+
     /// The next free uid for a new package.
     fn next_uid(&self) -> i32 {
         let mut uid = FIXTURE_UID;
@@ -1943,6 +1966,11 @@ impl PmsService {
             guest_source_dir,
             guest_native_lib_dir,
         )
+    }
+
+    /// Remove a non-primary installed package from PMS.
+    pub fn remove_package(&mut self, package: &str) -> bool {
+        self.state.lock().unwrap().remove_package(package)
     }
 
     /// The installed record for `package`. `None`/`""` is the package under

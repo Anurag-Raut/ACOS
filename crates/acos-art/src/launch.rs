@@ -987,6 +987,82 @@ struct SecondaryPool {
     /// is a start into a process that already runs, not a package to start.
     primary_package: String,
     started: Instant,
+    /// Session run root for hot-staged secondary system APKs (`system.settings`).
+    run_root: PathBuf,
+    /// Session output dir for per-process secondary logs/dirs.
+    out_dir: PathBuf,
+    /// Next secondary process tag to allocate on hot-attach.
+    next_tag: u32,
+}
+
+fn build_secondary_spec(
+    tag: u32,
+    extra: &ExtraApk,
+    run_root_base: &Path,
+    out_base: &Path,
+) -> SecondarySpec {
+    let facts = match extra.uid {
+        Some(uid) => acos_services::pms::PmsState::from_apk_with_uid(&extra.staged, uid).ok(),
+        None => acos_services::pms::PmsState::from_apk(&extra.staged).ok(),
+    };
+    let launcher = apk_launcher_activity(&extra.staged).ok();
+    let labels = acos_services::pms::manifest_labels(&extra.staged).ok();
+    let run_root = run_root_base.join("secondary").join(format!("tag-{tag}"));
+    let out_dir = out_base.join(format!("process-{tag}"));
+    let _ = fs::create_dir_all(&out_dir);
+    SecondarySpec {
+        tag,
+        package: extra.package.clone(),
+        staged: extra.staged.clone(),
+        guest_apk: extra.guest_path.clone(),
+        lib_root: extra.lib_root.clone(),
+        guest_lib_root: extra.guest_lib_root.clone(),
+        guest_lib_dir: extra.guest_lib_dir.clone(),
+        uid: extra.uid,
+        kind: SpawnKind::Activity,
+        service: String::new(),
+        activity: launcher
+            .as_ref()
+            .map(|l| l.component.clone())
+            .unwrap_or_default(),
+        app_class: facts
+            .as_ref()
+            .map(|state| state.app().class_name.clone())
+            .filter(|name| !name.is_empty())
+            .unwrap_or_default(),
+        theme: facts.as_ref().map_or(0, |state| state.app().theme),
+        app_flags: facts
+            .as_ref()
+            .map(|state| ((state.app().flags & !(1 << 29)) | (1 << 23)) as i64)
+            .unwrap_or(-1),
+        config_changes: launcher
+            .as_ref()
+            .map_or(0, |l| l.config_changes.max(0) as u32),
+        app_label: labels
+            .as_ref()
+            .map(|l| {
+                (
+                    l.application.res.max(0) as u32,
+                    l.application.literal.clone().unwrap_or_default(),
+                )
+            })
+            .unwrap_or((0, String::new())),
+        activity_label: launcher
+            .as_ref()
+            .map(|l| {
+                (
+                    l.label.res.max(0) as u32,
+                    l.label.literal.clone().unwrap_or_default(),
+                )
+            })
+            .unwrap_or((0, String::new())),
+        activity_target: launcher
+            .as_ref()
+            .and_then(|l| l.target.clone())
+            .unwrap_or_default(),
+        out_dir,
+        run_root,
+    }
 }
 
 impl SecondaryPool {
@@ -995,7 +1071,10 @@ impl SecondaryPool {
         shared: SecondaryShared,
         atms: Arc<std::sync::Mutex<acos_services::atms::AtmsState>>,
         primary_package: String,
+        run_root: PathBuf,
+        out_dir: PathBuf,
     ) -> Self {
+        let next_tag = specs.iter().map(|s| s.tag).max().unwrap_or(0) + 1;
         Self {
             specs,
             shared,
@@ -1007,6 +1086,91 @@ impl SecondaryPool {
             atms,
             primary_package,
             started: Instant::now(),
+            run_root,
+            out_dir,
+            next_tag,
+        }
+    }
+
+    /// Whether a package already has a registered secondary spec.
+    fn has_package(&self, package: &str) -> bool {
+        self.specs.iter().any(|s| s.package == package)
+    }
+
+    /// Stage a hot-attached system APK (e.g. `com.android.settings`) into the
+    /// session's private run tree so it can be installed into PMS/ATMS and
+    /// lazily spawned by [`Self::spawn`] without restarting the primary app.
+    fn stage_hot_apk(&self, apk: &Path) -> Result<ExtraApk> {
+        let name = apk
+            .file_name()
+            .map(|f| f.to_string_lossy().to_string())
+            .filter(|n| !n.is_empty())
+            .ok_or_else(|| {
+                Error::Layout(format!(
+                    "hot system APK {}: path has no file name",
+                    apk.display()
+                ))
+            })?;
+        let extra_package = crate::app::apk_package(apk)?;
+        let app_dir = self.run_root.join("app");
+        fs::create_dir_all(&app_dir)?;
+        let staged = app_dir.join(&name);
+        crate::app::stage_apk(apk, &staged)?;
+        crate::app::ensure_apk_mountpoint(&self.shared.root.data, &name, apk)?;
+        let guest_lib_root = format!("/data/app-lib-extra/{extra_package}");
+        let lib_root = self.run_root.join("app-lib-extra").join(&extra_package);
+        fs::create_dir_all(&lib_root)?;
+        Ok(ExtraApk {
+            staged,
+            guest_path: format!("/data/app/{name}"),
+            guest_lib_dir: format!("{guest_lib_root}/{}", acos_services::native_libs::HOST_ABI),
+            guest_lib_root,
+            lib_root,
+            package: extra_package,
+            uid: None,
+        })
+    }
+
+    /// Register a staged hot system APK into `SecondaryPool` so the next
+    /// matching intent lazily spawns it.
+    fn register_hot_extra(&mut self, extra: ExtraApk) {
+        if self.has_package(&extra.package) {
+            return;
+        }
+        let tag = self.next_tag;
+        self.next_tag += 1;
+        let spec = build_secondary_spec(tag, &extra, &self.run_root, &self.out_dir);
+        self.shared
+            .session_apks
+            .push((extra.staged.clone(), extra.guest_path.clone()));
+        self.specs.push(spec);
+    }
+
+    /// Tear down a hot-detached system package: kill any running secondary
+    /// process and remove its spec from the pool.
+    fn remove_package(&mut self, package: &str) {
+        if let Some(tag) = self.running_tag(package) {
+            if let Some(mut guest) = self.guests.remove(&tag) {
+                guest.cgroup.kill();
+                let _ = guest.child.kill();
+                let _ = guest.child.wait();
+                self.atms
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .process_died(tag);
+            }
+        }
+        let removed_paths: Vec<String> = self
+            .specs
+            .iter()
+            .filter(|s| s.package == package)
+            .map(|s| s.guest_apk.clone())
+            .collect();
+        self.specs.retain(|s| s.package != package);
+        if !removed_paths.is_empty() {
+            self.shared
+                .session_apks
+                .retain(|(_, guest_path)| !removed_paths.contains(guest_path));
         }
     }
 
@@ -1984,6 +2148,7 @@ pub(crate) fn launch_session(
     // own poll tick to notice the frame it is binding.
     let settle_change = Arc::new(ProbeWake::default());
     let settle_change_for_peer = Arc::clone(&settle_change);
+    let prompts_for_peer = Arc::clone(&live.prompts);
     let peer_thread = std::thread::spawn(move || {
         let summary = (|| -> std::io::Result<PeerSummary> {
             // The real ServiceHost, with its package manager pointed at the APK
@@ -2011,13 +2176,9 @@ pub(crate) fn launch_session(
                     let reply = service_request(peer, &mut peer_registry, &request);
                     let guest_commands = peer.host_mut().drain_guest_commands();
                     let debug_reply = reply.to_string();
-                    peer_control.reply(
-                        id,
-                        ServiceControlReply {
-                            reply,
-                            guest_commands,
-                        },
-                    );
+                    // Send spawn requests before waking the launcher so a
+                    // `replay_intent` or `launch_home` caller can drain them
+                    // immediately without racing the peer thread.
                     for spawn in peer.take_spawn_requests() {
                         eprintln!(
                             "acos-binder-peer: control op: {} needs a process for {} ({})",
@@ -2025,6 +2186,13 @@ pub(crate) fn launch_session(
                         );
                         let _ = pump_spawns.send(spawn);
                     }
+                    peer_control.reply(
+                        id,
+                        ServiceControlReply {
+                            reply,
+                            guest_commands,
+                        },
+                    );
                     // A live `ctl` op can queue `system -> app` deliveries (an
                     // SMS, a call-state event, a location fix, an auth result).
                     // No binder transaction follows to flush them, so do it here
@@ -2053,7 +2221,33 @@ pub(crate) fn launch_session(
                 }
                 frames
             };
-            let notify_settle = || settle_change_for_peer.notify();
+            let last_live_prompt_seq = std::sync::atomic::AtomicU64::new(0);
+            let notify_settle = || {
+                settle_change_for_peer.notify();
+                if let Some(view) = LIVE_VIEW.get() {
+                    if view.has_subscribers() {
+                        let last = last_live_prompt_seq.load(std::sync::atomic::Ordering::Relaxed);
+                        let new_prompts = {
+                            let guard = prompts_for_peer
+                                .lock()
+                                .unwrap_or_else(|e| e.into_inner());
+                            if guard.cursor() > last {
+                                guard.since(last)
+                            } else {
+                                Vec::new()
+                            }
+                        };
+                        for prompt in new_prompts {
+                            last_live_prompt_seq
+                                .store(prompt.seq, std::sync::atomic::Ordering::Relaxed);
+                            view.push_event(serde_json::json!({
+                                "kind": "capability_prompt",
+                                "prompt": prompt.to_json(),
+                            }));
+                        }
+                    }
+                }
+            };
             let served = acos_binder_peer::serve::serve_with_control(
                 &mut peer,
                 listener,
@@ -2364,74 +2558,7 @@ pub(crate) fn launch_session(
     let mut secondary_specs: Vec<SecondarySpec> = Vec::new();
     for (index, extra) in extras.iter().enumerate() {
         let tag = (index as u32) + 1;
-        // UID: this package's **own** uid (the package manager allocated it at
-        // install time), so every fact built from its APK carries the uid the
-        // process runs as — never the fixture uid of the launched package.
-        let facts = match extra.uid {
-            Some(uid) => acos_services::pms::PmsState::from_apk_with_uid(&extra.staged, uid).ok(),
-            None => acos_services::pms::PmsState::from_apk(&extra.staged).ok(),
-        };
-        let launcher = apk_launcher_activity(&extra.staged).ok();
-        let labels = acos_services::pms::manifest_labels(&extra.staged).ok();
-        let run_root = run.path().join("secondary").join(format!("tag-{tag}"));
-        let out_dir = out.join(format!("process-{tag}"));
-        let _ = fs::create_dir_all(&out_dir);
-        secondary_specs.push(SecondarySpec {
-            tag,
-            package: extra.package.clone(),
-            staged: extra.staged.clone(),
-            guest_apk: extra.guest_path.clone(),
-            lib_root: extra.lib_root.clone(),
-            guest_lib_root: extra.guest_lib_root.clone(),
-            guest_lib_dir: extra.guest_lib_dir.clone(),
-            uid: extra.uid,
-            // A spec starts as an activity process (MPROC4's lazy `startActivity`
-            // spawn); a request for a service component switches it to
-            // `SpawnKind::Service` at spawn time.
-            kind: SpawnKind::Activity,
-            service: String::new(),
-            activity: launcher
-                .as_ref()
-                .map(|l| l.component.clone())
-                .unwrap_or_default(),
-            app_class: facts
-                .as_ref()
-                .map(|state| state.app().class_name.clone())
-                .filter(|name| !name.is_empty())
-                .unwrap_or_default(),
-            theme: facts.as_ref().map_or(0, |state| state.app().theme),
-            app_flags: facts
-                .as_ref()
-                .map(|state| ((state.app().flags & !(1 << 29)) | (1 << 23)) as i64)
-                .unwrap_or(-1),
-            config_changes: launcher
-                .as_ref()
-                .map_or(0, |l| l.config_changes.max(0) as u32),
-            app_label: labels
-                .as_ref()
-                .map(|l| {
-                    (
-                        l.application.res.max(0) as u32,
-                        l.application.literal.clone().unwrap_or_default(),
-                    )
-                })
-                .unwrap_or((0, String::new())),
-            activity_label: launcher
-                .as_ref()
-                .map(|l| {
-                    (
-                        l.label.res.max(0) as u32,
-                        l.label.literal.clone().unwrap_or_default(),
-                    )
-                })
-                .unwrap_or((0, String::new())),
-            activity_target: launcher
-                .as_ref()
-                .and_then(|l| l.target.clone())
-                .unwrap_or_default(),
-            out_dir,
-            run_root,
-        });
+        secondary_specs.push(build_secondary_spec(tag, extra, run.path(), &out));
     }
     let keystore_env = resolve_keystore_env(&module_specs, inherited_keystore.as_deref());
     let secondary_shared = SecondaryShared {
@@ -2461,13 +2588,14 @@ pub(crate) fn launch_session(
             .collect(),
         keystore_env: keystore_env.clone(),
     };
-    let mut secondary_pool =
-        SecondaryPool::new(
-            secondary_specs,
-            secondary_shared,
-            Arc::clone(&live.atms),
-            package.clone(),
-        );
+    let mut secondary_pool = SecondaryPool::new(
+        secondary_specs,
+        secondary_shared,
+        Arc::clone(&live.atms),
+        package.clone(),
+        run.path().to_path_buf(),
+        out.clone(),
+    );
     if !interactive && !secondary_pool.specs.is_empty() {
         eprintln!(
             "acos-art: launch: {} secondary package(s) installed; a non-interactive session has \
@@ -9617,12 +9745,74 @@ fn interactive_serve(
             }
             "services" => {
                 // ADR-0029 item 4 + 2026-11-18 amendment (option A): list/status/
-                // attach/detach/ctl on the live session. The peer thread owns the
-                // host and returns both the module's reply and any typed guest
-                // commands queued onto `ServiceHost`'s outbox. The launcher writes
-                // each command to the owning guest process, waits for a fresh
-                // probe sample, and returns the settled UI tree in the same reply.
-                let reply = match control.submit(request.clone(), Duration::from_secs(10)) {
+                // attach/detach/ctl/replay_intent on the live session. The peer
+                // thread owns the host and returns both the module's reply and
+                // any typed guest commands queued onto `ServiceHost`'s outbox.
+                let svc_op = request
+                    .get("op")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string();
+                let svc_id = request
+                    .get("id")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string();
+                let svc_profile = request
+                    .get("profile")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("real");
+                let mut forward_request = request.clone();
+                let mut hot_staged_extra: Option<ExtraApk> = None;
+                if svc_op == "attach"
+                    && svc_id == acos_services::modules::settings::MODULE_ID
+                    && svc_profile != "off"
+                    && !secondary.has_package(acos_services::modules::settings::SETTINGS_PACKAGE)
+                {
+                    let cfg = match request.get("config") {
+                        None => Ok(acos_services::module::ModuleConfig::default()),
+                        Some(value) => {
+                            acos_services::module::ModuleConfig::from_json("<live>", value)
+                        }
+                    };
+                    if let Ok(config) = cfg {
+                        let apk_path = acos_services::modules::settings::settings_apk(&config);
+                        if apk_path.is_file() {
+                            match secondary.stage_hot_apk(&apk_path) {
+                                Ok(extra) => {
+                                    if let Some(obj) = forward_request.as_object_mut() {
+                                        obj.insert(
+                                            "_hot_extra_apk".into(),
+                                            serde_json::json!({
+                                                "staged": extra.staged.to_string_lossy(),
+                                                "guest_path": extra.guest_path,
+                                                "guest_lib_dir": extra.guest_lib_dir,
+                                                "package": extra.package,
+                                            }),
+                                        );
+                                    }
+                                    hot_staged_extra = Some(extra);
+                                }
+                                Err(err) => {
+                                    let reply = serde_json::json!({
+                                        "ok": false,
+                                        "cmd": "services",
+                                        "op": "attach",
+                                        "code": "INTERNAL",
+                                        "error": format!(
+                                            "hot-staging system.settings APK failed: {err}"
+                                        ),
+                                    });
+                                    protocol_write(&reply);
+                                    evidence.push(reply);
+                                    continue;
+                                }
+                            }
+                        }
+                    }
+                }
+                let replay_g0 = (svc_op == "replay_intent").then(|| latest_generation(live));
+                let reply = match control.submit(forward_request, Duration::from_secs(10)) {
                     Some(ServiceControlReply {
                         mut reply,
                         guest_commands,
@@ -9631,6 +9821,50 @@ fn interactive_serve(
                             .get("ok")
                             .and_then(|v| v.as_bool())
                             .unwrap_or(false);
+                        let hot_uid = reply
+                            .as_object_mut()
+                            .and_then(|obj| obj.remove("_hot_extra_uid"))
+                            .and_then(|v| v.as_i64())
+                            .map(|u| u as i32);
+                        if reply_ok {
+                            if let Some(mut extra) = hot_staged_extra {
+                                extra.uid = hot_uid;
+                                secondary.register_hot_extra(extra);
+                            }
+                            if svc_op == "detach"
+                                && svc_id == acos_services::modules::settings::MODULE_ID
+                            {
+                                secondary.remove_package(
+                                    acos_services::modules::settings::SETTINGS_PACKAGE,
+                                );
+                            }
+                            if svc_op == "replay_intent" {
+                                let g0 = replay_g0.unwrap_or(0);
+                                drain_pending_spawns(
+                                    Some((&pending_spawns, secondary)),
+                                    probe_state,
+                                    &live.compositor,
+                                );
+                                let deadline =
+                                    Instant::now() + frame_wait.min(Duration::from_secs(5));
+                                let mut settled = false;
+                                while Instant::now() < deadline {
+                                    drain_pending_spawns(
+                                        Some((&pending_spawns, secondary)),
+                                        probe_state,
+                                        &live.compositor,
+                                    );
+                                    if latest_generation(live) > g0 {
+                                        settled = true;
+                                        break;
+                                    }
+                                    std::thread::sleep(Duration::from_millis(15));
+                                }
+                                if let Some(obj) = reply.as_object_mut() {
+                                    obj.insert("settled".into(), serde_json::json!(settled));
+                                }
+                            }
+                        }
                         if reply_ok && !guest_commands.is_empty() {
                             let mut dispatch_err: Option<serde_json::Value> = None;
                             for command in &guest_commands {
@@ -9882,6 +10116,11 @@ fn interactive_serve(
                 let publish_epoch_ms = host_ms();
                 let p0 = baseline_probe.as_ref().map(|p| p.seq).unwrap_or(0);
                 let g0 = latest_generation(live);
+                let prompt_cursor = live
+                    .prompts
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .cursor();
                 // W59: the guest's ack is the end of the host-visible input
                 // phase; the looper lines the guest printed in between are the
                 // stages. Both are stamped on the same monotonic base.
@@ -10364,6 +10603,17 @@ fn interactive_serve(
                             settle_timing.reason.as_deref().unwrap_or("timeout"),
                         )),
                     );
+                    let new_prompts: Vec<serde_json::Value> = live
+                        .prompts
+                        .lock()
+                        .unwrap_or_else(|e| e.into_inner())
+                        .since(prompt_cursor)
+                        .into_iter()
+                        .map(|p| p.to_json())
+                        .collect();
+                    if !new_prompts.is_empty() {
+                        map.insert("capability_prompts".into(), serde_json::json!(new_prompts));
+                    }
                     protocol_write(&reply);
                     evidence.push(reply);
                     continue;
@@ -10384,7 +10634,7 @@ fn interactive_serve(
                         // tree reply, P9) so the observation is ordered after
                         // the previous one; no buffer is claimed.
                         captures += 1;
-                        let reply = serde_json::json!({
+                        let mut reply = serde_json::json!({
                             "ok": true, "cmd": cmd,
                             "frame_seq": captures,
                             "pixels": false,
@@ -10408,6 +10658,22 @@ fn interactive_serve(
                             },
                             "settle": settle_timing.to_json(true, ack_ms),
                         });
+                        let new_prompts: Vec<serde_json::Value> = live
+                            .prompts
+                            .lock()
+                            .unwrap_or_else(|e| e.into_inner())
+                            .since(prompt_cursor)
+                            .into_iter()
+                            .map(|p| p.to_json())
+                            .collect();
+                        if !new_prompts.is_empty() {
+                            if let Some(obj) = reply.as_object_mut() {
+                                obj.insert(
+                                    "capability_prompts".into(),
+                                    serde_json::json!(new_prompts),
+                                );
+                            }
+                        }
                         protocol_write(&reply);
                         evidence.push(serde_json::json!({
                             "cmd": cmd, "ok": true, "window_gone": true,
@@ -10469,6 +10735,17 @@ fn interactive_serve(
                     }),
                 );
                 map.insert("settle".into(), settle_timing.to_json(true, ack_ms));
+                let new_prompts: Vec<serde_json::Value> = live
+                    .prompts
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .since(prompt_cursor)
+                    .into_iter()
+                    .map(|p| p.to_json())
+                    .collect();
+                if !new_prompts.is_empty() {
+                    map.insert("capability_prompts".into(), serde_json::json!(new_prompts));
+                }
                 protocol_write(&reply);
                 evidence.push(serde_json::json!({
                     "cmd": cmd, "ok": true, "frame_seq": capture.seq,
@@ -11195,13 +11472,30 @@ fn service_request(
 ) -> serde_json::Value {
     let op = request.get("op").and_then(|v| v.as_str()).unwrap_or("");
     let result = match op {
-        "list" | "status" => Ok(serde_json::json!({
-            "attached": modules.attached().iter().map(|(id, profile)| serde_json::json!({
-                "id": id,
-                "profile": profile.as_str(),
-            })).collect::<Vec<_>>(),
-            "modules": modules.verdict_modules(),
-        })),
+        "list" | "status" => {
+            let mut body = serde_json::json!({
+                "attached": modules.attached().iter().map(|(id, profile)| serde_json::json!({
+                    "id": id,
+                    "profile": profile.as_str(),
+                })).collect::<Vec<_>>(),
+                "modules": modules.verdict_modules(),
+            });
+            if let Some(prompts_arc) = peer.host_mut().capability_prompts() {
+                let prompts: Vec<serde_json::Value> = prompts_arc
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .recent(16)
+                    .into_iter()
+                    .map(|p| p.to_json())
+                    .collect();
+                if !prompts.is_empty() {
+                    if let Some(obj) = body.as_object_mut() {
+                        obj.insert("capability_prompts".into(), serde_json::json!(prompts));
+                    }
+                }
+            }
+            Ok(body)
+        }
         "attach" => {
             let Some(id) = request.get("id").and_then(|v| v.as_str()) else {
                 return serde_json::json!({
@@ -11237,13 +11531,60 @@ fn service_request(
             };
             modules
                 .attach_live(peer.host_mut(), id, profile, &config)
-                .map(|()| serde_json::json!({
-                    "attached": modules.attached().iter().map(|(id, profile)| serde_json::json!({
-                        "id": id,
-                        "profile": profile.as_str(),
-                    })).collect::<Vec<_>>(),
-                    "modules": modules.verdict_modules(),
-                }))
+                .and_then(|()| {
+                    let mut hot_uid: Option<i32> = None;
+                    if let Some(extra) = request.get("_hot_extra_apk").and_then(|v| v.as_object()) {
+                        let staged = extra.get("staged").and_then(|v| v.as_str()).unwrap_or("");
+                        let guest_path = extra.get("guest_path").and_then(|v| v.as_str());
+                        let guest_lib_dir = extra.get("guest_lib_dir").and_then(|v| v.as_str());
+                        if !staged.is_empty() {
+                            let staged_path = Path::new(staged);
+                            let uid = match peer.host_mut().install_extra_package_from_apk_as(
+                                staged_path,
+                                guest_path,
+                                guest_lib_dir,
+                            ) {
+                                Ok(uid) => uid,
+                                Err(err) => {
+                                    let _ = modules.detach_live(peer.host_mut(), id);
+                                    return Err(acos_services::ServiceError::Internal(format!(
+                                        "hot install_extra_package_from_apk_as failed: {err}"
+                                    )));
+                                }
+                            };
+                            if let Ok(object) = peer
+                                .host_mut()
+                                .ensure("android.app.IActivityTaskManager")
+                            {
+                                if let Some(atms) = object
+                                    .as_any_mut()
+                                    .and_then(|any| any.downcast_mut::<acos_services::atms::AtmsService>())
+                                {
+                                    if let Err(err) =
+                                        atms.seed_manifest_from_apk_with_uid(staged_path, uid)
+                                    {
+                                        let _ = modules.detach_live(peer.host_mut(), id);
+                                        return Err(acos_services::ServiceError::Internal(format!(
+                                            "hot seed_manifest_from_apk_with_uid failed: {err}"
+                                        )));
+                                    }
+                                }
+                            }
+                            hot_uid = Some(uid);
+                        }
+                    }
+                    let mut body = serde_json::json!({
+                        "attached": modules.attached().iter().map(|(id, profile)| serde_json::json!({
+                            "id": id,
+                            "profile": profile.as_str(),
+                        })).collect::<Vec<_>>(),
+                        "modules": modules.verdict_modules(),
+                    });
+                    if let (Some(uid), Some(obj)) = (hot_uid, body.as_object_mut()) {
+                        obj.insert("_hot_extra_uid".into(), serde_json::json!(uid));
+                    }
+                    Ok(body)
+                })
         }
         "detach" => {
             let Some(id) = request.get("id").and_then(|v| v.as_str()) else {
@@ -11253,6 +11594,10 @@ fn service_request(
                 });
             };
             modules.detach_live(peer.host_mut(), id).map(|()| {
+                if id == acos_services::modules::settings::MODULE_ID {
+                    peer.host_mut()
+                        .remove_extra_package(acos_services::modules::settings::SETTINGS_PACKAGE);
+                }
                 serde_json::json!({
                     "attached": modules.attached().iter().map(|(id, profile)| serde_json::json!({
                         "id": id,
@@ -11261,6 +11606,33 @@ fn service_request(
                     "modules": modules.verdict_modules(),
                 })
             })
+        }
+        "replay_intent" => {
+            let Some(intent_id) = request.get("intent_id").and_then(|v| v.as_u64()) else {
+                return serde_json::json!({
+                    "ok": false, "cmd": "services", "op": "replay_intent", "code": "BAD_REQUEST",
+                    "error": "replay_intent needs an integer `intent_id`",
+                });
+            };
+            match peer.host_mut().replay_saved_intent(intent_id) {
+                Ok(code) if code >= 0 => Ok(serde_json::json!({
+                    "intent_id": intent_id,
+                    "start_result": code,
+                })),
+                Ok(code) => {
+                    return serde_json::json!({
+                        "ok": false,
+                        "cmd": "services",
+                        "op": "replay_intent",
+                        "code": "START_NOT_FOUND",
+                        "start_result": code,
+                        "error": format!(
+                            "replayed intent {intent_id} was not resolved (start_result={code})"
+                        ),
+                    });
+                }
+                Err(error) => Err(error),
+            }
         }
         "launch_home" => match peer.host_mut().launch_home() {
             Ok(code) => Ok(serde_json::json!({ "start_result": code })),
@@ -11315,7 +11687,7 @@ fn service_request(
         other => {
             return serde_json::json!({
                 "ok": false, "cmd": "services", "code": "BAD_REQUEST",
-                "error": format!("unknown op {other:?}; use list, status, attach, detach or ctl"),
+                "error": format!("unknown op {other:?}; use list, status, attach, detach, ctl or replay_intent"),
             })
         }
     };

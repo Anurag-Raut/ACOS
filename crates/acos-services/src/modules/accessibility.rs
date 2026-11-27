@@ -541,6 +541,83 @@ mod tests {
     }
 
     #[test]
+    fn installed_list_is_returned_even_before_any_service_is_enabled() {
+        let mut host = host_with_a11y();
+        let mut registry = ModuleRegistry::standard();
+        registry
+            .attach_session(
+                &mut host,
+                &[ModuleSpec::parse("accessibility:real").expect("spec")],
+            )
+            .expect("attach");
+        let state = a11y_state(&mut host);
+        {
+            let state = state.lock().unwrap();
+            let pms = state.pms.clone().expect("package manager wired");
+            let mut pms = pms.lock().unwrap();
+            let primary = pms.primary_mut();
+            primary.app.package_name = "com.gaten".into();
+            primary.package.package_name = "com.gaten".into();
+            primary.services.push(crate::pms::ServiceInfo {
+                name: "com.gaten.app.GatenAccessibilityService".into(),
+                package_name: "com.gaten".into(),
+                process_name: "com.gaten".into(),
+                permission: "android.permission.BIND_ACCESSIBILITY_SERVICE".into(),
+                exported: true,
+                flags: 0,
+                foreground_service_type: 0,
+                meta_data: Vec::new(),
+            });
+        }
+        let installed_method =
+            acos_aidl::lookup("android.view.accessibility.IAccessibilityManager", 5)
+                .expect("installed row");
+        let enabled_method =
+            acos_aidl::lookup("android.view.accessibility.IAccessibilityManager", 6)
+                .expect("enabled row");
+        let mut service = A11yService::new(Arc::clone(&state));
+        let installed_reply = service
+            .call(
+                "android.view.accessibility.IAccessibilityManager",
+                installed_method,
+                &[crate::value::Value::Int(0)],
+            )
+            .expect("getInstalledAccessibilityServiceList");
+        match &installed_reply.reply[0] {
+            crate::value::Value::List(Some(items)) => assert_eq!(items.len(), 1),
+            other => panic!("expected one installed service, got {other:?}"),
+        }
+        let enabled_reply = service
+            .call(
+                "android.view.accessibility.IAccessibilityManager",
+                enabled_method,
+                &[crate::value::Value::Int(-1), crate::value::Value::Int(0)],
+            )
+            .expect("getEnabledAccessibilityServiceList");
+        match &enabled_reply.reply[0] {
+            crate::value::Value::List(Some(items)) => assert!(items.is_empty()),
+            other => panic!("expected zero enabled services before toggle, got {other:?}"),
+        }
+        // Enable using full class spelling (`pkg/pkg.Class`); enabled list must still match.
+        state
+            .lock()
+            .unwrap()
+            .enable_services(&["com.gaten/com.gaten.app.GatenAccessibilityService".into()])
+            .unwrap();
+        let enabled_reply_after = service
+            .call(
+                "android.view.accessibility.IAccessibilityManager",
+                enabled_method,
+                &[crate::value::Value::Int(-1), crate::value::Value::Int(0)],
+            )
+            .expect("getEnabledAccessibilityServiceList after enable");
+        match &enabled_reply_after.reply[0] {
+            crate::value::Value::List(Some(items)) => assert_eq!(items.len(), 1),
+            other => panic!("expected one enabled service after toggle, got {other:?}"),
+        }
+    }
+
+    #[test]
     fn an_event_reaches_the_record_through_the_transaction_path() {
         let mut host = host_with_a11y();
         let mut registry = ModuleRegistry::standard();

@@ -143,7 +143,7 @@ impl CapturedIntent {
                 let value = match value {
                     Extra::String(text) => serde_json::json!(text),
                     Extra::Int(number) => serde_json::json!(number),
-                    Extra::Short(number) => serde_json::json!(number),
+                    Extra::Long(number) => serde_json::json!(number),
                     Extra::Bool(flag) => serde_json::json!(flag),
                     // MODNOTIF3/MODBLUETOOTH: the extra kinds the modules added
                     // are rendered in the shape the Android API returns them in,
@@ -153,6 +153,13 @@ impl CapturedIntent {
                     Extra::Ints(items) => serde_json::json!(items),
                     Extra::Bytes(bytes) => serde_json::json!(bytes),
                     Extra::ByteArrays(items) => serde_json::json!(items),
+                    Extra::Bundle(nested) => serde_json::json!({
+                        "bundle": nested
+                            .entries
+                            .iter()
+                            .map(|(k, v)| (k.clone(), serde_json::json!(format!("{v:?}"))))
+                            .collect::<serde_json::Map<String, serde_json::Value>>()
+                    }),
                     Extra::Parcelable(parcelable) => {
                         serde_json::json!({"parcelable": format!("{parcelable:?}")})
                     }

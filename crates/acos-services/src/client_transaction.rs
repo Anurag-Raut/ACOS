@@ -139,6 +139,7 @@ pub fn intent(facts: &IntentFacts) -> Result<Parcelable> {
         let value = match extra {
             Extra::String(s) => Value::Str(Some(s.clone())),
             Extra::Int(i) => Value::Int(*i),
+            Extra::Long(l) => Value::Long(*l),
             Extra::Short(i) => Value::Int(i32::from(*i)),
             Extra::Bool(b) => Value::Bool(*b),
             Extra::Strings(items) => {
@@ -153,6 +154,7 @@ pub fn intent(facts: &IntentFacts) -> Result<Parcelable> {
                     .map(|bytes| Value::ByteArray(Some(bytes)))
                     .collect(),
             )),
+            Extra::Bundle(nested) => Value::Bundle(Some(nested.clone())),
             Extra::Parcelable(payload) => Value::Parcelable(payload.clone()),
             Extra::Present => {
                 return Err(ServiceError::UnsupportedParcelable {
