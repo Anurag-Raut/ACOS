@@ -3533,13 +3533,52 @@ impl ArtSession {
                 let absorb_started = Instant::now();
                 self.absorb(&reply)?;
                 timing.absorb_ms = absorb_started.elapsed().as_millis() as u64;
-                if !reply_had_tree && self.settle_mode != "content" {
+                let initial_visual_change = settle_state_changed(&reply).unwrap_or(false);
+                self.last_input_settle = reply.get("settle").cloned();
+                let delivered_record = delivery(&reply, initial_visual_change);
+                self.last_input = Some(delivered_record.clone());
+                let refreshed_via_followup = !reply_had_tree && self.settle_mode != "content";
+                if refreshed_via_followup {
                     let guest_settle = if self.settle_mode == "fast" {
                         "fast"
                     } else {
                         "strict"
                     };
-                    self.request_tree_only(guest_settle)?;
+                    let refresh = if guest_settle == "strict" {
+                        self.request_tree_with("strict", true)
+                    } else {
+                        self.request_tree_only(guest_settle)
+                    };
+                    if let Err(err) = refresh {
+                        let code = match &err {
+                            BackendError::Timeout { .. } => ErrorCode::Timeout,
+                            BackendError::Failed { code, .. }
+                            | BackendError::Error { code, .. }
+                            | BackendError::Protocol { code, .. } => *code,
+                            BackendError::Crash { .. } => ErrorCode::AppCrashed,
+                            BackendError::Unsupported { .. } => ErrorCode::UnsupportedBackend,
+                        };
+                        return Err(BackendError::Protocol {
+                            code,
+                            detail: format!(
+                                "input `{context}` was delivered to the guest, but follow-up tree refresh failed: {err}"
+                            ),
+                            hint: Some(
+                                "Input was already committed in the guest; observe the tree instead of re-sending the input to avoid duplication."
+                                    .to_string(),
+                            ),
+                            details: Some(serde_json::json!({
+                                "delivered": true,
+                                "context": context,
+                                "input_delivery": {
+                                    "delivered": delivered_record.delivered,
+                                    "handled": delivered_record.handled,
+                                    "published": delivered_record.published,
+                                },
+                                "traversal_error": err.to_string(),
+                            })),
+                        });
+                    }
                 }
                 // Compare exactly the pair the executor's `changed_from` will
                 // compare: this action's frame against the frame it was handed
@@ -3552,14 +3591,22 @@ impl ArtSession {
                 // from the pre-action tree (or explicitly fell back without a
                 // change). That verdict wins so a mid-animation frame is never
                 // reported as a state change the tree did not show.
-                self.last_input_settle = reply
-                    .get("settle")
-                    .cloned()
-                    .or_else(|| (!reply_had_tree).then(|| self.last_tree_settle.clone()).flatten());
                 if let Some(changed) = settle_state_changed(&reply) {
                     visual_change = changed;
                 }
-                self.last_input = Some(delivery(&reply, visual_change));
+                let mut input_delivery = delivery(&reply, visual_change);
+                if refreshed_via_followup {
+                    // When a follow-up traversal supplied the cached tree, use
+                    // its settle record (including any unsettled timeout) rather
+                    // than masking it with the earlier input reply's settle block.
+                    // The original input acknowledgement fields remain on
+                    // `input_delivery`.
+                    self.last_input_settle = self.last_tree_settle.clone();
+                    input_delivery.settle = self.last_input_settle.clone();
+                } else {
+                    self.last_input_settle = reply.get("settle").cloned();
+                }
+                self.last_input = Some(input_delivery);
                 // SYSUI3A: a tap whose *target window* the host recorded before
                 // the gesture and no longer records afterwards is a completed
                 // interaction: the strict settle's `detached` reason is that
@@ -6594,6 +6641,10 @@ impl SessionBackend for DeferredArtSession {
 
     fn tree(&mut self) -> Result<UiTree, BackendError> {
         self.ensure_started()?.tree()
+    }
+
+    fn scroll_until_tree(&mut self) -> Result<UiTree, BackendError> {
+        self.ensure_started()?.scroll_until_tree()
     }
 
     fn set_settle_timeout(&mut self, timeout_ms: Option<u64>) {

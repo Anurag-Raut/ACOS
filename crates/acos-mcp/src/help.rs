@@ -193,7 +193,7 @@ pub fn mcp_topic(infos: &[ToolInfo]) -> String {
          an inline preview) or to `acos_observe`. A frame with no app pixels (such as a launch \
          placeholder) returns `NO_FRESH_FRAME`. On legacy Rust VM sessions, `acos_observe_tree` ignores \
          `screenshot`, and `acos_observe` with `screenshot: true` returns `UNSUPPORTED_BACKEND`; pass \
-         `screenshot: \"/abs/out.png\"` to `acos_observe` there. Alternatives: a `capture: {name: shot, format: png, \
+         `acos_observe {\"tree\": false, \"screenshot\": \"/abs/out.png\"}` there. Alternatives: a `capture: {name: shot, format: png, \
          fresh: true}` step in an `acos_verify` scenario (`frames/<seq>.png`), or on the CLI \
          `acos observe --screenshot out/shot.png --json`.\n\
          * **Type into a field.** `acos_observe_tree` -> `acos_tap {\"id\": \"...\"}` or \

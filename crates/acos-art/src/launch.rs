@@ -802,6 +802,38 @@ impl SecondaryShared {
     }
 }
 
+/// True when a raw `ACOS_ART_KEYSTORE` value enables `SoftwareKeyStore` in the
+/// guest (`LaunchMain.java` accepts `on`, `1`, or `software`, case-insensitive).
+fn keystore_env_enables_software(raw: &str) -> bool {
+    let mode = raw.trim();
+    mode.eq_ignore_ascii_case("on") || mode == "1" || mode.eq_ignore_ascii_case("software")
+}
+
+/// Reconcile an inherited `ACOS_ART_KEYSTORE` environment variable into the
+/// effective module spec list before attachment and report collection.
+///
+/// When `specs` omits `security.keystore` and `inherited` enables the guest
+/// provider (`on`, `1`, `software`), appends `security.keystore` with
+/// `Profile::Real` so the module registry, launch reply, and `status` control
+/// agree with guest availability. Explicit specs (including `profile: off`) are
+/// preserved untouched.
+fn reconcile_inherited_keystore_module(
+    specs: &mut Vec<acos_services::module::ModuleSpec>,
+    inherited: Option<&str>,
+) {
+    use acos_services::module::{ModuleConfig, ModuleSpec, Profile};
+    if acos_services::modules::keystore::requested_profile(specs).is_some() {
+        return;
+    }
+    if inherited.is_some_and(keystore_env_enables_software) {
+        specs.push(ModuleSpec {
+            id: acos_services::modules::keystore::MODULE_ID.to_string(),
+            profile: Profile::Real,
+            config: ModuleConfig::default(),
+        });
+    }
+}
+
 /// Resolve the guest `ACOS_ART_KEYSTORE` env value from the session's module
 /// specs, preserving explicit `off` override over any inherited host variable.
 fn resolve_keystore_env(
@@ -1386,6 +1418,8 @@ pub(crate) fn launch_session(
                 .map_err(|error| Error::Layout(format!("ACOS_ART_SERVICES: {error}")))?;
         }
     }
+    let inherited_keystore = std::env::var(acos_services::modules::keystore::KEYSTORE_ENV).ok();
+    reconcile_inherited_keystore_module(&mut module_specs, inherited_keystore.as_deref());
     // WV8: the `webview` module owns the session's WebView socket and the
     // provider package. With it `off` (the default) neither exists, which is
     // Android's own "no WebView provider" path: no `com.android.webview` in the
@@ -2411,7 +2445,6 @@ pub(crate) fn launch_session(
             run_root,
         });
     }
-    let inherited_keystore = std::env::var(acos_services::modules::keystore::KEYSTORE_ENV).ok();
     let keystore_env = resolve_keystore_env(&module_specs, inherited_keystore.as_deref());
     let secondary_shared = SecondaryShared {
         root: root.clone(),
@@ -7370,7 +7403,17 @@ enum GuestCommitResult {
         focus_class: Option<String>,
         error: String,
     },
+    /// Proven non-delivery before sending `COMMIT_TEXT` to the guest (safe to
+    /// fall back to `live.input.type_text` for ASCII).
     Unavailable {
+        reason: String,
+    },
+    /// `COMMIT_TEXT` was written (or partially written) to the guest, so
+    /// delivery is uncertain (timeout, write error, or guest exit). Never
+    /// replay the text through `live.input.type_text`, which could double-insert
+    /// when a stalled guest looper resumes.
+    Uncertain {
+        code: &'static str,
         reason: String,
     },
 }
@@ -7405,8 +7448,9 @@ fn try_guest_commit_text(
     {
         use std::io::Write;
         if let Err(err) = writeln!(writer, "COMMIT_TEXT {seq} {encoded}").and_then(|()| writer.flush()) {
-            return GuestCommitResult::Unavailable {
-                reason: format!("failed writing COMMIT_TEXT to guest: {err}"),
+            return GuestCommitResult::Uncertain {
+                code: "INPUT_UNAVAILABLE",
+                reason: format!("failed writing COMMIT_TEXT to guest (delivery uncertain): {err}"),
             };
         }
     }
@@ -7446,13 +7490,19 @@ fn try_guest_commit_text(
             }
         }
         if let Ok(Some(status)) = child.try_wait() {
-            return GuestCommitResult::Unavailable {
-                reason: format!("guest exited before committing text: {status}"),
+            return GuestCommitResult::Uncertain {
+                code: "INPUT_UNAVAILABLE",
+                reason: format!("guest exited before acknowledging COMMIT_TEXT (seq={seq}): {status}"),
             };
         }
         if Instant::now() >= deadline {
-            return GuestCommitResult::Unavailable {
-                reason: format!("timed out waiting for guest InputConnection.commitText ack (seq={seq})"),
+            use std::io::Write;
+            let _ = writeln!(writer, "CANCEL_COMMIT_TEXT {seq}").and_then(|()| writer.flush());
+            return GuestCommitResult::Uncertain {
+                code: "TIMEOUT",
+                reason: format!(
+                    "timed out waiting for guest InputConnection.commitText ack (seq={seq}); sent CANCEL_COMMIT_TEXT and not replaying"
+                ),
             };
         }
         wait_for_change(&wake, &mut seen);
@@ -9190,6 +9240,12 @@ fn interactive_serve(
                             }));
                         }
                     }
+                    GuestCommitResult::Uncertain { code, reason } => {
+                        protocol_write(&serde_json::json!({
+                            "ok": false, "cmd": "panel_text", "code": code,
+                            "error": format!("panel_text InputConnection.commitText did not confirm delivery: {reason}"),
+                        }));
+                    }
                 }
             }
             "rotate" | "panel_rotate" => {
@@ -9744,6 +9800,19 @@ fn interactive_serve(
                                             evidence.push(reply);
                                             continue;
                                         }
+                                    }
+                                    GuestCommitResult::Uncertain { code, reason } => {
+                                        let reply = serde_json::json!({
+                                            "ok": false,
+                                            "cmd": cmd,
+                                            "code": code,
+                                            "error": format!(
+                                                "InputConnection.commitText did not confirm delivery: {reason}"
+                                            ),
+                                        });
+                                        protocol_write(&reply);
+                                        evidence.push(reply);
+                                        continue;
                                     }
                                 }
                             }
@@ -13468,6 +13537,34 @@ mod panel_touch_tests {
         assert_eq!(
             resolve_keystore_env(&[], Some("on")).as_deref(),
             Some("on")
+        );
+
+        // Inherited enabling values reconcile into effective `security.keystore` = Real
+        // before module attachment/reporting, while preserving explicit `off`.
+        for val in ["on", "ON", "1", "software", " Software "] {
+            let mut specs = Vec::new();
+            reconcile_inherited_keystore_module(&mut specs, Some(val));
+            assert_eq!(
+                acos_services::modules::keystore::requested_profile(&specs),
+                Some(Profile::Real),
+                "inherited={val:?} should reconcile to Profile::Real"
+            );
+        }
+        for val in ["", "   ", "off", "0", "false"] {
+            let mut specs = Vec::new();
+            reconcile_inherited_keystore_module(&mut specs, Some(val));
+            assert_eq!(
+                acos_services::modules::keystore::requested_profile(&specs),
+                None,
+                "inherited={val:?} should not enable security.keystore"
+            );
+        }
+        let mut explicit_off = off.clone();
+        reconcile_inherited_keystore_module(&mut explicit_off, Some("on"));
+        assert_eq!(
+            acos_services::modules::keystore::requested_profile(&explicit_off),
+            Some(Profile::Off),
+            "explicit off override must survive inherited ACOS_ART_KEYSTORE=on"
         );
     }
 

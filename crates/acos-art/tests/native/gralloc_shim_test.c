@@ -13,6 +13,7 @@
 
 #include "../../shim/gralloc_shim.c"
 
+#include <sched.h>
 #include <signal.h>
 #include <stdatomic.h>
 #include <stdint.h>
@@ -176,28 +177,54 @@ static void case_concurrent_lock_unlock_preserves_mapping(void) {
     CHECK(count_live_handles() == 0 && count_live_maps() == 0, "clean registry");
 }
 
+#define STRESS_WORKERS 4
+
 typedef struct {
     const nh_t *nh;
     size_t size;
+    atomic_int ready;
+    atomic_int churn_active;
     atomic_int stop;
+    atomic_uint scans_during_churn[STRESS_WORKERS];
 } StressCtx;
 
+typedef struct {
+    StressCtx *ctx;
+    int worker_id;
+} WorkerArg;
+
 static void *worker_reader_thread(void *arg) {
-    StressCtx *ctx = (StressCtx *)arg;
+    WorkerArg *wa = (WorkerArg *)arg;
+    StressCtx *ctx = wa->ctx;
+    int id = wa->worker_id;
     void *addr = NULL;
     CHECK(mapper_lock_async64(NULL, ctx->nh, 0x33ULL, 0x100ULL, NULL, &addr, -1, NULL, NULL) == 0,
           "worker lock");
+    atomic_fetch_add_explicit(&ctx->ready, 1, memory_order_release);
     volatile uint8_t *p = (volatile uint8_t *)addr;
     uint64_t acc = 0;
-    while (!atomic_load_explicit(&ctx->stop, memory_order_relaxed)) {
+    while (!atomic_load_explicit(&ctx->stop, memory_order_acquire)) {
+        int during_churn = atomic_load_explicit(&ctx->churn_active, memory_order_acquire);
         for (size_t off = 0; off < ctx->size; off += 4096) {
             acc += p[off];
         }
         acc += p[ctx->size - 1];
+        if (during_churn) {
+            atomic_fetch_add_explicit(&ctx->scans_during_churn[id], 1, memory_order_release);
+        }
     }
     (void)acc;
     CHECK(mapper_unlock(NULL, ctx->nh) == 0, "worker unlock");
     return NULL;
+}
+
+static int all_workers_scanned_during_churn(StressCtx *ctx) {
+    for (int i = 0; i < STRESS_WORKERS; i++) {
+        if (atomic_load_explicit(&ctx->scans_during_churn[i], memory_order_acquire) == 0) {
+            return 0;
+        }
+    }
+    return 1;
 }
 
 static void case_multithreaded_lock_unlock_stress(void) {
@@ -207,14 +234,32 @@ static void case_multithreaded_lock_unlock_stress(void) {
     size_t size = (size_t)stride * 64 * 4;
     CHECK(size > 2, "buffer large enough for disjoint churn byte");
 
-    StressCtx ctx = {nh, size};
+    StressCtx ctx = {.nh = nh, .size = size};
+    atomic_init(&ctx.ready, 0);
+    atomic_init(&ctx.churn_active, 0);
     atomic_init(&ctx.stop, 0);
-    pthread_t workers[4];
-    for (int i = 0; i < 4; i++) {
-        CHECK(pthread_create(&workers[i], NULL, worker_reader_thread, &ctx) == 0, "pthread_create");
+    for (int i = 0; i < STRESS_WORKERS; i++) {
+        atomic_init(&ctx.scans_during_churn[i], 0);
     }
 
-    for (int iter = 0; iter < 500; iter++) {
+    pthread_t workers[STRESS_WORKERS];
+    WorkerArg args[STRESS_WORKERS];
+    for (int i = 0; i < STRESS_WORKERS; i++) {
+        args[i].ctx = &ctx;
+        args[i].worker_id = i;
+        CHECK(pthread_create(&workers[i], NULL, worker_reader_thread, &args[i]) == 0,
+              "pthread_create");
+    }
+
+    // Wait until every reader holds an active lock before starting churn.
+    while (atomic_load_explicit(&ctx.ready, memory_order_acquire) < STRESS_WORKERS) {
+        sched_yield();
+    }
+
+    atomic_store_explicit(&ctx.churn_active, 1, memory_order_release);
+    // Run at least 500 churn iterations, and continue churning until every
+    // reader has completed at least one full scan while churn is active.
+    for (int iter = 0; iter < 500 || !all_workers_scanned_during_churn(&ctx); iter++) {
         void *addr = NULL;
         CHECK(mapper_lock(NULL, nh, 0x33ULL, NULL, &addr, NULL, NULL) == 0, "churn lock");
         // Write to offset 1 (disjoint from worker reads at 0, 4096, ..., size-1)
@@ -222,11 +267,16 @@ static void case_multithreaded_lock_unlock_stress(void) {
         ((volatile uint8_t *)addr)[1] = (uint8_t)iter;
         int fence = 0;
         CHECK(mapper_unlock_async(NULL, nh, &fence) == 0, "churn unlock");
+        if (iter >= 500) {
+            sched_yield();
+        }
     }
 
-    atomic_store_explicit(&ctx.stop, 1, memory_order_relaxed);
-    for (int i = 0; i < 4; i++) {
+    atomic_store_explicit(&ctx.stop, 1, memory_order_release);
+    for (int i = 0; i < STRESS_WORKERS; i++) {
         pthread_join(workers[i], NULL);
+        CHECK(atomic_load_explicit(&ctx.scans_during_churn[i], memory_order_acquire) >= 1,
+              "worker %d completed scan during churn", i);
     }
 
     CHECK(count_live_maps() == 0, "no leaked maps after stress");

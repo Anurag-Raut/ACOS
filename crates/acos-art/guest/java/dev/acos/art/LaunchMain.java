@@ -2128,9 +2128,19 @@ public final class LaunchMain {
         }
     }
 
+    static final java.util.Set<Long> sAbandonedCommitTextSeqs =
+            java.util.Collections.synchronizedSet(new java.util.HashSet<Long>());
+
     static void commitTextOnMainThread(long reqSeq, String text, Object fallbackActivity) {
         String focusClass = null;
         try {
+            if (sAbandonedCommitTextSeqs.remove(reqSeq)) {
+                System.out.println("ACOSCOMMITTEXT {\"seq\":" + reqSeq
+                        + ",\"ok\":false,\"handled\":false,\"cancelled\":true"
+                        + ",\"error\":\"commitText abandoned after host timeout\"}");
+                System.out.flush();
+                return;
+            }
             View focused = null;
             java.util.List<View> views = windowViews();
             if (views != null) {
@@ -2186,6 +2196,14 @@ public final class LaunchMain {
                         + ",\"ok\":false,\"handled\":false,\"no_focused_editor\":true"
                         + ",\"focus_class\":\"" + jesc(focusClass) + "\""
                         + ",\"error\":\"focused view returned null InputConnection\"}");
+                System.out.flush();
+                return;
+            }
+            if (sAbandonedCommitTextSeqs.remove(reqSeq)) {
+                System.out.println("ACOSCOMMITTEXT {\"seq\":" + reqSeq
+                        + ",\"ok\":false,\"handled\":false,\"cancelled\":true"
+                        + ",\"focus_class\":\"" + jesc(focusClass) + "\""
+                        + ",\"error\":\"commitText abandoned after host timeout\"}");
                 System.out.flush();
                 return;
             }
@@ -2347,6 +2365,15 @@ public final class LaunchMain {
                                     commitTextOnMainThread(reqSeq, text, activity);
                                 }
                             });
+                        } else if (word.toUpperCase().startsWith("CANCEL_COMMIT_TEXT")) {
+                            String[] parts = word.split(" ", 2);
+                            if (parts.length >= 2) {
+                                try {
+                                    long cancelSeq = Long.parseLong(parts[1].trim());
+                                    sAbandonedCommitTextSeqs.add(cancelSeq);
+                                } catch (Throwable ignored) {
+                                }
+                            }
                         }
                     }
                     sProbeControlDead = true;
