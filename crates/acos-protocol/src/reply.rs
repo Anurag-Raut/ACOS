@@ -292,17 +292,33 @@ pub fn compact_text(
 /// another repository can read it.
 #[must_use]
 pub fn shape_tree(tree: &Value, sequence: Option<u64>, opts: &TreeShapeOptions) -> ShapedTree {
-    let nodes = compact_nodes(tree);
+    shape_tree_with_disk(tree, tree, sequence, opts)
+}
+
+/// Shape one tree for an inline reply while writing `disk_tree` to
+/// `opts.artifacts_dir/tree/<seq>.json`.
+///
+/// Separating `inline_tree` from `disk_tree` lets callers bound the inline
+/// view (for example with `max_nodes`) while preserving the complete,
+/// untruncated tree on disk at `tree_path`.
+#[must_use]
+pub fn shape_tree_with_disk(
+    inline_tree: &Value,
+    disk_tree: &Value,
+    sequence: Option<u64>,
+    opts: &TreeShapeOptions,
+) -> ShapedTree {
+    let nodes = compact_nodes(inline_tree);
     let total = nodes.len();
     let tree_path = opts.artifacts_dir.as_ref().and_then(|dir| {
         let seq = sequence.unwrap_or(0);
-        write_full_tree(dir, seq, tree)
+        write_full_tree(dir, seq, disk_tree)
             .ok()
             .map(|path| path.display().to_string())
     });
     if opts.full {
         return ShapedTree {
-            view: tree.clone(),
+            view: inline_tree.clone(),
             total,
             returned: total,
             next_cursor: None,
@@ -310,32 +326,56 @@ pub fn shape_tree(tree: &Value, sequence: Option<u64>, opts: &TreeShapeOptions) 
         };
     }
     let page_size = opts.page();
+    let out_of_range = (total > 0 && opts.cursor >= total) || (total == 0 && opts.cursor > 0);
     let start = opts.cursor.min(total);
     let end = start.saturating_add(page_size).min(total);
     let page: Vec<Value> = nodes[start..end].to_vec();
     let next_cursor = (end < total).then_some(end);
-    let view = match tree {
+    let view = match inline_tree {
         Value::Array(_) => Value::Array(page),
         Value::Object(map) => {
             let mut compact = map.clone();
             compact.insert("compact".into(), Value::Bool(true));
             compact.insert("node_count".into(), json!(total));
             compact.insert("returned".into(), json!(end - start));
-            compact.insert("cursor".into(), json!(start));
             compact.insert(
-                "next_cursor".into(),
-                next_cursor.map_or(Value::Null, |cursor| json!(cursor)),
+                "cursor".into(),
+                json!(if out_of_range { opts.cursor } else { start }),
             );
+            if out_of_range {
+                compact.insert("cursor_out_of_range".into(), Value::Bool(true));
+            } else {
+                compact.insert(
+                    "next_cursor".into(),
+                    next_cursor.map_or(Value::Null, |cursor| json!(cursor)),
+                );
+            }
             compact.insert("nodes".into(), Value::Array(page));
-            compact.insert(
-                "note".into(),
-                Value::String(match &tree_path {
+            let note = if out_of_range {
+                let base_note = if total == 0 {
+                    format!(
+                        "cursor {} is out of range (0 compact nodes available)",
+                        opts.cursor
+                    )
+                } else {
+                    format!(
+                        "cursor {} is out of range ({total} compact nodes available; valid cursor: 0..{total})",
+                        opts.cursor
+                    )
+                };
+                match &tree_path {
+                    Some(path) => format!("{base_note}; full tree: {path}"),
+                    None => base_note,
+                }
+            } else {
+                match &tree_path {
                     Some(path) => format!(
                         "compact view: visible text/content_desc nodes in reading order; full tree: {path}"
                     ),
                     None => "compact view: visible text/content_desc nodes in reading order".into(),
-                }),
-            );
+                }
+            };
+            compact.insert("note".into(), Value::String(note));
             Value::Object(compact)
         }
         other => other.clone(),
@@ -1468,4 +1508,70 @@ mod tests {
         assert!(envelope["result"].get("steps").is_none());
         assert!(envelope["result"].get("verdict").is_none());
     }
+
+    #[test]
+    fn shape_tree_with_disk_preserves_untruncated_disk_tree_when_inline_is_capped() {
+        let dir = reply_test_dir("shape-with-disk");
+        let inline_tree = large_tree(2);
+        let disk_tree = large_tree(5);
+        let opts = TreeShapeOptions {
+            artifacts_dir: Some(dir.clone()),
+            ..TreeShapeOptions::default()
+        };
+        let shaped = shape_tree_with_disk(&inline_tree, &disk_tree, Some(11), &opts);
+        assert_eq!(shaped.total, 2);
+        assert_eq!(shaped.returned, 2);
+        let path = shaped.tree_path.expect("tree_path");
+        let written: Value = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+        assert_eq!(written["nodes"].as_array().unwrap().len(), 5);
+        assert_eq!(
+            written["nodes"][4]["text"],
+            "Settings row 4 — the content in the middle"
+        );
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn out_of_range_cursor_keeps_caller_cursor_and_sets_flag_and_note() {
+        let dir = reply_test_dir("cursor-oor");
+        let tree = large_tree(10);
+        let opts = TreeShapeOptions {
+            cursor: 50,
+            artifacts_dir: Some(dir.clone()),
+            ..TreeShapeOptions::default()
+        };
+        let shaped = shape_tree(&tree, Some(3), &opts);
+        assert_eq!(shaped.total, 10);
+        assert_eq!(shaped.returned, 0);
+        assert_eq!(shaped.next_cursor, None);
+        assert_eq!(shaped.view["cursor"], 50);
+        assert_eq!(shaped.view["returned"], 0);
+        assert_eq!(shaped.view["node_count"], 10);
+        assert_eq!(shaped.view["cursor_out_of_range"], true);
+        assert!(shaped.view.get("next_cursor").is_none());
+        assert_eq!(shaped.view["nodes"].as_array().unwrap().len(), 0);
+        let note = shaped.view["note"].as_str().unwrap();
+        assert!(note.contains("cursor 50 is out of range"), "{note}");
+        assert!(note.contains("10 compact nodes available"), "{note}");
+        assert!(note.contains("full tree:"), "{note}");
+
+        let empty_tree = json!({"max_nodes": 2000, "truncated": false, "nodes": []});
+        let empty_opts = TreeShapeOptions {
+            cursor: 1,
+            ..TreeShapeOptions::default()
+        };
+        let empty_shaped = shape_tree(&empty_tree, None, &empty_opts);
+        assert_eq!(empty_shaped.returned, 0);
+        assert_eq!(empty_shaped.view["cursor"], 1);
+        assert_eq!(empty_shaped.view["cursor_out_of_range"], true);
+        assert!(empty_shaped.view["note"]
+            .as_str()
+            .unwrap()
+            .contains("0 compact nodes available"));
+        // Zero cursor on an empty tree is in-range (normal empty view).
+        let ok_empty = shape_tree(&empty_tree, None, &TreeShapeOptions::default());
+        assert!(ok_empty.view.get("cursor_out_of_range").is_none());
+        let _ = std::fs::remove_dir_all(dir);
+    }
 }
+

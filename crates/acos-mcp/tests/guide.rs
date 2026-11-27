@@ -496,11 +496,13 @@ fn the_mcp_topic_is_generated_from_the_advertised_tools() {
         "Type into a field",
         "content_desc",
         "Prove a flow",
-        // The screenshot answer must name a route that works today and say what
-        // is coming, not leave the agent with a tool that does not exist.
+        // The screenshot answer must name the live MCP capture option and
+        // the CLI/scenario alternatives.
+        "\"screenshot\": true",
+        "acos_observe_tree",
+        "NO_FRESH_FRAME",
         "acos observe --screenshot",
         "capture: {name: shot, format: png, fresh: true}",
-        "Coming:",
     ] {
         assert!(
             workflow.contains(expected),
