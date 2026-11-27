@@ -14,6 +14,7 @@
 #include "../../shim/gralloc_shim.c"
 
 #include <signal.h>
+#include <stdatomic.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -178,7 +179,7 @@ static void case_concurrent_lock_unlock_preserves_mapping(void) {
 typedef struct {
     const nh_t *nh;
     size_t size;
-    volatile int stop;
+    atomic_int stop;
 } StressCtx;
 
 static void *worker_reader_thread(void *arg) {
@@ -188,7 +189,7 @@ static void *worker_reader_thread(void *arg) {
           "worker lock");
     volatile uint8_t *p = (volatile uint8_t *)addr;
     uint64_t acc = 0;
-    while (!ctx->stop) {
+    while (!atomic_load_explicit(&ctx->stop, memory_order_relaxed)) {
         for (size_t off = 0; off < ctx->size; off += 4096) {
             acc += p[off];
         }
@@ -204,8 +205,10 @@ static void case_multithreaded_lock_unlock_stress(void) {
     uint32_t stride = 0;
     CHECK(alloc9(NULL, 64, 64, 1, 1, 0x933ULL, &nh, &stride, 3ULL, NULL) == 0, "alloc9");
     size_t size = (size_t)stride * 64 * 4;
+    CHECK(size > 2, "buffer large enough for disjoint churn byte");
 
-    StressCtx ctx = {nh, size, 0};
+    StressCtx ctx = {nh, size};
+    atomic_init(&ctx.stop, 0);
     pthread_t workers[4];
     for (int i = 0; i < 4; i++) {
         CHECK(pthread_create(&workers[i], NULL, worker_reader_thread, &ctx) == 0, "pthread_create");
@@ -214,12 +217,14 @@ static void case_multithreaded_lock_unlock_stress(void) {
     for (int iter = 0; iter < 500; iter++) {
         void *addr = NULL;
         CHECK(mapper_lock(NULL, nh, 0x33ULL, NULL, &addr, NULL, NULL) == 0, "churn lock");
-        ((volatile uint8_t *)addr)[0] = (uint8_t)iter;
+        // Write to offset 1 (disjoint from worker reads at 0, 4096, ..., size-1)
+        // so the stress test exercises live writes without a C11 data race.
+        ((volatile uint8_t *)addr)[1] = (uint8_t)iter;
         int fence = 0;
         CHECK(mapper_unlock_async(NULL, nh, &fence) == 0, "churn unlock");
     }
 
-    ctx.stop = 1;
+    atomic_store_explicit(&ctx.stop, 1, memory_order_relaxed);
     for (int i = 0; i < 4; i++) {
         pthread_join(workers[i], NULL);
     }
