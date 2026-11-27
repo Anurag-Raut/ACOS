@@ -2133,6 +2133,7 @@ public final class LaunchMain {
 
     static void commitTextOnMainThread(long reqSeq, String text, Object fallbackActivity) {
         String focusClass = null;
+        boolean commitAttempted = false;
         try {
             if (sAbandonedCommitTextSeqs.remove(reqSeq)) {
                 System.out.println("ACOSCOMMITTEXT {\"seq\":" + reqSeq
@@ -2207,6 +2208,7 @@ public final class LaunchMain {
                 System.out.flush();
                 return;
             }
+            commitAttempted = true;
             boolean committed = ic.commitText(text, 1);
             if (committed) {
                 sDirtyAtMs = System.currentTimeMillis();
@@ -2226,7 +2228,8 @@ public final class LaunchMain {
             System.out.flush();
         } catch (Throwable t) {
             StringBuilder sb = new StringBuilder("ACOSCOMMITTEXT {\"seq\":").append(reqSeq)
-                    .append(",\"ok\":false,\"handled\":false,\"no_focused_editor\":false");
+                    .append(",\"ok\":false,\"handled\":false,\"no_focused_editor\":false")
+                    .append(",\"commit_attempted\":").append(commitAttempted ? "true" : "false");
             if (focusClass != null) {
                 sb.append(",\"focus_class\":\"").append(jesc(focusClass)).append('"');
             }

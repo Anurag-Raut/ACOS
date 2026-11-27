@@ -3647,6 +3647,7 @@ struct CommitTextOutcome {
     ok: bool,
     handled: bool,
     no_focused_editor: bool,
+    commit_attempted: bool,
     focus_class: Option<String>,
     error: Option<String>,
 }
@@ -7246,6 +7247,140 @@ pub(crate) enum GuestProbeChannel {
     Fifo(std::fs::File),
 }
 
+impl GuestProbeChannel {
+    fn as_raw_fd(&self) -> RawFd {
+        use std::os::unix::io::AsRawFd;
+        match self {
+            GuestProbeChannel::Pipe(writer) => writer.as_raw_fd(),
+            GuestProbeChannel::Fifo(writer) => writer.as_raw_fd(),
+        }
+    }
+
+    /// Write all `bytes` before `deadline` using non-blocking `write(2)` +
+    /// `poll(2)`, preventing a stalled guest reader from blocking past the
+    /// acknowledgement deadline when the payload exceeds pipe capacity.
+    fn write_all_until(
+        &mut self,
+        bytes: &[u8],
+        deadline: Instant,
+    ) -> std::result::Result<(), (bool, std::io::Error)> {
+        write_fd_all_until(self.as_raw_fd(), bytes, deadline)
+    }
+}
+
+fn write_fd_all_until(
+    fd: RawFd,
+    bytes: &[u8],
+    deadline: Instant,
+) -> std::result::Result<(), (bool, std::io::Error)> {
+    let orig_flags = unsafe { libc::fcntl(fd, libc::F_GETFL) };
+    if orig_flags < 0 {
+        return Err((false, std::io::Error::last_os_error()));
+    }
+    let added_nonblock = (orig_flags & libc::O_NONBLOCK) == 0;
+    if added_nonblock
+        && unsafe { libc::fcntl(fd, libc::F_SETFL, orig_flags | libc::O_NONBLOCK) } != 0
+    {
+        return Err((false, std::io::Error::last_os_error()));
+    }
+    struct RestoreFlags {
+        fd: RawFd,
+        orig_flags: libc::c_int,
+        restore: bool,
+    }
+    impl Drop for RestoreFlags {
+        fn drop(&mut self) {
+            if self.restore {
+                unsafe {
+                    libc::fcntl(self.fd, libc::F_SETFL, self.orig_flags);
+                }
+            }
+        }
+    }
+    let _guard = RestoreFlags {
+        fd,
+        orig_flags,
+        restore: added_nonblock,
+    };
+
+    let mut written = 0usize;
+    while written < bytes.len() {
+        let n = unsafe {
+            libc::write(
+                fd,
+                bytes[written..].as_ptr().cast(),
+                bytes.len() - written,
+            )
+        };
+        if n > 0 {
+            written += n as usize;
+            continue;
+        }
+        if n == 0 {
+            return Err((
+                written > 0,
+                std::io::Error::new(
+                    std::io::ErrorKind::WriteZero,
+                    "write returned 0 bytes on guest control channel",
+                ),
+            ));
+        }
+        let err = std::io::Error::last_os_error();
+        if err.kind() == std::io::ErrorKind::Interrupted {
+            continue;
+        }
+        if err.kind() != std::io::ErrorKind::WouldBlock {
+            return Err((written > 0, err));
+        }
+        let now = Instant::now();
+        if now >= deadline {
+            return Err((
+                written > 0,
+                std::io::Error::new(
+                    std::io::ErrorKind::TimedOut,
+                    "timed out writing to guest control channel",
+                ),
+            ));
+        }
+        let rem_ms = (deadline - now).as_millis().clamp(1, i32::MAX as u128) as i32;
+        let mut pfd = libc::pollfd {
+            fd,
+            events: libc::POLLOUT,
+            revents: 0,
+        };
+        let rc = unsafe { libc::poll(&mut pfd, 1, rem_ms) };
+        if rc < 0 {
+            let perr = std::io::Error::last_os_error();
+            if perr.kind() == std::io::ErrorKind::Interrupted {
+                continue;
+            }
+            return Err((written > 0, perr));
+        }
+        if rc == 0 {
+            return Err((
+                written > 0,
+                std::io::Error::new(
+                    std::io::ErrorKind::TimedOut,
+                    "timed out waiting for guest control channel writability",
+                ),
+            ));
+        }
+        if (pfd.revents & (libc::POLLERR | libc::POLLHUP | libc::POLLNVAL)) != 0 {
+            return Err((
+                written > 0,
+                std::io::Error::new(
+                    std::io::ErrorKind::BrokenPipe,
+                    format!(
+                        "guest control channel closed (poll revents=0x{:x})",
+                        pfd.revents
+                    ),
+                ),
+            ));
+        }
+    }
+    Ok(())
+}
+
 impl std::io::Write for GuestProbeChannel {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
         match self {
@@ -7330,6 +7465,10 @@ fn parse_commit_text_line(trimmed: &str) -> Option<(u64, CommitTextOutcome)> {
             .get("no_focused_editor")
             .and_then(|v| v.as_bool())
             .unwrap_or(false),
+        commit_attempted: value
+            .get("commit_attempted")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false),
         focus_class: value
             .get("focus_class")
             .and_then(|v| v.as_str())
@@ -7375,6 +7514,7 @@ fn base64_encode(input: &[u8]) -> String {
     out
 }
 
+#[derive(Debug, PartialEq, Eq)]
 enum GuestCommitResult {
     Committed {
         seq: u64,
@@ -7396,14 +7536,52 @@ enum GuestCommitResult {
     Unavailable {
         reason: String,
     },
-    /// `COMMIT_TEXT` was written (or partially written) to the guest, so
-    /// delivery is uncertain (timeout, write error, or guest exit). Never
-    /// replay the text through `live.input.type_text`, which could double-insert
-    /// when a stalled guest looper resumes.
+    /// `COMMIT_TEXT` was written (or partially written) to the guest, or
+    /// `InputConnection.commitText` threw after entry, so delivery is
+    /// uncertain. Never replay the text through `live.input.type_text`, which
+    /// could double-insert into the editor.
     Uncertain {
         code: &'static str,
         reason: String,
     },
+}
+
+fn classify_commit_text_outcome(
+    seq: u64,
+    outcome: CommitTextOutcome,
+    latency_us: u64,
+) -> GuestCommitResult {
+    if outcome.ok {
+        return GuestCommitResult::Committed {
+            seq,
+            handled: outcome.handled,
+            latency_us,
+            focus_class: outcome.focus_class,
+        };
+    }
+    if outcome.commit_attempted {
+        return GuestCommitResult::Uncertain {
+            code: "INPUT_UNAVAILABLE",
+            reason: outcome.error.unwrap_or_else(|| {
+                "InputConnection.commitText threw after entry (delivery uncertain; not replaying)"
+                    .to_string()
+            }),
+        };
+    }
+    if outcome.no_focused_editor {
+        return GuestCommitResult::NoFocusedEditor {
+            focus_class: outcome.focus_class,
+            error: outcome
+                .error
+                .unwrap_or_else(|| "no focused InputConnection".to_string()),
+        };
+    }
+    GuestCommitResult::Rejected {
+        focus_class: outcome.focus_class,
+        error: outcome
+            .error
+            .unwrap_or_else(|| "InputConnection.commitText returned false".to_string()),
+    }
 }
 
 fn try_guest_commit_text(
@@ -7433,48 +7611,36 @@ fn try_guest_commit_text(
         state.next_commit_text_seq
     };
     let encoded = base64_encode(text.as_bytes());
-    {
-        use std::io::Write;
-        if let Err(err) = writeln!(writer, "COMMIT_TEXT {seq} {encoded}").and_then(|()| writer.flush()) {
-            return GuestCommitResult::Uncertain {
-                code: "INPUT_UNAVAILABLE",
-                reason: format!("failed writing COMMIT_TEXT to guest (delivery uncertain): {err}"),
-            };
-        }
-    }
     let started = Instant::now();
     let timeout = ack_wait
         .max(Duration::from_millis(2000))
         .min(Duration::from_secs(5));
     let deadline = started + timeout;
+    let payload = format!("COMMIT_TEXT {seq} {encoded}\n");
+    if let Err((wrote_any, err)) = writer.write_all_until(payload.as_bytes(), deadline) {
+        let code = if err.kind() == std::io::ErrorKind::TimedOut {
+            "TIMEOUT"
+        } else {
+            "INPUT_UNAVAILABLE"
+        };
+        return GuestCommitResult::Uncertain {
+            code,
+            reason: format!(
+                "failed writing COMMIT_TEXT to guest (partial={wrote_any}, delivery uncertain): {err}"
+            ),
+        };
+    }
     let wake = settle_wake(probe_state);
     let mut seen = 0u64;
     loop {
         {
             let mut state = probe_state.lock().unwrap_or_else(|e| e.into_inner());
             if let Some(outcome) = state.commit_text_results.remove(&seq) {
-                if outcome.ok {
-                    return GuestCommitResult::Committed {
-                        seq,
-                        handled: outcome.handled,
-                        latency_us: started.elapsed().as_micros() as u64,
-                        focus_class: outcome.focus_class,
-                    };
-                }
-                if outcome.no_focused_editor {
-                    return GuestCommitResult::NoFocusedEditor {
-                        focus_class: outcome.focus_class,
-                        error: outcome
-                            .error
-                            .unwrap_or_else(|| "no focused InputConnection".to_string()),
-                    };
-                }
-                return GuestCommitResult::Rejected {
-                    focus_class: outcome.focus_class,
-                    error: outcome
-                        .error
-                        .unwrap_or_else(|| "InputConnection.commitText returned false".to_string()),
-                };
+                return classify_commit_text_outcome(
+                    seq,
+                    outcome,
+                    started.elapsed().as_micros() as u64,
+                );
             }
         }
         if let Ok(Some(status)) = child.try_wait() {
@@ -7484,8 +7650,11 @@ fn try_guest_commit_text(
             };
         }
         if Instant::now() >= deadline {
-            use std::io::Write;
-            let _ = writeln!(writer, "CANCEL_COMMIT_TEXT {seq}").and_then(|()| writer.flush());
+            let cancel = format!("CANCEL_COMMIT_TEXT {seq}\n");
+            let _ = writer.write_all_until(
+                cancel.as_bytes(),
+                Instant::now() + Duration::from_millis(100),
+            );
             return GuestCommitResult::Uncertain {
                 code: "TIMEOUT",
                 reason: format!(
@@ -13578,6 +13747,7 @@ mod panel_touch_tests {
                     ok: true,
                     handled: true,
                     no_focused_editor: false,
+                    commit_attempted: false,
                     focus_class: Some("android.widget.EditText".to_string()),
                     error: None,
                 }
@@ -13592,11 +13762,71 @@ mod panel_touch_tests {
                     ok: false,
                     handled: false,
                     no_focused_editor: true,
+                    commit_attempted: false,
                     focus_class: None,
                     error: Some("no focused view in active window".to_string()),
                 }
             ))
         );
+        let post_entry_throw = r#"ACOSCOMMITTEXT {"seq":9,"ok":false,"handled":false,"no_focused_editor":false,"commit_attempted":true,"focus_class":"android.widget.EditText","error":"RuntimeException: boom"}"#;
+        let (_, outcome) = parse_commit_text_line(post_entry_throw).expect("parse post-entry throw");
+        assert!(outcome.commit_attempted);
+        assert_eq!(
+            classify_commit_text_outcome(9, outcome, 42),
+            GuestCommitResult::Uncertain {
+                code: "INPUT_UNAVAILABLE",
+                reason: "RuntimeException: boom".to_string(),
+            }
+        );
+
+        let pre_entry_throw = r#"ACOSCOMMITTEXT {"seq":10,"ok":false,"handled":false,"no_focused_editor":false,"commit_attempted":false,"error":"windowViews failed"}"#;
+        let (_, pre_outcome) =
+            parse_commit_text_line(pre_entry_throw).expect("parse pre-entry throw");
+        assert!(!pre_outcome.commit_attempted);
+        assert_eq!(
+            classify_commit_text_outcome(10, pre_outcome, 12),
+            GuestCommitResult::Rejected {
+                focus_class: None,
+                error: "windowViews failed".to_string(),
+            }
+        );
+    }
+
+    #[test]
+    fn write_fd_all_until_bounds_stalled_pipe_and_restores_flags() {
+        let mut fds = [-1i32; 2];
+        assert_eq!(unsafe { libc::pipe(fds.as_mut_ptr()) }, 0);
+        let (rfd, wfd) = (fds[0], fds[1]);
+        let before_flags = unsafe { libc::fcntl(wfd, libc::F_GETFL) };
+        assert_eq!(before_flags & libc::O_NONBLOCK, 0);
+
+        // Normal small write succeeds immediately and leaves blocking flag intact.
+        let small = b"COMMIT_TEXT 1 YWJj\n";
+        write_fd_all_until(wfd, small, Instant::now() + Duration::from_secs(1))
+            .expect("small write fits in empty pipe");
+        let after_small_flags = unsafe { libc::fcntl(wfd, libc::F_GETFL) };
+        assert_eq!(after_small_flags, before_flags);
+
+        // Oversized payload into a stalled pipe with no reader must time out near
+        // the deadline instead of blocking indefinitely.
+        let huge = vec![b'A'; 512 * 1024];
+        let started = Instant::now();
+        let err = write_fd_all_until(wfd, &huge, started + Duration::from_millis(80))
+            .expect_err("stalled oversized write must time out");
+        let elapsed = started.elapsed();
+        assert!(err.0, "expected partial write before pipe filled");
+        assert_eq!(err.1.kind(), std::io::ErrorKind::TimedOut);
+        assert!(
+            elapsed < Duration::from_secs(2),
+            "bounded write exceeded deadline wildly: {elapsed:?}"
+        );
+        let after_timeout_flags = unsafe { libc::fcntl(wfd, libc::F_GETFL) };
+        assert_eq!(after_timeout_flags, before_flags);
+
+        unsafe {
+            libc::close(rfd);
+            libc::close(wfd);
+        }
     }
 }
 
