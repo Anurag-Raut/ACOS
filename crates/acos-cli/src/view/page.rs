@@ -2222,13 +2222,20 @@ function createHarness() {{
             test_body = test_body,
         );
 
-        let mut child = Command::new("node")
+        let mut child = match Command::new("node")
             .arg("-")
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn()
-            .expect("node should be installed and runnable");
+        {
+            Ok(child) => child,
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+                eprintln!("skipping page.rs JS test: `node` not found on PATH");
+                return;
+            }
+            Err(err) => panic!("failed to spawn `node` for page.rs JS test: {err}"),
+        };
 
         child
             .stdin

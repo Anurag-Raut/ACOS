@@ -1184,6 +1184,49 @@ impl SecondaryPool {
         self.specs.push(spec);
     }
 
+    /// Build a `_hot_extra_apk` descriptor for a package already registered in
+    /// `SecondaryPool` so a fresh `attach` can reinstall it on the peer if a
+    /// prior timed-out `detach` removed it from PMS/ATMS.
+    fn hot_extra_descriptor(&self, package: &str) -> Option<serde_json::Value> {
+        let spec = self.specs.iter().find(|s| s.package == package)?;
+        Some(serde_json::json!({
+            "staged": spec.staged.to_string_lossy(),
+            "guest_path": spec.guest_apk,
+            "guest_lib_dir": spec.guest_lib_dir,
+            "package": spec.package,
+            "reinstall_if_missing": true,
+        }))
+    }
+
+    /// Update a registered package's UID after a peer-side reinstall (for
+    /// example, after a timed-out `detach` removed it on the peer), stopping
+    /// any stale running guest whose UID no longer matches.
+    fn update_package_uid(&mut self, package: &str, uid: i32) {
+        let changed = self
+            .specs
+            .iter()
+            .find(|s| s.package == package)
+            .is_some_and(|s| s.uid != Some(uid));
+        if changed {
+            if let Some(tag) = self.running_tag(package) {
+                if let Some(mut guest) = self.guests.remove(&tag) {
+                    guest.cgroup.kill();
+                    let _ = guest.child.kill();
+                    let _ = guest.child.wait();
+                    self.atms
+                        .lock()
+                        .unwrap_or_else(|e| e.into_inner())
+                        .process_died(tag);
+                }
+            }
+        }
+        for spec in &mut self.specs {
+            if spec.package == package {
+                spec.uid = Some(uid);
+            }
+        }
+    }
+
     /// Tear down a hot-detached system package: kill any running secondary
     /// process and remove its spec from the pool.
     fn remove_package(&mut self, package: &str) {
@@ -9818,47 +9861,54 @@ fn interactive_serve(
                 if svc_op == "attach"
                     && svc_id == acos_services::modules::settings::MODULE_ID
                     && svc_profile != "off"
-                    && !secondary.has_package(acos_services::modules::settings::SETTINGS_PACKAGE)
                 {
-                    let cfg = match request.get("config") {
-                        None => Ok(acos_services::module::ModuleConfig::default()),
-                        Some(value) => {
-                            acos_services::module::ModuleConfig::from_json("<live>", value)
-                        }
-                    };
-                    if let Ok(config) = cfg {
-                        let apk_path = acos_services::modules::settings::settings_apk(&config);
-                        if apk_path.is_file() {
-                            match secondary.stage_hot_apk(&apk_path) {
-                                Ok(extra) => {
-                                    if let Some(obj) = forward_request.as_object_mut() {
-                                        obj.insert(
-                                            "_hot_extra_apk".into(),
-                                            serde_json::json!({
-                                                "staged": extra.staged.to_string_lossy(),
-                                                "guest_path": extra.guest_path,
-                                                "guest_lib_dir": extra.guest_lib_dir,
-                                                "package": extra.package,
-                                            }),
-                                        );
+                    if !secondary.has_package(acos_services::modules::settings::SETTINGS_PACKAGE) {
+                        let cfg = match request.get("config") {
+                            None => Ok(acos_services::module::ModuleConfig::default()),
+                            Some(value) => {
+                                acos_services::module::ModuleConfig::from_json("<live>", value)
+                            }
+                        };
+                        if let Ok(config) = cfg {
+                            let apk_path = acos_services::modules::settings::settings_apk(&config);
+                            if apk_path.is_file() {
+                                match secondary.stage_hot_apk(&apk_path) {
+                                    Ok(extra) => {
+                                        if let Some(obj) = forward_request.as_object_mut() {
+                                            obj.insert(
+                                                "_hot_extra_apk".into(),
+                                                serde_json::json!({
+                                                    "staged": extra.staged.to_string_lossy(),
+                                                    "guest_path": extra.guest_path,
+                                                    "guest_lib_dir": extra.guest_lib_dir,
+                                                    "package": extra.package,
+                                                }),
+                                            );
+                                        }
+                                        hot_staged_extra = Some(extra);
                                     }
-                                    hot_staged_extra = Some(extra);
-                                }
-                                Err(err) => {
-                                    let reply = serde_json::json!({
-                                        "ok": false,
-                                        "cmd": "services",
-                                        "op": "attach",
-                                        "code": "INTERNAL",
-                                        "error": format!(
-                                            "hot-staging system.settings APK failed: {err}"
-                                        ),
-                                    });
-                                    protocol_write(&reply);
-                                    evidence.push(reply);
-                                    continue;
+                                    Err(err) => {
+                                        let reply = serde_json::json!({
+                                            "ok": false,
+                                            "cmd": "services",
+                                            "op": "attach",
+                                            "code": "INTERNAL",
+                                            "error": format!(
+                                                "hot-staging system.settings APK failed: {err}"
+                                            ),
+                                        });
+                                        protocol_write(&reply);
+                                        evidence.push(reply);
+                                        continue;
+                                    }
                                 }
                             }
+                        }
+                    } else if let Some(desc) = secondary
+                        .hot_extra_descriptor(acos_services::modules::settings::SETTINGS_PACKAGE)
+                    {
+                        if let Some(obj) = forward_request.as_object_mut() {
+                            obj.insert("_hot_extra_apk".into(), desc);
                         }
                     }
                 }
@@ -9881,6 +9931,15 @@ fn interactive_serve(
                             if let Some(mut extra) = hot_staged_extra {
                                 extra.uid = hot_uid;
                                 secondary.register_hot_extra(extra);
+                            } else if svc_op == "attach"
+                                && svc_id == acos_services::modules::settings::MODULE_ID
+                            {
+                                if let Some(uid) = hot_uid {
+                                    secondary.update_package_uid(
+                                        acos_services::modules::settings::SETTINGS_PACKAGE,
+                                        uid,
+                                    );
+                                }
                             }
                             if svc_op == "detach"
                                 && svc_id == acos_services::modules::settings::MODULE_ID
@@ -11529,6 +11588,22 @@ struct PeerSummary {
     resource_limits: u64,
 }
 
+fn host_has_package(host: &mut acos_services::ServiceHost, package: &str) -> bool {
+    host.ensure("android.content.pm.IPackageManager")
+        .ok()
+        .and_then(|obj| {
+            obj.as_any_mut()
+                .and_then(|any| any.downcast_mut::<acos_services::pms::PmsService>())
+        })
+        .is_some_and(|pms| {
+            pms.shared_state()
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .lookup(Some(package))
+                .is_some()
+        })
+}
+
 /// Roll back a hot-attach that succeeded on the peer thread after the
 /// launcher's `ServiceControl::submit` timed out and abandoned the operation.
 ///
@@ -11548,6 +11623,15 @@ fn rollback_timed_out_hot_attach(
         return false;
     };
     if reply.get("ok").and_then(|v| v.as_bool()) != Some(true) {
+        return false;
+    }
+    let reinstall_if_missing = extra
+        .get("reinstall_if_missing")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+    if reinstall_if_missing && reply.get("_hot_extra_uid").is_none() {
+        // The package was already present before this attach (no-op re-attach);
+        // do not tear down a pre-existing installation.
         return false;
     }
     let Some(id_str) = request.get("id").and_then(|v| v.as_str()) else {
@@ -11645,7 +11729,13 @@ fn service_request(
                             .and_then(|v| v.as_str())
                             .filter(|s| !s.is_empty())
                             .unwrap_or(acos_services::modules::settings::SETTINGS_PACKAGE);
-                        if !staged.is_empty() {
+                        let reinstall_if_missing = extra
+                            .get("reinstall_if_missing")
+                            .and_then(|v| v.as_bool())
+                            .unwrap_or(false);
+                        let already_installed =
+                            reinstall_if_missing && host_has_package(peer.host_mut(), package);
+                        if !staged.is_empty() && !already_installed {
                             let staged_path = Path::new(staged);
                             let uid = match peer.host_mut().install_extra_package_from_apk_as(
                                 staged_path,
@@ -14714,32 +14804,48 @@ mod service_control_hot_attach_tests {
     fn service_control_started_timeout_returns_false_and_does_not_leak_reply() {
         let control = Arc::new(ServiceControl::default());
         let peer_control = Arc::clone(&control);
+        let (ready_tx, ready_rx) = std::sync::mpsc::channel();
         let (started_tx, started_rx) = std::sync::mpsc::channel();
         let (allow_reply_tx, allow_reply_rx) = std::sync::mpsc::channel();
 
         let peer = std::thread::spawn(move || {
+            ready_tx.send(()).unwrap();
+            let deadline = Instant::now() + Duration::from_secs(2);
             let (id, _) = loop {
                 if let Some(item) = peer_control.take() {
                     break item;
                 }
+                if Instant::now() >= deadline {
+                    return None;
+                }
                 std::thread::sleep(Duration::from_millis(1));
             };
             started_tx.send(id).unwrap();
-            allow_reply_rx.recv().unwrap();
-            peer_control.reply(
+            if allow_reply_rx.recv_timeout(Duration::from_secs(2)).is_err() {
+                return None;
+            }
+            Some(peer_control.reply(
                 id,
                 ServiceControlReply {
                     reply: serde_json::json!({"ok": true}),
                     guest_commands: Vec::new(),
                 },
-            )
+            ))
         });
 
-        let result = control.submit(serde_json::json!({"op": "list"}), Duration::from_millis(20));
+        ready_rx
+            .recv_timeout(Duration::from_secs(2))
+            .expect("peer thread must become ready");
+        let result = control.submit(serde_json::json!({"op": "list"}), Duration::from_millis(50));
         assert!(result.is_none(), "submit must time out while peer is blocked");
-        let _id = started_rx.recv().unwrap();
+        let _id = started_rx
+            .recv_timeout(Duration::from_secs(2))
+            .expect("peer must take the request before the test deadline");
         allow_reply_tx.send(()).unwrap();
-        let accepted = peer.join().unwrap();
+        let accepted = peer
+            .join()
+            .unwrap()
+            .expect("peer must take the request and attempt reply");
         assert!(
             !accepted,
             "late reply after caller timeout must return false"
@@ -14760,27 +14866,31 @@ mod service_control_hot_attach_tests {
         let peer_control = Arc::clone(&control);
 
         let peer = std::thread::spawn(move || {
+            let deadline = Instant::now() + Duration::from_secs(2);
             let (id, req) = loop {
                 if let Some(item) = peer_control.take() {
                     break item;
                 }
+                if Instant::now() >= deadline {
+                    return false;
+                }
                 std::thread::sleep(Duration::from_millis(1));
             };
-            let accepted = peer_control.reply(
+            peer_control.reply(
                 id,
                 ServiceControlReply {
                     reply: serde_json::json!({"ok": true, "echo": req}),
                     guest_commands: Vec::new(),
                 },
-            );
-            assert!(accepted, "in-time reply must return true");
+            )
         });
 
         let result = control
             .submit(serde_json::json!({"op": "status"}), Duration::from_secs(2))
             .expect("in-time reply must reach submit()");
         assert_eq!(result.reply.get("ok").and_then(|v| v.as_bool()), Some(true));
-        peer.join().unwrap();
+        let accepted = peer.join().unwrap();
+        assert!(accepted, "in-time reply must return true");
         assert!(
             control
                 .replies
@@ -14939,6 +15049,95 @@ mod service_control_hot_attach_tests {
         assert!(!modules.attached().iter().any(|(id, _)| *id == MODULE_ID));
         assert!(!pms_has_package(peer.host_mut(), SETTINGS_PACKAGE));
         assert!(!atms_has_package(peer.host_mut(), SETTINGS_PACKAGE));
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn timed_out_detach_recovers_via_reattach_or_repeated_detach() {
+        use acos_services::module::SessionModules;
+        use acos_services::modules::settings::{MODULE_ID, SETTINGS_PACKAGE};
+
+        let dir = scratch_dir("hot-detach-recovery");
+        let apk_path = write_synthetic_settings_apk(&dir);
+
+        let mut session = SessionModules::new();
+        session.attach(&[]).expect("attach core");
+        let (host, mut modules) = session.into_parts();
+        let mut peer = Peer::with_host(host, None);
+
+        // Initial hot-attach installs com.android.settings on the peer.
+        let attach_req = serde_json::json!({
+            "op": "attach",
+            "id": MODULE_ID,
+            "profile": "real",
+            "_hot_extra_apk": {
+                "staged": apk_path.to_string_lossy(),
+                "guest_path": "/data/app/settings.apk",
+                "guest_lib_dir": "/data/app-lib-extra/com.android.settings/x86_64",
+                "package": SETTINGS_PACKAGE,
+            },
+        });
+        let attach_reply = service_request(&mut peer, &mut modules, &attach_req);
+        assert_eq!(attach_reply.get("ok").and_then(|v| v.as_bool()), Some(true));
+        assert!(pms_has_package(peer.host_mut(), SETTINGS_PACKAGE));
+        assert!(atms_has_package(peer.host_mut(), SETTINGS_PACKAGE));
+
+        // Peer runs detach (simulating a detach whose reply timed out on the
+        // launcher, leaving SecondaryPool thinking the package is still there).
+        let detach_req = serde_json::json!({ "op": "detach", "id": MODULE_ID });
+        let detach_reply = service_request(&mut peer, &mut modules, &detach_req);
+        assert_eq!(detach_reply.get("ok").and_then(|v| v.as_bool()), Some(true));
+        assert!(!pms_has_package(peer.host_mut(), SETTINGS_PACKAGE));
+        assert!(!atms_has_package(peer.host_mut(), SETTINGS_PACKAGE));
+
+        // Recovery path 1: a repeated detach succeeds cleanly so the launcher
+        // can confirm and drop its SecondaryPool spec.
+        let repeat_detach = service_request(&mut peer, &mut modules, &detach_req);
+        assert_eq!(repeat_detach.get("ok").and_then(|v| v.as_bool()), Some(true));
+
+        // Recovery path 2: a fresh attach with `reinstall_if_missing: true`
+        // (sent when SecondaryPool still has the spec) reinstalls PMS + ATMS
+        // and returns the fresh `_hot_extra_uid`.
+        let reinstall_req = serde_json::json!({
+            "op": "attach",
+            "id": MODULE_ID,
+            "profile": "real",
+            "_hot_extra_apk": {
+                "staged": apk_path.to_string_lossy(),
+                "guest_path": "/data/app/settings.apk",
+                "guest_lib_dir": "/data/app-lib-extra/com.android.settings/x86_64",
+                "package": SETTINGS_PACKAGE,
+                "reinstall_if_missing": true,
+            },
+        });
+        let reinstall_reply = service_request(&mut peer, &mut modules, &reinstall_req);
+        assert_eq!(
+            reinstall_reply.get("ok").and_then(|v| v.as_bool()),
+            Some(true),
+            "reinstall_if_missing attach must succeed: {reinstall_reply}"
+        );
+        assert!(
+            reinstall_reply.get("_hot_extra_uid").and_then(|v| v.as_i64()).is_some(),
+            "reinstalled package must return fresh _hot_extra_uid"
+        );
+        assert!(pms_has_package(peer.host_mut(), SETTINGS_PACKAGE));
+        assert!(atms_has_package(peer.host_mut(), SETTINGS_PACKAGE));
+
+        // Normal re-attach with `reinstall_if_missing: true` while already
+        // installed is a clean no-op without `_hot_extra_uid`, and a timeout on
+        // it must not roll back the pre-existing package.
+        let noop_reply = service_request(&mut peer, &mut modules, &reinstall_req);
+        assert_eq!(noop_reply.get("ok").and_then(|v| v.as_bool()), Some(true));
+        assert!(noop_reply.get("_hot_extra_uid").is_none());
+        assert!(!rollback_timed_out_hot_attach(
+            &mut peer,
+            &mut modules,
+            &reinstall_req,
+            &noop_reply,
+        ));
+        assert!(pms_has_package(peer.host_mut(), SETTINGS_PACKAGE));
+        assert!(atms_has_package(peer.host_mut(), SETTINGS_PACKAGE));
 
         let _ = std::fs::remove_dir_all(&dir);
     }
