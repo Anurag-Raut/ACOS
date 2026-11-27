@@ -120,6 +120,8 @@ CLI_SOCK="$TMP_RUNTIME/cli.sock"
 (
     cd /tmp
     exec env -u ACOS_HOME -u ACOS_BIN -u ACOS_SESSION_DAEMON \
+        -u ACOS_LAUNCHER_APK -u ACOS_SETTINGS_APK \
+        -u ACOS_PERMISSION_CONTROLLER_APK -u ACOS_SYSTEMUI_APK \
         ACOS_RUNTIME_DIR="$TMP_RUNTIME" \
         ACOS_SESSION_SOCKET="$CLI_SOCK" \
         "$TMP_PREFIX/bin/acos" serve --socket "$CLI_SOCK" --owner-pid "$$" \
@@ -142,6 +144,8 @@ done
 printf '[smoke-system-apps] running installed acos launch from /tmp (env -u ACOS_HOME)\n'
 if ! (
     cd /tmp && env -u ACOS_HOME -u ACOS_BIN -u ACOS_SESSION_DAEMON \
+        -u ACOS_LAUNCHER_APK -u ACOS_SETTINGS_APK \
+        -u ACOS_PERMISSION_CONTROLLER_APK -u ACOS_SYSTEMUI_APK \
         ACOS_RUNTIME_DIR="$TMP_RUNTIME" \
         ACOS_SESSION_SOCKET="$CLI_SOCK" \
         "$TMP_PREFIX/bin/acos" launch --engine art "$APP_APK" \
@@ -178,6 +182,8 @@ PYEOF
 
 (
     cd /tmp && env -u ACOS_HOME -u ACOS_BIN -u ACOS_SESSION_DAEMON \
+        -u ACOS_LAUNCHER_APK -u ACOS_SETTINGS_APK \
+        -u ACOS_PERMISSION_CONTROLLER_APK -u ACOS_SYSTEMUI_APK \
         ACOS_RUNTIME_DIR="$TMP_RUNTIME" \
         ACOS_SESSION_SOCKET="$CLI_SOCK" \
         "$TMP_PREFIX/bin/acos" session destroy --session "$CLI_SID" --json >/dev/null
@@ -198,7 +204,14 @@ import time
 
 mcp_bin, app_apk, runtime_dir = sys.argv[1], sys.argv[2], sys.argv[3]
 env = {k: v for k, v in os.environ.items() if k not in {
-    "ACOS_HOME", "ACOS_BIN", "ACOS_SESSION_SOCKET", "ACOS_SESSION_DAEMON"
+    "ACOS_HOME",
+    "ACOS_BIN",
+    "ACOS_SESSION_SOCKET",
+    "ACOS_SESSION_DAEMON",
+    "ACOS_LAUNCHER_APK",
+    "ACOS_SETTINGS_APK",
+    "ACOS_PERMISSION_CONTROLLER_APK",
+    "ACOS_SYSTEMUI_APK",
 }}
 env["ACOS_RUNTIME_DIR"] = runtime_dir
 
