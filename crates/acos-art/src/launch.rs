@@ -2224,13 +2224,26 @@ pub(crate) fn launch_session(
                         );
                         let _ = pump_spawns.send(spawn);
                     }
-                    peer_control.reply(
+                    let reply_for_rollback = (request.get("op").and_then(|v| v.as_str())
+                        == Some("attach")
+                        && request.get("_hot_extra_apk").is_some())
+                    .then(|| reply.clone());
+                    if !peer_control.reply(
                         id,
                         ServiceControlReply {
                             reply,
                             guest_commands,
                         },
-                    );
+                    ) {
+                        if let Some(ref reply) = reply_for_rollback {
+                            rollback_timed_out_hot_attach(
+                                peer,
+                                &mut peer_registry,
+                                &request,
+                                reply,
+                            );
+                        }
+                    }
                     // A live `ctl` op can queue `system -> app` deliveries (an
                     // SMS, a call-state event, a location fix, an auth result).
                     // No binder transaction follows to flush them, so do it here
@@ -11409,7 +11422,7 @@ struct ServiceControlReply {
 #[derive(Default)]
 struct ServiceControl {
     requests: Mutex<Vec<(u64, serde_json::Value)>>,
-    replies: Mutex<HashMap<u64, ServiceControlReply>>,
+    replies: Mutex<HashMap<u64, Option<ServiceControlReply>>>,
     next_id: AtomicU64,
     reply_cv: Condvar,
     /// The peer's wake-pipe write end (`-1` until the launcher installs it). A
@@ -11432,10 +11445,14 @@ impl ServiceControl {
         timeout: Duration,
     ) -> Option<ServiceControlReply> {
         let id = self.next_id.fetch_add(1, Ordering::Relaxed) + 1;
-        self.requests
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .push((id, request));
+        {
+            let mut replies = self.replies.lock().unwrap_or_else(|e| e.into_inner());
+            replies.insert(id, None);
+        }
+        {
+            let mut requests = self.requests.lock().unwrap_or_else(|e| e.into_inner());
+            requests.push((id, request));
+        }
         let wake = self.wake.load(Ordering::Acquire);
         if wake >= 0 {
             let byte = 1u8;
@@ -11446,11 +11463,19 @@ impl ServiceControl {
         let deadline = Instant::now() + timeout;
         let mut replies = self.replies.lock().unwrap_or_else(|e| e.into_inner());
         loop {
-            if let Some(reply) = replies.remove(&id) {
-                return Some(reply);
+            if replies.get(&id).is_some_and(Option::is_some) {
+                return replies.remove(&id).flatten();
             }
             let now = Instant::now();
             if now >= deadline {
+                if let Some(Some(reply)) = replies.remove(&id) {
+                    return Some(reply);
+                }
+                drop(replies);
+                self.requests
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .retain(|(req_id, _)| *req_id != id);
                 return None;
             }
             let (guard, _) = self
@@ -11472,12 +11497,16 @@ impl ServiceControl {
     }
 
     /// Peer-thread side: publish the answer and wake the caller.
-    fn reply(&self, id: u64, value: ServiceControlReply) {
-        self.replies
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .insert(id, value);
+    ///
+    /// Returns `false` if the caller already timed out and removed its slot.
+    fn reply(&self, id: u64, value: ServiceControlReply) -> bool {
+        let mut replies = self.replies.lock().unwrap_or_else(|e| e.into_inner());
+        let Some(slot) = replies.get_mut(&id) else {
+            return false;
+        };
+        *slot = Some(value);
         self.reply_cv.notify_all();
+        true
     }
 }
 
@@ -11498,6 +11527,40 @@ struct PeerSummary {
     reverse_replies: u64,
     reverse_failed: u64,
     resource_limits: u64,
+}
+
+/// Roll back a hot-attach that succeeded on the peer thread after the
+/// launcher's `ServiceControl::submit` timed out and abandoned the operation.
+///
+/// Without this, `system.settings` stays attached and `com.android.settings`
+/// remains installed in PMS/ATMS while `SecondaryPool` never received a spec,
+/// breaking both process spawns and subsequent retries.
+fn rollback_timed_out_hot_attach(
+    peer: &mut Peer,
+    modules: &mut acos_services::module::ModuleRegistry,
+    request: &serde_json::Value,
+    reply: &serde_json::Value,
+) -> bool {
+    if request.get("op").and_then(|v| v.as_str()) != Some("attach") {
+        return false;
+    }
+    let Some(extra) = request.get("_hot_extra_apk").and_then(|v| v.as_object()) else {
+        return false;
+    };
+    if reply.get("ok").and_then(|v| v.as_bool()) != Some(true) {
+        return false;
+    }
+    let Some(id_str) = request.get("id").and_then(|v| v.as_str()) else {
+        return false;
+    };
+    let package = extra
+        .get("package")
+        .and_then(|v| v.as_str())
+        .filter(|s| !s.is_empty())
+        .unwrap_or(acos_services::modules::settings::SETTINGS_PACKAGE);
+    let _ = modules.detach_live(peer.host_mut(), id_str);
+    peer.host_mut().remove_extra_package(package);
+    true
 }
 
 /// One `{"cmd":"services", ...}` operation against the peer thread's host.
@@ -11577,6 +11640,11 @@ fn service_request(
                         let staged = extra.get("staged").and_then(|v| v.as_str()).unwrap_or("");
                         let guest_path = extra.get("guest_path").and_then(|v| v.as_str());
                         let guest_lib_dir = extra.get("guest_lib_dir").and_then(|v| v.as_str());
+                        let package = extra
+                            .get("package")
+                            .and_then(|v| v.as_str())
+                            .filter(|s| !s.is_empty())
+                            .unwrap_or(acos_services::modules::settings::SETTINGS_PACKAGE);
                         if !staged.is_empty() {
                             let staged_path = Path::new(staged);
                             let uid = match peer.host_mut().install_extra_package_from_apk_as(
@@ -11604,6 +11672,7 @@ fn service_request(
                                         atms.seed_manifest_from_apk_with_uid(staged_path, uid)
                                     {
                                         let _ = modules.detach_live(peer.host_mut(), id);
+                                        peer.host_mut().remove_extra_package(package);
                                         return Err(acos_services::ServiceError::Internal(format!(
                                             "hot seed_manifest_from_apk_with_uid failed: {err}"
                                         )));
@@ -14454,6 +14523,433 @@ mod panel_touch_tests {
             ],
             "only intact subsequent COMMIT_TEXT frames may reach the editor"
         );
+    }
+}
+
+#[cfg(test)]
+mod service_control_hot_attach_tests {
+    use super::*;
+
+    fn crc32(data: &[u8]) -> u32 {
+        let mut crc = 0xFFFF_FFFFu32;
+        for &b in data {
+            crc ^= u32::from(b);
+            for _ in 0..8 {
+                let mask = (crc & 1).wrapping_neg();
+                crc = (crc >> 1) ^ (0xEDB8_8320 & mask);
+            }
+        }
+        !crc
+    }
+
+    fn stored_zip_single_file(name: &str, data: &[u8]) -> Vec<u8> {
+        let crc = crc32(data);
+        let len = data.len() as u32;
+        let name_bytes = name.as_bytes();
+        let name_len = name_bytes.len() as u16;
+        let mut out = Vec::new();
+
+        // Local file header (30 bytes + filename).
+        out.extend_from_slice(&0x0403_4B50u32.to_le_bytes());
+        out.extend_from_slice(&20u16.to_le_bytes()); // version needed
+        out.extend_from_slice(&0u16.to_le_bytes()); // flags
+        out.extend_from_slice(&0u16.to_le_bytes()); // compression = stored
+        out.extend_from_slice(&0u16.to_le_bytes()); // mod time
+        out.extend_from_slice(&0u16.to_le_bytes()); // mod date
+        out.extend_from_slice(&crc.to_le_bytes());
+        out.extend_from_slice(&len.to_le_bytes());
+        out.extend_from_slice(&len.to_le_bytes());
+        out.extend_from_slice(&name_len.to_le_bytes());
+        out.extend_from_slice(&0u16.to_le_bytes()); // extra len
+        out.extend_from_slice(name_bytes);
+        out.extend_from_slice(data);
+
+        let cd_offset = out.len() as u32;
+        // Central directory header (46 bytes + filename).
+        out.extend_from_slice(&0x0201_4B50u32.to_le_bytes());
+        out.extend_from_slice(&20u16.to_le_bytes()); // version made by
+        out.extend_from_slice(&20u16.to_le_bytes()); // version needed
+        out.extend_from_slice(&0u16.to_le_bytes()); // flags
+        out.extend_from_slice(&0u16.to_le_bytes()); // compression = stored
+        out.extend_from_slice(&0u16.to_le_bytes()); // mod time
+        out.extend_from_slice(&0u16.to_le_bytes()); // mod date
+        out.extend_from_slice(&crc.to_le_bytes());
+        out.extend_from_slice(&len.to_le_bytes());
+        out.extend_from_slice(&len.to_le_bytes());
+        out.extend_from_slice(&name_len.to_le_bytes());
+        out.extend_from_slice(&0u16.to_le_bytes()); // extra len
+        out.extend_from_slice(&0u16.to_le_bytes()); // comment len
+        out.extend_from_slice(&0u16.to_le_bytes()); // disk number
+        out.extend_from_slice(&0u16.to_le_bytes()); // internal attrs
+        out.extend_from_slice(&0u32.to_le_bytes()); // external attrs
+        out.extend_from_slice(&0u32.to_le_bytes()); // local header offset
+        out.extend_from_slice(name_bytes);
+        let cd_size = (out.len() as u32) - cd_offset;
+
+        // End of central directory (22 bytes).
+        out.extend_from_slice(&0x0605_4B50u32.to_le_bytes());
+        out.extend_from_slice(&0u16.to_le_bytes()); // disk
+        out.extend_from_slice(&0u16.to_le_bytes()); // cd start disk
+        out.extend_from_slice(&1u16.to_le_bytes()); // entries on disk
+        out.extend_from_slice(&1u16.to_le_bytes()); // total entries
+        out.extend_from_slice(&cd_size.to_le_bytes());
+        out.extend_from_slice(&cd_offset.to_le_bytes());
+        out.extend_from_slice(&0u16.to_le_bytes()); // comment len
+        out
+    }
+
+    fn minimal_axml_manifest(package: &str) -> Vec<u8> {
+        let strings = ["manifest", "package", package];
+        let mut pool_data = Vec::new();
+        let mut offsets = Vec::with_capacity(strings.len());
+        for s in &strings {
+            offsets.push(pool_data.len() as u32);
+            let bytes = s.as_bytes();
+            assert!(bytes.len() < 128);
+            pool_data.push(bytes.len() as u8); // utf16 len
+            pool_data.push(bytes.len() as u8); // utf8 len
+            pool_data.extend_from_slice(bytes);
+            pool_data.push(0);
+        }
+        while pool_data.len() % 4 != 0 {
+            pool_data.push(0);
+        }
+
+        let pool_header_size = 28u16;
+        let strings_start = u32::from(pool_header_size) + (strings.len() as u32) * 4;
+        let pool_chunk_size = strings_start + pool_data.len() as u32;
+        let mut pool = Vec::new();
+        pool.extend_from_slice(&0x0001u16.to_le_bytes()); // RES_STRING_POOL_TYPE
+        pool.extend_from_slice(&pool_header_size.to_le_bytes());
+        pool.extend_from_slice(&pool_chunk_size.to_le_bytes());
+        pool.extend_from_slice(&(strings.len() as u32).to_le_bytes());
+        pool.extend_from_slice(&0u32.to_le_bytes()); // styleCount
+        pool.extend_from_slice(&0x0100u32.to_le_bytes()); // UTF8_FLAG
+        pool.extend_from_slice(&strings_start.to_le_bytes());
+        pool.extend_from_slice(&0u32.to_le_bytes()); // stylesStart
+        for off in offsets {
+            pool.extend_from_slice(&off.to_le_bytes());
+        }
+        pool.extend_from_slice(&pool_data);
+
+        // Start element <manifest package="...">
+        let mut start_el = Vec::new();
+        start_el.extend_from_slice(&0x0102u16.to_le_bytes()); // RES_XML_START_ELEMENT_TYPE
+        start_el.extend_from_slice(&16u16.to_le_bytes()); // header_size
+        start_el.extend_from_slice(&(16u32 + 20 + 20).to_le_bytes()); // chunk_size
+        start_el.extend_from_slice(&1u32.to_le_bytes()); // line
+        start_el.extend_from_slice(&u32::MAX.to_le_bytes()); // comment
+        start_el.extend_from_slice(&u32::MAX.to_le_bytes()); // ns
+        start_el.extend_from_slice(&0u32.to_le_bytes()); // name = "manifest"
+        start_el.extend_from_slice(&20u16.to_le_bytes()); // attribute_start
+        start_el.extend_from_slice(&20u16.to_le_bytes()); // attribute_size
+        start_el.extend_from_slice(&1u16.to_le_bytes()); // attribute_count
+        start_el.extend_from_slice(&0u16.to_le_bytes()); // id_index
+        start_el.extend_from_slice(&0u16.to_le_bytes()); // class_index
+        start_el.extend_from_slice(&0u16.to_le_bytes()); // style_index
+        // Attr 0: package = <package>
+        start_el.extend_from_slice(&u32::MAX.to_le_bytes()); // ns
+        start_el.extend_from_slice(&1u32.to_le_bytes()); // name = "package"
+        start_el.extend_from_slice(&2u32.to_le_bytes()); // raw_value = package
+        start_el.extend_from_slice(&8u16.to_le_bytes()); // value size
+        start_el.push(0); // res0
+        start_el.push(0x03); // TYPE_STRING
+        start_el.extend_from_slice(&2u32.to_le_bytes()); // data = string idx 2
+
+        // End element </manifest>
+        let mut end_el = Vec::new();
+        end_el.extend_from_slice(&0x0103u16.to_le_bytes()); // RES_XML_END_ELEMENT_TYPE
+        end_el.extend_from_slice(&16u16.to_le_bytes()); // header_size
+        end_el.extend_from_slice(&24u32.to_le_bytes()); // chunk_size
+        end_el.extend_from_slice(&1u32.to_le_bytes()); // line
+        end_el.extend_from_slice(&u32::MAX.to_le_bytes()); // comment
+        end_el.extend_from_slice(&u32::MAX.to_le_bytes()); // ns
+        end_el.extend_from_slice(&0u32.to_le_bytes()); // name = "manifest"
+
+        let total_size = 8u32 + pool.len() as u32 + start_el.len() as u32 + end_el.len() as u32;
+        let mut doc = Vec::with_capacity(total_size as usize);
+        doc.extend_from_slice(&0x0003u16.to_le_bytes()); // RES_XML_TYPE
+        doc.extend_from_slice(&8u16.to_le_bytes());
+        doc.extend_from_slice(&total_size.to_le_bytes());
+        doc.extend_from_slice(&pool);
+        doc.extend_from_slice(&start_el);
+        doc.extend_from_slice(&end_el);
+        doc
+    }
+
+    fn write_synthetic_settings_apk(dir: &Path) -> PathBuf {
+        let apk_path = dir.join("settings.apk");
+        let manifest = minimal_axml_manifest(acos_services::modules::settings::SETTINGS_PACKAGE);
+        let zip_bytes = stored_zip_single_file("AndroidManifest.xml", &manifest);
+        std::fs::write(&apk_path, zip_bytes).expect("write synthetic settings.apk");
+        apk_path
+    }
+
+    #[test]
+    fn service_control_unstarted_timeout_is_removed_from_requests() {
+        let control = ServiceControl::default();
+        let reply = control.submit(serde_json::json!({"op": "list"}), Duration::from_millis(5));
+        assert!(reply.is_none(), "timed-out submit must return None");
+        assert!(
+            control.take().is_none(),
+            "unstarted timed-out request must be removed from requests"
+        );
+    }
+
+    fn scratch_dir(name: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!(
+            "acos-art-{}-{}-{name}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos())
+                .unwrap_or(0)
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("scratch dir");
+        dir
+    }
+
+    #[test]
+    fn service_control_started_timeout_returns_false_and_does_not_leak_reply() {
+        let control = Arc::new(ServiceControl::default());
+        let peer_control = Arc::clone(&control);
+        let (started_tx, started_rx) = std::sync::mpsc::channel();
+        let (allow_reply_tx, allow_reply_rx) = std::sync::mpsc::channel();
+
+        let peer = std::thread::spawn(move || {
+            let (id, _) = loop {
+                if let Some(item) = peer_control.take() {
+                    break item;
+                }
+                std::thread::sleep(Duration::from_millis(1));
+            };
+            started_tx.send(id).unwrap();
+            allow_reply_rx.recv().unwrap();
+            peer_control.reply(
+                id,
+                ServiceControlReply {
+                    reply: serde_json::json!({"ok": true}),
+                    guest_commands: Vec::new(),
+                },
+            )
+        });
+
+        let result = control.submit(serde_json::json!({"op": "list"}), Duration::from_millis(20));
+        assert!(result.is_none(), "submit must time out while peer is blocked");
+        let _id = started_rx.recv().unwrap();
+        allow_reply_tx.send(()).unwrap();
+        let accepted = peer.join().unwrap();
+        assert!(
+            !accepted,
+            "late reply after caller timeout must return false"
+        );
+        assert!(
+            control
+                .replies
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .is_empty(),
+            "late reply must not leak an entry into ServiceControl::replies"
+        );
+    }
+
+    #[test]
+    fn service_control_reply_before_timeout_is_returned() {
+        let control = Arc::new(ServiceControl::default());
+        let peer_control = Arc::clone(&control);
+
+        let peer = std::thread::spawn(move || {
+            let (id, req) = loop {
+                if let Some(item) = peer_control.take() {
+                    break item;
+                }
+                std::thread::sleep(Duration::from_millis(1));
+            };
+            let accepted = peer_control.reply(
+                id,
+                ServiceControlReply {
+                    reply: serde_json::json!({"ok": true, "echo": req}),
+                    guest_commands: Vec::new(),
+                },
+            );
+            assert!(accepted, "in-time reply must return true");
+        });
+
+        let result = control
+            .submit(serde_json::json!({"op": "status"}), Duration::from_secs(2))
+            .expect("in-time reply must reach submit()");
+        assert_eq!(result.reply.get("ok").and_then(|v| v.as_bool()), Some(true));
+        peer.join().unwrap();
+        assert!(
+            control
+                .replies
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .is_empty(),
+            "completed submit must not leave an entry in replies"
+        );
+    }
+
+    fn pms_has_package(host: &mut acos_services::ServiceHost, package: &str) -> bool {
+        let obj = host
+            .ensure("android.content.pm.IPackageManager")
+            .expect("package service registered");
+        let pms = obj
+            .as_any_mut()
+            .and_then(|any| any.downcast_mut::<acos_services::pms::PmsService>())
+            .expect("PmsService");
+        let state = pms.shared_state();
+        let guard = state.lock().unwrap();
+        guard.lookup(Some(package)).is_some()
+    }
+
+    fn atms_has_package(host: &mut acos_services::ServiceHost, package: &str) -> bool {
+        let obj = host
+            .ensure("android.app.IActivityTaskManager")
+            .expect("atms registered");
+        let atms = obj
+            .as_any_mut()
+            .and_then(|any| any.downcast_mut::<acos_services::atms::AtmsService>())
+            .expect("AtmsService");
+        let state = atms.shared_state();
+        let guard = state.lock().unwrap();
+        guard.ams.manifests.package(package).is_some()
+    }
+
+    #[test]
+    fn timed_out_hot_attach_rolls_back_and_allows_retry() {
+        use acos_services::module::SessionModules;
+        use acos_services::modules::settings::{MODULE_ID, SETTINGS_PACKAGE};
+
+        let dir = scratch_dir("hot-attach-rollback-retry");
+        let apk_path = write_synthetic_settings_apk(&dir);
+
+        let mut session = SessionModules::new();
+        session.attach(&[]).expect("attach core");
+        let (host, mut modules) = session.into_parts();
+        let mut peer = Peer::with_host(host, None);
+
+        let request = serde_json::json!({
+            "op": "attach",
+            "id": MODULE_ID,
+            "profile": "real",
+            "_hot_extra_apk": {
+                "staged": apk_path.to_string_lossy(),
+                "guest_path": "/data/app/settings.apk",
+                "guest_lib_dir": "/data/app-lib-extra/com.android.settings/x86_64",
+                "package": SETTINGS_PACKAGE,
+            },
+        });
+
+        // Simulate the peer completing the hot-attach after ServiceControl::submit timed out.
+        let control = ServiceControl::default();
+        assert!(
+            control
+                .submit(request.clone(), Duration::from_millis(1))
+                .is_none(),
+            "submit must time out first"
+        );
+        // Suppose the peer already took the request right before timeout: execute
+        // service_request and attempt to publish the late reply.
+        let reply = service_request(&mut peer, &mut modules, &request);
+        assert_eq!(reply.get("ok").and_then(|v| v.as_bool()), Some(true));
+        assert!(
+            modules.attached().iter().any(|(id, _)| *id == MODULE_ID),
+            "system.settings must be attached before rollback"
+        );
+        assert!(
+            pms_has_package(peer.host_mut(), SETTINGS_PACKAGE),
+            "com.android.settings must be installed in PMS before rollback"
+        );
+        assert!(
+            atms_has_package(peer.host_mut(), SETTINGS_PACKAGE),
+            "com.android.settings must be seeded in ATMS before rollback"
+        );
+
+        let published = control.reply(
+            1,
+            ServiceControlReply {
+                reply: reply.clone(),
+                guest_commands: Vec::new(),
+            },
+        );
+        assert!(!published, "late reply after timeout must return false");
+
+        // Verify non-matching cases are no-ops.
+        assert!(!rollback_timed_out_hot_attach(
+            &mut peer,
+            &mut modules,
+            &serde_json::json!({"op": "detach", "id": MODULE_ID}),
+            &reply,
+        ));
+        assert!(!rollback_timed_out_hot_attach(
+            &mut peer,
+            &mut modules,
+            &request,
+            &serde_json::json!({"ok": false}),
+        ));
+
+        // Roll back the timed-out hot-attach.
+        assert!(rollback_timed_out_hot_attach(
+            &mut peer,
+            &mut modules,
+            &request,
+            &reply,
+        ));
+        assert!(
+            !modules.attached().iter().any(|(id, _)| *id == MODULE_ID),
+            "system.settings must be detached after rollback"
+        );
+        assert!(
+            !pms_has_package(peer.host_mut(), SETTINGS_PACKAGE),
+            "com.android.settings must be removed from PMS after rollback"
+        );
+        assert!(
+            !atms_has_package(peer.host_mut(), SETTINGS_PACKAGE),
+            "com.android.settings must be removed from ATMS after rollback"
+        );
+
+        // Retrying the hot-attach must now succeed cleanly.
+        let retry_reply = service_request(&mut peer, &mut modules, &request);
+        assert_eq!(
+            retry_reply.get("ok").and_then(|v| v.as_bool()),
+            Some(true),
+            "retried attach must succeed: {retry_reply}"
+        );
+        assert!(modules.attached().iter().any(|(id, _)| *id == MODULE_ID));
+        assert!(pms_has_package(peer.host_mut(), SETTINGS_PACKAGE));
+        assert!(atms_has_package(peer.host_mut(), SETTINGS_PACKAGE));
+
+        // Also verify fallback package name when `_hot_extra_apk.package` is omitted.
+        let request_no_pkg = serde_json::json!({
+            "op": "attach",
+            "id": MODULE_ID,
+            "profile": "real",
+            "_hot_extra_apk": {
+                "staged": apk_path.to_string_lossy(),
+            },
+        });
+        assert!(rollback_timed_out_hot_attach(
+            &mut peer,
+            &mut modules,
+            &request_no_pkg,
+            &retry_reply,
+        ));
+        assert!(!modules.attached().iter().any(|(id, _)| *id == MODULE_ID));
+        assert!(!pms_has_package(peer.host_mut(), SETTINGS_PACKAGE));
+        assert!(!atms_has_package(peer.host_mut(), SETTINGS_PACKAGE));
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn synthetic_settings_apk_opens_and_parses() {
+        let dir = scratch_dir("synthetic-settings-apk");
+        let apk_path = write_synthetic_settings_apk(&dir);
+        let pkg = crate::app::apk_package(&apk_path).expect("parse synthetic settings.apk");
+        assert_eq!(pkg, acos_services::modules::settings::SETTINGS_PACKAGE);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }
 
