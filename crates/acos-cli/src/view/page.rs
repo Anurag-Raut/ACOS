@@ -546,6 +546,7 @@ function closeWs() {
     try { ws.close(); } catch (_) {}
     ws = null;
   }
+  failPendingCapabilities();
 }
 
 function isTerminalInput(msg) {
@@ -1410,7 +1411,9 @@ function handleCapabilityReply(msg) {
       rec.statusEl.hidden = false;
       rec.statusEl.className = "cap-status ok";
       rec.statusEl.textContent = "Enabled.";
-      setTimeout(() => dismissCapabilityPrompt(seq), 750);
+      setTimeout(() => {
+        if (capabilityCards.get(seq) === rec) dismissCapabilityPrompt(seq);
+      }, 750);
     }
   } else {
     addEvent({
@@ -1939,3 +1942,440 @@ if (location.hash.startsWith("#s=")) {
 </body>
 </html>
 "##;
+
+#[cfg(test)]
+mod tests {
+    use super::PAGE;
+    use std::io::Write;
+    use std::process::{Command, Stdio};
+
+    fn extract_script() -> &'static str {
+        let start_tag = "<script>";
+        let end_tag = "</script>";
+        let start = PAGE.find(start_tag).expect("PAGE should contain <script>") + start_tag.len();
+        let end = PAGE[start..]
+            .find(end_tag)
+            .map(|i| start + i)
+            .expect("PAGE should contain </script>");
+        &PAGE[start..end]
+    }
+
+    fn run_page_js_scenario(test_body: &str) {
+        let page_js = serde_json::to_string(extract_script()).expect("serialize page script");
+        let runner = format!(
+            r#"
+const assert = require("node:assert/strict");
+const vm = require("node:vm");
+
+const pageJs = {page_js};
+
+function createHarness() {{
+  let nowMs = 1000000;
+  let nextTimerId = 1;
+  const timers = new Map();
+
+  function fakeSetTimeout(fn, delay = 0, ...args) {{
+    const id = nextTimerId++;
+    timers.set(id, {{ id, fn, args, at: nowMs + Math.max(0, Number(delay) || 0), interval: null }});
+    return id;
+  }}
+  function fakeClearTimeout(id) {{
+    timers.delete(id);
+  }}
+  function fakeSetInterval(fn, delay = 0, ...args) {{
+    const id = nextTimerId++;
+    const step = Math.max(1, Number(delay) || 1);
+    timers.set(id, {{ id, fn, args, at: nowMs + step, interval: step }});
+    return id;
+  }}
+  function fakeClearInterval(id) {{
+    timers.delete(id);
+  }}
+  function advanceTimers(ms) {{
+    const target = nowMs + ms;
+    while (true) {{
+      let next = null;
+      for (const t of timers.values()) {{
+        if (t.at <= target && (!next || t.at < next.at || (t.at === next.at && t.id < next.id))) {{
+          next = t;
+        }}
+      }}
+      if (!next) break;
+      nowMs = next.at;
+      if (next.interval !== null) {{
+        next.at = nowMs + next.interval;
+      }} else {{
+        timers.delete(next.id);
+      }}
+      if (typeof next.fn === "function") {{
+        next.fn(...next.args);
+      }}
+    }}
+    nowMs = target;
+  }}
+
+  class ClassList {{
+    constructor() {{ this.set = new Set(); }}
+    add(...names) {{ for (const n of names) this.set.add(n); }}
+    remove(...names) {{ for (const n of names) this.set.delete(n); }}
+    toggle(name, force) {{
+      if (force === undefined) {{
+        if (this.set.has(name)) {{ this.set.delete(name); return false; }}
+        this.set.add(name); return true;
+      }}
+      if (force) this.set.add(name); else this.set.delete(name);
+      return !!force;
+    }}
+    contains(name) {{ return this.set.has(name); }}
+  }}
+
+  class StubElement {{
+    constructor(tagName, id = "") {{
+      this.tagName = String(tagName || "div").toUpperCase();
+      this.id = id;
+      this.className = "";
+      this.classList = new ClassList();
+      this._textContent = "";
+      this.hidden = false;
+      this.disabled = false;
+      this.title = "";
+      this.type = "";
+      this.value = "";
+      this.width = 0;
+      this.height = 0;
+      this.tabIndex = 0;
+      this.children = [];
+      this.parentNode = null;
+      this.listeners = new Map();
+      this.attrs = new Map();
+      this.style = {{ setProperty() {{}} }};
+    }}
+    get textContent() {{ return this._textContent; }}
+    set textContent(v) {{
+      this._textContent = String(v ?? "");
+      if (this._textContent === "") {{
+        for (const c of this.children) c.parentNode = null;
+        this.children = [];
+      }}
+    }}
+    get lastChild() {{
+      return this.children.length ? this.children[this.children.length - 1] : null;
+    }}
+    appendChild(child) {{
+      if (child.parentNode) child.remove();
+      child.parentNode = this;
+      this.children.push(child);
+      return child;
+    }}
+    prepend(child) {{
+      if (child.parentNode) child.remove();
+      child.parentNode = this;
+      this.children.unshift(child);
+      return child;
+    }}
+    remove() {{
+      if (!this.parentNode) return;
+      const idx = this.parentNode.children.indexOf(this);
+      if (idx >= 0) this.parentNode.children.splice(idx, 1);
+      this.parentNode = null;
+    }}
+    addEventListener(type, fn) {{
+      if (!this.listeners.has(type)) this.listeners.set(type, []);
+      this.listeners.get(type).push(fn);
+    }}
+    dispatchEvent(ev) {{
+      const list = this.listeners.get(ev.type) || [];
+      for (const fn of list) fn(ev);
+    }}
+    click() {{
+      this.dispatchEvent({{ type: "click", preventDefault() {{}} }});
+    }}
+    setAttribute(k, v) {{ this.attrs.set(k, String(v)); }}
+    getContext() {{ return {{ clearRect() {{}}, drawImage() {{}} }}; }}
+    focus() {{}}
+    getBoundingClientRect() {{ return {{ left: 0, top: 0, width: 100, height: 200, right: 100, bottom: 200 }}; }}
+    querySelector() {{ return null; }}
+    hasPointerCapture() {{ return false; }}
+    releasePointerCapture() {{}}
+    setPointerCapture() {{}}
+    toBlob(cb) {{ cb(null); }}
+  }}
+
+  const elementsById = new Map();
+  const docListeners = new Map();
+  const winListeners = new Map();
+  const bodyEl = new StubElement("body");
+  const documentStub = {{
+    readyState: "complete",
+    hidden: false,
+    activeElement: null,
+    body: bodyEl,
+    getElementById(id) {{
+      if (!elementsById.has(id)) elementsById.set(id, new StubElement("div", id));
+      return elementsById.get(id);
+    }},
+    createElement(tag) {{ return new StubElement(tag); }},
+    createElementNS(_ns, tag) {{ return new StubElement(tag); }},
+    addEventListener(type, fn) {{
+      if (!docListeners.has(type)) docListeners.set(type, []);
+      docListeners.get(type).push(fn);
+    }},
+    execCommand() {{ return false; }},
+  }};
+
+  const createdSockets = [];
+  class MockWebSocket {{
+    constructor(url) {{
+      this.url = url;
+      this.readyState = MockWebSocket.OPEN;
+      this.sent = [];
+      this.closed = false;
+      this.onopen = null;
+      this.onmessage = null;
+      this.onclose = null;
+      this.onerror = null;
+      createdSockets.push(this);
+    }}
+    send(data) {{ this.sent.push(data); }}
+    close() {{
+      if (this.readyState === MockWebSocket.CLOSED) return;
+      this.readyState = MockWebSocket.CLOSED;
+      this.closed = true;
+      const sock = this;
+      fakeSetTimeout(() => {{ if (sock.onclose) sock.onclose(); }}, 0);
+    }}
+    emitMessage(obj) {{
+      if (this.onmessage) this.onmessage({{ data: JSON.stringify(obj) }});
+    }}
+  }}
+  MockWebSocket.CONNECTING = 0;
+  MockWebSocket.OPEN = 1;
+  MockWebSocket.CLOSING = 2;
+  MockWebSocket.CLOSED = 3;
+
+  class MockEventSource {{
+    constructor(url) {{
+      this.url = url;
+      this.closed = false;
+    }}
+    addEventListener() {{}}
+    close() {{ this.closed = true; }}
+  }}
+
+  const windowStub = {{
+    addEventListener(type, fn) {{
+      if (!winListeners.has(type)) winListeners.set(type, []);
+      winListeners.get(type).push(fn);
+    }},
+  }};
+
+  const sandbox = {{
+    console,
+    URLSearchParams,
+    AbortController,
+    TextDecoder,
+    Blob,
+    URL,
+    WebSocket: MockWebSocket,
+    EventSource: MockEventSource,
+    document: documentStub,
+    window: windowStub,
+    navigator: {{}},
+    location: {{
+      search: "?t=test-token",
+      protocol: "http:",
+      host: "127.0.0.1:8080",
+      pathname: "/",
+      hash: "",
+    }},
+    history: {{ replaceState() {{}} }},
+    fetch: async () => ({{ ok: true, json: async () => ({{ sessions: [] }}) }}),
+    setTimeout: fakeSetTimeout,
+    clearTimeout: fakeClearTimeout,
+    setInterval: fakeSetInterval,
+    clearInterval: fakeClearInterval,
+    requestAnimationFrame: (fn) => fakeSetTimeout(fn, 16),
+  }};
+  sandbox.globalThis = sandbox;
+
+  const ctx = vm.createContext(sandbox);
+  vm.runInContext(pageJs, ctx);
+
+  function dispatchWindow(type, ev = {{}}) {{
+    const list = winListeners.get(type) || [];
+    for (const fn of list) fn(Object.assign({{ type }}, ev));
+  }}
+
+  return {{
+    ctx,
+    eval: (code) => vm.runInContext(code, ctx),
+    advanceTimers,
+    createdSockets,
+    dispatchWindow,
+    capTray: documentStub.getElementById("cap-tray"),
+  }};
+}}
+
+{test_body}
+"#,
+            page_js = page_js,
+            test_body = test_body,
+        );
+
+        let mut child = Command::new("node")
+            .arg("-")
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .expect("node should be installed and runnable");
+
+        child
+            .stdin
+            .as_mut()
+            .expect("stdin pipe")
+            .write_all(runner.as_bytes())
+            .expect("write runner script to node stdin");
+
+        let output = child.wait_with_output().expect("wait for node");
+        assert!(
+            output.status.success(),
+            "node JS test failed (status {:?})\nstdout:\n{}\nstderr:\n{}",
+            output.status.code(),
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr),
+        );
+    }
+
+    #[test]
+    fn queue_full_disconnect_fails_pending_capabilities_and_reenables_buttons() {
+        run_page_js_scenario(
+            r#"
+const h = createHarness();
+h.eval(`
+  openSession({ session_id: "sess-1", guest_gen: 1, stream: false, watch_only: false });
+  showCapabilityPrompt({
+    seq: 7,
+    title: "Location",
+    options: [{ kind: "hot_attach", id: "opt-loc", label: "Enable location" }],
+  });
+`);
+const rec = h.eval(`capabilityCards.get(7)`);
+assert.equal(rec.buttons.length, 1);
+rec.buttons[0].click();
+
+assert.equal(h.eval(`pendingCapabilities.has(7)`), true);
+assert.equal(rec.buttons[0].disabled, true);
+assert.equal(rec.statusEl.textContent, "Enabling…");
+assert.equal(h.createdSockets.length, 1);
+const sock = h.createdSockets[0];
+assert.equal(h.eval(`ws !== null`), true);
+
+sock.emitMessage({ ok: false, code: "QUEUE_FULL", disconnected: true });
+h.advanceTimers(10);
+
+assert.equal(sock.closed, true);
+assert.equal(h.eval(`ws`), null);
+assert.equal(h.eval(`pendingCapabilities.size`), 0);
+assert.equal(rec.buttons[0].disabled, false);
+assert.equal(rec.statusEl.hidden, false);
+assert.equal(rec.statusEl.className, "cap-status bad");
+assert.match(rec.statusEl.textContent, /Connection lost: the result is uncertain/);
+"#,
+        );
+    }
+
+    #[test]
+    fn pagehide_fails_pending_capabilities_so_bfcache_restore_does_not_stick_disabled() {
+        run_page_js_scenario(
+            r#"
+const h = createHarness();
+h.eval(`
+  openSession({ session_id: "sess-2", guest_gen: 2, stream: true, watch_only: false });
+  showCapabilityPrompt({
+    seq: 3,
+    title: "Camera",
+    options: [{ kind: "hot_attach", id: "opt-cam", label: "Enable camera" }],
+  });
+`);
+const rec = h.eval(`capabilityCards.get(3)`);
+rec.buttons[0].click();
+
+assert.equal(h.eval(`pendingCapabilities.has(3)`), true);
+assert.equal(rec.buttons[0].disabled, true);
+assert.equal(h.createdSockets.length, 1);
+const sock = h.createdSockets[0];
+
+h.dispatchWindow("pagehide", { persisted: true });
+h.advanceTimers(10);
+h.dispatchWindow("pageshow", { persisted: true });
+
+assert.equal(sock.closed, true);
+assert.equal(h.eval(`ws`), null);
+assert.equal(h.eval(`pendingCapabilities.size`), 0);
+assert.equal(rec.buttons[0].disabled, false);
+assert.equal(rec.statusEl.hidden, false);
+assert.equal(rec.statusEl.className, "cap-status bad");
+assert.match(rec.statusEl.textContent, /Connection lost: the result is uncertain/);
+"#,
+        );
+    }
+
+    #[test]
+    fn stale_success_dismiss_timer_does_not_dismiss_replacement_card_across_sessions() {
+        run_page_js_scenario(
+            r#"
+const h = createHarness();
+// Part 1: switch from session A to session B with same seq=1 before 750ms elapses.
+h.eval(`
+  openSession({ session_id: "sess-a", guest_gen: 1, stream: false, watch_only: false });
+  showCapabilityPrompt({
+    seq: 1,
+    title: "Prompt A",
+    options: [{ kind: "hot_attach", id: "opt-a", label: "Enable A" }],
+  });
+`);
+const recA = h.eval(`capabilityCards.get(1)`);
+recA.buttons[0].click();
+h.eval(`handleCapabilityReply({ prompt_seq: 1, ok: true });`);
+assert.equal(recA.statusEl.textContent, "Enabled.");
+
+h.advanceTimers(200);
+h.eval(`
+  openSession({ session_id: "sess-b", guest_gen: 1, stream: false, watch_only: false });
+  showCapabilityPrompt({
+    seq: 1,
+    title: "Prompt B",
+    options: [{ kind: "hot_attach", id: "opt-b", label: "Enable B" }],
+  });
+`);
+const recB = h.eval(`capabilityCards.get(1)`);
+assert.notEqual(recB, recA);
+assert.equal(h.capTray.children.includes(recB.card), true);
+
+h.advanceTimers(600);
+assert.equal(h.eval(`capabilityCards.get(1)`) === recB, true);
+assert.equal(h.capTray.children.includes(recB.card), true);
+
+// Part 2: without switching sessions, the 750ms timer still dismisses the original card.
+h.eval(`
+  openSession({ session_id: "sess-c", guest_gen: 1, stream: false, watch_only: false });
+  showCapabilityPrompt({
+    seq: 1,
+    title: "Prompt C",
+    options: [{ kind: "hot_attach", id: "opt-c", label: "Enable C" }],
+  });
+`);
+const recC = h.eval(`capabilityCards.get(1)`);
+h.eval(`handleCapabilityReply({ prompt_seq: 1, ok: true });`);
+h.advanceTimers(749);
+assert.equal(h.eval(`capabilityCards.get(1)`) === recC, true);
+assert.equal(h.capTray.children.includes(recC.card), true);
+
+h.advanceTimers(1);
+assert.equal(h.eval(`capabilityCards.has(1)`), false);
+assert.equal(h.capTray.children.includes(recC.card), false);
+"#,
+        );
+    }
+}
