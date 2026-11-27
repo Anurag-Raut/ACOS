@@ -50,7 +50,7 @@ fn scratch_dir(name: &str) -> PathBuf {
 #[test]
 fn every_probe_wake_reaches_the_zygote_child_side_of_the_fifo() {
     let dir = scratch_dir("deliver");
-    let mut channel = Some(GuestProbeChannel::Fifo(
+    let mut channel = Some(GuestProbeChannel::fifo(
         open_guest_probe_fifo(&dir).expect("create the session probe FIFO"),
     ));
     let path = dir.join(GUEST_PROBE_FIFO);
@@ -110,7 +110,7 @@ fn every_probe_wake_reaches_the_zygote_child_side_of_the_fifo() {
 #[test]
 fn a_vanished_reader_cannot_break_the_next_wake() {
     let dir = scratch_dir("reader-gone");
-    let mut channel = Some(GuestProbeChannel::Fifo(
+    let mut channel = Some(GuestProbeChannel::fifo(
         open_guest_probe_fifo(&dir).expect("create the session probe FIFO"),
     ));
     let path = dir.join(GUEST_PROBE_FIFO);
@@ -119,10 +119,7 @@ fn a_vanished_reader_cannot_break_the_next_wake() {
         drop(file);
     }
     // Writes must still succeed (this process is also a reader, so no EPIPE).
-    let mut writer = match channel.as_mut() {
-        Some(GuestProbeChannel::Fifo(writer)) => writer,
-        _ => panic!("expected the FIFO channel"),
-    };
+    let writer = channel.as_mut().expect("expected the FIFO channel");
     assert!(writeln!(writer, "PROBE").is_ok());
     assert!(writer.flush().is_ok());
     let _ = std::fs::remove_dir_all(&dir);

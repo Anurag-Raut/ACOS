@@ -2340,9 +2340,14 @@ public final class LaunchMain {
                                 }
                             });
                         } else if (word.toUpperCase().startsWith("COMMIT_TEXT")) {
-                            String[] parts = word.split(" ", 3);
-                            if (parts.length < 2) {
-                                System.out.println("ACOSLAUNCH MARK commit-text-bad-arg line=" + word);
+                            String[] parts = word.split(" ", -1);
+                            String safeSeq = (parts.length > 1 && parts[1].matches("\\d+"))
+                                    ? parts[1]
+                                    : "<invalid>";
+                            if (parts.length != 5 || !"COMMIT_TEXT".equalsIgnoreCase(parts[0])
+                                    || !"END".equals(parts[4])) {
+                                System.out.println("ACOSLAUNCH MARK commit-text-bad-frame seq="
+                                        + safeSeq + " tokens=" + parts.length);
                                 System.out.flush();
                                 continue;
                             }
@@ -2350,15 +2355,23 @@ public final class LaunchMain {
                             final String text;
                             try {
                                 reqSeq = Long.parseLong(parts[1]);
-                                String b64 = parts.length >= 3 ? parts[2].trim() : "";
+                                int expectedLen = Integer.parseInt(parts[2]);
+                                String b64 = parts[3];
+                                if (expectedLen < 0 || b64.length() != expectedLen) {
+                                    System.out.println("ACOSLAUNCH MARK commit-text-bad-len seq="
+                                            + reqSeq + " expected=" + expectedLen
+                                            + " actual=" + b64.length());
+                                    System.out.flush();
+                                    continue;
+                                }
                                 text = b64.isEmpty()
                                         ? ""
                                         : new String(
                                                 java.util.Base64.getDecoder().decode(b64),
                                                 java.nio.charset.StandardCharsets.UTF_8);
                             } catch (Throwable bad) {
-                                System.out.println("ACOSLAUNCH MARK commit-text-bad-arg line=" + word
-                                        + " err=" + unwrap(bad));
+                                System.out.println("ACOSLAUNCH MARK commit-text-bad-arg seq="
+                                        + safeSeq + " err=" + unwrap(bad));
                                 System.out.flush();
                                 continue;
                             }

@@ -7242,29 +7242,86 @@ fn probe_usable_for_fast_tree(
 /// * `Fifo` — a zygote session (Z4/ZPROD): the keeper's stdin is `/dev/null`,
 ///   so the forked child `System.setIn`s `<session>/probe.fifo` instead
 ///   (`ZygoteApp.z4ProbeStdin`), and this is the writer half.
-pub(crate) enum GuestProbeChannel {
+enum GuestProbeIo {
     Pipe(std::process::ChildStdin),
     Fifo(std::fs::File),
 }
 
+pub(crate) struct GuestProbeChannel {
+    io: GuestProbeIo,
+    /// Set when a deadline-bounded write wrote a partial line (without its
+    /// trailing `\n`). The next write prepends `!\n` so the guest terminates
+    /// and rejects the incomplete frame before reading the next command.
+    needs_resync: bool,
+}
+
 impl GuestProbeChannel {
-    fn as_raw_fd(&self) -> RawFd {
-        use std::os::unix::io::AsRawFd;
-        match self {
-            GuestProbeChannel::Pipe(writer) => writer.as_raw_fd(),
-            GuestProbeChannel::Fifo(writer) => writer.as_raw_fd(),
+    pub(crate) fn pipe(writer: std::process::ChildStdin) -> Self {
+        Self {
+            io: GuestProbeIo::Pipe(writer),
+            needs_resync: false,
         }
     }
 
-    /// Write all `bytes` before `deadline` using non-blocking `write(2)` +
-    /// `poll(2)`, preventing a stalled guest reader from blocking past the
-    /// acknowledgement deadline when the payload exceeds pipe capacity.
-    fn write_all_until(
+    pub(crate) fn fifo(writer: std::fs::File) -> Self {
+        Self {
+            io: GuestProbeIo::Fifo(writer),
+            needs_resync: false,
+        }
+    }
+
+    fn as_raw_fd(&self) -> RawFd {
+        use std::os::unix::io::AsRawFd;
+        match &self.io {
+            GuestProbeIo::Pipe(writer) => writer.as_raw_fd(),
+            GuestProbeIo::Fifo(writer) => writer.as_raw_fd(),
+        }
+    }
+
+    /// Write a single `\n`-terminated control command before `deadline` using
+    /// non-blocking `write(2)` + `poll(2)`. If an earlier write timed out or
+    /// failed mid-line, prepends `!\n` so the guest discards the truncated
+    /// line and receives this command intact.
+    ///
+    /// On error, returns `(payload_wrote_any, err)` where `payload_wrote_any`
+    /// is true only if at least one byte of `line` itself reached the kernel
+    /// pipe/FIFO buffer (excluding any leading `!\n` resync marker).
+    fn write_line_until(
         &mut self,
-        bytes: &[u8],
+        line: &[u8],
         deadline: Instant,
     ) -> std::result::Result<(), (bool, std::io::Error)> {
-        write_fd_all_until(self.as_raw_fd(), bytes, deadline)
+        debug_assert!(
+            line.ends_with(b"\n"),
+            "GuestProbeChannel::write_line_until expects a newline-terminated command"
+        );
+        let prefix_len = if self.needs_resync { 2 } else { 0 };
+        let res = if prefix_len > 0 {
+            let mut framed = Vec::with_capacity(prefix_len + line.len());
+            framed.extend_from_slice(b"!\n");
+            framed.extend_from_slice(line);
+            write_fd_all_until(self.as_raw_fd(), &framed, deadline)
+        } else {
+            write_fd_all_until(self.as_raw_fd(), line, deadline)
+        };
+        match res {
+            Ok(()) => {
+                self.needs_resync = false;
+                Ok(())
+            }
+            Err((written, err)) => {
+                if written >= prefix_len {
+                    let payload_written = written - prefix_len;
+                    self.needs_resync = payload_written > 0;
+                    Err((payload_written > 0, err))
+                } else {
+                    // Did not finish writing the `!\n` resync marker: keep
+                    // resync pending and report 0 bytes of `line` written.
+                    self.needs_resync = true;
+                    Err((false, err))
+                }
+            }
+        }
     }
 }
 
@@ -7272,16 +7329,16 @@ fn write_fd_all_until(
     fd: RawFd,
     bytes: &[u8],
     deadline: Instant,
-) -> std::result::Result<(), (bool, std::io::Error)> {
+) -> std::result::Result<(), (usize, std::io::Error)> {
     let orig_flags = unsafe { libc::fcntl(fd, libc::F_GETFL) };
     if orig_flags < 0 {
-        return Err((false, std::io::Error::last_os_error()));
+        return Err((0, std::io::Error::last_os_error()));
     }
     let added_nonblock = (orig_flags & libc::O_NONBLOCK) == 0;
     if added_nonblock
         && unsafe { libc::fcntl(fd, libc::F_SETFL, orig_flags | libc::O_NONBLOCK) } != 0
     {
-        return Err((false, std::io::Error::last_os_error()));
+        return Err((0, std::io::Error::last_os_error()));
     }
     struct RestoreFlags {
         fd: RawFd,
@@ -7305,6 +7362,15 @@ fn write_fd_all_until(
 
     let mut written = 0usize;
     while written < bytes.len() {
+        if Instant::now() >= deadline {
+            return Err((
+                written,
+                std::io::Error::new(
+                    std::io::ErrorKind::TimedOut,
+                    "timed out before writing to guest control channel",
+                ),
+            ));
+        }
         let n = unsafe {
             libc::write(
                 fd,
@@ -7318,7 +7384,7 @@ fn write_fd_all_until(
         }
         if n == 0 {
             return Err((
-                written > 0,
+                written,
                 std::io::Error::new(
                     std::io::ErrorKind::WriteZero,
                     "write returned 0 bytes on guest control channel",
@@ -7330,12 +7396,12 @@ fn write_fd_all_until(
             continue;
         }
         if err.kind() != std::io::ErrorKind::WouldBlock {
-            return Err((written > 0, err));
+            return Err((written, err));
         }
         let now = Instant::now();
         if now >= deadline {
             return Err((
-                written > 0,
+                written,
                 std::io::Error::new(
                     std::io::ErrorKind::TimedOut,
                     "timed out writing to guest control channel",
@@ -7354,11 +7420,11 @@ fn write_fd_all_until(
             if perr.kind() == std::io::ErrorKind::Interrupted {
                 continue;
             }
-            return Err((written > 0, perr));
+            return Err((written, perr));
         }
         if rc == 0 {
             return Err((
-                written > 0,
+                written,
                 std::io::Error::new(
                     std::io::ErrorKind::TimedOut,
                     "timed out waiting for guest control channel writability",
@@ -7367,7 +7433,7 @@ fn write_fd_all_until(
         }
         if (pfd.revents & (libc::POLLERR | libc::POLLHUP | libc::POLLNVAL)) != 0 {
             return Err((
-                written > 0,
+                written,
                 std::io::Error::new(
                     std::io::ErrorKind::BrokenPipe,
                     format!(
@@ -7383,16 +7449,23 @@ fn write_fd_all_until(
 
 impl std::io::Write for GuestProbeChannel {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        match self {
-            GuestProbeChannel::Pipe(writer) => writer.write(buf),
-            GuestProbeChannel::Fifo(writer) => writer.write(buf),
+        if self.needs_resync {
+            match &mut self.io {
+                GuestProbeIo::Pipe(writer) => writer.write_all(b"!\n")?,
+                GuestProbeIo::Fifo(writer) => writer.write_all(b"!\n")?,
+            }
+            self.needs_resync = false;
+        }
+        match &mut self.io {
+            GuestProbeIo::Pipe(writer) => writer.write(buf),
+            GuestProbeIo::Fifo(writer) => writer.write(buf),
         }
     }
 
     fn flush(&mut self) -> std::io::Result<()> {
-        match self {
-            GuestProbeChannel::Pipe(writer) => writer.flush(),
-            GuestProbeChannel::Fifo(writer) => writer.flush(),
+        match &mut self.io {
+            GuestProbeIo::Pipe(writer) => writer.flush(),
+            GuestProbeIo::Fifo(writer) => writer.flush(),
         }
     }
 }
@@ -7437,9 +7510,8 @@ fn request_guest_probe(
     let Some(writer) = stdin.as_mut() else {
         return true;
     };
-    use std::io::Write;
-    let written = writeln!(writer, "PROBE")
-        .and_then(|_| writer.flush())
+    let written = writer
+        .write_line_until(b"PROBE\n", Instant::now() + Duration::from_millis(100))
         .is_ok();
     // SETTLE5: the channel's health is evidence, and a wake the pipe refuses is
     // counted rather than silently swallowed. Only the counters change; the
@@ -7584,6 +7656,11 @@ fn classify_commit_text_outcome(
     }
 }
 
+fn format_commit_text_frame(seq: u64, text: &str) -> String {
+    let encoded = base64_encode(text.as_bytes());
+    format!("COMMIT_TEXT {seq} {} {encoded} END\n", encoded.len())
+}
+
 fn try_guest_commit_text(
     child: &mut std::process::Child,
     live: &acos_services::registry::LiveHandles,
@@ -7610,14 +7687,18 @@ fn try_guest_commit_text(
         state.next_commit_text_seq = state.next_commit_text_seq.saturating_add(1);
         state.next_commit_text_seq
     };
-    let encoded = base64_encode(text.as_bytes());
     let started = Instant::now();
     let timeout = ack_wait
         .max(Duration::from_millis(2000))
         .min(Duration::from_secs(5));
     let deadline = started + timeout;
-    let payload = format!("COMMIT_TEXT {seq} {encoded}\n");
-    if let Err((wrote_any, err)) = writer.write_all_until(payload.as_bytes(), deadline) {
+    let payload = format_commit_text_frame(seq, text);
+    if let Err((wrote_any, err)) = writer.write_line_until(payload.as_bytes(), deadline) {
+        if !wrote_any {
+            return GuestCommitResult::Unavailable {
+                reason: format!("COMMIT_TEXT not written to guest stdin: {err}"),
+            };
+        }
         let code = if err.kind() == std::io::ErrorKind::TimedOut {
             "TIMEOUT"
         } else {
@@ -7626,7 +7707,7 @@ fn try_guest_commit_text(
         return GuestCommitResult::Uncertain {
             code,
             reason: format!(
-                "failed writing COMMIT_TEXT to guest (partial={wrote_any}, delivery uncertain): {err}"
+                "failed writing COMMIT_TEXT to guest (partial=true, delivery uncertain): {err}"
             ),
         };
     }
@@ -7651,7 +7732,7 @@ fn try_guest_commit_text(
         }
         if Instant::now() >= deadline {
             let cancel = format!("CANCEL_COMMIT_TEXT {seq}\n");
-            let _ = writer.write_all_until(
+            let _ = writer.write_line_until(
                 cancel.as_bytes(),
                 Instant::now() + Duration::from_millis(100),
             );
@@ -8170,8 +8251,8 @@ fn interactive_serve(
     // ZPROD3b: a zygote session's probe channel is its own FIFO (the stub's
     // stdin is a dead end); every other session keeps the guest's own pipe.
     let mut guest_stdin = match probe_fifo {
-        Some(fifo) => Some(GuestProbeChannel::Fifo(fifo)),
-        None => child.stdin.take().map(GuestProbeChannel::Pipe),
+        Some(fifo) => Some(GuestProbeChannel::fifo(fifo)),
+        None => child.stdin.take().map(GuestProbeChannel::pipe),
     };
     // CR1FIX #20: WINDOW commands written to the guest so far, and the guest's
     // failed-command count already reported to the host.
@@ -12093,7 +12174,7 @@ mod probe_line_tests {
         // A read-only handle is the shape of a channel that cannot accept a
         // wake (a dead reader): the write fails and must be counted.
         let read_only = std::fs::File::open(&path).expect("open read-only");
-        let mut dead = Some(GuestProbeChannel::Fifo(read_only));
+        let mut dead = Some(GuestProbeChannel::fifo(read_only));
         let state = Arc::new(std::sync::Mutex::new(ProbeState::default()));
         assert!(!request_guest_probe(&mut dead, &state));
         {
@@ -12108,7 +12189,7 @@ mod probe_line_tests {
             .append(true)
             .open(&path)
             .expect("open writable");
-        let mut live = Some(GuestProbeChannel::Fifo(writable));
+        let mut live = Some(GuestProbeChannel::fifo(writable));
         assert!(request_guest_probe(&mut live, &state));
         {
             let state = state.lock().unwrap();
@@ -13800,9 +13881,20 @@ mod panel_touch_tests {
         let before_flags = unsafe { libc::fcntl(wfd, libc::F_GETFL) };
         assert_eq!(before_flags & libc::O_NONBLOCK, 0);
 
+        // Already-expired deadline must fail before calling write(2) even on an empty pipe.
+        let expired = write_fd_all_until(
+            wfd,
+            b"PROBE\n",
+            Instant::now() - Duration::from_millis(1),
+        )
+        .expect_err("expired deadline must time out without writing");
+        assert_eq!(expired.0, 0);
+        assert_eq!(expired.1.kind(), std::io::ErrorKind::TimedOut);
+        assert_eq!(unsafe { libc::fcntl(wfd, libc::F_GETFL) }, before_flags);
+
         // Normal small write succeeds immediately and leaves blocking flag intact.
-        let small = b"COMMIT_TEXT 1 YWJj\n";
-        write_fd_all_until(wfd, small, Instant::now() + Duration::from_secs(1))
+        let small = format_commit_text_frame(1, "abc");
+        write_fd_all_until(wfd, small.as_bytes(), Instant::now() + Duration::from_secs(1))
             .expect("small write fits in empty pipe");
         let after_small_flags = unsafe { libc::fcntl(wfd, libc::F_GETFL) };
         assert_eq!(after_small_flags, before_flags);
@@ -13814,7 +13906,7 @@ mod panel_touch_tests {
         let err = write_fd_all_until(wfd, &huge, started + Duration::from_millis(80))
             .expect_err("stalled oversized write must time out");
         let elapsed = started.elapsed();
-        assert!(err.0, "expected partial write before pipe filled");
+        assert!(err.0 > 0, "expected partial write before pipe filled");
         assert_eq!(err.1.kind(), std::io::ErrorKind::TimedOut);
         assert!(
             elapsed < Duration::from_secs(2),
@@ -13827,6 +13919,129 @@ mod panel_touch_tests {
             libc::close(rfd);
             libc::close(wfd);
         }
+    }
+
+    /// Mirrors `LaunchMain.java`'s `COMMIT_TEXT <seq> <b64_len> <b64> END` parser.
+    fn parse_guest_commit_frame_line(line: &str) -> Option<(u64, String)> {
+        let word = line.trim();
+        if !word.to_ascii_uppercase().starts_with("COMMIT_TEXT") {
+            return None;
+        }
+        let parts: Vec<&str> = word.split(' ').collect();
+        if parts.len() != 5 || !parts[0].eq_ignore_ascii_case("COMMIT_TEXT") || parts[4] != "END" {
+            return None;
+        }
+        let seq: u64 = parts[1].parse().ok()?;
+        let expected_len: usize = parts[2].parse().ok()?;
+        let b64 = parts[3];
+        if b64.len() != expected_len {
+            return None;
+        }
+        Some((seq, b64.to_string()))
+    }
+
+    #[test]
+    fn partial_commit_text_timeout_discards_truncated_frame_and_preserves_next_commands() {
+        use std::io::BufRead;
+        use std::os::unix::io::FromRawFd;
+
+        let mut fds = [-1i32; 2];
+        assert_eq!(unsafe { libc::pipe(fds.as_mut_ptr()) }, 0);
+        let reader_file = unsafe { std::fs::File::from_raw_fd(fds[0]) };
+        let writer_file = unsafe { std::fs::File::from_raw_fd(fds[1]) };
+        let mut channel = GuestProbeChannel::fifo(writer_file);
+
+        // 1. Write an oversized COMMIT_TEXT into a stalled pipe -> partial write + timeout.
+        let oversized_text = "x".repeat(512 * 1024);
+        let frame1 = format_commit_text_frame(1, &oversized_text);
+        let err1 = channel
+            .write_line_until(frame1.as_bytes(), Instant::now() + Duration::from_millis(80))
+            .expect_err("stalled oversized COMMIT_TEXT must time out");
+        assert!(err1.0, "partial write must report payload wrote_any=true");
+        assert_eq!(err1.1.kind(), std::io::ErrorKind::TimedOut);
+        assert!(channel.needs_resync, "partial write must arm resync marker");
+
+        // 2. While the pipe is still full, a second attempt writes 0 bytes of payload
+        //    (safe to classify as Unavailable) and keeps needs_resync armed.
+        let frame2 = format_commit_text_frame(2, "never-sent");
+        let err2 = channel
+            .write_line_until(frame2.as_bytes(), Instant::now() + Duration::from_millis(40))
+            .expect_err("still-full pipe must time out");
+        assert!(!err2.0, "zero-byte payload failure must report wrote_any=false");
+        assert_eq!(err2.1.kind(), std::io::ErrorKind::TimedOut);
+        assert!(channel.needs_resync);
+
+        // 3. Resume the reader (simulating a stalled guest control thread waking up).
+        let reader_thread = std::thread::spawn(move || {
+            let mut reader = std::io::BufReader::new(reader_file);
+            let mut probes = 0usize;
+            let mut commits: Vec<(u64, String)> = Vec::new();
+            let mut discarded_commit_lines = 0usize;
+            let mut line = String::new();
+            loop {
+                line.clear();
+                let n = reader.read_line(&mut line).expect("read pipe");
+                if n == 0 {
+                    break;
+                }
+                let word = line.trim();
+                if word.eq_ignore_ascii_case("PROBE") {
+                    probes += 1;
+                } else if word.to_ascii_uppercase().starts_with("COMMIT_TEXT") {
+                    match parse_guest_commit_frame_line(word) {
+                        Some(parsed) => commits.push(parsed),
+                        None => discarded_commit_lines += 1,
+                    }
+                }
+            }
+            (probes, commits, discarded_commit_lines)
+        });
+
+        // 4. Send PROBE, then a real Unicode COMMIT_TEXT, then simulate a worst-case
+        //    partial frame missing only '\n' followed by one more COMMIT_TEXT.
+        channel
+            .write_line_until(b"PROBE\n", Instant::now() + Duration::from_secs(2))
+            .expect("PROBE after resync must succeed");
+        assert!(!channel.needs_resync);
+
+        let follow_up_text = "日本語 café 🎉";
+        let frame3 = format_commit_text_frame(3, follow_up_text);
+        channel
+            .write_line_until(frame3.as_bytes(), Instant::now() + Duration::from_secs(2))
+            .expect("follow-up COMMIT_TEXT must succeed");
+
+        // Boundary case: partial frame stopped right before '\n' (has full "END").
+        let almost_complete = format_commit_text_frame(4, "must-not-commit");
+        let without_nl = almost_complete.strip_suffix('\n').unwrap();
+        write_fd_all_until(
+            channel.as_raw_fd(),
+            without_nl.as_bytes(),
+            Instant::now() + Duration::from_secs(1),
+        )
+        .expect("write boundary partial frame");
+        channel.needs_resync = true;
+
+        let frame5 = format_commit_text_frame(5, "after-boundary");
+        channel
+            .write_line_until(frame5.as_bytes(), Instant::now() + Duration::from_secs(2))
+            .expect("COMMIT_TEXT after boundary partial frame must succeed");
+        assert!(!channel.needs_resync);
+
+        drop(channel);
+        let (probes, commits, discarded) = reader_thread.join().expect("reader thread");
+        assert_eq!(probes, 1, "PROBE must arrive intact after partial frame resync");
+        assert_eq!(
+            discarded, 2,
+            "both truncated COMMIT_TEXT frames (seq 1 and boundary seq 4) must be discarded"
+        );
+        assert_eq!(
+            commits,
+            vec![
+                (3, base64_encode(follow_up_text.as_bytes())),
+                (5, base64_encode(b"after-boundary")),
+            ],
+            "only intact subsequent COMMIT_TEXT frames may reach the editor"
+        );
     }
 }
 
