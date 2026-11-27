@@ -3590,7 +3590,18 @@ const UNSUPPORTED_PREFIX: &str = "ACOSUNSUPPORTED ";
 const LIVE_PROBE_LINE_CAP: usize = 8 * 1024 * 1024;
 /// W36: the guest probe reports a swallowed exception as this marker.
 const PROBE_ERROR_PREFIX: &str = "ACOSPROBE-ERROR ";
+/// Guest `InputConnection.commitText` outcome emitted on the main looper.
+const COMMIT_TEXT_PREFIX: &str = "ACOSCOMMITTEXT ";
 const CAPTURE_SOURCE: &str = "acos-c1-buffer";
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct CommitTextOutcome {
+    ok: bool,
+    handled: bool,
+    no_focused_editor: bool,
+    focus_class: Option<String>,
+    error: Option<String>,
+}
 
 #[derive(Clone)]
 struct ProbeSample {
@@ -3814,6 +3825,8 @@ struct ProbeState {
     wake_failures: u64,
     stale_samples: u64,
     stall_pending_ms: Option<u64>,
+    commit_text_results: std::collections::BTreeMap<u64, CommitTextOutcome>,
+    next_commit_text_seq: u64,
 }
 
 impl ProbeState {
@@ -4911,6 +4924,13 @@ fn drain_tee_lines<R: std::io::Read>(
                 state.unsupported = Some(value);
                 state.unsupported_seq += 1;
             }
+        } else if let Some((seq, outcome)) = parse_commit_text_line(trimmed) {
+            let wake = {
+                let mut state = state.lock().unwrap_or_else(|e| e.into_inner());
+                state.commit_text_results.insert(seq, outcome);
+                Arc::clone(&state.wake)
+            };
+            wake.notify();
         }
     }
     tail
@@ -7251,6 +7271,167 @@ fn request_guest_probe(
     written
 }
 
+fn parse_commit_text_line(trimmed: &str) -> Option<(u64, CommitTextOutcome)> {
+    let json = trimmed.strip_prefix(COMMIT_TEXT_PREFIX)?;
+    let value = serde_json::from_str::<serde_json::Value>(json).ok()?;
+    let seq = value.get("seq").and_then(|v| v.as_u64())?;
+    let outcome = CommitTextOutcome {
+        ok: value.get("ok").and_then(|v| v.as_bool()).unwrap_or(false),
+        handled: value.get("handled").and_then(|v| v.as_bool()).unwrap_or(false),
+        no_focused_editor: value
+            .get("no_focused_editor")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false),
+        focus_class: value
+            .get("focus_class")
+            .and_then(|v| v.as_str())
+            .map(str::to_string),
+        error: value
+            .get("error")
+            .and_then(|v| v.as_str())
+            .map(str::to_string),
+    };
+    Some((seq, outcome))
+}
+
+fn base64_encode(input: &[u8]) -> String {
+    const TABLE: &[u8; 64] =
+        b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut out = String::with_capacity(input.len().div_ceil(3) * 4);
+    for chunk in input.chunks(3) {
+        let b0 = u32::from(chunk[0]);
+        let b1 = if chunk.len() > 1 {
+            u32::from(chunk[1])
+        } else {
+            0
+        };
+        let b2 = if chunk.len() > 2 {
+            u32::from(chunk[2])
+        } else {
+            0
+        };
+        let n = (b0 << 16) | (b1 << 8) | b2;
+        out.push(TABLE[((n >> 18) & 0x3f) as usize] as char);
+        out.push(TABLE[((n >> 12) & 0x3f) as usize] as char);
+        out.push(if chunk.len() > 1 {
+            TABLE[((n >> 6) & 0x3f) as usize] as char
+        } else {
+            '='
+        });
+        out.push(if chunk.len() > 2 {
+            TABLE[(n & 0x3f) as usize] as char
+        } else {
+            '='
+        });
+    }
+    out
+}
+
+enum GuestCommitResult {
+    Committed {
+        seq: u64,
+        handled: bool,
+        latency_us: u64,
+        #[allow(dead_code)]
+        focus_class: Option<String>,
+    },
+    NoFocusedEditor {
+        focus_class: Option<String>,
+        error: String,
+    },
+    Rejected {
+        focus_class: Option<String>,
+        error: String,
+    },
+    Unavailable {
+        reason: String,
+    },
+}
+
+fn try_guest_commit_text(
+    child: &mut std::process::Child,
+    live: &acos_services::registry::LiveHandles,
+    probe_state: &Arc<std::sync::Mutex<ProbeState>>,
+    guest_stdin: &mut Option<GuestProbeChannel>,
+    text: &str,
+    ack_wait: Duration,
+) -> GuestCommitResult {
+    let foreground = live.top_process.load(std::sync::atomic::Ordering::Relaxed);
+    if foreground != 0 {
+        return GuestCommitResult::Unavailable {
+            reason: format!(
+                "foreground secondary process {foreground} has no stdin control pipe for InputConnection.commitText"
+            ),
+        };
+    }
+    let Some(writer) = guest_stdin.as_mut() else {
+        return GuestCommitResult::Unavailable {
+            reason: "guest has no stdin control pipe for InputConnection.commitText".to_string(),
+        };
+    };
+    let seq = {
+        let mut state = probe_state.lock().unwrap_or_else(|e| e.into_inner());
+        state.next_commit_text_seq = state.next_commit_text_seq.saturating_add(1);
+        state.next_commit_text_seq
+    };
+    let encoded = base64_encode(text.as_bytes());
+    {
+        use std::io::Write;
+        if let Err(err) = writeln!(writer, "COMMIT_TEXT {seq} {encoded}").and_then(|()| writer.flush()) {
+            return GuestCommitResult::Unavailable {
+                reason: format!("failed writing COMMIT_TEXT to guest: {err}"),
+            };
+        }
+    }
+    let started = Instant::now();
+    let timeout = ack_wait
+        .max(Duration::from_millis(2000))
+        .min(Duration::from_secs(5));
+    let deadline = started + timeout;
+    let wake = settle_wake(probe_state);
+    let mut seen = 0u64;
+    loop {
+        {
+            let mut state = probe_state.lock().unwrap_or_else(|e| e.into_inner());
+            if let Some(outcome) = state.commit_text_results.remove(&seq) {
+                if outcome.ok {
+                    return GuestCommitResult::Committed {
+                        seq,
+                        handled: outcome.handled,
+                        latency_us: started.elapsed().as_micros() as u64,
+                        focus_class: outcome.focus_class,
+                    };
+                }
+                if outcome.no_focused_editor {
+                    return GuestCommitResult::NoFocusedEditor {
+                        focus_class: outcome.focus_class,
+                        error: outcome
+                            .error
+                            .unwrap_or_else(|| "no focused InputConnection".to_string()),
+                    };
+                }
+                return GuestCommitResult::Rejected {
+                    focus_class: outcome.focus_class,
+                    error: outcome
+                        .error
+                        .unwrap_or_else(|| "InputConnection.commitText returned false".to_string()),
+                };
+            }
+        }
+        if let Ok(Some(status)) = child.try_wait() {
+            return GuestCommitResult::Unavailable {
+                reason: format!("guest exited before committing text: {status}"),
+            };
+        }
+        if Instant::now() >= deadline {
+            return GuestCommitResult::Unavailable {
+                reason: format!("timed out waiting for guest InputConnection.commitText ack (seq={seq})"),
+            };
+        }
+        wait_for_change(&wake, &mut seen);
+    }
+}
+
 enum FastTreeEnd {
     Ready(ProbeSample),
     Timeout { probe_seq: u64 },
@@ -8925,12 +9106,63 @@ fn interactive_serve(
                     }));
                     continue;
                 };
-                match live.input.type_text(text, ack_wait) {
-                    Ok(_) => protocol_write(&serde_json::json!({"ok": true, "cmd": "panel_text", "text": text})),
-                    Err(err) => protocol_write(&serde_json::json!({
-                        "ok": false, "cmd": "panel_text", "code": "INPUT_UNAVAILABLE",
-                        "error": format!("panel_text failed: {err}"),
-                    })),
+                if text.is_empty() {
+                    match live.input.type_text(text, ack_wait) {
+                        Ok(_) => protocol_write(&serde_json::json!({"ok": true, "cmd": "panel_text", "text": text})),
+                        Err(err) => protocol_write(&serde_json::json!({
+                            "ok": false, "cmd": "panel_text", "code": "INPUT_UNAVAILABLE",
+                            "error": format!("panel_text failed: {err}"),
+                        })),
+                    }
+                    continue;
+                }
+                match try_guest_commit_text(
+                    child,
+                    live,
+                    probe_state,
+                    &mut guest_stdin,
+                    text,
+                    ack_wait,
+                ) {
+                    GuestCommitResult::Committed { .. } => {
+                        protocol_write(&serde_json::json!({"ok": true, "cmd": "panel_text", "text": text}));
+                    }
+                    GuestCommitResult::NoFocusedEditor { focus_class, error }
+                    | GuestCommitResult::Rejected { focus_class, error } => {
+                        if text.is_ascii() {
+                            match live.input.type_text(text, ack_wait) {
+                                Ok(_) => protocol_write(&serde_json::json!({"ok": true, "cmd": "panel_text", "text": text})),
+                                Err(err) => protocol_write(&serde_json::json!({
+                                    "ok": false, "cmd": "panel_text", "code": "INPUT_UNAVAILABLE",
+                                    "error": format!("panel_text failed: {err}"),
+                                })),
+                            }
+                        } else {
+                            let suffix = focus_class
+                                .map(|cls| format!(" (focused={cls})"))
+                                .unwrap_or_default();
+                            protocol_write(&serde_json::json!({
+                                "ok": false, "cmd": "panel_text", "code": "INPUT_UNAVAILABLE",
+                                "error": format!("panel_text InputConnection.commitText failed for non-ASCII text{suffix}: {error}"),
+                            }));
+                        }
+                    }
+                    GuestCommitResult::Unavailable { reason } => {
+                        if text.is_ascii() {
+                            match live.input.type_text(text, ack_wait) {
+                                Ok(_) => protocol_write(&serde_json::json!({"ok": true, "cmd": "panel_text", "text": text})),
+                                Err(err) => protocol_write(&serde_json::json!({
+                                    "ok": false, "cmd": "panel_text", "code": "INPUT_UNAVAILABLE",
+                                    "error": format!("panel_text failed: {err}"),
+                                })),
+                            }
+                        } else {
+                            protocol_write(&serde_json::json!({
+                                "ok": false, "cmd": "panel_text", "code": "INPUT_UNAVAILABLE",
+                                "error": format!("panel_text InputConnection.commitText unavailable for non-ASCII text: {reason}"),
+                            }));
+                        }
+                    }
                 }
             }
             "rotate" | "panel_rotate" => {
@@ -9417,9 +9649,78 @@ fn interactive_serve(
                         ("swipe", _) => live
                             .input
                             .swipe(swipe_from, swipe_to, swipe_duration, ack_wait),
-                        ("type_text", _) => live
-                            .input
-                            .type_text(text_arg.as_deref().unwrap_or_default(), ack_wait),
+                        ("type_text", _) => {
+                            let text = text_arg.as_deref().unwrap_or_default();
+                            if text.is_empty() {
+                                live.input.type_text(text, ack_wait)
+                            } else {
+                                match try_guest_commit_text(
+                                    child,
+                                    live,
+                                    probe_state,
+                                    &mut guest_stdin,
+                                    text,
+                                    ack_wait,
+                                ) {
+                                    GuestCommitResult::Committed {
+                                        seq,
+                                        handled,
+                                        latency_us,
+                                        focus_class: _,
+                                    } => Ok(
+                                        acos_services::window_session::input_dispatch::InjectedGesture {
+                                            token: acos_parcel::BinderId(0),
+                                            seqs: vec![seq as u32],
+                                            acks: vec![
+                                                acos_services::window_session::input_dispatch::InjectedAck {
+                                                    seq: seq as u32,
+                                                    handled,
+                                                    latency_us: Some(latency_us),
+                                                },
+                                            ],
+                                        },
+                                    ),
+                                    GuestCommitResult::NoFocusedEditor { focus_class, error }
+                                    | GuestCommitResult::Rejected { focus_class, error } => {
+                                        if text.is_ascii() {
+                                            live.input.type_text(text, ack_wait)
+                                        } else {
+                                            let suffix = focus_class
+                                                .map(|cls| format!(" (focused={cls})"))
+                                                .unwrap_or_default();
+                                            let reply = serde_json::json!({
+                                                "ok": false,
+                                                "cmd": cmd,
+                                                "code": "INPUT_UNAVAILABLE",
+                                                "error": format!(
+                                                    "InputConnection.commitText failed for non-ASCII text{suffix}: {error}"
+                                                ),
+                                            });
+                                            protocol_write(&reply);
+                                            evidence.push(reply);
+                                            continue;
+                                        }
+                                    }
+                                    GuestCommitResult::Unavailable { reason } => {
+                                        if text.is_ascii() {
+                                            live.input.type_text(text, ack_wait)
+                                        } else {
+                                            let reply = serde_json::json!({
+                                                "ok": false,
+                                                "cmd": cmd,
+                                                "code": "INPUT_UNAVAILABLE",
+                                                "error": format!(
+                                                    "InputConnection.commitText unavailable for non-ASCII text: {reason}"
+                                                ),
+                                            });
+                                            protocol_write(&reply);
+                                            evidence.push(reply);
+                                            continue;
+                                        }
+                                    }
+                                }
+                            }
+                        }
                         (_, Some(code)) => live.input.key(code, ack_wait),
                         _ => unreachable!(),
                     }
@@ -9528,7 +9829,8 @@ fn interactive_serve(
                     None,
                     unhandled_ack_floor,
                     entry_fnv,
-                    (!is_home_key).then_some((injected.token, removal_mark)),
+                    (!is_home_key && injected.token.0 != 0)
+                        .then_some((injected.token, removal_mark)),
                     window_reshown,
                     Some((&pending_spawns, secondary)),
                 );
@@ -9621,9 +9923,10 @@ fn interactive_serve(
                 // The window this gesture went to is gone (dialog dismissed, task
                 // finished): the host's fact, checked against the *delivered*
                 // token only.
-                let window_removed = live
-                    .input
-                    .window_removed_since(injected.token, removal_mark);
+                let window_removed = injected.token.0 != 0
+                    && live
+                        .input
+                        .window_removed_since(injected.token, removal_mark);
                 if window_removed {
                     trace_host(
                         probe_state,
@@ -11155,6 +11458,8 @@ mod probe_line_tests {
                 wake: Arc::clone(&self.wake),
                 anim_traced: self.anim_traced.clone(),
                 touch_traced: self.touch_traced,
+                commit_text_results: self.commit_text_results.clone(),
+                next_commit_text_seq: self.next_commit_text_seq,
             }
         }
     }
@@ -13105,4 +13410,48 @@ mod panel_touch_tests {
             "gesture with cursor hit_point inside DIALOG must not hit ACTIVITY"
         );
     }
+
+    #[test]
+    fn base64_encode_handles_unicode_and_padding() {
+        assert_eq!(base64_encode(b""), "");
+        assert_eq!(base64_encode(b"a"), "YQ==");
+        assert_eq!(base64_encode(b"ab"), "YWI=");
+        assert_eq!(base64_encode(b"abc"), "YWJj");
+        assert_eq!(base64_encode("腹立つ".as_bytes()), "6IW556uL44Gk");
+        assert_eq!(base64_encode("café 🎉".as_bytes()), "Y2Fmw6kg8J+OiQ==");
+    }
+
+    #[test]
+    fn parse_commit_text_line_extracts_ok_and_failure_shapes() {
+        assert_eq!(parse_commit_text_line("ACOSPROBE {}"), None);
+        let ok_line = r#"ACOSCOMMITTEXT {"seq":7,"ok":true,"handled":true,"method":"input_connection","focus_class":"android.widget.EditText"}"#;
+        assert_eq!(
+            parse_commit_text_line(ok_line),
+            Some((
+                7,
+                CommitTextOutcome {
+                    ok: true,
+                    handled: true,
+                    no_focused_editor: false,
+                    focus_class: Some("android.widget.EditText".to_string()),
+                    error: None,
+                }
+            ))
+        );
+        let missing_line = r#"ACOSCOMMITTEXT {"seq":8,"ok":false,"handled":false,"no_focused_editor":true,"error":"no focused view in active window"}"#;
+        assert_eq!(
+            parse_commit_text_line(missing_line),
+            Some((
+                8,
+                CommitTextOutcome {
+                    ok: false,
+                    handled: false,
+                    no_focused_editor: true,
+                    focus_class: None,
+                    error: Some("no focused view in active window".to_string()),
+                }
+            ))
+        );
+    }
 }
+

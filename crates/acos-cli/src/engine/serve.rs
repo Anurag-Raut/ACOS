@@ -90,6 +90,9 @@ struct HeldArtSession {
     /// commands targeted at a replaced guest (`SESSION_REPLACED`) without
     /// breaking live viewers on idempotent relaunch.
     guest_token: String,
+    /// Default verb settle inherited by `observe*`/input verbs when `settle`
+    /// is omitted (`"content"` if launched with `settle: "content"`, else `"strict"`).
+    default_settle: Mutex<&'static str>,
     /// `Mutex` because two connections may address the same session id; the
     /// guest takes one command at a time.
     session: Mutex<ArtSession>,
@@ -109,6 +112,19 @@ impl HeldArtSession {
 
     fn set_device_name(&self, name: Option<String>) {
         *self.device_name.lock().unwrap_or_else(|e| e.into_inner()) = name;
+    }
+
+    fn set_default_settle(&self, settle: &'static str) {
+        *self.default_settle.lock().unwrap_or_else(|e| e.into_inner()) = if settle == "content" {
+            "content"
+        } else {
+            "strict"
+        };
+    }
+
+    #[allow(dead_code)]
+    fn default_settle(&self) -> &'static str {
+        *self.default_settle.lock().unwrap_or_else(|e| e.into_inner())
     }
 
     fn device_name(&self) -> Option<String> {
@@ -985,6 +1001,15 @@ impl ServeEngine {
                     // interleave `set_device_name` and `publish_live`.
                     let mut session = held.session.lock().unwrap_or_else(|e| e.into_inner());
                     held.note_launch(&agent_label);
+                    if args.get("settle").is_some() {
+                        let default_settle = if settle == "content" {
+                            "content"
+                        } else {
+                            "strict"
+                        };
+                        held.set_default_settle(default_settle);
+                        session.set_default_verb_settle(default_settle);
+                    }
                     if device_name.is_some() {
                         held.set_device_name(device_name.clone());
                     }
@@ -1068,6 +1093,12 @@ impl ServeEngine {
             &launch_intent,
         ) {
             Ok(mut session) => {
+                let default_settle = if settle == "content" {
+                    "content"
+                } else {
+                    "strict"
+                };
+                session.set_default_verb_settle(default_settle);
                 session.set_settle_timeout(settle_timeout_ms);
                 let started = match session.ensure_launch_tree(settle, pixels) {
                     Ok(tree) => tree,
@@ -1097,6 +1128,7 @@ impl ServeEngine {
                     started_ms: Mutex::new(0),
                     launch_token: Mutex::new(String::new()),
                     guest_token: new_launch_token(),
+                    default_settle: Mutex::new(default_settle),
                     session: Mutex::new(session),
                 });
                 held.note_launch(&agent_label);
@@ -2613,7 +2645,7 @@ fn observe_tree(
     // P3b: the tree verb consumes P1's settle vocabulary. `strict` is the
     // default and unchanged; `fast` is for inspection/navigation, labelled in
     // the reply, and never accepted by an assertion.
-    let settle = requested_settle(args)?;
+    let settle = requested_settle_or(args, session.default_verb_settle())?;
     let t_begin = m5_now_us();
     // FB2c item 6: a screenshot is captured by the same traversal as the tree,
     // so the two cannot disagree about which frame is on screen.
@@ -2676,7 +2708,7 @@ fn observe(
 ) -> Result<Value, BackendError> {
     let want_tree = args.get("tree").and_then(Value::as_bool).unwrap_or(false);
     let want_text = args.get("text").and_then(Value::as_bool).unwrap_or(false);
-    let settle = requested_settle(args)?;
+    let settle = requested_settle_or(args, session.default_verb_settle())?;
     let screenshot = png_shorthand(screenshot_request(args)?, args);
     let path = match &screenshot {
         ScreenshotRequest::Path(path) => Some(path.clone()),
@@ -2771,11 +2803,12 @@ fn observe(
 }
 
 fn tap(session: &mut ArtSession, args: &Value) -> Result<Value, BackendError> {
-    let settle = requested_settle(args)?;
+    let settle = requested_settle_or(args, session.default_verb_settle())?;
     // FB3: the reply describes what the action changed (default on).
     session.set_diff_requested(diff_requested(args)?);
     // SE1: reject an unverifiable pass before the input is injected.
     reject_expect_change_without_pixel_evidence(args)?;
+    reject_expect_change_for_settle(args, settle)?;
     let result = if let Some((selector, describe)) = args_selector(args) {
         // Input resolution, not evidence resolution: a `text` selector reaches
         // the platform's accessible name (text, else content description among
@@ -2829,9 +2862,10 @@ fn tap(session: &mut ArtSession, args: &Value) -> Result<Value, BackendError> {
 /// reported from such a traversal, and a miss is a structured `ELEMENT_NOT_FOUND`
 /// naming the attempts and the last tree's texts.
 fn swipe(session: &mut ArtSession, args: &Value) -> Result<Value, BackendError> {
-    let settle = requested_settle(args)?;
+    let settle = requested_settle_or(args, session.default_verb_settle())?;
     session.set_diff_requested(diff_requested(args)?);
     reject_expect_change_without_pixel_evidence(args)?;
+    reject_expect_change_for_settle(args, settle)?;
     let (from, to, duration_ms) = swipe_points(session, args)?;
     let fling = fling_requested(args);
     let Some(until) = args.get("until").filter(|value| !value.is_null()) else {
@@ -2840,14 +2874,15 @@ fn swipe(session: &mut ArtSession, args: &Value) -> Result<Value, BackendError> 
         session.swipe(from, to, duration_ms, fling)?;
         return Ok(input_result(session, "swipe", Value::Null));
     };
-    // A repeated search needs every observation to be settled, and the
-    // selector's visibility is checked on the fresh tree each attempt took.
-    if matches!(settle, "fast" | "content") {
+    // A repeated search needs every observation to be settled (`strict` or
+    // `content`), and the selector's visibility is checked on the fresh tree
+    // each attempt took. `fast` is navigation-only and cannot prove settled state.
+    if settle == "fast" {
         return Err(BackendError::Failed {
             code: ErrorCode::InvalidArgument,
             detail: format!(
-                "`until` needs a strict settle so a found node is backed by a settled \
-                 observation; `settle: {settle}` cannot prove that"
+                "`until` needs a settled observation (`strict` or `content`) so a found node \
+                 is backed by a settled observation; `settle: {settle}` cannot prove that"
             ),
         });
     }
@@ -2860,7 +2895,7 @@ fn swipe(session: &mut ArtSession, args: &Value) -> Result<Value, BackendError> 
         .and_then(Value::as_u64)
         .unwrap_or(if fling { 10 } else { 6 })
         .clamp(1, 50) as usize;
-    session.set_settle_mode("strict");
+    session.set_settle_mode(settle);
     session.begin_input();
     let report = session.scroll_until(&selector, from, to, duration_ms, fling, max_attempts)?;
     let mut result = input_result(session, "swipe", Value::Null);
@@ -2869,6 +2904,7 @@ fn swipe(session: &mut ArtSession, args: &Value) -> Result<Value, BackendError> 
         "found": true,
         "attempts": report.attempts,
         "frame_seq": report.frame_seq,
+        "settle": settle,
     });
     Ok(result)
 }
@@ -3160,9 +3196,9 @@ fn input_target(text: &str, decision: &EchoDecision<'_>) -> Value {
 }
 
 fn type_text(session: &mut ArtSession, args: &Value) -> Result<Value, BackendError> {
-    let settle = requested_settle(args)?;
+    let settle = requested_settle_or(args, session.default_verb_settle())?;
     session.set_diff_requested(diff_requested(args)?);
-    reject_expect_change_without_pixel_evidence(args)?;
+    reject_expect_change_for_settle(args, settle)?;
     let Some(text) = args.get("text").and_then(Value::as_str) else {
         return Err(BackendError::Failed {
             code: ErrorCode::InvalidArgument,
@@ -3192,9 +3228,9 @@ fn type_text(session: &mut ArtSession, args: &Value) -> Result<Value, BackendErr
 }
 
 fn key(session: &mut ArtSession, args: &Value) -> Result<Value, BackendError> {
-    let settle = requested_settle(args)?;
+    let settle = requested_settle_or(args, session.default_verb_settle())?;
     session.set_diff_requested(diff_requested(args)?);
-    reject_expect_change_without_pixel_evidence(args)?;
+    reject_expect_change_for_settle(args, settle)?;
     let code = args.get("code").cloned().unwrap_or(Value::Null);
     let value = if let Some(name) = code.as_str() {
         let name = name.to_ascii_lowercase();
@@ -4036,11 +4072,16 @@ fn reset_bind(args: &Value) -> Result<(&'static str, bool), BackendError> {
 }
 
 fn requested_settle(args: &Value) -> Result<&'static str, BackendError> {
+    requested_settle_or(args, "strict")
+}
+
+fn requested_settle_or(args: &Value, default: &'static str) -> Result<&'static str, BackendError> {
     match args.get("settle").and_then(Value::as_str) {
-        None | Some("strict") => Ok("strict"),
+        None => Ok(default),
+        Some("strict") => Ok("strict"),
         Some("fast") => Ok("fast"),
         // SE2: the content-stable rule for a screen that animates forever in
-        // pixels (ADR-0026 decision 3). Backs UI/text observations only.
+        // pixels (ADR-0026 decision 3). Backs UI/text observations and input verbs.
         Some("content") => Ok("content"),
         Some(other) => Err(BackendError::Failed {
             code: ErrorCode::InvalidArgument,
@@ -4198,6 +4239,10 @@ fn reject_expect_change_without_pixel_evidence(args: &Value) -> Result<(), Backe
     let Some(settle) = args.get("settle").and_then(Value::as_str) else {
         return Ok(());
     };
+    reject_expect_change_for_settle(args, settle)
+}
+
+fn reject_expect_change_for_settle(args: &Value, settle: &str) -> Result<(), BackendError> {
     if !expect_change_arg(args)? {
         return Ok(());
     }
