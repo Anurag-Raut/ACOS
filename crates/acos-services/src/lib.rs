@@ -139,3 +139,75 @@ pub fn workspace_path(rel: &str) -> Option<std::path::PathBuf> {
     }
     None
 }
+
+#[cfg(test)]
+pub(crate) mod test_env {
+    use std::ffi::{OsStr, OsString};
+    use std::path::{Path, PathBuf};
+    use std::sync::atomic::{AtomicU64, Ordering};
+    use std::sync::{Mutex, MutexGuard};
+
+    static ENV_LOCK: Mutex<()> = Mutex::new(());
+    static NEXT_ID: AtomicU64 = AtomicU64::new(0);
+
+    pub(crate) struct EnvGuard {
+        _lock: MutexGuard<'static, ()>,
+        saved: Vec<(&'static str, Option<OsString>)>,
+    }
+
+    impl EnvGuard {
+        pub(crate) fn new(vars: &[&'static str]) -> Self {
+            let lock = ENV_LOCK
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            let saved = vars.iter().map(|&k| (k, std::env::var_os(k))).collect();
+            Self { _lock: lock, saved }
+        }
+
+        pub(crate) fn set(&self, key: &str, value: impl AsRef<OsStr>) {
+            std::env::set_var(key, value);
+        }
+
+        pub(crate) fn remove(&self, key: &str) {
+            std::env::remove_var(key);
+        }
+    }
+
+    impl Drop for EnvGuard {
+        fn drop(&mut self) {
+            for (key, old) in self.saved.iter().rev() {
+                match old {
+                    Some(val) => std::env::set_var(key, val),
+                    None => std::env::remove_var(key),
+                }
+            }
+        }
+    }
+
+    pub(crate) struct TempDir {
+        path: PathBuf,
+    }
+
+    impl TempDir {
+        pub(crate) fn new(prefix: &str) -> Self {
+            let id = NEXT_ID.fetch_add(1, Ordering::Relaxed);
+            let path = std::env::temp_dir().join(format!(
+                "acos-{prefix}-{}-{id}",
+                std::process::id()
+            ));
+            let _ = std::fs::remove_dir_all(&path);
+            std::fs::create_dir_all(&path).expect("create temp test dir");
+            Self { path }
+        }
+
+        pub(crate) fn path(&self) -> &Path {
+            &self.path
+        }
+    }
+
+    impl Drop for TempDir {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.path);
+        }
+    }
+}

@@ -85,6 +85,9 @@ pub const PERMISSION_CONTROLLER_PACKAGE: &str =
 pub const CONFIG_APK: &str = "apk";
 /// The controller APK's environment override.
 pub const APK_ENV: &str = "ACOS_PERMISSION_CONTROLLER_APK";
+/// Installed image-relative system-app APK (`tools/release/install.sh`).
+pub const APK_IMAGE_REL: &str =
+    ".cache/boot/android-34/system-apps/com.android.permissioncontroller.apk";
 /// Workspace-relative default build output (`tools/build/build-apps.sh`).
 pub const APK_REL: &str = "fixtures/build/apps/permissioncontroller.apk";
 /// `config: {"system_ui": "dialogs" | "off"}`.
@@ -421,25 +424,36 @@ fn apply_config(store: &mut PermissionStore, config: &ModuleConfig) -> Result<Va
     }))
 }
 
+/// Resolve the host APK path for `system.permissions`'s controller app.
+///
+/// Order: `config: {"apk": ...}`, then `ACOS_PERMISSION_CONTROLLER_APK`, then
+/// the installed image path (`APK_IMAGE_REL` via `workspace_path`, checking
+/// `$ACOS_HOME` first), then the workspace fixture build (`APK_REL`).
+#[must_use]
+pub fn controller_apk(config: &ModuleConfig) -> std::path::PathBuf {
+    if let Some(path) = config.string(CONFIG_APK).filter(|path| !path.is_empty()) {
+        return std::path::PathBuf::from(path);
+    }
+    if let Some(path) = std::env::var_os(APK_ENV) {
+        if !path.is_empty() {
+            return std::path::PathBuf::from(path);
+        }
+    }
+    if let Some(image) = crate::workspace_path(APK_IMAGE_REL) {
+        return image;
+    }
+    crate::workspace_path(APK_REL).unwrap_or_else(|| std::path::PathBuf::from(APK_REL))
+}
+
 /// The host APK this module's declared **system app** installs
 /// (`crate::module::system_apks`).
 ///
 /// `config: {"apk": …}` first, then `ACOS_PERMISSION_CONTROLLER_APK`, then the
-/// workspace build output. `None` when `module`/`app` is not this module's.
+/// installed image path (`APK_IMAGE_REL`), then the workspace build output.
+/// `None` when `module`/`app` is not this module's.
 #[must_use]
 pub fn system_app_apk(module: &str, app: &str, config: &ModuleConfig) -> Option<std::path::PathBuf> {
-    if module != MODULE_ID || app != PERMISSION_CONTROLLER_PACKAGE {
-        return None;
-    }
-    if let Some(path) = config.string(CONFIG_APK).filter(|path| !path.is_empty()) {
-        return Some(std::path::PathBuf::from(path));
-    }
-    if let Some(path) = std::env::var_os(APK_ENV) {
-        if !path.is_empty() {
-            return Some(std::path::PathBuf::from(path));
-        }
-    }
-    Some(crate::workspace_path(APK_REL).unwrap_or_else(|| std::path::PathBuf::from(APK_REL)))
+    (module == MODULE_ID && app == PERMISSION_CONTROLLER_PACKAGE).then(|| controller_apk(config))
 }
 
 impl Module for PermissionsModule {
@@ -643,5 +657,44 @@ mod tests {
     fn the_manifest_is_valid_and_declares_the_takeover() {
         manifest_ref().validate().expect("valid manifest");
         assert_eq!(manifest_ref().replaces, &["permission"]);
+    }
+
+    #[test]
+    fn resolves_installed_prefix_before_checkout_and_respects_overrides() {
+        let env = crate::test_env::EnvGuard::new(&["ACOS_HOME", APK_ENV]);
+        let home = crate::test_env::TempDir::new("permissions-home");
+        let installed_apk = home.path().join(APK_IMAGE_REL);
+        std::fs::create_dir_all(installed_apk.parent().expect("parent"))
+            .expect("create system-apps dir");
+        std::fs::write(&installed_apk, b"fake-apk")
+            .expect("write installed permissioncontroller apk");
+
+        env.set("ACOS_HOME", home.path());
+        env.remove(APK_ENV);
+
+        let default_cfg = ModuleConfig::default();
+        assert_eq!(controller_apk(&default_cfg), installed_apk);
+        assert_eq!(
+            system_app_apk(MODULE_ID, PERMISSION_CONTROLLER_PACKAGE, &default_cfg),
+            Some(installed_apk.clone())
+        );
+        assert_eq!(system_app_apk(MODULE_ID, "com.other", &default_cfg), None);
+
+        let empty_cfg =
+            ModuleConfig::from_json(MODULE_ID, &json!({ CONFIG_APK: "" })).expect("empty cfg");
+        env.set(APK_ENV, "");
+        assert_eq!(controller_apk(&empty_cfg), installed_apk);
+
+        let env_override = home.path().join("env-override.apk");
+        env.set(APK_ENV, &env_override);
+        assert_eq!(controller_apk(&default_cfg), env_override);
+
+        let cfg_override = home.path().join("cfg-override.apk");
+        let cfg = ModuleConfig::from_json(
+            MODULE_ID,
+            &json!({ CONFIG_APK: cfg_override.to_string_lossy() }),
+        )
+        .expect("cfg");
+        assert_eq!(controller_apk(&cfg), cfg_override);
     }
 }
