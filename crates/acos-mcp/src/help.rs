@@ -187,11 +187,13 @@ pub fn mcp_topic(infos: &[ToolInfo]) -> String {
     }
     out.push_str(
         "\n### Recipes\n\n\
-         * **Take a screenshot.** Pass `screenshot: true` to `acos_observe_tree` (recommended — \
+         * **Take a screenshot (ART sessions).** Pass `screenshot: true` to `acos_observe_tree` (recommended — \
          captures a lossless PNG of the exact bound frame under `<artifacts_dir>/screenshots/` \
          and returns `screenshot.path`, `width`, `height`, `display_size`, `display_origin`, plus \
          an inline preview) or to `acos_observe`. A frame with no app pixels (such as a launch \
-         placeholder) returns `NO_FRESH_FRAME`. Alternatives: a `capture: {name: shot, format: png, \
+         placeholder) returns `NO_FRESH_FRAME`. On legacy Rust VM sessions, `acos_observe_tree` ignores \
+         `screenshot`, and `acos_observe` with `screenshot: true` returns `UNSUPPORTED_BACKEND`; pass \
+         `screenshot: \"/abs/out.png\"` to `acos_observe` there. Alternatives: a `capture: {name: shot, format: png, \
          fresh: true}` step in an `acos_verify` scenario (`frames/<seq>.png`), or on the CLI \
          `acos observe --screenshot out/shot.png --json`.\n\
          * **Type into a field.** `acos_observe_tree` -> `acos_tap {\"id\": \"...\"}` or \

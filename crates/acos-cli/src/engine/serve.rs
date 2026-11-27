@@ -1724,10 +1724,25 @@ impl ServeEngine {
                     },
                 );
             } else {
-                self.routes
-                    .lock()
-                    .unwrap_or_else(|e| e.into_inner())
-                    .remove(id);
+                // Only drop the route when no live legacy session survives for
+                // `id` (for example, an early validation failure like a missing
+                // APK or bad display returns before replacing the held session).
+                let still_live = self
+                    .legacy
+                    .session_call("acos_status", &json!({"session_id": id}), ctx)
+                    .and_then(|status| {
+                        status
+                            .result()
+                            .and_then(|r| r.get("launched"))
+                            .and_then(Value::as_bool)
+                    })
+                    .unwrap_or(false);
+                if !still_live {
+                    self.routes
+                        .lock()
+                        .unwrap_or_else(|e| e.into_inner())
+                        .remove(id);
+                }
             }
         } else if tool == "acos_destroy" {
             self.routes

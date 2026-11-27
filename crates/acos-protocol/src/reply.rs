@@ -344,11 +344,12 @@ pub fn shape_tree_with_disk(
             );
             if out_of_range {
                 compact.insert("cursor_out_of_range".into(), Value::Bool(true));
+            } else {
+                compact.insert(
+                    "next_cursor".into(),
+                    next_cursor.map_or(Value::Null, |cursor| json!(cursor)),
+                );
             }
-            compact.insert(
-                "next_cursor".into(),
-                next_cursor.map_or(Value::Null, |cursor| json!(cursor)),
-            );
             compact.insert("nodes".into(), Value::Array(page));
             let note = if out_of_range {
                 let base_note = if total == 0 {
@@ -1547,7 +1548,7 @@ mod tests {
         assert_eq!(shaped.view["returned"], 0);
         assert_eq!(shaped.view["node_count"], 10);
         assert_eq!(shaped.view["cursor_out_of_range"], true);
-        assert_eq!(shaped.view["next_cursor"], Value::Null);
+        assert!(shaped.view.get("next_cursor").is_none());
         assert_eq!(shaped.view["nodes"].as_array().unwrap().len(), 0);
         let note = shaped.view["note"].as_str().unwrap();
         assert!(note.contains("cursor 50 is out of range"), "{note}");
