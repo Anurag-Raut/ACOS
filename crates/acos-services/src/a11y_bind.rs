@@ -223,6 +223,14 @@ pub fn plan_bind(state: &mut A11yState) -> Result<Vec<PendingDelivery>> {
     if state.bound_service.is_some() {
         return Ok(Vec::new());
     }
+    // A bind to the same component is already in flight: a second token would
+    // make the first `publishService` fail its token check and leak the first
+    // service instance.
+    if state.pending_bind.as_ref().is_some_and(|pending| {
+        crate::misc::same_component(&pending.component, &state.enabled_services[0])
+    }) {
+        return Ok(Vec::new());
+    }
     let component = state.enabled_services[0].clone();
     let (package, class) = component
         .split_once('/')
@@ -1886,12 +1894,17 @@ pub fn sync_enabled_services(state: &mut A11yState) -> Vec<PendingDelivery> {
     {
         return Vec::new();
     }
-    let prev_flags = state.flags();
-    let prev_services = state.enabled_services.clone();
+    // Compare against what the clients were last told, not against the
+    // already-updated table/record: a touch-exploration-only change or a
+    // control-path write (`enable_services`/`disable`) has moved both already.
+    let prev_flags = state.notified_flags;
+    let prev_services = state.notified_services.clone();
     state.observed_secure_generation = Some(generation);
     state.enabled = enabled;
     state.enabled_services = services;
     let new_flags = state.flags();
+    state.notified_flags = new_flags;
+    state.notified_services = state.enabled_services.clone();
     // A service that is no longer enabled (or was replaced by another one) is
     // unbound first: `setEnabledServices` unbinds the services that left the
     // set before it binds the ones that joined it.

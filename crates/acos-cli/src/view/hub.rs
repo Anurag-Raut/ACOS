@@ -1382,8 +1382,17 @@ impl InputClient {
                             let mut reply = err_json("QUEUE_FULL", "input queue full");
                             if matches!(cmd, InputCommand::Rotate { .. }) {
                                 reply["t"] = json!("rotate");
-                            } else if matches!(cmd, InputCommand::CapabilityAction { .. }) {
+                            } else if let InputCommand::CapabilityAction {
+                                prompt_seq,
+                                option_id,
+                                ..
+                            } = &cmd
+                            {
+                                // Echo the identifiers so the page can restore the
+                                // matching card (the action was NOT dispatched).
                                 reply["t"] = json!("capability");
+                                reply["prompt_seq"] = json!(prompt_seq);
+                                reply["option_id"] = json!(option_id);
                             }
                             immediate_reply = Some((reply_to, reply.to_string()));
                         }
@@ -5095,6 +5104,18 @@ mod tests {
         assert_eq!(reply["ok"], json!(false));
         assert_eq!(reply["code"], json!("QUEUE_FULL"));
         assert_eq!(reply["t"], json!("rotate"));
+
+        // A capability action rejected on a full queue must echo prompt_seq and
+        // option_id so the page can restore the matching card.
+        assert!(client.enqueue(
+            r#"{"t":"capability","prompt_seq":7,"option_id":"enable","modules":[{"id":"accessibility","profile":"real"}]}"#,
+            Arc::clone(&tx)
+        ));
+        let reply = read_server_ws_text(&mut rx);
+        assert_eq!(reply["code"], json!("QUEUE_FULL"));
+        assert_eq!(reply["t"], json!("capability"));
+        assert_eq!(reply["prompt_seq"], json!(7));
+        assert_eq!(reply["option_id"], json!("enable"));
 
         {
             let (lock, cv) = &*release;

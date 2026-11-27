@@ -28,12 +28,19 @@
         android:textSize="16sp"
         android:text="" />
 
-    <LinearLayout
-        android:id="@+id/settings_dynamic_container"
+    <ScrollView
+        android:id="@+id/settings_scroll"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="vertical"
-        android:paddingTop="16dp" />
+        android:layout_height="0dp"
+        android:layout_weight="1">
+
+        <LinearLayout
+            android:id="@+id/settings_dynamic_container"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingTop="16dp" />
+    </ScrollView>
 
     <Button
         android:id="@+id/settings_back"

@@ -159,6 +159,15 @@ pub struct A11yState {
     /// against (`a11y_bind::sync_enabled_services`): a write moves the
     /// generation, which is the settings observer's trigger.
     pub observed_secure_generation: Option<i32>,
+    /// The `setState` flag word the connected manager clients were last told
+    /// about. Deliberately **not** updated by `enable_services`/`disable`:
+    /// those write the settings table first, so the next reconciliation
+    /// compares the new state against what clients last saw and notifies them
+    /// for control-path changes and touch-exploration-only changes alike.
+    pub notified_flags: i32,
+    /// The enabled-service list the clients were last told about (see
+    /// `notified_flags`).
+    pub notified_services: Vec<String>,
     /// The most recent events (bounded, newest last).
     pub events: Vec<A11yEvent>,
     /// Every interaction connection the app registered.
@@ -353,6 +362,8 @@ impl A11yState {
             enabled_services: Vec::new(),
             enabled: false,
             observed_secure_generation: None,
+            notified_flags: 0,
+            notified_services: Vec::new(),
             events: Vec::new(),
             connections: Vec::new(),
             unsupported: Vec::new(),
@@ -1057,11 +1068,17 @@ impl A11yState {
         }
     }
 
-    /// Look up the `IApplicationThread` for `package`, falling back to the
-    /// single-process `app_thread` field when no package-specific entry exists.
+    /// Look up the `IApplicationThread` for `package`. Once any per-package
+    /// registration exists (multi-process session), an unknown package has no
+    /// thread yet (`None`) rather than borrowing another process's thread; the
+    /// single-process `app_thread` fallback applies only while the map is empty.
     #[must_use]
     pub fn app_thread_for(&self, package: &str) -> Option<u64> {
-        self.app_threads.get(package).copied().or(self.app_thread)
+        if self.app_threads.is_empty() {
+            self.app_thread
+        } else {
+            self.app_threads.get(package).copied()
+        }
     }
 
     /// Record the `AccessibilityServiceInfo` the service set on connect.
@@ -1334,6 +1351,12 @@ impl ServiceObject for A11yService {
                 let state_flags = state.flags();
                 if let Some(client) = args.first().and_then(Value::as_binder) {
                     if !state.clients.contains(&client.0) {
+                        if state.clients.is_empty() {
+                            // Nobody holds stale state: the first client is
+                            // told the current state by this very reply.
+                            state.notified_flags = state_flags;
+                            state.notified_services = state.enabled_services.clone();
+                        }
                         state.clients.push(client.0);
                     }
                     // `AccessibilityManager.addClient` is a registration: the
@@ -2503,6 +2526,62 @@ pub fn empty_bundle() -> Bundle {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn app_thread_for_unknown_package_is_none_when_registrations_exist() {
+        let mut state = A11yState::new();
+        state.set_app_thread(7);
+        // Single-process session: the fallback thread answers any package.
+        assert_eq!(state.app_thread_for("any.pkg"), Some(7));
+        state.set_app_thread_for_package("com.primary", 7);
+        state.set_app_thread_for_package("com.settings", 9);
+        assert_eq!(state.app_thread_for("com.settings"), Some(9));
+        assert_eq!(state.app_thread_for("com.unknown"), None);
+    }
+
+    fn a11y_with_client() -> (A11yState, Arc<Mutex<crate::provider::SettingsState>>) {
+        let settings = Arc::new(Mutex::new(crate::provider::SettingsState::new()));
+        let mut state = A11yState::new();
+        state.settings = Some(Arc::clone(&settings));
+        state.clients.push(0x55);
+        (state, settings)
+    }
+
+    fn state_codes(deliveries: &[crate::host::PendingDelivery]) -> Vec<u32> {
+        deliveries.iter().map(|d| d.code).collect()
+    }
+
+    #[test]
+    fn touch_exploration_only_change_notifies_clients() {
+        let (mut state, settings) = a11y_with_client();
+        {
+            let mut s = settings.lock().unwrap();
+            s.put(crate::provider::Namespace::Secure, "accessibility_enabled", "0");
+        }
+        let _ = crate::a11y_bind::sync_enabled_services(&mut state);
+        assert_eq!(state.notified_flags, 0);
+        settings.lock().unwrap().put(
+            crate::provider::Namespace::Secure,
+            "touch_exploration_enabled",
+            "1",
+        );
+        let out = crate::a11y_bind::sync_enabled_services(&mut state);
+        // setState (code 1) + notifyServicesStateChanged (code 2).
+        assert_eq!(state_codes(&out), vec![1, 2], "{out:?}");
+        assert_eq!(state.notified_flags, 2);
+    }
+
+    #[test]
+    fn control_path_enable_and_disable_notify_clients() {
+        let (mut state, _settings) = a11y_with_client();
+        state.enable_services(&["p/.S".to_string()]).unwrap();
+        let out = crate::a11y_bind::sync_enabled_services(&mut state);
+        assert!(state_codes(&out).contains(&1), "enable must notify: {out:?}");
+        state.disable();
+        let out = crate::a11y_bind::sync_enabled_services(&mut state);
+        assert!(state_codes(&out).contains(&1), "disable must notify: {out:?}");
+        assert_eq!(state.notified_flags, 0);
+    }
 
     /// A11YPACE: a paced stroke's arrival instants are its own declared
     /// timeline — the first event at the stroke's start, every later one at its
