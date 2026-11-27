@@ -537,7 +537,7 @@ impl ServeEngine {
         match tool {
             "acos_launch" => self.call_launch(&request_id, &id, args, ctx, explicit),
             "acos_destroy" => self.call_destroy(&request_id, &id, args, ctx),
-            "panel_touch" | "panel_key" | "panel_text" | "panel_rotate" => {
+            "panel_touch" | "panel_key" | "panel_text" | "panel_rotate" | "panel_capability" => {
                 if let Some(held) = held {
                     return self.call_panel(&request_id, &id, &held, tool, args);
                 }
@@ -1678,6 +1678,80 @@ impl ServeEngine {
                     "width": w,
                     "height": h,
                     "rotation": applied,
+                }))
+            })(),
+            "panel_capability" => (|| {
+                let modules = args
+                    .get("modules")
+                    .and_then(Value::as_array)
+                    .cloned()
+                    .unwrap_or_default();
+                let control = args.get("control").and_then(Value::as_object);
+                let replay_intent = args.get("replay_intent").and_then(Value::as_u64);
+                if modules.is_empty() && control.is_none() && replay_intent.is_none() {
+                    return Err(BackendError::Failed {
+                        code: ErrorCode::InvalidArgument,
+                        detail: "panel_capability requires at least one of `modules`, `control`, or `replay_intent`"
+                            .to_string(),
+                    });
+                }
+                let mut attached: Vec<Value> = Vec::new();
+                for spec in &modules {
+                    let Some(mod_id) = spec.get("id").and_then(Value::as_str) else {
+                        return Err(BackendError::Failed {
+                            code: ErrorCode::InvalidArgument,
+                            detail: "panel_capability modules[] entry needs string `id`"
+                                .to_string(),
+                        });
+                    };
+                    let profile = spec
+                        .get("profile")
+                        .and_then(Value::as_str)
+                        .unwrap_or("real");
+                    let reply = session.service_op(json!({
+                        "op": "attach",
+                        "id": mod_id,
+                        "profile": profile,
+                    }))?;
+                    if let Some(arr) = reply.get("attached").and_then(Value::as_array) {
+                        attached = arr.clone();
+                    }
+                }
+                let mut control_result = Value::Null;
+                if let Some(ctl) = control {
+                    let Some(mod_id) = ctl.get("module").and_then(Value::as_str) else {
+                        return Err(BackendError::Failed {
+                            code: ErrorCode::InvalidArgument,
+                            detail: "panel_capability control needs string `module`".to_string(),
+                        });
+                    };
+                    let Some(ctl_op) = ctl.get("op").and_then(Value::as_str) else {
+                        return Err(BackendError::Failed {
+                            code: ErrorCode::InvalidArgument,
+                            detail: "panel_capability control needs string `op`".to_string(),
+                        });
+                    };
+                    let ctl_args = ctl.get("args").cloned().unwrap_or(Value::Null);
+                    control_result = session.service_op(json!({
+                        "op": "ctl",
+                        "id": mod_id,
+                        "ctl_op": ctl_op,
+                        "args": ctl_args,
+                    }))?;
+                }
+                let mut replay_result = Value::Null;
+                if let Some(intent_id) = replay_intent {
+                    replay_result = session.service_op(json!({
+                        "op": "replay_intent",
+                        "intent_id": intent_id,
+                    }))?;
+                }
+                Ok(json!({
+                    "ok": true,
+                    "session_id": id,
+                    "attached": attached,
+                    "control": control_result,
+                    "replay": replay_result,
                 }))
             })(),
             other => Err(BackendError::Unsupported {
@@ -3969,12 +4043,15 @@ fn module_service_ctl(session: &mut ArtSession, args: &Value) -> Result<Value, B
 /// engine request `{op: "ctl", id, ctl_op, args}`.
 fn service_control(session: &mut ArtSession, args: &Value) -> Result<Value, BackendError> {
     let op = args.get("op").and_then(Value::as_str).unwrap_or("");
-    if !matches!(op, "list" | "status" | "attach" | "detach" | "ctl") {
+    if !matches!(
+        op,
+        "list" | "status" | "attach" | "detach" | "ctl" | "replay_intent"
+    ) {
         return Err(BackendError::Failed {
             code: ErrorCode::InvalidArgument,
             detail: format!(
-                "unknown op {op:?}; use list, status, attach or detach (a module control op is \
-                 `acos_service_ctl {{module, op, args}}`)"
+                "unknown op {op:?}; use list, status, attach, detach, ctl or replay_intent (a \
+                 module control op is `acos_service_ctl {{module, op, args}}`)"
             ),
         });
     }
@@ -4010,6 +4087,15 @@ fn service_control(session: &mut ArtSession, args: &Value) -> Result<Value, Back
         if let Some(ctl_args) = args.get("args") {
             request["args"] = ctl_args.clone();
         }
+    }
+    if op == "replay_intent" {
+        let Some(intent_id) = args.get("intent_id").and_then(Value::as_u64) else {
+            return Err(BackendError::Failed {
+                code: ErrorCode::InvalidArgument,
+                detail: "replay_intent needs an integer `intent_id`".into(),
+            });
+        };
+        request["intent_id"] = json!(intent_id);
     }
     let mut reply = session.service_op(request)?;
     reply["session_id"] = json!(args
@@ -4283,6 +4369,10 @@ fn input_result(session: &mut ArtSession, kind: &str, target: Value) -> Value {
     // present when asked for: `diff:false` is the pre-FB3 reply, byte for byte.
     if session.diff_requested() {
         result["changes"] = serde_json::to_value(session.tree_changes()).unwrap_or(Value::Null);
+    }
+    let prompts = session.last_capability_prompts();
+    if !prompts.is_empty() {
+        result["capability_prompts"] = json!(prompts);
     }
     result
 }

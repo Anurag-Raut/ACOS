@@ -171,6 +171,10 @@ pub struct A11yState {
     /// The app process's `IApplicationThread`, captured from
     /// `attachApplication`; the bind has no target before that.
     pub app_thread: Option<u64>,
+    /// Per-package `IApplicationThread` map for multi-process sessions (e.g.
+    /// primary app + hot-attached `com.android.settings`), so attaching a
+    /// secondary process never redirects a service bind to the wrong process.
+    pub app_threads: std::collections::BTreeMap<String, u64>,
     /// The bind that is in flight (deliveries queued, `publishService` not yet
     /// received).
     pub pending_bind: Option<A11yPendingBind>,
@@ -354,6 +358,7 @@ impl A11yState {
             unsupported: Vec::new(),
             pms: None,
             app_thread: None,
+            app_threads: std::collections::BTreeMap::new(),
             pending_bind: None,
             bound_service: None,
             next_bind_seq: 0,
@@ -1037,6 +1042,28 @@ impl A11yState {
         self.app_thread = Some(binder);
     }
 
+    /// Record the `IApplicationThread` for a specific package (`attachApplication`).
+    ///
+    /// Multi-process sessions (e.g. primary app + hot-attached `com.android.settings`)
+    /// have one `IApplicationThread` per process, so each package is indexed by
+    /// name and a secondary process attaching never clobbers the primary app's
+    /// fallback thread.
+    pub fn set_app_thread_for_package(&mut self, package: &str, binder: u64) {
+        if !package.is_empty() {
+            self.app_threads.insert(package.to_string(), binder);
+        }
+        if self.app_thread.is_none() {
+            self.app_thread = Some(binder);
+        }
+    }
+
+    /// Look up the `IApplicationThread` for `package`, falling back to the
+    /// single-process `app_thread` field when no package-specific entry exists.
+    #[must_use]
+    pub fn app_thread_for(&self, package: &str) -> Option<u64> {
+        self.app_threads.get(package).copied().or(self.app_thread)
+    }
+
     /// Record the `AccessibilityServiceInfo` the service set on connect.
     pub fn set_service_info(&mut self, value: Option<crate::value::Value>) {
         if let Some(bound) = self.bound_service.as_mut() {
@@ -1143,6 +1170,24 @@ pub fn validate_component(value: &str) -> Result<()> {
         });
     }
     Ok(())
+}
+
+/// Compare two `package/class` component spellings canonically so `pkg/.Foo`
+/// and `pkg/pkg.Foo` match.
+pub(crate) fn same_component(a: &str, b: &str) -> bool {
+    fn canonical(raw: &str) -> Option<(&str, String)> {
+        let (pkg, cls) = raw.split_once('/')?;
+        let full = if let Some(short) = cls.strip_prefix('.') {
+            format!("{pkg}.{short}")
+        } else {
+            cls.to_string()
+        };
+        Some((pkg, full))
+    }
+    match (canonical(a), canonical(b)) {
+        (Some(ca), Some(cb)) => ca == cb,
+        _ => a == b,
+    }
 }
 
 /// The `AccessibilityServiceInfo` value the framework reads from
@@ -1324,20 +1369,31 @@ impl ServiceObject for A11yService {
                     deliveries,
                 })
             }
-            "getInstalledAccessibilityServiceList" | "getEnabledAccessibilityServiceList" => {
+            "getInstalledAccessibilityServiceList" => {
                 // `getInstalled...` reads the **package manager** (the installed
                 // APK's `<service android:permission="…BIND_ACCESSIBILITY_SERVICE">`
-                // records), exactly like AOSP's `queryIntentServices`; the
-                // launch config only decides what is *enabled*. `getEnabled...`
-                // adds the feedback-type filter AOSP applies.
-                let enabled =
-                    matches!(method.name.as_str(), "getInstalledAccessibilityServiceList")
-                        || state.enabled;
+                // records), exactly like AOSP's `queryIntentServices`, regardless
+                // of whether each service is currently enabled (so Settings can
+                // list installed services and present a toggle for each).
+                let items = state
+                    .installed_services()
+                    .iter()
+                    .filter_map(|service| service_info_value(service))
+                    .collect();
+                Ok(CallResult {
+                    reply: vec![Value::List(Some(items))],
+                    deliveries: Vec::new(),
+                })
+            }
+            "getEnabledAccessibilityServiceList" => {
+                // `getEnabled...` returns only installed services that are
+                // currently enabled (matching either short `pkg/.Class` or
+                // full `pkg/pkg.Class` spelling).
                 let installed = state.installed_services();
                 let mut items = Vec::new();
-                if enabled {
+                if state.enabled {
                     for service in &state.enabled_services {
-                        if installed.iter().any(|i| i == service) {
+                        if installed.iter().any(|i| same_component(i, service)) {
                             if let Some(info) = service_info_value(service) {
                                 items.push(info);
                             }

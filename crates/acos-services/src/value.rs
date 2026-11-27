@@ -185,8 +185,11 @@ pub enum DynamicValue {
     StringArray(Option<Vec<Option<String>>>),
     /// `VAL_IBINDER`.
     Binder(Option<BinderId>),
-    /// A `VAL_MAP`/`VAL_BUNDLE`-shaped nested map (best effort).
+    /// A `VAL_MAP` nested map.
     Map(Vec<(DynamicValue, DynamicValue)>),
+    /// A `VAL_BUNDLE` nested `android.os.Bundle` (no outer length word;
+    /// `writeBundle` writes its own `BaseBundle` length and `"BNDL"` header).
+    Bundle(Option<Bundle>),
     /// A `VAL_SPARSEARRAY` (the image's tag 12): an `int` key per value.
     ///
     /// `activityStopped`'s saved-state `Bundle` carries the window hierarchy

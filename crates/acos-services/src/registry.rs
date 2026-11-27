@@ -210,6 +210,10 @@ pub struct LiveHandles {
     /// started/bound service is a candidate) and the peer removes the record
     /// when the process dies.
     pub atms: std::sync::Arc<std::sync::Mutex<crate::atms::AtmsState>>,
+    /// v0.6.1: on-demand capability prompts recorded for both humans (`acos view`)
+    /// and agents (MCP / CLI) when an app hits an unattached module or captured intent.
+    pub prompts:
+        std::sync::Arc<std::sync::Mutex<crate::capability_prompts::CapabilityPromptState>>,
 }
 
 /// Install the standard ACOS service set on `host`.
@@ -362,6 +366,12 @@ pub fn install_with_handles_and_insets(
     // MPROC1: the activity manager captures an unresolvable share/pick/view into
     // the same state the broker service (and the session control op) reads.
     atms_state.ams.intents = Some(Arc::clone(&intents));
+    // v0.6.1: on-demand capability prompts shared across AMS, ServiceHost,
+    // and the live launcher / view feed.
+    let prompts = Arc::new(Mutex::new(
+        crate::capability_prompts::CapabilityPromptState::new(),
+    ));
+    atms_state.ams.prompts = Some(Arc::clone(&prompts));
     let atms = Arc::new(Mutex::new(atms_state));
     // The handles a live session drives: the same input producer the window
     // sessions use, the compositor state, the window state, the intent capture
@@ -373,7 +383,9 @@ pub fn install_with_handles_and_insets(
         intents: Arc::clone(&intents),
         top_process: Arc::clone(&top_process),
         atms: Arc::clone(&atms),
+        prompts: Arc::clone(&prompts),
     };
+    host.set_capability_prompts(Arc::clone(&prompts));
     // MODNOTIF4: the `IIntentSender` node pool. A `PendingIntent` is only a
     // strong binder to one of these (`PendingIntent.writeToParcel`), so the
     // binders exist before any app asks for one; `getIntentSender` fills a slot

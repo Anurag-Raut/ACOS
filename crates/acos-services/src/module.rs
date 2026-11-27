@@ -1205,6 +1205,31 @@ pub fn tombstone_for(name: &str) -> Option<&'static Tombstone> {
     TOMBSTONES.iter().find(|t| t.name == name)
 }
 
+/// Lookup `(AttachMode, preferred_profile)` for a shipped module id.
+///
+/// Used when recording a [`crate::capability_prompts::CapabilityPrompt`] for a
+/// tombstone hit so humans and agents know whether the module can be hot-attached
+/// or requires a session relaunch.
+#[must_use]
+pub fn module_attach_hint(module_id: &str) -> (AttachMode, Profile) {
+    let reg = ModuleRegistry::standard();
+    if let Some(manifest) = reg.manifest(module_id) {
+        let profile = if manifest.supports(Profile::Real) {
+            Profile::Real
+        } else if manifest.supports(Profile::Scripted) {
+            Profile::Scripted
+        } else {
+            manifest
+                .profiles
+                .first()
+                .copied()
+                .unwrap_or(Profile::Scripted)
+        };
+        return (manifest.attach, profile);
+    }
+    (AttachMode::AtLaunch, Profile::Real)
+}
+
 /// A service object that answers every transaction with the tombstone error.
 struct TombstoneService {
     tombstone: &'static Tombstone,

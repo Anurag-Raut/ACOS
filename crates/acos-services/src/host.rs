@@ -728,6 +728,10 @@ pub struct ServiceHost {
     /// guest process, waits for a fresh probe sample, and returns the settled
     /// UI tree in the same control reply.
     guest_commands: Vec<GuestCommand>,
+    /// v0.6.1: on-demand capability prompts recorded when an app hits a
+    /// tombstone or unhandled settings/external intent.
+    prompts:
+        Option<std::sync::Arc<std::sync::Mutex<crate::capability_prompts::CapabilityPromptState>>>,
 }
 
 /// One typed host → guest command queued via [`ServiceHost::push_guest_command`]
@@ -838,6 +842,7 @@ impl ServiceHost {
             wms: None,
             compositor: None,
             guest_commands: Vec::new(),
+            prompts: None,
         }
     }
 
@@ -2557,6 +2562,59 @@ impl ServiceHost {
         service.install_extra_package_from_apk_as(apk_path, guest_source_dir, guest_native_lib_dir)
     }
 
+    /// Remove a hot-detached extra system package from both PMS and ATMS
+    /// (`ManifestDb`).
+    pub fn remove_extra_package(&mut self, package: &str) -> bool {
+        let removed_pms = self
+            .pms_mut()
+            .map(|pms| pms.remove_package(package))
+            .unwrap_or(false);
+        let removed_atms = self
+            .ensure("android.app.IActivityTaskManager")
+            .ok()
+            .and_then(|obj| {
+                obj.as_any_mut()
+                    .and_then(|any| any.downcast_mut::<crate::atms::AtmsService>())
+            })
+            .map(|atms| atms.remove_manifest_package(package))
+            .unwrap_or(false);
+        removed_pms || removed_atms
+    }
+
+    /// Attach the session's shared `CapabilityPromptState` (called by
+    /// `registry::install_with_handles_and_insets`).
+    pub fn set_capability_prompts(
+        &mut self,
+        prompts: std::sync::Arc<
+            std::sync::Mutex<crate::capability_prompts::CapabilityPromptState>,
+        >,
+    ) {
+        self.prompts = Some(prompts);
+    }
+
+    /// Shared handle to the session's `CapabilityPromptState`, if wired.
+    #[must_use]
+    pub fn capability_prompts(
+        &self,
+    ) -> Option<
+        std::sync::Arc<std::sync::Mutex<crate::capability_prompts::CapabilityPromptState>>,
+    > {
+        self.prompts.clone()
+    }
+
+    /// Replay a previously missed intent saved by `CapabilityPromptState`
+    /// through ATMS once the needed module (e.g. `system.settings`) is attached.
+    pub fn replay_saved_intent(&mut self, intent_id: u64) -> Result<i32> {
+        let object = self.ensure("android.app.IActivityTaskManager")?;
+        let atms = object
+            .as_any_mut()
+            .and_then(|any| any.downcast_mut::<crate::atms::AtmsService>())
+            .ok_or_else(|| {
+                ServiceError::Internal("activity task service is not an AtmsService".into())
+            })?;
+        atms.replay_saved_intent(intent_id)
+    }
+
     /// The uid the package manager allocated for `package` in this session.
     ///
     /// `None` when the package manager is not registered or the package is not
@@ -2641,6 +2699,24 @@ impl ServiceHost {
             });
         }
         if let Err(error) = &result {
+            if let ServiceError::ModuleUnavailable {
+                service, module, ..
+            } = error
+            {
+                if let Some(prompts) = self.prompts.as_ref() {
+                    let (attach_mode, default_profile) =
+                        crate::module::module_attach_hint(module);
+                    if let Ok(mut prompts) = prompts.lock() {
+                        prompts.record_tombstone_hit(
+                            service,
+                            module,
+                            attach_mode,
+                            default_profile,
+                            crate::intents::now_ms(),
+                        );
+                    }
+                }
+            }
             write_error_reply(reply, error);
         }
         result.map(|_| ())
@@ -2984,9 +3060,25 @@ impl ServiceHost {
                     "attachApplication" => {
                         if let Some(thread) = args.first().and_then(crate::value::Value::as_binder)
                         {
-                            a11y.lock()
-                                .unwrap_or_else(std::sync::PoisonError::into_inner)
-                                .set_app_thread(thread.0);
+                            let package = self.ams_state().and_then(|state| {
+                                let state = state
+                                    .lock()
+                                    .unwrap_or_else(std::sync::PoisonError::into_inner);
+                                state
+                                    .processes
+                                    .iter()
+                                    .find(|p| p.app_thread == Some(thread.0))
+                                    .map(|p| p.package_name.clone())
+                                    .filter(|pkg| !pkg.is_empty())
+                            });
+                            let mut a11y = a11y
+                                .lock()
+                                .unwrap_or_else(std::sync::PoisonError::into_inner);
+                            if let Some(package) = package {
+                                a11y.set_app_thread_for_package(&package, thread.0);
+                            } else {
+                                a11y.set_app_thread(thread.0);
+                            }
                         }
                     }
                     _ => {}

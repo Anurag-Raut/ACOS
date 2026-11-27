@@ -1382,6 +1382,8 @@ impl InputClient {
                             let mut reply = err_json("QUEUE_FULL", "input queue full");
                             if matches!(cmd, InputCommand::Rotate { .. }) {
                                 reply["t"] = json!("rotate");
+                            } else if matches!(cmd, InputCommand::CapabilityAction { .. }) {
+                                reply["t"] = json!("capability");
                             }
                             immediate_reply = Some((reply_to, reply.to_string()));
                         }
@@ -1472,6 +1474,13 @@ enum InputCommand {
     },
     Rotate {
         rotation: u8,
+    },
+    CapabilityAction {
+        prompt_seq: Option<u64>,
+        option_id: Option<String>,
+        modules: Vec<Value>,
+        control: Option<Value>,
+        replay_intent: Option<u64>,
     },
 }
 
@@ -2290,6 +2299,7 @@ impl InputWorker {
                     }
                     | InputCommand::Text { .. }
                     | InputCommand::Rotate { .. }
+                    | InputCommand::CapabilityAction { .. }
             );
             if should_emit {
                 self.notify_watch_only_ignored(&entry);
@@ -2312,6 +2322,13 @@ impl InputWorker {
             }
             InputCommand::Text { s } => self.handle_text(&s),
             InputCommand::Rotate { rotation } => self.handle_rotate(rotation),
+            InputCommand::CapabilityAction {
+                prompt_seq,
+                option_id,
+                modules,
+                control,
+                replay_intent,
+            } => self.handle_capability(prompt_seq, option_id, modules, control, replay_intent),
         }
     }
 
@@ -3197,6 +3214,53 @@ impl InputWorker {
         }
     }
 
+    fn handle_capability(
+        &mut self,
+        prompt_seq: Option<u64>,
+        option_id: Option<String>,
+        modules: Vec<Value>,
+        control: Option<Value>,
+        replay_intent: Option<u64>,
+    ) -> Value {
+        let mut args = serde_json::Map::new();
+        if !modules.is_empty() {
+            args.insert("modules".into(), Value::Array(modules));
+        }
+        if let Some(ctl) = control {
+            args.insert("control".into(), ctl);
+        }
+        if let Some(intent_id) = replay_intent {
+            args.insert("replay_intent".into(), json!(intent_id));
+        }
+        match self.call_daemon("panel_capability", Value::Object(args)) {
+            Ok(res) => {
+                let mut reply = json!({
+                    "ok": true,
+                    "t": "capability",
+                    "prompt_seq": prompt_seq,
+                    "option_id": option_id,
+                });
+                if let Some(attached) = res.get("attached") {
+                    reply["attached"] = attached.clone();
+                }
+                if let Some(replay) = res.get("replay") {
+                    if !replay.is_null() {
+                        reply["replay"] = replay.clone();
+                    }
+                }
+                reply
+            }
+            Err((c, m)) => json!({
+                "ok": false,
+                "t": "capability",
+                "prompt_seq": prompt_seq,
+                "option_id": option_id,
+                "code": c,
+                "error": m,
+            }),
+        }
+    }
+
     fn clear_guest_key_state(&mut self) {
         if !self.pending_key_ups.is_empty() {
             self.bump_recovery_episode();
@@ -3420,6 +3484,37 @@ fn parse_input_command(raw_json: &str) -> Result<InputCommand, String> {
                 .filter(|&v| v <= 3)
                 .ok_or_else(|| "rotate requires integer `rotation` in 0..=3".to_string())?;
             Ok(InputCommand::Rotate { rotation: rot })
+        }
+        "capability" => {
+            let prompt_seq = val.get("prompt_seq").and_then(Value::as_u64);
+            let option_id = val
+                .get("option_id")
+                .and_then(Value::as_str)
+                .map(str::to_string);
+            let modules = match val.get("modules") {
+                None | Some(Value::Null) => Vec::new(),
+                Some(Value::Array(arr)) => arr.clone(),
+                Some(_) => return Err("capability `modules` must be an array".to_string()),
+            };
+            let control = match val.get("control") {
+                None | Some(Value::Null) => None,
+                Some(v @ Value::Object(_)) => Some(v.clone()),
+                Some(_) => return Err("capability `control` must be an object".to_string()),
+            };
+            let replay_intent = val.get("replay_intent").and_then(Value::as_u64);
+            if modules.is_empty() && control.is_none() && replay_intent.is_none() {
+                return Err(
+                    "capability requires at least one of `modules`, `control`, or `replay_intent`"
+                        .to_string(),
+                );
+            }
+            Ok(InputCommand::CapabilityAction {
+                prompt_seq,
+                option_id,
+                modules,
+                control,
+                replay_intent,
+            })
         }
         other => Err(format!("unknown input message type {other:?}")),
     }
@@ -7191,6 +7286,56 @@ mod tests {
         drop(client1);
         drop(client2);
         drop(client3);
+        let _ = std::fs::remove_dir_all(&registry);
+    }
+
+    #[test]
+    fn capability_action_forwards_to_panel_capability_and_refuses_watch_only() {
+        let daemon = FakeDaemon::start("cap-act");
+        let registry = scratch("cap-act-reg");
+        publish_input_entry(&registry, "s_cap", Some(&daemon.socket), None, false);
+        let hub = Hub::new(registry.clone());
+        let client = hub.open_input("s_cap").expect("open interactive");
+        let (mut rx, tx) = ws_sink_pair();
+
+        // Empty capability message is rejected at parse time without calling daemon.
+        client.enqueue(r#"{"t":"capability"}"#, Arc::clone(&tx));
+        let bad = read_server_ws_text(&mut rx);
+        assert_eq!(bad["ok"], json!(false));
+        assert!(daemon.calls.lock().unwrap().is_empty());
+
+        // Valid hot-attach + replay_intent forwards to panel_capability.
+        client.enqueue(
+            r#"{"t":"capability","prompt_seq":3,"option_id":"enable_and_open_settings","modules":[{"id":"system.settings","profile":"real"},{"id":"accessibility","profile":"real"}],"replay_intent":1}"#,
+            Arc::clone(&tx),
+        );
+        let ok = read_server_ws_text(&mut rx);
+        assert_eq!(ok["ok"], json!(true));
+        assert_eq!(ok["t"], json!("capability"));
+        assert_eq!(ok["prompt_seq"], json!(3));
+        assert_eq!(ok["option_id"], json!("enable_and_open_settings"));
+        let calls = daemon.calls.lock().unwrap().clone();
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].0, "panel_capability");
+        assert_eq!(calls[0].1["replay_intent"], json!(1));
+        assert_eq!(calls[0].1["modules"].as_array().unwrap().len(), 2);
+
+        // Watch-only (verify) session must refuse capability mutations.
+        daemon.calls.lock().unwrap().clear();
+        publish_input_entry(&registry, "s_verify_cap", Some(&daemon.socket), None, true);
+        let vclient = hub.open_input("s_verify_cap").expect("open verify");
+        let (mut vrx, vtx) = ws_sink_pair();
+        vclient.enqueue(
+            r#"{"t":"capability","prompt_seq":1,"modules":[{"id":"system.settings","profile":"real"}]}"#,
+            Arc::clone(&vtx),
+        );
+        let refused = read_server_ws_text(&mut vrx);
+        assert_eq!(refused["ok"], json!(false));
+        assert_eq!(refused["code"], json!("VERIFY_WATCH_ONLY"));
+        assert!(daemon.calls.lock().unwrap().is_empty());
+
+        drop(client);
+        drop(vclient);
         let _ = std::fs::remove_dir_all(&registry);
     }
 }

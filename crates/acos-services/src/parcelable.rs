@@ -4406,6 +4406,7 @@ fn dynamic_to_value(v: crate::value::DynamicValue) -> Value {
         }
         D::Binder(b) => Value::Binder(b),
         D::Map(m) => Value::Map(Some(m)),
+        D::Bundle(b) => Value::Bundle(b),
         D::SparseArray(_) => {
             // `Value` has no sparse-array variant: a decoded
             // `VAL_SPARSEARRAY` is represented honestly as skipped when it has
@@ -4463,7 +4464,7 @@ fn value_to_dynamic(v: &Value) -> Result<crate::value::DynamicValue> {
             fd.0.try_clone().map_err(ServiceError::Parcel)?,
         ))),
         Value::RawFd(None) => D::Null,
-        Value::Bundle(Some(b)) => D::Parcelable(b.parcelable()),
+        Value::Bundle(Some(b)) => D::Bundle(Some(b.clone())),
         Value::Bundle(None) => D::Null,
         Value::Map(Some(entries)) => D::Map(entries.clone()),
         Value::Map(None) => D::Null,
@@ -4705,18 +4706,7 @@ pub fn read_dynamic(parcel: &mut Parcel) -> Result<crate::value::DynamicValue> {
             check_value_length(parcel, declared, start, val::SPARSEARRAY)?;
             D::SparseArray(entries)
         }
-        val::BUNDLE => {
-            let b = read_bundle(parcel)?;
-            D::Map(
-                b.map(|b| {
-                    b.entries
-                        .into_iter()
-                        .map(|(k, v)| (D::String(Some(k)), value_to_dynamic(&v).unwrap_or(D::Null)))
-                        .collect()
-                })
-                .unwrap_or_default(),
-            )
-        }
+        val::BUNDLE => D::Bundle(read_bundle(parcel)?),
         other => {
             // We cannot know the payload width of an unmodelled tag. Fail loudly
             // rather than desynchronising the rest of the parcel.
@@ -4862,6 +4852,12 @@ pub fn write_dynamic(parcel: &mut Parcel, value: &crate::value::DynamicValue) ->
                 }
                 Ok(())
             })?;
+        }
+        D::Bundle(bundle) => {
+            // `VAL_BUNDLE` is NOT length-prefixed by `Parcel.writeValue`
+            // (it carries `BaseBundle`'s own length + magic header).
+            parcel.write_int32(val::BUNDLE);
+            write_bundle(parcel, bundle.as_ref())?;
         }
         D::SparseArray(entries) => {
             write_value_length_prefixed(parcel, val::SPARSEARRAY, |parcel| {

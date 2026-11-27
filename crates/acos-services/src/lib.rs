@@ -46,6 +46,7 @@ pub mod ams;
 pub mod animation;
 pub mod apk_facts; // PERF-REL3b: one APK open per launch facts set (manifest, budget)
 pub mod atms;
+pub mod capability_prompts; // v0.6.1: on-demand capability prompts for humans and agents
 pub mod client_transaction; // MPROC6: host-built launch transactions (ADR-0029)
 pub mod clipboard;
 pub mod codec;

@@ -706,9 +706,14 @@ fn the_service_module_tools_advertise_closed_schemas() {
         .and_then(Value::as_array)
         .expect("op enum");
     let ops: Vec<&str> = ops.iter().filter_map(Value::as_str).collect();
-    // `ctl` is the scripted-module control operation (MODLOC): the enum is
-    // closed, so an agent cannot invent an op and have it silently ignored.
-    assert_eq!(ops, ["list", "status", "attach", "detach", "ctl"]);
+    // `ctl` is the scripted-module control operation (MODLOC), and
+    // `replay_intent` replays a saved intent from a capability prompt (v0.6.1):
+    // the enum is closed, so an agent cannot invent an op and have it silently
+    // ignored.
+    assert_eq!(
+        ops,
+        ["list", "status", "attach", "detach", "ctl", "replay_intent"]
+    );
     // `ctl` needs its own op name and argument object, both declared.
     assert_eq!(
         schema
@@ -721,6 +726,12 @@ fn the_service_module_tools_advertise_closed_schemas() {
             .pointer("/properties/args/type")
             .and_then(Value::as_str),
         Some("object")
+    );
+    assert_eq!(
+        schema
+            .pointer("/properties/intent_id/type")
+            .and_then(Value::as_str),
+        Some("integer")
     );
     assert_eq!(
         schema.pointer("/required/0").and_then(Value::as_str),

@@ -149,6 +149,11 @@ pub enum Extra {
     /// `putExtra(String, Serializable)` of an `Object[]` of `byte[]`: the shape
     /// `SMS_RECEIVED` uses for its `pdus` extra (`Parcel.VAL_OBJECTARRAY`).
     ByteArrays(Vec<Vec<u8>>),
+    /// `putExtra(long)`.
+    Long(i64),
+    /// A nested `Bundle` extra (e.g. `:settings:show_fragment_args` passed on
+    /// `ACTION_ACCESSIBILITY_SETTINGS` intents).
+    Bundle(Bundle),
     /// A parcelable extra (a `BluetoothDevice` on `ACTION_FOUND`). The payload
     /// is written with its class name, exactly like `Intent.putExtra(Parcelable)`.
     Parcelable(crate::value::Parcelable),
@@ -411,9 +416,11 @@ fn reduce_extras(bundle: &Bundle) -> BTreeMap<String, Extra> {
             }
             Value::IntArray(Some(items)) => Extra::Ints(items.clone()),
             Value::Int(i) => Extra::Int(*i),
+            Value::Long(l) => Extra::Long(*l),
             Value::Short(s) => Extra::Short(*s),
             Value::Bool(b) => Extra::Bool(*b),
             Value::ByteArray(Some(bytes)) => Extra::Bytes(bytes.clone()),
+            Value::Bundle(Some(nested)) => Extra::Bundle(nested.clone()),
             Value::Parcelable(parcelable) => Extra::Parcelable(parcelable.clone()),
             Value::ObjectArray(Some(items))
                 if items
@@ -443,6 +450,7 @@ fn encode_extras(extras: &BTreeMap<String, Extra>) -> Bundle {
         match value {
             Extra::String(s) => bundle.put(key, Value::Str(Some(s.clone()))),
             Extra::Int(i) => bundle.put(key, Value::Int(*i)),
+            Extra::Long(l) => bundle.put(key, Value::Long(*l)),
             Extra::Short(s) => bundle.put(key, Value::Short(*s)),
             Extra::Bool(b) => bundle.put(key, Value::Bool(*b)),
             Extra::Strings(items) => bundle.put(
@@ -451,6 +459,7 @@ fn encode_extras(extras: &BTreeMap<String, Extra>) -> Bundle {
             ),
             Extra::Ints(items) => bundle.put(key, Value::IntArray(Some(items.clone()))),
             Extra::Bytes(bytes) => bundle.put(key, Value::ByteArray(Some(bytes.clone()))),
+            Extra::Bundle(nested) => bundle.put(key, Value::Bundle(Some(nested.clone()))),
             Extra::Parcelable(parcelable) => bundle.put(key, Value::Parcelable(parcelable.clone())),
             Extra::ByteArrays(pdus) => bundle.put(
                 key,
@@ -701,6 +710,33 @@ impl ManifestDb {
     #[must_use]
     pub fn package(&self, name: &str) -> Option<&PackageRecord> {
         self.packages.iter().find(|p| p.package == name)
+    }
+
+    /// Remove a package record by name (used on hot-detach of system apps).
+    pub fn remove_package(&mut self, name: &str) -> bool {
+        let before = self.packages.len();
+        self.packages.retain(|p| p.package != name);
+        self.packages.len() != before
+    }
+
+    /// Flattened component names (`pkg/class`) of every installed service that
+    /// declares `android.accessibilityservice.AccessibilityService`.
+    #[must_use]
+    pub fn accessibility_services(&self) -> Vec<String> {
+        let mut out = Vec::new();
+        for pkg in &self.packages {
+            for svc in &pkg.services {
+                let is_a11y = svc.filters.iter().any(|f| {
+                    f.actions
+                        .iter()
+                        .any(|a| a == "android.accessibilityservice.AccessibilityService")
+                });
+                if is_a11y {
+                    out.push(format!("{}/{}", pkg.package, svc.class));
+                }
+            }
+        }
+        out
     }
 
     /// Resolve an activity via explicit component or implicit filter.
@@ -1459,6 +1495,10 @@ pub struct AmsState {
     /// (set by the standard registry); `None` in a bare state machine, where an
     /// unresolvable intent stays the structured `START_NOT_FOUND`.
     pub intents: Option<std::sync::Arc<std::sync::Mutex<crate::intents::IntentState>>>,
+    /// v0.6.1: on-demand capability prompts recorded when an app hits an
+    /// unhandled `android.settings.*` intent or an external intent is captured.
+    pub prompts:
+        Option<std::sync::Arc<std::sync::Mutex<crate::capability_prompts::CapabilityPromptState>>>,
     /// W53/WV3: `IActivityManager.addPackageDependency` records, i.e. the
     /// packages the calling guest process declared it depends on. On a device
     /// this is `ProcessRecord.pkgDeps` — the set AMS consults when a package is
@@ -1622,6 +1662,33 @@ impl AmsState {
         )
     }
 
+    /// Replay a previously missed intent saved by `CapabilityPromptState`
+    /// once the missing module (e.g. `system.settings`) has been attached.
+    ///
+    /// Dispatched with [`LaunchOrigin::Host`] and `FLAG_ACTIVITY_NEW_TASK` so
+    /// the host schedules the newly-installed target package via
+    /// `SecondaryPool` and brings it to the foreground.
+    pub fn replay_saved_intent(&mut self, intent_id: u64) -> Result<i32> {
+        let saved = self
+            .prompts
+            .as_ref()
+            .and_then(|p| p.lock().ok().and_then(|p| p.saved_intent(intent_id)))
+            .ok_or_else(|| ServiceError::IllegalState {
+                component: "atms",
+                detail: format!("saved intent {intent_id} not found (expired or invalid id)"),
+            })?;
+        const FLAG_ACTIVITY_NEW_TASK: i32 = 0x1000_0000;
+        self.start_activity_origin_tagged(
+            &saved.intent,
+            saved.flags | FLAG_ACTIVITY_NEW_TASK,
+            0,
+            -1,
+            None,
+            LaunchOrigin::Host,
+            None,
+        )
+    }
+
     /// Full activity-start implementation with explicit `origin` and `caller_tag`.
     #[allow(clippy::too_many_arguments)]
     pub fn start_activity_origin_tagged(
@@ -1691,15 +1758,47 @@ impl AmsState {
                     })
                 });
                 return match captured {
-                    Some(record) => Ok(capture_start_success(&record)),
-                    None => Err(ServiceError::IllegalState {
-                        component: "atms",
-                        detail: format!(
-                            "no installed package handles action {:?} (and it is not an intent \
-                             the capture target stands in for)",
-                            intent.action.as_deref().unwrap_or("")
-                        ),
-                    }),
+                    Some(record) => {
+                        if let Some(prompts) = self.prompts.as_ref() {
+                            if let Ok(mut prompts) = prompts.lock() {
+                                prompts.record_captured_intent(&record);
+                            }
+                        }
+                        Ok(capture_start_success(&record))
+                    }
+                    None => {
+                        let action = intent.action.as_deref().unwrap_or("");
+                        if crate::capability_prompts::settings_action_supported(action)
+                            && self
+                                .manifests
+                                .package(crate::modules::settings::SETTINGS_PACKAGE)
+                                .is_none()
+                        {
+                            let a11y_services = self.manifests.accessibility_services();
+                            if let Some(prompts) = self.prompts.as_ref() {
+                                if let Ok(mut prompts) = prompts.lock() {
+                                    prompts.record_settings_intent_miss(
+                                        intent,
+                                        flags,
+                                        result_to,
+                                        request_code,
+                                        result_who,
+                                        caller_tag,
+                                        &a11y_services,
+                                        crate::intents::now_ms(),
+                                    );
+                                }
+                            }
+                        }
+                        Err(ServiceError::IllegalState {
+                            component: "atms",
+                            detail: format!(
+                                "no installed package handles action {:?} (and it is not an intent \
+                                 the capture target stands in for)",
+                                action
+                            ),
+                        })
+                    }
                 };
             }
             Err(other) => return Err(other),

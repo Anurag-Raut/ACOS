@@ -920,6 +920,15 @@ pub fn materialize_intent(vm: &mut Vm, facts: &IntentFacts) -> JResult<Handle> {
                 )
                 .map_err(err)?;
             }
+            Extra::Long(v) => {
+                vm.call_method(
+                    intent,
+                    "putExtra",
+                    "(Ljava/lang/String;J)Landroid/content/Intent;",
+                    &[JavaValue::Object(k), JavaValue::Long(*v)],
+                )
+                .map_err(err)?;
+            }
             Extra::Short(v) => {
                 vm.call_method(
                     intent,
@@ -971,9 +980,9 @@ pub fn materialize_intent(vm: &mut Vm, facts: &IntentFacts) -> JResult<Handle> {
                 )
                 .map_err(err)?;
             }
-            Extra::Parcelable(_) => {
+            Extra::Parcelable(_) | Extra::Bundle(_) => {
                 return Err(err(format!(
-                    "cannot re-materialise extra `{key}`: this value is a parcelable and the VM path has no class-loader construction for it"
+                    "cannot re-materialise extra `{key}`: this value is a parcelable/bundle and the VM path has no class-loader construction for it"
                 )))
             }
             // MODNOTIF2/MODNOTIF5: the request direction carries a `String[]`

@@ -254,6 +254,9 @@ pub struct ArtSession {
     /// `ack_ms`, `first_change_ms`, `frame_ms`, `state_changed`). Opaque JSON:
     /// it is guest-reported and copied, never synthesised.
     last_input_settle: Option<serde_json::Value>,
+    /// v0.6.1: capability prompts emitted during the most recent input command
+    /// (empty on normal steps; copied verbatim from the launcher reply).
+    last_capability_prompts: Vec<serde_json::Value>,
     /// HUMANVIEW1: highest `event_time` already processed by `panel_touch` on
     /// this session. Because `acos serve` handles each Unix socket connection
     /// on its own thread behind `HeldArtSession::session`, a compensating
@@ -2282,6 +2285,7 @@ impl ArtSession {
             last_input_timing: None,
             last_phase: None,
             last_input_settle: None,
+            last_capability_prompts: Vec::new(),
             last_panel_touch_event_time: None,
             last_panel_key_event_time: None,
             next_req_id: 1,
@@ -2818,6 +2822,12 @@ impl ArtSession {
     /// P1: the guest's settle block for the most recent input, verbatim.
     pub fn last_input_settle(&self) -> Option<&serde_json::Value> {
         self.last_input_settle.as_ref()
+    }
+
+    /// v0.6.1: capability prompts emitted during the most recent input command.
+    #[must_use]
+    pub fn last_capability_prompts(&self) -> &[serde_json::Value] {
+        &self.last_capability_prompts
     }
 
     /// Host-observed phase timings of the most recent tree/capture command.
@@ -3483,6 +3493,7 @@ impl ArtSession {
             }
         }
         self.last_input_settle = None;
+        self.last_capability_prompts.clear();
         let started = Instant::now();
         let mut timing = InputTiming {
             frame_seq_before: self.cached.as_ref().map(|frame| frame.seq).unwrap_or(0),
@@ -3525,6 +3536,11 @@ impl ArtSession {
             Ok(reply) => {
                 timing.guest_ms = started.elapsed().as_millis() as u64;
                 self.settle.guest += 1;
+                self.last_capability_prompts = reply
+                    .get("capability_prompts")
+                    .and_then(|v| v.as_array())
+                    .cloned()
+                    .unwrap_or_default();
                 let baseline = self.input_baseline.clone();
                 if let Some(seq) = reply.get("probe_seq").and_then(|v| v.as_u64()) {
                     self.last_probe_seq = Some(self.last_probe_seq.map_or(seq, |seen| seen.max(seq)));

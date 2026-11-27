@@ -2256,9 +2256,16 @@ impl Peer {
             let mut state = state
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner);
-            state
-                .take_launch_for_process(tag, &package, &app, &activity, token)
-                .ok()??
+            match state.take_launch_for_process(tag, &package, &app, &activity, token) {
+                Ok(Some(txn)) => txn,
+                Ok(None) => return None,
+                Err(err) => {
+                    eprintln!(
+                        "acos-binder-peer: process {tag}: take_launch_for_process({package}/{class}) failed: {err}"
+                    );
+                    return None;
+                }
+            }
         };
         let parcel = acos_services::client_transaction::schedule_transaction_request(&transaction)
             .map_err(|err| {
