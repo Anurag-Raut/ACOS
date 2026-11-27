@@ -27,6 +27,7 @@ A module is a set of Android system pieces attached to a session. `off` is alway
 | `multiwindow` | `off`, `real` | `hot` | `in-process` | 1 | 5 | real multi-window task bounds and windowing-mode transitions on the live WMS (slice 1: single-task split enter_split/resize/exit via the ServiceHost guest-command outbox; `off` keeps fullscreen and refuses control ops, no stub/scripted profile) | window `TYPE_APPLICATION` | `enter_split`, `resize`, `exit`, `status` |
 | `system.launcher` | `off`, `real` | `at-launch` | `in-process` | 1 | 1 | guest Launcher system app (`com.acos.launcher`) answering ACTION_MAIN / CATEGORY_HOME and listing MAIN/LAUNCHER apps from PackageManager | app `com.acos.launcher` | `status` |
 | `system.settings` | `off`, `real` | `at-launch` | `in-process` | 1 | 1 | guest Settings stub system app (`com.android.settings`) answering ACTION_SETTINGS, ACTION_APPLICATION_DETAILS_SETTINGS, and ACTION_WIFI_SETTINGS | app `com.android.settings` | `status` |
+| `security.keystore` | `off`, `real` | `at-launch` | `in-process` | 1 | 2 | software-backed AndroidKeyStore JCA provider (SECURITY_LEVEL_SOFTWARE, non-hardware-backed): AES-256-GCM/CBC/CTR/ECB, HmacSHA256/SHA1, RSA/EC keys and self-signed X.509 chains with 0600/0700 session-private storage under /data/app-data/<pkg>/acos-keystore; no TEE/StrongBox, no attestation, no user-auth/biometric-bound keys (`off` fails honestly with AndroidKeyStore not found + diagnostic log breadcrumb) | provider `AndroidKeyStore` | `status` |
 | `hw.usb` | `off`, `stub` | `hot` | `in-process` | 1 | 2 | USB host: stub (no USB hardware), empty device list and no configured functions | `usb` | — |
 | `system.dropbox` | `off`, `stub` | `hot` | `in-process` | 1 | 2 | DropBox: stub (no system DropBox), no entries and no enabled tags | `dropbox` | — |
 | `hw.nfc` | `off` | `hot` | `in-process` | 1 | 1 | NFC: off (no NFC hardware) | `nfc` | — |
@@ -133,6 +134,7 @@ A module is a set of Android system pieces attached to a session. `off` is alway
 | `multiwindow` | `status` | none — current multi-window state, active task bounds and transition count |
 | `system.launcher` | `status` | none — whether com.acos.launcher is staged for HOME and app launching |
 | `system.settings` | `status` | none — whether com.android.settings is staged for settings intents |
+| `security.keystore` | `status` | none — whether software AndroidKeyStore is active, its per-session storage path, and its software security-level limits |
 
 ## Names with no module attached
 

@@ -5,6 +5,7 @@ pub mod biometric;
 pub mod camera;
 pub mod camera_metadata;
 pub mod bluetooth;
+pub mod keystore;
 pub mod launcher;
 pub mod location;
 pub mod media_session;

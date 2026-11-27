@@ -620,6 +620,12 @@ pub trait SessionBackend {
     /// tree reply with no settle record is not evidence of anything and fails
     /// closed. All three rules are the shared ones from `acos_verify::backend`,
     /// so this engine and the verifier's default search cannot disagree.
+    /// Observation rule used for each `scroll_until` traversal (`strict` by
+    /// default, or `content` when the caller requested `settle: "content"`).
+    fn scroll_until_tree(&mut self) -> Result<UiTree, BackendError> {
+        self.tree()
+    }
+
     fn scroll_until(
         &mut self,
         selector: &acos_protocol::Selector,
@@ -633,14 +639,15 @@ pub trait SessionBackend {
         // The baseline is a settled traversal *before* the first gesture: without
         // it the very first swipe (which may already be at the end) could not be
         // recognised as having moved nothing.
-        let mut movement = acos_verify::backend::ScrollUntilMovement::new(self.tree()?);
+        let mut movement =
+            acos_verify::backend::ScrollUntilMovement::new(self.scroll_until_tree()?);
         let mut last: Option<(u64, usize, Vec<String>)> = None;
         for attempt in 1..=attempts {
             self.swipe(from, to, duration_ms, fling)?;
             // REL3H2: the swipe's own delivery (`handled`) is read before the
             // traversal, which overwrites the engine's last-input record.
             let delivery = self.last_input_delivery();
-            let tree = self.tree()?;
+            let tree = self.scroll_until_tree()?;
             // REL3H: `found` may only come from a *settled* observation. A tree
             // request that timed out still answers with the latest tree (P12b),
             // and the node it shows may be a mid-animation state, so the search

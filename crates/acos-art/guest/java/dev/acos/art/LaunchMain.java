@@ -218,6 +218,8 @@ public final class LaunchMain {
             String mode = ks == null ? "" : ks.trim();
             if ("on".equalsIgnoreCase(mode) || "1".equals(mode) || "software".equalsIgnoreCase(mode)) {
                 SoftwareKeyStore.install("/data/app-data/" + sPkg);
+            } else {
+                SoftwareKeyStore.installDiagnosticOff();
             }
         } catch (Throwable t) {
             System.out.println("ACOSLAUNCH WARN keystore install: " + t);
@@ -2126,6 +2128,117 @@ public final class LaunchMain {
         }
     }
 
+    static final java.util.Set<Long> sAbandonedCommitTextSeqs =
+            java.util.Collections.synchronizedSet(new java.util.HashSet<Long>());
+
+    static void commitTextOnMainThread(long reqSeq, String text, Object fallbackActivity) {
+        String focusClass = null;
+        boolean commitAttempted = false;
+        try {
+            if (sAbandonedCommitTextSeqs.remove(reqSeq)) {
+                System.out.println("ACOSCOMMITTEXT {\"seq\":" + reqSeq
+                        + ",\"ok\":false,\"handled\":false,\"cancelled\":true"
+                        + ",\"error\":\"commitText abandoned after host timeout\"}");
+                System.out.flush();
+                return;
+            }
+            View focused = null;
+            java.util.List<View> views = windowViews();
+            if (views != null) {
+                for (int i = views.size() - 1; i >= 0; i--) {
+                    View root = views.get(i);
+                    if (root != null && root.hasWindowFocus()) {
+                        View f = root.findFocus();
+                        if (f != null) {
+                            focused = f;
+                            break;
+                        }
+                    }
+                }
+            }
+            Object act = resumedActivity(sThread);
+            if (act == null) act = liveRecordActivity();
+            if (act == null) act = sLastLiveActivity != null ? sLastLiveActivity : fallbackActivity;
+            if (focused == null && act instanceof android.app.Activity) {
+                android.view.Window win = ((android.app.Activity) act).getWindow();
+                if (win != null) {
+                    focused = win.getCurrentFocus();
+                    if (focused == null && win.getDecorView() != null) {
+                        focused = win.getDecorView().findFocus();
+                    }
+                }
+            }
+            if (focused == null && views != null) {
+                for (int i = views.size() - 1; i >= 0; i--) {
+                    View root = views.get(i);
+                    if (root != null) {
+                        View f = root.findFocus();
+                        if (f != null) {
+                            focused = f;
+                            break;
+                        }
+                    }
+                }
+            }
+            if (focused == null) {
+                System.out.println("ACOSCOMMITTEXT {\"seq\":" + reqSeq
+                        + ",\"ok\":false,\"handled\":false,\"no_focused_editor\":true"
+                        + ",\"error\":\"no focused view in active window\"}");
+                System.out.flush();
+                return;
+            }
+            focusClass = focused.getClass().getName();
+            android.view.inputmethod.EditorInfo editorInfo =
+                    new android.view.inputmethod.EditorInfo();
+            android.view.inputmethod.InputConnection ic =
+                    focused.onCreateInputConnection(editorInfo);
+            if (ic == null) {
+                System.out.println("ACOSCOMMITTEXT {\"seq\":" + reqSeq
+                        + ",\"ok\":false,\"handled\":false,\"no_focused_editor\":true"
+                        + ",\"focus_class\":\"" + jesc(focusClass) + "\""
+                        + ",\"error\":\"focused view returned null InputConnection\"}");
+                System.out.flush();
+                return;
+            }
+            if (sAbandonedCommitTextSeqs.remove(reqSeq)) {
+                System.out.println("ACOSCOMMITTEXT {\"seq\":" + reqSeq
+                        + ",\"ok\":false,\"handled\":false,\"cancelled\":true"
+                        + ",\"focus_class\":\"" + jesc(focusClass) + "\""
+                        + ",\"error\":\"commitText abandoned after host timeout\"}");
+                System.out.flush();
+                return;
+            }
+            commitAttempted = true;
+            boolean committed = ic.commitText(text, 1);
+            if (committed) {
+                sDirtyAtMs = System.currentTimeMillis();
+                sTreeDirty.set(true);
+                synchronized (sProbeWake) {
+                    sProbeWake.notifyAll();
+                }
+                System.out.println("ACOSCOMMITTEXT {\"seq\":" + reqSeq
+                        + ",\"ok\":true,\"handled\":true,\"method\":\"input_connection\""
+                        + ",\"focus_class\":\"" + jesc(focusClass) + "\"}");
+            } else {
+                System.out.println("ACOSCOMMITTEXT {\"seq\":" + reqSeq
+                        + ",\"ok\":false,\"handled\":false,\"no_focused_editor\":false"
+                        + ",\"focus_class\":\"" + jesc(focusClass) + "\""
+                        + ",\"error\":\"InputConnection.commitText returned false\"}");
+            }
+            System.out.flush();
+        } catch (Throwable t) {
+            StringBuilder sb = new StringBuilder("ACOSCOMMITTEXT {\"seq\":").append(reqSeq)
+                    .append(",\"ok\":false,\"handled\":false,\"no_focused_editor\":false")
+                    .append(",\"commit_attempted\":").append(commitAttempted ? "true" : "false");
+            if (focusClass != null) {
+                sb.append(",\"focus_class\":\"").append(jesc(focusClass)).append('"');
+            }
+            sb.append(",\"error\":\"").append(jesc(String.valueOf(unwrap(t)))).append("\"}");
+            System.out.println(sb);
+            System.out.flush();
+        }
+    }
+
     static void startLiveProbe(final Object activity) {
         final android.os.Handler main = new android.os.Handler(Looper.getMainLooper());
         final java.util.concurrent.atomic.AtomicBoolean pending =
@@ -2148,7 +2261,8 @@ public final class LaunchMain {
             public void run() {
                 try {
                     java.io.BufferedReader reader = new java.io.BufferedReader(
-                            new java.io.InputStreamReader(System.in));
+                            new java.io.InputStreamReader(
+                                    System.in, java.nio.charset.StandardCharsets.UTF_8));
                     String line;
                     while ((line = reader.readLine()) != null) {
                         String word = line.trim();
@@ -2225,6 +2339,57 @@ public final class LaunchMain {
                                     applyWindow(mode, l, t, r, b, al, atPx, ar, ab);
                                 }
                             });
+                        } else if (word.toUpperCase().startsWith("COMMIT_TEXT")) {
+                            String[] parts = word.split(" ", -1);
+                            String safeSeq = (parts.length > 1 && parts[1].matches("\\d+"))
+                                    ? parts[1]
+                                    : "<invalid>";
+                            if (parts.length != 5 || !"COMMIT_TEXT".equalsIgnoreCase(parts[0])
+                                    || !"END".equals(parts[4])) {
+                                System.out.println("ACOSLAUNCH MARK commit-text-bad-frame seq="
+                                        + safeSeq + " tokens=" + parts.length);
+                                System.out.flush();
+                                continue;
+                            }
+                            final long reqSeq;
+                            final String text;
+                            try {
+                                reqSeq = Long.parseLong(parts[1]);
+                                int expectedLen = Integer.parseInt(parts[2]);
+                                String b64 = parts[3];
+                                if (expectedLen < 0 || b64.length() != expectedLen) {
+                                    System.out.println("ACOSLAUNCH MARK commit-text-bad-len seq="
+                                            + reqSeq + " expected=" + expectedLen
+                                            + " actual=" + b64.length());
+                                    System.out.flush();
+                                    continue;
+                                }
+                                text = b64.isEmpty()
+                                        ? ""
+                                        : new String(
+                                                java.util.Base64.getDecoder().decode(b64),
+                                                java.nio.charset.StandardCharsets.UTF_8);
+                            } catch (Throwable bad) {
+                                System.out.println("ACOSLAUNCH MARK commit-text-bad-arg seq="
+                                        + safeSeq + " err=" + unwrap(bad));
+                                System.out.flush();
+                                continue;
+                            }
+                            main.post(new Runnable() {
+                                @Override
+                                public void run() {
+                                    commitTextOnMainThread(reqSeq, text, activity);
+                                }
+                            });
+                        } else if (word.toUpperCase().startsWith("CANCEL_COMMIT_TEXT")) {
+                            String[] parts = word.split(" ", 2);
+                            if (parts.length >= 2) {
+                                try {
+                                    long cancelSeq = Long.parseLong(parts[1].trim());
+                                    sAbandonedCommitTextSeqs.add(cancelSeq);
+                                } catch (Throwable ignored) {
+                                }
+                            }
                         }
                     }
                     sProbeControlDead = true;

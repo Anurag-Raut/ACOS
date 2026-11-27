@@ -1306,6 +1306,7 @@ impl ModuleRegistry {
             Box::new(crate::modules::multiwindow::MultiwindowModule::new()),
             Box::new(crate::modules::launcher::LauncherModule::new()),
             Box::new(crate::modules::settings::SettingsModule::new()),
+            Box::new(crate::modules::keystore::KeystoreModule::new()),
         ]
         .into_iter()
         .chain(crate::modules::tail_stubs::modules())

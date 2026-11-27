@@ -28,6 +28,8 @@ pub const SETTINGS_PACKAGE: &str = "com.android.settings";
 pub const CONFIG_APK: &str = "apk";
 /// Environment override for the Settings APK.
 pub const APK_ENV: &str = "ACOS_SETTINGS_APK";
+/// Installed image-relative system-app APK (`tools/release/install.sh`).
+pub const APK_IMAGE_REL: &str = ".cache/boot/android-34/system-apps/com.android.settings.apk";
 /// Workspace-relative default build output (`tools/build/build-apps.sh`).
 pub const APK_REL: &str = "fixtures/build/apps/settings.apk";
 
@@ -64,6 +66,10 @@ fn manifest_ref() -> &'static ModuleManifest {
 }
 
 /// Resolve the host APK path for `system.settings`.
+///
+/// Order: `config: {"apk": ...}`, then `ACOS_SETTINGS_APK`, then the installed
+/// image path (`APK_IMAGE_REL` via `workspace_path`, checking `$ACOS_HOME`
+/// first), then the workspace fixture build (`APK_REL`).
 #[must_use]
 pub fn settings_apk(config: &ModuleConfig) -> PathBuf {
     if let Some(path) = config.string(CONFIG_APK).filter(|p| !p.is_empty()) {
@@ -73,6 +79,9 @@ pub fn settings_apk(config: &ModuleConfig) -> PathBuf {
         if !path.is_empty() {
             return PathBuf::from(path);
         }
+    }
+    if let Some(image) = crate::workspace_path(APK_IMAGE_REL) {
+        return image;
     }
     crate::workspace_path(APK_REL).unwrap_or_else(|| PathBuf::from(APK_REL))
 }
@@ -180,5 +189,43 @@ mod tests {
         manifest_ref().validate().expect("valid manifest");
         assert_eq!(manifest_ref().attach, AttachMode::AtLaunch);
         assert_eq!(manifest_ref().system_apps, &[SETTINGS_PACKAGE]);
+    }
+
+    #[test]
+    fn resolves_installed_prefix_before_checkout_and_respects_overrides() {
+        let env = crate::test_env::EnvGuard::new(&["ACOS_HOME", APK_ENV]);
+        let home = crate::test_env::TempDir::new("settings-home");
+        let installed_apk = home.path().join(APK_IMAGE_REL);
+        std::fs::create_dir_all(installed_apk.parent().expect("parent"))
+            .expect("create system-apps dir");
+        std::fs::write(&installed_apk, b"fake-apk").expect("write installed settings apk");
+
+        env.set("ACOS_HOME", home.path());
+        env.remove(APK_ENV);
+
+        let default_cfg = ModuleConfig::default();
+        assert_eq!(settings_apk(&default_cfg), installed_apk);
+        assert_eq!(
+            system_app_apk(MODULE_ID, SETTINGS_PACKAGE, &default_cfg),
+            Some(installed_apk.clone())
+        );
+        assert_eq!(system_app_apk(MODULE_ID, "com.other", &default_cfg), None);
+
+        let empty_cfg =
+            ModuleConfig::from_json(MODULE_ID, &json!({ CONFIG_APK: "" })).expect("empty cfg");
+        env.set(APK_ENV, "");
+        assert_eq!(settings_apk(&empty_cfg), installed_apk);
+
+        let env_override = home.path().join("env-override.apk");
+        env.set(APK_ENV, &env_override);
+        assert_eq!(settings_apk(&default_cfg), env_override);
+
+        let cfg_override = home.path().join("cfg-override.apk");
+        let cfg = ModuleConfig::from_json(
+            MODULE_ID,
+            &json!({ CONFIG_APK: cfg_override.to_string_lossy() }),
+        )
+        .expect("cfg");
+        assert_eq!(settings_apk(&cfg), cfg_override);
     }
 }

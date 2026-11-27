@@ -18,11 +18,12 @@
 # `tools/guard/guarded.sh`. Output: <out>/{fidelity,xsession,default-off}/
 # Exit 0 only when every check passed and nothing leaked.
 set -uo pipefail
-WT=/home/Qui/.paseo/worktrees/3oxa6xao/k5
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+WT="${ACOS_K5B_WT:-$(cd "$SCRIPT_DIR/../.." && pwd)}"
 OUT="${1:-$WT/.cache/k5b/keystore-suite}"
 PHASE="${2:-all}"
-ACOS="$WT/.cache/k5-target/release/acos"
-ACOS_ART="$WT/.cache/k5-target/release/acos-art"
+ACOS="${ACOS:-$WT/.cache/target/release/acos}"
+ACOS_ART="${ACOS_ART:-$WT/.cache/target/release/acos-art}"
 APK="$WT/fixtures/build/apps/keystore-probe.apk"
 PKG=dev.acos.fixtures.keystoreprobe
 PROBE_DEX="$WT/.cache/k5b/probe-guest/classes.dex"
@@ -30,7 +31,13 @@ ART_DATA="$WT/.cache/art/data"
 # `acos-art run` writes its per-run roots under ACOS_ART_DATA; the phases
 # inspect them from the host, so pin it here instead of relying on the caller.
 export ACOS_ART_DATA="${ACOS_ART_DATA:-$ART_DATA}"
-export ACOS_FONT_DIR=/home/Qui/Projects/acos/.cache/boot/android-34/fonts
+if [ -z "${ACOS_FONT_DIR:-}" ]; then
+    if [ -d "$WT/.cache/boot/android-34/fonts" ]; then
+        export ACOS_FONT_DIR="$WT/.cache/boot/android-34/fonts"
+    elif [ -d /home/Qui/Projects/acos/.cache/boot/android-34/fonts ]; then
+        export ACOS_FONT_DIR=/home/Qui/Projects/acos/.cache/boot/android-34/fonts
+    fi
+fi
 unset ACOS_BOOT_DIR
 cd "$WT" || exit 9
 mkdir -p "$OUT"
@@ -184,7 +191,7 @@ phase_default_off() {
     local rc=$?
     echo "default-off launch rc=$rc" >> "$PROGRESS"
     local rco=0
-    "$ACOS" logs --session s_cli --tag KEYPROBE --json > "$dir/logs.json" 2> "$dir/logs.err" \
+    "$ACOS" logs --session s_cli --tag KEYPROBE --min-priority V --json > "$dir/logs.json" 2> "$dir/logs.err" \
         || rco=1
     "$ACOS" session destroy > /dev/null 2>&1
     python3 "$WT/tools/keystore-k5b/extract.py" "$dir/logs.json" "$dir/default_off.jsonl" default-off \

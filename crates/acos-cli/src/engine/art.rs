@@ -277,9 +277,13 @@ pub struct ArtSession {
     /// receiving a reply; also lets `command_raw` drain stale replies from
     /// legacy peers that do not echo `req_id`.
     unmatched_timeouts: usize,
-    /// P1: `"fast"` or `"strict"` for the next input command. Serve sets it per
-    /// verb; the default is strict.
+    /// P1: `"fast"`, `"strict"`, or `"content"` for the next input command.
+    /// Serve sets it per verb; the default is strict.
     settle_mode: &'static str,
+    /// Session-wide default settle rule inherited by serve verbs when `settle`
+    /// is omitted (`"content"` when launched with `settle: "content"`,
+    /// otherwise `"strict"` — launch `"fast"` never becomes the verb default).
+    default_verb_settle: &'static str,
     /// REL3A: the settle rule the next **observation** (`frame()`) binds with.
     /// `"strict"` (default) or `"content"` (ADR-0026 decision 3). The verifier
     /// sets it per step (`set_observation_settle`); the rule is one-shot - `frame()`
@@ -2283,6 +2287,7 @@ impl ArtSession {
             next_req_id: 1,
             unmatched_timeouts: 0,
             settle_mode: "strict",
+            default_verb_settle: "strict",
             observation_settle: "strict",
             last_tree_settle: None,
             last_tree_json: None,
@@ -2680,6 +2685,22 @@ impl ArtSession {
             "content" => "content",
             _ => "strict",
         };
+    }
+
+    /// Record the session's default verb settle mode (`"content"` if launched
+    /// with `settle: "content"`, otherwise `"strict"` — launch `"fast"` never
+    /// makes later verbs default to `"fast"`).
+    pub fn set_default_verb_settle(&mut self, mode: &str) {
+        self.default_verb_settle = if mode == "content" {
+            "content"
+        } else {
+            "strict"
+        };
+    }
+
+    #[must_use]
+    pub fn default_verb_settle(&self) -> &'static str {
+        self.default_verb_settle
     }
 
     /// P12b: the per-request settle deadline (`settle_timeout_ms`). `None` keeps
@@ -3505,9 +3526,60 @@ impl ArtSession {
                 timing.guest_ms = started.elapsed().as_millis() as u64;
                 self.settle.guest += 1;
                 let baseline = self.input_baseline.clone();
+                if let Some(seq) = reply.get("probe_seq").and_then(|v| v.as_u64()) {
+                    self.last_probe_seq = Some(self.last_probe_seq.map_or(seq, |seen| seen.max(seq)));
+                }
+                let reply_had_tree = reply.get("tree").is_some_and(|v| !v.is_null());
                 let absorb_started = Instant::now();
                 self.absorb(&reply)?;
                 timing.absorb_ms = absorb_started.elapsed().as_millis() as u64;
+                let initial_visual_change = settle_state_changed(&reply).unwrap_or(false);
+                self.last_input_settle = reply.get("settle").cloned();
+                let delivered_record = delivery(&reply, initial_visual_change);
+                self.last_input = Some(delivered_record.clone());
+                let refreshed_via_followup = !reply_had_tree && self.settle_mode != "content";
+                if refreshed_via_followup {
+                    let guest_settle = if self.settle_mode == "fast" {
+                        "fast"
+                    } else {
+                        "strict"
+                    };
+                    let refresh = if guest_settle == "strict" {
+                        self.request_tree_with("strict", true)
+                    } else {
+                        self.request_tree_only(guest_settle)
+                    };
+                    if let Err(err) = refresh {
+                        let code = match &err {
+                            BackendError::Timeout { .. } => ErrorCode::Timeout,
+                            BackendError::Failed { code, .. }
+                            | BackendError::Error { code, .. }
+                            | BackendError::Protocol { code, .. } => *code,
+                            BackendError::Crash { .. } => ErrorCode::AppCrashed,
+                            BackendError::Unsupported { .. } => ErrorCode::UnsupportedBackend,
+                        };
+                        return Err(BackendError::Protocol {
+                            code,
+                            detail: format!(
+                                "input `{context}` was delivered to the guest, but follow-up tree refresh failed: {err}"
+                            ),
+                            hint: Some(
+                                "Input was already committed in the guest; observe the tree instead of re-sending the input to avoid duplication."
+                                    .to_string(),
+                            ),
+                            details: Some(serde_json::json!({
+                                "delivered": true,
+                                "context": context,
+                                "input_delivery": {
+                                    "delivered": delivered_record.delivered,
+                                    "handled": delivered_record.handled,
+                                    "published": delivered_record.published,
+                                },
+                                "traversal_error": err.to_string(),
+                            })),
+                        });
+                    }
+                }
                 // Compare exactly the pair the executor's `changed_from` will
                 // compare: this action's frame against the frame it was handed
                 // at the previous step (snapshotted by `begin_input` before the
@@ -3519,11 +3591,22 @@ impl ArtSession {
                 // from the pre-action tree (or explicitly fell back without a
                 // change). That verdict wins so a mid-animation frame is never
                 // reported as a state change the tree did not show.
-                self.last_input_settle = reply.get("settle").cloned();
                 if let Some(changed) = settle_state_changed(&reply) {
                     visual_change = changed;
                 }
-                self.last_input = Some(delivery(&reply, visual_change));
+                let mut input_delivery = delivery(&reply, visual_change);
+                if refreshed_via_followup {
+                    // When a follow-up traversal supplied the cached tree, use
+                    // its settle record (including any unsettled timeout) rather
+                    // than masking it with the earlier input reply's settle block.
+                    // The original input acknowledgement fields remain on
+                    // `input_delivery`.
+                    self.last_input_settle = self.last_tree_settle.clone();
+                    input_delivery.settle = self.last_input_settle.clone();
+                } else {
+                    self.last_input_settle = reply.get("settle").cloned();
+                }
+                self.last_input = Some(input_delivery);
                 // SYSUI3A: a tap whose *target window* the host recorded before
                 // the gesture and no longer records afterwards is a completed
                 // interaction: the strict settle's `detached` reason is that
@@ -4903,7 +4986,15 @@ impl ArtSession {
         settle: &'static str,
         pixels: bool,
     ) -> Result<UiTree, BackendError> {
-        let settle = if settle == "fast" { "fast" } else { "strict" };
+        let settle = match settle {
+            "fast" => "fast",
+            "content" => "content",
+            _ => "strict",
+        };
+        if settle == "content" {
+            self.content_settle()?;
+            return self.require_cached_tree();
+        }
         self.request_tree_with(settle, pixels)?;
         self.require_cached_tree()
     }
@@ -5741,6 +5832,14 @@ impl SessionBackend for ArtSession {
         self.tree_with_settle("strict")
     }
 
+    fn scroll_until_tree(&mut self) -> Result<UiTree, BackendError> {
+        if self.settle_mode == "content" {
+            self.tree_with_settle("content")
+        } else {
+            self.tree_with_settle("strict")
+        }
+    }
+
     /// SE2b: forward the step's `settle_timeout_ms` to the session.
     ///
     /// The verifier's `Backend::set_settle_timeout` reaches
@@ -6225,6 +6324,7 @@ impl SessionBackend for ArtSession {
         }
         let mut fresh = fresh.expect("the relaunch loop either returns or yields a session");
         fresh.settle_timeout_ms = self.reset_settle_timeout_ms;
+        fresh.default_verb_settle = self.default_verb_settle;
         let start_ms = relaunch_started.elapsed().as_millis() as u64;
         fresh.seq_offset = offset;
         fresh.log_offset = log_offset;
@@ -6541,6 +6641,10 @@ impl SessionBackend for DeferredArtSession {
 
     fn tree(&mut self) -> Result<UiTree, BackendError> {
         self.ensure_started()?.tree()
+    }
+
+    fn scroll_until_tree(&mut self) -> Result<UiTree, BackendError> {
+        self.ensure_started()?.scroll_until_tree()
     }
 
     fn set_settle_timeout(&mut self, timeout_ms: Option<u64>) {

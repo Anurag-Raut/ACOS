@@ -187,12 +187,15 @@ pub fn mcp_topic(infos: &[ToolInfo]) -> String {
     }
     out.push_str(
         "\n### Recipes\n\n\
-         * **Take a screenshot.** Today the MCP path has no capture tool. Either (a) put a \
-         `capture: {name: shot, format: png, fresh: true}` step in the `acos_verify` scenario — the \
-         PNG lands as `frames/<seq>.png` under the artifacts directory and the step JSON names it — \
-         or (b) with the CLI on a live daemon session, `acos observe --screenshot out/shot.png \
-         --json`. Coming: `screenshot: true` on `acos_observe_tree`, returning the PNG path in the \
-         reply (never a silent no-op; a frame with no pixels becomes `NO_FRESH_FRAME`).\n\
+         * **Take a screenshot (ART sessions).** Pass `screenshot: true` to `acos_observe_tree` (recommended — \
+         captures a lossless PNG of the exact bound frame under `<artifacts_dir>/screenshots/` \
+         and returns `screenshot.path`, `width`, `height`, `display_size`, `display_origin`, plus \
+         an inline preview) or to `acos_observe`. A frame with no app pixels (such as a launch \
+         placeholder) returns `NO_FRESH_FRAME`. On legacy Rust VM sessions, `acos_observe_tree` ignores \
+         `screenshot`, and `acos_observe` with `screenshot: true` returns `UNSUPPORTED_BACKEND`; pass \
+         `acos_observe {\"tree\": false, \"screenshot\": \"/abs/out.png\"}` there. Alternatives: a `capture: {name: shot, format: png, \
+         fresh: true}` step in an `acos_verify` scenario (`frames/<seq>.png`), or on the CLI \
+         `acos observe --screenshot out/shot.png --json`.\n\
          * **Type into a field.** `acos_observe_tree` -> `acos_tap {\"id\": \"...\"}` or \
          `{\"text\": \"...\"}` on the field -> `acos_text {\"text\": \"Ada\"}` -> `acos_observe_tree` \
          again to read the value. Type goes to the *focused* editor through the real \
@@ -344,25 +347,25 @@ fn sample_value(name: &str, schema: &Value) -> Value {
 fn tool_returns(tool: &ToolInfo) -> &'static str {
     match tool.tool_name.as_str() {
         "acos_launch" => {
-            "the launch ladder (`stages[]`), `reached_stage`, `package`/`activity`, \n`session_id`, `settle` and the frame identity; a non-ok rung carries the blocker"
+            "the launch ladder (`stages[]`), `reached_stage`, `package`/`activity`, \n`session_id`, `artifacts_dir`, `settle`, full `modules[]` and the frame identity; a non-ok rung carries the blocker"
         }
         "acos_observe_tree" => {
-            "`nodes[]` (id, class, resource_id, text, content_desc, bounds, visible/\nenabled/focused/clickable/scrollable), `windows`, `truncated`, `max_nodes`"
+            "`nodes[]` (id, class, resource_id, text, content_desc, bounds, visible/\nenabled/focused/clickable/scrollable), `windows`, `truncated`, `max_nodes`, `tree_path`, `modules_summary`"
         }
         "acos_tap" => {
-            "`handled` (the app window's own `finishInputEvent` answer), `accepted`, \n`state_changed`, `target` (resolved node + the hit-test at the injected point, \nwith the clickable node to tap instead), `acks` and `pixels_changed` when measured"
+            "`handled` (the app window's own `finishInputEvent` answer), `accepted`, \n`state_changed`, `target` (resolved node + the hit-test at the injected point, \nwith the clickable node to tap instead), `acks`, `modules_summary` and `pixels_changed` when measured"
         }
         "acos_text" => {
-            "`handled`, `accepted`, `state_changed`, `target` (the field the text went to) \nand `text_path` (`input-connection` or `key-events`)"
+            "`handled`, `accepted`, `state_changed`, `target` (the field the text went to), \n`text_path` (`input-connection` or `key-events`) and `modules_summary`"
         }
-        "acos_key" => "`handled`, `accepted`, `state_changed`, `target`, `acks`",
+        "acos_key" => "`handled`, `accepted`, `state_changed`, `target`, `acks`, `modules_summary`",
         "acos_swipe" => {
-            "`handled` (per-event `finishInputEvent` bit of a real DOWN/MOVE/UP stream), \n`accepted`, `state_changed`, `target`, the injected gesture seqs/acks, and `until` \n(`found`/`attempts`/`frame_seq`) when the call searched for a selector"
+            "`handled` (per-event `finishInputEvent` bit of a real DOWN/MOVE/UP stream), \n`accepted`, `state_changed`, `target`, the injected gesture seqs/acks, `modules_summary`, and `until` \n(`found`/`attempts`/`frame_seq`) when the call searched for a selector"
         }
-        "acos_logs" => "`logs[]` (priority, tag, message, line, repeat_count), `total`/`count`, `filter`, `stage_reached`, `crash`",
-        "acos_status" => "`launched`, `stage_reached`, `published_frames`, `package`/`activity`, `capabilities`",
-        "acos_services" => "`attached[]` (`id`, `profile`) and `modules[]` (`id`, `profile`, `attach`, `state`, `fidelity`, `reason`); attach/detach answer with the set they produced",
-        "acos_service_ctl" => "`id`, `op`, `value` (the module's own answer) and the honest `modules[]` rows after the control; a detached module is a structured refusal",
+        "acos_logs" => "`logs[]` (priority, tag, message, line, repeat_count), `total`/`count`, `filter`, `stage_reached`, `crash`, `modules_summary`",
+        "acos_status" => "`launched`, `stage_reached`, `published_frames`, `package`/`activity`, `capabilities`, `modules_summary`",
+        "acos_services" => "`attached[]` (`id`, `profile`) and full `modules[]` (`id`, `profile`, `attach`, `state`, `fidelity`, `reason`); attach/detach answer with the set they produced",
+        "acos_service_ctl" => "`id`, `op`, `value` (the module's own answer) and `modules_summary` after the control (call `acos_services` for full module rows); a detached module is a structured refusal",
         "acos_capabilities" => "the implemented command list, the resolved `acos` binary/version, the server limits and — with `session_id` — that session's attached modules",
         "acos_net" => "`action`, the relay state (`up`, `pasta_version`, `host_ports`) and this \n                       session's own row (`networked`, `offline`, `delay_ms`, `loss_pct`); \n                       `hostport` also returns the relay's `host_ports` list",        "acos_doctor" => "`checks[]` with pass/fail and a concrete `fix` per failing check",
         "acos_help" => "`guide` (the requested section), `guide_topics`, `fidelity_rules`, `supported`/`unsupported`",

@@ -520,15 +520,15 @@ server.
 |---|---|---|---|---|
 | `acos_inspect` | protocol | `inspect` | `static-analysis` | `apk`, `base` |
 | `acos_run_dex` | protocol | `run-dex` | `native-runtime` | `base`, `path` |
-| `acos_run` | protocol | `run` | `native-runtime` | `apk`, `base` |
-| `acos_observe` | protocol | `observe` | `native-runtime` | `base` |
+| `acos_run` | protocol | `run` | `native-runtime` | `apk` |
+| `acos_observe` | protocol | `observe` | `native-runtime` | - |
 | `acos_capture` | protocol | `capture` | `native-runtime` | `base` |
 | `acos_action` | protocol | `action` | `native-runtime` | `action`, `base` |
 | `acos_assert` | protocol | `assert` | `native-runtime` | `assertion`, `base` |
 | `acos_events` | protocol | `events` | `native-runtime` | `base` |
-| `acos_reset` | protocol | `reset` | `native-runtime` | `base`, `scope` |
+| `acos_reset` | protocol | `reset` | `native-runtime` | `scope` |
 | `acos_profile` | protocol | `profile` | `native-runtime` | `base` |
-| `acos_destroy` | protocol | `destroy` | `native-runtime` | `base` |
+| `acos_destroy` | protocol | `destroy` | `native-runtime` | - |
 | `acos_verify` | protocol | `verify` | `native-runtime` | `artifacts`, `base`, `scenario` |
 | `acos_capability_report` | protocol | `capability-report` | `static-analysis` | `apk`, `base` |
 | `acos_capabilities` | server | - | `n/a` | - |
@@ -627,15 +627,20 @@ live session reply names that complete file. `{"all": true}` (or
 
 `acos_launch {"services": [{"id": "feedback.vibrator", "profile": "stub"}]}`
 attaches modules before the guest boots (`core` is always attached first at
-`real`). The launch reply carries `modules[]` — `id`, `profile`, `attach`
-(`hot`/`at-launch`), `state` and `fidelity` — and that is what was **actually
-attached**, not what was requested. `acos_services {"op": "list",
-"base": {"session_id": …}}` returns the same rows for a live session;
-`{"op": "attach"|"detach", "id": …}` changes the set and answers with the new
-one. Only `hot` modules can change live: an `at-launch` module (e.g. `core`) is
-refused with a structured error naming the launch call, never silently ignored.
-`acos_capabilities {"session_id": …}` includes `session.attached` and
-`session.modules` for that session (the catalog alone when no session is named).
+`real`). The launch reply carries the full `modules[]` catalog — `id`,
+`profile`, `attach` (`hot`/`at-launch`), `state` and `fidelity` — and that is
+what was **actually attached**, not what was requested. Subsequent step replies
+(`acos_observe_tree`, `acos_tap`, `acos_text`, `acos_key`, `acos_swipe`,
+`acos_logs`, `acos_status`, `acos_reset`, `acos_service_ctl`, `acos_net`) omit
+the ~20 KB catalog and emit compact `modules_summary: {"attached": [{"id": ...,
+"profile": ...}], "total": N}` instead. `acos_services {"op": "list",
+"base": {"session_id": …}}` returns the full `modules[]` rows for a live
+session; `{"op": "attach"|"detach", "id": …}` changes the set and answers with
+the new one. Only `hot` modules can change live: an `at-launch` module (e.g.
+`core`) is refused with a structured error naming the launch call, never
+silently ignored. `acos_capabilities {"session_id": …}` includes
+`session.attached` and `session.modules` for that session (the catalog alone
+when no session is named).
 
 A module at `stub` or `scripted` is a documented stand-in, not a real
 implementation. Its fidelity is reported in the launch reply, `acos_services`
@@ -662,12 +667,16 @@ tree-bearing reply is **not** a dump of the hierarchy:
   `FrameLayout` with no words) carry no answer and are omitted;
 * the compact list is **paged**, never head/tail-cut. The first page carries
   `next_cursor` (also `tree_next_cursor`); pass `{"cursor": N}` to read the next
-  page. A middle-of-screen row is on page 3, not lost in the middle;
-* the **full tree** is always written to the session's
-  `tree/<frame_seq>.json`, and the reply names the absolute `tree_path`
-  (live sessions get a per-session artifacts directory; verify runs keep
-  `tree/<frame_seq>.json` in `--artifacts`). Read that file when you need the
-  hierarchy, ids of non-text nodes, or bounds of an invisible node;
+  page. A middle-of-screen row is on page 3, not lost in the middle. An
+  out-of-range `cursor` keeps the caller's `cursor`, sets
+  `cursor_out_of_range: true` and `returned: 0` (`next_cursor` absent), and still
+  preserves `tree_path`;
+* the **full untruncated tree** is always written to the session's
+  `tree/<frame_seq>.json` (even when `max_nodes` caps the inline reply), and the
+  reply names the absolute `tree_path` (each fresh `acos_launch` gets its own
+  unique `artifacts_dir`; verify runs keep `tree/<frame_seq>.json` in
+  `--artifacts`). Read that file when you need the hierarchy, ids of non-text
+  nodes, or bounds of an invisible node;
 * `acos_launch` defaults to the compact summary/visible texts; `{"full": true}`
   (or `{"full_tree": true}`) returns the old inline tree when it fits. The full
   tree is still the file above. `acos_observe_tree`, `acos_observe` and
@@ -691,14 +700,16 @@ artifacts. `{"all": true}` returns the whole in-memory view (subject to the
 {"name": "acos_observe_tree", "arguments": {"session_id": "mcp-1234", "screenshot": "/abs/out/home.png"}}
 ```
 
-* `true` writes `<session artifacts>/screenshots/<verb>-<frame_seq>.png`; a
+* `true` (or `"true"`) writes `<session artifacts>/screenshots/<verb>-<frame_seq>.png`,
+  appending `-1`, `-2`, … instead of overwriting if that file already exists on
+  the same `frame_seq` (`false` / `"false"` disables capture); a
   **relative** path resolves against the session's artifacts directory (never the
   daemon's cwd) and an **absolute** path must stay inside it. `..` components, a
   symlink that leaves the directory and a destination that is the frame artifact
   itself are refused with `INVALID_ARGUMENT` before anything is created or
   written — a screenshot can never create directories or overwrite files outside
-  the session. Anything that is not `true` or such a path (`7`, `""`) is
-  `INVALID_ARGUMENT` — never a silent no-op.
+  the session. Anything that is not a boolean/boolean-string or such a path (`7`,
+  `""`) is `INVALID_ARGUMENT` — never a silent no-op.
 * The screenshot is always bound to the frame of the tree in the same reply: a
   request that asks for a screenshot makes the tree traversal capture pixels
   itself, so the reply's `screenshot.frame_seq` equals the tree's. A bound tree

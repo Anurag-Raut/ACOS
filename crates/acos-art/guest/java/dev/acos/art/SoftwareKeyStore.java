@@ -139,6 +139,9 @@ public final class SoftwareKeyStore extends Provider {
     private static final long serialVersionUID = 1L;
 
     static final String NAME = "AndroidKeyStore";
+    static final String DIAGNOSTIC_NAME = "ACOSKeyStoreDiagnostic";
+    private static final java.util.concurrent.atomic.AtomicBoolean DIAGNOSTIC_LOGGED =
+            new java.util.concurrent.atomic.AtomicBoolean(false);
     /** Set by {@link #install(String)}; the session's private storage. */
     private static File sDir;
     private static boolean sInstalled;
@@ -171,6 +174,9 @@ public final class SoftwareKeyStore extends Provider {
         File dir = new File(dataDir, "acos-keystore");
         mkdirsPrivate(dir);
         sDir = dir;
+        if (Security.getProvider(DIAGNOSTIC_NAME) != null) {
+            Security.removeProvider(DIAGNOSTIC_NAME);
+        }
         if (Security.getProvider(NAME) == null) {
             Security.addProvider(new SoftwareKeyStore());
             // AOSP's key operations are serviced by
@@ -184,6 +190,60 @@ public final class SoftwareKeyStore extends Provider {
             System.out.println("ACOSLAUNCH MARK keystore provider=present dir=" + dir);
         }
         sInstalled = true;
+    }
+
+    /**
+     * Install the default-off diagnostic hook when {@code security.keystore}
+     * is not attached.
+     *
+     * <p>Does <b>not</b> register a provider named {@code "AndroidKeyStore"}, so
+     * {@code Security.getProvider("AndroidKeyStore")} remains {@code null} and
+     * {@code KeyStore.getInstance("AndroidKeyStore")} still throws
+     * {@code KeyStoreException: AndroidKeyStore not found}. When an app
+     * touches {@code KeyStore.getInstance("AndroidKeyStore")}, it emits a
+     * single loud {@code W/ACOSKeyStore} breadcrumb to logcat so callers who
+     * catch the exception can still see the cause and attach call in
+     * {@code acos_logs}.
+     */
+    public static synchronized void installDiagnosticOff() {
+        if (Security.getProvider(NAME) != null || Security.getProvider(DIAGNOSTIC_NAME) != null) {
+            return;
+        }
+        Security.addProvider(new DiagnosticOffProvider());
+    }
+
+    private static final class DiagnosticOffProvider extends Provider {
+        private static final long serialVersionUID = 1L;
+
+        DiagnosticOffProvider() {
+            super(DIAGNOSTIC_NAME, 1.0, "ACOS AndroidKeyStore off-mode diagnostic");
+            putService(new DiagnosticOffService(this));
+        }
+    }
+
+    private static final class DiagnosticOffService extends Provider.Service {
+        DiagnosticOffService(Provider provider) {
+            super(provider, "KeyStore", NAME, Store.class.getName(), null, null);
+        }
+
+        @Override
+        public Object newInstance(Object parameter) throws java.security.NoSuchAlgorithmException {
+            if (DIAGNOSTIC_LOGGED.compareAndSet(false, true)) {
+                String msg = "UNSUPPORTED_ANDROID_API: AndroidKeyStore is disabled "
+                        + "(security.keystore module is off). Attach at launch with "
+                        + "services: [{\"id\":\"security.keystore\",\"profile\":\"real\"}] "
+                        + "for software-backed AndroidKeyStore "
+                        + "(SECURITY_LEVEL_SOFTWARE; non-hardware-backed).";
+                try {
+                    android.util.Log.w("ACOSKeyStore", msg);
+                } catch (Throwable ignored) {
+                }
+                System.out.println("ACOSLAUNCH WARN " + msg);
+            }
+            throw new java.security.NoSuchAlgorithmException(
+                    "AndroidKeyStore not found (security.keystore module is off; "
+                            + "attach services: [{\"id\":\"security.keystore\",\"profile\":\"real\"}])");
+        }
     }
 
     /**
@@ -778,8 +838,22 @@ public final class SoftwareKeyStore extends Provider {
 
         @Override
         public Certificate engineGetCertificate(String alias) {
-            Certificate[] c = engineGetCertificateChain(alias);
-            return c != null && c.length > 0 ? c[0] : null;
+            synchronized (SoftwareKeyStore.class) {
+                ensureLoaded();
+                Entry e = ENTRIES.get(alias);
+                if (e == null) return null;
+                if ("certificate".equals(e.type) && e.material.length > 0) {
+                    try {
+                        CertificateFactory cf = CertificateFactory.getInstance("X.509");
+                        return cf.generateCertificate(
+                                new java.io.ByteArrayInputStream(e.material));
+                    } catch (Throwable t) {
+                        return null;
+                    }
+                }
+                Certificate[] c = asChain(e);
+                return c != null && c.length > 0 ? c[0] : null;
+            }
         }
 
         @Override
@@ -954,6 +1028,10 @@ public final class SoftwareKeyStore extends Provider {
                                 asPrivate(alias, e),
                                 chain != null ? chain : new Certificate[0]);
                     }
+                    if ("certificate".equals(e.type)) {
+                        Certificate cert = engineGetCertificate(alias);
+                        return cert != null ? new KeyStore.TrustedCertificateEntry(cert) : null;
+                    }
                 } catch (Throwable t) {
                     throw new ProviderException("ACOS keystore: cannot read " + alias + ": " + t);
                 }
@@ -998,6 +1076,9 @@ public final class SoftwareKeyStore extends Provider {
             }
             if (entryClass.isAssignableFrom(KeyStore.PrivateKeyEntry.class)) {
                 return "private".equals(typeOf(alias));
+            }
+            if (entryClass.isAssignableFrom(KeyStore.TrustedCertificateEntry.class)) {
+                return "certificate".equals(typeOf(alias));
             }
             return false;
         }
@@ -1506,7 +1587,9 @@ public final class SoftwareKeyStore extends Provider {
          */
         @Override
         public boolean supportsParameter(Object parameter) {
-            if (parameter instanceof Key) return parameter instanceof SoftwareKey;
+            if (parameter instanceof Key) {
+                return parameter instanceof SoftwareKey || parameter instanceof StorePublicKey;
+            }
             return true;
         }
 
@@ -1658,7 +1741,7 @@ public final class SoftwareKeyStore extends Provider {
         }
 
         private void prepare(int opmode, Key key, AlgorithmParameterSpec params,
-                SecureRandom random) throws InvalidKeyException,
+                AlgorithmParameters rawParams, SecureRandom random) throws InvalidKeyException,
                 InvalidAlgorithmParameterException {
             String t = transformation;
             if (t == null) {
@@ -1672,7 +1755,8 @@ public final class SoftwareKeyStore extends Provider {
             if (e != null && opmode == Cipher.ENCRYPT_MODE
                     && e.randomizedEncryptionRequired
                     && (params instanceof IvParameterSpec
-                            || params instanceof javax.crypto.spec.GCMParameterSpec)) {
+                            || params instanceof javax.crypto.spec.GCMParameterSpec
+                            || (params == null && rawParams != null))) {
                 // AOSP: KM_ERROR_CALLER_NONCE_PROHIBITED -> this exact message.
                 throw new InvalidAlgorithmParameterException(
                         "Caller-provided IV not permitted");
@@ -1686,15 +1770,21 @@ public final class SoftwareKeyStore extends Provider {
             }
             // The key handed to the delegate is built from THIS store's entry,
             // never from the (opaque) key object the caller passed in.
-            Key material = e == null ? key
-                    : ("secret".equals(e.type) ? materialSecret(key) : materialPrivate(key));
+            Key material;
+            if (e == null) {
+                material = key instanceof StorePublicKey ? ((StorePublicKey) key).delegate : key;
+            } else {
+                material = "secret".equals(e.type) ? materialSecret(key) : materialPrivate(key);
+            }
             if (material == null) material = key;
             try {
                 target = delegate(t);
-                if (params == null) {
-                    target.init(opmode, material, random);
-                } else {
+                if (params != null) {
                     target.init(opmode, material, params, random);
+                } else if (rawParams != null) {
+                    target.init(opmode, material, rawParams, random);
+                } else {
+                    target.init(opmode, material, random);
                 }
             } catch (InvalidKeyException | InvalidAlgorithmParameterException ex) {
                 throw ex;
@@ -1731,7 +1821,7 @@ public final class SoftwareKeyStore extends Provider {
         protected void engineInit(int opmode, Key key, SecureRandom random)
                 throws InvalidKeyException {
             try {
-                prepare(opmode, key, null, random);
+                prepare(opmode, key, null, null, random);
             } catch (InvalidAlgorithmParameterException e) {
                 throw new InvalidKeyException(e.getMessage(), e);
             }
@@ -1740,21 +1830,36 @@ public final class SoftwareKeyStore extends Provider {
         @Override
         protected void engineInit(int opmode, Key key, AlgorithmParameterSpec params,
                 SecureRandom random) throws InvalidKeyException, InvalidAlgorithmParameterException {
-            prepare(opmode, key, params, random);
+            prepare(opmode, key, params, null, random);
         }
 
         @Override
         protected void engineInit(int opmode, Key key, AlgorithmParameters params,
                 SecureRandom random) throws InvalidKeyException, InvalidAlgorithmParameterException {
-            prepare(opmode, key, params == null ? null : specOf(params), random);
+            AlgorithmParameterSpec spec = params == null ? null : specOf(params);
+            prepare(opmode, key, spec, spec == null ? params : null, random);
         }
 
         private static AlgorithmParameterSpec specOf(AlgorithmParameters params) {
+            try {
+                return params.getParameterSpec(javax.crypto.spec.GCMParameterSpec.class);
+            } catch (Throwable ignored) {
+            }
             try {
                 return params.getParameterSpec(IvParameterSpec.class);
             } catch (Throwable t) {
                 return null;
             }
+        }
+
+        @Override
+        protected void engineUpdateAAD(byte[] input, int offset, int len) {
+            target.updateAAD(input, offset, len);
+        }
+
+        @Override
+        protected void engineUpdateAAD(java.nio.ByteBuffer src) {
+            target.updateAAD(src);
         }
 
         @Override
@@ -1837,8 +1942,10 @@ public final class SoftwareKeyStore extends Provider {
 
         @Override
         protected void engineInitVerify(PublicKey publicKey) throws InvalidKeyException {
+            PublicKey material = publicKey instanceof StorePublicKey
+                    ? ((StorePublicKey) publicKey).delegate : publicKey;
             try {
-                target().initVerify(publicKey);
+                target().initVerify(material);
             } catch (java.security.NoSuchAlgorithmException e) {
                 throw new InvalidKeyException("Keystore operation failed", e);
             }

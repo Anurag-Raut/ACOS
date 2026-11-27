@@ -66,14 +66,15 @@ Call `acos_help {"topic": "workflow"}` next if you are about to run an app.
 <!-- topic:workflow -->
 ## Recipes (answer these first)
 
-**Take a screenshot.** There is no capture tool on the MCP surface yet. Two
-routes work today: (a) a `capture: {name: shot, format: png, fresh: true}` step
-in an `acos_verify` scenario — the PNG lands as `frames/<seq>.png` under the
-artifacts directory and the step JSON names it; (b) with the CLI on a live
-daemon session, `acos observe --screenshot out/shot.png --json`. Coming:
-`screenshot: true` on `acos_observe_tree`, which returns the PNG path in the
-reply (and `NO_FRESH_FRAME` instead of a silent no-op when the frame carries no
-pixels).
+**Take a screenshot.** Pass `"screenshot": true` to `acos_observe_tree` on a live
+session: `acos_observe_tree {"screenshot": true}` captures a lossless PNG of the
+bound frame under `<artifacts_dir>/screenshots/<verb>-<frame_seq>.png` (appending
+`-1`, `-2`, … instead of overwriting if that filename already exists) and
+returns `screenshot.path` plus an inline preview — or `NO_FRESH_FRAME` when the
+frame carries no pixels. Alternatives: (a) a
+`capture: {name: shot, format: png, fresh: true}` step in an `acos_verify`
+scenario (`frames/<seq>.png`), or (b) on the CLI against a live daemon session,
+`acos observe --screenshot out/shot.png --json`.
 
 **Type into a field.** Observe the tree, tap the field (`acos_tap {"id": ...}`
 or `{"text": ...}`), type with `acos_text {"text": "Ada"}`, then observe again to
@@ -99,11 +100,16 @@ what makes the pass mean something.
 
 **Launch arguments.** Paths must be **absolute**: the server's cwd is not your
 shell's, and a relative path is `INVALID_ARGUMENT` with
-`details.resolved_path`. Each launch rung carries `ms`. Pass `"label": "..."`
-and, if you will park the session, `"idle_ttl_s": N`: the server destroys its
-own sessions after the idle TTL (default 600 s, `ACOS_SESSION_IDLE_TTL_S`) and
-the next call on an expired one returns `SESSION_NOT_FOUND` with
-`details.reason=idle_ttl_expired` and the TTL.
+`details.resolved_path`. Each launch rung carries `ms`, and `acos_launch` gives
+every fresh launch its own unique `artifacts_dir` plus the full `modules`
+catalog (step replies carry compact `modules_summary: {attached, total}`; call
+`acos_services` when you need the full catalog). Plain
+`acos_launch {"apk": "..."}` boots React Native APKs natively on ART (`"rn": true`
+is legacy-only and emits a non-fatal `RN_FLAG_UNNECESSARY_ON_ART` warning on
+ART). Pass `"label": "..."` and, if you will park the session, `"idle_ttl_s": N`:
+the server destroys its own sessions after the idle TTL (default 600 s,
+`ACOS_SESSION_IDLE_TTL_S`) and the next call on an expired one returns
+`SESSION_NOT_FOUND` with `details.reason=idle_ttl_expired` and the TTL.
 
 **Assert, do not eyeball.** `assert_text` (optionally with `bounds`),
 `assert_visible` / `assert_not_visible` (collapsed content stays in the tree with
@@ -158,7 +164,10 @@ doctor -> inspect -> launch -> observe_tree -> tap/text/key/swipe -> logs -> ver
 4. **Observe before acting.** `acos_observe_tree` returns nodes with
    `resource_id`, `text`, `content_desc`, `class`, `bounds`,
    `clickable/enabled/focused/scrollable`. Use those bounds and ids for the
-   next step. Before the app has a window the reply is `unsupported` with
+   next step. The full untruncated tree is always written to `tree_path` (even
+   when `max_nodes` caps the inline result); an out-of-range `cursor` reports
+   `cursor_out_of_range: true` with `returned: 0` and still keeps `tree_path`.
+   Before the app has a window the reply is `unsupported` with
    `details.reason = "not_ready"` — never an empty tree.
 5. **Act.** `acos_tap {"text": "Increment"}` (preferred),
    `acos_tap {"content_desc": "Search Japanese dictionary"}`,
@@ -1141,17 +1150,27 @@ Two session-specific hints worth memorising:
   directory. Relative paths resolve against the server's working directory,
   never against the APK's directory.
 
+* **`display` on `acos_launch`** applies to the in-process engine; the ART
+  daemon route reports the display it used rather than overriding it. Plain
+  `acos_launch {"apk": "..."}` boots React Native APKs on real ART (`"rn": true`
+  is only for `ACOS_MCP_ENGINE=legacy` and adds a non-fatal
+  `RN_FLAG_UNNECESSARY_ON_ART` warning on ART).
+* **`acos_destroy`** accepts `{}` or `{"session_id": "..."}` directly without
+  requiring a `base` envelope.
+
 * **Service modules are opt-in and honest.** A session attaches `core` (the
   service table every app needs) plus whatever `services:`/`--service` names.
   Any name a module does not serve is either a tombstone that answers
   `UNSUPPORTED_ANDROID_API` naming the module and the attach call, or Android's
   real missing path (`null`) where AOSP builds working behaviour out of it — see
   the generated table below. A module at `stub`/`scripted` is a documented
-  stand-in, never a real implementation: the launch reply, `acos_services` and
-  `verdict.json` all state its profile and fidelity. Only `hot` modules can be
+  stand-in, never a real implementation: `acos_launch`, `acos_services` and
+  `verdict.json` carry the full `modules` rows with profile and fidelity, while
+  per-step replies (`acos_tap`, `acos_observe_tree`, …) carry a compact
+  `modules_summary` (`{attached, total}`). Only `hot` modules can be
   attached/detached on a live session; an `at-launch` module (e.g. `core`) is
   refused with the launch call in the message.
-  `acos_capabilities {session_id}` shows one session's attached set.
+  `acos_capabilities {"session_id": "..."}` shows one session's attached set.
 
 <!-- modules:generated -->
 

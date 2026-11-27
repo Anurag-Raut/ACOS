@@ -236,7 +236,12 @@ fn prepare_options(apk: &Path, scratch: &Path) -> Result<RnSessionOptions, RnSes
     if !driver_dex.is_file() {
         return Err(RnSessionError::Setup {
             stage: "driver-dex",
-            detail: format!("{} is missing", driver_dex.display()),
+            detail: format!(
+                "{} is missing (`rn-bridge-probe.dex` is only used by the legacy `engine: \"rust-vm\"` \
+                 route / `ACOS_MCP_ENGINE=legacy`; React Native APKs boot natively on the default ART \
+                 engine with plain `acos_launch {{\"apk\": ...}}`)",
+                driver_dex.display()
+            ),
         });
     }
     let boot_dir = default_boot_dir();

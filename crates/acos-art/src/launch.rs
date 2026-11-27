@@ -675,6 +675,9 @@ struct SecondaryShared {
     /// secondary process (e.g. Launcher resolving `ResolveInfo.loadLabel`) can
     /// read other installed packages' resources.
     session_apks: Vec<(PathBuf, String)>,
+    /// Value to forward as `ACOS_ART_KEYSTORE` (from `security.keystore` module
+    /// spec or legacy env fallback when the module spec omits it).
+    keystore_env: Option<String>,
 }
 
 impl SecondaryShared {
@@ -783,6 +786,9 @@ impl SecondaryShared {
         if self.live_probe {
             sb.env("ACOSLAUNCH_LIVE_PROBE", "1");
         }
+        if let Some(v) = &self.keystore_env {
+            sb.env(acos_services::modules::keystore::KEYSTORE_ENV, v);
+        }
         let mut argv: Vec<String> = Vec::new();
         if self.image.is_some() {
             argv.push("-Ximage:/data/img/boot.art".into());
@@ -793,6 +799,55 @@ impl SecondaryShared {
         argv.push(GUEST_CLASS.into());
         argv.extend(self.guest_args(spec));
         sb.command("/system/apex/com.android.art/bin/dalvikvm64", &argv)
+    }
+}
+
+/// True when a raw `ACOS_ART_KEYSTORE` value enables `SoftwareKeyStore` in the
+/// guest (`LaunchMain.java` accepts `on`, `1`, or `software`, case-insensitive).
+fn keystore_env_enables_software(raw: &str) -> bool {
+    let mode = raw.trim();
+    mode.eq_ignore_ascii_case("on") || mode == "1" || mode.eq_ignore_ascii_case("software")
+}
+
+/// Reconcile an inherited `ACOS_ART_KEYSTORE` environment variable into the
+/// effective module spec list before attachment and report collection.
+///
+/// When `specs` omits `security.keystore` and `inherited` enables the guest
+/// provider (`on`, `1`, `software`), appends `security.keystore` with
+/// `Profile::Real` so the module registry, launch reply, and `status` control
+/// agree with guest availability. Explicit specs (including `profile: off`) are
+/// preserved untouched.
+fn reconcile_inherited_keystore_module(
+    specs: &mut Vec<acos_services::module::ModuleSpec>,
+    inherited: Option<&str>,
+) {
+    use acos_services::module::{ModuleConfig, ModuleSpec, Profile};
+    if acos_services::modules::keystore::requested_profile(specs).is_some() {
+        return;
+    }
+    if inherited.is_some_and(keystore_env_enables_software) {
+        specs.push(ModuleSpec {
+            id: acos_services::modules::keystore::MODULE_ID.to_string(),
+            profile: Profile::Real,
+            config: ModuleConfig::default(),
+        });
+    }
+}
+
+/// Resolve the guest `ACOS_ART_KEYSTORE` env value from the session's module
+/// specs, preserving explicit `off` override over any inherited host variable.
+fn resolve_keystore_env(
+    specs: &[acos_services::module::ModuleSpec],
+    inherited: Option<&str>,
+) -> Option<String> {
+    use acos_services::module::Profile;
+    match acos_services::modules::keystore::requested_profile(specs) {
+        Some(Profile::Real) => Some("on".to_string()),
+        Some(_) => None,
+        None => inherited
+            .map(str::trim)
+            .filter(|v| !v.is_empty())
+            .map(str::to_string),
     }
 }
 
@@ -1363,6 +1418,8 @@ pub(crate) fn launch_session(
                 .map_err(|error| Error::Layout(format!("ACOS_ART_SERVICES: {error}")))?;
         }
     }
+    let inherited_keystore = std::env::var(acos_services::modules::keystore::KEYSTORE_ENV).ok();
+    reconcile_inherited_keystore_module(&mut module_specs, inherited_keystore.as_deref());
     // WV8: the `webview` module owns the session's WebView socket and the
     // provider package. With it `off` (the default) neither exists, which is
     // Android's own "no WebView provider" path: no `com.android.webview` in the
@@ -1748,20 +1805,8 @@ pub(crate) fn launch_session(
     // uses and captures C1's stored buffer, so the standard install hands both
     // back. Building the host here (instead of inside the peer thread) keeps
     // those handles in the launcher without a second install.
-    let mut module_specs: Vec<acos_services::module::ModuleSpec> =
-        acos_services::module::ModuleSpec::parse_list(&serde_json::Value::Array(
-            opts.services.clone(),
-        ))
-        .map_err(|error| Error::Layout(format!("services: {error}")))?;
-    if module_specs.is_empty() {
-        if let Ok(raw) = std::env::var("ACOS_ART_SERVICES") {
-            let value: serde_json::Value = serde_json::from_str(&raw).map_err(|error| {
-                Error::Layout(format!("ACOS_ART_SERVICES is not JSON: {error}"))
-            })?;
-            module_specs = acos_services::module::ModuleSpec::parse_list(&value)
-                .map_err(|error| Error::Layout(format!("ACOS_ART_SERVICES: {error}")))?;
-        }
-    }
+    // Reuse the reconciled `module_specs` parsed above (including any legacy
+    // `ACOS_ART_KEYSTORE` promotion) for attachment, reporting, and guest env.
     let mut session_modules = match prebuilt {
         Some((host, handles)) => {
             acos_services::module::SessionModules::from_installed(host, handles)
@@ -2388,6 +2433,7 @@ pub(crate) fn launch_session(
             run_root,
         });
     }
+    let keystore_env = resolve_keystore_env(&module_specs, inherited_keystore.as_deref());
     let secondary_shared = SecondaryShared {
         root: root.clone(),
         image: boot_image.as_ref().map(|image| image.dir.clone()),
@@ -2413,6 +2459,7 @@ pub(crate) fn launch_session(
         session_apks: std::iter::once((apk.clone(), guest_apk.clone()))
             .chain(extras.iter().map(|e| (e.staged.clone(), e.guest_path.clone())))
             .collect(),
+        keystore_env: keystore_env.clone(),
     };
     let mut secondary_pool =
         SecondaryPool::new(
@@ -2829,12 +2876,13 @@ pub(crate) fn launch_session(
     // device; ACOS's WMS runs no transition animations, so there is nothing to
     // scale beyond the app-side animator scale.
     sb.env("ACOS_ANIMATIONS", opts.animations.as_str());
-    // K5: the software AndroidKeyStore seam (`on` enables the opt-in shim;
-    // unset/`off` keeps the honest K4 failure). The guest environment is
-    // cleared by bwrap, so every `System.getenv` the launch guest reads must be
-    // listed here explicitly.
-    if let Ok(v) = std::env::var("ACOS_ART_KEYSTORE") {
-        sb.env("ACOS_ART_KEYSTORE", &v);
+    // K5 / ADR-0029 `security.keystore`: `real` enables the software
+    // AndroidKeyStore JCA provider (`ACOS_ART_KEYSTORE=on`); explicit `off`
+    // suppresses any inherited host env; omitting the module preserves legacy
+    // `ACOS_ART_KEYSTORE` env compatibility and defaults to `off` (honest
+    // `AndroidKeyStore not found` + diagnostic log breadcrumb).
+    if let Some(v) = &keystore_env {
+        sb.env(acos_services::modules::keystore::KEYSTORE_ENV, v);
     }
     // K5b: the keystore probe's mode and its list of paths to reach for
     // (`fixtures/apps/keystore-probe`). Test-only names: nothing else reads
@@ -3590,7 +3638,19 @@ const UNSUPPORTED_PREFIX: &str = "ACOSUNSUPPORTED ";
 const LIVE_PROBE_LINE_CAP: usize = 8 * 1024 * 1024;
 /// W36: the guest probe reports a swallowed exception as this marker.
 const PROBE_ERROR_PREFIX: &str = "ACOSPROBE-ERROR ";
+/// Guest `InputConnection.commitText` outcome emitted on the main looper.
+const COMMIT_TEXT_PREFIX: &str = "ACOSCOMMITTEXT ";
 const CAPTURE_SOURCE: &str = "acos-c1-buffer";
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct CommitTextOutcome {
+    ok: bool,
+    handled: bool,
+    no_focused_editor: bool,
+    commit_attempted: bool,
+    focus_class: Option<String>,
+    error: Option<String>,
+}
 
 #[derive(Clone)]
 struct ProbeSample {
@@ -3814,6 +3874,8 @@ struct ProbeState {
     wake_failures: u64,
     stale_samples: u64,
     stall_pending_ms: Option<u64>,
+    commit_text_results: std::collections::BTreeMap<u64, CommitTextOutcome>,
+    next_commit_text_seq: u64,
 }
 
 impl ProbeState {
@@ -4911,6 +4973,13 @@ fn drain_tee_lines<R: std::io::Read>(
                 state.unsupported = Some(value);
                 state.unsupported_seq += 1;
             }
+        } else if let Some((seq, outcome)) = parse_commit_text_line(trimmed) {
+            let wake = {
+                let mut state = state.lock().unwrap_or_else(|e| e.into_inner());
+                state.commit_text_results.insert(seq, outcome);
+                Arc::clone(&state.wake)
+            };
+            wake.notify();
         }
     }
     tail
@@ -7173,23 +7242,230 @@ fn probe_usable_for_fast_tree(
 /// * `Fifo` — a zygote session (Z4/ZPROD): the keeper's stdin is `/dev/null`,
 ///   so the forked child `System.setIn`s `<session>/probe.fifo` instead
 ///   (`ZygoteApp.z4ProbeStdin`), and this is the writer half.
-pub(crate) enum GuestProbeChannel {
+enum GuestProbeIo {
     Pipe(std::process::ChildStdin),
     Fifo(std::fs::File),
 }
 
+pub(crate) struct GuestProbeChannel {
+    io: GuestProbeIo,
+    /// Set when a deadline-bounded write wrote a partial line (without its
+    /// trailing `\n`). The next write prepends `!\n` so the guest terminates
+    /// and rejects the incomplete frame before reading the next command.
+    needs_resync: bool,
+}
+
+impl GuestProbeChannel {
+    pub(crate) fn pipe(writer: std::process::ChildStdin) -> Self {
+        Self {
+            io: GuestProbeIo::Pipe(writer),
+            needs_resync: false,
+        }
+    }
+
+    pub(crate) fn fifo(writer: std::fs::File) -> Self {
+        Self {
+            io: GuestProbeIo::Fifo(writer),
+            needs_resync: false,
+        }
+    }
+
+    fn as_raw_fd(&self) -> RawFd {
+        use std::os::unix::io::AsRawFd;
+        match &self.io {
+            GuestProbeIo::Pipe(writer) => writer.as_raw_fd(),
+            GuestProbeIo::Fifo(writer) => writer.as_raw_fd(),
+        }
+    }
+
+    /// Write a single `\n`-terminated control command before `deadline` using
+    /// non-blocking `write(2)` + `poll(2)`. If an earlier write timed out or
+    /// failed mid-line, prepends `!\n` so the guest discards the truncated
+    /// line and receives this command intact.
+    ///
+    /// On error, returns `(payload_wrote_any, err)` where `payload_wrote_any`
+    /// is true only if at least one byte of `line` itself reached the kernel
+    /// pipe/FIFO buffer (excluding any leading `!\n` resync marker).
+    fn write_line_until(
+        &mut self,
+        line: &[u8],
+        deadline: Instant,
+    ) -> std::result::Result<(), (bool, std::io::Error)> {
+        debug_assert!(
+            line.ends_with(b"\n"),
+            "GuestProbeChannel::write_line_until expects a newline-terminated command"
+        );
+        let prefix_len = if self.needs_resync { 2 } else { 0 };
+        let res = if prefix_len > 0 {
+            let mut framed = Vec::with_capacity(prefix_len + line.len());
+            framed.extend_from_slice(b"!\n");
+            framed.extend_from_slice(line);
+            write_fd_all_until(self.as_raw_fd(), &framed, deadline)
+        } else {
+            write_fd_all_until(self.as_raw_fd(), line, deadline)
+        };
+        match res {
+            Ok(()) => {
+                self.needs_resync = false;
+                Ok(())
+            }
+            Err((written, err)) => {
+                if written >= prefix_len {
+                    let payload_written = written - prefix_len;
+                    self.needs_resync = payload_written > 0;
+                    Err((payload_written > 0, err))
+                } else {
+                    // Did not finish writing the `!\n` resync marker: keep
+                    // resync pending and report 0 bytes of `line` written.
+                    self.needs_resync = true;
+                    Err((false, err))
+                }
+            }
+        }
+    }
+}
+
+fn write_fd_all_until(
+    fd: RawFd,
+    bytes: &[u8],
+    deadline: Instant,
+) -> std::result::Result<(), (usize, std::io::Error)> {
+    let orig_flags = unsafe { libc::fcntl(fd, libc::F_GETFL) };
+    if orig_flags < 0 {
+        return Err((0, std::io::Error::last_os_error()));
+    }
+    let added_nonblock = (orig_flags & libc::O_NONBLOCK) == 0;
+    if added_nonblock
+        && unsafe { libc::fcntl(fd, libc::F_SETFL, orig_flags | libc::O_NONBLOCK) } != 0
+    {
+        return Err((0, std::io::Error::last_os_error()));
+    }
+    struct RestoreFlags {
+        fd: RawFd,
+        orig_flags: libc::c_int,
+        restore: bool,
+    }
+    impl Drop for RestoreFlags {
+        fn drop(&mut self) {
+            if self.restore {
+                unsafe {
+                    libc::fcntl(self.fd, libc::F_SETFL, self.orig_flags);
+                }
+            }
+        }
+    }
+    let _guard = RestoreFlags {
+        fd,
+        orig_flags,
+        restore: added_nonblock,
+    };
+
+    let mut written = 0usize;
+    while written < bytes.len() {
+        if Instant::now() >= deadline {
+            return Err((
+                written,
+                std::io::Error::new(
+                    std::io::ErrorKind::TimedOut,
+                    "timed out before writing to guest control channel",
+                ),
+            ));
+        }
+        let n = unsafe {
+            libc::write(
+                fd,
+                bytes[written..].as_ptr().cast(),
+                bytes.len() - written,
+            )
+        };
+        if n > 0 {
+            written += n as usize;
+            continue;
+        }
+        if n == 0 {
+            return Err((
+                written,
+                std::io::Error::new(
+                    std::io::ErrorKind::WriteZero,
+                    "write returned 0 bytes on guest control channel",
+                ),
+            ));
+        }
+        let err = std::io::Error::last_os_error();
+        if err.kind() == std::io::ErrorKind::Interrupted {
+            continue;
+        }
+        if err.kind() != std::io::ErrorKind::WouldBlock {
+            return Err((written, err));
+        }
+        let now = Instant::now();
+        if now >= deadline {
+            return Err((
+                written,
+                std::io::Error::new(
+                    std::io::ErrorKind::TimedOut,
+                    "timed out writing to guest control channel",
+                ),
+            ));
+        }
+        let rem_ms = (deadline - now).as_millis().clamp(1, i32::MAX as u128) as i32;
+        let mut pfd = libc::pollfd {
+            fd,
+            events: libc::POLLOUT,
+            revents: 0,
+        };
+        let rc = unsafe { libc::poll(&mut pfd, 1, rem_ms) };
+        if rc < 0 {
+            let perr = std::io::Error::last_os_error();
+            if perr.kind() == std::io::ErrorKind::Interrupted {
+                continue;
+            }
+            return Err((written, perr));
+        }
+        if rc == 0 {
+            return Err((
+                written,
+                std::io::Error::new(
+                    std::io::ErrorKind::TimedOut,
+                    "timed out waiting for guest control channel writability",
+                ),
+            ));
+        }
+        if (pfd.revents & (libc::POLLERR | libc::POLLHUP | libc::POLLNVAL)) != 0 {
+            return Err((
+                written,
+                std::io::Error::new(
+                    std::io::ErrorKind::BrokenPipe,
+                    format!(
+                        "guest control channel closed (poll revents=0x{:x})",
+                        pfd.revents
+                    ),
+                ),
+            ));
+        }
+    }
+    Ok(())
+}
+
 impl std::io::Write for GuestProbeChannel {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        match self {
-            GuestProbeChannel::Pipe(writer) => writer.write(buf),
-            GuestProbeChannel::Fifo(writer) => writer.write(buf),
+        if self.needs_resync {
+            match &mut self.io {
+                GuestProbeIo::Pipe(writer) => writer.write_all(b"!\n")?,
+                GuestProbeIo::Fifo(writer) => writer.write_all(b"!\n")?,
+            }
+            self.needs_resync = false;
+        }
+        match &mut self.io {
+            GuestProbeIo::Pipe(writer) => writer.write(buf),
+            GuestProbeIo::Fifo(writer) => writer.write(buf),
         }
     }
 
     fn flush(&mut self) -> std::io::Result<()> {
-        match self {
-            GuestProbeChannel::Pipe(writer) => writer.flush(),
-            GuestProbeChannel::Fifo(writer) => writer.flush(),
+        match &mut self.io {
+            GuestProbeIo::Pipe(writer) => writer.flush(),
+            GuestProbeIo::Fifo(writer) => writer.flush(),
         }
     }
 }
@@ -7234,9 +7510,8 @@ fn request_guest_probe(
     let Some(writer) = stdin.as_mut() else {
         return true;
     };
-    use std::io::Write;
-    let written = writeln!(writer, "PROBE")
-        .and_then(|_| writer.flush())
+    let written = writer
+        .write_line_until(b"PROBE\n", Instant::now() + Duration::from_millis(100))
         .is_ok();
     // SETTLE5: the channel's health is evidence, and a wake the pipe refuses is
     // counted rather than silently swallowed. Only the counters change; the
@@ -7249,6 +7524,227 @@ fn request_guest_probe(
     }
     drop(guard);
     written
+}
+
+fn parse_commit_text_line(trimmed: &str) -> Option<(u64, CommitTextOutcome)> {
+    let json = trimmed.strip_prefix(COMMIT_TEXT_PREFIX)?;
+    let value = serde_json::from_str::<serde_json::Value>(json).ok()?;
+    let seq = value.get("seq").and_then(|v| v.as_u64())?;
+    let outcome = CommitTextOutcome {
+        ok: value.get("ok").and_then(|v| v.as_bool()).unwrap_or(false),
+        handled: value.get("handled").and_then(|v| v.as_bool()).unwrap_or(false),
+        no_focused_editor: value
+            .get("no_focused_editor")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false),
+        commit_attempted: value
+            .get("commit_attempted")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false),
+        focus_class: value
+            .get("focus_class")
+            .and_then(|v| v.as_str())
+            .map(str::to_string),
+        error: value
+            .get("error")
+            .and_then(|v| v.as_str())
+            .map(str::to_string),
+    };
+    Some((seq, outcome))
+}
+
+fn base64_encode(input: &[u8]) -> String {
+    const TABLE: &[u8; 64] =
+        b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut out = String::with_capacity(input.len().div_ceil(3) * 4);
+    for chunk in input.chunks(3) {
+        let b0 = u32::from(chunk[0]);
+        let b1 = if chunk.len() > 1 {
+            u32::from(chunk[1])
+        } else {
+            0
+        };
+        let b2 = if chunk.len() > 2 {
+            u32::from(chunk[2])
+        } else {
+            0
+        };
+        let n = (b0 << 16) | (b1 << 8) | b2;
+        out.push(TABLE[((n >> 18) & 0x3f) as usize] as char);
+        out.push(TABLE[((n >> 12) & 0x3f) as usize] as char);
+        out.push(if chunk.len() > 1 {
+            TABLE[((n >> 6) & 0x3f) as usize] as char
+        } else {
+            '='
+        });
+        out.push(if chunk.len() > 2 {
+            TABLE[(n & 0x3f) as usize] as char
+        } else {
+            '='
+        });
+    }
+    out
+}
+
+#[derive(Debug, PartialEq, Eq)]
+enum GuestCommitResult {
+    Committed {
+        seq: u64,
+        handled: bool,
+        latency_us: u64,
+        #[allow(dead_code)]
+        focus_class: Option<String>,
+    },
+    NoFocusedEditor {
+        focus_class: Option<String>,
+        error: String,
+    },
+    Rejected {
+        focus_class: Option<String>,
+        error: String,
+    },
+    /// Proven non-delivery before sending `COMMIT_TEXT` to the guest (safe to
+    /// fall back to `live.input.type_text` for ASCII).
+    Unavailable {
+        reason: String,
+    },
+    /// `COMMIT_TEXT` was written (or partially written) to the guest, or
+    /// `InputConnection.commitText` threw after entry, so delivery is
+    /// uncertain. Never replay the text through `live.input.type_text`, which
+    /// could double-insert into the editor.
+    Uncertain {
+        code: &'static str,
+        reason: String,
+    },
+}
+
+fn classify_commit_text_outcome(
+    seq: u64,
+    outcome: CommitTextOutcome,
+    latency_us: u64,
+) -> GuestCommitResult {
+    if outcome.ok {
+        return GuestCommitResult::Committed {
+            seq,
+            handled: outcome.handled,
+            latency_us,
+            focus_class: outcome.focus_class,
+        };
+    }
+    if outcome.commit_attempted {
+        return GuestCommitResult::Uncertain {
+            code: "INPUT_UNAVAILABLE",
+            reason: outcome.error.unwrap_or_else(|| {
+                "InputConnection.commitText threw after entry (delivery uncertain; not replaying)"
+                    .to_string()
+            }),
+        };
+    }
+    if outcome.no_focused_editor {
+        return GuestCommitResult::NoFocusedEditor {
+            focus_class: outcome.focus_class,
+            error: outcome
+                .error
+                .unwrap_or_else(|| "no focused InputConnection".to_string()),
+        };
+    }
+    GuestCommitResult::Rejected {
+        focus_class: outcome.focus_class,
+        error: outcome
+            .error
+            .unwrap_or_else(|| "InputConnection.commitText returned false".to_string()),
+    }
+}
+
+fn format_commit_text_frame(seq: u64, text: &str) -> String {
+    let encoded = base64_encode(text.as_bytes());
+    format!("COMMIT_TEXT {seq} {} {encoded} END\n", encoded.len())
+}
+
+fn try_guest_commit_text(
+    child: &mut std::process::Child,
+    live: &acos_services::registry::LiveHandles,
+    probe_state: &Arc<std::sync::Mutex<ProbeState>>,
+    guest_stdin: &mut Option<GuestProbeChannel>,
+    text: &str,
+    ack_wait: Duration,
+) -> GuestCommitResult {
+    let foreground = live.top_process.load(std::sync::atomic::Ordering::Relaxed);
+    if foreground != 0 {
+        return GuestCommitResult::Unavailable {
+            reason: format!(
+                "foreground secondary process {foreground} has no stdin control pipe for InputConnection.commitText"
+            ),
+        };
+    }
+    let Some(writer) = guest_stdin.as_mut() else {
+        return GuestCommitResult::Unavailable {
+            reason: "guest has no stdin control pipe for InputConnection.commitText".to_string(),
+        };
+    };
+    let seq = {
+        let mut state = probe_state.lock().unwrap_or_else(|e| e.into_inner());
+        state.next_commit_text_seq = state.next_commit_text_seq.saturating_add(1);
+        state.next_commit_text_seq
+    };
+    let started = Instant::now();
+    let timeout = ack_wait
+        .max(Duration::from_millis(2000))
+        .min(Duration::from_secs(5));
+    let deadline = started + timeout;
+    let payload = format_commit_text_frame(seq, text);
+    if let Err((wrote_any, err)) = writer.write_line_until(payload.as_bytes(), deadline) {
+        if !wrote_any {
+            return GuestCommitResult::Unavailable {
+                reason: format!("COMMIT_TEXT not written to guest stdin: {err}"),
+            };
+        }
+        let code = if err.kind() == std::io::ErrorKind::TimedOut {
+            "TIMEOUT"
+        } else {
+            "INPUT_UNAVAILABLE"
+        };
+        return GuestCommitResult::Uncertain {
+            code,
+            reason: format!(
+                "failed writing COMMIT_TEXT to guest (partial=true, delivery uncertain): {err}"
+            ),
+        };
+    }
+    let wake = settle_wake(probe_state);
+    let mut seen = 0u64;
+    loop {
+        {
+            let mut state = probe_state.lock().unwrap_or_else(|e| e.into_inner());
+            if let Some(outcome) = state.commit_text_results.remove(&seq) {
+                return classify_commit_text_outcome(
+                    seq,
+                    outcome,
+                    started.elapsed().as_micros() as u64,
+                );
+            }
+        }
+        if let Ok(Some(status)) = child.try_wait() {
+            return GuestCommitResult::Uncertain {
+                code: "INPUT_UNAVAILABLE",
+                reason: format!("guest exited before acknowledging COMMIT_TEXT (seq={seq}): {status}"),
+            };
+        }
+        if Instant::now() >= deadline {
+            let cancel = format!("CANCEL_COMMIT_TEXT {seq}\n");
+            let _ = writer.write_line_until(
+                cancel.as_bytes(),
+                Instant::now() + Duration::from_millis(100),
+            );
+            return GuestCommitResult::Uncertain {
+                code: "TIMEOUT",
+                reason: format!(
+                    "timed out waiting for guest InputConnection.commitText ack (seq={seq}); sent CANCEL_COMMIT_TEXT and not replaying"
+                ),
+            };
+        }
+        wait_for_change(&wake, &mut seen);
+    }
 }
 
 enum FastTreeEnd {
@@ -7755,8 +8251,8 @@ fn interactive_serve(
     // ZPROD3b: a zygote session's probe channel is its own FIFO (the stub's
     // stdin is a dead end); every other session keeps the guest's own pipe.
     let mut guest_stdin = match probe_fifo {
-        Some(fifo) => Some(GuestProbeChannel::Fifo(fifo)),
-        None => child.stdin.take().map(GuestProbeChannel::Pipe),
+        Some(fifo) => Some(GuestProbeChannel::fifo(fifo)),
+        None => child.stdin.take().map(GuestProbeChannel::pipe),
     };
     // CR1FIX #20: WINDOW commands written to the guest so far, and the guest's
     // failed-command count already reported to the host.
@@ -8925,12 +9421,69 @@ fn interactive_serve(
                     }));
                     continue;
                 };
-                match live.input.type_text(text, ack_wait) {
-                    Ok(_) => protocol_write(&serde_json::json!({"ok": true, "cmd": "panel_text", "text": text})),
-                    Err(err) => protocol_write(&serde_json::json!({
-                        "ok": false, "cmd": "panel_text", "code": "INPUT_UNAVAILABLE",
-                        "error": format!("panel_text failed: {err}"),
-                    })),
+                if text.is_empty() {
+                    match live.input.type_text(text, ack_wait) {
+                        Ok(_) => protocol_write(&serde_json::json!({"ok": true, "cmd": "panel_text", "text": text})),
+                        Err(err) => protocol_write(&serde_json::json!({
+                            "ok": false, "cmd": "panel_text", "code": "INPUT_UNAVAILABLE",
+                            "error": format!("panel_text failed: {err}"),
+                        })),
+                    }
+                    continue;
+                }
+                match try_guest_commit_text(
+                    child,
+                    live,
+                    probe_state,
+                    &mut guest_stdin,
+                    text,
+                    ack_wait,
+                ) {
+                    GuestCommitResult::Committed { .. } => {
+                        protocol_write(&serde_json::json!({"ok": true, "cmd": "panel_text", "text": text}));
+                    }
+                    GuestCommitResult::NoFocusedEditor { focus_class, error }
+                    | GuestCommitResult::Rejected { focus_class, error } => {
+                        if text.is_ascii() {
+                            match live.input.type_text(text, ack_wait) {
+                                Ok(_) => protocol_write(&serde_json::json!({"ok": true, "cmd": "panel_text", "text": text})),
+                                Err(err) => protocol_write(&serde_json::json!({
+                                    "ok": false, "cmd": "panel_text", "code": "INPUT_UNAVAILABLE",
+                                    "error": format!("panel_text failed: {err}"),
+                                })),
+                            }
+                        } else {
+                            let suffix = focus_class
+                                .map(|cls| format!(" (focused={cls})"))
+                                .unwrap_or_default();
+                            protocol_write(&serde_json::json!({
+                                "ok": false, "cmd": "panel_text", "code": "INPUT_UNAVAILABLE",
+                                "error": format!("panel_text InputConnection.commitText failed for non-ASCII text{suffix}: {error}"),
+                            }));
+                        }
+                    }
+                    GuestCommitResult::Unavailable { reason } => {
+                        if text.is_ascii() {
+                            match live.input.type_text(text, ack_wait) {
+                                Ok(_) => protocol_write(&serde_json::json!({"ok": true, "cmd": "panel_text", "text": text})),
+                                Err(err) => protocol_write(&serde_json::json!({
+                                    "ok": false, "cmd": "panel_text", "code": "INPUT_UNAVAILABLE",
+                                    "error": format!("panel_text failed: {err}"),
+                                })),
+                            }
+                        } else {
+                            protocol_write(&serde_json::json!({
+                                "ok": false, "cmd": "panel_text", "code": "INPUT_UNAVAILABLE",
+                                "error": format!("panel_text InputConnection.commitText unavailable for non-ASCII text: {reason}"),
+                            }));
+                        }
+                    }
+                    GuestCommitResult::Uncertain { code, reason } => {
+                        protocol_write(&serde_json::json!({
+                            "ok": false, "cmd": "panel_text", "code": code,
+                            "error": format!("panel_text InputConnection.commitText did not confirm delivery: {reason}"),
+                        }));
+                    }
                 }
             }
             "rotate" | "panel_rotate" => {
@@ -9417,9 +9970,91 @@ fn interactive_serve(
                         ("swipe", _) => live
                             .input
                             .swipe(swipe_from, swipe_to, swipe_duration, ack_wait),
-                        ("type_text", _) => live
-                            .input
-                            .type_text(text_arg.as_deref().unwrap_or_default(), ack_wait),
+                        ("type_text", _) => {
+                            let text = text_arg.as_deref().unwrap_or_default();
+                            if text.is_empty() {
+                                live.input.type_text(text, ack_wait)
+                            } else {
+                                match try_guest_commit_text(
+                                    child,
+                                    live,
+                                    probe_state,
+                                    &mut guest_stdin,
+                                    text,
+                                    ack_wait,
+                                ) {
+                                    GuestCommitResult::Committed {
+                                        seq,
+                                        handled,
+                                        latency_us,
+                                        focus_class: _,
+                                    } => Ok(
+                                        acos_services::window_session::input_dispatch::InjectedGesture {
+                                            token: acos_parcel::BinderId(0),
+                                            seqs: vec![seq as u32],
+                                            acks: vec![
+                                                acos_services::window_session::input_dispatch::InjectedAck {
+                                                    seq: seq as u32,
+                                                    handled,
+                                                    latency_us: Some(latency_us),
+                                                },
+                                            ],
+                                        },
+                                    ),
+                                    GuestCommitResult::NoFocusedEditor { focus_class, error }
+                                    | GuestCommitResult::Rejected { focus_class, error } => {
+                                        if text.is_ascii() {
+                                            live.input.type_text(text, ack_wait)
+                                        } else {
+                                            let suffix = focus_class
+                                                .map(|cls| format!(" (focused={cls})"))
+                                                .unwrap_or_default();
+                                            let reply = serde_json::json!({
+                                                "ok": false,
+                                                "cmd": cmd,
+                                                "code": "INPUT_UNAVAILABLE",
+                                                "error": format!(
+                                                    "InputConnection.commitText failed for non-ASCII text{suffix}: {error}"
+                                                ),
+                                            });
+                                            protocol_write(&reply);
+                                            evidence.push(reply);
+                                            continue;
+                                        }
+                                    }
+                                    GuestCommitResult::Unavailable { reason } => {
+                                        if text.is_ascii() {
+                                            live.input.type_text(text, ack_wait)
+                                        } else {
+                                            let reply = serde_json::json!({
+                                                "ok": false,
+                                                "cmd": cmd,
+                                                "code": "INPUT_UNAVAILABLE",
+                                                "error": format!(
+                                                    "InputConnection.commitText unavailable for non-ASCII text: {reason}"
+                                                ),
+                                            });
+                                            protocol_write(&reply);
+                                            evidence.push(reply);
+                                            continue;
+                                        }
+                                    }
+                                    GuestCommitResult::Uncertain { code, reason } => {
+                                        let reply = serde_json::json!({
+                                            "ok": false,
+                                            "cmd": cmd,
+                                            "code": code,
+                                            "error": format!(
+                                                "InputConnection.commitText did not confirm delivery: {reason}"
+                                            ),
+                                        });
+                                        protocol_write(&reply);
+                                        evidence.push(reply);
+                                        continue;
+                                    }
+                                }
+                            }
+                        }
                         (_, Some(code)) => live.input.key(code, ack_wait),
                         _ => unreachable!(),
                     }
@@ -9528,7 +10163,8 @@ fn interactive_serve(
                     None,
                     unhandled_ack_floor,
                     entry_fnv,
-                    (!is_home_key).then_some((injected.token, removal_mark)),
+                    (!is_home_key && injected.token.0 != 0)
+                        .then_some((injected.token, removal_mark)),
                     window_reshown,
                     Some((&pending_spawns, secondary)),
                 );
@@ -9621,9 +10257,10 @@ fn interactive_serve(
                 // The window this gesture went to is gone (dialog dismissed, task
                 // finished): the host's fact, checked against the *delivered*
                 // token only.
-                let window_removed = live
-                    .input
-                    .window_removed_since(injected.token, removal_mark);
+                let window_removed = injected.token.0 != 0
+                    && live
+                        .input
+                        .window_removed_since(injected.token, removal_mark);
                 if window_removed {
                     trace_host(
                         probe_state,
@@ -11155,6 +11792,8 @@ mod probe_line_tests {
                 wake: Arc::clone(&self.wake),
                 anim_traced: self.anim_traced.clone(),
                 touch_traced: self.touch_traced,
+                commit_text_results: self.commit_text_results.clone(),
+                next_commit_text_seq: self.next_commit_text_seq,
             }
         }
     }
@@ -11535,7 +12174,7 @@ mod probe_line_tests {
         // A read-only handle is the shape of a channel that cannot accept a
         // wake (a dead reader): the write fails and must be counted.
         let read_only = std::fs::File::open(&path).expect("open read-only");
-        let mut dead = Some(GuestProbeChannel::Fifo(read_only));
+        let mut dead = Some(GuestProbeChannel::fifo(read_only));
         let state = Arc::new(std::sync::Mutex::new(ProbeState::default()));
         assert!(!request_guest_probe(&mut dead, &state));
         {
@@ -11550,7 +12189,7 @@ mod probe_line_tests {
             .append(true)
             .open(&path)
             .expect("open writable");
-        let mut live = Some(GuestProbeChannel::Fifo(writable));
+        let mut live = Some(GuestProbeChannel::fifo(writable));
         assert!(request_guest_probe(&mut live, &state));
         {
             let state = state.lock().unwrap();
@@ -13105,4 +13744,304 @@ mod panel_touch_tests {
             "gesture with cursor hit_point inside DIALOG must not hit ACTIVITY"
         );
     }
+
+    #[test]
+    fn resolve_keystore_env_handles_real_explicit_off_and_inherited() {
+        use acos_services::module::{ModuleConfig, ModuleSpec, Profile};
+        use acos_services::modules::keystore::MODULE_ID;
+
+        let real = vec![ModuleSpec {
+            id: MODULE_ID.to_string(),
+            profile: Profile::Real,
+            config: ModuleConfig::default(),
+        }];
+        assert_eq!(resolve_keystore_env(&real, None).as_deref(), Some("on"));
+        assert_eq!(
+            resolve_keystore_env(&real, Some("off")).as_deref(),
+            Some("on")
+        );
+
+        let off = vec![ModuleSpec {
+            id: MODULE_ID.to_string(),
+            profile: Profile::Off,
+            config: ModuleConfig::default(),
+        }];
+        assert_eq!(resolve_keystore_env(&off, Some("on")), None);
+        assert_eq!(resolve_keystore_env(&off, None), None);
+
+        // Omitting the module falls back to legacy ACOS_ART_KEYSTORE if non-empty.
+        assert_eq!(resolve_keystore_env(&[], None), None);
+        assert_eq!(resolve_keystore_env(&[], Some("   ")), None);
+        assert_eq!(
+            resolve_keystore_env(&[], Some("on")).as_deref(),
+            Some("on")
+        );
+
+        // Inherited enabling values reconcile into effective `security.keystore` = Real
+        // before module attachment/reporting, while preserving explicit `off`.
+        for val in ["on", "ON", "1", "software", " Software "] {
+            let mut specs = Vec::new();
+            reconcile_inherited_keystore_module(&mut specs, Some(val));
+            assert_eq!(
+                acos_services::modules::keystore::requested_profile(&specs),
+                Some(Profile::Real),
+                "inherited={val:?} should reconcile to Profile::Real"
+            );
+        }
+        for val in ["", "   ", "off", "0", "false"] {
+            let mut specs = Vec::new();
+            reconcile_inherited_keystore_module(&mut specs, Some(val));
+            assert_eq!(
+                acos_services::modules::keystore::requested_profile(&specs),
+                None,
+                "inherited={val:?} should not enable security.keystore"
+            );
+        }
+        let mut explicit_off = off.clone();
+        reconcile_inherited_keystore_module(&mut explicit_off, Some("on"));
+        assert_eq!(
+            acos_services::modules::keystore::requested_profile(&explicit_off),
+            Some(Profile::Off),
+            "explicit off override must survive inherited ACOS_ART_KEYSTORE=on"
+        );
+    }
+
+    #[test]
+    fn base64_encode_handles_unicode_and_padding() {
+        assert_eq!(base64_encode(b""), "");
+        assert_eq!(base64_encode(b"a"), "YQ==");
+        assert_eq!(base64_encode(b"ab"), "YWI=");
+        assert_eq!(base64_encode(b"abc"), "YWJj");
+        assert_eq!(base64_encode("腹立つ".as_bytes()), "6IW556uL44Gk");
+        assert_eq!(base64_encode("café 🎉".as_bytes()), "Y2Fmw6kg8J+OiQ==");
+    }
+
+    #[test]
+    fn parse_commit_text_line_extracts_ok_and_failure_shapes() {
+        assert_eq!(parse_commit_text_line("ACOSPROBE {}"), None);
+        let ok_line = r#"ACOSCOMMITTEXT {"seq":7,"ok":true,"handled":true,"method":"input_connection","focus_class":"android.widget.EditText"}"#;
+        assert_eq!(
+            parse_commit_text_line(ok_line),
+            Some((
+                7,
+                CommitTextOutcome {
+                    ok: true,
+                    handled: true,
+                    no_focused_editor: false,
+                    commit_attempted: false,
+                    focus_class: Some("android.widget.EditText".to_string()),
+                    error: None,
+                }
+            ))
+        );
+        let missing_line = r#"ACOSCOMMITTEXT {"seq":8,"ok":false,"handled":false,"no_focused_editor":true,"error":"no focused view in active window"}"#;
+        assert_eq!(
+            parse_commit_text_line(missing_line),
+            Some((
+                8,
+                CommitTextOutcome {
+                    ok: false,
+                    handled: false,
+                    no_focused_editor: true,
+                    commit_attempted: false,
+                    focus_class: None,
+                    error: Some("no focused view in active window".to_string()),
+                }
+            ))
+        );
+        let post_entry_throw = r#"ACOSCOMMITTEXT {"seq":9,"ok":false,"handled":false,"no_focused_editor":false,"commit_attempted":true,"focus_class":"android.widget.EditText","error":"RuntimeException: boom"}"#;
+        let (_, outcome) = parse_commit_text_line(post_entry_throw).expect("parse post-entry throw");
+        assert!(outcome.commit_attempted);
+        assert_eq!(
+            classify_commit_text_outcome(9, outcome, 42),
+            GuestCommitResult::Uncertain {
+                code: "INPUT_UNAVAILABLE",
+                reason: "RuntimeException: boom".to_string(),
+            }
+        );
+
+        let pre_entry_throw = r#"ACOSCOMMITTEXT {"seq":10,"ok":false,"handled":false,"no_focused_editor":false,"commit_attempted":false,"error":"windowViews failed"}"#;
+        let (_, pre_outcome) =
+            parse_commit_text_line(pre_entry_throw).expect("parse pre-entry throw");
+        assert!(!pre_outcome.commit_attempted);
+        assert_eq!(
+            classify_commit_text_outcome(10, pre_outcome, 12),
+            GuestCommitResult::Rejected {
+                focus_class: None,
+                error: "windowViews failed".to_string(),
+            }
+        );
+    }
+
+    #[test]
+    fn write_fd_all_until_bounds_stalled_pipe_and_restores_flags() {
+        let mut fds = [-1i32; 2];
+        assert_eq!(unsafe { libc::pipe(fds.as_mut_ptr()) }, 0);
+        let (rfd, wfd) = (fds[0], fds[1]);
+        let before_flags = unsafe { libc::fcntl(wfd, libc::F_GETFL) };
+        assert_eq!(before_flags & libc::O_NONBLOCK, 0);
+
+        // Already-expired deadline must fail before calling write(2) even on an empty pipe.
+        let expired = write_fd_all_until(
+            wfd,
+            b"PROBE\n",
+            Instant::now() - Duration::from_millis(1),
+        )
+        .expect_err("expired deadline must time out without writing");
+        assert_eq!(expired.0, 0);
+        assert_eq!(expired.1.kind(), std::io::ErrorKind::TimedOut);
+        assert_eq!(unsafe { libc::fcntl(wfd, libc::F_GETFL) }, before_flags);
+
+        // Normal small write succeeds immediately and leaves blocking flag intact.
+        let small = format_commit_text_frame(1, "abc");
+        write_fd_all_until(wfd, small.as_bytes(), Instant::now() + Duration::from_secs(1))
+            .expect("small write fits in empty pipe");
+        let after_small_flags = unsafe { libc::fcntl(wfd, libc::F_GETFL) };
+        assert_eq!(after_small_flags, before_flags);
+
+        // Oversized payload into a stalled pipe with no reader must time out near
+        // the deadline instead of blocking indefinitely.
+        let huge = vec![b'A'; 512 * 1024];
+        let started = Instant::now();
+        let err = write_fd_all_until(wfd, &huge, started + Duration::from_millis(80))
+            .expect_err("stalled oversized write must time out");
+        let elapsed = started.elapsed();
+        assert!(err.0 > 0, "expected partial write before pipe filled");
+        assert_eq!(err.1.kind(), std::io::ErrorKind::TimedOut);
+        assert!(
+            elapsed < Duration::from_secs(2),
+            "bounded write exceeded deadline wildly: {elapsed:?}"
+        );
+        let after_timeout_flags = unsafe { libc::fcntl(wfd, libc::F_GETFL) };
+        assert_eq!(after_timeout_flags, before_flags);
+
+        unsafe {
+            libc::close(rfd);
+            libc::close(wfd);
+        }
+    }
+
+    /// Mirrors `LaunchMain.java`'s `COMMIT_TEXT <seq> <b64_len> <b64> END` parser.
+    fn parse_guest_commit_frame_line(line: &str) -> Option<(u64, String)> {
+        let word = line.trim();
+        if !word.to_ascii_uppercase().starts_with("COMMIT_TEXT") {
+            return None;
+        }
+        let parts: Vec<&str> = word.split(' ').collect();
+        if parts.len() != 5 || !parts[0].eq_ignore_ascii_case("COMMIT_TEXT") || parts[4] != "END" {
+            return None;
+        }
+        let seq: u64 = parts[1].parse().ok()?;
+        let expected_len: usize = parts[2].parse().ok()?;
+        let b64 = parts[3];
+        if b64.len() != expected_len {
+            return None;
+        }
+        Some((seq, b64.to_string()))
+    }
+
+    #[test]
+    fn partial_commit_text_timeout_discards_truncated_frame_and_preserves_next_commands() {
+        use std::io::BufRead;
+        use std::os::unix::io::FromRawFd;
+
+        let mut fds = [-1i32; 2];
+        assert_eq!(unsafe { libc::pipe(fds.as_mut_ptr()) }, 0);
+        let reader_file = unsafe { std::fs::File::from_raw_fd(fds[0]) };
+        let writer_file = unsafe { std::fs::File::from_raw_fd(fds[1]) };
+        let mut channel = GuestProbeChannel::fifo(writer_file);
+
+        // 1. Write an oversized COMMIT_TEXT into a stalled pipe -> partial write + timeout.
+        let oversized_text = "x".repeat(512 * 1024);
+        let frame1 = format_commit_text_frame(1, &oversized_text);
+        let err1 = channel
+            .write_line_until(frame1.as_bytes(), Instant::now() + Duration::from_millis(80))
+            .expect_err("stalled oversized COMMIT_TEXT must time out");
+        assert!(err1.0, "partial write must report payload wrote_any=true");
+        assert_eq!(err1.1.kind(), std::io::ErrorKind::TimedOut);
+        assert!(channel.needs_resync, "partial write must arm resync marker");
+
+        // 2. While the pipe is still full, a second attempt writes 0 bytes of payload
+        //    (safe to classify as Unavailable) and keeps needs_resync armed.
+        let frame2 = format_commit_text_frame(2, "never-sent");
+        let err2 = channel
+            .write_line_until(frame2.as_bytes(), Instant::now() + Duration::from_millis(40))
+            .expect_err("still-full pipe must time out");
+        assert!(!err2.0, "zero-byte payload failure must report wrote_any=false");
+        assert_eq!(err2.1.kind(), std::io::ErrorKind::TimedOut);
+        assert!(channel.needs_resync);
+
+        // 3. Resume the reader (simulating a stalled guest control thread waking up).
+        let reader_thread = std::thread::spawn(move || {
+            let mut reader = std::io::BufReader::new(reader_file);
+            let mut probes = 0usize;
+            let mut commits: Vec<(u64, String)> = Vec::new();
+            let mut discarded_commit_lines = 0usize;
+            let mut line = String::new();
+            loop {
+                line.clear();
+                let n = reader.read_line(&mut line).expect("read pipe");
+                if n == 0 {
+                    break;
+                }
+                let word = line.trim();
+                if word.eq_ignore_ascii_case("PROBE") {
+                    probes += 1;
+                } else if word.to_ascii_uppercase().starts_with("COMMIT_TEXT") {
+                    match parse_guest_commit_frame_line(word) {
+                        Some(parsed) => commits.push(parsed),
+                        None => discarded_commit_lines += 1,
+                    }
+                }
+            }
+            (probes, commits, discarded_commit_lines)
+        });
+
+        // 4. Send PROBE, then a real Unicode COMMIT_TEXT, then simulate a worst-case
+        //    partial frame missing only '\n' followed by one more COMMIT_TEXT.
+        channel
+            .write_line_until(b"PROBE\n", Instant::now() + Duration::from_secs(2))
+            .expect("PROBE after resync must succeed");
+        assert!(!channel.needs_resync);
+
+        let follow_up_text = "日本語 café 🎉";
+        let frame3 = format_commit_text_frame(3, follow_up_text);
+        channel
+            .write_line_until(frame3.as_bytes(), Instant::now() + Duration::from_secs(2))
+            .expect("follow-up COMMIT_TEXT must succeed");
+
+        // Boundary case: partial frame stopped right before '\n' (has full "END").
+        let almost_complete = format_commit_text_frame(4, "must-not-commit");
+        let without_nl = almost_complete.strip_suffix('\n').unwrap();
+        write_fd_all_until(
+            channel.as_raw_fd(),
+            without_nl.as_bytes(),
+            Instant::now() + Duration::from_secs(1),
+        )
+        .expect("write boundary partial frame");
+        channel.needs_resync = true;
+
+        let frame5 = format_commit_text_frame(5, "after-boundary");
+        channel
+            .write_line_until(frame5.as_bytes(), Instant::now() + Duration::from_secs(2))
+            .expect("COMMIT_TEXT after boundary partial frame must succeed");
+        assert!(!channel.needs_resync);
+
+        drop(channel);
+        let (probes, commits, discarded) = reader_thread.join().expect("reader thread");
+        assert_eq!(probes, 1, "PROBE must arrive intact after partial frame resync");
+        assert_eq!(
+            discarded, 2,
+            "both truncated COMMIT_TEXT frames (seq 1 and boundary seq 4) must be discarded"
+        );
+        assert_eq!(
+            commits,
+            vec![
+                (3, base64_encode(follow_up_text.as_bytes())),
+                (5, base64_encode(b"after-boundary")),
+            ],
+            "only intact subsequent COMMIT_TEXT frames may reach the editor"
+        );
+    }
 }
+
