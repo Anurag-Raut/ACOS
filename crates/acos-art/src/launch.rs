@@ -1805,20 +1805,8 @@ pub(crate) fn launch_session(
     // uses and captures C1's stored buffer, so the standard install hands both
     // back. Building the host here (instead of inside the peer thread) keeps
     // those handles in the launcher without a second install.
-    let mut module_specs: Vec<acos_services::module::ModuleSpec> =
-        acos_services::module::ModuleSpec::parse_list(&serde_json::Value::Array(
-            opts.services.clone(),
-        ))
-        .map_err(|error| Error::Layout(format!("services: {error}")))?;
-    if module_specs.is_empty() {
-        if let Ok(raw) = std::env::var("ACOS_ART_SERVICES") {
-            let value: serde_json::Value = serde_json::from_str(&raw).map_err(|error| {
-                Error::Layout(format!("ACOS_ART_SERVICES is not JSON: {error}"))
-            })?;
-            module_specs = acos_services::module::ModuleSpec::parse_list(&value)
-                .map_err(|error| Error::Layout(format!("ACOS_ART_SERVICES: {error}")))?;
-        }
-    }
+    // Reuse the reconciled `module_specs` parsed above (including any legacy
+    // `ACOS_ART_KEYSTORE` promotion) for attachment, reporting, and guest env.
     let mut session_modules = match prebuilt {
         Some((host, handles)) => {
             acos_services::module::SessionModules::from_installed(host, handles)
