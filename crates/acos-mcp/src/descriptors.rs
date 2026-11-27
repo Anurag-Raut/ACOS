@@ -290,12 +290,25 @@ fn session_id_property() -> Value {
     })
 }
 
-/// Add the top-level `session_id` to a closed schema (idempotent).
+/// Add the top-level `session_id` to a closed schema (idempotent) and drop
+/// `base` from `required` because `SessionBackend` defaults `base` to this
+/// server's session id (`mcp-<pid>`).
 fn with_session_id(mut schema: Value) -> Value {
     if let Some(properties) = schema.get_mut("properties").and_then(Value::as_object_mut) {
         properties
             .entry("session_id".to_string())
             .or_insert_with(session_id_property);
+    }
+    if let Some(obj) = schema.as_object_mut() {
+        let empty = if let Some(req) = obj.get_mut("required").and_then(Value::as_array_mut) {
+            req.retain(|v| v.as_str() != Some("base"));
+            req.is_empty()
+        } else {
+            false
+        };
+        if empty {
+            obj.remove("required");
+        }
     }
     schema
 }
@@ -525,7 +538,8 @@ fn session_tool_spec(name: &str) -> (&'static str, Value) {
              session that persists across MCP calls (the CLI relaunches per invocation). Returns \
              the honest launch stage ladder (apk_parsed -> process_booted -> bind_application -> \
              application_on_create -> client_transaction -> activity_on_create -> on_resume -> \
-             first_frame) plus `session_id`, `reached_stage` and `classes_loaded`. `ok:true` is \
+             first_frame), `session_id`, `artifacts_dir`, `reached_stage`, `classes_loaded`, and \
+             the full `modules` catalog (`id`, `profile`, `state`, `fidelity`). `ok:true` is \
              only returned when every rung ran; otherwise the first blocked rung carries the \
              structured blocker with a code and `details`. Re-launching the same session id \
              replaces the previous task. Common errors: APK_*, WRONG_ABI, CONFINEMENT_UNAVAILABLE \
@@ -665,11 +679,11 @@ fn session_tool_spec(name: &str) -> (&'static str, Value) {
                 },
                 "rn": {
                     "type": "boolean",
-                    "description": "Declare this APK a React Native app: forces the native \
-                                    (confined child) route and picks the React Native bridge \
-                                    session when the APK really is RN. Detection is otherwise \
-                                    structural (libreactnativejni.so / index.android.bundle); \
-                                    the reply's `engine` says which engine actually ran."
+                    "description": "Legacy diagnostic flag for the frozen RN-bridge child route \
+                                    (used only with `ACOS_MCP_ENGINE=legacy` / `engine: \"rust-vm\"`). \
+                                    On the default ART engine, React Native APKs launch natively with \
+                                    plain `acos_launch {\"apk\": ...}` — passing `rn: true` still boots \
+                                    on ART and adds an `RN_FLAG_UNNECESSARY_ON_ART` warning."
                 },
                 "label": {
                     "type": "string",
@@ -720,13 +734,15 @@ fn session_tool_spec(name: &str) -> (&'static str, Value) {
             "Walk the live framework View hierarchy of the held session (WindowManagerGlobal -> \
              ViewRootImpl -> ViewGroup) and return a COMPACT screen by default: the visible \
              text/content_desc nodes in reading order with bounds, clickable flag and ids, paged \
-             with `cursor` (never head/tail-cut). The full tree is always written to `tree_path`; \
-             `full:true` returns it inline when it fits the reply cap. Call it after \
+             with `cursor` (never head/tail-cut). The full untruncated tree is always written to \
+             `tree_path` (even when `max_nodes` caps the inline reply); `full:true` returns it \
+             inline when it fits the reply cap. Out-of-range `cursor` values report \
+             `cursor_out_of_range: true` with `returned: 0` and keep `tree_path`. Call it after \
              `acos_launch`, before any selector-based tap. Before the app adds a window it returns \
              `UNSUPPORTED_BACKEND` with `details.reason=not_ready` and `details.stage_reached`, \
              never an empty tree. Common errors: UNSUPPORTED_BACKEND (not_ready), TIMEOUT.",
             with_base(json!({
-                "max_nodes": {"type": "integer", "minimum": 1, "description": "Truncate the walk after this many nodes."},
+                "max_nodes": {"type": "integer", "minimum": 1, "description": "Cap the inline walk after this many nodes; `tree_path` on disk still contains the full untruncated tree."},
                 "full": {
                     "type": "boolean",
                     "description": "Include the full tree inline instead of the compact screen (default false). \
@@ -753,13 +769,15 @@ fn session_tool_spec(name: &str) -> (&'static str, Value) {
                 "screenshot": {
                     "type": ["boolean", "string"],
                     "description": "FB2: `true` writes this frame's lossless PNG under the session's \
-                                    artifacts and returns `screenshot.path` (absolute), `width`, \
-                                    `height`, `display_size`, `display_origin` and `frame_seq`, plus \
-                                    a bounded inline preview in this reply. A string writes to that \
-                                    path instead. A placeholder/no-pixel frame answers \
-                                    NO_FRESH_FRAME, never an empty success. `display_origin` is the \
-                                    offset between PNG pixels and tree bounds: png_y = display_y - \
-                                    display_origin.y."
+                                    artifacts (`<verb>-<frame_seq>.png`, appending `-1`/`-2`... if that \
+                                    file already exists) and returns `screenshot.path` (absolute), \
+                                    `width`, `height`, `display_size`, `display_origin` and `frame_seq`, \
+                                    plus a bounded inline preview in this reply. A string writes to \
+                                    that path instead (\"true\"/\"false\" strings are treated as \
+                                    booleans, never literal filenames). A placeholder/no-pixel frame \
+                                    answers NO_FRESH_FRAME, never an empty success. `display_origin` \
+                                    is the offset between PNG pixels and tree bounds: png_y = \
+                                    display_y - display_origin.y."
                 }
             })),
         ),
@@ -1047,7 +1065,8 @@ fn session_tool_spec(name: &str) -> (&'static str, Value) {
             "ADR-0029 item 4: drive a scripted module's state on a live session (`acos_service_ctl`). \
              `module` is the id (`net.telephony`), `op` is the module's own control operation \
              (`calls`, `reset`, `sms`, `call_state`, `scan`, `auth`, ...) and `args` is that op's \
-             object. The module answers with the op's own value: a refused or unknown op is a \
+             object. The module answers with the op's own value plus compact `modules_summary` \
+             (use `acos_services` for the full 28-module catalog): a refused or unknown op is a \
              structured error, never a silent success. Only an attached module answers; a detached \
              one says so (`attach` it first with `acos_services`).",
             json!({

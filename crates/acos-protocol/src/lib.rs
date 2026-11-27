@@ -76,7 +76,8 @@ pub use launch::{ExtraValue, LaunchIntent};
 pub use mcp::{mcp_tools, McpToolDescriptor, McpToolsList};
 pub use reply::{
     compact_nodes, compact_text, enforce_cap, enforce_cap_pretty, shape_result_tree, shape_tree,
-    write_full_tree, ShapedTree, TreeShapeOptions, DEFAULT_PAGE_SIZE, MAX_REPLY_BYTES,
+    shape_tree_with_disk, write_full_tree, ShapedTree, TreeShapeOptions, DEFAULT_PAGE_SIZE,
+    MAX_REPLY_BYTES,
 };
 pub use scenario::{
     validate_scenario, CaptureStep, DensitySetup, Engine, Expectation, FallbackPolicy, LaunchStep,

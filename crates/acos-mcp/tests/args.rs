@@ -164,3 +164,40 @@ fn the_verify_default_engine_schema_is_the_one_constant() {
     );
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn session_addressed_tools_do_not_require_base_and_destroy_accepts_empty_args() {
+    let cli = acos_mcp::CliBackend::new(acos_mcp::BackendConfig::for_binary("/nonexistent/acos"));
+    let mut server = McpClient::start(
+        acos_mcp::SessionBackend::with_cli(cli, Default::default()),
+        test_config(),
+    );
+    server.initialize("2025-06-18");
+    let list = server.request("tools/list", json!({}));
+    for name in acos_mcp::descriptors::SESSION_ADDRESSED_PROTOCOL_TOOLS {
+        for schema in [
+            acos_mcp::descriptors::tool_schema(name).expect("tool_schema"),
+            tool(&list, name)
+                .unwrap_or_else(|| panic!("{name} missing from tools/list"))["inputSchema"]
+                .clone(),
+        ] {
+            let required: Vec<&str> = schema["required"]
+                .as_array()
+                .map(|items| items.iter().filter_map(Value::as_str).collect())
+                .unwrap_or_default();
+            assert!(
+                !required.contains(&"base"),
+                "{name} schema must not require `base`: {schema}"
+            );
+        }
+    }
+    let destroy_schema = acos_mcp::descriptors::tool_schema("acos_destroy").expect("schema");
+    for args in [json!({}), json!({"session_id": "s_short"})] {
+        assert!(
+            acos_mcp::args::check("acos_destroy", &args, &destroy_schema).is_none(),
+            "acos_destroy rejected {args}"
+        );
+        let reply = server.call_tool("acos_destroy", args.clone());
+        assert!(!is_error(&reply), "acos_destroy {args} failed: {reply}");
+    }
+}

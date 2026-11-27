@@ -182,7 +182,7 @@ fn guest_rss_kb(pid: u32) -> Option<u64> {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Route {
     Art,
-    Legacy,
+    Legacy { native_child: bool },
 }
 
 /// The daemon's engine multiplexer.
@@ -498,7 +498,7 @@ impl ServeEngine {
             Some(Engine::RustVm) => None,
             Some(Engine::Art) => held.clone(),
             None => match self.route_of(&id) {
-                Some(Route::Legacy) => None,
+                Some(Route::Legacy { .. }) => None,
                 Some(Route::Art) | None => held.clone(),
             },
         };
@@ -545,7 +545,7 @@ impl ServeEngine {
                 let wants_legacy = match explicit {
                     Some(Engine::RustVm) => true,
                     Some(Engine::Art) => false,
-                    None => self.route_of(&id) == Some(Route::Legacy),
+                    None => matches!(self.route_of(&id), Some(Route::Legacy { .. })),
                 };
                 if !wants_legacy {
                     return with_hint(
@@ -590,17 +590,14 @@ impl ServeEngine {
                 json!({"field": "apk"}),
             );
         };
-        let native_requested = ["native", "flutter", "rn"]
-            .iter()
-            .any(|key| args.get(*key).and_then(Value::as_bool).unwrap_or(false));
-        // The Rust loader (`native: true`) is a different execution path from
-        // ART and cannot be combined with it. The `rn`/`flutter` flags are
-        // *product-path hints* for the legacy native-child route, not a claim
-        // that ART cannot run the APK: ART boots the app's own launcher Activity
-        // and loads its `lib/<abi>/` closure, so an explicit `engine: "art"`
-        // wins and those hints are ignored rather than refused (G1 rank 5: a
-        // Gaten `--engine art` launch used to die in the frozen VM).
+        // The Rust loader (`native: true`) and Flutter (`flutter: true`) keep
+        // the legacy confined-child route when no engine is specified. `rn: true`
+        // is legacy-only (`engine: "rust-vm"`) because real ART boots React
+        // Native APKs natively through the normal launcher path and must not be
+        // hijacked into `rn-bridge-probe.dex` on the frozen VM path.
         let rust_loader = args.get("native").and_then(Value::as_bool).unwrap_or(false);
+        let explicit_flutter = args.get("flutter").and_then(Value::as_bool).unwrap_or(false);
+        let legacy_requested = rust_loader || explicit_flutter;
         if explicit == Some(Engine::Art) && rust_loader {
             return with_hint(
                 art_failure(
@@ -619,8 +616,8 @@ impl ServeEngine {
                  launch with engine: \"art\", or ask for engine: \"rust-vm\" to use the Rust loader.",
             );
         }
-        let engine = explicit.unwrap_or(if native_requested {
-            // Flutter/RN/native sessions on the *default* route are real host
+        let engine = explicit.unwrap_or(if legacy_requested {
+            // Flutter/native sessions on the *default* route are real host
             // native code in a confined child, not the Rust VM; they keep the
             // legacy route and are labelled `native-child`.
             Engine::RustVm
@@ -1030,7 +1027,9 @@ impl ServeEngine {
                 json!({"max_sessions": self.max_sessions}),
             );
         }
-        let artifacts = self.artifacts_root.join(sanitize_session_id(id));
+        let artifacts = self
+            .artifacts_root
+            .join(format!("{}-{}", sanitize_session_id(id), new_launch_token()));
         // ADR-0029 item 4: `acos_launch {services: [...]}`. The shapes are
         // validated here so a bad spec is INVALID_ARGUMENT before a guest
         // exists, and the launcher refuses an unknown module/profile itself.
@@ -1235,15 +1234,30 @@ impl ServeEngine {
             .with_session_id(id.to_string())
             .with_value_result(result);
         }
-        let existed = self
+        let prev_route = self
             .routes
             .lock()
             .unwrap_or_else(|e| e.into_inner())
-            .remove(id)
-            .is_some();
+            .remove(id);
+        let existed = prev_route.is_some();
+        let explicit = parse_engine_arg(args).ok().flatten();
+        let (label, frozen) = match prev_route {
+            Some(Route::Art) => (ENGINE_ART, false),
+            Some(Route::Legacy { native_child: true }) => (ENGINE_NATIVE_CHILD, false),
+            Some(Route::Legacy { native_child: false }) => (ENGINE_RUST_VM, true),
+            None => {
+                if explicit == Some(Engine::RustVm)
+                    || (explicit.is_none() && self.default_engine == Engine::RustVm)
+                {
+                    (ENGINE_RUST_VM, true)
+                } else {
+                    (ENGINE_ART, false)
+                }
+            }
+        };
         let env = self.legacy.session_call("acos_destroy", args, ctx);
         let env = match env {
-            Some(env) => relabel_legacy(env, ENGINE_RUST_VM, Trust::Trusted, true),
+            Some(env) => relabel_legacy(env, label, Trust::Trusted, frozen),
             None => art_failure(
                 request_id,
                 Some(id),
@@ -1368,7 +1382,12 @@ impl ServeEngine {
                 if let Some(object) = result.as_object_mut() {
                     object.insert("animations".into(), json!(session.animations()));
                     object.insert("insets".into(), json!(session.insets()));
-                    object.insert("modules".into(), json!(session.modules()));
+                    if tool == "acos_services" {
+                        object.insert("modules".into(), json!(session.modules()));
+                    } else {
+                        object.remove("modules");
+                        object.insert("modules_summary".into(), modules_summary(session.modules()));
+                    }
                     object.insert("extra_apks".into(), extra_apks_json(session.extra_apks()));
                 }
                 label_frame(&mut result, &session);
@@ -1670,7 +1689,16 @@ impl ServeEngine {
         let native_requested = ["native", "flutter", "rn"]
             .iter()
             .any(|key| args.get(*key).and_then(Value::as_bool).unwrap_or(false));
-        let label = if native_requested {
+        let stored_native = matches!(
+            self.route_of(id),
+            Some(Route::Legacy { native_child: true })
+        );
+        let is_native_child = if tool == "acos_launch" {
+            native_requested
+        } else {
+            native_requested || stored_native
+        };
+        let label = if is_native_child {
             ENGINE_NATIVE_CHILD
         } else {
             ENGINE_RUST_VM
@@ -1688,7 +1716,19 @@ impl ServeEngine {
             );
         };
         if tool == "acos_launch" {
-            self.set_route(id, Route::Legacy);
+            if envelope.ok() {
+                self.set_route(
+                    id,
+                    Route::Legacy {
+                        native_child: is_native_child,
+                    },
+                );
+            } else {
+                self.routes
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .remove(id);
+            }
         } else if tool == "acos_destroy" {
             self.routes
                 .lock()
@@ -2061,6 +2101,10 @@ fn launch_reply(
         "replaced_guest": replaced_guest,
         "activity": session.activity(),
         "apk": held.apk.display().to_string(),
+        "artifacts_dir": std::fs::canonicalize(&held.artifacts)
+            .unwrap_or_else(|_| held.artifacts.clone())
+            .display()
+            .to_string(),
         "stage_reached": "first_frame",
         "isolation": if fresh_guest { "fresh-guest-process" } else { "live-session" },
         "tree": tree_value,
@@ -2143,6 +2187,20 @@ fn launch_reply(
                     "pixels_changed": report.pixels_changed,
                     "frames_advanced": report.frames_advanced,
                 }]);
+            }
+        }
+    }
+    if args.get("rn").and_then(Value::as_bool).unwrap_or(false) {
+        let warning = json!({
+            "code": "RN_FLAG_UNNECESSARY_ON_ART",
+            "message": "`rn: true` is unnecessary on the ART engine and was ignored; \
+                        React Native APKs boot natively via plain `acos_launch {\"apk\": ...}` \
+                        (`rn: true` is only for legacy `engine: \"rust-vm\"`).",
+        });
+        match result.get_mut("warnings").and_then(Value::as_array_mut) {
+            Some(warnings) => warnings.push(warning),
+            None => {
+                result["warnings"] = json!([warning]);
             }
         }
     }
@@ -2346,6 +2404,12 @@ fn screenshot_request(args: &Value) -> Result<ScreenshotRequest, BackendError> {
     match args.get("screenshot") {
         None | Some(Value::Null) | Some(Value::Bool(false)) => Ok(ScreenshotRequest::None),
         Some(Value::Bool(true)) => Ok(ScreenshotRequest::Default),
+        Some(Value::String(s)) if s.trim().eq_ignore_ascii_case("true") => {
+            Ok(ScreenshotRequest::Default)
+        }
+        Some(Value::String(s)) if s.trim().eq_ignore_ascii_case("false") => {
+            Ok(ScreenshotRequest::None)
+        }
         Some(Value::String(path)) if !path.trim().is_empty() => {
             Ok(ScreenshotRequest::Path(PathBuf::from(path)))
         }
@@ -2469,7 +2533,19 @@ fn confine_screenshot_dest(
             code: ErrorCode::RenderIo,
             detail: format!("cannot create {}: {error}", dir.display()),
         })?;
-        return Ok(dir.join(format!("{}-{frame_seq}.png", verb.replace("acos_", ""))));
+        let stem = verb.replace("acos_", "");
+        let primary = dir.join(format!("{stem}-{frame_seq}.png"));
+        if std::fs::symlink_metadata(&primary).is_err() {
+            return Ok(primary);
+        }
+        let mut suffix = 1u64;
+        loop {
+            let candidate = dir.join(format!("{stem}-{frame_seq}-{suffix}.png"));
+            if std::fs::symlink_metadata(&candidate).is_err() {
+                return Ok(candidate);
+            }
+            suffix += 1;
+        }
     };
     let reject = |why: &str| BackendError::Error {
         code: ErrorCode::InvalidArgument,
@@ -3577,6 +3653,36 @@ fn extra_apks_json(extra_apks: &[std::path::PathBuf]) -> Value {
     )
 }
 
+/// Compact summary of attached modules for per-step replies (`acos_tap`,
+/// `acos_observe_tree`, etc.), keeping the full ~20 KB module catalog on
+/// `acos_launch`, `acos_services`, and `acos_capabilities`.
+fn modules_summary(modules: &[Value]) -> Value {
+    let attached: Vec<Value> = modules
+        .iter()
+        .filter(|row| {
+            let state = row.get("state").and_then(Value::as_str);
+            let attached_flag = row.get("attached").and_then(Value::as_bool);
+            let profile = row.get("profile").and_then(Value::as_str).unwrap_or("off");
+            state == Some("attached")
+                || attached_flag == Some(true)
+                || (state.is_none()
+                    && attached_flag.is_none()
+                    && profile != "off"
+                    && !profile.is_empty())
+        })
+        .map(|row| {
+            json!({
+                "id": row.get("id").and_then(Value::as_str).unwrap_or(""),
+                "profile": row.get("profile").and_then(Value::as_str).unwrap_or(""),
+            })
+        })
+        .collect();
+    json!({
+        "attached": attached,
+        "total": modules.len(),
+    })
+}
+
 /// MPROC7: read the launch-time `idle_kill_seconds` argument.
 ///
 /// Absent and explicit `null` both mean "not provided" (`Ok(None)`); anything
@@ -4342,7 +4448,13 @@ fn shaped_tree(
     max_nodes: usize,
     args: &Value,
 ) -> (Value, usize, usize, bool, Option<String>, Option<usize>) {
-    let (max_nodes, _sampled, truncated, full_value) = tree_json(tree, max_nodes);
+    let (max_nodes, _sampled, truncated, capped_by_max_nodes, inline_value) =
+        tree_json_with_cap(tree, max_nodes);
+    let disk_value = if capped_by_max_nodes {
+        Some(tree_json_with_cap(tree, usize::MAX).4)
+    } else {
+        None
+    };
     let full = args.get("full").and_then(Value::as_bool).unwrap_or(false)
         || args
             .get("full_tree")
@@ -4360,7 +4472,12 @@ fn shaped_tree(
         artifacts_dir: Some(artifacts.to_path_buf()),
         session: None,
     };
-    let shaped = reply::shape_tree(&full_value, Some(tree.frame.frame_seq), &opts);
+    let shaped = reply::shape_tree_with_disk(
+        &inline_value,
+        disk_value.as_ref().unwrap_or(&inline_value),
+        Some(tree.frame.frame_seq),
+        &opts,
+    );
     (
         shaped.view,
         max_nodes,
@@ -4374,19 +4491,35 @@ fn shaped_tree(
 /// `max_nodes` is a hard host-side cap: the walk stops at the cap and the reply
 /// says `truncated: true`, so absence is never claimed from an incomplete tree.
 fn tree_json(tree: &UiTree, max_nodes: usize) -> (usize, usize, bool, Value) {
+    let (max_nodes, count, truncated, _capped_by_max_nodes, value) =
+        tree_json_with_cap(tree, max_nodes);
+    (max_nodes, count, truncated, value)
+}
+
+fn tree_json_with_cap(tree: &UiTree, max_nodes: usize) -> (usize, usize, bool, bool, Value) {
     let max_nodes = max_nodes.max(1);
     let mut budget = max_nodes;
     let mut count = 0usize;
     let mut truncated = tree.truncated;
+    let mut capped_by_max_nodes = false;
     let roots: Vec<Value> = tree
         .nodes
         .iter()
-        .filter_map(|node| node_json(node, &mut budget, &mut count, &mut truncated))
+        .filter_map(|node| {
+            let mut node_capped = false;
+            let value = node_json(node, &mut budget, &mut count, &mut node_capped);
+            if node_capped {
+                capped_by_max_nodes = true;
+                truncated = true;
+            }
+            value
+        })
         .collect();
     (
         max_nodes,
         count,
         truncated,
+        capped_by_max_nodes,
         json!({
             "max_nodes": max_nodes,
             "truncated": truncated,
@@ -4755,14 +4888,17 @@ fn relabel_legacy(envelope: Envelope, engine: &str, trust: Trust, frozen: bool) 
         label_meta(&mut result, engine, trust, EVIDENCE_NO_GUEST);
         if let Some(object) = result.as_object_mut() {
             object.insert("engine_frozen".into(), json!(frozen));
-            object.insert(
-                "note".into(),
-                json!(if frozen {
-                    "the frozen Rust VM produced this reply; it is not real ART"
-                } else {
-                    "the confined native child produced this reply"
-                }),
-            );
+            if frozen {
+                object.insert(
+                    "note".into(),
+                    json!("the frozen Rust VM produced this reply; it is not real ART"),
+                );
+            } else if engine == ENGINE_NATIVE_CHILD {
+                object.insert(
+                    "note".into(),
+                    json!("the confined native child produced this reply"),
+                );
+            }
         }
         Envelope::pass(
             request_id,
@@ -5018,7 +5154,7 @@ mod tests {
         let dir = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../../target/acos-serve-reply-tests")
             .join(format!("{}-{}", std::process::id(), 1));
-        let (view, _, count, truncated, path, next) =
+        let (view, _, count, truncated, path, _next) =
             shaped_tree(&dir, &tree(nodes), 2000, &json!({}));
         assert_eq!(count, 80);
         assert!(!truncated);
@@ -6079,5 +6215,276 @@ mod tests {
             ("f".to_string(), acos_protocol::ExtraValue::Float(1.5))
         );
         assert!(parse_extra_argument("novalue").is_err());
+    }
+
+    #[test]
+    fn modules_summary_keeps_only_attached_modules_and_stays_compact() {
+        let mut catalog = vec![
+            json!({
+                "id": "core",
+                "profile": "real",
+                "attach": "at-launch",
+                "state": "attached",
+                "fidelity": "real",
+                "reason": "core binder services",
+                "details": {"services": 24, "note": "long catalog details"}
+            }),
+            json!({
+                "id": "network",
+                "profile": "real",
+                "attach": "hot",
+                "state": "attached",
+                "fidelity": "real",
+                "reason": "host pasta relay",
+                "details": {"relay": "active"}
+            }),
+        ];
+        for i in 0..26 {
+            catalog.push(json!({
+                "id": format!("mod.{i}"),
+                "profile": "off",
+                "attach": "hot",
+                "state": "off",
+                "fidelity": "off",
+                "reason": "not attached at launch; attach with acos_services",
+                "details": {"large_field": "x".repeat(400)}
+            }));
+        }
+        let summary = modules_summary(&catalog);
+        assert_eq!(
+            summary,
+            json!({
+                "attached": [
+                    {"id": "core", "profile": "real"},
+                    {"id": "network", "profile": "real"}
+                ],
+                "total": 28
+            })
+        );
+        assert!(
+            serde_json::to_string(&summary).unwrap().len() < 200,
+            "modules_summary must stay compact: {summary}"
+        );
+    }
+
+    #[test]
+    fn shaped_tree_with_small_max_nodes_writes_full_tree_to_disk_and_handles_cursor() {
+        let mut nodes = Vec::new();
+        for i in 0..15 {
+            let mut n = node(&format!("row{i}"), &format!("item {i}"), Vec::new());
+            n.bounds = Bounds::new(0, i * 40, 1080, i * 40 + 36);
+            n.visible = true;
+            nodes.push(n);
+        }
+        let dir = fb2_scratch("max-nodes-disk");
+        let (view, max, count, truncated, path, next) =
+            shaped_tree(&dir, &tree(nodes.clone()), 3, &json!({}));
+        assert_eq!(max, 3);
+        assert!(truncated, "inline reply must report max_nodes truncation");
+        assert_eq!(count, 3, "inline compact count reflects max_nodes cap");
+        assert_eq!(next, None);
+        assert_eq!(view["nodes"].as_array().unwrap().len(), 3);
+        let path = path.expect("tree_path");
+        let on_disk: Value = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+        assert_eq!(
+            on_disk["nodes"].as_array().unwrap().len(),
+            15,
+            "on-disk tree JSON must keep all 15 nodes even when max_nodes=3"
+        );
+        assert_eq!(on_disk["truncated"], json!(false));
+
+        let (oor_view, _, oor_count, _, oor_path, oor_next) =
+            shaped_tree(&dir, &tree(nodes), 2000, &json!({"cursor": 99}));
+        assert_eq!(oor_count, 15);
+        assert_eq!(oor_next, None);
+        assert_eq!(oor_view["cursor"], json!(99));
+        assert_eq!(oor_view["cursor_out_of_range"], json!(true));
+        assert_eq!(oor_view["returned"], json!(0));
+        assert_eq!(oor_view["nodes"], json!([]));
+        let note = oor_view["note"].as_str().unwrap();
+        assert!(note.contains("out of range"), "{note}");
+        assert!(note.contains(&oor_path.unwrap()), "{note}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn screenshot_string_booleans_and_non_overwrite_filenames() {
+        assert_eq!(
+            screenshot_request(&json!({"screenshot": "true"})).unwrap(),
+            ScreenshotRequest::Default
+        );
+        assert_eq!(
+            screenshot_request(&json!({"screenshot": " TRUE "})).unwrap(),
+            ScreenshotRequest::Default
+        );
+        assert_eq!(
+            screenshot_request(&json!({"screenshot": "false"})).unwrap(),
+            ScreenshotRequest::None
+        );
+        assert_eq!(
+            screenshot_request(&json!({"screenshot": " FALSE "})).unwrap(),
+            ScreenshotRequest::None
+        );
+        assert_eq!(
+            screenshot_request(&json!({"screenshot": "out/shot.png"})).unwrap(),
+            ScreenshotRequest::Path(PathBuf::from("out/shot.png"))
+        );
+
+        let dir = fb2_scratch("shot-no-overwrite");
+        let source = dir.join("frame.png");
+        std::fs::write(&source, crate::engine::fake::TINY_PNG).unwrap();
+        let artifacts = dir.join("artifacts");
+        std::fs::create_dir_all(&artifacts).unwrap();
+
+        let mut paths = Vec::new();
+        for _ in 0..3 {
+            let mut result = json!({});
+            write_screenshot(
+                &artifacts,
+                None,
+                "acos_observe_tree",
+                (&source, 7, "m7", crate::engine::fake::TINY_PNG.len() as u64),
+                (1080, 2400),
+                (0, 128),
+                &mut result,
+            )
+            .unwrap();
+            paths.push(result["screenshot"]["path"].as_str().unwrap().to_string());
+        }
+        assert!(paths[0].ends_with("/observe_tree-7.png"), "{paths:?}");
+        assert!(paths[1].ends_with("/observe_tree-7-1.png"), "{paths:?}");
+        assert!(paths[2].ends_with("/observe_tree-7-2.png"), "{paths:?}");
+        for path in &paths {
+            assert!(Path::new(path).is_file(), "missing {path}");
+        }
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    fn test_serve_engine(artifacts_root: PathBuf) -> ServeEngine {
+        let cli = acos_mcp::CliBackend::new(acos_mcp::BackendConfig::for_binary("/nonexistent/acos"));
+        let legacy = Arc::new(LegacyBackend::with_cli(
+            cli,
+            acos_runtime::session::SessionOptions::default(),
+        ));
+        ServeEngine::new(legacy, Engine::Art, 4, artifacts_root)
+    }
+
+    fn test_call_ctx(dir: &Path) -> CallContext {
+        CallContext {
+            cancel: acos_mcp::CancelToken::new(),
+            deadline: std::time::Instant::now() + std::time::Duration::from_secs(30),
+            budget: acos_protocol::ResourceBudget::default(),
+            allowed_roots: vec![dir.to_path_buf()],
+            artifacts_dir: dir.to_path_buf(),
+            max_arg_chars: 8 * 1024,
+            max_output_bytes: 16 * 1024 * 1024,
+        }
+    }
+
+    #[test]
+    fn failed_art_launch_and_rn_true_do_not_misreport_rust_vm_frozen() {
+        let dir = fb2_scratch("serve-engine-fail");
+        let engine = test_serve_engine(dir.join("art-sessions"));
+        let ctx = test_call_ctx(&dir);
+
+        // Plain failed ART launch followed by acos_status & acos_destroy.
+        let launch = engine.call(
+            "acos_launch",
+            &json!({"base": {"request_id": "r1", "session_id": "s_fail"}, "apk": "/nonexistent/app.apk"}),
+            &ctx,
+        );
+        assert!(!launch.ok());
+        let launch_details = launch.error().unwrap().details.as_ref().unwrap();
+        assert_eq!(launch_details["engine"], json!(ENGINE_ART));
+        assert_eq!(launch_details["engine_frozen"], json!(false));
+
+        let status = engine.call(
+            "acos_status",
+            &json!({"base": {"request_id": "r2", "session_id": "s_fail"}}),
+            &ctx,
+        );
+        assert!(!status.ok());
+        assert_eq!(status.error().unwrap().code, ErrorCode::SessionNotFound);
+        let status_details = status.error().unwrap().details.as_ref().unwrap();
+        assert_eq!(status_details["engine"], json!(ENGINE_ART));
+        assert_eq!(status_details["engine_frozen"], json!(false));
+
+        let destroy = engine.call(
+            "acos_destroy",
+            &json!({"base": {"request_id": "r3", "session_id": "s_fail"}}),
+            &ctx,
+        );
+        assert!(destroy.ok());
+        let destroy_result = destroy.result().unwrap();
+        assert_eq!(destroy_result["engine"], json!(ENGINE_ART));
+        assert_eq!(destroy_result["engine_frozen"], json!(false));
+        assert_eq!(destroy_result["already_absent"], json!(true));
+        assert!(destroy_result.get("note").is_none(), "{destroy_result}");
+
+        // `rn: true` on default ART engine routes to ART (not legacy `rn-bridge-probe.dex`).
+        let rn_launch = engine.call(
+            "acos_launch",
+            &json!({"base": {"request_id": "r4", "session_id": "s_rn"}, "apk": "/nonexistent/rn.apk", "rn": true}),
+            &ctx,
+        );
+        assert!(!rn_launch.ok());
+        let rn_details = rn_launch.error().unwrap().details.as_ref().unwrap();
+        assert_eq!(rn_details["engine"], json!(ENGINE_ART));
+        assert_eq!(rn_details["engine_frozen"], json!(false));
+
+        let rn_status = engine.call(
+            "acos_status",
+            &json!({"base": {"request_id": "r5", "session_id": "s_rn"}}),
+            &ctx,
+        );
+        assert!(!rn_status.ok());
+        assert_eq!(rn_status.error().unwrap().code, ErrorCode::SessionNotFound);
+        assert_eq!(
+            rn_status.error().unwrap().details.as_ref().unwrap()["engine"],
+            json!(ENGINE_ART)
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn native_child_route_preserves_label_and_failed_legacy_launch_clears_route() {
+        let dir = fb2_scratch("serve-engine-legacy");
+        let engine = test_serve_engine(dir.join("art-sessions"));
+        let ctx = test_call_ctx(&dir);
+
+        // Failed legacy native-child launch must not leave Route::Legacy behind.
+        let failed_legacy = engine.call(
+            "acos_launch",
+            &json!({
+                "base": {"request_id": "r1", "session_id": "s_leg_fail"},
+                "apk": "/nonexistent/app.apk",
+                "engine": "rust-vm",
+                "flutter": true
+            }),
+            &ctx,
+        );
+        assert!(!failed_legacy.ok());
+        assert!(engine.route_of("s_leg_fail").is_none());
+
+        // Stored Route::Legacy { native_child: true } preserves ENGINE_NATIVE_CHILD on follow-ups.
+        engine.set_route("s_nc", Route::Legacy { native_child: true });
+        let status = engine.call(
+            "acos_status",
+            &json!({"base": {"request_id": "r2", "session_id": "s_nc"}}),
+            &ctx,
+        );
+        assert!(status.ok());
+        assert_eq!(status.result().unwrap()["engine"], json!(ENGINE_NATIVE_CHILD));
+        assert_eq!(status.result().unwrap()["engine_frozen"], json!(false));
+
+        let destroy = engine.call(
+            "acos_destroy",
+            &json!({"base": {"request_id": "r3", "session_id": "s_nc"}}),
+            &ctx,
+        );
+        assert!(destroy.ok());
+        assert_eq!(destroy.result().unwrap()["engine"], json!(ENGINE_NATIVE_CHILD));
+        assert_eq!(destroy.result().unwrap()["engine_frozen"], json!(false));
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }
