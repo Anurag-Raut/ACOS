@@ -372,11 +372,23 @@ impl<B: Backend> Server<B> {
             Ok(permit) => permit,
             Err(GateError::Cancelled) => {
                 let envelope = cancelled_envelope(name);
-                return tool_result(id, &envelope, &self.negotiated_version(), &self.config, &args);
+                return tool_result(
+                    id,
+                    &envelope,
+                    &self.negotiated_version(),
+                    &self.config,
+                    &args,
+                );
             }
             Err(GateError::Timeout) => {
                 let envelope = busy_envelope(name, self.config.max_concurrency);
-                return tool_result(id, &envelope, &self.negotiated_version(), &self.config, &args);
+                return tool_result(
+                    id,
+                    &envelope,
+                    &self.negotiated_version(),
+                    &self.config,
+                    &args,
+                );
             }
         };
 
@@ -451,7 +463,13 @@ impl<B: Backend> Server<B> {
             }
         };
         drop(permit);
-        tool_result(id, &envelope, &self.negotiated_version(), &self.config, &args)
+        tool_result(
+            id,
+            &envelope,
+            &self.negotiated_version(),
+            &self.config,
+            &args,
+        )
     }
 
     fn call_context(&self, token: &CancelToken, args: &Value) -> CallContext {
@@ -695,20 +713,26 @@ fn shape_reply_tree(mut value: Value, config: &ServerConfig, args: &Value) -> Va
     let session = value
         .get("session_id")
         .and_then(Value::as_str)
-        .or_else(|| {
-            value
-                .pointer("/result/session_id")
-                .and_then(Value::as_str)
-        })
+        .or_else(|| value.pointer("/result/session_id").and_then(Value::as_str))
         .unwrap_or("session");
     let safe: String = session
         .chars()
-        .map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '_' { c } else { '_' })
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '-' || c == '_' {
+                c
+            } else {
+                '_'
+            }
+        })
         .collect();
     let dir = config
         .artifacts_dir
         .join("sessions")
-        .join(if safe.is_empty() { "session".to_string() } else { safe });
+        .join(if safe.is_empty() {
+            "session".to_string()
+        } else {
+            safe
+        });
     let opts = TreeShapeOptions {
         cursor,
         page_size: reply::DEFAULT_PAGE_SIZE,
@@ -907,12 +931,16 @@ fn append_screenshot_content(
         roots.push(PathBuf::from(dir));
     }
     roots.push(std::env::temp_dir());
-    if !path_within_allowed_roots(full, &roots) {
+    // CWE-367: open once, validate the *opened* file, read from that handle.
+    let Some(bytes) = read_file_within_allowed_roots(full, &roots) else {
         return;
-    }
-    if let Some(preview) =
-        crate::preview::image_preview(full, config.max_image_side, config.max_image_bytes)
-    {
+    };
+    if let Some(preview) = crate::preview::image_preview_from_bytes(
+        full,
+        &bytes,
+        config.max_image_side,
+        config.max_image_bytes,
+    ) {
         content.push(json!({
             "type": "image",
             "data": crate::base64::encode(&preview.data),
@@ -932,19 +960,39 @@ fn append_screenshot_content(
     }
 }
 
-/// FB2c: is this file inside one of the server's allowed roots?
+/// Largest file [`read_file_within_allowed_roots`] reads (a preview source is
+/// a PNG frame; anything bigger is not inlined).
+const MAX_PREVIEW_SOURCE_BYTES: u64 = 64 * 1024 * 1024;
+
+/// FB2c / CWE-367: read `path` only if the file actually opened is a regular
+/// file inside one of the server's allowed roots.
 ///
-/// Both sides are canonicalized, so a symlink cannot smuggle a file out of a
-/// root and a root the user configured through a link still matches. A path
-/// that cannot be canonicalized (missing file) is not in a root.
-fn path_within_allowed_roots(path: &Path, roots: &[PathBuf]) -> bool {
-    let Ok(real) = std::fs::canonicalize(path) else {
-        return false;
-    };
-    roots.iter().any(|root| {
+/// The file is opened **once**; the check runs on that descriptor (`fstat` for
+/// the type, `/proc/self/fd/<fd>` for the resolved path, compared against the
+/// canonicalized roots) and the bytes come from the same handle, so a symlink
+/// swapped in between a check and a read cannot smuggle a file out of a root.
+/// A root the user configured through a link still matches.
+fn read_file_within_allowed_roots(path: &Path, roots: &[PathBuf]) -> Option<Vec<u8>> {
+    use std::io::Read as _;
+    use std::os::unix::io::AsRawFd;
+    let file = std::fs::File::open(path).ok()?;
+    let meta = file.metadata().ok()?;
+    if !meta.is_file() || meta.len() > MAX_PREVIEW_SOURCE_BYTES {
+        return None;
+    }
+    let real = std::fs::read_link(format!("/proc/self/fd/{}", file.as_raw_fd())).ok()?;
+    let inside = roots.iter().any(|root| {
         let root = std::fs::canonicalize(root).unwrap_or_else(|_| root.clone());
         real.starts_with(&root)
-    })
+    });
+    if !inside {
+        return None;
+    }
+    let mut bytes = Vec::with_capacity(meta.len() as usize);
+    file.take(MAX_PREVIEW_SOURCE_BYTES)
+        .read_to_end(&mut bytes)
+        .ok()?;
+    Some(bytes)
 }
 
 /// One line describing the inline image: which file it came from, whether it is
@@ -1170,16 +1218,20 @@ mod tests {
         let link = root.join("link.png");
         std::os::unix::fs::symlink(&outside, &link).unwrap();
         let roots = vec![root.clone()];
-        assert!(path_within_allowed_roots(&inside, &roots));
-        assert!(!path_within_allowed_roots(&outside, &roots));
+        assert_eq!(
+            read_file_within_allowed_roots(&inside, &roots),
+            Some(b"x".to_vec())
+        );
+        assert!(read_file_within_allowed_roots(&outside, &roots).is_none());
         assert!(
-            !path_within_allowed_roots(&link, &roots),
+            read_file_within_allowed_roots(&link, &roots).is_none(),
             "a symlink out of the root"
         );
-        assert!(!path_within_allowed_roots(
-            &root.join("missing.png"),
-            &roots
-        ));
+        assert!(read_file_within_allowed_roots(&root.join("missing.png"), &roots).is_none());
+        assert!(
+            read_file_within_allowed_roots(&root, &roots).is_none(),
+            "a directory is not a regular file"
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -1318,6 +1370,37 @@ mod tests {
         .with_value_result(json!({"node_count": 9}));
         let plain = tool_result(&json!(12), &plain, "2025-06-18", &config, &json!({}));
         assert_eq!(plain["result"]["content"].as_array().unwrap().len(), 1);
+
+        // CWE-367 regression: a `screenshot.path` that is a symlink to a PNG
+        // outside every allowed root (the OS temp dir included) is never
+        // inlined -- the opened file's real path is what is checked.
+        let outside_dir = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../.cache/mcp-preview-outside")
+            .join(std::process::id().to_string());
+        std::fs::create_dir_all(&outside_dir).unwrap();
+        let outside_dir = std::fs::canonicalize(&outside_dir).unwrap();
+        if !outside_dir.starts_with(std::fs::canonicalize(std::env::temp_dir()).unwrap()) {
+            let secret = outside_dir.join("secret.png");
+            std::fs::write(&secret, tiny_png()).unwrap();
+            let link = dir.join("screenshots/link-8.png");
+            std::os::unix::fs::symlink(&secret, &link).unwrap();
+            let linked = Envelope::pass(
+                "req",
+                ProtocolBackend::AcosNative,
+                Fidelity::ArtReference,
+                Metrics::wall_ms(1),
+            )
+            .with_value_result(json!({
+                "screenshot": {"path": link.display().to_string(), "format": "png"},
+            }));
+            let linked = tool_result(&json!(13), &linked, "2025-06-18", &config, &json!({}));
+            let content = linked["result"]["content"].as_array().unwrap();
+            assert!(
+                !content.iter().any(|c| c["type"] == "image"),
+                "a symlink out of the allowed roots is never inlined: {content:?}"
+            );
+        }
+        let _ = std::fs::remove_dir_all(&outside_dir);
         // A path that does not exist is never inlined or linked.
         let missing = Envelope::pass(
             "req",

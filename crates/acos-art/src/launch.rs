@@ -10883,6 +10883,11 @@ fn interactive_serve(
                 // an entry's absolute ordinal to `LogRecord.seq`; entries are
                 // guest-asserted (docs/SANDBOX_CERTIFICATION.md §7) and never
                 // justify a pass on an untrusted run.
+                // The live `logs/logcat.txt` mirror is that file's only
+                // writer: flush it here and name it so the CLI never rewrites
+                // (and truncates) the file under the mirror's open handle.
+                logd.flush_logcat_mirror();
+                let live_logcat_mirror = logd.live_logcat_mirror().map(|p| p.display().to_string());
                 let entries = logd.snapshot();
                 let stats = logd.stats();
                 let reply = serde_json::json!({
@@ -10891,6 +10896,7 @@ fn interactive_serve(
                     "kept": entries.len(),
                     "dropped": stats.dropped,
                     "cap": stats.cap,
+                    "live_logcat_mirror": live_logcat_mirror,
                     "entries": entries,
                 });
                 protocol_write(&reply);

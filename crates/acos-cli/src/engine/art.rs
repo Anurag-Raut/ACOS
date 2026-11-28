@@ -158,6 +158,10 @@ pub struct ArtSession {
     log_offset: u64,
     /// The raw entry count the current guest's logd sink has reported.
     logs_total_raw: u64,
+    /// The live `logs/logcat.txt` mirror the guest's logd sink reported on its
+    /// last `logs` reply (already flushed by that reply). While set, that sink
+    /// is the file's only writer.
+    live_logcat_mirror: Option<PathBuf>,
     /// The first fatal log entry the guest's logd sink carried (a real crash
     /// signature), if any. Guest-asserted: an untrusted run never sees it.
     crash: Option<CrashRecord>,
@@ -2261,6 +2265,7 @@ impl ArtSession {
             seq_offset: 0,
             log_offset: 0,
             logs_total_raw: 0,
+            live_logcat_mirror: None,
             crash: None,
             process_group: Some(_pid as i32),
             guest_group: None,
@@ -5598,6 +5603,22 @@ impl ArtSession {
         self.diff_requested
     }
 
+    /// Whether the guest's logd sink mirrors live into `logcat` (as of the last
+    /// `logs` reply, which also flushed it via `Logd::flush_logcat_mirror`).
+    /// When it does, the sink is that file's only writer and the CLI must not
+    /// rewrite the file.
+    #[must_use]
+    pub fn has_live_logcat_mirror(&self, logcat: &Path) -> bool {
+        let Some(mirror) = self.live_logcat_mirror.as_deref() else {
+            return false;
+        };
+        mirror == logcat
+            || matches!(
+                (std::fs::canonicalize(mirror), std::fs::canonicalize(logcat)),
+                (Ok(a), Ok(b)) if a == b
+            )
+    }
+
     /// FB3: the settled tree diff of the action that just ran.
     ///
     /// `before` is the tree snapshotted before the input was injected and
@@ -5983,6 +6004,10 @@ impl SessionBackend for ArtSession {
         let reply = self.command(serde_json::json!({"cmd":"logs"}))?;
         let total = reply.get("total").and_then(|v| v.as_u64()).unwrap_or(0);
         self.logs_total_raw = self.logs_total_raw.max(total);
+        self.live_logcat_mirror = reply
+            .get("live_logcat_mirror")
+            .and_then(serde_json::Value::as_str)
+            .map(PathBuf::from);
         if self.crash.is_none() {
             self.crash = fatal_log(&reply);
         }

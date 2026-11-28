@@ -302,10 +302,7 @@ impl PermissionService {
     /// Wrap shared state.
     #[must_use]
     pub fn new(state: Arc<Mutex<PermissionState>>) -> Self {
-        Self {
-            state,
-            store: None,
-        }
+        Self { state, store: None }
     }
 
     /// [`Self::new`] with the session's shared permission table, so the
@@ -670,6 +667,9 @@ pub struct NotificationState {
     pub channels: Vec<StoredNotificationChannel>,
     /// Channel groups the app created, per package (R2).
     pub channel_groups: Vec<StoredNotificationChannelGroup>,
+    /// `setNotificationDelegate(callingPkg, delegate)` per calling package; a
+    /// null/empty delegate clears it (`NotificationManagerService`).
+    pub delegates: std::collections::BTreeMap<String, String>,
     /// Every toast the framework asked the (in-process) system service to show,
     /// in order. This is the real `Toast.show()` -> `INotificationManager`
     /// request, with the text the framework serialised.
@@ -1060,9 +1060,33 @@ impl ServiceObject for NotificationService {
                 vec![Value::TypedObject(crate::value::Parcelable::Null)]
             }
             "getZenRules" => vec![Value::List(Some(Vec::new()))],
-            "getNotificationDelegate" => vec![Value::Str(None)],
+            // Android 14 `INotificationManager`:
+            // `String getNotificationDelegate(String callingPkg)` and
+            // `void setNotificationDelegate(String callingPkg, String delegate)`.
+            "getNotificationDelegate" => {
+                let package = str_arg(args, 0);
+                let st = self.state.lock().unwrap();
+                vec![Value::Str(st.delegates.get(&package).cloned())]
+            }
+            "setNotificationDelegate" => {
+                let package = str_arg(args, 0);
+                let delegate = args
+                    .get(1)
+                    .and_then(Value::as_str)
+                    .filter(|d| !d.is_empty())
+                    .map(str::to_string);
+                let mut st = self.state.lock().unwrap();
+                match delegate {
+                    Some(delegate) => {
+                        st.delegates.insert(package, delegate);
+                    }
+                    None => {
+                        st.delegates.remove(&package);
+                    }
+                }
+                Vec::new()
+            }
             "setInterruptionFilter"
-            | "setNotificationDelegate"
             | "setToastRateLimitingEnabled"
             | "setPrivateNotificationsAllowed"
             | "clearRequestedListenerHints"

@@ -343,6 +343,21 @@ impl Manifest {
         })
     }
 
+    /// Whether any `<provider>` declares a reference-typed `android:initOrder`
+    /// (e.g. `@integer/provider_init_order`), which needs `resources.arsc` to
+    /// resolve.
+    #[must_use]
+    pub fn has_provider_init_order_reference(doc: &XmlDocument) -> bool {
+        doc.root.children_named("application").any(|app| {
+            app.children_named("provider").any(|provider| {
+                matches!(
+                    provider.attribute("initOrder").map(|a| &a.value),
+                    Some(TypedValue::Reference(id)) if *id != 0
+                )
+            })
+        })
+    }
+
     /// Build the typed model from an AXML DOM, resolving `<meta-data
     /// android:value="@...">` references against `res` when supplied.
     pub fn parse_with_resources(
@@ -782,7 +797,7 @@ fn parse_component(
         process: attr_string(node, "process"),
         permission: attr_string(node, "permission"),
         grant_uri_permissions: attr_bool(node, "grantUriPermissions"),
-        init_order: attr_i32(node, "initOrder"),
+        init_order: init_order_of(node, res),
         label,
         label_ref,
         intent_filters,
@@ -931,6 +946,19 @@ fn attr_i32(node: &XmlNode, name: &str) -> Option<i32> {
     }
 }
 
+/// `android:initOrder`: a literal integer, or an `@integer/...` reference
+/// resolved through `res` the way `TypedArray.getInt` resolves it.
+fn init_order_of(node: &XmlNode, res: Option<&ResourceTable>) -> Option<i32> {
+    match &attribute(node, "initOrder")?.value {
+        TypedValue::Reference(id) => match res?.resolve_value(*id)? {
+            ResValue::IntDec(value) => Some(*value),
+            ResValue::IntHex(value) => Some(*value as i32),
+            _ => None,
+        },
+        _ => attr_i32(node, "initOrder"),
+    }
+}
+
 fn attr_i64(node: &XmlNode, name: &str) -> Option<i64> {
     match &attribute(node, name)?.value {
         TypedValue::IntDec(i) => Some(*i as i64),
@@ -1070,10 +1098,7 @@ mod tests {
                     "permission",
                     vec![
                         attr("name", TypedValue::String(".permission.PROBE".into())),
-                        attr(
-                            "label",
-                            TypedValue::String("probe permission".into()),
-                        ),
+                        attr("label", TypedValue::String("probe permission".into())),
                         attr(
                             "description",
                             TypedValue::String("a declared permission".into()),
@@ -1671,6 +1696,68 @@ mod launcher_tests {
         assert_eq!(manifest.providers[0].init_order, Some(100));
         assert_eq!(manifest.providers[1].init_order, None);
         assert_eq!(manifest.providers[2].init_order, Some(-10));
+    }
+
+    #[test]
+    fn provider_init_order_references_resolve_against_resource_table() {
+        use crate::arsc::{Config, ResourceEntry, ResourcePackage};
+
+        let table = ResourceTable {
+            global_strings: Vec::new(),
+            packages: vec![ResourcePackage {
+                id: 0x7f,
+                name: "pkg".into(),
+                type_names: vec!["integer".into()],
+                key_names: Vec::new(),
+                type_specs: Vec::new(),
+                entries: vec![ResourceEntry {
+                    id: 0x7f01_0001,
+                    type_id: 1,
+                    entry_id: 1,
+                    type_name: "integer".into(),
+                    key: "early_init_order".into(),
+                    config: Config::default(),
+                    value: ResValue::IntDec(500),
+                }],
+            }],
+        };
+        let dom = document(vec![
+            node(
+                "provider",
+                vec![
+                    attr("name", TypedValue::String(".Literal".into())),
+                    attr("authorities", TypedValue::String("pkg.literal".into())),
+                    attr("initOrder", TypedValue::IntDec(100)),
+                ],
+                Vec::new(),
+            ),
+            node(
+                "provider",
+                vec![
+                    attr("name", TypedValue::String(".Referenced".into())),
+                    attr("authorities", TypedValue::String("pkg.referenced".into())),
+                    attr("initOrder", TypedValue::Reference(0x7f01_0001)),
+                ],
+                Vec::new(),
+            ),
+        ]);
+        assert!(Manifest::has_provider_init_order_reference(&dom));
+        assert!(!Manifest::has_meta_data_value_reference(&dom));
+
+        // Without the table the reference cannot resolve: platform default.
+        let unresolved = Manifest::parse(&dom).expect("manifest");
+        assert_eq!(unresolved.providers[1].init_order, None);
+
+        let manifest = Manifest::parse_with_resources(&dom, Some(&table)).expect("manifest");
+        assert_eq!(manifest.providers[0].init_order, Some(100));
+        assert_eq!(manifest.providers[1].init_order, Some(500));
+
+        // Descending initOrder (PMS / launcher order) puts the resolved
+        // `@integer/...` provider ahead of the lower literal one.
+        let mut ordered: Vec<_> = manifest.providers.iter().collect();
+        ordered.sort_by(|a, b| b.init_order.unwrap_or(0).cmp(&a.init_order.unwrap_or(0)));
+        assert_eq!(ordered[0].name, "pkg.Referenced");
+        assert_eq!(ordered[1].name, "pkg.Literal");
     }
 
     #[test]

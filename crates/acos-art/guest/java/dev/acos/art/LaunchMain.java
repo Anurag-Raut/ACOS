@@ -122,6 +122,41 @@ public final class LaunchMain {
     /** Original process stdout/stderr before app stream redirection to logcat. */
     static final java.io.PrintStream sOrigOut = System.out;
     static final java.io.PrintStream sOrigErr = System.err;
+    /**
+     * The one lock that serialises every byte reaching {@link #sOrigOut} /
+     * {@link #sOrigErr}: the redirected {@code System.out}/{@code System.err}
+     * streams write whole lines under it, and every direct protocol write goes
+     * through {@link #origLine}. Nothing but the raw write + flush runs while
+     * it is held, so it is always the innermost guest-side lock (no inversion
+     * with a {@code PrintStream} monitor).
+     */
+    static final Object sOutLock = new Object();
+
+    /** Write {@code text} to {@code ps} and flush it as one atomic chunk. */
+    static void origWrite(java.io.PrintStream ps, String text) {
+        byte[] bytes = text.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        synchronized (sOutLock) {
+            ps.write(bytes, 0, bytes.length);
+            ps.flush();
+        }
+    }
+
+    /** One complete protocol line on {@code ps}, never interleaved. */
+    static void origLine(java.io.PrintStream ps, Object line) {
+        origWrite(ps, String.valueOf(line) + "\n");
+    }
+
+    /** The same line on stdout and stderr, both under one hold of the lock. */
+    static void origLineBoth(Object line) {
+        byte[] bytes = (String.valueOf(line) + "\n")
+                .getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        synchronized (sOutLock) {
+            sOrigOut.write(bytes, 0, bytes.length);
+            sOrigErr.write(bytes, 0, bytes.length);
+            sOrigOut.flush();
+            sOrigErr.flush();
+        }
+    }
 
     public static void main(String[] args) {
         long t0 = System.currentTimeMillis();
@@ -362,7 +397,10 @@ public final class LaunchMain {
 
     /**
      * Line-buffered stream wrapper that mirrors every byte untouched to the
-     * original process stream (`sOrigOut` / `sOrigErr`) while forwarding
+     * original process stream (`sOrigOut` / `sOrigErr`) -- whole lines at a
+     * time under {@link #sOutLock}, so a record larger than the
+     * `PrintStream` encoder's 8 KiB chunk is never split by a direct protocol
+     * write from another thread -- while forwarding
      * non-protocol app lines to Android's logcat (`System.out` / `System.err`).
      * ACOS harness protocol lines (`ACOSLAUNCH`, `ACOSPROBE`, `ACOSTRACE`,
      * `ACOSSTUCK`, `ACOSUNSUPPORTED`) are never buffered or sent to logcat so
@@ -378,6 +416,11 @@ public final class LaunchMain {
         private final java.io.ByteArrayOutputStream lineBuf =
                 new java.io.ByteArrayOutputStream(256);
         private boolean skipCurrentLine = false;
+        /** Bytes of the current, not yet newline-terminated line for `orig`. */
+        private final java.io.ByteArrayOutputStream origBuf =
+                new java.io.ByteArrayOutputStream(256);
+        /** A line with no newline past this size is passed through anyway. */
+        private static final int MAX_PENDING_ORIG = 1 << 20;
 
         LogRedirectOutputStream(java.io.PrintStream orig, int priority, String tag) {
             this.orig = orig;
@@ -432,16 +475,49 @@ public final class LaunchMain {
             }
         }
 
+        /** Pass every buffered byte to `orig` in one write under {@link #sOutLock}. */
+        private void drainOrigLocked() {
+            if (origBuf.size() == 0) {
+                return;
+            }
+            byte[] bytes = origBuf.toByteArray();
+            origBuf.reset();
+            synchronized (sOutLock) {
+                orig.write(bytes, 0, bytes.length);
+                orig.flush();
+            }
+        }
+
         @Override
         public synchronized void write(int b) throws java.io.IOException {
-            orig.write(b);
+            origBuf.write(b);
+            if (b == '\n' || origBuf.size() >= MAX_PENDING_ORIG) {
+                drainOrigLocked();
+            }
             feedLocked((byte) b);
         }
 
         @Override
         public synchronized void write(byte[] b, int off, int len) throws java.io.IOException {
-            orig.write(b, off, len);
             int end = off + len;
+            int lastNl = -1;
+            for (int i = end - 1; i >= off; i--) {
+                if (b[i] == '\n') {
+                    lastNl = i;
+                    break;
+                }
+            }
+            if (lastNl >= 0) {
+                // Complete line(s): emit buffered prefix + them atomically.
+                origBuf.write(b, off, lastNl + 1 - off);
+                drainOrigLocked();
+                origBuf.write(b, lastNl + 1, end - lastNl - 1);
+            } else {
+                origBuf.write(b, off, len);
+            }
+            if (origBuf.size() >= MAX_PENDING_ORIG) {
+                drainOrigLocked();
+            }
             for (int i = off; i < end; i++) {
                 feedLocked(b[i]);
             }
@@ -449,7 +525,10 @@ public final class LaunchMain {
 
         @Override
         public synchronized void flush() throws java.io.IOException {
-            orig.flush();
+            drainOrigLocked();
+            synchronized (sOutLock) {
+                orig.flush();
+            }
         }
     }
 
@@ -492,16 +571,14 @@ public final class LaunchMain {
                 } catch (Throwable ignored) {
                 }
                 try {
-                    cause.printStackTrace(sOrigErr);
-                    sOrigErr.flush();
+                    origWrite(sOrigErr, android.util.Log.getStackTraceString(cause));
                 } catch (Throwable ignored) {
                 }
                 try {
-                    sOrigOut.println("ACOSLAUNCH {\"outcome\":\"crash\",\"code\":\"GUEST_ERROR\","
+                    origLine(sOrigOut, "ACOSLAUNCH {\"outcome\":\"crash\",\"code\":\"GUEST_ERROR\","
                             + "\"thread\":\"" + esc(threadName) + "\","
                             + "\"message\":\"" + esc(String.valueOf(cause)) + "\""
                             + crashDetail(cause) + "}");
-                    sOrigOut.flush();
                 } catch (Throwable ignored) {
                 }
                 System.exit(1);
@@ -726,12 +803,11 @@ public final class LaunchMain {
             // The stack is the diagnosis of the *next* wall: print it before the
             // one-line outcome so a `--until activity-resumed` run that got past
             // the resume still names what stopped it.
-            cause.printStackTrace(sOrigOut);
-            sOrigOut.println("ACOSLAUNCH {\"outcome\":\"crash\",\"code\":\"LOOPER_THREW\","
+            origWrite(sOrigOut, android.util.Log.getStackTraceString(cause)
+                    + "ACOSLAUNCH {\"outcome\":\"crash\",\"code\":\"LOOPER_THREW\","
                     + "\"activity_resumed\":" + resumed + ",\"message\":\""
                     + esc(String.valueOf(cause)) + "\""
-                    + crashDetail(cause) + "}");
-            sOrigOut.flush();
+                    + crashDetail(cause) + "}\n");
             System.exit(1);
             return;
         }
@@ -2682,8 +2758,7 @@ public final class LaunchMain {
                         if (pendingSince == 0) {
                             pendingSince = now;
                         } else if (now - pendingSince > 2000) {
-                            sOrigErr.println("ACOSPROBE-STALL-DETECT pending_ms=" + (now - pendingSince));
-                            sOrigErr.flush();
+                            origLine(sOrigErr, "ACOSPROBE-STALL-DETECT pending_ms=" + (now - pendingSince));
                             dumpMainStack();
                             pendingSince = now;
                         }
@@ -2806,10 +2881,7 @@ public final class LaunchMain {
                 if (n++ >= 40) break;
                 b.append(" | ").append(f);
             }
-            sOrigOut.println(b);
-            sOrigErr.println(b);
-            sOrigOut.flush();
-            sOrigErr.flush();
+            origLineBoth(b);
         } catch (Throwable ignored) {
         }
     }
@@ -2842,11 +2914,7 @@ public final class LaunchMain {
         } catch (Throwable ignored) {
         }
         b.append("]}");
-        String line = b.toString();
-        sOrigOut.println(line);
-        sOrigErr.println(line);
-        sOrigOut.flush();
-        sOrigErr.flush();
+        origLineBoth(b.toString());
     }
 
     /**
@@ -2879,15 +2947,14 @@ public final class LaunchMain {
                     }
                 }
                 long c0 = runtimeStat("art.gc.gc-count");
-                sOrigOut.println("ACOSLAUNCH EARLY_RELEASE start delay_ms=" + delayMs
+                origLine(sOrigOut, "ACOSLAUNCH EARLY_RELEASE start delay_ms=" + delayMs
                         + " gc_count_before=" + c0);
-                sOrigOut.flush();
                 try {
                     Class<?> vm = Class.forName("dalvik.system.VMRuntime");
                     Object rt = vm.getMethod("getRuntime").invoke(null);
                     vm.getMethod("requestConcurrentGC").invoke(rt);
                 } catch (Throwable x) {
-                    sOrigErr.println("ACOSLAUNCH EARLY_RELEASE concurrent_error " + x);
+                    origLine(sOrigErr, "ACOSLAUNCH EARLY_RELEASE concurrent_error " + x);
                 }
                 long c1 = runtimeStat("art.gc.gc-count");
                 System.out.println("ACOSLAUNCH EARLY_RELEASE done ms="
@@ -3071,8 +3138,8 @@ public final class LaunchMain {
                 .append(",\"applied\":").append(sAnimationsApplied)
                 .append(",\"source\":\"").append(jesc(sAnimationsSource)).append("\"}");
         j.append('}');
-        System.out.println(j);
-        System.out.flush();
+        // One atomic protocol write: an ACOSPROBE record is often > 8 KiB.
+        origLine(sOrigOut, j);
     }
 
     /** LAYER1 window facts: identity, real type/flags, focus and parent link. */

@@ -314,6 +314,9 @@ pub struct NotificationStore {
     pub package: String,
     /// The target SDK the gate uses (default: the image's API level, 34).
     pub target_sdk: i32,
+    /// `setNotificationDelegate(callingPkg, delegate)` per calling package; a
+    /// null/empty delegate clears it (`NotificationManagerService`).
+    pub delegates: std::collections::BTreeMap<String, String>,
 }
 
 impl NotificationStore {
@@ -785,8 +788,33 @@ impl ServiceObject for NotificationsService {
             "getHintsFromListenerNoToken" => vec![WireValue::Int(0)],
             "isNotificationListenerAccessGranted" => vec![WireValue::Bool(false)],
             "getEnabledNotificationListeners" => vec![WireValue::List(Some(Vec::new()))],
-            // No notification delegate is configured by default on a fresh device.
-            "getNotificationDelegate" => vec![WireValue::Str(None)],
+            // Android 14 `INotificationManager`:
+            // `String getNotificationDelegate(String callingPkg)` (arg 0) and
+            // `void setNotificationDelegate(String callingPkg, String delegate)`
+            // (args 0, 1). None is configured on a fresh device.
+            "getNotificationDelegate" => {
+                vec![WireValue::Str(
+                    self.store().delegates.get(&string(0)).cloned(),
+                )]
+            }
+            "setNotificationDelegate" => {
+                let package = string(0);
+                let delegate = args
+                    .get(1)
+                    .and_then(WireValue::as_str)
+                    .filter(|d| !d.is_empty())
+                    .map(str::to_string);
+                let mut store = self.store();
+                match delegate {
+                    Some(delegate) => {
+                        store.delegates.insert(package, delegate);
+                    }
+                    None => {
+                        store.delegates.remove(&package);
+                    }
+                }
+                Vec::new()
+            }
             _ => {
                 return Err(ServiceError::UnsupportedAndroidApi {
                     interface: interface.to_string(),
@@ -1082,7 +1110,14 @@ fn shade_key(posted: &PostedNotification) -> String {
 fn shade_key_parts(key: &str) -> Option<(i32, Option<String>)> {
     let (id, tag) = key.split_once(':')?;
     let id = id.trim().parse::<i32>().ok()?;
-    Some((id, if tag.is_empty() { None } else { Some(tag.to_string()) }))
+    Some((
+        id,
+        if tag.is_empty() {
+            None
+        } else {
+            Some(tag.to_string())
+        },
+    ))
 }
 
 /// SYSUI2: open the shade — start the `com.android.systemui` system app's
@@ -1130,9 +1165,10 @@ fn open_shade(host: &mut ServiceHost, store: &Arc<Mutex<NotificationStore>>) -> 
     intent.component = Some((SHADE_PACKAGE.to_string(), SHADE_ACTIVITY.to_string()));
     intent.package = Some(SHADE_PACKAGE.to_string());
     intent.flags = FLAG_ACTIVITY_NEW_TASK;
-    intent
-        .extras
-        .insert(SHADE_EXTRA_KEYS.to_string(), crate::ams::Extra::Strings(keys.clone()));
+    intent.extras.insert(
+        SHADE_EXTRA_KEYS.to_string(),
+        crate::ams::Extra::Strings(keys.clone()),
+    );
     intent.extras.insert(
         SHADE_EXTRA_TITLES.to_string(),
         crate::ams::Extra::Strings(titles),
@@ -1227,9 +1263,8 @@ mod tests {
         );
         assert_eq!(system_app_apk(MODULE_ID, "com.other", &default_cfg), None);
 
-        let empty_cfg =
-            ModuleConfig::from_json(MODULE_ID, &json!({ SHADE_APK_CONFIG: "" }))
-                .expect("empty cfg");
+        let empty_cfg = ModuleConfig::from_json(MODULE_ID, &json!({ SHADE_APK_CONFIG: "" }))
+            .expect("empty cfg");
         env.set(SHADE_APK_ENV, "");
         assert_eq!(shade_apk(&empty_cfg), installed_apk);
 
@@ -1270,6 +1305,44 @@ mod tests {
             .expect("getNotificationDelegate should succeed");
         assert_eq!(reply.reply, vec![WireValue::Str(None)]);
     }
+
+    #[test]
+    fn set_notification_delegate_round_trips_through_get() {
+        let mut svc = NotificationsService {
+            store: Arc::new(Mutex::new(NotificationStore::new("com.example.app"))),
+        };
+        let get = acos_aidl::lookup_by_name(DESCRIPTOR, "getNotificationDelegate")
+            .expect("AIDL getNotificationDelegate");
+        let set = acos_aidl::lookup_by_name(DESCRIPTOR, "setNotificationDelegate")
+            .expect("AIDL setNotificationDelegate");
+        assert_eq!((set.code, get.code), (138, 139));
+        let pkg = WireValue::Str(Some("com.example.app".into()));
+        let get_delegate = |svc: &mut NotificationsService| {
+            svc.call(DESCRIPTOR, get, std::slice::from_ref(&pkg))
+                .expect("get")
+                .reply
+        };
+        assert_eq!(get_delegate(&mut svc), vec![WireValue::Str(None)]);
+        svc.call(
+            DESCRIPTOR,
+            set,
+            &[pkg.clone(), WireValue::Str(Some("com.del".into()))],
+        )
+        .expect("set");
+        assert_eq!(
+            get_delegate(&mut svc),
+            vec![WireValue::Str(Some("com.del".into()))]
+        );
+        // Another package's delegate is independent.
+        let other = svc
+            .call(DESCRIPTOR, get, &[WireValue::Str(Some("com.other".into()))])
+            .expect("get other")
+            .reply;
+        assert_eq!(other, vec![WireValue::Str(None)]);
+        svc.call(DESCRIPTOR, set, &[pkg.clone(), WireValue::Str(None)])
+            .expect("clear");
+        assert_eq!(get_delegate(&mut svc), vec![WireValue::Str(None)]);
+    }
 }
 
 /// Resolve the host APK path for `system.notifications`'s shade app.
@@ -1299,6 +1372,10 @@ pub fn shade_apk(config: &ModuleConfig) -> std::path::PathBuf {
 /// The host APK a module's declared **system app** installs
 /// (`crate::module::system_apks`). The shade app is SYSUI1's system app.
 #[must_use]
-pub fn system_app_apk(module: &str, app: &str, config: &ModuleConfig) -> Option<std::path::PathBuf> {
+pub fn system_app_apk(
+    module: &str,
+    app: &str,
+    config: &ModuleConfig,
+) -> Option<std::path::PathBuf> {
     (module == MODULE_ID && app == SHADE_PACKAGE).then(|| shade_apk(config))
 }

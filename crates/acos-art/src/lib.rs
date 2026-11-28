@@ -176,7 +176,8 @@ pub fn gralloc_shim(root: &ArtRoot) -> Result<PathBuf> {
         }
         Ok(())
     })?;
-    let installed = crate::build_cache::install(&built, &["libacoshw.so"], &root.data.join("shim"))?;
+    let installed =
+        crate::build_cache::install(&built, &["libacoshw.so"], &root.data.join("shim"))?;
     Ok(installed[0].clone())
 }
 
@@ -571,9 +572,8 @@ impl ArtRoot {
                 Err(e) => eprintln!("acos-art: janitor could not remove {}: {e}", path.display()),
             }
         }
-        let _ = crate::webview_socket::sweep_stale_session_dirs(
-            &crate::webview_socket::runtime_root(),
-        );
+        let _ =
+            crate::webview_socket::sweep_stale_session_dirs(&crate::webview_socket::runtime_root());
         Ok(removed)
     }
 
@@ -1931,8 +1931,7 @@ impl<'a> Sandbox<'a> {
                 // the node is also granted in a plan that is bound over the
                 // default one for this run only (below, after /data/seccomp).
                 if self.seccomp_guest {
-                    gpu_landlock_plan =
-                        landlock::write_gpu_plan(&r.data.join("seccomp"), &node)?;
+                    gpu_landlock_plan = landlock::write_gpu_plan(&r.data.join("seccomp"), &node)?;
                 }
                 a.push("--dev-bind".into());
                 a.push(node.clone().into());
@@ -2131,41 +2130,139 @@ impl<'a> Sandbox<'a> {
 /// Binding empty files prevents host username disclosure and eliminates all
 /// bionic `Found user/group name` logcat spam.
 fn ensure_synthetic_etc(data: &Path) -> Result<(PathBuf, PathBuf)> {
-    const PASSWD_CONTENT: &[u8] = b"";
-    const GROUP_CONTENT: &[u8] = b"";
-
-    fn write_pair(dir: &Path) -> std::io::Result<(PathBuf, PathBuf)> {
-        fs::create_dir_all(dir)?;
-        let write_if_changed = |name: &str, expected: &[u8]| -> std::io::Result<PathBuf> {
-            let path = dir.join(name);
-            if fs::read(&path).ok().as_deref() == Some(expected) {
-                return Ok(path);
-            }
-            let tmp = dir.join(format!(".{name}.tmp.{}", std::process::id()));
-            fs::write(&tmp, expected)?;
-            // `rename` is atomic on POSIX; ignore NotFound if another process raced us.
-            if let Err(e) = fs::rename(&tmp, &path) {
-                let _ = fs::remove_file(&tmp);
-                if fs::read(&path).ok().as_deref() != Some(expected) {
-                    return Err(e);
-                }
-            }
-            Ok(path)
-        };
-        let passwd = write_if_changed("passwd", PASSWD_CONTENT)?;
-        let group = write_if_changed("group", GROUP_CONTENT)?;
-        Ok((passwd, group))
-    }
-
-    match write_pair(&data.join("etc")) {
+    match write_synthetic_etc_pair(&data.join("etc")) {
         Ok(pair) => Ok(pair),
         Err(_) => {
-            let fallback = std::env::temp_dir().join(format!("acos-etc-{}", unsafe {
-                libc::geteuid()
-            }));
-            write_pair(&fallback).map_err(Error::Io)
+            let fallback =
+                std::env::temp_dir().join(format!("acos-etc-{}", unsafe { libc::geteuid() }));
+            secure_private_dir(&fallback).map_err(Error::Io)?;
+            write_synthetic_etc_pair(&fallback).map_err(Error::Io)
         }
     }
+}
+
+const SYNTHETIC_PASSWD: &[u8] = b"";
+const SYNTHETIC_GROUP: &[u8] = b"";
+
+fn write_synthetic_etc_pair(dir: &Path) -> std::io::Result<(PathBuf, PathBuf)> {
+    fs::create_dir_all(dir)?;
+    let passwd = write_etc_file(dir, "passwd", SYNTHETIC_PASSWD)?;
+    let group = write_etc_file(dir, "group", SYNTHETIC_GROUP)?;
+    Ok((passwd, group))
+}
+
+/// Create (mode 0700) or validate a private directory in a shared location
+/// such as `/tmp` (CWE-59): it must be a real directory -- never a symlink --
+/// owned by this euid and not group/world-writable. A directory an older ACOS
+/// made with the default umask (0755) is tightened to 0700 through the opened
+/// descriptor; anything else is refused.
+fn secure_private_dir(dir: &Path) -> std::io::Result<()> {
+    use std::os::unix::ffi::OsStrExt;
+    use std::os::unix::fs::DirBuilderExt;
+    use std::os::unix::fs::MetadataExt;
+
+    match fs::DirBuilder::new().mode(0o700).create(dir) {
+        Ok(()) => {}
+        Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {}
+        Err(e) => return Err(e),
+    }
+    let meta = fs::symlink_metadata(dir)?;
+    let refuse = |why: &str| {
+        Err(std::io::Error::new(
+            std::io::ErrorKind::PermissionDenied,
+            format!("refusing synthetic /etc dir {}: {why}", dir.display()),
+        ))
+    };
+    if meta.file_type().is_symlink() || !meta.is_dir() {
+        return refuse("not a real directory");
+    }
+    let c_dir = std::ffi::CString::new(dir.as_os_str().as_bytes())
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, e))?;
+    // SAFETY: plain open(2) on a NUL-terminated path; the fd is closed below.
+    let fd = unsafe {
+        libc::open(
+            c_dir.as_ptr(),
+            libc::O_RDONLY | libc::O_DIRECTORY | libc::O_NOFOLLOW | libc::O_CLOEXEC,
+        )
+    };
+    if fd < 0 {
+        return Err(std::io::Error::last_os_error());
+    }
+    // SAFETY: `fd` is a freshly opened descriptor we own.
+    let dir_file = unsafe { <fs::File as std::os::unix::io::FromRawFd>::from_raw_fd(fd) };
+    let meta = dir_file.metadata()?;
+    if meta.ino() != fs::symlink_metadata(dir)?.ino() || !meta.is_dir() {
+        return refuse("directory changed while validating");
+    }
+    if meta.uid() != unsafe { libc::geteuid() } {
+        return refuse("not owned by this user");
+    }
+    let mode = meta.mode() & 0o7777;
+    if mode & 0o022 != 0 {
+        return refuse("group- or world-writable");
+    }
+    if mode & 0o077 != 0 {
+        use std::os::unix::fs::PermissionsExt;
+        dir_file.set_permissions(fs::Permissions::from_mode(0o700))?;
+    }
+    Ok(())
+}
+
+/// Write `dir/name` with `expected` unless it already is a regular file with
+/// exactly that content. The temporary file is created with
+/// `O_CREAT|O_EXCL|O_NOFOLLOW` under a unique name, so a symlink planted at a
+/// predictable temp path is never followed or truncated; `rename` then
+/// replaces whatever sits at `name` (including a symlink) atomically.
+fn write_etc_file(dir: &Path, name: &str, expected: &[u8]) -> std::io::Result<PathBuf> {
+    use std::io::Write as _;
+    use std::os::unix::fs::OpenOptionsExt;
+
+    let path = dir.join(name);
+    if let Ok(meta) = fs::symlink_metadata(&path) {
+        if meta.file_type().is_file() && fs::read(&path).ok().as_deref() == Some(expected) {
+            return Ok(path);
+        }
+    }
+    let pid = std::process::id();
+    let mut created = None;
+    for attempt in 0..64u32 {
+        let tmp = dir.join(format!(".{name}.tmp.{pid}.{attempt}"));
+        match fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .mode(0o644)
+            .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC)
+            .open(&tmp)
+        {
+            Ok(file) => {
+                created = Some((tmp, file));
+                break;
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(e) => return Err(e),
+        }
+    }
+    let Some((tmp, mut file)) = created else {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::AlreadyExists,
+            format!("no free temp name for {}", path.display()),
+        ));
+    };
+    if let Err(e) = file.write_all(expected).and_then(|()| file.sync_all()) {
+        let _ = fs::remove_file(&tmp);
+        return Err(e);
+    }
+    drop(file);
+    // `rename` is atomic on POSIX; tolerate a concurrent writer that won.
+    if let Err(e) = fs::rename(&tmp, &path) {
+        let _ = fs::remove_file(&tmp);
+        let ok = fs::symlink_metadata(&path).is_ok_and(|m| m.file_type().is_file())
+            && fs::read(&path).ok().as_deref() == Some(expected);
+        if !ok {
+            return Err(e);
+        }
+    }
+    Ok(path)
 }
 
 // ---------------------------------------------------------------------------
@@ -2519,6 +2616,81 @@ mod tests {
     // Path resolution. ACOS_HOME wins over any checkout; unset keeps today's
     // behaviour byte-identically; the guest sources fall back home -> repo ->
     // compile-time.
+
+    /// CWE-59: a symlink planted at the predictable temp name is neither
+    /// followed nor truncated, and a symlinked target is replaced by a real
+    /// file instead of being trusted.
+    #[test]
+    fn synthetic_etc_write_never_follows_a_planted_symlink() {
+        use std::os::unix::fs::symlink;
+        let dir = scratch_dir("synthetic-etc-symlink");
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let victim = dir.join("victim.txt");
+        fs::write(&victim, b"precious").unwrap();
+        let pid = std::process::id();
+        symlink(&victim, dir.join(format!(".passwd.tmp.{pid}.0"))).unwrap();
+        // `group` itself is a symlink to a file that already holds the
+        // expected (empty) bytes: it must still be replaced.
+        let empty = dir.join("empty.txt");
+        fs::write(&empty, b"").unwrap();
+        symlink(&empty, dir.join("group")).unwrap();
+
+        let (passwd, group) = write_synthetic_etc_pair(&dir).expect("write pair");
+        assert_eq!(fs::read(&victim).unwrap(), b"precious", "victim untouched");
+        for path in [&passwd, &group] {
+            let meta = fs::symlink_metadata(path).unwrap();
+            assert!(
+                meta.file_type().is_file(),
+                "{} is a real file",
+                path.display()
+            );
+            assert_eq!(fs::read(path).unwrap(), b"");
+        }
+        // The planted symlink is still a symlink (never opened through).
+        assert!(
+            fs::symlink_metadata(dir.join(format!(".passwd.tmp.{pid}.0")))
+                .unwrap()
+                .file_type()
+                .is_symlink()
+        );
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn synthetic_etc_fallback_dir_refuses_symlinks_and_shared_dirs() {
+        use std::os::unix::fs::{symlink, PermissionsExt};
+        let base = scratch_dir("synthetic-etc-private");
+        let _ = fs::remove_dir_all(&base);
+        fs::create_dir_all(&base).unwrap();
+
+        let fresh = base.join("fresh");
+        secure_private_dir(&fresh).expect("fresh dir");
+        let mode = fs::metadata(&fresh).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mode, 0o700);
+
+        let legacy = base.join("legacy");
+        fs::create_dir(&legacy).unwrap();
+        fs::set_permissions(&legacy, fs::Permissions::from_mode(0o755)).unwrap();
+        secure_private_dir(&legacy).expect("0755 dir is tightened");
+        assert_eq!(
+            fs::metadata(&legacy).unwrap().permissions().mode() & 0o777,
+            0o700
+        );
+
+        let shared = base.join("shared");
+        fs::create_dir(&shared).unwrap();
+        fs::set_permissions(&shared, fs::Permissions::from_mode(0o777)).unwrap();
+        assert!(
+            secure_private_dir(&shared).is_err(),
+            "world-writable refused"
+        );
+
+        let link = base.join("link");
+        symlink(&fresh, &link).unwrap();
+        assert!(secure_private_dir(&link).is_err(), "symlink refused");
+        let _ = fs::remove_dir_all(&base);
+    }
 
     /// A throw-away install root under the checkout's `.cache/`.
     fn fake_home(tag: &str) -> PathBuf {

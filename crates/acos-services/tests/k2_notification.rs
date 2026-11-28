@@ -281,3 +281,35 @@ fn create_request_decodes_or_falls_back_without_rejecting() {
         "the channel slice decoded"
     );
 }
+
+/// `setNotificationDelegate(callingPkg, delegate)` / `getNotificationDelegate(
+/// callingPkg)` (Android 14 AIDL, codes 138/139) stay consistent: default null,
+/// set -> get returns it, a null delegate clears it.
+#[test]
+fn a_notification_delegate_round_trips_and_clears() {
+    let mut service = service();
+    let iface = "android.app.INotificationManager";
+    let get = method(iface, "getNotificationDelegate");
+    let set = method(iface, "setNotificationDelegate");
+    assert_eq!((set.code, get.code), (138, 139));
+    let pkg = Value::Str(Some("com.example.app".into()));
+    let read = |service: &mut NotificationService| {
+        service
+            .call(iface, get, std::slice::from_ref(&pkg))
+            .expect("getNotificationDelegate")
+            .reply
+    };
+    assert_eq!(read(&mut service), vec![Value::Str(None)]);
+    service
+        .call(
+            iface,
+            set,
+            &[pkg.clone(), Value::Str(Some("com.del".into()))],
+        )
+        .expect("setNotificationDelegate");
+    assert_eq!(read(&mut service), vec![Value::Str(Some("com.del".into()))]);
+    service
+        .call(iface, set, &[pkg.clone(), Value::Str(None)])
+        .expect("clear delegate");
+    assert_eq!(read(&mut service), vec![Value::Str(None)]);
+}

@@ -894,7 +894,10 @@ fn provider_specs(apk_path: &Path) -> Result<Vec<bind_app::ProviderSpec>, Lifecy
     let manifest = apk
         .manifest()
         .map_err(|e| LifecycleError::Bind(BindAppError::Materialize(format!("manifest: {e}"))))?;
-    let mut specs: Vec<bind_app::ProviderSpec> = manifest
+    // Frozen pre-ART track (AGENTS.md): `init_order` is carried as data only so
+    // the shared `ProviderSpec` compiles; `initOrder` scheduling lives on the
+    // ART path (`acos-services` PMS, `acos-art` launcher) and is tested there.
+    Ok(manifest
         .providers
         .iter()
         .flat_map(|c| {
@@ -915,9 +918,7 @@ fn provider_specs(apk_path: &Path) -> Result<Vec<bind_app::ProviderSpec>, Lifecy
                     init_order,
                 })
         })
-        .collect();
-    specs.sort_by(|a, b| b.init_order.cmp(&a.init_order));
-    Ok(specs)
+        .collect())
 }
 
 /// Run the interpreter until no green thread is runnable (the main looper has
@@ -1174,7 +1175,11 @@ mod tests {
         }) {
             Ok(rt) => rt,
             Err(VmError::BootClasspathMissing(msg)) => {
-                acos_test_support::require_prereq(false, "describe_throwable_unwraps_exception_in_initializer_error", &format!("describe_throwable_unwraps_exception_in_initializer_error: {msg}"));
+                acos_test_support::require_prereq(
+                    false,
+                    "describe_throwable_unwraps_exception_in_initializer_error",
+                    &format!("describe_throwable_unwraps_exception_in_initializer_error: {msg}"),
+                );
                 return;
             }
             Err(e) => panic!("Runtime::standard_with failed: {e}"),

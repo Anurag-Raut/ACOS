@@ -84,13 +84,24 @@ impl Preview {
 /// only the path.
 pub fn image_preview(path: &Path, max_side: u32, max_bytes: usize) -> Option<Preview> {
     let bytes = std::fs::read(path).ok()?;
+    image_preview_from_bytes(path, &bytes, max_side, max_bytes)
+}
+
+/// [`image_preview`] for bytes the caller already read from `path` (through a
+/// handle it validated), so the file is never opened a second time.
+pub fn image_preview_from_bytes(
+    path: &Path,
+    bytes: &[u8],
+    max_side: u32,
+    max_bytes: usize,
+) -> Option<Preview> {
     let lower = path.to_string_lossy().to_ascii_lowercase();
     if lower.ends_with(".jpg") || lower.ends_with(".jpeg") || lower.ends_with(".webp") {
         // Decodable by a browser but not by this server: link it, never inline
         // an unbounded blob.
         return None;
     }
-    preview_of_png(&bytes, max_side, max_bytes)
+    preview_of_png(bytes, max_side, max_bytes)
 }
 
 /// The same, for PNG bytes already in memory (the Flutter backend's screenshot).

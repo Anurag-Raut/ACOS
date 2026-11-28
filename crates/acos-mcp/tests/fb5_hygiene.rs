@@ -56,6 +56,9 @@ enum Mode {
     NoTokens,
     /// Non-launch/destroy/list tools take 1.5 s (an in-flight call, M1).
     Slow,
+    /// `acos_status` drops the connection without a reply (a daemon that died
+    /// mid-call): a transport error, never an authoritative not-found.
+    DropsStatus,
 }
 
 struct FakeDaemon {
@@ -191,6 +194,8 @@ fn fake_daemon(path: &std::path::Path, mode: Mode) -> FakeDaemon {
                     Metrics::wall_ms(0),
                 )
                 .with_value_result(json!({"destroyed": true}))
+            } else if tool == "acos_status" && mode == Mode::DropsStatus {
+                return;
             } else if tool == "acos_status" {
                 let found = live
                     .lock()
@@ -691,7 +696,10 @@ fn status_without_session_id_lists_live_owned_sessions() {
     let listed = backend
         .session_call("acos_status", &json!({"base": {"request_id": "r1"}}), &ctx)
         .expect("status");
-    assert!(listed.ok(), "status without session_id should pass: {listed:?}");
+    assert!(
+        listed.ok(),
+        "status without session_id should pass: {listed:?}"
+    );
     let res = listed.result().expect("result");
     assert_eq!(res["count"], json!(2));
     let mut ids: Vec<&str> = res["sessions"]
@@ -717,6 +725,37 @@ fn status_without_session_id_lists_live_owned_sessions() {
         Some(ErrorCode::SessionNotFound)
     );
 
+    let _ = fake.stop.send(());
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// A daemon that cannot be reached (EOF mid-call) must not turn a session-less
+/// `acos_status` into `ok: true, count: 0, sessions: []`: only the daemon's own
+/// `SESSION_NOT_FOUND` reply means "nothing is running".
+#[test]
+fn status_without_a_session_keeps_a_daemon_transport_error() {
+    let dir = scratch("status-eof");
+    let socket = dir.join("session.sock");
+    let fake = fake_daemon(&socket, Mode::DropsStatus);
+    let backend = backend(&socket);
+    let ctx = context(&dir);
+    let status = backend
+        .session_call(
+            "acos_status",
+            &json!({"base": {"request_id": "req_status"}}),
+            &ctx,
+        )
+        .expect("status is answered");
+    assert!(
+        !status.ok(),
+        "a broken daemon is not an empty listing: {status:?}"
+    );
+    let error = status.error().expect("an error envelope");
+    assert_eq!(
+        error.details.as_ref().and_then(|d| d.get("reason")),
+        Some(&json!("daemon_unreachable")),
+        "{error:?}"
+    );
     let _ = fake.stop.send(());
     let _ = std::fs::remove_dir_all(&dir);
 }

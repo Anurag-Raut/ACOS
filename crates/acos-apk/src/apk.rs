@@ -355,7 +355,10 @@ impl Apk {
             .as_ref()
             .ok_or_else(|| ApkError::new(APK_NO_MANIFEST, "APK contains no AndroidManifest.xml"))?;
         let doc = crate::axml::parse(raw)?;
-        let res = if self.arsc_raw.is_some() && Manifest::has_meta_data_value_reference(&doc) {
+        let res = if self.arsc_raw.is_some()
+            && (Manifest::has_meta_data_value_reference(&doc)
+                || Manifest::has_provider_init_order_reference(&doc))
+        {
             self.resources().ok().flatten()
         } else {
             None
