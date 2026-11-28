@@ -131,12 +131,55 @@ public final class LaunchMain {
      * with a {@code PrintStream} monitor).
      */
     static final Object sOutLock = new Object();
+    /**
+     * Whether the last byte written to {@link #sOrigOut} / {@link #sOrigErr}
+     * under {@link #sOutLock} was {@code '\n'} (or nothing has been written
+     * yet). Guarded by {@link #sOutLock}.
+     */
+    private static boolean sOrigOutAtLineStart = true;
+    private static boolean sOrigErrAtLineStart = true;
+
+    private static boolean isAtLineStartLocked(java.io.PrintStream ps) {
+        if (ps == sOrigOut) {
+            return sOrigOutAtLineStart;
+        }
+        if (ps == sOrigErr) {
+            return sOrigErrAtLineStart;
+        }
+        return true;
+    }
+
+    private static void setAtLineStartLocked(java.io.PrintStream ps, boolean atLineStart) {
+        if (ps == sOrigOut) {
+            sOrigOutAtLineStart = atLineStart;
+        } else if (ps == sOrigErr) {
+            sOrigErrAtLineStart = atLineStart;
+        }
+    }
+
+    /**
+     * Write {@code bytes} to {@code ps} while {@link #sOutLock} is held. When
+     * {@code ensureLineStart} is true and the previous write on {@code ps} left
+     * a partial line open, emit a leading {@code '\n'} first so protocol
+     * records always start at column 0.
+     */
+    static void writeRawOrigLocked(
+            java.io.PrintStream ps, byte[] bytes, boolean ensureLineStart) {
+        if (bytes.length == 0) {
+            return;
+        }
+        if (ensureLineStart && !isAtLineStartLocked(ps)) {
+            ps.write('\n');
+        }
+        ps.write(bytes, 0, bytes.length);
+        setAtLineStartLocked(ps, bytes[bytes.length - 1] == '\n');
+    }
 
     /** Write {@code text} to {@code ps} and flush it as one atomic chunk. */
     static void origWrite(java.io.PrintStream ps, String text) {
         byte[] bytes = text.getBytes(java.nio.charset.StandardCharsets.UTF_8);
         synchronized (sOutLock) {
-            ps.write(bytes, 0, bytes.length);
+            writeRawOrigLocked(ps, bytes, true);
             ps.flush();
         }
     }
@@ -151,8 +194,8 @@ public final class LaunchMain {
         byte[] bytes = (String.valueOf(line) + "\n")
                 .getBytes(java.nio.charset.StandardCharsets.UTF_8);
         synchronized (sOutLock) {
-            sOrigOut.write(bytes, 0, bytes.length);
-            sOrigErr.write(bytes, 0, bytes.length);
+            writeRawOrigLocked(sOrigOut, bytes, true);
+            writeRawOrigLocked(sOrigErr, bytes, true);
             sOrigOut.flush();
             sOrigErr.flush();
         }
@@ -395,6 +438,15 @@ public final class LaunchMain {
                 || line.startsWith("ACOSUNSUPPORTED");
     }
 
+    static boolean isAcosProtocolBytes(byte[] bytes) {
+        if (bytes.length < 9) {
+            return false;
+        }
+        int prefixLen = Math.min(bytes.length, 16);
+        String prefix = new String(bytes, 0, prefixLen, java.nio.charset.StandardCharsets.UTF_8);
+        return isAcosProtocolLine(prefix);
+    }
+
     /**
      * Line-buffered stream wrapper that mirrors every byte untouched to the
      * original process stream (`sOrigOut` / `sOrigErr`) -- whole lines at a
@@ -482,8 +534,9 @@ public final class LaunchMain {
             }
             byte[] bytes = origBuf.toByteArray();
             origBuf.reset();
+            boolean ensureLineStart = isAcosProtocolBytes(bytes);
             synchronized (sOutLock) {
-                orig.write(bytes, 0, bytes.length);
+                writeRawOrigLocked(orig, bytes, ensureLineStart);
                 orig.flush();
             }
         }

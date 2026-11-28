@@ -15296,5 +15296,196 @@ mod service_control_hot_attach_tests {
         assert_eq!(meta_unescape(&v0[1..]), raw_val);
         assert_eq!(entries[1], "flag=b1");
     }
+
+    #[test]
+    fn launch_main_preserves_protocol_line_boundaries_after_partial_stdout() {
+        fn parse_lines(lines: &str) -> ProbeState {
+            let state = Arc::new(std::sync::Mutex::new(ProbeState::default()));
+            drain_stdout_lines(
+                std::io::Cursor::new(lines.as_bytes().to_vec()),
+                128 * 1024,
+                Arc::clone(&state),
+                None,
+                0,
+            );
+            Arc::try_unwrap(state)
+                .ok()
+                .expect("unique Arc")
+                .into_inner()
+                .unwrap()
+        }
+
+        let src = include_str!("../guest/java/dev/acos/art/LaunchMain.java");
+        for required in [
+            "private static boolean sOrigOutAtLineStart = true;",
+            "private static boolean sOrigErrAtLineStart = true;",
+            "static void writeRawOrigLocked(",
+            "writeRawOrigLocked(ps, bytes, true);",
+            "writeRawOrigLocked(sOrigOut, bytes, true);",
+            "writeRawOrigLocked(sOrigErr, bytes, true);",
+            "writeRawOrigLocked(orig, bytes, ensureLineStart);",
+        ] {
+            assert!(
+                src.contains(required),
+                "LaunchMain.java must preserve line-boundary tracking (`{required}`)"
+            );
+        }
+
+        // Without a leading newline, a flushed partial line before ACOSPROBE hides the record.
+        let merged = parse_lines("helloACOSPROBE {\"seq\":1,\"tree\":{\"nodes\":[]}}\n");
+        assert!(
+            merged.latest.is_none(),
+            "sanity check: host parser requires ACOSPROBE to start at column 0"
+        );
+        let separated = parse_lines("hello\nACOSPROBE {\"seq\":1,\"tree\":{\"nodes\":[]}}\n");
+        assert_eq!(
+            separated.latest.as_ref().map(|s| s.seq),
+            Some(1),
+            "host parser must capture ACOSPROBE once separated onto its own line"
+        );
+
+        // When the Android SDK + JDK are available, compile and run the real LaunchMain
+        // stream framing on the host JVM to verify partial-line behavior end to end.
+        let Ok(sdk) = android_sdk() else {
+            return;
+        };
+        let android_jar = sdk.join("platforms/android-34/android.jar");
+        if !android_jar.is_file() {
+            return;
+        }
+        let javac = PathBuf::from(std::env::var("JAVAC").unwrap_or_else(|_| "javac".into()));
+        let java = PathBuf::from(std::env::var("JAVA").unwrap_or_else(|_| "java".into()));
+        struct TempDirGuard(PathBuf);
+        impl Drop for TempDirGuard {
+            fn drop(&mut self) {
+                let _ = fs::remove_dir_all(&self.0);
+            }
+        }
+        let tmp_path = std::env::temp_dir().join(format!(
+            "acos-launch-line-boundary-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&tmp_path);
+        fs::create_dir_all(&tmp_path).expect("create tempdir");
+        let _guard = TempDirGuard(tmp_path.clone());
+
+        let classes = tmp_path.join("classes");
+        fs::create_dir_all(&classes).expect("create classes dir");
+        let driver = tmp_path.join("LineBoundaryDriver.java");
+        fs::write(
+            &driver,
+            r#"package dev.acos.art;
+import java.io.ByteArrayOutputStream;
+import java.io.FileOutputStream;
+import java.io.PrintStream;
+public final class LineBoundaryDriver {
+    public static void main(String[] args) throws Exception {
+        ByteArrayOutputStream capOut = new ByteArrayOutputStream();
+        ByteArrayOutputStream capErr = new ByteArrayOutputStream();
+        System.setOut(new PrintStream(capOut, true, "UTF-8"));
+        System.setErr(new PrintStream(capErr, true, "UTF-8"));
+
+        LaunchMain.installRuntimeDiagnostics();
+
+        // 1. Flushed partial app stdout followed by direct protocol write.
+        System.out.print("hello");
+        System.out.flush();
+        LaunchMain.origLine(
+                LaunchMain.sOrigOut,
+                "ACOSPROBE {\"seq\":1,\"tree\":{\"nodes\":[]}}");
+
+        // 2. Normal partial app stdout followed by continuation must stay unbroken.
+        System.out.print("foo");
+        System.out.flush();
+        System.out.println(" bar");
+
+        // 3. Flushed partial app stdout followed by redirected ACOS protocol line.
+        System.out.print("partial");
+        System.out.flush();
+        System.out.println("ACOSLAUNCH MARK ok");
+
+        // 4. Flushed partial app stderr followed by origLineBoth (stdout already at line start).
+        System.err.print("err-part");
+        System.err.flush();
+        LaunchMain.origLineBoth("ACOSSTUCK {}");
+
+        try (FileOutputStream fo = new FileOutputStream(args[0]);
+             FileOutputStream fe = new FileOutputStream(args[1])) {
+            fo.write(capOut.toByteArray());
+            fe.write(capErr.toByteArray());
+        }
+    }
 }
+"#,
+        )
+        .expect("write driver");
+
+        let src_dir = crate::app::guest_source_dir();
+        let compile = Command::new(&javac)
+            .args(crate::jvm::dump_args())
+            .arg("-source")
+            .arg("11")
+            .arg("-target")
+            .arg("11")
+            .arg("-Xlint:-options")
+            .arg("-cp")
+            .arg(&android_jar)
+            .arg("-d")
+            .arg(&classes)
+            .arg(src_dir.join("dev/acos/art/LaunchMain.java"))
+            .arg(src_dir.join("dev/acos/art/SoftwareKeyStore.java"))
+            .arg(src_dir.join("dev/acos/art/RenderNat.java"))
+            .arg(src_dir.join("dev/acos/art/Nat.java"))
+            .arg(&driver)
+            .output()
+            .expect("run javac");
+        assert!(
+            compile.status.success(),
+            "javac failed:\n{}{}",
+            String::from_utf8_lossy(&compile.stdout),
+            String::from_utf8_lossy(&compile.stderr)
+        );
+
+        let out_file = tmp_path.join("stdout.txt");
+        let err_file = tmp_path.join("stderr.txt");
+        let cp = format!("{}:{}", classes.display(), android_jar.display());
+        let run = Command::new(&java)
+            .arg(format!("-XX:ErrorFile={}/hs_err_pid%p.log", tmp_path.display()))
+            .arg(format!("-XX:ReplayDataFile={}/replay_pid%p.log", tmp_path.display()))
+            .arg("-cp")
+            .arg(&cp)
+            .arg("dev.acos.art.LineBoundaryDriver")
+            .arg(&out_file)
+            .arg(&err_file)
+            .output()
+            .expect("run java");
+        assert!(
+            run.status.success(),
+            "LineBoundaryDriver failed:\n{}{}",
+            String::from_utf8_lossy(&run.stdout),
+            String::from_utf8_lossy(&run.stderr)
+        );
+
+        let stdout = fs::read_to_string(&out_file).expect("read captured stdout");
+        let stderr = fs::read_to_string(&err_file).expect("read captured stderr");
+        assert_eq!(
+            stdout,
+            "hello\nACOSPROBE {\"seq\":1,\"tree\":{\"nodes\":[]}}\nfoo bar\npartial\nACOSLAUNCH MARK ok\nACOSSTUCK {}\n"
+        );
+        assert_eq!(stderr, "err-part\nACOSSTUCK {}\n");
+
+        let parsed = parse_lines(&stdout);
+        assert_eq!(
+            parsed.latest.as_ref().map(|s| s.seq),
+            Some(1),
+            "host parser must parse ACOSPROBE emitted after flushed partial stdout"
+        );
+        assert!(
+            parsed.marks.iter().any(|m| m == "ACOSLAUNCH MARK ok"),
+            "host parser must also capture redirected ACOSLAUNCH MARK after partial stdout: {:?}",
+            parsed.marks
+        );
+    }
+}
+
 
