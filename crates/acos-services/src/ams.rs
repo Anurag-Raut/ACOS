@@ -601,9 +601,14 @@ impl Filter {
 
     /// Specificity score used to rank competing `<intent-filter>` matches for a
     /// deep link (higher = more specific: literal path > prefix > glob > host >
-    /// wildcard host > port > scheme > MIME type).
+    /// wildcard host > port > scheme > MIME type). Only the authority and path
+    /// alternatives that match `intent` count.
     #[must_use]
-    pub fn specificity(&self) -> u32 {
+    pub fn specificity(&self, intent: &IntentFacts) -> u32 {
+        let data = intent.data.as_deref().and_then(parse_intent_data);
+        let host = data.as_ref().and_then(|d| d.host);
+        let port = data.as_ref().map_or(-1, |d| d.port);
+        let path = data.as_ref().and_then(|d| d.path).unwrap_or("");
         let mut score = 0u32;
         if !self.schemes.is_empty() {
             score += 1;
@@ -614,6 +619,7 @@ impl Filter {
         let auth_score = self
             .authorities
             .iter()
+            .filter(|a| host.is_some_and(|h| a.matches(h, port)))
             .map(|a| {
                 let mut s = if a.wild { 2 } else { 4 };
                 if a.port != -1 {
@@ -627,6 +633,7 @@ impl Filter {
         let path_score = self
             .paths
             .iter()
+            .filter(|p| p.matches(path))
             .map(|p| match p.kind {
                 0 => 8, // PATTERN_LITERAL
                 1 => 6, // PATTERN_PREFIX
@@ -716,7 +723,9 @@ impl DeclaredComponent {
         Self {
             package: package.to_string(),
             class: acos_apk::manifest::fq_name(package, &c.name),
-            exported: c.exported.unwrap_or(false),
+            // `PackageParser`: an omitted `android:exported` is true exactly
+            // when the component declares an intent filter.
+            exported: c.exported.unwrap_or(!c.intent_filters.is_empty()),
             launch_mode: launch_mode_code(c.launch_mode.as_deref()),
             filters: c
                 .intent_filters
@@ -1940,23 +1949,24 @@ impl AmsState {
             ..IntentFacts::default()
         };
 
-        // Match activities against the manifest `<intent-filter>` table.
-        // Prefer explicitly exported activities and more specific filters
-        // (path > authority > scheme), while keeping legacy manifests that
-        // omitted `android:exported` resolvable just like `resolve_activity`.
-        let mut candidates: Vec<((u8, u32), DeclaredComponent)> = self
+        // Match activities against the manifest `<intent-filter>` table. The
+        // host is an outside caller, so a non-exported activity is never a
+        // candidate (AOSP refuses that start: `ActivityTaskSupervisor`,
+        // "not exported from uid").
+        let mut candidates: Vec<(u32, DeclaredComponent)> = self
             .manifests
             .matching_activities(&intent)
             .into_iter()
+            .filter(|c| c.exported)
             .map(|c| {
                 let score = c
                     .filters
                     .iter()
                     .filter(|f| f.matches(&intent))
-                    .map(Filter::specificity)
+                    .map(|f| f.specificity(&intent))
                     .max()
                     .unwrap_or(0);
-                ((u8::from(c.exported), score), c)
+                (score, c)
             })
             .collect();
 
@@ -1968,13 +1978,14 @@ impl AmsState {
                 .unwrap_or_default();
             return Err(ServiceError::StartNotFound {
                 detail: format!(
-                    "no installed activity matches ACTION_VIEW for URI {trimmed:?}{pkg_note}"
+                    "no installed exported activity matches ACTION_VIEW for URI \
+                     {trimmed:?}{pkg_note}"
                 ),
             });
         }
 
-        // Stable sort descending by (exported, specificity) so more specific
-        // path/authority filters win while preserving install order on ties.
+        // Stable sort descending by specificity so more specific path/authority
+        // filters win while preserving install order on ties.
         candidates.sort_by(|a, b| b.0.cmp(&a.0));
         let component = candidates.remove(0).1;
 
@@ -2149,7 +2160,12 @@ impl AmsState {
                 // target does not stand in for stays `START_NOT_FOUND`.
                 let captured = self.intents.as_ref().and_then(|state| {
                     state.lock().ok().and_then(|mut state| {
-                        state.capture(
+                        state.capture_from(
+                            crate::intents::CaptureOrigin {
+                                process_tag: caller_tag
+                                    .unwrap_or(crate::atms::PRIMARY_PROCESS_TAG),
+                                requester: result_to,
+                            },
                             intent,
                             flags,
                             request_code,
@@ -2561,18 +2577,7 @@ impl AmsState {
                     == crate::atms::PRIMARY_PROCESS_TAG
         })?;
         let pending = self.pending_launches.remove(index);
-        for activity in &mut self.activities {
-            if activity.token == pending.token {
-                activity.token = real;
-            }
-        }
-        for task in &mut self.tasks {
-            for token in &mut task.activities {
-                if *token == pending.token {
-                    *token = real;
-                }
-            }
-        }
+        self.rebind_activity_token(pending.token, real);
         Some((pending.token, pending.class))
     }
 
@@ -2666,11 +2671,14 @@ impl AmsState {
     /// (`singleTop` / `FLAG_ACTIVITY_SINGLE_TOP`). `new_intents` stays the
     /// evidence stream; this queue is what the peer drains into a
     /// `NewIntentItem`.
+    ///
+    /// An entry whose activity still waits for its launch stays queued: its
+    /// token is a placeholder that names no process yet.
     pub fn take_pending_new_intent(&mut self, tag: u32) -> Option<(u64, IntentFacts)> {
-        let index = self
-            .pending_new_intents
-            .iter()
-            .position(|(token, _)| crate::atms::process_tag_of(*token) == tag)?;
+        let index = self.pending_new_intents.iter().position(|(token, _)| {
+            crate::atms::process_tag_of(*token) == tag
+                && !self.pending_launches.iter().any(|l| l.token == *token)
+        })?;
         Some(self.pending_new_intents.remove(index))
     }
 
@@ -2684,6 +2692,20 @@ impl AmsState {
     /// `startActivityForResult` receiver (`result_to`, an activity token) still
     /// names the right activity.
     pub fn bind_launch_token(&mut self, old: u64, new: u64) {
+        self.rebind_activity_token(old, new);
+        for launch in &mut self.pending_launches {
+            if launch.token == old {
+                launch.token = new;
+            }
+            if launch.result_to == old {
+                launch.result_to = new;
+            }
+        }
+    }
+
+    /// Move everything keyed by an activity's token from `old` to `new`: its
+    /// record, its task slot and the `onNewIntent` deliveries queued for it.
+    fn rebind_activity_token(&mut self, old: u64, new: u64) {
         for activity in &mut self.activities {
             if activity.token == old {
                 activity.token = new;
@@ -2696,12 +2718,9 @@ impl AmsState {
                 }
             }
         }
-        for launch in &mut self.pending_launches {
-            if launch.token == old {
-                launch.token = new;
-            }
-            if launch.result_to == old {
-                launch.result_to = new;
+        for (token, _) in &mut self.pending_new_intents {
+            if *token == old {
+                *token = new;
             }
         }
     }
@@ -3804,6 +3823,32 @@ mod tests {
         let advanced = &declared.filters[1].paths;
         assert_eq!(advanced.len(), 1, "an empty list would match any path");
         assert!(!advanced[0].matches("/admin"));
+    }
+
+    #[test]
+    fn an_omitted_exported_attribute_follows_the_presence_of_intent_filters() {
+        let component = |exported: Option<bool>, filters: usize| acos_apk::manifest::Component {
+            kind: acos_apk::manifest::ComponentKind::Activity,
+            name: ".Main".into(),
+            authorities: Vec::new(),
+            exported,
+            launch_mode: None,
+            process: None,
+            permission: None,
+            grant_uri_permissions: None,
+            label: None,
+            label_ref: None,
+            intent_filters: vec![acos_apk::manifest::IntentFilter::default(); filters],
+            target_activity: None,
+            enabled: None,
+            meta_data: Vec::new(),
+        };
+        let exported =
+            |e, n| DeclaredComponent::from_apk("pkg", &component(e, n)).exported;
+        assert!(exported(None, 1));
+        assert!(!exported(None, 0));
+        assert!(!exported(Some(false), 1));
+        assert!(exported(Some(true), 0));
     }
 
     fn db_with_fixture() -> ManifestDb {

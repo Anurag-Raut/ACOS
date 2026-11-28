@@ -37,7 +37,7 @@
 //! traversal segment (`..`, `.`, `\`, percent-encoded `%2e`/`%2f`/`%5c`) or
 //! unknown id is refused before touching the filesystem.
 
-use std::collections::VecDeque;
+use std::collections::{BTreeSet, VecDeque};
 use std::fs::{File, OpenOptions};
 use std::os::fd::OwnedFd;
 use std::path::{Path, PathBuf};
@@ -151,6 +151,9 @@ impl PickerEntry {
 pub struct PickerRegistry {
     next_id: u64,
     entries: VecDeque<PickerEntry>,
+    /// Staged files this registry owns and must delete. Ownership is per file,
+    /// not per entry, so it survives evicting one of several entries serving it.
+    owned: BTreeSet<PathBuf>,
 }
 
 impl PickerRegistry {
@@ -193,53 +196,76 @@ impl PickerRegistry {
             "content://{PICKER_AUTHORITY}/{id}/{}",
             percent_encode_segment(&name)
         );
+        if writable {
+            // The app's saved output now: never deleted by the registry.
+            self.owned.remove(&canonical);
+            for other in &mut self.entries {
+                if other.host_path == canonical {
+                    other.staged = false;
+                }
+            }
+        }
         let entry = PickerEntry {
             id,
             uri,
+            staged: self.owned.contains(&canonical),
             host_path: canonical,
             display_name: name,
             mime_type: mime,
             writable,
-            staged: false,
         };
-        while self.entries.len() >= MAX_PICKER_ENTRIES {
+        // Insert first: the new entry may serve the same file as an evicted one.
+        self.entries.push_back(entry.clone());
+        while self.entries.len() > MAX_PICKER_ENTRIES {
             if let Some(evicted) = self.entries.pop_front() {
-                self.discard_staged(&evicted);
+                self.release_if_unserved(&evicted.host_path);
             }
         }
-        self.entries.push_back(entry.clone());
         Ok(entry)
     }
 
     /// Hand ownership of entry `id`'s backing file to the registry, so it is
-    /// deleted on eviction or [`Self::release_staged`]. Refused (`false`) for a
-    /// writable entry, whose file is the app's saved output, and for any path
-    /// outside the viewer's upload directories.
+    /// deleted once no entry serves it any more (eviction) or at
+    /// [`Self::release_staged`]. Refused (`false`) for a file any entry may
+    /// write, which is the app's saved output, and for any path outside the
+    /// viewer's upload directories.
     pub fn mark_staged(&mut self, id: u64) -> bool {
-        match self.entries.iter_mut().find(|e| e.id == id) {
-            Some(entry) if !entry.writable && is_staged_upload_path(&entry.host_path) => {
+        let Some(path) = self
+            .entries
+            .iter()
+            .find(|e| e.id == id)
+            .map(|e| e.host_path.clone())
+        else {
+            return false;
+        };
+        if !is_staged_upload_path(&path)
+            || self.entries.iter().any(|e| e.writable && e.host_path == path)
+        {
+            return false;
+        }
+        for entry in &mut self.entries {
+            if entry.host_path == path {
                 entry.staged = true;
-                true
             }
-            _ => false,
         }
+        self.owned.insert(path);
+        true
     }
 
-    /// End of session: drop every staged entry and delete its file.
+    /// End of session: drop every entry serving an owned file and delete it.
     pub fn release_staged(&mut self) {
-        let (staged, kept): (VecDeque<_>, VecDeque<_>) =
-            std::mem::take(&mut self.entries).into_iter().partition(|e| e.staged);
-        self.entries = kept;
-        for entry in &staged {
-            self.discard_staged(entry);
+        let owned = std::mem::take(&mut self.owned);
+        self.entries.retain(|e| !owned.contains(&e.host_path));
+        for path in &owned {
+            // Best effort: a file the user already removed is not an error.
+            let _ = std::fs::remove_file(path);
         }
     }
 
-    /// Delete a removed entry's staged file unless a live entry still serves it.
-    fn discard_staged(&self, removed: &PickerEntry) {
-        if removed.staged && !self.entries.iter().any(|e| e.host_path == removed.host_path) {
-            // Best effort: a file the user already removed is not an error.
-            let _ = std::fs::remove_file(&removed.host_path);
+    /// Delete an owned file once no live entry serves it.
+    fn release_if_unserved(&mut self, path: &Path) {
+        if !self.entries.iter().any(|e| e.host_path == path) && self.owned.remove(path) {
+            let _ = std::fs::remove_file(path);
         }
     }
 
@@ -1027,6 +1053,70 @@ mod tests {
         assert!(!ending_path.exists(), "session end deletes the staged copy");
         assert!(reg.resolve_uri(&ending.uri).is_err());
         assert!(own.exists() && saved_path.exists());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_replacement_for_the_evicted_oldest_entry_keeps_its_file() {
+        let (dir, own) = temp_file("pick-own.txt", b"mine");
+        let uploads = dir.join("picker");
+        std::fs::create_dir_all(&uploads).expect("mkdir");
+        let path = uploads.join("pick-again");
+        std::fs::write(&path, b"copy").expect("stage");
+        let mut reg = PickerRegistry::new();
+        let oldest = reg.register_file(&path, None, None, false).expect("oldest");
+        assert!(reg.mark_staged(oldest.id));
+        for _ in 1..MAX_PICKER_ENTRIES {
+            reg.register_file(&own, None, None, false).expect("fill");
+        }
+        let again = reg.register_file(&path, None, None, false).expect("again");
+        assert!(reg.resolve_uri(&oldest.uri).is_err(), "oldest was evicted");
+        assert!(reg.open_file(&again.uri, "r").is_ok(), "the new URI is readable");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn an_alias_keeps_a_staged_file_owned_until_it_goes_too() {
+        let (dir, own) = temp_file("pick-own.txt", b"mine");
+        let uploads = dir.join("picker");
+        std::fs::create_dir_all(&uploads).expect("mkdir");
+        let stage = |reg: &mut PickerRegistry, name: &str| {
+            let path = uploads.join(name);
+            std::fs::write(&path, b"copy").expect("stage");
+            let entry = reg.register_file(&path, None, None, false).expect("staged");
+            assert!(reg.mark_staged(entry.id));
+            // The alias is not marked staged by its caller.
+            let alias = reg.register_file(&path, None, None, false).expect("alias");
+            (path, entry, alias)
+        };
+
+        // Session end releases a file whose first entry was already evicted.
+        let mut reg = PickerRegistry::new();
+        let (path, first, alias) = stage(&mut reg, "pick-ending");
+        for _ in 0..MAX_PICKER_ENTRIES - 1 {
+            reg.register_file(&own, None, None, false).expect("fill");
+        }
+        assert!(reg.resolve_uri(&first.uri).is_err());
+        assert!(reg.resolve_uri(&alias.uri).is_ok() && path.exists());
+        reg.release_staged();
+        assert!(!path.exists(), "session end deletes the staged copy");
+        assert!(reg.resolve_uri(&alias.uri).is_err());
+
+        // So does evicting the last entry that serves it.
+        let mut reg = PickerRegistry::new();
+        let (path, _, alias) = stage(&mut reg, "pick-evicted");
+        for _ in 0..MAX_PICKER_ENTRIES {
+            reg.register_file(&own, None, None, false).expect("fill");
+        }
+        assert!(reg.resolve_uri(&alias.uri).is_err());
+        assert!(!path.exists(), "the last eviction deletes the staged copy");
+
+        // A writable alias turns the file into the app's output: kept.
+        let mut reg = PickerRegistry::new();
+        let (path, _, _) = stage(&mut reg, "pick-written");
+        reg.register_file(&path, None, None, true).expect("writable");
+        reg.release_staged();
+        assert!(path.exists() && own.exists());
         let _ = std::fs::remove_dir_all(&dir);
     }
 

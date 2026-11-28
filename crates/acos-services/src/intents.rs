@@ -139,6 +139,34 @@ pub struct CapturedIntent {
     pub for_result: bool,
     /// The answer scripted for this capture, when one was scripted.
     pub scripted_result: Option<ScriptedResult>,
+    /// Which activity of which process made the request.
+    pub origin: CaptureOrigin,
+    /// The process instance that made the request has since been replaced, so
+    /// no live activity can receive the answer.
+    pub requester_gone: bool,
+}
+
+/// The requester of a captured intent: where its result has to go.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct CaptureOrigin {
+    /// The app process tag (`0` is the primary process).
+    pub process_tag: u32,
+    /// The requesting activity's token (`resultTo`; `0` when there is none).
+    pub requester: u64,
+}
+
+/// Why a captured request can no longer be answered.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ReplyRefusal {
+    /// The requesting process instance is gone.
+    RequesterGone,
+    /// Another activity of the same process made a newer request with the same
+    /// request code (capture `newer`). The guest routes a result by request
+    /// code, so an answer to the older one would reach the wrong activity.
+    Superseded {
+        /// The newer capture's sequence number.
+        newer: u64,
+    },
 }
 
 /// A scripted answer: what the capture target "returns" to a waiting activity.
@@ -282,6 +310,7 @@ impl CapturedIntent {
             "categories": self.categories,
             "extras": extras,
             "component": self.component,
+            "process_tag": self.origin.process_tag,
             "flags": self.flags,
             "request_code": self.request_code,
             "for_result": self.for_result,
@@ -361,10 +390,31 @@ impl IntentState {
         Self::default()
     }
 
-    /// Record one captured intent and return it. `None` when the intent is not
-    /// one the capture target stands in for (see [`capture_eligible`]).
+    /// [`Self::capture_from`] for the primary process with no requesting
+    /// activity.
     pub fn capture(
         &mut self,
+        facts: &IntentFacts,
+        flags: i32,
+        request_code: i32,
+        for_result: bool,
+        utc_ms: u64,
+    ) -> Option<CapturedIntent> {
+        self.capture_from(
+            CaptureOrigin::default(),
+            facts,
+            flags,
+            request_code,
+            for_result,
+            utc_ms,
+        )
+    }
+
+    /// Record one captured intent and return it. `None` when the intent is not
+    /// one the capture target stands in for (see [`capture_eligible`]).
+    pub fn capture_from(
+        &mut self,
+        origin: CaptureOrigin,
         facts: &IntentFacts,
         flags: i32,
         request_code: i32,
@@ -407,12 +457,47 @@ impl IntentState {
             request_code,
             for_result,
             scripted_result: None,
+            origin,
+            requester_gone: false,
         };
         if self.captures.len() >= MAX_CAPTURES {
             self.captures.pop_front();
         }
         self.captures.push_back(record.clone());
         Some(record)
+    }
+
+    /// Process `tag` is about to be started again: whatever its earlier
+    /// instances requested has no activity left to receive an answer.
+    pub fn orphan_process(&mut self, tag: u32) {
+        for capture in &mut self.captures {
+            if capture.origin.process_tag == tag {
+                capture.requester_gone = true;
+            }
+        }
+    }
+
+    /// Whether the answer to capture `seq` can still reach its requester.
+    /// An unknown `seq` is not refused here: scripting it reports that.
+    pub fn reply_refusal(&self, seq: u64) -> Option<ReplyRefusal> {
+        let target = self.by_seq(seq)?;
+        if target.requester_gone {
+            return Some(ReplyRefusal::RequesterGone);
+        }
+        if !target.for_result {
+            return None;
+        }
+        self.captures
+            .iter()
+            .rev()
+            .find(|c| {
+                c.seq > target.seq
+                    && c.for_result
+                    && c.origin.process_tag == target.origin.process_tag
+                    && c.request_code == target.request_code
+                    && c.origin.requester != target.origin.requester
+            })
+            .map(|c| ReplyRefusal::Superseded { newer: c.seq })
     }
 
     /// The newest capture.

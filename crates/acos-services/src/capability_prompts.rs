@@ -774,6 +774,8 @@ mod tests {
             request_code: -1,
             for_result: false,
             scripted_result: None,
+            origin: Default::default(),
+            requester_gone: false,
         };
         let prompt = state.record_captured_intent(&captured);
         assert_eq!(prompt.trigger, PromptTrigger::IntentCaptured);
@@ -804,6 +806,8 @@ mod tests {
             request_code: 42,
             for_result: true,
             scripted_result: None,
+            origin: Default::default(),
+            requester_gone: false,
         };
         let prompt = state.record_captured_intent(&captured);
         assert_eq!(prompt.trigger, PromptTrigger::IntentCaptured);
