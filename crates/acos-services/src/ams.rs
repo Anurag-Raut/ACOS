@@ -488,6 +488,10 @@ pub struct Filter {
     pub categories: Vec<String>,
     /// `<data android:scheme>`.
     pub schemes: Vec<String>,
+    /// `<data android:host>` + optional `<data android:port>`.
+    pub authorities: Vec<DataAuthority>,
+    /// `<data android:path>` / `pathPrefix` / `pathPattern`.
+    pub paths: Vec<DataPattern>,
     /// `<data android:mimeType>`.
     pub mime_types: Vec<String>,
 }
@@ -509,20 +513,13 @@ impl Filter {
         {
             return false;
         }
-        if !self.schemes.is_empty() {
-            let Some(scheme) = intent.data.as_deref().and_then(scheme_of) else {
-                return false;
-            };
-            if !self.schemes.iter().any(|s| s == scheme) {
-                return false;
-            }
-        }
-        true
+        self.matches_data(intent)
     }
 
-    /// Android's matching rule for the filter subset ACOS models: every intent
-    /// action/category/scheme must be present in the filter. An intent with no
-    /// categories only matches a filter that declares `DEFAULT`.
+    /// Android's matching rule (`IntentFilter.match`): every intent action,
+    /// category, and data constraint (`scheme`, `host`, `port`, `path`,
+    /// `pathPrefix`, `pathPattern`, `mimeType`) must match. An intent with no
+    /// categories only matches a filter that declares `CATEGORY_DEFAULT`.
     #[must_use]
     pub fn matches(&self, intent: &IntentFacts) -> bool {
         if let Some(action) = &intent.action {
@@ -541,20 +538,168 @@ impl Filter {
         {
             return false;
         }
+        self.matches_data(intent)
+    }
+
+    /// AOSP `IntentFilter.matchData` semantics for scheme, authority
+    /// (host + optional port), path (`path` / `pathPrefix` / `pathPattern`),
+    /// and MIME type.
+    fn matches_data(&self, intent: &IntentFacts) -> bool {
+        let parsed = intent.data.as_deref().and_then(parse_intent_data);
+        let type_ = intent.mime_type.as_deref();
+        if self.schemes.is_empty() && self.mime_types.is_empty() {
+            return type_.is_none() && intent.data.is_none();
+        }
         if !self.schemes.is_empty() {
-            let Some(scheme) = intent.data.as_deref().and_then(scheme_of) else {
+            let Some(data) = parsed.as_ref() else {
                 return false;
             };
-            if !self.schemes.iter().any(|s| s == scheme) {
+            if !self
+                .schemes
+                .iter()
+                .any(|s| s.eq_ignore_ascii_case(data.scheme))
+            {
                 return false;
             }
+            if !self.authorities.is_empty() {
+                let Some(host) = data.host else {
+                    return false;
+                };
+                if !self
+                    .authorities
+                    .iter()
+                    .any(|a| a.matches(host, data.port))
+                {
+                    return false;
+                }
+            }
+            if !self.paths.is_empty() {
+                // `Uri.getPath()` is empty string for `https://host` (no slash)
+                // and `Some("/...")` when a path is present.
+                let path = data.path.unwrap_or("");
+                if !self.paths.iter().any(|p| p.matches(path)) {
+                    return false;
+                }
+            }
+        } else if let Some(data) = parsed.as_ref() {
+            // AOSP `IntentFilter.matchData`: when a filter specifies MIME types
+            // without schemes, only `""`, `"content"`, or `"file"` URIs match.
+            if !data.scheme.is_empty()
+                && !data.scheme.eq_ignore_ascii_case("content")
+                && !data.scheme.eq_ignore_ascii_case("file")
+            {
+                return false;
+            }
+        } else if intent.data.is_some() {
+            return false;
         }
-        true
+        if self.mime_types.is_empty() {
+            return type_.is_none();
+        }
+        type_.is_some_and(|t| self.mime_types.iter().any(|d| mime_matches(d, t)))
+    }
+
+    /// Specificity score used to rank competing `<intent-filter>` matches for a
+    /// deep link (higher = more specific: literal path > prefix > glob > host >
+    /// wildcard host > port > scheme > MIME type). Only the authority and path
+    /// alternatives that match `intent` count.
+    #[must_use]
+    pub fn specificity(&self, intent: &IntentFacts) -> u32 {
+        let data = intent.data.as_deref().and_then(parse_intent_data);
+        let host = data.as_ref().and_then(|d| d.host);
+        let port = data.as_ref().map_or(-1, |d| d.port);
+        let path = data.as_ref().and_then(|d| d.path).unwrap_or("");
+        let mut score = 0u32;
+        if !self.schemes.is_empty() {
+            score += 1;
+        }
+        if !self.mime_types.is_empty() {
+            score += 1;
+        }
+        let auth_score = self
+            .authorities
+            .iter()
+            .filter(|a| host.is_some_and(|h| a.matches(h, port)))
+            .map(|a| {
+                let mut s = if a.wild { 2 } else { 4 };
+                if a.port != -1 {
+                    s += 1;
+                }
+                s
+            })
+            .max()
+            .unwrap_or(0);
+        score += auth_score;
+        let path_score = self
+            .paths
+            .iter()
+            .filter(|p| p.matches(path))
+            .map(|p| match p.kind {
+                0 => 8, // PATTERN_LITERAL
+                1 => 6, // PATTERN_PREFIX
+                2 => 4, // PATTERN_SIMPLE_GLOB
+                4 => 4, // PATTERN_SUFFIX
+                _ => 2,
+            })
+            .max()
+            .unwrap_or(0);
+        score += path_score;
+        score
     }
 }
 
-fn scheme_of(data: &str) -> Option<&str> {
-    data.split_once(':').map(|(scheme, _)| scheme)
+/// How [`AmsState::open_url`] delivered a deep-link intent to the guest.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OpenUrlDelivery {
+    /// Delivered to an existing activity instance via `onNewIntent`
+    /// (`NewIntentItem`).
+    NewIntent,
+    /// Queued a fresh `LaunchActivityItem` (`LaunchOrigin::Host`).
+    Launch,
+}
+
+impl OpenUrlDelivery {
+    /// Wire spelling for JSON replies.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::NewIntent => "on_new_intent",
+            Self::Launch => "launch",
+        }
+    }
+}
+
+/// Structured outcome of [`AmsState::open_url`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OpenUrlOutcome {
+    /// Whether the intent went to `onNewIntent` or started a fresh Activity.
+    pub delivery: OpenUrlDelivery,
+    /// Resolved target package.
+    pub package: String,
+    /// Resolved target Activity class.
+    pub class: String,
+    /// Activity token (existing token for `NewIntent`, placeholder for `Launch`).
+    pub token: u64,
+    /// Task id owning the activity.
+    pub task_id: i32,
+    /// Normalized URI string delivered to the app.
+    pub url: String,
+}
+
+impl OpenUrlOutcome {
+    /// Wire JSON representation for `acos_service_ctl` / `acos view`.
+    #[must_use]
+    pub fn to_json(&self) -> serde_json::Value {
+        serde_json::json!({
+            "ok": true,
+            "delivery": self.delivery.as_str(),
+            "package": self.package,
+            "class": self.class,
+            "component": format!("{}/{}", self.package, self.class),
+            "task_id": self.task_id,
+            "url": self.url,
+        })
+    }
 }
 
 /// A declared activity/service/receiver.
@@ -578,16 +723,70 @@ impl DeclaredComponent {
         Self {
             package: package.to_string(),
             class: acos_apk::manifest::fq_name(package, &c.name),
-            exported: c.exported.unwrap_or(false),
+            // `PackageParser`: an omitted `android:exported` is true exactly
+            // when the component declares an intent filter.
+            exported: c.exported.unwrap_or(!c.intent_filters.is_empty()),
             launch_mode: launch_mode_code(c.launch_mode.as_deref()),
             filters: c
                 .intent_filters
                 .iter()
-                .map(|f| Filter {
-                    actions: f.actions.clone(),
-                    categories: f.categories.clone(),
-                    schemes: f.data.iter().filter_map(|d| d.scheme.clone()).collect(),
-                    mime_types: f.data.iter().filter_map(|d| d.mime_type.clone()).collect(),
+                .map(|f| {
+                    let mut authorities = Vec::new();
+                    let mut paths = Vec::new();
+                    for d in &f.data {
+                        if let Some(host) = d.host.as_deref().filter(|h| !h.is_empty()) {
+                            let port = d
+                                .port
+                                .as_deref()
+                                .and_then(|p| p.trim().parse::<i32>().ok())
+                                .unwrap_or(-1);
+                            authorities.push(DataAuthority {
+                                host: Some(host.to_string()),
+                                port,
+                                wild: host.starts_with('*'),
+                            });
+                        }
+                        if let Some(path) = d.path.as_deref() {
+                            paths.push(DataPattern {
+                                pattern: Some(path.to_string()),
+                                kind: 0, // PATTERN_LITERAL
+                            });
+                        }
+                        if let Some(prefix) = d.path_prefix.as_deref() {
+                            paths.push(DataPattern {
+                                pattern: Some(prefix.to_string()),
+                                kind: 1, // PATTERN_PREFIX
+                            });
+                        }
+                        if let Some(pat) = d.path_pattern.as_deref() {
+                            paths.push(DataPattern {
+                                pattern: Some(pat.to_string()),
+                                kind: 2, // PATTERN_SIMPLE_GLOB
+                            });
+                        }
+                        if let Some(suffix) = d.path_suffix.as_deref() {
+                            paths.push(DataPattern {
+                                pattern: Some(suffix.to_string()),
+                                kind: 4, // PATTERN_SUFFIX
+                            });
+                        }
+                        if let Some(pat) = d.path_advanced_pattern.as_deref() {
+                            // Kept even though the matcher never matches it: an
+                            // empty path list would accept every path.
+                            paths.push(DataPattern {
+                                pattern: Some(pat.to_string()),
+                                kind: 3, // PATTERN_ADVANCED_GLOB
+                            });
+                        }
+                    }
+                    Filter {
+                        actions: f.actions.clone(),
+                        categories: f.categories.clone(),
+                        schemes: f.data.iter().filter_map(|d| d.scheme.clone()).collect(),
+                        authorities,
+                        paths,
+                        mime_types: f.data.iter().filter_map(|d| d.mime_type.clone()).collect(),
+                    }
                 })
                 .collect(),
         }
@@ -1003,7 +1202,8 @@ pub struct DataPattern {
     /// `PatternMatcher.mPattern`.
     pub pattern: Option<String>,
     /// `PatternMatcher.mType` (`PATTERN_LITERAL` = 0, `PATTERN_PREFIX` = 1,
-    /// `PATTERN_SIMPLE_GLOB` = 2, `PATTERN_ADVANCED_GLOB` = 3).
+    /// `PATTERN_SIMPLE_GLOB` = 2, `PATTERN_ADVANCED_GLOB` = 3,
+    /// `PATTERN_SUFFIX` = 4).
     pub kind: i32,
 }
 
@@ -1050,11 +1250,15 @@ impl DataAuthority {
         if self.wild {
             // `*.example.com` matches any sub-domain but not the domain itself
             // (`IntentFilter.AuthorityEntry.match` compares against
-            // `mHost` = `.example.com`).
+            // `mHost` = `.example.com`, case-insensitively).
             let suffix = declared.trim_start_matches('*');
-            return host.len() > suffix.len() && host.ends_with(suffix);
+            // Compare bytes: `host` comes from an untrusted URI, and slicing
+            // the `str` at this offset panics inside a multi-byte character.
+            let (host, suffix) = (host.as_bytes(), suffix.as_bytes());
+            return host.len() > suffix.len()
+                && host[host.len() - suffix.len()..].eq_ignore_ascii_case(suffix);
         }
-        declared == host
+        declared.eq_ignore_ascii_case(host)
     }
 }
 
@@ -1100,16 +1304,21 @@ fn parse_intent_data(data: &str) -> Option<IntentData<'_>> {
     let (host, port, path) = if let Some(after) = rest.strip_prefix("//") {
         let end = after.find(['/', '?', '#']).unwrap_or(after.len());
         let authority = &after[..end];
-        let path = if end < after.len() {
-            Some(&after[end..])
+        let tail = &after[end..];
+        let path = if tail.starts_with('/') {
+            let path_end = tail.find(['?', '#']).unwrap_or(tail.len());
+            Some(&tail[..path_end])
         } else {
             None
         };
-        let (host, port) = match authority.rsplit_once(':') {
-            Some((host, port)) if port.chars().all(|c| c.is_ascii_digit()) => {
+        let hostport = authority
+            .rsplit_once('@')
+            .map_or(authority, |(_, hp)| hp);
+        let (host, port) = match hostport.rsplit_once(':') {
+            Some((host, port)) if !port.is_empty() && port.chars().all(|c| c.is_ascii_digit()) => {
                 (host, port.parse::<i32>().unwrap_or(-1))
             }
-            _ => (authority, -1),
+            _ => (hostport, -1),
         };
         (Some(host), port, path)
     } else {
@@ -1689,6 +1898,215 @@ impl AmsState {
         )
     }
 
+    /// Deliver a host-initiated deep link (`ACTION_VIEW` + `CATEGORY_DEFAULT` +
+    /// `CATEGORY_BROWSABLE`) to a matching installed Activity in the guest.
+    ///
+    /// Resolves `url` (with optional explicit `package` and `mime_type`
+    /// overrides) against [`ManifestDb`]'s exported `<intent-filter>` entries.
+    ///
+    /// * If **no** installed exported activity matches, fails honestly with
+    ///   [`ServiceError::StartNotFound`] — never falls back to external intent
+    ///   capture or a synthetic success.
+    /// * If the matched activity is `singleTask`/`singleInstance` and already
+    ///   has a live instance, brings its task to front, clears activities above
+    ///   it, and queues a `NewIntentItem` (`onNewIntent`).
+    /// * If the matched activity is `singleTop` (or `FLAG_ACTIVITY_SINGLE_TOP`
+    ///   is set) and is already the foreground task's top unfinished activity,
+    ///   reuses it via `NewIntentItem` (`onNewIntent`).
+    /// * Otherwise launches a fresh instance with [`LaunchOrigin::Host`] and
+    ///   requests the target process if needed.
+    pub fn open_url(
+        &mut self,
+        url: &str,
+        package: Option<&str>,
+        mime_type: Option<&str>,
+        flags: i32,
+    ) -> Result<OpenUrlOutcome> {
+        let trimmed = url.trim();
+        if trimmed.is_empty() || parse_intent_data(trimmed).is_none() {
+            return Err(ServiceError::BadRequest {
+                interface: "acos.intents".into(),
+                method: "open_url".into(),
+                detail: format!("invalid URL {url:?}: expected a URI with a scheme (e.g. myapp://... or https://...)"),
+            });
+        }
+        let mut intent = IntentFacts {
+            action: Some("android.intent.action.VIEW".to_string()),
+            data: Some(trimmed.to_string()),
+            mime_type: mime_type
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .map(ToString::to_string),
+            flags,
+            package: package
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .map(ToString::to_string),
+            categories: vec![
+                "android.intent.category.DEFAULT".to_string(),
+                "android.intent.category.BROWSABLE".to_string(),
+            ],
+            ..IntentFacts::default()
+        };
+
+        // Match activities against the manifest `<intent-filter>` table. The
+        // host is an outside caller, so a non-exported activity is never a
+        // candidate (AOSP refuses that start: `ActivityTaskSupervisor`,
+        // "not exported from uid").
+        let mut candidates: Vec<(u32, DeclaredComponent)> = self
+            .manifests
+            .matching_activities(&intent)
+            .into_iter()
+            .filter(|c| c.exported)
+            .map(|c| {
+                let score = c
+                    .filters
+                    .iter()
+                    .filter(|f| f.matches(&intent))
+                    .map(|f| f.specificity(&intent))
+                    .max()
+                    .unwrap_or(0);
+                (score, c)
+            })
+            .collect();
+
+        if candidates.is_empty() {
+            let pkg_note = intent
+                .package
+                .as_deref()
+                .map(|p| format!(" in package {p:?}"))
+                .unwrap_or_default();
+            return Err(ServiceError::StartNotFound {
+                detail: format!(
+                    "no installed exported activity matches ACTION_VIEW for URI \
+                     {trimmed:?}{pkg_note}"
+                ),
+            });
+        }
+
+        // Stable sort descending by specificity so more specific path/authority
+        // filters win while preserving install order on ties.
+        candidates.sort_by(|a, b| b.0.cmp(&a.0));
+        let component = candidates.remove(0).1;
+
+        intent.component = Some((component.package.clone(), component.class.clone()));
+
+        const NEW_TASK: i32 = 0x1000_0000;
+        const SINGLE_TOP: i32 = 0x2000_0000;
+
+        // 1. `singleTask` (2) / `singleInstance` (3): reuse an existing live
+        //    instance anywhere in the task stack and deliver `onNewIntent`.
+        if matches!(component.launch_mode, 2 | 3) {
+            let found = self.tasks.iter().rev().find_map(|task| {
+                task.activities
+                    .iter()
+                    .rev()
+                    .copied()
+                    .find(|tok| {
+                        self.activities.iter().any(|a| {
+                            a.token == *tok
+                                && !a.finished
+                                && a.package == component.package
+                                && a.class == component.class
+                        })
+                    })
+                    .map(|tok| (task.id, tok))
+            });
+            if let Some((existing_task_id, token)) = found {
+                self.bring_task_to_front(existing_task_id);
+                let above = self.clear_above(existing_task_id, token);
+                for finished in above {
+                    if let Some(a) = self.activities.iter_mut().find(|a| a.token == finished) {
+                        a.finished = true;
+                    }
+                }
+                self.new_intents.push((token, intent.clone()));
+                self.pending_new_intents.push((token, intent));
+                return Ok(OpenUrlOutcome {
+                    delivery: OpenUrlDelivery::NewIntent,
+                    package: component.package,
+                    class: component.class,
+                    token,
+                    task_id: existing_task_id,
+                    url: trimmed.to_string(),
+                });
+            }
+        }
+
+        // 2. `singleTop` (1) or `FLAG_ACTIVITY_SINGLE_TOP`: reuse when already
+        //    the foreground task's top unfinished activity.
+        if component.launch_mode == 1 || (flags & SINGLE_TOP) != 0 {
+            let top = self.tasks.last().and_then(|task| {
+                task.activities
+                    .iter()
+                    .rev()
+                    .copied()
+                    .find(|tok| self.activities.iter().any(|a| a.token == *tok && !a.finished))
+                    .map(|tok| (task.id, tok))
+            });
+            if let Some((top_task_id, token)) = top {
+                let top_matches = self.activities.iter().any(|a| {
+                    a.token == token
+                        && !a.finished
+                        && a.package == component.package
+                        && a.class == component.class
+                });
+                if top_matches {
+                    self.new_intents.push((token, intent.clone()));
+                    self.pending_new_intents.push((token, intent));
+                    return Ok(OpenUrlOutcome {
+                        delivery: OpenUrlDelivery::NewIntent,
+                        package: component.package,
+                        class: component.class,
+                        token,
+                        task_id: top_task_id,
+                        url: trimmed.to_string(),
+                    });
+                }
+            }
+        }
+
+        // 3. Otherwise launch a new activity instance from the host.
+        let behaviour = if (flags & NEW_TASK) != 0 || component.launch_mode == 3 {
+            LaunchBehaviour::NewTask
+        } else {
+            LaunchBehaviour::NewInstance
+        };
+        let task_id = self.task_for(&component, behaviour);
+        let token = self.next_token;
+        self.next_token += 1;
+        self.activities.push(ActivityEntry {
+            token,
+            package: component.package.clone(),
+            class: component.class.clone(),
+            task_id,
+            finished: false,
+            reused: false,
+        });
+        self.task_mut(task_id).activities.push(token);
+        self.request_process(&component.package, &component.class, "open_url");
+        self.pending_launches.push(PendingLaunch {
+            token,
+            package: component.package.clone(),
+            class: component.class.clone(),
+            intent,
+            task_id,
+            result_to: 0,
+            request_code: 0,
+            result_who: None,
+            origin: LaunchOrigin::Host,
+            caller_tag: None,
+        });
+        Ok(OpenUrlOutcome {
+            delivery: OpenUrlDelivery::Launch,
+            package: component.package,
+            class: component.class,
+            token,
+            task_id,
+            url: trimmed.to_string(),
+        })
+    }
+
     /// Full activity-start implementation with explicit `origin` and `caller_tag`.
     #[allow(clippy::too_many_arguments)]
     pub fn start_activity_origin_tagged(
@@ -1742,7 +2160,12 @@ impl AmsState {
                 // target does not stand in for stays `START_NOT_FOUND`.
                 let captured = self.intents.as_ref().and_then(|state| {
                     state.lock().ok().and_then(|mut state| {
-                        state.capture(
+                        state.capture_from(
+                            crate::intents::CaptureOrigin {
+                                process_tag: caller_tag
+                                    .unwrap_or(crate::atms::PRIMARY_PROCESS_TAG),
+                                requester: result_to,
+                            },
                             intent,
                             flags,
                             request_code,
@@ -2154,18 +2577,7 @@ impl AmsState {
                     == crate::atms::PRIMARY_PROCESS_TAG
         })?;
         let pending = self.pending_launches.remove(index);
-        for activity in &mut self.activities {
-            if activity.token == pending.token {
-                activity.token = real;
-            }
-        }
-        for task in &mut self.tasks {
-            for token in &mut task.activities {
-                if *token == pending.token {
-                    *token = real;
-                }
-            }
-        }
+        self.rebind_activity_token(pending.token, real);
         Some((pending.token, pending.class))
     }
 
@@ -2259,11 +2671,14 @@ impl AmsState {
     /// (`singleTop` / `FLAG_ACTIVITY_SINGLE_TOP`). `new_intents` stays the
     /// evidence stream; this queue is what the peer drains into a
     /// `NewIntentItem`.
+    ///
+    /// An entry whose activity still waits for its launch stays queued: its
+    /// token is a placeholder that names no process yet.
     pub fn take_pending_new_intent(&mut self, tag: u32) -> Option<(u64, IntentFacts)> {
-        let index = self
-            .pending_new_intents
-            .iter()
-            .position(|(token, _)| crate::atms::process_tag_of(*token) == tag)?;
+        let index = self.pending_new_intents.iter().position(|(token, _)| {
+            crate::atms::process_tag_of(*token) == tag
+                && !self.pending_launches.iter().any(|l| l.token == *token)
+        })?;
         Some(self.pending_new_intents.remove(index))
     }
 
@@ -2277,6 +2692,20 @@ impl AmsState {
     /// `startActivityForResult` receiver (`result_to`, an activity token) still
     /// names the right activity.
     pub fn bind_launch_token(&mut self, old: u64, new: u64) {
+        self.rebind_activity_token(old, new);
+        for launch in &mut self.pending_launches {
+            if launch.token == old {
+                launch.token = new;
+            }
+            if launch.result_to == old {
+                launch.result_to = new;
+            }
+        }
+    }
+
+    /// Move everything keyed by an activity's token from `old` to `new`: its
+    /// record, its task slot and the `onNewIntent` deliveries queued for it.
+    fn rebind_activity_token(&mut self, old: u64, new: u64) {
         for activity in &mut self.activities {
             if activity.token == old {
                 activity.token = new;
@@ -2289,12 +2718,9 @@ impl AmsState {
                 }
             }
         }
-        for launch in &mut self.pending_launches {
-            if launch.token == old {
-                launch.token = new;
-            }
-            if launch.result_to == old {
-                launch.result_to = new;
+        for (token, _) in &mut self.pending_new_intents {
+            if *token == old {
+                *token = new;
             }
         }
     }
@@ -3345,6 +3771,86 @@ fn provider_from_holder(holder: &Parcelable) -> Option<ProviderRecord> {
 mod tests {
     use super::*;
 
+    #[test]
+    fn wildcard_authority_handles_non_ascii_hosts_without_panicking() {
+        let authority = DataAuthority {
+            host: Some("*.a".into()),
+            port: -1,
+            wild: true,
+        };
+        // `.a` starts inside `é`: byte 1 is not a character boundary.
+        assert!(!authority.matches("\u{e9}a", -1));
+        assert!(authority.matches("\u{e9}.A", -1));
+    }
+
+    #[test]
+    fn suffix_and_advanced_path_filters_do_not_accept_every_path() {
+        let data = |suffix: Option<&str>, advanced: Option<&str>| acos_apk::manifest::IntentData {
+            path_suffix: suffix.map(str::to_string),
+            path_advanced_pattern: advanced.map(str::to_string),
+            ..Default::default()
+        };
+        let component = acos_apk::manifest::Component {
+            kind: acos_apk::manifest::ComponentKind::Activity,
+            name: ".Main".into(),
+            authorities: Vec::new(),
+            exported: Some(true),
+            launch_mode: None,
+            process: None,
+            permission: None,
+            grant_uri_permissions: None,
+            label: None,
+            label_ref: None,
+            intent_filters: vec![
+                acos_apk::manifest::IntentFilter {
+                    data: vec![data(Some(".pdf"), None)],
+                    ..Default::default()
+                },
+                acos_apk::manifest::IntentFilter {
+                    data: vec![data(None, Some("/item/[0-9]+"))],
+                    ..Default::default()
+                },
+            ],
+            target_activity: None,
+            enabled: None,
+            meta_data: Vec::new(),
+        };
+        let declared = DeclaredComponent::from_apk("pkg", &component);
+        let suffix = &declared.filters[0].paths;
+        assert_eq!(suffix.len(), 1);
+        assert!(suffix[0].matches("/docs/a.pdf"));
+        assert!(!suffix[0].matches("/admin"));
+        let advanced = &declared.filters[1].paths;
+        assert_eq!(advanced.len(), 1, "an empty list would match any path");
+        assert!(!advanced[0].matches("/admin"));
+    }
+
+    #[test]
+    fn an_omitted_exported_attribute_follows_the_presence_of_intent_filters() {
+        let component = |exported: Option<bool>, filters: usize| acos_apk::manifest::Component {
+            kind: acos_apk::manifest::ComponentKind::Activity,
+            name: ".Main".into(),
+            authorities: Vec::new(),
+            exported,
+            launch_mode: None,
+            process: None,
+            permission: None,
+            grant_uri_permissions: None,
+            label: None,
+            label_ref: None,
+            intent_filters: vec![acos_apk::manifest::IntentFilter::default(); filters],
+            target_activity: None,
+            enabled: None,
+            meta_data: Vec::new(),
+        };
+        let exported =
+            |e, n| DeclaredComponent::from_apk("pkg", &component(e, n)).exported;
+        assert!(exported(None, 1));
+        assert!(!exported(None, 0));
+        assert!(!exported(Some(false), 1));
+        assert!(exported(Some(true), 0));
+    }
+
     fn db_with_fixture() -> ManifestDb {
         let path = crate::workspace_path("fixtures/apps/service-provider/AndroidManifest.xml");
         // Build from the bundled manifest via a minimal APK is not possible for
@@ -4024,7 +4530,7 @@ mod tests {
             actions: vec!["android.settings.APPLICATION_DETAILS_SETTINGS".into()],
             categories: vec!["android.intent.category.DEFAULT".into()],
             schemes: vec!["package".into()],
-            mime_types: Vec::new(),
+            ..Filter::default()
         };
         let missing_data = IntentFacts {
             action: Some("android.settings.APPLICATION_DETAILS_SETTINGS".into()),
@@ -4063,8 +4569,7 @@ mod tests {
                 filters: vec![Filter {
                     actions: vec!["android.intent.action.MAIN".into()],
                     categories: vec!["android.intent.category.LAUNCHER".into()],
-                    schemes: Vec::new(),
-                    mime_types: Vec::new(),
+                    ..Filter::default()
                 }],
             }],
             ..Default::default()
@@ -4083,8 +4588,7 @@ mod tests {
                         "android.intent.category.HOME".into(),
                         "android.intent.category.DEFAULT".into(),
                     ],
-                    schemes: Vec::new(),
-                    mime_types: Vec::new(),
+                    ..Filter::default()
                 }],
             }],
             ..Default::default()

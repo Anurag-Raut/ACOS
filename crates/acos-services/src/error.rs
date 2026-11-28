@@ -53,6 +53,9 @@ pub mod codes {
     /// The relay is up but has no session under this name (the module is
     /// attached and its relay session is gone: a real, addressable gap).
     pub const NETWORK_NO_SUCH_SESSION: &str = "NETWORK_NO_SUCH_SESSION";
+    /// No installed activity's manifest `intent-filter` matched the requested
+    /// deep link / implicit activity intent (`ActivityManager.START_INTENT_NOT_RESOLVED`).
+    pub const START_NOT_FOUND: &str = "START_NOT_FOUND";
 }
 
 /// Errors returned by [`crate::ServiceHost`] and the service state machines.
@@ -208,6 +211,13 @@ pub enum ServiceError {
         /// The relay's answer, with the relay session name.
         detail: String,
     },
+    /// No installed activity's manifest `intent-filter` matched the requested
+    /// URI / implicit intent (`ActivityManager.START_INTENT_NOT_RESOLVED`).
+    #[error("no activity found to handle intent: {detail}")]
+    StartNotFound {
+        /// Human-readable explanation naming the unmatched URI/action.
+        detail: String,
+    },
     /// Internal failure.
     #[error("internal service error: {0}")]
     Internal(String),
@@ -236,6 +246,7 @@ impl ServiceError {
             Self::PermissionUiUnavailable { .. } => codes::PERMISSION_UI_UNAVAILABLE,
             Self::NetworkUnavailable { .. } => codes::NETWORK_UNAVAILABLE,
             Self::NetworkNoSuchSession { .. } => codes::NETWORK_NO_SUCH_SESSION,
+            Self::StartNotFound { .. } => codes::START_NOT_FOUND,
             Self::Internal(_) => codes::SERVICE_INTERNAL,
             Self::ResourceLimit { .. } => codes::ART_RESOURCE_LIMIT,
         }
@@ -261,7 +272,7 @@ impl ServiceError {
             Self::UnknownBinder { .. } | Self::UnknownService { .. } => EX_ILLEGAL_ARGUMENT,
             Self::BadRequest { .. } | Self::BadReply { .. } => EX_ILLEGAL_ARGUMENT,
             Self::ResourceLimit { .. } => EX_UNSUPPORTED_OPERATION,
-            Self::IllegalState { .. } => EX_ILLEGAL_STATE,
+            Self::IllegalState { .. } | Self::StartNotFound { .. } => EX_ILLEGAL_STATE,
             Self::Android { code, .. } => *code,
             Self::Parcel(_) | Self::Internal(_) => EX_ILLEGAL_ARGUMENT,
         }

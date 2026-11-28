@@ -220,6 +220,8 @@ pub struct IntentData {
     pub path: Option<String>,
     pub path_prefix: Option<String>,
     pub path_pattern: Option<String>,
+    pub path_suffix: Option<String>,
+    pub path_advanced_pattern: Option<String>,
     pub mime_type: Option<String>,
 }
 
@@ -796,6 +798,8 @@ fn parse_intent_filter(node: &XmlNode) -> IntentFilter {
                     path: attr_string(child, "path"),
                     path_prefix: attr_string(child, "pathPrefix"),
                     path_pattern: attr_string(child, "pathPattern"),
+                    path_suffix: attr_string(child, "pathSuffix"),
+                    path_advanced_pattern: attr_string(child, "pathAdvancedPattern"),
                     mime_type: attr_string(child, "mimeType"),
                 });
             }
@@ -1556,6 +1560,27 @@ mod launcher_tests {
         assert!(
             manifest.launcher_activity().is_none(),
             "<application android:enabled=\"false\"> disables every component"
+        );
+    }
+
+    #[test]
+    fn intent_filter_data_keeps_suffix_and_advanced_path_patterns() {
+        let data = node(
+            "data",
+            vec![
+                attr("pathSuffix", TypedValue::String(".pdf".into())),
+                attr(
+                    "pathAdvancedPattern",
+                    TypedValue::String("/item/[0-9]+".into()),
+                ),
+            ],
+            Vec::new(),
+        );
+        let filter = parse_intent_filter(&node("intent-filter", Vec::new(), vec![data]));
+        assert_eq!(filter.data[0].path_suffix.as_deref(), Some(".pdf"));
+        assert_eq!(
+            filter.data[0].path_advanced_pattern.as_deref(),
+            Some("/item/[0-9]+")
         );
     }
 }

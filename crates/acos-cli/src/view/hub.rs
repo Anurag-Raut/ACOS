@@ -72,6 +72,7 @@ pub struct Entry {
     pub stream_socket: Option<String>,
     pub has_home: Option<bool>,
     pub launch_token: Option<String>,
+    pub artifacts_dir: Option<String>,
 }
 
 impl Entry {
@@ -120,6 +121,11 @@ impl Entry {
         let has_home = doc.get("has_home").and_then(Value::as_bool);
         let launch_token = doc
             .get("launch_token")
+            .and_then(Value::as_str)
+            .filter(|value| !value.is_empty())
+            .map(str::to_string);
+        let artifacts_dir = doc
+            .get("artifacts_dir")
             .and_then(Value::as_str)
             .filter(|value| !value.is_empty())
             .map(str::to_string);
@@ -177,6 +183,7 @@ impl Entry {
                 .map(str::to_string),
             has_home,
             launch_token,
+            artifacts_dir,
         })
     }
 
@@ -247,6 +254,61 @@ pub enum OpenInputError {
     NotFound,
     /// A newer guest replaced the watched `guest_gen` for this `session_id`.
     Replaced,
+}
+
+/// Failure reason when invoking a session control op (`open_url`, `pick_file`)
+/// from the `acos view` HTTP API.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ServiceCtlError {
+    /// No live session exists in the registry for this `session_id`.
+    NotFound,
+    /// A newer guest replaced the watched `guest_gen` for this `session_id`.
+    Replaced,
+    /// Session is watch-only (e.g. `acos verify`) or has no interactive daemon socket.
+    WatchOnly,
+    /// Could not connect to or communicate with the session daemon.
+    Unavailable {
+        message: String,
+        /// The request reached the daemon but its outcome is unknown.
+        may_have_applied: bool,
+    },
+    /// The session daemon answered with a structured code/message.
+    Daemon {
+        code: String,
+        message: String,
+        /// The error does not say whether the op ran (a timeout).
+        may_have_applied: bool,
+    },
+}
+
+impl ServiceCtlError {
+    /// `true` only when the op certainly did not run. A lost or timed-out
+    /// reply, and any error that can follow the op, answer `false`.
+    #[must_use]
+    pub fn is_definite_refusal(&self) -> bool {
+        match self {
+            Self::NotFound | Self::Replaced | Self::WatchOnly => true,
+            Self::Unavailable {
+                may_have_applied, ..
+            } => !may_have_applied,
+            Self::Daemon {
+                code,
+                may_have_applied,
+                ..
+            } => {
+                !may_have_applied
+                    && matches!(
+                        code.as_str(),
+                        "INVALID_ARGUMENT"
+                            | "BAD_REQUEST"
+                            | "UNSUPPORTED_ANDROID_API"
+                            | "UNSUPPORTED_BACKEND"
+                            | "INSUFFICIENT_HOST_EVIDENCE"
+                            | "PERMISSION_DENIED"
+                    )
+            }
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -576,6 +638,126 @@ impl Hub {
             inner.guest_gens.get(session_id).copied()?
         };
         self.open_input_checked(session_id, guest_gen).ok()
+    }
+
+    fn resolve_ctl_target(
+        &self,
+        session_id: &str,
+        expected_guest_gen: Option<u64>,
+    ) -> Result<(Entry, String), ServiceCtlError> {
+        let mut inner = self.inner.lock().expect("hub");
+        self.refresh_locked(&mut inner);
+        let entry = inner
+            .entries
+            .get(session_id)
+            .ok_or(ServiceCtlError::NotFound)?
+            .clone();
+        if let Some(expected) = expected_guest_gen {
+            let current = inner.guest_gens.get(session_id).copied().unwrap_or(0);
+            if expected != current {
+                return Err(ServiceCtlError::Replaced);
+            }
+        }
+        if entry.watch_only {
+            return Err(ServiceCtlError::WatchOnly);
+        }
+        let Some(socket) = entry.serve_socket.clone() else {
+            return Err(ServiceCtlError::WatchOnly);
+        };
+        Ok((entry, socket))
+    }
+
+    /// Host-local directory where `acos view` stages files uploaded for
+    /// `/api/picker/<session_id>`. Refuses watch-only or stale sessions before
+    /// creating any files.
+    pub fn picker_upload_dir(
+        &self,
+        session_id: &str,
+        expected_guest_gen: Option<u64>,
+    ) -> Result<PathBuf, ServiceCtlError> {
+        let (entry, _) = self.resolve_ctl_target(session_id, expected_guest_gen)?;
+        let dir = if let Some(artifacts) = entry.artifacts_dir.as_deref() {
+            PathBuf::from(artifacts).join("picker")
+        } else {
+            let safe_sid: String = session_id
+                .chars()
+                .map(|c| {
+                    if c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.') {
+                        c
+                    } else {
+                        '_'
+                    }
+                })
+                .collect();
+            let safe_sid = if safe_sid.is_empty() || safe_sid == "." || safe_sid == ".." {
+                "session".to_string()
+            } else {
+                safe_sid
+            };
+            self.dir.join("picker-uploads").join(safe_sid)
+        };
+        Ok(dir)
+    }
+
+    /// Invoke `acos_service_ctl` against the session's `acos serve` daemon
+    /// socket (checking `watch_only`, `guest_gen`, and peer UID).
+    pub fn service_ctl(
+        &self,
+        session_id: &str,
+        expected_guest_gen: Option<u64>,
+        module: &str,
+        op: &str,
+        args: Value,
+    ) -> Result<Value, ServiceCtlError> {
+        let (entry, socket) = self.resolve_ctl_target(session_id, expected_guest_gen)?;
+        let mut conn = DaemonConn::connect(&socket)
+            .map_err(|(_code, message)| ServiceCtlError::Unavailable {
+                message,
+                may_have_applied: false,
+            })?;
+        // Deep-link / picker operations may wait up to ~3s for guest ack or
+        // frame advance, so give the daemon read timeout ample headroom.
+        let _ = conn
+            .reader
+            .get_ref()
+            .set_read_timeout(Some(Duration::from_secs(15)));
+        let req_id = format!("view_ctl_{}", live_registry::now_ms());
+        let mut daemon_args = json!({
+            "base": {
+                "request_id": req_id,
+                "session_id": session_id,
+            },
+            "module": module,
+            "op": op,
+            "args": args,
+        });
+        // The daemon re-checks this before dispatch: the id may be replaced
+        // between the check above and the call.
+        if let Some(token) = entry.launch_token.as_deref() {
+            daemon_args["expected_launch_token"] = json!(token);
+        }
+        conn.call("acos_service_ctl", daemon_args).map_err(|err| {
+            let (code, message, may_have_applied) = err.into_outcome();
+            if code == "SESSION_REPLACED" {
+                ServiceCtlError::Replaced
+            } else if code == "SESSION_NOT_FOUND" {
+                ServiceCtlError::NotFound
+            } else if matches!(code.as_str(), "INPUT_UNAVAILABLE" | "IO_ERROR" | "EOF") {
+                // An I/O error or EOF the daemon itself reports can follow
+                // the op, like a lost reply.
+                let may_have_applied = may_have_applied || code != "INPUT_UNAVAILABLE";
+                ServiceCtlError::Unavailable {
+                    message,
+                    may_have_applied,
+                }
+            } else {
+                ServiceCtlError::Daemon {
+                    code,
+                    message,
+                    may_have_applied,
+                }
+            }
+        })
     }
 
     /// Per-session counters (the hub's test seam, and what a test asserts on
@@ -3679,6 +3861,7 @@ mod tests {
             stream_socket: Some(socket.display().to_string()),
             has_home: Some(false),
             launch_token: None,
+            artifacts_dir: None,
         };
         crate::live_registry::LiveRegistry::at(dir.to_path_buf())
             .write(&entry)
@@ -4024,6 +4207,7 @@ mod tests {
             stream_socket: stream_socket.map(|p| p.display().to_string()),
             has_home: Some(false),
             launch_token: None,
+            artifacts_dir: None,
         };
         crate::live_registry::LiveRegistry::at(dir.to_path_buf())
             .write(&entry)
@@ -4354,6 +4538,7 @@ mod tests {
                 stream_socket: None,
                 has_home: Some(false),
                 launch_token: Some(token.to_string()),
+                artifacts_dir: None,
             };
             crate::live_registry::LiveRegistry::at(registry.clone())
                 .write(&entry)

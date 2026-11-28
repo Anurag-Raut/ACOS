@@ -83,6 +83,14 @@ struct Daemon {
 
 impl Daemon {
     fn start(tag: &str, extra: &[&str]) -> Daemon {
+        Self::spawn(tag, extra, &[])
+    }
+
+    fn start_with_env(tag: &str, env: &[(&str, &std::ffi::OsStr)]) -> Daemon {
+        Self::spawn(tag, &[], env)
+    }
+
+    fn spawn(tag: &str, extra: &[&str], env: &[(&str, &std::ffi::OsStr)]) -> Daemon {
         let dir = scratch(tag);
         // `sun_path` is 108 bytes: the socket never lives under the worktree,
         // whose path length is not under this test's control.
@@ -100,6 +108,7 @@ impl Daemon {
             // dir, so this test must not inherit it.
             .env_remove("ACOS_SESSION_SOCKET")
             .env("ACOS_CACHE_DIR", dir.join("cache"))
+            .envs(env.iter().copied())
             .args(extra)
             .stdout(Stdio::null())
             .stderr(Stdio::null());
@@ -298,6 +307,8 @@ fn art_agent_loop_over_the_socket() {
         acos_test_support::require_prereq(false, "art_agent_loop_over_the_socket", "counter.apk or release acos-art missing");
         return;
     }
+    // The daemon refuses a launch path with a `..` component.
+    let apk = apk.canonicalize().expect("canonical counter.apk");
     let daemon = Daemon::start("art-loop", &[]);
     let mut conn = daemon.connect();
     let b = base("s_w50_art_loop");
@@ -337,6 +348,28 @@ fn art_agent_loop_over_the_socket() {
     assert_eq!(asserted["ok"], json!(true), "{asserted:#?}");
     assert_eq!(asserted["result"]["assert"], json!(true));
 
+    // An unmatched deep link is the caller's error, with its marker.
+    let unmatched = conn.call(
+        "acos_service_ctl",
+        json!({"base": b, "module": "intents", "op": "open_url",
+               "args": {"url": "acos-nobody://handles/this"}}),
+    );
+    assert_eq!(
+        unmatched["error"]["code"],
+        json!("INVALID_ARGUMENT"),
+        "{unmatched:#?}"
+    );
+    assert!(unmatched.to_string().contains("START_NOT_FOUND"), "{unmatched:#?}");
+
+    // A control op bound to another guest instance never reaches this one.
+    let stale = conn.call(
+        "acos_service_ctl",
+        json!({"base": b, "module": "intents", "op": "list",
+               "expected_launch_token": "not-this-guest"}),
+    );
+    assert_eq!(stale["ok"], json!(false), "{stale:#?}");
+    assert!(stale.to_string().contains("SESSION_REPLACED"), "{stale:#?}");
+
     // The server-side assert must fail, not pass, on the wrong expectation.
     let refused = conn.call(
         "acos_assert",
@@ -344,7 +377,11 @@ fn art_agent_loop_over_the_socket() {
     );
     assert_eq!(refused["error"]["code"], json!("ASSERTION_FAILED"));
 
-    let shot_path = daemon.dir.join("shot.png");
+    // A screenshot path must lie inside the session's artifacts directory.
+    let artifacts = launch["result"]["artifacts_dir"]
+        .as_str()
+        .expect("artifacts_dir");
+    let shot_path = Path::new(artifacts).join("shot.png");
     let shot = conn.call(
         "acos_observe",
         json!({"base": b, "tree": false, "png": true, "screenshot": shot_path}),
@@ -409,8 +446,115 @@ fn art_agent_loop_over_the_socket() {
     assert_eq!(gone["error"]["code"], json!("SESSION_NOT_FOUND"));
 }
 
+/// A picker requested by a **secondary** guest process is answered to the
+/// activity that asked, and a reply bound to the pre-reset guest is refused.
+#[test]
+#[ignore = "boots two real ART guests; run under tools/guard/guarded.sh"]
+fn art_secondary_process_picker_and_reset_token() {
+    let apps = repo_root().join("fixtures/build/apps");
+    let (primary, secondary) = (apps.join("proc-a.apk"), apps.join("proc-b.apk"));
+    let art = repo_root().join(".cache/w50-target/release/acos-art");
+    if !primary.is_file() || !secondary.is_file() || !art.is_file() {
+        acos_test_support::require_prereq(
+            false,
+            "art_secondary_process_picker_and_reset_token",
+            "proc-a.apk, proc-b.apk or release acos-art missing",
+        );
+        return;
+    }
+    let live = scratch("art-pick-live");
+    let daemon = Daemon::start_with_env("art-pick", &[("ACOS_VIEW_REGISTRY_DIR", live.as_os_str())]);
+    let mut conn = daemon.connect();
+    let b = base("s_w50_art_pick");
+    let launch = conn.call(
+        "acos_launch",
+        json!({"base": b, "apk": primary.canonicalize().unwrap(),
+               "extra_apks": [secondary.canonicalize().unwrap()]}),
+    );
+    assert_eq!(launch["ok"], json!(true), "{launch:#?}");
+
+    // Wait for `resource` to be on screen with text containing `needle`.
+    let wait_for = |conn: &mut Conn, resource: &str, needle: &str| {
+        let deadline = Instant::now() + Duration::from_secs(60);
+        loop {
+            let tree = conn.call("acos_observe_tree", json!({"base": b, "max_nodes": 2000}));
+            let text = find_node(&tree["result"]["tree"], resource)
+                .and_then(|node| node["text"].as_str());
+            if text.is_some_and(|text| text.contains(needle)) {
+                return;
+            }
+            assert!(
+                Instant::now() < deadline,
+                "{resource} never showed {needle:?}: {tree:#?}"
+            );
+            std::thread::sleep(Duration::from_millis(250));
+        }
+    };
+    let tap = |conn: &mut Conn, id: &str| {
+        let reply = conn.call("acos_tap", json!({"base": b, "id": id}));
+        assert_eq!(reply["ok"], json!(true), "{reply:#?}");
+    };
+    let ctl = |conn: &mut Conn, op: &str, args: Value, token: Option<&str>| {
+        let mut request = json!({"base": b, "module": "intents", "op": op, "args": args});
+        if let Some(token) = token {
+            request["expected_launch_token"] = json!(token);
+        }
+        conn.call("acos_service_ctl", request)
+    };
+    let published_token = || -> String {
+        std::fs::read_dir(&live)
+            .expect("live registry")
+            .filter_map(|entry| std::fs::read_to_string(entry.ok()?.path()).ok())
+            .filter_map(|text| serde_json::from_str::<Value>(&text).ok())
+            .find_map(|doc| doc["launch_token"].as_str().map(str::to_string))
+            .expect("published launch token")
+    };
+
+    wait_for(&mut conn, "start_b", "Start B");
+    tap(&mut conn, "start_b");
+    wait_for(&mut conn, "pick", "Pick In B");
+    tap(&mut conn, "pick");
+    wait_for(&mut conn, "picked", "waiting");
+    let token = published_token();
+    let last = ctl(&mut conn, "last", json!({}), Some(&token));
+    let capture = &last["result"]["capture"];
+    assert_eq!(capture["process_tag"], json!(1), "{last:#?}");
+    let seq = capture["seq"].as_u64().expect("seq");
+
+    let document = daemon.dir.join("picked.txt");
+    std::fs::write(&document, "from-the-host\n").unwrap();
+    let picked = ctl(
+        &mut conn,
+        "pick_file",
+        json!({"path": document, "capture_seq": seq}),
+        Some(&token),
+    );
+    assert_eq!(picked["ok"], json!(true), "{picked:#?}");
+    assert_eq!(picked["result"]["delivered"], json!(true), "{picked:#?}");
+    wait_for(&mut conn, "picked", "result=-1 text=from-the-host");
+
+    let reset = conn.call("acos_reset", json!({"base": b}));
+    assert_eq!(reset["ok"], json!(true), "{reset:#?}");
+    let stale = ctl(
+        &mut conn,
+        "pick_file",
+        json!({"cancel": true, "capture_seq": seq}),
+        Some(&token),
+    );
+    assert!(stale.to_string().contains("SESSION_REPLACED"), "{stale:#?}");
+    let renewed = published_token();
+    assert_ne!(renewed, token);
+    let current = ctl(&mut conn, "list", json!({}), Some(&renewed));
+    assert_eq!(current["ok"], json!(true), "{current:#?}");
+    assert_eq!(current["result"]["captures"], json!([]));
+
+    let destroy = conn.call("acos_destroy", json!({"base": b}));
+    assert_eq!(destroy["result"]["teardown"]["survivors"], json!([]));
+}
+
 fn find_node<'a>(nodes: &'a Value, resource: &str) -> Option<&'a Value> {
-    let array = nodes.as_array()?;
+    // Verb replies wrap the node list: `tree: {compact, nodes: [...]}`.
+    let array = nodes.get("nodes").unwrap_or(nodes).as_array()?;
     for node in array {
         let rid = node
             .get("resource_id")

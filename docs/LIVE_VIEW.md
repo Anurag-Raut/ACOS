@@ -442,6 +442,20 @@ acos view: http://127.0.0.1:54321/?t=<token>
     input WebSocket is open, the hub upgrades the upstream subscription to `1.0`
     PNG @ `30` fps and reverts back to `0.5` PNG @ `15` fps when the last input
     socket closes.
+* **Guest identity.** A replacement launch and `acos_reset` give the session id
+  a new registry `launch_token`, so the hub bumps `guest_gen`: a page watching
+  the old guest shows `session ended` (reopen the session to watch the new one),
+  and a control or picker request bound to the old guest is refused with
+  `SESSION_REPLACED`.
+* **Picker uploads.** `/api/picker` stages the uploaded file under the session's
+  artifacts and removes it when `pick_file` was certainly refused. After a lost
+  or timed-out reply the file stays, because the app may already hold its
+  `content://com.acos.picker/...` URI.
+* **Picker routing.** `intents.pick_file` and `intents.result` answer the guest
+  process and activity that made the captured request. They refuse, changing
+  nothing, with `PICKER_REQUESTER_GONE` when that process is no longer running,
+  and with `PICKER_REQUEST_SUPERSEDED` when another activity of the same process
+  has since made a request with the same request code.
 * **Verify runs stay watch-only.** For sessions owned by `acos verify`
   (`watch_only: true`), the page shows a `watch-only: verify run` banner with
   disabled toolbar buttons, and `/api/input` refuses every valid message that

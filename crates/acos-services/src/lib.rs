@@ -81,6 +81,7 @@ pub mod parcelable;
 pub mod permission_catalog;
 pub mod pending_intent; // MODNOTIF4: PendingIntent sender records + the IIntentSender nodes
 pub mod permissions; // MODNOTIF2: the one runtime-permission table
+pub mod picker_provider; // Tier 1 Slice B: host-backed content://com.acos.picker/... provider
 pub mod pms;
 pub mod provider;
 pub mod refs; // BINDERREF2: the guest-binder registration ledger (host strong refs)

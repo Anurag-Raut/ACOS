@@ -675,6 +675,12 @@ struct SecondaryGuest {
     argv: Vec<String>,
 }
 
+/// Host path of a secondary guest's `/data/out/launch`: the only tree its
+/// result watcher reads.
+fn secondary_staging(run_root: &Path) -> PathBuf {
+    run_root.join("out").join("launch")
+}
+
 /// Everything a secondary guest needs from the session that is not in its
 /// [`SecondarySpec`]: the shared, read-only sandbox inputs and the shared
 /// sockets.
@@ -913,6 +919,11 @@ fn spawn_secondary(
         fs::create_dir_all(spec.run_root.join(sub))?;
     }
     fs::create_dir_all(spec.run_root.join("app-data").join(&spec.package))?;
+    // A respawn reuses the tag's tree: a result left for the dead instance must
+    // never reach the new one.
+    for stale in ["activity-result.json", "activity-result.ack"] {
+        let _ = fs::remove_file(secondary_staging(&spec.run_root).join(stale));
+    }
     let mut cmd = shared.command(spec, app_meta, providers)?;
     let argv = format!("{cmd:?}");
     let scope_info = std::fs::canonicalize(&spec.run_root)
@@ -1020,6 +1031,9 @@ struct SecondaryPool {
     /// thread blocked in a service handler, a suppressed close, an immediate
     /// respawn under the same tag).
     atms: Arc<std::sync::Mutex<acos_services::atms::AtmsState>>,
+    /// The capture table: a new process instance cannot receive the answers its
+    /// predecessor asked for.
+    intents: Arc<std::sync::Mutex<acos_services::intents::IntentState>>,
     /// SYSUI2: the session's **primary** package (tag 0). A spawn request for it
     /// is a start into a process that already runs, not a package to start.
     primary_package: String,
@@ -1107,6 +1121,7 @@ impl SecondaryPool {
         specs: Vec<SecondarySpec>,
         shared: SecondaryShared,
         atms: Arc<std::sync::Mutex<acos_services::atms::AtmsState>>,
+        intents: Arc<std::sync::Mutex<acos_services::intents::IntentState>>,
         primary_package: String,
         run_root: PathBuf,
         out_dir: PathBuf,
@@ -1121,6 +1136,7 @@ impl SecondaryPool {
             failures: Vec::new(),
             kills: Vec::new(),
             atms,
+            intents,
             primary_package,
             started: Instant::now(),
             run_root,
@@ -1382,6 +1398,10 @@ impl SecondaryPool {
             state.by_process.remove(&spec.tag);
             state.last_raw_seq.remove(&spec.tag);
         }
+        self.intents
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .orphan_process(spec.tag);
         let stderr = Arc::new(std::sync::Mutex::new(TailBuffer::with_cap(1 << 16)));
         match spawn_secondary(
             &self.shared,
@@ -1424,6 +1444,16 @@ impl SecondaryPool {
                 }));
             }
         }
+    }
+
+    /// The result directory of the secondary process `tag`; `None` when the
+    /// pool holds no process with that tag. Takes no lock, so it is safe under
+    /// the capture table's: [`Self::reap`] (which locks the activity manager)
+    /// runs before it.
+    fn result_staging(&self, tag: u32) -> Option<PathBuf> {
+        self.guests
+            .get(&tag)
+            .map(|guest| secondary_staging(&guest.spec.run_root))
     }
 
     /// MPROC5c: kill every lazily spawned process that has held nothing for
@@ -2686,6 +2716,7 @@ pub(crate) fn launch_session(
         secondary_specs,
         secondary_shared,
         Arc::clone(&live.atms),
+        Arc::clone(&live.intents),
         package.clone(),
         run.path().to_path_buf(),
         out.clone(),
@@ -3344,6 +3375,12 @@ pub(crate) fn launch_session(
             // MPROC5c: the idle kill's timeout (`0` disables it).
             Duration::from_secs(opts.idle_kill_secs),
         );
+        // The session is over however it ended: nothing serves the viewer's
+        // staged uploads any more.
+        live.picker
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .release_staged();
         match dead {
             Ok(end) => {
                 interactive_clean = end.clean;
@@ -5561,19 +5598,133 @@ fn animations_state() -> Option<&'static str> {
     }
 }
 
+/// Where the answer to capture `seq` must be written: the result directory of
+/// the process that made the request. `Err` is a `(code, message)` refusal for
+/// an answer that cannot reach its requester; nothing has been written then.
+/// An unknown `seq` goes to `primary`, where scripting it reports the error.
+fn result_destination(
+    state: &acos_services::intents::IntentState,
+    seq: Option<u64>,
+    primary: &Path,
+    secondary_staging: impl FnOnce(u32) -> Option<PathBuf>,
+) -> std::result::Result<PathBuf, (&'static str, String)> {
+    use acos_services::intents::ReplyRefusal;
+    let target = match seq {
+        Some(seq) => state.by_seq(seq),
+        None => state.last(),
+    };
+    let Some(target) = target else {
+        return Ok(primary.to_path_buf());
+    };
+    let (seq, tag) = (target.seq, target.origin.process_tag);
+    let gone = || {
+        (
+            "PICKER_REQUESTER_GONE",
+            format!(
+                "capture {seq} was requested by process {tag}, which is no longer running; no \
+                 activity can receive its result"
+            ),
+        )
+    };
+    match state.reply_refusal(seq) {
+        Some(ReplyRefusal::RequesterGone) => return Err(gone()),
+        Some(ReplyRefusal::Superseded { newer }) => {
+            return Err((
+                "PICKER_REQUEST_SUPERSEDED",
+                format!(
+                    "capture {seq} cannot be answered: another activity of process {tag} made a \
+                     newer request with the same request code (capture {newer}); answer that one \
+                     first or repeat the request"
+                ),
+            ))
+        }
+        None => {}
+    }
+    if tag == acos_services::atms::PRIMARY_PROCESS_TAG {
+        return Ok(primary.to_path_buf());
+    }
+    secondary_staging(tag).ok_or_else(gone)
+}
+
+/// Hand a scripted answer to the guest process whose result directory is
+/// `staging`: its watcher delivers `<staging>/activity-result.json` as the
+/// framework's own `ActivityResultItem` transaction to the requesting activity
+/// and acks in `<staging>/activity-result.ack`.
+fn deliver_scripted_result(
+    state: &mut acos_services::intents::IntentState,
+    scripted: acos_services::intents::ScriptedResult,
+    staging: &Path,
+) -> (serde_json::Value, bool, PathBuf, Option<String>) {
+    // Hand it to the guest: the result file is the session's control
+    // channel (the guest reads only this run's own tree).
+    let path = staging.join("activity-result.json");
+    let doc = serde_json::json!({
+        "capture_seq": scripted.capture_seq,
+        "request_code": scripted.request_code,
+        "result_code": scripted.result_code,
+        "action": scripted.action,
+        "data": scripted.data,
+        "mime_type": scripted.mime_type,
+        "flags": scripted.flags,
+        "extras": scripted.extras,
+    });
+    // Bound the wait for the guest's ack: a session whose guest is not
+    // running must say `delivered:false` instead of claiming a delivery.
+    let ack_path = staging.join("activity-result.ack");
+    let _ = std::fs::remove_file(&ack_path);
+    let written = std::fs::write(&path, serde_json::to_vec(&doc).unwrap_or_default());
+    let deadline = std::time::Instant::now() + Duration::from_millis(2000);
+    let mut delivered = false;
+    if written.is_ok() {
+        while std::time::Instant::now() < deadline {
+            if let Ok(text) = std::fs::read_to_string(&ack_path) {
+                if serde_json::from_str::<serde_json::Value>(&text)
+                    .ok()
+                    .and_then(|v| v.get("capture_seq").and_then(serde_json::Value::as_u64))
+                    == Some(scripted.capture_seq)
+                {
+                    delivered = true;
+                    break;
+                }
+            }
+            std::thread::sleep(Duration::from_millis(20));
+        }
+    }
+    if delivered {
+        let _ = std::fs::remove_file(&path);
+        state.mark_delivered(scripted.capture_seq, acos_services::intents::now_ms());
+    }
+    // The reply names the record *after* the delivery mark, so a caller
+    // that only reads this reply sees the same `delivered`/`delivered_utc_ms`
+    // as a later `op:"last"`.
+    let mut result = state
+        .list()
+        .into_iter()
+        .find(|capture| capture.seq == scripted.capture_seq)
+        .and_then(|capture| capture.scripted_result.as_ref().map(|r| r.to_json()))
+        .unwrap_or_else(|| scripted.to_json());
+    result["delivered"] = serde_json::json!(delivered);
+    (result, delivered, path, written.err().map(|e| e.to_string()))
+}
+
 /// MPROC1: one session control op over a session service.
 ///
 /// Only the `intents` module exists today (the capture target); any other
 /// `module`/`op` is a structured `UNSUPPORTED_ANDROID_API`, never a silent
-/// no-op. `op:"result"` also writes the scripted answer to
-/// `<staging>/activity-result.json`, which the guest's result watcher delivers
-/// as the framework's own `ActivityResultItem` transaction; the guest's ack is
-/// `<staging>/activity-result.ack`.
+/// no-op. `op:"result"` and `op:"pick_file"` answer the process that made the
+/// captured request (see [`result_destination`]).
+#[allow(clippy::too_many_arguments)]
 fn session_ctl(
     request: &serde_json::Value,
-    intents: &Arc<std::sync::Mutex<acos_services::intents::IntentState>>,
+    live: &acos_services::registry::LiveHandles,
     staging: &Path,
     secondary: &mut SecondaryPool,
+    control: &ServiceControl,
+    pending_spawns: &Arc<
+        std::sync::Mutex<std::collections::VecDeque<acos_services::ams::ProcessSpawnRequest>>,
+    >,
+    probe_state: &Arc<std::sync::Mutex<ProbeState>>,
+    frame_wait: Duration,
 ) -> serde_json::Value {
     let module = request.get("module").and_then(|v| v.as_str()).unwrap_or("");
     let op = request.get("op").and_then(|v| v.as_str()).unwrap_or("");
@@ -5613,7 +5764,90 @@ fn session_ctl(
         .get("args")
         .cloned()
         .unwrap_or(serde_json::Value::Null);
-    let mut state = intents.lock().unwrap_or_else(|e| e.into_inner());
+    if op == "open_url" {
+        let Some(url) = args
+            .get("url")
+            .and_then(serde_json::Value::as_str)
+            .map(str::trim)
+            .filter(|u| !u.is_empty())
+        else {
+            return serde_json::json!({
+                "ok": false, "cmd": "ctl", "module": module, "op": op,
+                "code": "BAD_REQUEST",
+                "error": "intents.open_url requires a non-empty string `url`",
+            });
+        };
+        let mut forward = serde_json::json!({
+            "op": "open_url",
+            "url": url,
+        });
+        if let Some(pkg) = args.get("package").and_then(serde_json::Value::as_str) {
+            forward["package"] = serde_json::json!(pkg);
+        }
+        if let Some(mime) = args.get("mime_type").and_then(serde_json::Value::as_str) {
+            forward["mime_type"] = serde_json::json!(mime);
+        }
+        if let Some(flags) = args.get("flags").and_then(serde_json::Value::as_i64) {
+            forward["flags"] = serde_json::json!(flags);
+        }
+        let g0 = latest_generation(live);
+        return match control.submit(forward, Duration::from_secs(10)) {
+            Some(ServiceControlReply { mut reply, .. }) => {
+                let ok = reply
+                    .get("ok")
+                    .and_then(serde_json::Value::as_bool)
+                    .unwrap_or(false);
+                if ok {
+                    drain_pending_spawns(
+                        Some((pending_spawns, secondary)),
+                        probe_state,
+                        &live.compositor,
+                    );
+                    let deadline = Instant::now() + frame_wait.min(Duration::from_secs(3));
+                    let mut frame_advanced = false;
+                    while Instant::now() < deadline {
+                        drain_pending_spawns(
+                            Some((pending_spawns, secondary)),
+                            probe_state,
+                            &live.compositor,
+                        );
+                        if latest_generation(live) > g0 {
+                            frame_advanced = true;
+                            break;
+                        }
+                        std::thread::sleep(Duration::from_millis(15));
+                    }
+                    if let Some(obj) = reply.as_object_mut() {
+                        obj.insert("cmd".into(), serde_json::json!("ctl"));
+                        obj.insert("module".into(), serde_json::json!(module));
+                        obj.insert("op".into(), serde_json::json!(op));
+                        obj.insert("frame_advanced".into(), serde_json::json!(frame_advanced));
+                    }
+                    reply
+                } else {
+                    if let Some(obj) = reply.as_object_mut() {
+                        obj.insert("cmd".into(), serde_json::json!("ctl"));
+                        obj.insert("module".into(), serde_json::json!(module));
+                        obj.insert("op".into(), serde_json::json!(op));
+                    }
+                    reply
+                }
+            }
+            None => serde_json::json!({
+                "ok": false, "cmd": "ctl", "module": module, "op": op,
+                "code": "TIMEOUT",
+                "error": "timed out waiting for the binder peer to resolve open_url",
+            }),
+        };
+    }
+
+    if matches!(op, "result" | "pick_file") {
+        // Forget exited processes first. The activity manager is locked before
+        // the capture table (a `startActivity` captures under it), never after.
+        let exited = secondary.reap();
+        secondary.records.extend(exited);
+    }
+    let mut state = live.intents.lock().unwrap_or_else(|e| e.into_inner());
     match op {
         "last" => serde_json::json!({
             "ok": true, "cmd": "ctl", "module": module, "op": op,
@@ -5640,6 +5874,11 @@ fn session_ctl(
                 .get("result_code")
                 .and_then(serde_json::Value::as_i64)
                 .and_then(|v| i32::try_from(v).ok());
+            let flags = args
+                .get("flags")
+                .and_then(serde_json::Value::as_i64)
+                .and_then(|v| i32::try_from(v).ok())
+                .unwrap_or(0);
             let mut extras = std::collections::BTreeMap::new();
             if let Some(map) = args.get("extras").and_then(serde_json::Value::as_object) {
                 for (key, value) in map {
@@ -5654,12 +5893,24 @@ fn session_ctl(
                     }
                 }
             }
-            let scripted = match state.script_result(
+            let destination = match result_destination(&state, capture_seq, staging, |tag| {
+                secondary.result_staging(tag)
+            }) {
+                Ok(destination) => destination,
+                Err((code, error)) => {
+                    return serde_json::json!({
+                        "ok": false, "cmd": "ctl", "module": module, "op": op,
+                        "code": code, "error": error,
+                    })
+                }
+            };
+            let scripted = match state.script_result_with_flags(
                 capture_seq,
                 result_code,
                 str_arg("data"),
                 str_arg("mime_type"),
                 str_arg("action"),
+                flags,
                 extras,
             ) {
                 Ok(scripted) => scripted,
@@ -5670,67 +5921,173 @@ fn session_ctl(
                     })
                 }
             };
-            // Hand it to the guest: the result file is the session's control
-            // channel (the guest reads only this run's own tree).
-            let path = staging.join("activity-result.json");
-            let doc = serde_json::json!({
-                "capture_seq": scripted.capture_seq,
-                "request_code": scripted.request_code,
-                "result_code": scripted.result_code,
-                "action": scripted.action,
-                "data": scripted.data,
-                "mime_type": scripted.mime_type,
-                "extras": scripted.extras,
-            });
-            let written = std::fs::write(&path, serde_json::to_vec(&doc).unwrap_or_default());
-            // Bound the wait for the guest's ack: a session whose guest is not
-            // running must say `delivered:false` instead of claiming a delivery.
-            let ack_path = staging.join("activity-result.ack");
-            let _ = std::fs::remove_file(&ack_path);
-            let deadline = std::time::Instant::now() + Duration::from_millis(2000);
-            let mut delivered = false;
-            if written.is_ok() {
-                while std::time::Instant::now() < deadline {
-                    if let Ok(text) = std::fs::read_to_string(&ack_path) {
-                        if serde_json::from_str::<serde_json::Value>(&text)
-                            .ok()
-                            .and_then(|v| v.get("capture_seq").and_then(serde_json::Value::as_u64))
-                            == Some(scripted.capture_seq)
-                        {
-                            delivered = true;
-                            break;
-                        }
-                    }
-                    std::thread::sleep(Duration::from_millis(20));
-                }
-            }
-            if delivered {
-                let _ = std::fs::remove_file(&path);
-                state.mark_delivered(scripted.capture_seq, acos_services::intents::now_ms());
-            }
-            // The reply names the record *after* the delivery mark, so a caller
-            // that only reads this reply sees the same `delivered`/`delivered_utc_ms`
-            // as a later `op:"last"`.
-            let mut result = state
-                .list()
-                .into_iter()
-                .find(|capture| capture.seq == scripted.capture_seq)
-                .and_then(|capture| capture.scripted_result.as_ref().map(|r| r.to_json()))
-                .unwrap_or_else(|| scripted.to_json());
-            result["delivered"] = serde_json::json!(delivered);
+            let (result, delivered, path, write_error) =
+                deliver_scripted_result(&mut state, scripted, &destination);
             serde_json::json!({
                 "ok": true, "cmd": "ctl", "module": module, "op": op,
                 "result": result,
                 "delivered": delivered,
                 "control_file": path.display().to_string(),
-                "error": written.err().map(|e| e.to_string()),
+                "error": write_error,
+            })
+        }
+        "pick_file" => {
+            let capture_seq = args.get("capture_seq").and_then(serde_json::Value::as_u64);
+            let cancel = args
+                .get("cancel")
+                .and_then(serde_json::Value::as_bool)
+                .unwrap_or(false);
+            let target_capture = match capture_seq {
+                Some(seq) => state.by_seq(seq).cloned(),
+                None => state
+                    .last_picker()
+                    .or_else(|| state.last())
+                    .cloned(),
+            };
+            let Some(target) = target_capture else {
+                return serde_json::json!({
+                    "ok": false, "cmd": "ctl", "module": module, "op": op,
+                    "code": "BAD_REQUEST",
+                    "error": match capture_seq {
+                        Some(seq) => format!("no captured intent with seq {seq}"),
+                        None => "no captured picker intent to answer".to_string(),
+                    },
+                });
+            };
+            // Decided before anything is registered or scripted, so a refusal
+            // leaves the session untouched.
+            let destination = match result_destination(&state, Some(target.seq), staging, |tag| {
+                secondary.result_staging(tag)
+            }) {
+                Ok(destination) => destination,
+                Err((code, error)) => {
+                    return serde_json::json!({
+                        "ok": false, "cmd": "ctl", "module": module, "op": op,
+                        "code": code, "error": error,
+                    })
+                }
+            };
+            if cancel {
+                let scripted = match state.script_result_with_flags(
+                    Some(target.seq),
+                    Some(0), // Activity.RESULT_CANCELED
+                    None,
+                    None,
+                    None,
+                    0,
+                    std::collections::BTreeMap::new(),
+                ) {
+                    Ok(scripted) => scripted,
+                    Err(error) => {
+                        return serde_json::json!({
+                            "ok": false, "cmd": "ctl", "module": module, "op": op,
+                            "code": "BAD_REQUEST", "error": error.to_string(),
+                        })
+                    }
+                };
+                let (result, delivered, path, write_error) =
+                    deliver_scripted_result(&mut state, scripted, &destination);
+                return serde_json::json!({
+                    "ok": true, "cmd": "ctl", "module": module, "op": op,
+                    "canceled": true,
+                    "capture_seq": target.seq,
+                    "result": result,
+                    "delivered": delivered,
+                    "control_file": path.display().to_string(),
+                    "error": write_error,
+                });
+            }
+            let Some(host_path) = args
+                .get("path")
+                .and_then(serde_json::Value::as_str)
+                .map(str::trim)
+                .filter(|p| !p.is_empty())
+            else {
+                return serde_json::json!({
+                    "ok": false, "cmd": "ctl", "module": module, "op": op,
+                    "code": "BAD_REQUEST",
+                    "error": "intents.pick_file requires either `path` (host file path) or `cancel: true`",
+                });
+            };
+            let display_name = args
+                .get("display_name")
+                .and_then(serde_json::Value::as_str)
+                .filter(|s| !s.is_empty());
+            let mime_type = args
+                .get("mime_type")
+                .and_then(serde_json::Value::as_str)
+                .filter(|s| !s.is_empty());
+            let writable = args
+                .get("writable")
+                .and_then(serde_json::Value::as_bool)
+                .unwrap_or_else(|| target.is_create_document());
+            let entry = {
+                let mut picker = live.picker.lock().unwrap_or_else(|e| e.into_inner());
+                match picker.register_file(
+                    Path::new(host_path),
+                    display_name,
+                    mime_type,
+                    writable,
+                ) {
+                    Ok(entry) => {
+                        // A browser upload `acos view` staged for this session.
+                        if args.get("staged").and_then(serde_json::Value::as_bool) == Some(true) {
+                            picker.mark_staged(entry.id);
+                        }
+                        entry
+                    }
+                    Err(error) => {
+                        return serde_json::json!({
+                            "ok": false, "cmd": "ctl", "module": module, "op": op,
+                            "code": "BAD_REQUEST", "error": error.to_string(),
+                        })
+                    }
+                }
+            };
+            let mut flags = acos_services::intents::FLAG_GRANT_READ_URI_PERMISSION;
+            if entry.writable {
+                flags |= acos_services::intents::FLAG_GRANT_WRITE_URI_PERMISSION;
+            }
+            let scripted = match state.script_result_with_flags(
+                Some(target.seq),
+                Some(-1), // Activity.RESULT_OK
+                Some(entry.uri.clone()),
+                Some(entry.mime_type.clone()),
+                None,
+                flags,
+                std::collections::BTreeMap::new(),
+            ) {
+                Ok(scripted) => scripted,
+                Err(error) => {
+                    return serde_json::json!({
+                        "ok": false, "cmd": "ctl", "module": module, "op": op,
+                        "code": "BAD_REQUEST", "error": error.to_string(),
+                    })
+                }
+            };
+            let (result, delivered, path, write_error) =
+                deliver_scripted_result(&mut state, scripted, &destination);
+            serde_json::json!({
+                "ok": true, "cmd": "ctl", "module": module, "op": op,
+                "canceled": false,
+                "capture_seq": target.seq,
+                "uri": entry.uri,
+                "display_name": entry.display_name,
+                "mime_type": entry.mime_type,
+                "size": entry.size_bytes(),
+                "writable": entry.writable,
+                "flags": flags,
+                "result": result,
+                "delivered": delivered,
+                "control_file": path.display().to_string(),
+                "error": write_error,
             })
         }
         other => serde_json::json!({
             "ok": false, "cmd": "ctl", "module": module, "op": other,
             "code": "BAD_REQUEST",
             "error": format!(
-                "intents control op {other:?} does not exist (ops: last, list, clear, result)"
+                "intents control op {other:?} does not exist (ops: last, list, clear, result, open_url, pick_file)"
             ),
         }),
     }
@@ -10896,7 +11253,16 @@ fn interactive_serve(
             // "clear"|"result"}`. It never fabricates a handler: a capture says
             // `handled_by:"captured"`.
             "ctl" => {
-                let reply = session_ctl(&request, &live.intents, &staging, secondary);
+                let reply = session_ctl(
+                    &request,
+                    live,
+                    &staging,
+                    secondary,
+                    control,
+                    &pending_spawns,
+                    probe_state,
+                    frame_wait,
+                );
                 protocol_write(&reply);
                 evidence.push(reply);
             }
@@ -11828,6 +12194,35 @@ fn service_request(
                         "error": format!(
                             "replayed intent {intent_id} was not resolved (start_result={code})"
                         ),
+                    });
+                }
+                Err(error) => Err(error),
+            }
+        }
+        "open_url" => {
+            let Some(url) = request.get("url").and_then(|v| v.as_str()) else {
+                return serde_json::json!({
+                    "ok": false, "cmd": "services", "op": "open_url", "code": "BAD_REQUEST",
+                    "error": "open_url needs a string `url`",
+                });
+            };
+            let package = request.get("package").and_then(|v| v.as_str());
+            let mime_type = request.get("mime_type").and_then(|v| v.as_str());
+            let flags = request
+                .get("flags")
+                .and_then(|v| v.as_i64())
+                .and_then(|v| i32::try_from(v).ok())
+                .unwrap_or(0);
+            match peer.host_mut().open_url(url, package, mime_type, flags) {
+                Ok(outcome) => Ok(outcome.to_json()),
+                Err(acos_services::ServiceError::StartNotFound { detail }) => {
+                    return serde_json::json!({
+                        "ok": false,
+                        "cmd": "services",
+                        "op": "open_url",
+                        "code": "START_NOT_FOUND",
+                        "start_result": acos_services::ams::START_NOT_FOUND,
+                        "error": detail,
                     });
                 }
                 Err(error) => Err(error),
@@ -15152,3 +15547,57 @@ mod service_control_hot_attach_tests {
     }
 }
 
+#[cfg(test)]
+mod picker_routing_tests {
+    use super::*;
+    use acos_services::ams::IntentFacts;
+    use acos_services::intents::{CaptureOrigin, IntentState, ACTION_OPEN_DOCUMENT};
+
+    fn ask(state: &mut IntentState, process_tag: u32, requester: u64) -> u64 {
+        let pick = IntentFacts {
+            action: Some(ACTION_OPEN_DOCUMENT.into()),
+            ..IntentFacts::default()
+        };
+        let origin = CaptureOrigin {
+            process_tag,
+            requester,
+        };
+        state
+            .capture_from(origin, &pick, 0, 7, true, 0)
+            .expect("captured")
+            .seq
+    }
+
+    #[test]
+    fn an_answer_goes_only_to_the_process_that_asked() {
+        let primary = Path::new("/session/out/launch");
+        let secondary = secondary_staging(Path::new("/session/secondary/tag-1"));
+        let running = |tag: u32| (tag == 1).then(|| secondary.clone());
+        let mut state = IntentState::new();
+        let from_primary = ask(&mut state, 0, 10);
+        let from_secondary = ask(&mut state, 1, 20);
+
+        let route = |state: &IntentState, seq| result_destination(state, seq, primary, running);
+        assert_eq!(route(&state, Some(from_primary)).unwrap(), primary);
+        assert_eq!(route(&state, Some(from_secondary)).unwrap(), secondary);
+        // No selector means the newest capture, and its process.
+        assert_eq!(route(&state, None).unwrap(), secondary);
+        // An unknown selector is left for scripting to refuse.
+        assert_eq!(route(&state, Some(99)).unwrap(), primary);
+
+        let (code, _) = result_destination(&state, Some(from_secondary), primary, |_| None)
+            .expect_err("no running process: never the primary's tree");
+        assert_eq!(code, "PICKER_REQUESTER_GONE");
+
+        let newer = ask(&mut state, 1, 21);
+        let (code, message) = route(&state, Some(from_secondary)).expect_err("ambiguous");
+        assert_eq!(code, "PICKER_REQUEST_SUPERSEDED");
+        assert!(message.contains(&format!("capture {newer}")), "{message}");
+
+        // A respawned process under the same tag is a different instance.
+        state.orphan_process(1);
+        let (code, _) = route(&state, Some(newer)).expect_err("instance replaced");
+        assert_eq!(code, "PICKER_REQUESTER_GONE");
+        assert_eq!(route(&state, Some(from_primary)).unwrap(), primary);
+    }
+}

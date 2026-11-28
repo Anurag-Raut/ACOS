@@ -1065,20 +1065,30 @@ fn session_tool_spec(name: &str) -> (&'static str, Value) {
             }),
         ),
         "acos_service_ctl" => (
-            "ADR-0029 item 4: drive a scripted module's state on a live session (`acos_service_ctl`). \
-             `module` is the id (`net.telephony`), `op` is the module's own control operation \
-             (`calls`, `reset`, `sms`, `call_state`, `scan`, `auth`, ...) and `args` is that op's \
-             object. The module answers with the op's own value plus compact `modules_summary` \
-             (use `acos_services` for the full 28-module catalog): a refused or unknown op is a \
-             structured error, never a silent success. Only an attached module answers; a detached \
-             one says so (`attach` it first with `acos_services`).",
+            "ADR-0029 item 4: drive a scripted module's state or the `intents` router on a live \
+             session (`acos_service_ctl`). `module` is the id (`intents`, `net.telephony`, \
+             `hw.biometric`, ...), `op` is the module's own control operation (`open_url`, \
+             `pick_file`, `last`, `list`, `result`, `clear`, `calls`, `reset`, `sms`, \
+             `call_state`, `scan`, `auth`, ...) and `args` is that op's object. For `intents`: \
+             `open_url` (`{url, package?, mime_type?, flags?}`) resolves and delivers an \
+             `ACTION_VIEW` deep link / App Link (returning `START_NOT_FOUND` if unmatched); \
+             `pick_file` (`{path?, cancel?, display_name?, mime_type?, writable?, capture_seq?}`) \
+             fulfills a captured file/photo picker via `content://com.acos.picker/...` or cancels \
+             it with `RESULT_CANCELED`. `pick_file` and `result` answer the activity that made \
+             the captured request, in whichever app process (`PICKER_REQUESTER_GONE` / \
+             `PICKER_REQUEST_SUPERSEDED` refuse a reply that cannot reach it). \
+             The module answers with the op's own value plus compact \
+             `modules_summary` (use `acos_services` for the full 28-module catalog): a refused or \
+             unknown op is a structured error, never a silent success. `intents` is a core service \
+             and answers without attaching. A detached scripted module says so (`attach` it \
+             first with `acos_services`).",
             json!({
                 "type": "object",
                 "additionalProperties": false,
                 "required": ["module", "op"],
                 "properties": {
-                    "module": {"type": "string", "minLength": 1, "description": "Module id (`net.telephony`, `hw.biometric`, `hw.bluetooth`, `feedback.vibrator`)."},
-                    "op": {"type": "string", "minLength": 1, "description": "The module's control operation name (`calls`, `sms`, `auth`, `scan`, ...)."},
+                    "module": {"type": "string", "minLength": 1, "description": "Module id (`intents`, `net.telephony`, `hw.biometric`, `hw.bluetooth`, `feedback.vibrator`)."},
+                    "op": {"type": "string", "minLength": 1, "description": "The module's control operation name (`open_url`, `pick_file`, `last`, `calls`, `sms`, `auth`, `scan`, ...)."},
                     "args": {"type": "object", "description": "Op arguments (op-specific; see `acos_capabilities` modules[].controls)."},
                     "base": base.clone()
                 }

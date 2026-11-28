@@ -1007,10 +1007,16 @@ pub enum SessionCommand {
     Logs(SessionCmdArgs),
     /// MPROC1: run a session service control op (`--module`, `--op`, `--args`).
     ///
-    /// `--module intents` is the capture target: `--op last`/`list` read what
-    /// the app shared or picked, `--op result --args '{"data":"content://…"}'`
-    /// scripts the answer a picker returns, `--op clear` empties the record.
+    /// `--module intents` is the capture and deep-link target: `--op open_url`
+    /// delivers an `ACTION_VIEW` deep link, `--op pick_file` fulfills or
+    /// cancels a captured file/photo picker via `content://com.acos.picker/…`,
+    /// `--op last`/`list` read what the app shared or picked, `--op result`
+    /// scripts a raw activity result, and `--op clear` empties the record.
     Ctl(SessionCtlArgs),
+    /// Deliver an `ACTION_VIEW` deep link / App Link to a live session.
+    OpenUrl(SessionOpenUrlArgs),
+    /// Fulfill (with a host file) or cancel a captured file/photo picker intent.
+    PickFile(SessionPickFileArgs),
     /// Recreate the session's task state (drop the VM).
     Reset(SessionCmdArgs),
     /// Destroy the session (idempotent).
@@ -1030,6 +1036,8 @@ pub fn session(command: SessionCommand) -> ExitCode {
         SessionCommand::Text(args) => session_text(args),
         SessionCommand::Logs(args) => session_logs(args),
         SessionCommand::Ctl(args) => session_ctl(args),
+        SessionCommand::OpenUrl(args) => session_open_url(args),
+        SessionCommand::PickFile(args) => session_pick_file(args),
         SessionCommand::Reset(args) => session_reset(args),
         SessionCommand::Destroy(args) => session_destroy(args),
         SessionCommand::Close(args) => session_destroy(args),
@@ -1254,7 +1262,7 @@ pub struct SessionCtlArgs {
     #[arg(long, default_value = "intents")]
     pub module: String,
 
-    /// The service's operation (`last`, `list`, `clear`, `result`).
+    /// The service's operation (`last`, `list`, `clear`, `result`, `open_url`, `pick_file`).
     #[arg(long)]
     pub op: String,
 
@@ -1298,6 +1306,206 @@ fn session_ctl(args: SessionCtlArgs) -> ExitCode {
         &new_request_id(),
         ErrorCode::UnsupportedBackend,
         "`acos session ctl` requires the session daemon; unset ACOS_NO_DAEMON to enable it",
+        json!({"tool": "acos_service_ctl"}),
+    );
+    emit(&envelope, args.json)
+}
+
+/// Arguments for `acos session open-url`.
+#[derive(Debug, clap::Args)]
+pub struct SessionOpenUrlArgs {
+    /// Session id label (default `s_cli`).
+    #[arg(long, default_value = "s_cli")]
+    pub session: String,
+
+    /// Deep link or App Link URL (e.g. `myapp://item/42` or `https://example.com/item/42`).
+    pub url: String,
+
+    /// Optional explicit target package name.
+    #[arg(long)]
+    pub package: Option<String>,
+
+    /// Optional MIME type for `ACTION_VIEW`.
+    #[arg(long = "mime-type")]
+    pub mime_type: Option<String>,
+
+    /// Optional Android Intent flags bitmask.
+    #[arg(long)]
+    pub flags: Option<i32>,
+
+    /// Emit the standard ACOS JSON envelope instead of a summary.
+    #[arg(long)]
+    pub json: bool,
+}
+
+fn build_open_url_ctl_args(args: &SessionOpenUrlArgs) -> Result<Value, String> {
+    let url = args.url.trim();
+    if url.is_empty() {
+        return Err("url must not be empty".to_string());
+    }
+    let mut inner = json!({ "url": url });
+    if let Some(pkg) = args.package.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+        inner["package"] = json!(pkg);
+    }
+    if let Some(mime) = args.mime_type.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+        inner["mime_type"] = json!(mime);
+    }
+    if let Some(flags) = args.flags {
+        inner["flags"] = json!(flags);
+    }
+    Ok(inner)
+}
+
+fn session_open_url(args: SessionOpenUrlArgs) -> ExitCode {
+    let inner = match build_open_url_ctl_args(&args) {
+        Ok(value) => value,
+        Err(reason) => {
+            let envelope = fail(
+                &new_request_id(),
+                ErrorCode::InvalidArgument,
+                reason,
+                json!({"field": "url"}),
+            );
+            return emit(&envelope, args.json);
+        }
+    };
+    let daemon_args = json!({
+        "base": daemon_base(&args.session),
+        "module": "intents",
+        "op": "open_url",
+        "args": inner,
+    });
+    if let Some(code) = call_ensure_daemon("acos_service_ctl", &daemon_args, args.json) {
+        return code;
+    }
+    let envelope = fail(
+        &new_request_id(),
+        ErrorCode::UnsupportedBackend,
+        "`acos session open-url` requires the session daemon; unset ACOS_NO_DAEMON to enable it",
+        json!({"tool": "acos_service_ctl"}),
+    );
+    emit(&envelope, args.json)
+}
+
+/// Arguments for `acos session pick-file`.
+#[derive(Debug, clap::Args)]
+pub struct SessionPickFileArgs {
+    /// Session id label (default `s_cli`).
+    #[arg(long, default_value = "s_cli")]
+    pub session: String,
+
+    /// Host file path to hand to the app via `content://com.acos.picker/…` (positional).
+    pub path: Option<PathBuf>,
+
+    /// Host file path to hand to the app (flag form).
+    #[arg(long = "path", value_name = "FILE")]
+    pub path_flag: Option<PathBuf>,
+
+    /// Cancel the pending picker (`RESULT_CANCELED`, `data = null`).
+    #[arg(long)]
+    pub cancel: bool,
+
+    /// Override `_display_name` reported by `com.acos.picker`.
+    #[arg(long = "display-name")]
+    pub display_name: Option<String>,
+
+    /// Override MIME type reported by `com.acos.picker`.
+    #[arg(long = "mime-type")]
+    pub mime_type: Option<String>,
+
+    /// Allow write access (also enabled automatically for `ACTION_CREATE_DOCUMENT`).
+    #[arg(long)]
+    pub writable: bool,
+
+    /// Optional captured picker sequence number to target.
+    #[arg(long = "capture-seq")]
+    pub capture_seq: Option<u64>,
+
+    /// Emit the standard ACOS JSON envelope instead of a summary.
+    #[arg(long)]
+    pub json: bool,
+}
+
+fn build_pick_file_ctl_args(args: &SessionPickFileArgs) -> Result<Value, String> {
+    let chosen_path = args.path_flag.as_ref().or(args.path.as_ref());
+    if args.cancel && chosen_path.is_some() {
+        return Err("`--cancel` cannot be combined with a file path".to_string());
+    }
+    let mut inner = if args.cancel {
+        json!({ "cancel": true })
+    } else if let Some(path) = chosen_path {
+        let abs = std::fs::canonicalize(path).unwrap_or_else(|_| {
+            if path.is_absolute() {
+                path.clone()
+            } else {
+                std::env::current_dir()
+                    .map(|cwd| cwd.join(path))
+                    .unwrap_or_else(|_| path.clone())
+            }
+        });
+        // The daemon takes the path as JSON text. A lossy conversion could
+        // name a different file, so refuse instead.
+        let Some(text) = abs.to_str() else {
+            return Err(format!(
+                "file path {abs:?} is not valid UTF-8; rename or copy the file to a UTF-8 path"
+            ));
+        };
+        let mut obj = json!({ "path": text });
+        if let Some(name) = args
+            .display_name
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+        {
+            obj["display_name"] = json!(name);
+        }
+        if let Some(mime) = args
+            .mime_type
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+        {
+            obj["mime_type"] = json!(mime);
+        }
+        if args.writable {
+            obj["writable"] = json!(true);
+        }
+        obj
+    } else {
+        return Err("provide a file path (positional or `--path <FILE>`) or `--cancel`".to_string());
+    };
+    if let Some(seq) = args.capture_seq {
+        inner["capture_seq"] = json!(seq);
+    }
+    Ok(inner)
+}
+
+fn session_pick_file(args: SessionPickFileArgs) -> ExitCode {
+    let inner = match build_pick_file_ctl_args(&args) {
+        Ok(value) => value,
+        Err(reason) => {
+            let envelope = fail(
+                &new_request_id(),
+                ErrorCode::InvalidArgument,
+                reason,
+                json!({"field": "path"}),
+            );
+            return emit(&envelope, args.json);
+        }
+    };
+    let daemon_args = json!({
+        "base": daemon_base(&args.session),
+        "module": "intents",
+        "op": "pick_file",
+        "args": inner,
+    });
+    if let Some(code) = call_ensure_daemon("acos_service_ctl", &daemon_args, args.json) {
+        return code;
+    }
+    let envelope = fail(
+        &new_request_id(),
+        ErrorCode::UnsupportedBackend,
+        "`acos session pick-file` requires the session daemon; unset ACOS_NO_DAEMON to enable it",
         json!({"tool": "acos_service_ctl"}),
     );
     emit(&envelope, args.json)
@@ -1453,5 +1661,113 @@ mod tests {
         let line = status_line(&envelope);
         assert!(line.starts_with("request req_test: "), "{line}");
         assert!(line.contains("ok=true status=pass"), "{line}");
+    }
+
+    #[test]
+    fn open_url_args_trim_and_omit_unset_fields() {
+        let args = SessionOpenUrlArgs {
+            session: "s_cli".to_string(),
+            url: "  myapp://item/42  ".to_string(),
+            package: Some("com.example.app".to_string()),
+            mime_type: None,
+            flags: Some(0x10000000),
+            json: true,
+        };
+        let payload = build_open_url_ctl_args(&args).expect("valid open-url args");
+        assert_eq!(payload["url"], "myapp://item/42");
+        assert_eq!(payload["package"], "com.example.app");
+        assert_eq!(payload["flags"], 0x10000000);
+        assert!(payload.get("mime_type").is_none());
+
+        let empty = SessionOpenUrlArgs {
+            session: "s_cli".to_string(),
+            url: "   ".to_string(),
+            package: None,
+            mime_type: None,
+            flags: None,
+            json: false,
+        };
+        assert!(build_open_url_ctl_args(&empty).is_err());
+    }
+
+    #[test]
+    fn pick_file_args_support_path_cancel_and_reject_conflicts() {
+        let cancel = SessionPickFileArgs {
+            session: "s_cli".to_string(),
+            path: None,
+            path_flag: None,
+            cancel: true,
+            display_name: None,
+            mime_type: None,
+            writable: false,
+            capture_seq: Some(3),
+            json: false,
+        };
+        assert_eq!(
+            build_pick_file_ctl_args(&cancel).unwrap(),
+            json!({"cancel": true, "capture_seq": 3})
+        );
+
+        let missing = SessionPickFileArgs {
+            session: "s_cli".to_string(),
+            path: None,
+            path_flag: None,
+            cancel: false,
+            display_name: None,
+            mime_type: None,
+            writable: false,
+            capture_seq: None,
+            json: false,
+        };
+        assert!(build_pick_file_ctl_args(&missing).is_err());
+
+        let conflict = SessionPickFileArgs {
+            session: "s_cli".to_string(),
+            path: Some(PathBuf::from("/tmp/example.png")),
+            path_flag: None,
+            cancel: true,
+            display_name: None,
+            mime_type: None,
+            writable: false,
+            capture_seq: None,
+            json: false,
+        };
+        assert!(build_pick_file_ctl_args(&conflict).is_err());
+
+        let non_utf8 = SessionPickFileArgs {
+            session: "s_cli".to_string(),
+            path: Some(PathBuf::from(
+                <std::ffi::OsString as std::os::unix::ffi::OsStringExt>::from_vec(
+                    b"/nonexistent-pick-\xff.pdf".to_vec(),
+                ),
+            )),
+            path_flag: None,
+            cancel: false,
+            display_name: None,
+            mime_type: None,
+            writable: false,
+            capture_seq: None,
+            json: false,
+        };
+        let refusal = build_pick_file_ctl_args(&non_utf8).unwrap_err();
+        assert!(refusal.contains("not valid UTF-8"), "{refusal}");
+
+        let file = SessionPickFileArgs {
+            session: "s_cli".to_string(),
+            path: None,
+            path_flag: Some(PathBuf::from("/tmp/nonexistent-pick-test.pdf")),
+            cancel: false,
+            display_name: Some("report.pdf".to_string()),
+            mime_type: Some("application/pdf".to_string()),
+            writable: true,
+            capture_seq: Some(5),
+            json: false,
+        };
+        let payload = build_pick_file_ctl_args(&file).unwrap();
+        assert_eq!(payload["path"], "/tmp/nonexistent-pick-test.pdf");
+        assert_eq!(payload["display_name"], "report.pdf");
+        assert_eq!(payload["mime_type"], "application/pdf");
+        assert_eq!(payload["writable"], true);
+        assert_eq!(payload["capture_seq"], 5);
     }
 }

@@ -75,6 +75,9 @@ pub struct LiveEntry {
     pub stream_socket: Option<String>,
     /// Whether this session has an installed `CATEGORY_HOME` activity.
     pub has_home: Option<bool>,
+    /// Host-local session artifacts directory (`None` for watch-only verify runs).
+    /// Stays internal to `acos view` (never exposed to browser JSON).
+    pub artifacts_dir: Option<String>,
 }
 
 impl LiveEntry {
@@ -102,6 +105,9 @@ impl LiveEntry {
         });
         if let Some(token) = &self.launch_token {
             doc["launch_token"] = serde_json::json!(token);
+        }
+        if let Some(dir) = &self.artifacts_dir {
+            doc["artifacts_dir"] = serde_json::json!(dir);
         }
         doc
     }
@@ -185,6 +191,33 @@ impl LiveRegistry {
             .join(self.file_name(&entry.session_id, entry.daemon_pid));
         write_atomic(&path, &entry.to_json().to_string())?;
         Ok(path)
+    }
+
+    /// Replace the session's entry only while it still carries
+    /// `expected_launch_token`, serialized with `write`/`remove_if_token`: a
+    /// late republish cannot recreate a destroyed entry or overwrite a
+    /// replacement session's.
+    pub fn replace_if_token(
+        &self,
+        entry: &LiveEntry,
+        expected_launch_token: &str,
+    ) -> io::Result<bool> {
+        let _guard = self.io_lock.lock().unwrap_or_else(|e| e.into_inner());
+        let path = self
+            .dir
+            .join(self.file_name(&entry.session_id, entry.daemon_pid));
+        let current = std::fs::read_to_string(&path)
+            .ok()
+            .and_then(|text| serde_json::from_str::<serde_json::Value>(&text).ok());
+        let token = current
+            .as_ref()
+            .and_then(|doc| doc.get("launch_token"))
+            .and_then(serde_json::Value::as_str);
+        if token != Some(expected_launch_token) {
+            return Ok(false);
+        }
+        write_atomic(&path, &entry.to_json().to_string())?;
+        Ok(true)
     }
 
     /// Update `activity` in an existing entry (no-op when the file is gone).
@@ -726,6 +759,7 @@ mod tests {
             stream_socket: Some("/run/user/1000/acos-art-1-0/view.sock".to_string()),
             has_home: Some(false),
             launch_token: None,
+            artifacts_dir: None,
         }
     }
 
