@@ -379,8 +379,12 @@ impl IntentState {
         let wrapped_mime_type = wrapped.as_ref().and_then(|w| w.mime_type.clone());
         let mut extras = facts.extras.clone();
         if let Some(inner) = wrapped.as_ref() {
+            // `Intent.createChooser` puts the dialog title in the outer
+            // `EXTRA_TITLE`; for a picker the inner one is the suggested file
+            // name, so it wins.
+            let inner_is_picker = inner.action.as_deref().is_some_and(is_picker_action);
             for key in [EXTRA_TITLE, EXTRA_MIME_TYPES] {
-                if !extras.contains_key(key) {
+                if (inner_is_picker && key == EXTRA_TITLE) || !extras.contains_key(key) {
                     if let Some(val) = inner.extras.get(key) {
                         extras.insert(key.to_string(), val.clone());
                     }

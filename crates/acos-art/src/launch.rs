@@ -3344,6 +3344,12 @@ pub(crate) fn launch_session(
             // MPROC5c: the idle kill's timeout (`0` disables it).
             Duration::from_secs(opts.idle_kill_secs),
         );
+        // The session is over however it ended: nothing serves the viewer's
+        // staged uploads any more.
+        live.picker
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .release_staged();
         match dead {
             Ok(end) => {
                 interactive_clean = end.clean;
@@ -5912,7 +5918,13 @@ fn session_ctl(
                     mime_type,
                     writable,
                 ) {
-                    Ok(entry) => entry,
+                    Ok(entry) => {
+                        // A browser upload `acos view` staged for this session.
+                        if args.get("staged").and_then(serde_json::Value::as_bool) == Some(true) {
+                            picker.mark_staged(entry.id);
+                        }
+                        entry
+                    }
                     Err(error) => {
                         return serde_json::json!({
                             "ok": false, "cmd": "ctl", "module": module, "op": op,

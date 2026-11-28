@@ -77,9 +77,16 @@ mod tx {
     pub const OPEN_ASSET_FILE: u32 = 15;
     pub const GET_STREAM_TYPES: u32 = 22;
     pub const OPEN_TYPED_ASSET_FILE: u32 = 23;
+    pub const CREATE_CANCELLATION_SIGNAL: u32 = 24;
     pub const GET_TYPE_ASYNC: u32 = 29;
     pub const GET_TYPE_ANONYMOUS_ASYNC: u32 = 32;
 }
+
+/// `AssetFileDescriptor.UNKNOWN_LENGTH`: the asset runs to the end of the file.
+const ASSET_UNKNOWN_LENGTH: i64 = -1;
+
+/// `DatabaseUtils.writeExceptionToParcel`'s code for `FileNotFoundException`.
+const DB_EX_FILE_NOT_FOUND: i32 = 1;
 
 /// `DocumentsContract.Document.FLAG_SUPPORTS_WRITE`.
 const DOC_FLAG_SUPPORTS_WRITE: i64 = 0x2;
@@ -99,6 +106,9 @@ pub struct PickerEntry {
     pub mime_type: String,
     /// True only for `ACTION_CREATE_DOCUMENT` targets where guest writes are allowed.
     pub writable: bool,
+    /// The backing file is a copy `acos view` staged for this entry, deleted
+    /// when the entry ends. Never set for a caller's own file.
+    pub staged: bool,
 }
 
 impl PickerEntry {
@@ -190,12 +200,47 @@ impl PickerRegistry {
             display_name: name,
             mime_type: mime,
             writable,
+            staged: false,
         };
         while self.entries.len() >= MAX_PICKER_ENTRIES {
-            self.entries.pop_front();
+            if let Some(evicted) = self.entries.pop_front() {
+                self.discard_staged(&evicted);
+            }
         }
         self.entries.push_back(entry.clone());
         Ok(entry)
+    }
+
+    /// Hand ownership of entry `id`'s backing file to the registry, so it is
+    /// deleted on eviction or [`Self::release_staged`]. Refused (`false`) for a
+    /// writable entry, whose file is the app's saved output, and for any path
+    /// outside the viewer's upload directories.
+    pub fn mark_staged(&mut self, id: u64) -> bool {
+        match self.entries.iter_mut().find(|e| e.id == id) {
+            Some(entry) if !entry.writable && is_staged_upload_path(&entry.host_path) => {
+                entry.staged = true;
+                true
+            }
+            _ => false,
+        }
+    }
+
+    /// End of session: drop every staged entry and delete its file.
+    pub fn release_staged(&mut self) {
+        let (staged, kept): (VecDeque<_>, VecDeque<_>) =
+            std::mem::take(&mut self.entries).into_iter().partition(|e| e.staged);
+        self.entries = kept;
+        for entry in &staged {
+            self.discard_staged(entry);
+        }
+    }
+
+    /// Delete a removed entry's staged file unless a live entry still serves it.
+    fn discard_staged(&self, removed: &PickerEntry) {
+        if removed.staged && !self.entries.iter().any(|e| e.host_path == removed.host_path) {
+            // Best effort: a file the user already removed is not an error.
+            let _ = std::fs::remove_file(&removed.host_path);
+        }
     }
 
     /// Resolve a `content://com.acos.picker/...` URI to its registered entry.
@@ -322,10 +367,13 @@ impl PickerProviderService {
         Ok(())
     }
 
-    fn write_afd(reply: &mut Parcel, fd: &ParcelFd, len: u64) -> Result<()> {
+    /// Every picker asset is a whole file. A declared length would make
+    /// `ContentResolver.openFileDescriptor` throw "Not a whole file" and would
+    /// bound `openOutputStream` to the size at open time (0 for a new target).
+    fn write_afd(reply: &mut Parcel, fd: &ParcelFd) -> Result<()> {
         Self::write_pfd(reply, fd)?;
         reply.write_int64(0); // mStartOffset
-        reply.write_int64(i64::try_from(len).unwrap_or(-1)); // mLength
+        reply.write_int64(ASSET_UNKNOWN_LENGTH); // mLength
         reply.write_int32(0); // mExtras == null
         Ok(())
     }
@@ -465,7 +513,7 @@ impl ServiceObject for PickerProviderService {
                 let uri = read_uri(data, "openAssetFile")?;
                 let mode = data.read_string16()?.unwrap_or_else(|| "r".to_string());
                 let _signal = data.read_strong_binder()?;
-                let (fd, len) = self
+                let (fd, _len) = self
                     .registry
                     .lock()
                     .unwrap_or_else(std::sync::PoisonError::into_inner)
@@ -473,7 +521,7 @@ impl ServiceObject for PickerProviderService {
                 reply.reset();
                 write_no_exception(reply);
                 reply.write_int32(1); // AssetFileDescriptor != null
-                Self::write_afd(reply, &fd, len)?;
+                Self::write_afd(reply, &fd)?;
                 Ok(true)
             }
             tx::GET_STREAM_TYPES => {
@@ -496,18 +544,36 @@ impl ServiceObject for PickerProviderService {
             tx::OPEN_TYPED_ASSET_FILE => {
                 let _attr = parcelable::read_payload("android.content.AttributionSource", data)?;
                 let uri = read_uri(data, "openTypedAssetFile")?;
-                let _mime_type = data.read_string16()?;
+                let filter = data.read_string16()?.unwrap_or_else(|| "*/*".to_string());
                 let _opts = parcelable::read_bundle(data)?;
                 let _signal = data.read_strong_binder()?;
-                let (fd, len) = self
+                let registry = self
                     .registry
                     .lock()
-                    .unwrap_or_else(std::sync::PoisonError::into_inner)
-                    .open_file(&uri, "r")?;
+                    .unwrap_or_else(std::sync::PoisonError::into_inner);
+                if registry.get_stream_types(&uri, &filter)?.is_empty() {
+                    // AOSP `ContentProvider.openTypedAssetFile` throws
+                    // `FileNotFoundException`; the proxy reads it in this form.
+                    reply.reset();
+                    reply.write_int32(DB_EX_FILE_NOT_FOUND);
+                    reply.write_string16(&format!("Can't open {uri} as type {filter}"))?;
+                    return Ok(true);
+                }
+                let (fd, _len) = registry.open_file(&uri, "r")?;
+                drop(registry);
                 reply.reset();
                 write_no_exception(reply);
                 reply.write_int32(1); // AssetFileDescriptor != null
-                Self::write_afd(reply, &fd, len)?;
+                Self::write_afd(reply, &fd)?;
+                Ok(true)
+            }
+            tx::CREATE_CANCELLATION_SIGNAL => {
+                // A null `ICancellationSignal`: the client's `setRemote(null)`
+                // is a no-op and the query/open that follows runs to completion
+                // (every picker operation answers immediately).
+                reply.reset();
+                write_no_exception(reply);
+                reply.write_strong_binder_opt(None);
                 Ok(true)
             }
             _ => Ok(false),
@@ -594,6 +660,20 @@ fn resolve_host_path(host_path: &Path, writable: bool) -> Result<PathBuf> {
             detail: format!("cannot create writable target {}: {e}", target.display()),
         })?;
     Ok(target)
+}
+
+/// Whether `path` has the shape `acos view` stages uploads under:
+/// `<artifacts>/picker/pick-*` or `<registry>/picker-uploads/<session>/pick-*`.
+fn is_staged_upload_path(path: &Path) -> bool {
+    let parent = path.parent();
+    let name_is = |dir: Option<&Path>, name: &str| {
+        dir.and_then(Path::file_name).is_some_and(|n| n == name)
+    };
+    path.file_name()
+        .and_then(|n| n.to_str())
+        .is_some_and(|n| n.starts_with("pick-"))
+        && (name_is(parent, "picker")
+            || name_is(parent.and_then(Path::parent), "picker-uploads"))
 }
 
 fn open_with_android_mode(
@@ -903,6 +983,50 @@ mod tests {
             .expect("query after write");
         assert_eq!(cursor.rows[0][0], Field::Long(14));
 
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn staged_uploads_are_deleted_with_their_entry_and_other_files_are_not() {
+        let (dir, own) = temp_file("pick-own.txt", b"mine");
+        let uploads = dir.join("picker");
+        std::fs::create_dir_all(&uploads).expect("mkdir");
+        let upload = |name: &str| {
+            let path = uploads.join(name);
+            std::fs::write(&path, b"copy").expect("stage");
+            path
+        };
+        let mut reg = PickerRegistry::new();
+
+        // A caller's own file and a writable target are never owned.
+        let mine = reg.register_file(&own, None, None, false).expect("own");
+        assert!(!reg.mark_staged(mine.id));
+        let saved_path = upload("pick-saved");
+        let saved = reg
+            .register_file(&saved_path, None, None, true)
+            .expect("writable");
+        assert!(!reg.mark_staged(saved.id));
+
+        let evicted_path = upload("pick-evicted");
+        let evicted = reg
+            .register_file(&evicted_path, None, None, false)
+            .expect("staged");
+        assert!(reg.mark_staged(evicted.id));
+        for _ in 0..MAX_PICKER_ENTRIES {
+            reg.register_file(&own, None, None, false).expect("fill");
+        }
+        assert!(!evicted_path.exists(), "eviction deletes the staged copy");
+        assert!(own.exists() && saved_path.exists());
+
+        let ending_path = upload("pick-ending");
+        let ending = reg
+            .register_file(&ending_path, None, None, false)
+            .expect("staged");
+        assert!(reg.mark_staged(ending.id));
+        reg.release_staged();
+        assert!(!ending_path.exists(), "session end deletes the staged copy");
+        assert!(reg.resolve_uri(&ending.uri).is_err());
+        assert!(own.exists() && saved_path.exists());
         let _ = std::fs::remove_dir_all(&dir);
     }
 

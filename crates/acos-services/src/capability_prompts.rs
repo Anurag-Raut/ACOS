@@ -560,7 +560,9 @@ impl CapabilityPromptState {
     /// Record an external intent captured by [`crate::intents::IntentState`].
     pub fn record_captured_intent(&mut self, record: &CapturedIntent) -> CapabilityPrompt {
         let data = record.data.as_deref().unwrap_or("");
-        let (title, message, options) = if record.is_picker() {
+        // A plain `startActivity` has no result recipient, so neither choosing
+        // a file nor cancelling could ever reach the app.
+        let (title, message, options) = if record.is_picker() && record.for_result {
             let accept = record.picker_accept_hint();
             let mime_desc = accept.as_deref().unwrap_or("*/*");
             let eff_action = record.effective_action();
@@ -812,5 +814,21 @@ mod tests {
         assert_eq!(prompt.options[0].accept.as_deref(), Some("image/*"));
         assert_eq!(prompt.options[1].kind, PromptOptionKind::CancelPicker);
         assert_eq!(prompt.options[1].capture_seq, Some(3));
+
+        let no_result = CapturedIntent {
+            seq: 4,
+            request_code: -1,
+            for_result: false,
+            ..captured
+        };
+        let prompt = state.record_captured_intent(&no_result);
+        assert_eq!(prompt.title, "External intent captured");
+        assert!(
+            !prompt.options.iter().any(|o| matches!(
+                o.kind,
+                PromptOptionKind::FilePicker | PromptOptionKind::CancelPicker
+            )),
+            "a start without a result must not offer picker actions"
+        );
     }
 }

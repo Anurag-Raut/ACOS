@@ -248,6 +248,32 @@ fn picker_actions_and_chooser_wrapper_are_captured_and_emit_prompts() {
     assert_eq!(cap3.wrapped_action.as_deref(), Some(ACTION_GET_CONTENT));
     assert_eq!(cap3.effective_mime_type(), Some("application/pdf"));
 
+    // A chooser's own EXTRA_TITLE is the dialog title; the wrapped picker's
+    // EXTRA_TITLE is the suggested file name and wins.
+    let mut inner_extras = BTreeMap::new();
+    inner_extras.insert(EXTRA_TITLE.into(), Extra::String("report.csv".into()));
+    let titled_inner = IntentFacts {
+        action: Some(ACTION_CREATE_DOCUMENT.into()),
+        mime_type: Some("text/csv".into()),
+        extras: inner_extras,
+        ..Default::default()
+    };
+    let mut outer_extras = BTreeMap::new();
+    outer_extras.insert(
+        EXTRA_INTENT.into(),
+        Extra::Parcelable(titled_inner.to_parcelable()),
+    );
+    outer_extras.insert(EXTRA_TITLE.into(), Extra::String("Save as".into()));
+    let titled_chooser = IntentFacts {
+        action: Some(ACTION_CHOOSER.into()),
+        extras: outer_extras,
+        ..Default::default()
+    };
+    let titled = intents
+        .capture(&titled_chooser, 0, 105, true, 3_500)
+        .expect("captured");
+    assert_eq!(titled.suggested_filename(), Some("report.csv"));
+
     // 4. ACTION_PICK with data URI (e.g. MediaStore Images URI) and no MIME type
     let pick_uri = IntentFacts {
         action: Some(ACTION_PICK.into()),
@@ -359,7 +385,9 @@ fn picker_content_provider_serves_fd_cursor_and_mime_over_binder() {
     file.read_to_end(&mut got).expect("read from binder fd");
     assert_eq!(got, expected_bytes);
 
-    // 2. openAssetFile (code 15) -> ParcelFileDescriptor + offset=0 + len.
+    // 2. openAssetFile (code 15) -> ParcelFileDescriptor + offset=0 +
+    //    UNKNOWN_LENGTH (a whole file; a declared length breaks
+    //    openFileDescriptor and bounds openOutputStream).
     let mut req = Parcel::new();
     req.write_interface_token(CONTENT_PROVIDER_DESCRIPTOR).unwrap();
     write_attribution_source(&mut req);
@@ -376,12 +404,53 @@ fn picker_content_provider_serves_fd_cursor_and_mime_over_binder() {
     assert_eq!(reply.read_int32().unwrap(), 0, "no commFd");
     let _afd_fd = reply.read_file_descriptor().expect("read afd fd");
     assert_eq!(reply.read_int64().unwrap(), 0, "mStartOffset");
-    assert_eq!(
-        reply.read_int64().unwrap(),
-        expected_bytes.len() as i64,
-        "mLength"
-    );
+    assert_eq!(reply.read_int64().unwrap(), -1, "mLength is UNKNOWN_LENGTH");
     assert_eq!(reply.read_int32().unwrap(), 0, "mExtras null");
+
+    // 2b. openTypedAssetFile (code 23): a matching filter and */* open the
+    //     file; any other type is a FileNotFoundException (DatabaseUtils code 1).
+    for (filter, matches) in [
+        ("application/pdf", true),
+        ("application/*", true),
+        ("*/*", true),
+        ("image/png", false),
+    ] {
+        let mut req = Parcel::new();
+        req.write_interface_token(CONTENT_PROVIDER_DESCRIPTOR).unwrap();
+        write_attribution_source(&mut req);
+        write_string_uri(&mut req, &entry.uri);
+        req.write_string16(filter).unwrap();
+        acos_services::parcelable::write_bundle(&mut req, None).unwrap();
+        req.write_strong_binder_opt(None);
+        req.set_data_position(0);
+        let mut reply = Parcel::new();
+        host.transact(picker_binder, 23, &mut req, &mut reply, 0)
+            .expect("openTypedAssetFile transact");
+        reply.set_data_position(0);
+        if matches {
+            assert_eq!(reply.read_int32().unwrap(), 0, "no exception for {filter}");
+            assert_eq!(reply.read_int32().unwrap(), 1, "AFD present");
+            assert_eq!(reply.read_int32().unwrap(), 0, "no commFd");
+            let _fd = reply.read_file_descriptor().expect("typed fd");
+            assert_eq!(reply.read_int64().unwrap(), 0, "mStartOffset");
+            assert_eq!(reply.read_int64().unwrap(), -1, "mLength");
+        } else {
+            assert_eq!(reply.read_int32().unwrap(), 1, "FileNotFoundException");
+            let message = reply.read_string16().unwrap().expect("message");
+            assert!(message.contains("image/png"), "{message}");
+        }
+    }
+
+    // 2c. createCancellationSignal (code 24) -> a null ICancellationSignal.
+    let mut req = Parcel::new();
+    req.write_interface_token(CONTENT_PROVIDER_DESCRIPTOR).unwrap();
+    req.set_data_position(0);
+    let mut reply = Parcel::new();
+    host.transact(picker_binder, 24, &mut req, &mut reply, 0)
+        .expect("createCancellationSignal transact");
+    reply.set_data_position(0);
+    assert_eq!(reply.read_int32().unwrap(), 0, "no exception");
+    assert_eq!(reply.read_strong_binder().expect("binder"), None);
 
     // 3. query (code 1) -> BulkCursorDescriptor + inline CursorWindow.
     let mut req = Parcel::new();
