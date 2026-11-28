@@ -372,11 +372,23 @@ impl<B: Backend> Server<B> {
             Ok(permit) => permit,
             Err(GateError::Cancelled) => {
                 let envelope = cancelled_envelope(name);
-                return tool_result(id, &envelope, &self.negotiated_version(), &self.config, &args);
+                return tool_result(
+                    id,
+                    &envelope,
+                    &self.negotiated_version(),
+                    &self.config,
+                    &args,
+                );
             }
             Err(GateError::Timeout) => {
                 let envelope = busy_envelope(name, self.config.max_concurrency);
-                return tool_result(id, &envelope, &self.negotiated_version(), &self.config, &args);
+                return tool_result(
+                    id,
+                    &envelope,
+                    &self.negotiated_version(),
+                    &self.config,
+                    &args,
+                );
             }
         };
 
@@ -451,7 +463,13 @@ impl<B: Backend> Server<B> {
             }
         };
         drop(permit);
-        tool_result(id, &envelope, &self.negotiated_version(), &self.config, &args)
+        tool_result(
+            id,
+            &envelope,
+            &self.negotiated_version(),
+            &self.config,
+            &args,
+        )
     }
 
     fn call_context(&self, token: &CancelToken, args: &Value) -> CallContext {
@@ -695,20 +713,26 @@ fn shape_reply_tree(mut value: Value, config: &ServerConfig, args: &Value) -> Va
     let session = value
         .get("session_id")
         .and_then(Value::as_str)
-        .or_else(|| {
-            value
-                .pointer("/result/session_id")
-                .and_then(Value::as_str)
-        })
+        .or_else(|| value.pointer("/result/session_id").and_then(Value::as_str))
         .unwrap_or("session");
     let safe: String = session
         .chars()
-        .map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '_' { c } else { '_' })
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '-' || c == '_' {
+                c
+            } else {
+                '_'
+            }
+        })
         .collect();
     let dir = config
         .artifacts_dir
         .join("sessions")
-        .join(if safe.is_empty() { "session".to_string() } else { safe });
+        .join(if safe.is_empty() {
+            "session".to_string()
+        } else {
+            safe
+        });
     let opts = TreeShapeOptions {
         cursor,
         page_size: reply::DEFAULT_PAGE_SIZE,
@@ -816,33 +840,34 @@ fn append_evidence_content(
             continue;
         }
         let full = config.artifacts_dir.join(path);
-        if !config
-            .allowed_roots
-            .iter()
-            .any(|root| full.starts_with(root))
-        {
+        // CWE-59 / CWE-367: open once and validate the opened descriptor's real
+        // path against `allowed_roots`, so a symlink under `artifacts_dir`
+        // pointing outside the allowed roots is neither inlined nor linked.
+        let Some((file, len)) = open_file_within_allowed_roots(&full, &config.allowed_roots) else {
             continue;
-        }
-        if !full.is_file() {
-            continue;
-        }
+        };
         // SHOTZ: an image is inlined as a *bounded preview* (long side
         // `ACOS_MCP_PREVIEW_MAX_SIDE`, file `ACOS_MCP_MAX_IMAGE_BYTES`) and the
         // reply still names the lossless file below, because a full-frame PNG in
         // a tool reply is context spent on pixels the agent cannot read.
         if image_mime(path).is_some() {
-            if let Some(preview) =
-                crate::preview::image_preview(&full, config.max_image_side, config.max_image_bytes)
-            {
-                content.push(json!({
-                    "type": "image",
-                    "data": crate::base64::encode(&preview.data),
-                    "mimeType": preview.mime,
-                }));
-                content.push(json!({
-                    "type": "text",
-                    "text": preview_note(kind, &full, &preview),
-                }));
+            if let Some(bytes) = read_opened_preview_bytes(file, len) {
+                if let Some(preview) = crate::preview::image_preview_from_bytes(
+                    &full,
+                    &bytes,
+                    config.max_image_side,
+                    config.max_image_bytes,
+                ) {
+                    content.push(json!({
+                        "type": "image",
+                        "data": crate::base64::encode(&preview.data),
+                        "mimeType": preview.mime,
+                    }));
+                    content.push(json!({
+                        "type": "text",
+                        "text": preview_note(kind, &full, &preview),
+                    }));
+                }
             }
         }
         if supports_structured_content(protocol_version) {
@@ -906,12 +931,17 @@ fn append_screenshot_content(
     if let Some(dir) = std::env::var_os("ACOS_SERVE_ARTIFACTS") {
         roots.push(PathBuf::from(dir));
     }
-    if !path_within_allowed_roots(full, &roots) {
+    roots.push(std::env::temp_dir());
+    // CWE-367: open once, validate the *opened* file, read from that handle.
+    let Some(bytes) = read_file_within_allowed_roots(full, &roots) else {
         return;
-    }
-    if let Some(preview) =
-        crate::preview::image_preview(full, config.max_image_side, config.max_image_bytes)
-    {
+    };
+    if let Some(preview) = crate::preview::image_preview_from_bytes(
+        full,
+        &bytes,
+        config.max_image_side,
+        config.max_image_bytes,
+    ) {
         content.push(json!({
             "type": "image",
             "data": crate::base64::encode(&preview.data),
@@ -931,19 +961,58 @@ fn append_screenshot_content(
     }
 }
 
-/// FB2c: is this file inside one of the server's allowed roots?
-///
-/// Both sides are canonicalized, so a symlink cannot smuggle a file out of a
-/// root and a root the user configured through a link still matches. A path
-/// that cannot be canonicalized (missing file) is not in a root.
-fn path_within_allowed_roots(path: &Path, roots: &[PathBuf]) -> bool {
-    let Ok(real) = std::fs::canonicalize(path) else {
-        return false;
-    };
-    roots.iter().any(|root| {
+/// Largest file [`read_file_within_allowed_roots`] reads (a preview source is
+/// a PNG frame; anything bigger is not inlined).
+const MAX_PREVIEW_SOURCE_BYTES: u64 = 64 * 1024 * 1024;
+
+/// FB2c / CWE-59 / CWE-367: open `path` **once** and verify via `fstat` and
+/// `/proc/self/fd/<fd>` that the opened descriptor refers to a regular file
+/// inside one of `roots` (canonicalized so a root configured through a symlink
+/// still matches).
+fn open_file_within_allowed_roots(path: &Path, roots: &[PathBuf]) -> Option<(std::fs::File, u64)> {
+    use std::os::unix::io::AsRawFd;
+    let mut opts = std::fs::OpenOptions::new();
+    opts.read(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        opts.custom_flags(libc::O_NONBLOCK);
+    }
+    let file = opts.open(path).ok()?;
+    let meta = file.metadata().ok()?;
+    if !meta.is_file() {
+        return None;
+    }
+    let real = std::fs::read_link(format!("/proc/self/fd/{}", file.as_raw_fd())).ok()?;
+    let inside = roots.iter().any(|root| {
         let root = std::fs::canonicalize(root).unwrap_or_else(|_| root.clone());
         real.starts_with(&root)
-    })
+    });
+    if !inside {
+        return None;
+    }
+    Some((file, meta.len()))
+}
+
+/// Read up to [`MAX_PREVIEW_SOURCE_BYTES`] from an already-validated file
+/// descriptor.
+fn read_opened_preview_bytes(file: std::fs::File, len: u64) -> Option<Vec<u8>> {
+    use std::io::Read as _;
+    if len > MAX_PREVIEW_SOURCE_BYTES {
+        return None;
+    }
+    let mut bytes = Vec::with_capacity(len as usize);
+    file.take(MAX_PREVIEW_SOURCE_BYTES)
+        .read_to_end(&mut bytes)
+        .ok()?;
+    Some(bytes)
+}
+
+/// FB2c / CWE-367: read `path` only if the file actually opened is a regular
+/// file inside one of the server's allowed roots.
+fn read_file_within_allowed_roots(path: &Path, roots: &[PathBuf]) -> Option<Vec<u8>> {
+    let (file, len) = open_file_within_allowed_roots(path, roots)?;
+    read_opened_preview_bytes(file, len)
 }
 
 /// One line describing the inline image: which file it came from, whether it is
@@ -1169,16 +1238,20 @@ mod tests {
         let link = root.join("link.png");
         std::os::unix::fs::symlink(&outside, &link).unwrap();
         let roots = vec![root.clone()];
-        assert!(path_within_allowed_roots(&inside, &roots));
-        assert!(!path_within_allowed_roots(&outside, &roots));
+        assert_eq!(
+            read_file_within_allowed_roots(&inside, &roots),
+            Some(b"x".to_vec())
+        );
+        assert!(read_file_within_allowed_roots(&outside, &roots).is_none());
         assert!(
-            !path_within_allowed_roots(&link, &roots),
+            read_file_within_allowed_roots(&link, &roots).is_none(),
             "a symlink out of the root"
         );
-        assert!(!path_within_allowed_roots(
-            &root.join("missing.png"),
-            &roots
-        ));
+        assert!(read_file_within_allowed_roots(&root.join("missing.png"), &roots).is_none());
+        assert!(
+            read_file_within_allowed_roots(&root, &roots).is_none(),
+            "a directory is not a regular file"
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -1317,6 +1390,37 @@ mod tests {
         .with_value_result(json!({"node_count": 9}));
         let plain = tool_result(&json!(12), &plain, "2025-06-18", &config, &json!({}));
         assert_eq!(plain["result"]["content"].as_array().unwrap().len(), 1);
+
+        // CWE-367 regression: a `screenshot.path` that is a symlink to a PNG
+        // outside every allowed root (the OS temp dir included) is never
+        // inlined -- the opened file's real path is what is checked.
+        let outside_dir = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../.cache/mcp-preview-outside")
+            .join(std::process::id().to_string());
+        std::fs::create_dir_all(&outside_dir).unwrap();
+        let outside_dir = std::fs::canonicalize(&outside_dir).unwrap();
+        if !outside_dir.starts_with(std::fs::canonicalize(std::env::temp_dir()).unwrap()) {
+            let secret = outside_dir.join("secret.png");
+            std::fs::write(&secret, tiny_png()).unwrap();
+            let link = dir.join("screenshots/link-8.png");
+            std::os::unix::fs::symlink(&secret, &link).unwrap();
+            let linked = Envelope::pass(
+                "req",
+                ProtocolBackend::AcosNative,
+                Fidelity::ArtReference,
+                Metrics::wall_ms(1),
+            )
+            .with_value_result(json!({
+                "screenshot": {"path": link.display().to_string(), "format": "png"},
+            }));
+            let linked = tool_result(&json!(13), &linked, "2025-06-18", &config, &json!({}));
+            let content = linked["result"]["content"].as_array().unwrap();
+            assert!(
+                !content.iter().any(|c| c["type"] == "image"),
+                "a symlink out of the allowed roots is never inlined: {content:?}"
+            );
+        }
+        let _ = std::fs::remove_dir_all(&outside_dir);
         // A path that does not exist is never inlined or linked.
         let missing = Envelope::pass(
             "req",
@@ -1407,5 +1511,68 @@ mod tests {
         let guarded = tool_result(&json!(9), &escape, "2025-03-26", &config, &json!({}));
         assert_eq!(guarded["result"]["content"].as_array().unwrap().len(), 1);
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// CWE-59: a symlink inside `<artifacts_dir>/frames/` pointing outside
+    /// `allowed_roots` must neither be inlined as an image nor linked.
+    #[test]
+    fn evidence_symlink_outside_allowed_roots_is_not_inlined() {
+        use acos_protocol::Evidence;
+        let base = std::env::temp_dir().join(format!(
+            "acos-mcp-evidence-symlink-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&base);
+        let artifacts = base.join("artifacts");
+        let outside = base.join("outside");
+        std::fs::create_dir_all(artifacts.join("frames")).unwrap();
+        std::fs::create_dir_all(&outside).unwrap();
+        let secret = outside.join("secret.png");
+        std::fs::write(&secret, tiny_png()).unwrap();
+        std::os::unix::fs::symlink(&secret, artifacts.join("frames/escape.png")).unwrap();
+
+        let config = ServerConfig::for_roots(vec![artifacts.clone()], artifacts.clone());
+        let envelope = Envelope::pass(
+            "req",
+            ProtocolBackend::AcosNative,
+            Fidelity::NativeRuntime,
+            Metrics::wall_ms(1),
+        )
+        .with_evidence(Evidence {
+            screenshot: Some("frames/escape.png".to_string()),
+            ..Evidence::default()
+        });
+
+        let modern = tool_result(&json!(10), &envelope, "2025-06-18", &config, &json!({}));
+        let content = modern["result"]["content"].as_array().unwrap();
+        assert!(
+            !content.iter().any(|c| c["type"] == "image"),
+            "symlinked evidence outside allowed roots must not be inlined: {content:?}"
+        );
+        assert!(
+            !content.iter().any(|c| c["type"] == "resource_link"),
+            "symlinked evidence outside allowed roots must not be linked: {content:?}"
+        );
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn open_file_within_allowed_roots_rejects_fifo_without_blocking() {
+        use std::ffi::CString;
+        use std::os::unix::ffi::OsStrExt;
+        let base = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../.cache/mcp-fifo-test")
+            .join(std::process::id().to_string());
+        let _ = std::fs::remove_dir_all(&base);
+        std::fs::create_dir_all(&base).unwrap();
+        let fifo = base.join("pipe.png");
+        let c_fifo = CString::new(fifo.as_os_str().as_bytes()).unwrap();
+        let rc = unsafe { libc::mkfifo(c_fifo.as_ptr(), 0o600) };
+        assert_eq!(rc, 0, "mkfifo failed: {}", std::io::Error::last_os_error());
+
+        let result = open_file_within_allowed_roots(&fifo, std::slice::from_ref(&base));
+        assert!(result.is_none(), "FIFO must be rejected without blocking");
+        let _ = std::fs::remove_dir_all(&base);
     }
 }

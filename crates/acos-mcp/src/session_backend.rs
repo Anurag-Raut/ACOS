@@ -483,17 +483,11 @@ impl SessionBackend {
         // external daemon must never invent one for us.
         let mut normalized = args.clone();
         if let Some(object) = normalized.as_object_mut() {
-            let mut base = session_base(args);
             // Older clients (and `tools/release/mcp_smoke.py`'s first form) sent
-            // `session_id` at the top level; accept it as `base.session_id`
-            // rather than silently addressing the default session.
-            if let (Some(top), Some(map)) = (
-                args.get("session_id").and_then(Value::as_str),
-                base.as_object_mut(),
-            ) {
-                map.insert("session_id".to_string(), json!(top));
-            }
-            object.insert("base".to_string(), base);
+            // `session_id` at the top level; `session_base` accepts it as
+            // `base.session_id` (same rule as `explicit_session_id`), so a blank
+            // id never reaches the daemon and the ownership map agrees with it.
+            object.insert("base".to_string(), session_base(args));
         }
         let args = &normalized;
         // FB5b/H1: a listing is about the *daemon*, not about any session of
@@ -524,7 +518,10 @@ impl SessionBackend {
         // EOF can destroy exactly those sessions (a daemon outlives this process
         // by design; its guests must not outlive their purpose). SERVELEAK2/F3:
         // the launch token makes ownership provable, not just a name.
-        if tool == "acos_launch" && envelope.ok() {
+        if tool == "acos_launch"
+            && (envelope.ok()
+                || envelope.error().map(|error| error.code) == Some(ErrorCode::PlaceholderContent))
+        {
             let effective_ttl = self.remember_owned(&id, args, &launch_token(&envelope));
             annotate_launch(&mut envelope, args, effective_ttl);
         } else if tool == "acos_destroy" && envelope.ok() {
@@ -2610,9 +2607,14 @@ impl SessionBackend {
     /// an external daemon or a CLI launched, a native/Flutter/RN child — keeps
     /// its old path and gains the `sessions` array.
     fn call_status(&self, request_id: &str, args: &Value, ctx: &CallContext) -> Envelope {
-        let id = session_id(args);
-        if let Some(envelope) = self.expired_envelope(&id, request_id) {
-            return envelope;
+        let explicit = explicit_session_id(args);
+        let id = explicit
+            .clone()
+            .unwrap_or_else(|| default_session_id().to_string());
+        if explicit.is_some() {
+            if let Some(envelope) = self.expired_envelope(&id, request_id) {
+                return envelope;
+            }
         }
         let sessions = self.owned_status(ctx);
         let mine = sessions
@@ -2630,29 +2632,31 @@ impl SessionBackend {
             .with_session_id(id)
             .with_value_result(session);
         }
-        // This server launched it, but the daemon no longer holds it (it was
-        // destroyed, or the guest died): never a pass on a session with no
-        // guest. The idle-TTL case is answered above, with its reason.
-        let owned_here = self
-            .owned
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .contains_key(&id);
-        if owned_here {
-            let envelope = Envelope::failure(
-                request_id,
-                ProtocolBackend::AcosNative,
-                Fidelity::NativeRuntime,
-                ProtocolError::new(
-                    ErrorCode::SessionNotFound,
-                    format!("no live ART session `{id}`: it was destroyed or its guest exited"),
+        if explicit.is_some() {
+            // This server launched it, but the daemon no longer holds it (it was
+            // destroyed, or the guest died): never a pass on a session with no
+            // guest. The idle-TTL case is answered above, with its reason.
+            let owned_here = self
+                .owned
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .contains_key(&id);
+            if owned_here {
+                let envelope = Envelope::failure(
+                    request_id,
+                    ProtocolBackend::AcosNative,
+                    Fidelity::NativeRuntime,
+                    ProtocolError::new(
+                        ErrorCode::SessionNotFound,
+                        format!("no live ART session `{id}`: it was destroyed or its guest exited"),
+                    )
+                    .with_details(json!({"session_id": id, "reason": "no_live_guest"}))
+                    .with_hint("launch the APK again with `acos_launch`"),
+                    Metrics::wall_ms(0),
                 )
-                .with_details(json!({"session_id": id, "reason": "no_live_guest"}))
-                .with_hint("launch the APK again with `acos_launch`"),
-                Metrics::wall_ms(0),
-            )
-            .with_session_id(id);
-            return envelope;
+                .with_session_id(id);
+                return envelope;
+            }
         }
         if self.rn.contains(&id) {
             return self.status_rn(request_id, &id);
@@ -2669,8 +2673,45 @@ impl SessionBackend {
         // Not ours: the daemon's own status for that id (a CLI-launched session
         // on a shared daemon), or the in-process session of the legacy engine.
         if let Some(mut envelope) = self.forward_session_tool("acos_status", args) {
+            // Only the daemon's own authoritative "no such session" becomes
+            // the empty listing; a daemon that could not be reached stays an
+            // error (never `ok: true, sessions: []` over a broken socket).
+            if explicit.is_none()
+                && !envelope.ok()
+                && envelope.error().map(|error| error.code) == Some(ErrorCode::SessionNotFound)
+                && !is_daemon_unreachable(&envelope)
+            {
+                return Envelope::pass(
+                    request_id,
+                    ProtocolBackend::AcosNative,
+                    Fidelity::NativeRuntime,
+                    Metrics::wall_ms(0),
+                )
+                .with_session_id(id.clone())
+                .with_value_result(json!({
+                    "session_id": id,
+                    "launched": false,
+                    "count": sessions.len(),
+                    "sessions": sessions,
+                }));
+            }
             attach_sessions(&mut envelope, sessions);
             return envelope;
+        }
+        if explicit.is_none() && !sessions.is_empty() {
+            return Envelope::pass(
+                request_id,
+                ProtocolBackend::AcosNative,
+                Fidelity::NativeRuntime,
+                Metrics::wall_ms(0),
+            )
+            .with_session_id(id.clone())
+            .with_value_result(json!({
+                "session_id": id,
+                "launched": false,
+                "count": sessions.len(),
+                "sessions": sessions,
+            }));
         }
         let mut envelope = self.with_session(&id, |session| match session.status() {
             Ok(state) => Envelope::pass(
@@ -2763,15 +2804,23 @@ impl Backend for SessionBackend {
     }
 }
 
-fn session_id(args: &Value) -> String {
+fn explicit_session_id(args: &Value) -> Option<String> {
     args.pointer("/base/session_id")
         .and_then(Value::as_str)
+        .filter(|id| !id.trim().is_empty())
         // Older clients (and `mcp_smoke.py`'s first form) send `session_id` at
         // the top level; accept it here too, so `acos_status` addresses the
         // session the client named.
-        .or_else(|| args.get("session_id").and_then(Value::as_str))
+        .or_else(|| {
+            args.get("session_id")
+                .and_then(Value::as_str)
+                .filter(|id| !id.trim().is_empty())
+        })
         .map(str::to_string)
-        .unwrap_or_else(|| default_session_id().to_string())
+}
+
+fn session_id(args: &Value) -> String {
+    explicit_session_id(args).unwrap_or_else(|| default_session_id().to_string())
 }
 
 /// SERVELEAK2/F3: this **server instance's** default session id.
@@ -2840,7 +2889,13 @@ fn default_artifacts_root() -> PathBuf {
 fn safe_session_dir(id: &str) -> String {
     let safe: String = id
         .chars()
-        .map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '_' { c } else { '_' })
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '-' || c == '_' {
+                c
+            } else {
+                '_'
+            }
+        })
         .collect();
     if safe.is_empty() {
         "session".to_string()
@@ -3062,9 +3117,11 @@ fn rn_tree_text(tree: &acos_jni::react_native::RnTree) -> String {
 fn session_base(args: &Value) -> Value {
     let mut base = args.get("base").cloned().unwrap_or_else(|| json!({}));
     if let Some(object) = base.as_object_mut() {
-        object
-            .entry("session_id".to_string())
-            .or_insert_with(|| json!(session_id(args)));
+        // Exactly the id `explicit_session_id` resolves (non-blank
+        // `base.session_id`, else non-blank top-level `session_id`, else this
+        // server's default): an empty or whitespace-only id is never forwarded,
+        // so the daemon and this server's ownership map always agree.
+        object.insert("session_id".to_string(), json!(session_id(args)));
         object
             .entry("request_id".to_string())
             .or_insert_with(|| json!(request_id(args)));
@@ -3474,9 +3531,37 @@ impl ConfinedChild {
     }
 }
 
+/// `error.details.reason` of a [`daemon_error`]: the daemon never answered.
+const DAEMON_UNREACHABLE: &str = "daemon_unreachable";
+
 /// A transport failure while forwarding to the session daemon.
+///
+/// The code stays `SESSION_NOT_FOUND` (the session is unreachable either way),
+/// but `details.reason` is [`DAEMON_UNREACHABLE`], so a caller can tell this
+/// apart from the daemon's own authoritative "no such session" reply
+/// ([`is_daemon_unreachable`]).
 fn daemon_error(request_id: &str, args: &Value, message: &str) -> Envelope {
-    native_child_error(request_id, &session_id(args), "SESSION_NOT_FOUND", message)
+    let id = session_id(args);
+    Envelope::failure(
+        request_id,
+        ProtocolBackend::AcosNative,
+        Fidelity::NativeRuntime,
+        ProtocolError::new(ErrorCode::SessionNotFound, message.to_string())
+            .with_details(json!({"reason": DAEMON_UNREACHABLE, "session_id": id})),
+        Metrics::wall_ms(0),
+    )
+    .with_session_id(id)
+}
+
+/// Whether `envelope` is a [`daemon_error`] (a socket/EOF/connect failure),
+/// not an answer from the daemon.
+fn is_daemon_unreachable(envelope: &Envelope) -> bool {
+    envelope
+        .error()
+        .and_then(|error| error.details.as_ref())
+        .and_then(|details| details.get("reason"))
+        .and_then(Value::as_str)
+        == Some(DAEMON_UNREACHABLE)
 }
 
 /// The private ART daemon could not be started (no session command ran).
@@ -3657,6 +3742,39 @@ fn native_boot_root() -> Option<PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A whitespace-only `base.session_id` (or top-level one) is normalized to
+    /// the id `explicit_session_id` resolves before it is forwarded.
+    #[test]
+    fn a_blank_base_session_id_is_normalized_before_forwarding() {
+        let base = session_base(&json!({"base": {"session_id": "   "}}));
+        assert_eq!(base["session_id"], json!(default_session_id()));
+        let base = session_base(&json!({"base": {"session_id": ""}, "session_id": " \t"}));
+        assert_eq!(base["session_id"], json!(default_session_id()));
+        let base = session_base(&json!({"base": {"session_id": "  "}, "session_id": "s_top"}));
+        assert_eq!(base["session_id"], json!("s_top"));
+        let base = session_base(&json!({"base": {"session_id": "s_mine"}}));
+        assert_eq!(base["session_id"], json!("s_mine"));
+        let base = session_base(&json!({}));
+        assert_eq!(base["session_id"], json!(default_session_id()));
+    }
+
+    /// A transport failure is marked so `acos_status` can tell it apart from
+    /// the daemon's own authoritative `SESSION_NOT_FOUND`.
+    #[test]
+    fn a_daemon_transport_error_is_not_an_authoritative_not_found() {
+        let transport = daemon_error("req", &json!({}), "connection reset by peer");
+        assert_eq!(transport.error().unwrap().code, ErrorCode::SessionNotFound);
+        assert!(is_daemon_unreachable(&transport));
+        let authoritative = Envelope::failure(
+            "req",
+            ProtocolBackend::AcosNative,
+            Fidelity::NativeRuntime,
+            ProtocolError::new(ErrorCode::SessionNotFound, "no live ART session"),
+            Metrics::wall_ms(0),
+        );
+        assert!(!is_daemon_unreachable(&authoritative));
+    }
 
     #[test]
     fn observe_without_a_frame_is_not_ready() {

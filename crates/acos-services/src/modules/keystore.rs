@@ -234,3 +234,40 @@ impl Module for KeystoreModule {
         report
     }
 }
+
+/// Record a `relaunch_required` capability prompt when guest code touches
+/// `"AndroidKeyStore"` while `security.keystore` is `off`.
+pub fn record_off_capability_prompt(
+    prompts: &mut crate::capability_prompts::CapabilityPromptState,
+    now_ms: u64,
+) -> Option<crate::capability_prompts::CapabilityPrompt> {
+    prompts.record_tombstone_hit(
+        PROVIDER_NAME,
+        MODULE_ID,
+        AttachMode::AtLaunch,
+        Profile::Real,
+        now_ms,
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::capability_prompts::{CapabilityPromptState, PromptOptionKind, PromptTrigger};
+
+    #[test]
+    fn off_keystore_hit_records_relaunch_required_capability_prompt() {
+        let mut prompts = CapabilityPromptState::new();
+        let prompt = record_off_capability_prompt(&mut prompts, 1_000)
+            .expect("first hit records capability prompt");
+        assert_eq!(prompt.trigger, PromptTrigger::ServiceTombstone);
+        assert_eq!(prompt.request, "AndroidKeyStore (security.keystore)");
+        assert_eq!(prompt.options.len(), 1);
+        assert_eq!(prompt.options[0].kind, PromptOptionKind::RelaunchRequired);
+        assert_eq!(prompt.options[0].modules.len(), 1);
+        assert_eq!(prompt.options[0].modules[0].id, MODULE_ID);
+        assert_eq!(prompt.options[0].modules[0].profile, "real");
+        // Deduplicated within TOMBSTONE_DEDUP_MS.
+        assert!(record_off_capability_prompt(&mut prompts, 1_500).is_none());
+    }
+}

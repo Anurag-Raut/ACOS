@@ -90,6 +90,8 @@ pub struct ProviderSpec {
     pub write_permission: String,
     /// `android:exported`.
     pub exported: bool,
+    /// `android:initOrder` (higher values initialize first; default 0).
+    pub init_order: i32,
 }
 
 /// Build and deliver one `bindApplication` call to `activity_thread`.

@@ -894,6 +894,9 @@ fn provider_specs(apk_path: &Path) -> Result<Vec<bind_app::ProviderSpec>, Lifecy
     let manifest = apk
         .manifest()
         .map_err(|e| LifecycleError::Bind(BindAppError::Materialize(format!("manifest: {e}"))))?;
+    // Frozen pre-ART track (AGENTS.md): `init_order` is carried as data only so
+    // the shared `ProviderSpec` compiles; `initOrder` scheduling lives on the
+    // ART path (`acos-services` PMS, `acos-art` launcher) and is tested there.
     Ok(manifest
         .providers
         .iter()
@@ -903,6 +906,7 @@ fn provider_specs(apk_path: &Path) -> Result<Vec<bind_app::ProviderSpec>, Lifecy
             let shared = c.permission.clone().unwrap_or_default();
             let class = acos_apk::manifest::fq_name(&manifest.package, &c.name);
             let exported = c.exported.unwrap_or(false);
+            let init_order = c.init_order.unwrap_or(0);
             c.authorities
                 .iter()
                 .map(move |authority| bind_app::ProviderSpec {
@@ -911,6 +915,7 @@ fn provider_specs(apk_path: &Path) -> Result<Vec<bind_app::ProviderSpec>, Lifecy
                     read_permission: shared.clone(),
                     write_permission: shared.clone(),
                     exported,
+                    init_order,
                 })
         })
         .collect())
@@ -1170,7 +1175,11 @@ mod tests {
         }) {
             Ok(rt) => rt,
             Err(VmError::BootClasspathMissing(msg)) => {
-                acos_test_support::require_prereq(false, "describe_throwable_unwraps_exception_in_initializer_error", &format!("describe_throwable_unwraps_exception_in_initializer_error: {msg}"));
+                acos_test_support::require_prereq(
+                    false,
+                    "describe_throwable_unwraps_exception_in_initializer_error",
+                    &format!("describe_throwable_unwraps_exception_in_initializer_error: {msg}"),
+                );
                 return;
             }
             Err(e) => panic!("Runtime::standard_with failed: {e}"),

@@ -239,6 +239,8 @@ public final class SoftwareKeyStore extends Provider {
                 } catch (Throwable ignored) {
                 }
                 System.out.println("ACOSLAUNCH WARN " + msg);
+                System.out.println("ACOSLAUNCH CAPABILITY_PROMPT security.keystore");
+                System.out.flush();
             }
             throw new java.security.NoSuchAlgorithmException(
                     "AndroidKeyStore not found (security.keystore module is off; "

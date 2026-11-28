@@ -1222,11 +1222,14 @@ impl InstalledPackage {
                     // when the provider is exported and this manifest bit is
                     // absent; it is `android:grantUriPermissions`, default false.
                     grant_uri_permissions: c.grant_uri_permissions.unwrap_or(false),
-                    init_order: 0,
+                    init_order: c.init_order.unwrap_or(0),
                     meta_data: c.meta_data.clone(),
                 });
             }
         }
+        // Android orders ContentProvider initialization by descending
+        // `android:initOrder` (preserving manifest order on ties).
+        providers.sort_by(|a, b| b.init_order.cmp(&a.init_order));
         let services: Vec<ServiceInfo> = manifest
             .services
             .iter()

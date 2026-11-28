@@ -223,19 +223,27 @@ impl ResourceTable {
         exact.or(default).or(first)
     }
 
-    /// Resolve a resource id to a string, following at most 16 references.
-    pub fn resolve_string(&self, id: u32) -> Option<String> {
-        self.resolve_string_inner(id, 0)
+    /// Resolve a resource id to its terminal non-reference value, following at
+    /// most 16 reference hops.
+    pub fn resolve_value(&self, id: u32) -> Option<&ResValue> {
+        let mut current = id;
+        for _ in 0..=16 {
+            if current == 0 {
+                return None;
+            }
+            let entry = self.resolve(current)?;
+            match &entry.value {
+                ResValue::Reference(next) => current = *next,
+                other => return Some(other),
+            }
+        }
+        None
     }
 
-    fn resolve_string_inner(&self, id: u32, depth: usize) -> Option<String> {
-        if depth > 16 {
-            return None;
-        }
-        let entry = self.resolve(id)?;
-        match &entry.value {
+    /// Resolve a resource id to a string, following at most 16 references.
+    pub fn resolve_string(&self, id: u32) -> Option<String> {
+        match self.resolve_value(id)? {
             ResValue::String(s) => Some(s.clone()),
-            ResValue::Reference(r) => self.resolve_string_inner(*r, depth + 1),
             _ => None,
         }
     }

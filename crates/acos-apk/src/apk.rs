@@ -347,14 +347,23 @@ impl Apk {
         &self.raw
     }
 
-    /// Parse the typed `AndroidManifest.xml`.
+    /// Parse the typed `AndroidManifest.xml`, resolving `<meta-data
+    /// android:value="@...">` references against `resources.arsc` when present.
     pub fn manifest(&self) -> Result<Manifest> {
         let raw = self
             .manifest_raw
             .as_ref()
             .ok_or_else(|| ApkError::new(APK_NO_MANIFEST, "APK contains no AndroidManifest.xml"))?;
         let doc = crate::axml::parse(raw)?;
-        Manifest::parse(&doc)
+        let res = if self.arsc_raw.is_some()
+            && (Manifest::has_meta_data_value_reference(&doc)
+                || Manifest::has_provider_init_order_reference(&doc))
+        {
+            self.resources().ok().flatten()
+        } else {
+            None
+        };
+        Manifest::parse_with_resources(&doc, res.as_ref())
     }
 
     /// Parse the AXML DOM of `AndroidManifest.xml`.

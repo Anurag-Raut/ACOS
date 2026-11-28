@@ -56,6 +56,9 @@ enum Mode {
     NoTokens,
     /// Non-launch/destroy/list tools take 1.5 s (an in-flight call, M1).
     Slow,
+    /// `acos_status` drops the connection without a reply (a daemon that died
+    /// mid-call): a transport error, never an authoritative not-found.
+    DropsStatus,
 }
 
 struct FakeDaemon {
@@ -191,6 +194,35 @@ fn fake_daemon(path: &std::path::Path, mode: Mode) -> FakeDaemon {
                     Metrics::wall_ms(0),
                 )
                 .with_value_result(json!({"destroyed": true}))
+            } else if tool == "acos_status" && mode == Mode::DropsStatus {
+                return;
+            } else if tool == "acos_status" {
+                let found = live
+                    .lock()
+                    .unwrap()
+                    .iter()
+                    .find(|entry| entry["session_id"] == json!(session))
+                    .cloned();
+                match found {
+                    Some(entry) => Envelope::pass(
+                        "req_status",
+                        ProtocolBackend::AcosNative,
+                        Fidelity::NativeRuntime,
+                        Metrics::wall_ms(0),
+                    )
+                    .with_session_id(session)
+                    .with_value_result(entry),
+                    None => Envelope::failure(
+                        "req_status",
+                        ProtocolBackend::AcosNative,
+                        Fidelity::NativeRuntime,
+                        ProtocolError::new(
+                            ErrorCode::SessionNotFound,
+                            format!("no live ART session `{session}`"),
+                        ),
+                        Metrics::wall_ms(0),
+                    ),
+                }
             } else {
                 if mode == Mode::Slow {
                     std::thread::sleep(Duration::from_millis(1500));
@@ -636,6 +668,93 @@ fn l1_status_ignores_a_session_another_client_relaunched() {
             .iter()
             .all(|entry| entry["session_id"] != json!("s_mine")),
         "another client's guest is not listed as ours: {text}"
+    );
+    let _ = fake.stop.send(());
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn status_without_session_id_lists_live_owned_sessions() {
+    let dir = scratch("status-list");
+    let socket = dir.join("session.sock");
+    let fake = fake_daemon(&socket, Mode::Healthy);
+    let backend = backend(&socket);
+    let ctx = context(&dir);
+
+    // No sessions yet: `acos_status {}` returns ok:true with empty sessions list.
+    let empty = backend
+        .session_call("acos_status", &json!({"base": {"request_id": "r0"}}), &ctx)
+        .expect("status");
+    assert!(empty.ok(), "empty status should pass: {empty:?}");
+    let empty_res = empty.result().expect("result");
+    assert_eq!(empty_res["count"], json!(0));
+    assert_eq!(empty_res["sessions"], json!([]));
+
+    // Launch two named sessions, then call `acos_status {}` with no session_id.
+    launch(&backend, &ctx, &dir, Some("s_alpha"), 600);
+    launch(&backend, &ctx, &dir, Some("s_beta"), 600);
+    let listed = backend
+        .session_call("acos_status", &json!({"base": {"request_id": "r1"}}), &ctx)
+        .expect("status");
+    assert!(
+        listed.ok(),
+        "status without session_id should pass: {listed:?}"
+    );
+    let res = listed.result().expect("result");
+    assert_eq!(res["count"], json!(2));
+    let mut ids: Vec<&str> = res["sessions"]
+        .as_array()
+        .expect("sessions array")
+        .iter()
+        .filter_map(|entry| entry["session_id"].as_str())
+        .collect();
+    ids.sort();
+    assert_eq!(ids, vec!["s_alpha", "s_beta"]);
+
+    // Explicit unknown session_id still returns SESSION_NOT_FOUND.
+    let missing = backend
+        .session_call(
+            "acos_status",
+            &json!({"base": {"request_id": "r2", "session_id": "s_missing"}}),
+            &ctx,
+        )
+        .expect("status");
+    assert!(!missing.ok());
+    assert_eq!(
+        missing.error().map(|e| e.code),
+        Some(ErrorCode::SessionNotFound)
+    );
+
+    let _ = fake.stop.send(());
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// A daemon that cannot be reached (EOF mid-call) must not turn a session-less
+/// `acos_status` into `ok: true, count: 0, sessions: []`: only the daemon's own
+/// `SESSION_NOT_FOUND` reply means "nothing is running".
+#[test]
+fn status_without_a_session_keeps_a_daemon_transport_error() {
+    let dir = scratch("status-eof");
+    let socket = dir.join("session.sock");
+    let fake = fake_daemon(&socket, Mode::DropsStatus);
+    let backend = backend(&socket);
+    let ctx = context(&dir);
+    let status = backend
+        .session_call(
+            "acos_status",
+            &json!({"base": {"request_id": "req_status"}}),
+            &ctx,
+        )
+        .expect("status is answered");
+    assert!(
+        !status.ok(),
+        "a broken daemon is not an empty listing: {status:?}"
+    );
+    let error = status.error().expect("an error envelope");
+    assert_eq!(
+        error.details.as_ref().and_then(|d| d.get("reason")),
+        Some(&json!("daemon_unreachable")),
+        "{error:?}"
     );
     let _ = fake.stop.send(());
     let _ = std::fs::remove_dir_all(&dir);

@@ -1584,25 +1584,27 @@ impl SecondaryPool {
 /// The `ProviderInfoList` a bind request carries for one package (K3c), from
 /// that package's own parsed manifest.
 fn provider_spec_of(state: &acos_services::pms::PmsState) -> String {
-    let mut seen: Vec<(&str, Vec<&str>)> = Vec::new();
+    let mut seen: Vec<(&str, Vec<&str>, i32)> = Vec::new();
     for p in state.providers() {
         if p.process_name != state.app().process_name {
             continue;
         }
-        match seen.iter_mut().find(|(class, _)| *class == p.name) {
-            Some((_, authorities)) => authorities.push(&p.authority),
-            None => seen.push((&p.name, vec![&p.authority])),
+        match seen.iter_mut().find(|(class, _, _)| *class == p.name) {
+            Some((_, authorities, _)) => authorities.push(&p.authority),
+            None => seen.push((&p.name, vec![&p.authority], p.init_order)),
         }
     }
+    // Descending `android:initOrder`, preserving manifest order on ties.
+    seen.sort_by(|a, b| b.2.cmp(&a.2));
     seen.iter()
-        .map(|(class, authorities)| {
+        .map(|(class, authorities, init_order)| {
             let declared = state.providers().iter().find(|p| p.name == *class);
             let read = declared.map_or("", |p| p.read_permission.as_str());
             let exported = declared.is_some_and(|p| p.exported);
             let grant_uri = declared.is_some_and(|p| p.grant_uri_permissions);
             let meta = declared.map_or_else(String::new, |p| meta_spec(&p.meta_data));
             format!(
-                "{class}|{}|{read}|{}|{}|{meta}",
+                "{class}|{}|{read}|{}|{}|{meta}|{init_order}",
                 authorities.join(";"),
                 u8::from(exported),
                 u8::from(grant_uri)
@@ -2009,7 +2011,10 @@ pub(crate) fn launch_session(
     // mounted at `/dev/socket`, so a `view.sock` there would be reachable from
     // the APK under test). Both are 0700 and owned by this uid.
     let view_dir = ShortSocketDir::new_named("view").map_err(Error::Io)?;
-    let logd = Logd::start(&sockets.0).map_err(Error::Io)?;
+    let live_logcat = (out.file_name().and_then(|n| n.to_str()) == Some("art-frames"))
+        .then(|| out.parent().map(|p| p.join("logs").join("logcat.txt")))
+        .flatten();
+    let logd = Logd::start_with_logcat(&sockets.0, live_logcat.as_deref()).map_err(Error::Io)?;
     crate::stage("props-logd");
 
     // --- peer (in-process, real ServiceHost) -------------------------------
@@ -2924,36 +2929,7 @@ pub(crate) fn launch_session(
     // the declared entries here as well: it only ever exposes what the app's own
     // manifest says, and it keeps `ProviderInfo.metaData` truthful for a
     // provider that reads it from `attachInfo`.
-    let provider_spec = installed.as_ref().map_or_else(String::new, |state| {
-        let mut seen: Vec<(&str, Vec<&str>)> = Vec::new();
-        for p in state.providers() {
-            if p.process_name != state.app().process_name {
-                continue;
-            }
-            match seen.iter_mut().find(|(class, _)| *class == p.name) {
-                // One `ProviderInfo` per `<provider>`, authorities joined with
-                // `;` exactly as `PackageParser` writes them.
-                Some((_, authorities)) => authorities.push(&p.authority),
-                None => seen.push((&p.name, vec![&p.authority])),
-            }
-        }
-        seen.iter()
-            .map(|(class, authorities)| {
-                let declared = state.providers().iter().find(|p| p.name == *class);
-                let read = declared.map_or("", |p| p.read_permission.as_str());
-                let exported = declared.is_some_and(|p| p.exported);
-                let grant_uri = declared.is_some_and(|p| p.grant_uri_permissions);
-                let meta = declared.map_or_else(String::new, |p| meta_spec(&p.meta_data));
-                format!(
-                    "{class}|{}|{read}|{}|{}|{meta}",
-                    authorities.join(";"),
-                    u8::from(exported),
-                    u8::from(grant_uri)
-                )
-            })
-            .collect::<Vec<_>>()
-            .join("\n")
-    });
+    let provider_spec = installed.as_ref().map_or_else(String::new, provider_spec_of);
     // K3 shipped this OFF because two gaps downstream of the delivery made it a
     // net regression. Both are fixed, so delivery is the default (K4
     // results/compat/K4.md):
@@ -3222,10 +3198,11 @@ pub(crate) fn launch_session(
     // one condvar covers both fact sources (a parsed guest sample and an applied
     // transaction). Nothing has subscribed to `ProbeState::default()`'s own wake
     // yet, so replacing it here cannot strand a waiter.
-    probe_state
-        .lock()
-        .unwrap_or_else(|e| e.into_inner())
-        .wake = Arc::clone(&settle_change);
+    {
+        let mut guard = probe_state.lock().unwrap_or_else(|e| e.into_inner());
+        guard.wake = Arc::clone(&settle_change);
+        guard.prompts = Some(Arc::clone(&live.prompts));
+    }
     // W59: one trace sink for the whole interactive session. The guest's looper
     // lines and the host's tap markers share `started`, so the two clocks are
     // directly comparable (both are the same CLOCK_MONOTONIC on this host).
@@ -4098,6 +4075,12 @@ struct ProbeState {
     stall_pending_ms: Option<u64>,
     commit_text_results: std::collections::BTreeMap<u64, CommitTextOutcome>,
     next_commit_text_seq: u64,
+    /// Shared session capability prompts so in-guest modules (e.g.
+    /// `security.keystore` off-mode diagnostic) can record `relaunch_required`
+    /// prompts visible to both `acos view` and MCP/CLI callers.
+    prompts: Option<
+        Arc<std::sync::Mutex<acos_services::capability_prompts::CapabilityPromptState>>,
+    >,
 }
 
 impl ProbeState {
@@ -4295,6 +4278,18 @@ fn logd_tail(logs: &[crate::LogEntry], limit: usize) -> Vec<String> {
         .collect()
 }
 
+/// Last `limit` error/fatal (`E`/`F`, prio >= 6) logd entries (oldest first).
+fn logd_error_tail(logs: &[crate::LogEntry], limit: usize) -> Vec<String> {
+    let mut errors: Vec<String> = logs
+        .iter()
+        .filter(|e| e.prio >= 6)
+        .map(|e| format!("{}/{}: {}", e.priority_name(), e.tag, e.message))
+        .collect();
+    let start = errors.len().saturating_sub(limit);
+    errors.drain(..start);
+    errors
+}
+
 /// Last `limit` non-empty lines of a captured stream (oldest first).
 fn stdout_tail(text: &str, limit: usize) -> Vec<String> {
     let mut lines: Vec<String> = text
@@ -4348,6 +4343,8 @@ fn write_session_exit(
         // `System.exit`, a kill) still has the framework's own logd trail and
         // its last stdout/stderr lines. Bounded, newest last.
         "logd_tail": logd_tail(&result.logs, 24),
+        "error_logs": logd_error_tail(&result.logs, 24),
+        "unsupported_apis": result.unsupported,
         "logd_final": FINAL_LOGD_FILE,
         "stdout_tail": stdout_tail(&result.stdout, 32),
         "stderr_tail": stdout_tail(&result.stderr, 16),
@@ -4958,6 +4955,18 @@ fn drain_tee_lines<R: std::io::Read>(
                     .and_then(|value| value.parse::<u64>().ok())
                 {
                     state.stall_pending_ms = Some(ms);
+                }
+            }
+            if let Some(module_id) = trimmed.strip_prefix("ACOSLAUNCH CAPABILITY_PROMPT ") {
+                if module_id.trim() == acos_services::modules::keystore::MODULE_ID {
+                    if let Some(prompts_arc) = state.prompts.as_ref() {
+                        if let Ok(mut prompts) = prompts_arc.lock() {
+                            acos_services::modules::keystore::record_off_capability_prompt(
+                                &mut prompts,
+                                host_ms(),
+                            );
+                        }
+                    }
                 }
             }
             state.marks.push_back(trimmed.to_string());
@@ -10874,6 +10883,11 @@ fn interactive_serve(
                 // an entry's absolute ordinal to `LogRecord.seq`; entries are
                 // guest-asserted (docs/SANDBOX_CERTIFICATION.md §7) and never
                 // justify a pass on an untrusted run.
+                // The live `logs/logcat.txt` mirror is that file's only
+                // writer: flush it here and name it so the CLI never rewrites
+                // (and truncates) the file under the mirror's open handle.
+                logd.flush_logcat_mirror();
+                let live_logcat_mirror = logd.live_logcat_mirror().map(|p| p.display().to_string());
                 let entries = logd.snapshot();
                 let stats = logd.stats();
                 let reply = serde_json::json!({
@@ -10882,6 +10896,7 @@ fn interactive_serve(
                     "kept": entries.len(),
                     "dropped": stats.dropped,
                     "cap": stats.cap,
+                    "live_logcat_mirror": live_logcat_mirror,
                     "entries": entries,
                 });
                 protocol_write(&reply);
@@ -11462,7 +11477,11 @@ fn meta_spec(entries: &[acos_services::pms::MetaDataEntry]) -> String {
                 MetaDataValue::Float(number) => ('f', number.to_string()),
                 MetaDataValue::Reference(id) => ('i', (*id as i32).to_string()),
             };
-            format!("{}={kind}{value}", meta_spec_escape(&entry.name))
+            format!(
+                "{}={kind}{}",
+                meta_spec_escape(&entry.name),
+                meta_spec_escape(&value)
+            )
         })
         .collect::<Vec<_>>()
         .join(";")
@@ -12365,6 +12384,7 @@ mod probe_line_tests {
                 touch_traced: self.touch_traced,
                 commit_text_results: self.commit_text_results.clone(),
                 next_commit_text_seq: self.next_commit_text_seq,
+                prompts: self.prompts.clone(),
             }
         }
     }
@@ -15150,5 +15170,601 @@ mod service_control_hot_attach_tests {
         assert_eq!(pkg, acos_services::modules::settings::SETTINGS_PACKAGE);
         let _ = std::fs::remove_dir_all(&dir);
     }
-}
 
+    #[test]
+    fn provider_spec_of_sorts_descending_by_init_order_preserving_ties() {
+        let mut state = acos_services::pms::PmsState::new();
+        let pkg = state.app().package_name.clone();
+        let proc_name = state.app().process_name.clone();
+        let mk = |name: &str, authority: &str, init_order: i32| acos_services::pms::ProviderInfo {
+            name: name.to_string(),
+            package_name: pkg.clone(),
+            process_name: proc_name.clone(),
+            authority: authority.to_string(),
+            read_permission: String::new(),
+            write_permission: String::new(),
+            exported: false,
+            grant_uri_permissions: false,
+            init_order,
+            meta_data: Vec::new(),
+        };
+        state.packages[state.primary].providers = vec![
+            mk("com.example.DefaultFirst", "com.example.default1", 0),
+            mk("com.example.Crashlytics", "com.example.crashlytics", 99),
+            mk("com.example.DefaultSecond", "com.example.default2", 0),
+            mk("com.example.FirebaseInit", "com.example.firebase", 100),
+            mk("com.example.CrashlyticsTie", "com.example.crashlytics2", 99),
+            mk("com.example.LateProvider", "com.example.late", -10),
+        ];
+        let spec = provider_spec_of(&state);
+        let names_and_orders: Vec<(&str, &str)> = spec
+            .lines()
+            .map(|entry| {
+                let f: Vec<&str> = entry.split('|').collect();
+                (f[0], f[6])
+            })
+            .collect();
+        assert_eq!(
+            names_and_orders,
+            vec![
+                ("com.example.FirebaseInit", "100"),
+                ("com.example.Crashlytics", "99"),
+                ("com.example.CrashlyticsTie", "99"),
+                ("com.example.DefaultFirst", "0"),
+                ("com.example.DefaultSecond", "0"),
+                ("com.example.LateProvider", "-10"),
+            ]
+        );
+    }
+
+    #[test]
+    fn provider_spec_of_escapes_metadata_values_and_preserves_init_order() {
+        use acos_services::pms::{MetaDataEntry, MetaDataValue};
+
+        fn meta_unescape(text: &str) -> String {
+            // Mirrors `LaunchMain.metaUnescape`.
+            let mut out = String::with_capacity(text.len());
+            let mut chars = text.chars();
+            while let Some(c) = chars.next() {
+                if c != '\\' {
+                    out.push(c);
+                    continue;
+                }
+                match chars.next() {
+                    Some('p') => out.push('|'),
+                    Some('s') => out.push(';'),
+                    Some('e') => out.push('='),
+                    Some('n') => out.push('\n'),
+                    Some(other) => out.push(other),
+                    None => out.push('\\'),
+                }
+            }
+            out
+        }
+
+        let mut state = acos_services::pms::PmsState::new();
+        let pkg = state.app().package_name.clone();
+        let proc_name = state.app().process_name.clone();
+        let raw_val = "a|b;c=d\\e\nf";
+        state.packages[state.primary].providers = vec![acos_services::pms::ProviderInfo {
+            name: "com.example.MetaProvider".to_string(),
+            package_name: pkg,
+            process_name: proc_name,
+            authority: "com.example.meta".to_string(),
+            read_permission: String::new(),
+            write_permission: String::new(),
+            exported: false,
+            grant_uri_permissions: false,
+            init_order: 500,
+            meta_data: vec![
+                MetaDataEntry {
+                    name: "k|1;2=3".to_string(),
+                    value: MetaDataValue::String(raw_val.to_string()),
+                },
+                MetaDataEntry {
+                    name: "flag".to_string(),
+                    value: MetaDataValue::Boolean(true),
+                },
+            ],
+        }];
+
+        let spec = provider_spec_of(&state);
+        assert_eq!(
+            spec.lines().count(),
+            1,
+            "newlines in metadata value must be escaped: {spec:?}"
+        );
+        let fields: Vec<&str> = spec.split('|').collect();
+        assert_eq!(
+            fields.len(),
+            7,
+            "pipes in metadata value must not split provider fields: {fields:?}"
+        );
+        assert_eq!(fields[0], "com.example.MetaProvider");
+        assert_eq!(fields[6], "500");
+        assert!(spec.ends_with("|500"));
+
+        let entries: Vec<&str> = fields[5].split(';').collect();
+        assert_eq!(
+            entries.len(),
+            2,
+            "semicolons in metadata value must not split entries: {entries:?}"
+        );
+        let (k0, v0) = entries[0].split_once('=').expect("key=type+value");
+        assert_eq!(meta_unescape(k0), "k|1;2=3");
+        assert_eq!(v0.as_bytes()[0] as char, 's');
+        assert_eq!(meta_unescape(&v0[1..]), raw_val);
+        assert_eq!(entries[1], "flag=b1");
+    }
+
+    fn parse_lines(lines: &str) -> ProbeState {
+        let state = Arc::new(std::sync::Mutex::new(ProbeState::default()));
+        drain_stdout_lines(
+            std::io::Cursor::new(lines.as_bytes().to_vec()),
+            128 * 1024,
+            Arc::clone(&state),
+            None,
+            0,
+        );
+        Arc::try_unwrap(state)
+            .ok()
+            .expect("unique Arc")
+            .into_inner()
+            .unwrap()
+    }
+
+    /// Compile the real `LaunchMain` with `driver` (class `dev.acos.art.<class>`)
+    /// and run it on the host JVM. The driver gets two file paths and writes the
+    /// captured protocol stdout / stderr there. `None` (said on stderr) when the
+    /// Android SDK is not installed.
+    fn run_launch_main_driver(
+        class: &str,
+        driver_source: &str,
+    ) -> Option<(std::process::Output, String, String)> {
+        let sdk = android_sdk().ok();
+        let android_jar = sdk.map(|sdk| sdk.join("platforms/android-34/android.jar"));
+        let Some(android_jar) = android_jar.filter(|jar| jar.is_file()) else {
+            eprintln!("SKIP {class}: no Android SDK platform 34 on this host");
+            return None;
+        };
+        let javac = PathBuf::from(std::env::var("JAVAC").unwrap_or_else(|_| "javac".into()));
+        let java = PathBuf::from(std::env::var("JAVA").unwrap_or_else(|_| "java".into()));
+        struct TempDirGuard(PathBuf);
+        impl Drop for TempDirGuard {
+            fn drop(&mut self) {
+                let _ = fs::remove_dir_all(&self.0);
+            }
+        }
+        let tmp_path = std::env::temp_dir().join(format!("acos-{class}-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&tmp_path);
+        fs::create_dir_all(&tmp_path).expect("create tempdir");
+        let _guard = TempDirGuard(tmp_path.clone());
+
+        let classes = tmp_path.join("classes");
+        fs::create_dir_all(&classes).expect("create classes dir");
+        let driver = tmp_path.join(format!("{class}.java"));
+        fs::write(&driver, driver_source).expect("write driver");
+
+        let src_dir = crate::app::guest_source_dir();
+        let compile = Command::new(&javac)
+            .args(crate::jvm::dump_args())
+            .arg("-source")
+            .arg("11")
+            .arg("-target")
+            .arg("11")
+            .arg("-Xlint:-options")
+            .arg("-cp")
+            .arg(&android_jar)
+            .arg("-d")
+            .arg(&classes)
+            .arg(src_dir.join("dev/acos/art/LaunchMain.java"))
+            .arg(src_dir.join("dev/acos/art/SoftwareKeyStore.java"))
+            .arg(src_dir.join("dev/acos/art/RenderNat.java"))
+            .arg(src_dir.join("dev/acos/art/Nat.java"))
+            .arg(&driver)
+            .output()
+            .expect("run javac");
+        assert!(
+            compile.status.success(),
+            "javac failed:\n{}{}",
+            String::from_utf8_lossy(&compile.stdout),
+            String::from_utf8_lossy(&compile.stderr)
+        );
+
+        let out_file = tmp_path.join("stdout.txt");
+        let err_file = tmp_path.join("stderr.txt");
+        let cp = format!("{}:{}", classes.display(), android_jar.display());
+        let run = Command::new(&java)
+            .arg(format!(
+                "-XX:ErrorFile={}/hs_err_pid%p.log",
+                tmp_path.display()
+            ))
+            .arg(format!(
+                "-XX:ReplayDataFile={}/replay_pid%p.log",
+                tmp_path.display()
+            ))
+            .arg("-cp")
+            .arg(&cp)
+            .arg(format!("dev.acos.art.{class}"))
+            .arg(&out_file)
+            .arg(&err_file)
+            .output()
+            .expect("run java");
+
+        let stdout = fs::read_to_string(&out_file).expect("read captured stdout");
+        let stderr = fs::read_to_string(&err_file).expect("read captured stderr");
+        Some((run, stdout, stderr))
+    }
+
+    #[test]
+    fn launch_main_preserves_protocol_line_boundaries_after_partial_stdout() {
+        let src = include_str!("../guest/java/dev/acos/art/LaunchMain.java");
+        for required in [
+            "private static boolean sOrigOutAtLineStart = true;",
+            "private static boolean sOrigErrAtLineStart = true;",
+            "static void writeRawOrigLocked(",
+            "writeRawOrigLocked(ps, bytes, true);",
+            "writeRawOrigLocked(sOrigOut, bytes, true);",
+            "writeRawOrigLocked(sOrigErr, bytes, true);",
+            "writeRawOrigLocked(orig, bytes, ensureLineStart);",
+        ] {
+            assert!(
+                src.contains(required),
+                "LaunchMain.java must preserve line-boundary tracking (`{required}`)"
+            );
+        }
+
+        // Without a leading newline, a flushed partial line before ACOSPROBE hides the record.
+        let merged = parse_lines("helloACOSPROBE {\"seq\":1,\"tree\":{\"nodes\":[]}}\n");
+        assert!(
+            merged.latest.is_none(),
+            "sanity check: host parser requires ACOSPROBE to start at column 0"
+        );
+        let separated = parse_lines("hello\nACOSPROBE {\"seq\":1,\"tree\":{\"nodes\":[]}}\n");
+        assert_eq!(
+            separated.latest.as_ref().map(|s| s.seq),
+            Some(1),
+            "host parser must capture ACOSPROBE once separated onto its own line"
+        );
+
+        // When the Android SDK + JDK are available, compile and run the real LaunchMain
+        // stream framing on the host JVM to verify partial-line behavior end to end.
+        let Some((run, stdout, stderr)) = run_launch_main_driver(
+            "LineBoundaryDriver",
+            r#"package dev.acos.art;
+import java.io.ByteArrayOutputStream;
+import java.io.FileOutputStream;
+import java.io.PrintStream;
+public final class LineBoundaryDriver {
+    public static void main(String[] args) throws Exception {
+        ByteArrayOutputStream capOut = new ByteArrayOutputStream();
+        ByteArrayOutputStream capErr = new ByteArrayOutputStream();
+        System.setOut(new PrintStream(capOut, true, "UTF-8"));
+        System.setErr(new PrintStream(capErr, true, "UTF-8"));
+
+        LaunchMain.installRuntimeDiagnostics();
+
+        // 1. Flushed partial app stdout followed by direct protocol write.
+        System.out.print("hello");
+        System.out.flush();
+        LaunchMain.origLine(
+                LaunchMain.sOrigOut,
+                "ACOSPROBE {\"seq\":1,\"tree\":{\"nodes\":[]}}");
+
+        // 2. Normal partial app stdout followed by continuation must stay unbroken.
+        System.out.print("foo");
+        System.out.flush();
+        System.out.println(" bar");
+
+        // 3. Flushed partial app stdout followed by redirected ACOS protocol line.
+        System.out.print("partial");
+        System.out.flush();
+        System.out.println("ACOSLAUNCH MARK ok");
+
+        // 4. Flushed partial app stderr followed by origLineBoth (stdout already at line start).
+        System.err.print("err-part");
+        System.err.flush();
+        LaunchMain.origLineBoth("ACOSSTUCK {}");
+
+        try (FileOutputStream fo = new FileOutputStream(args[0]);
+             FileOutputStream fe = new FileOutputStream(args[1])) {
+            fo.write(capOut.toByteArray());
+            fe.write(capErr.toByteArray());
+        }
+    }
+}
+"#,
+        ) else {
+            return;
+        };
+        assert!(
+            run.status.success(),
+            "LineBoundaryDriver failed:\n{}{}",
+            String::from_utf8_lossy(&run.stdout),
+            String::from_utf8_lossy(&run.stderr)
+        );
+
+        assert_eq!(
+            stdout,
+            "hello\nACOSPROBE {\"seq\":1,\"tree\":{\"nodes\":[]}}\nfoo bar\npartial\nACOSLAUNCH MARK ok\nACOSSTUCK {}\n"
+        );
+        assert_eq!(stderr, "err-part\nACOSSTUCK {}\n");
+
+        let parsed = parse_lines(&stdout);
+        assert_eq!(
+            parsed.latest.as_ref().map(|s| s.seq),
+            Some(1),
+            "host parser must parse ACOSPROBE emitted after flushed partial stdout"
+        );
+        assert!(
+            parsed.marks.iter().any(|m| m == "ACOSLAUNCH MARK ok"),
+            "host parser must also capture redirected ACOSLAUNCH MARK after partial stdout: {:?}",
+            parsed.marks
+        );
+    }
+
+    #[test]
+    fn launch_main_fatal_trace_survives_an_unknown_host_cause() {
+        // The image's `Log` stack formatter returns "" when any link of the cause
+        // chain is an UnknownHostException, so no fatal path may go through it.
+        let src = include_str!("../guest/java/dev/acos/art/LaunchMain.java");
+        assert!(
+            !src.contains("Log.getStackTraceString("),
+            "LaunchMain.java fatal paths must use the unfiltered `stackTraceText`"
+        );
+
+        let Some((run, stdout, stderr)) = run_launch_main_driver(
+            "UnknownHostTraceDriver",
+            r#"package dev.acos.art;
+import java.io.FileOutputStream;
+import java.io.PrintStream;
+public final class UnknownHostTraceDriver {
+    public static void main(String[] args) throws Exception {
+        System.setOut(new PrintStream(new FileOutputStream(args[0]), true, "UTF-8"));
+        System.setErr(new PrintStream(new FileOutputStream(args[1]), true, "UTF-8"));
+        LaunchMain.installRuntimeDiagnostics();
+
+        // The fallback never throws and is never empty.
+        Throwable hostile = new RuntimeException() {
+            @Override
+            public void printStackTrace(java.io.PrintWriter w) {
+                throw new IllegalStateException("no trace");
+            }
+            @Override
+            public String toString() {
+                throw new IllegalStateException("no string");
+            }
+        };
+        LaunchMain.origWrite(LaunchMain.sOrigErr, "null=" + LaunchMain.stackTraceText(null));
+        LaunchMain.origWrite(
+                LaunchMain.sOrigErr,
+                "hostile=" + (LaunchMain.stackTraceText(hostile).length() > 1) + "\n");
+
+        // The real default handler; it ends the process with status 1.
+        Thread.getDefaultUncaughtExceptionHandler().uncaughtException(
+                Thread.currentThread(),
+                new IllegalStateException(
+                        "sync failed",
+                        new RuntimeException(
+                                "fetch failed",
+                                new java.net.UnknownHostException("api.invalid"))));
+    }
+}
+"#,
+        ) else {
+            return;
+        };
+        assert_eq!(
+            run.status.code(),
+            Some(1),
+            "the uncaught handler exits 1:\n{}{}",
+            String::from_utf8_lossy(&run.stdout),
+            String::from_utf8_lossy(&run.stderr)
+        );
+        for needle in [
+            "null=null\nhostile=true\n",
+            "java.lang.IllegalStateException: sync failed\n\tat ",
+            "Caused by: java.lang.RuntimeException: fetch failed",
+            "Caused by: java.net.UnknownHostException: api.invalid",
+        ] {
+            assert!(
+                stderr.contains(needle),
+                "fatal trace must contain {needle:?}:\n{stderr}"
+            );
+        }
+        let record = parse_lines(&stdout)
+            .guest_launch
+            .expect("structured crash record");
+        let detail = guest_crash_detail(Some(&record)).expect("crash record parses");
+        assert_eq!(detail["code"], "GUEST_ERROR");
+        assert_eq!(
+            detail["causes"][1]["class"],
+            "java.net.UnknownHostException"
+        );
+    }
+
+    #[test]
+    fn launch_main_keeps_large_protocol_records_intact_under_concurrent_writes() {
+        const ROUNDS: u64 = 150;
+        let Some((run, stdout, stderr)) = run_launch_main_driver(
+            "ConcurrentRecordDriver",
+            r#"package dev.acos.art;
+import java.io.ByteArrayOutputStream;
+import java.io.FileOutputStream;
+import java.io.PrintStream;
+public final class ConcurrentRecordDriver {
+    static final int ROUNDS = 150;
+    // Well past the 8 KiB encoder buffer of a PrintStream.
+    static final String PAD = new String(new char[20000]).replace('\0', 'x');
+
+    /** Yields on every flush so other writers get in between two drains. */
+    static final class Capture extends ByteArrayOutputStream {
+        @Override
+        public void flush() {
+            Thread.yield();
+        }
+    }
+
+    interface Round {
+        void run(int i);
+    }
+
+    static Thread writer(final Round round) {
+        return new Thread(new Runnable() {
+            @Override
+            public void run() {
+                for (int i = 1; i <= ROUNDS; i++) {
+                    round.run(i);
+                }
+            }
+        });
+    }
+
+    public static void main(String[] args) throws Exception {
+        Capture capOut = new Capture();
+        Capture capErr = new Capture();
+        System.setOut(new PrintStream(capOut, true, "UTF-8"));
+        System.setErr(new PrintStream(capErr, true, "UTF-8"));
+        LaunchMain.installRuntimeDiagnostics();
+
+        // Deterministic: the first chunk of a record is flushed, then a direct write.
+        String split = "ACOSLAUNCH MARK split " + PAD;
+        System.out.write(split.getBytes("UTF-8"), 0, 8192);
+        System.out.flush();
+        LaunchMain.origLine(LaunchMain.sOrigOut, "ACOSLAUNCH MARK between");
+        System.out.println(split.substring(8192));
+        // A commit-text acknowledgment after a flushed partial app write.
+        System.out.print("hello");
+        System.out.flush();
+        System.out.println("ACOSCOMMITTEXT {\"seq\":0,\"ok\":true,\"handled\":true}");
+
+        Thread[] threads = {
+            writer(new Round() {
+                @Override
+                public void run(int i) {
+                    System.out.println("ACOSCOMMITTEXT {\"seq\":" + i
+                            + ",\"ok\":true,\"handled\":true,\"pad\":\"" + PAD + "\"}");
+                }
+            }),
+            writer(new Round() {
+                @Override
+                public void run(int i) {
+                    System.out.println("ACOSLAUNCH MARK redirected-" + i + " " + PAD);
+                }
+            }),
+            writer(new Round() {
+                @Override
+                public void run(int i) {
+                    LaunchMain.origLine(LaunchMain.sOrigOut, "ACOSPROBE {\"seq\":" + i
+                            + ",\"tree\":{\"nodes\":[]},\"pad\":\"" + PAD + "\"}");
+                }
+            }),
+            writer(new Round() {
+                @Override
+                public void run(int i) {
+                    LaunchMain.origLine(LaunchMain.sOrigOut, "ACOSLAUNCH MARK direct-" + i);
+                    LaunchMain.origLineBoth("ACOSSTUCK {\"i\":" + i + "}");
+                    Thread.yield();
+                }
+            }),
+            writer(new Round() {
+                @Override
+                public void run(int i) {
+                    System.out.print("app ");
+                    System.out.flush();
+                    System.out.println(PAD);
+                }
+            }),
+        };
+        for (Thread t : threads) {
+            t.start();
+        }
+        for (Thread t : threads) {
+            t.join(60000);
+            if (t.isAlive()) {
+                Runtime.getRuntime().halt(3); // deadlock
+            }
+        }
+
+        try (FileOutputStream fo = new FileOutputStream(args[0]);
+             FileOutputStream fe = new FileOutputStream(args[1])) {
+            fo.write(capOut.toByteArray());
+            fe.write(capErr.toByteArray());
+        }
+    }
+}
+"#,
+        ) else {
+            return;
+        };
+        assert!(
+            run.status.success(),
+            "ConcurrentRecordDriver failed ({:?}):\n{}{}",
+            run.status.code(),
+            String::from_utf8_lossy(&run.stdout),
+            String::from_utf8_lossy(&run.stderr)
+        );
+
+        let pad = "x".repeat(20000);
+        let mut expected = vec![
+            format!("ACOSLAUNCH MARK split {pad}"),
+            "ACOSLAUNCH MARK between".to_string(),
+            r#"ACOSCOMMITTEXT {"seq":0,"ok":true,"handled":true}"#.to_string(),
+        ];
+        for i in 1..=ROUNDS {
+            expected.push(format!(
+                r#"ACOSCOMMITTEXT {{"seq":{i},"ok":true,"handled":true,"pad":"{pad}"}}"#
+            ));
+            expected.push(format!("ACOSLAUNCH MARK redirected-{i} {pad}"));
+            expected.push(format!(
+                r#"ACOSPROBE {{"seq":{i},"tree":{{"nodes":[]}},"pad":"{pad}"}}"#
+            ));
+            expected.push(format!("ACOSLAUNCH MARK direct-{i}"));
+            expected.push(format!(r#"ACOSSTUCK {{"i":{i}}}"#));
+        }
+        expected.sort();
+
+        // Every line is either one whole protocol record or only app output (a
+        // large app line may be split by a record; a record may never be).
+        let mut records = Vec::new();
+        for (n, line) in stdout.lines().enumerate() {
+            if line.starts_with("ACOS") {
+                records.push(line.to_string());
+            } else {
+                assert!(
+                    line.replace("app ", "")
+                        .replace("hello", "")
+                        .bytes()
+                        .all(|b| b == b'x'),
+                    "line {n} is a broken protocol fragment: {:.160}",
+                    line
+                );
+            }
+        }
+        records.sort();
+        assert_eq!(records.len(), expected.len(), "protocol record count");
+        for (got, want) in records.iter().zip(&expected) {
+            assert!(
+                got == want,
+                "broken record: got {got:.160} want {want:.160}"
+            );
+        }
+        let split_at = stdout.find("ACOSLAUNCH MARK split ").expect("split record");
+        assert!(
+            stdout
+                .find("ACOSLAUNCH MARK between")
+                .expect("direct record")
+                < split_at,
+            "a direct write goes before a record that is still being assembled"
+        );
+        assert_eq!(stderr.lines().count() as u64, ROUNDS);
+
+        let parsed = parse_lines(&stdout);
+        assert_eq!(parsed.bad_probe_lines, 0);
+        assert_eq!(parsed.latest.as_ref().map(|s| s.seq), Some(ROUNDS));
+        assert!(
+            parsed.commit_text_results.contains_key(&0),
+            "commit-text acknowledgment after a partial app write must parse"
+        );
+    }
+}
