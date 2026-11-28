@@ -40,8 +40,31 @@ dev-loop step asks for it.
 
 ## Not done / open
 
-- No live ART + Metro run of `scenarios/metro-redbox.yaml`: the RN debug APK is not built on this host. The parser is
-  pinned to RN 0.81.4 source formats, not to a recorded guest log; the first live run is the acceptance check, and any
-  mismatch must be fixed in the parser, never by weakening the scenario.
+- **`scenarios/metro-redbox.yaml` fails live** (first live run, ART + Metro, RN 0.81.4 debug APK): step 9
+  `assert_js_error: no JS error was reported in scope`. For the uncaught `ReferenceError` the guest logs
+  `E ReactNativeJS: [ReferenceError: Property 'acosMissingFunction' doesn't exist]` (bracketed, no stack) and shows
+  LogBox's JS-drawn overlay ("Uncaught Error", "Call Stack", `App.js:32:24`), not the native redbox. The parser reads
+  neither shape. The parser must learn them (never by weakening the scenario); until then METRO4's live acceptance is
+  not met.
 - `react_native` control ops have unit coverage of their outcome logic only (no fake `ArtSession` harness exists).
 - Indexed (`sections`) source maps are refused with a reason; Metro does not emit them for dev bundles.
+
+## Second review round (PR #16, 9 threads)
+
+- Source maps are bound to a bundle revision (renewed by every `dev_server` `start` and `edit`); an older error is
+  never mapped by newer maps or sent to a newer Metro. Live `acos_logs` does not know the revision, so it keeps no disk
+  cache, remembers results per logged error, and contacts Metro after releasing the session lock (2 s per request,
+  4 s per call, failures retried after 10 s). A first poll made after a refresh is still answered by Metro's current
+  bundle.
+- An `assert_js_error` wait maps the latest error and applies the step's own full check.
+- Redbox title classification, `httpClient.ts`, bare `index.bundle` names and chunked-reply framing are fixed.
+- New scope `since_last_js_assert`; `metro-redbox.yaml` uses it for the no-error assertion.
+
+Live check with an uncommitted variant of the scenario that throws a shape the parser reads
+(`console.error(new Error('acosLiveProbe').stack)`):
+
+| run | result |
+|---|---|
+| probe | pass, 19 steps; `symbolicated: true` by `metro /symbolicate`, `App.js:32`, same answer in `verdict.json` after the fix edits |
+| a second error logged while the fix refreshes | fail (`a JS error is still reported: Error: acosRecoveryProbe`) |
+| the same, with the old `since_previous_step` scope | pass (the false pass the new scope removes) |

@@ -158,7 +158,8 @@ An error overlay an agent can assert on, not a picture of a red screen.
   unreachable bundle is `BUNDLE_UNREACHABLE`, never `ASSERTION_FAILED`.
 - `assert_js_error` (`acos-protocol` + `schema/scenario.json`, `acos-verify`):
   `name`/`message`/`file`+`line`/`symbolicated`, `none: true`,
-  `bundle_unreachable: true`, `since_previous_step`, `timeout_ms`. `verdict.json`
+  `bundle_unreachable: true`, `since_previous_step`, `since_last_js_assert`,
+  `timeout_ms` (the wait ends only when the whole assertion holds). `verdict.json`
   carries `rn: {js_error, bundle_unreachable}`; the live `acos_logs` reply
   carries the same `rn` block. New codes: `JS_ERROR`, `BUNDLE_UNREACHABLE`.
 
@@ -215,8 +216,13 @@ not at `index.bundle:1:483920`.
 - `crates/acos-verify/src/symbolicate.rs`: Metro's `POST /symbolicate` first
   (0-based columns, Metro's convention), then `GET /index.map?...` decoded here
   (source map v3, base64 VLQ) and cached per map SHA-256 in
-  `<artifacts>/source-maps/` (`index.json` maps the bundle path to the hash), so
-  an error after Metro stopped still maps from the cache. Every request has a
+  `<artifacts>/source-maps/` (`index.json` maps bundle revision + map path to
+  the hash), so an error of the same revision still maps after Metro stopped. A
+  refresh keeps the URL, so the scenario runner renews the revision on every
+  `start` and `edit`, and never maps an older error with a newer bundle. The live
+  `acos_logs` path does not know the revision: it uses no disk cache, remembers
+  results per logged error, and contacts Metro after releasing the session lock
+  (4 s budget per call). Every request has a
   strict timeout (5 s while Metro runs, 0.5 s after it stopped, 2 s on the live
   `acos_logs` path); a dead Metro answers within the connect timeout.
 - Honest fallback: frames stay untouched with `symbolicated: false` and a reason

@@ -511,7 +511,7 @@ A step is a **one-key map**. Valid keys:
 | `set_locale` / `set_density` / `set_theme` / `set_time` | `locale` / `density_dpi` / `theme` / `timestamp` |
 | `service_ctl` | `module`, `op` (`attach`/`detach`/a module control op), optional `profile`+`config` (attach), `args` (control arguments), `expect` (a JSON subset the reply must contain — this is what makes the op an assertion) |
 | `dev_server` | `op` (`start`\|`edit`\|`wait_serves`\|`fast_refresh`\|`reload`\|`dev_menu`\|`stop`) — drives a run-owned host Metro server for a React Native dev loop (`needs_env: [pasta, metro]`); `start` copies `project`, opens the relay host-loopback opt-in (`expose_to_guest`, default `true`), optionally writes the app's `debug_http_host = localhost:<port>` before the guest boots (`debug_http_host: true`, must precede `launch`), and waits for `/status`; `edit` edits only the copy; `fast_refresh` (default) waits for Metro to serve the edit for `/hot` delivery; `reload` sends best-effort `POST /reload`; `dev_menu` opens the RN dev menu without a shake (Metro `/message` broadcast `devMenu`; fails when no app is connected); `stop` terminates Metro and deletes the copy (also enforced automatically on every exit path, failure, or timeout) |
-| `assert_js_error` | the React Native JS error (redbox / LogBox / `ExceptionsManager`) in scope: `name` (exact), `message` (substring), `file` (frame file suffix) + `line`, `symbolicated`; or `none: true` (no error, e.g. after a fix + reload — usually with `since_previous_step: true`); or `bundle_unreachable: true`. Optional `timeout_ms`. An unreachable bundle fails a JS-error assertion as `BUNDLE_UNREACHABLE` (blocked), never as a JS fail |
+| `assert_js_error` | the React Native JS error (redbox / LogBox / `ExceptionsManager`) in scope: `name` (exact), `message` (substring), `file` (frame file suffix) + `line`, `symbolicated`; or `none: true` (no error, e.g. after a fix + reload — usually with `since_previous_step: true`, or `since_last_js_assert: true` when the fix spans several steps); or `bundle_unreachable: true`. Optional `timeout_ms` waits until the whole assertion holds, source frame included. An unreachable bundle fails a JS-error assertion as `BUNDLE_UNREACHABLE` (blocked), never as a JS fail |
 | `assert_tree` | `record: <label>` (remember the UI tree node count) or `not_grown_since: <label>` (assert node count `<=` the recorded count so a stale/doubled root fails), optional `timeout_ms`, `settle` |
 | `call_activity_method` | only for debuggable, source-owned builds with an injected hook |
 
@@ -1008,11 +1008,22 @@ Rules and lifecycle guarantees:
   - dev_server: {op: reload}
   - assert_js_error: {none: true, since_previous_step: true, timeout_ms: 60000}
   ```
+
+  `since_previous_step` covers the lines from the step before the assertion.
+  When the fix takes several steps, `since_last_js_assert: true` covers
+  everything from the first step after the previous `assert_js_error`, so an
+  error logged during the edits or the refresh cannot slip out of scope.
 * **Source maps (`symbolicated`).** Frames from a dev bundle point at
   `index.bundle:1:483920`. ACOS maps them to source with Metro's own `POST
-  /symbolicate`, then (Metro unavailable for that) the bundle's `index.map`
-  (cached per map hash under `<artifacts>/source-maps/`, so an error after Metro
-  stopped still maps), each call with a strict timeout. When neither works the
+  /symbolicate`, then (Metro unavailable for that) the bundle's `index.map`,
+  each call with a strict timeout. A `dev_server` run caches maps under
+  `<artifacts>/source-maps/` per **bundle revision** (a new one per `start` and
+  `edit`): an error maps from the cache after Metro stopped, and an error older
+  than the latest edit is never mapped with the newer bundle. A live session
+  cannot know the revision, so `acos_logs` caches no map on disk: it remembers
+  the answer per logged error, and a repeated poll does not ask Metro again (a
+  failed attempt is retried after 10 s). Poll soon after the error: Metro
+  answers for the bundle it serves at that moment. When neither works the
   frames are left as they are with `symbolicated: false` and a reason
   (`no metro configured`, `symbolicate_unreachable: ...`, `no map: ...`), never a
   guessed position. Columns follow Metro's convention (0-based).
