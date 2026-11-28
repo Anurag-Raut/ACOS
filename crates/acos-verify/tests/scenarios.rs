@@ -3056,6 +3056,29 @@ fn metro4_none_true_after_a_reload_judges_only_the_new_lines() {
     let _ = std::fs::remove_dir_all(&artifacts);
 }
 
+/// `since_last_js_assert`: what the fix logged is judged, in whichever step it
+/// was collected; the error the previous assertion judged is not.
+#[test]
+fn metro4_since_last_js_assert_covers_every_step_of_the_recovery() {
+    let steps = "  - assert_js_error: {name: TypeError}\n  - wait: {ms: 1}\n  - wait: {ms: 1}\n  - wait: {ms: 1}\n  - assert_js_error: {none: true, since_last_js_assert: true}\n";
+    let error = || vec![(LogLevel::Error, "ReactNative", RN_TYPE_ERROR)];
+    // call n is step n's flush; the intentional error arrives for step 1
+    let mut backend = RnLogs::new(vec![vec![], error()]);
+    let (outcome, artifacts) = run_ordered(&js_error_scenario(steps), &mut backend);
+    assert_eq!(outcome.verdict.verdict, Status::Pass, "{:?}", outcome.verdict.failure);
+    let _ = std::fs::remove_dir_all(&artifacts);
+
+    // a second error logged during the first recovery step fails it, although
+    // two more steps run before the assertion
+    let mut backend = RnLogs::new(vec![vec![], error(), vec![], error()]);
+    let (outcome, artifacts) = run_ordered(&js_error_scenario(steps), &mut backend);
+    assert_eq!(outcome.verdict.verdict, Status::Fail);
+    let failure = outcome.verdict.failure.as_ref().unwrap();
+    assert_eq!(failure.step_index, Some(5));
+    assert!(failure.error.message.contains("still reported"), "{}", failure.error.message);
+    let _ = std::fs::remove_dir_all(&artifacts);
+}
+
 #[test]
 fn metro4_a_non_rn_run_has_no_rn_block() {
     let scenario = js_error_scenario("  - wait: {ms: 1}\n");

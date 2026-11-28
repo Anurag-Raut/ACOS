@@ -124,6 +124,20 @@ pub struct DevServerHost {
     log_dir: Option<PathBuf>,
     /// The `replace`/`contents` text of the latest edit (what `fast_refresh` waits for).
     last_edit_needle: Option<String>,
+    /// Which bundle is being served: renewed by `start` and by every `edit`.
+    /// Kept after `stop`, so errors of the last bundle can still be mapped.
+    revision: Option<String>,
+}
+
+/// A bundle revision no other server, edit or run has used (a reused artifacts
+/// directory may hold maps cached by an earlier run).
+fn new_revision() -> String {
+    static COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |elapsed| elapsed.as_nanos());
+    let count = COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    format!("{nanos:x}-{}-{count}", std::process::id())
 }
 
 struct Running {
@@ -153,6 +167,12 @@ impl DevServerHost {
     /// The project copy Metro serves (source paths in its maps start here).
     pub fn project_root(&self) -> Option<&Path> {
         self.inner.as_ref().map(|running| running.project.as_path())
+    }
+
+    /// The revision of the bundle the (last) server serves; `None` before any
+    /// `start`.
+    pub fn bundle_revision(&self) -> Option<&str> {
+        self.revision.as_deref()
     }
 
     /// Where `stop` saved Metro's log (relative reporting is the caller's job).
@@ -274,6 +294,7 @@ impl DevServerHost {
         });
         self.inner = Some(running);
         self.last_edit_needle = None;
+        self.revision = Some(new_revision());
         Ok(reply)
     }
 
@@ -328,6 +349,7 @@ impl DevServerHost {
         let staging = target.with_extension("acos-edit.tmp");
         fs::write(&staging, &new_text).map_err(io_error("write the edit"))?;
         fs::rename(&staging, &target).map_err(io_error("move the edit into place"))?;
+        self.revision = Some(new_revision());
         self.last_edit_needle = replace.or(contents).map(str::to_string);
         Ok(json!({"file": file, "replacements": replaced, "bytes": new_text.len()}))
     }
@@ -736,13 +758,21 @@ mod tests {
             project: copy.clone(),
             log: copy.join("metro.log"),
         });
+        assert_eq!(host.bundle_revision(), None);
         let reply = host
             .edit("App.js", Some("ACOS"), Some("Metro"), None)
             .unwrap();
+        // every edit is a new bundle revision; a refused one is not
+        let first = host.bundle_revision().expect("revision").to_string();
+        host.edit("App.js", Some("absent"), Some("x"), None).unwrap_err();
+        assert_eq!(host.bundle_revision(), Some(first.as_str()));
+        host.edit("App.js", None, None, Some("Hello Metro")).unwrap();
+        assert_ne!(host.bundle_revision(), Some(first.as_str()));
         assert_eq!(reply["replacements"], 1);
         assert_eq!(fs::read_to_string(copy.join("App.js")).unwrap(), "Hello Metro");
         assert_eq!(fs::read_to_string(src.join("App.js")).unwrap(), "Hello ACOS");
         host.shutdown();
+        assert!(host.bundle_revision().is_some(), "kept for errors of the stopped server");
         assert!(!copy.exists(), "stop deletes the project copy");
         let _ = fs::remove_dir_all(&src);
     }

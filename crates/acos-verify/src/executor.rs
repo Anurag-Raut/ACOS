@@ -360,6 +360,8 @@ pub fn run_scenario(
     // METRO6: the port of the last dev server this run started (Metro may have
     // been stopped since; its source maps stay cached in the artifacts).
     let mut last_dev_port: Option<u16> = None;
+    // METRO6: results and bundle revisions shared by every symbolication of the run.
+    let mut rn_symbols = RnSymbolication::default();
     let uses_dev_loop = scenario
         .steps
         .iter()
@@ -433,23 +435,47 @@ pub fn run_scenario(
         }
 
         // METRO4: `assert_js_error.timeout_ms` waits for the dev-loop event the
-        // way `assert_log` waits for its line: until a JS error / bundle failure
-        // is in scope (or, for `none: true`, until none is), then the step below
-        // judges (and symbolicates) the final slice. A miss is a normal failure.
+        // way `assert_log` waits for its line: until the whole assertion holds on
+        // what the step would judge (the latest error, symbolicated when the
+        // assertion depends on it), then the step below judges that same
+        // observation. A miss is a normal failure.
+        let mut js_scope = 0usize;
+        let mut js_settled = false;
+        if let Some(StepRef::AssertJsError(assertion)) = step.as_step() {
+            let previous = scenario.steps[..index]
+                .iter()
+                .rposition(|step| step.assert_js_error.is_some());
+            js_scope = js_scope_start(assertion, index, &step_log_cursors, previous);
+        }
         if caps.logs {
             if let Some(StepRef::AssertJsError(assertion)) = step.as_step() {
                 if let Some(timeout_ms) = assertion.timeout_ms {
-                    let start = log_scope_start(assertion.since_previous_step, index, &step_log_cursors);
                     let deadline = Instant::now() + Duration::from_millis(timeout_ms);
                     let mut backoff_ms = 10u64;
                     loop {
                         // The step's own constraints decide when to stop: an
                         // earlier TypeError does not end a wait for the
-                        // SyntaxError the scenario asked for.
-                        let (state, unreachable_last) =
-                            crate::rn_errors::parse_logs_ordered(&all_logs[start..]);
-                        let settled = crate::rn_errors::wait_settled(assertion, &state, unreachable_last);
-                        if settled || Instant::now() >= deadline {
+                        // SyntaxError, or the source frame, the scenario asked for.
+                        let mut symbolicator =
+                            run_symbolicator(&dev_host, last_dev_port, &options.artifacts_dir);
+                        // a slow Metro cannot stretch the wait far past its deadline
+                        symbolicator.budget = Some(
+                            deadline
+                                .saturating_duration_since(Instant::now())
+                                .max(Duration::from_secs(1)),
+                        );
+                        js_settled = js_wait_settled(
+                            assertion,
+                            &all_logs,
+                            JsStep {
+                                scope_start: js_scope,
+                                symbolicator,
+                                current_revision: dev_host.bundle_revision().map(str::to_string),
+                                retry_after: SYMBOLICATE_RETRY,
+                                symbols: &mut rn_symbols,
+                            },
+                        );
+                        if js_settled || Instant::now() >= deadline {
                             break;
                         }
                         std::thread::sleep(Duration::from_millis(backoff_ms));
@@ -471,8 +497,22 @@ pub fn run_scenario(
                 }
             }
         }
-        let symbolicator = matches!(step.as_step(), Some(StepRef::AssertJsError(_)))
-            .then(|| run_symbolicator(&dev_host, last_dev_port, &options.artifacts_dir));
+        let js_step = matches!(step.as_step(), Some(StepRef::AssertJsError(_))).then(|| JsStep {
+            scope_start: js_scope,
+            symbolicator: run_symbolicator(&dev_host, last_dev_port, &options.artifacts_dir),
+            current_revision: dev_host.bundle_revision().map(str::to_string),
+            // A verdict that depends on the mapping judges the observation that
+            // ended the wait; otherwise a failed symbolication is tried again.
+            retry_after: match step.as_step() {
+                Some(StepRef::AssertJsError(assertion))
+                    if js_settled && crate::rn_errors::needs_mapping(assertion) =>
+                {
+                    Duration::MAX
+                }
+                _ => Duration::ZERO,
+            },
+            symbols: &mut rn_symbols,
+        });
 
         // The step's log scope, computed once: `assert_log` (this step's own
         // assertion, below) reads it as `since_logs`, and the wait above judged
@@ -548,12 +588,14 @@ pub fn run_scenario(
                 &mut capabilities_used,
                 &mut dev_host,
                 &mut tree_marks,
-                symbolicator.as_ref(),
+                js_step,
             )
         };
         if let Some(port) = dev_host.port() {
             last_dev_port = Some(port);
         }
+        // Lines collected from here on come from the bundle served now.
+        rn_symbols.note_revision(all_logs.len(), dev_host.bundle_revision());
         // ---- SE2: a requested content settle must be honoured ----------------
         // If a step asked for `settle: content` and the backend returned a
         // frame with no content record (or another rule's record), the step did
@@ -792,9 +834,16 @@ pub fn run_scenario(
             }
         }
     }
-    let mut rn_state = crate::rn_errors::parse_logs(&all_logs);
+    let parsed = crate::rn_errors::parse_logs_located(&all_logs);
+    let mut rn_state = parsed.state;
     if let Some(error) = rn_state.js_error.as_mut() {
-        run_symbolicator(&dev_host, last_dev_port, &options.artifacts_dir).symbolicate(error);
+        rn_symbols.symbolicate(
+            run_symbolicator(&dev_host, last_dev_port, &options.artifacts_dir),
+            parsed.js_error_at.map(|at| (at, all_logs[at].seq)),
+            dev_host.bundle_revision(),
+            error,
+            Duration::ZERO,
+        );
     }
 
     // METRO3: the dev server never outlives the scenario, pass or fail.
@@ -1253,7 +1302,7 @@ fn execute_step(
     capabilities_used: &mut BTreeSet<String>,
     dev_host: &mut crate::dev_server::DevServerHost,
     tree_marks: &mut BTreeMap<String, usize>,
-    symbolicator: Option<&crate::symbolicate::Symbolicator>,
+    js_step: Option<JsStep<'_>>,
 ) -> StepExec {
     let Some(step_ref) = step.as_step() else {
         return StepExec::unsupported(Capability::StaticManifest, "step has no recognised kind");
@@ -2001,12 +2050,7 @@ fn execute_step(
             if let Some(error) = log_failure {
                 return StepExec::failed_backend(error);
             }
-            let scoped: &[LogRecord] = if assertion.since_previous_step {
-                since_logs
-            } else {
-                all_logs
-            };
-            js_error_step(backend, caps, assertion, scoped, symbolicator)
+            js_error_step(backend, caps, assertion, all_logs, js_step)
         }
         StepRef::AssertTree(assertion) => {
             capabilities_used.insert(Capability::UiTree.as_str().to_string());
@@ -2204,6 +2248,115 @@ fn dev_server_step(
     }
 }
 
+/// How often a wait retries a symbolication that failed.
+const SYMBOLICATE_RETRY: Duration = Duration::from_millis(500);
+
+/// The log slice an `assert_js_error` step judges starts here. With
+/// `since_last_js_assert`, that is the start of the step after the previous
+/// `assert_js_error` (so what that one judged stays out, and everything a
+/// following fix and refresh logged stays in).
+fn js_scope_start(
+    assertion: &acos_protocol::scenario::JsErrorAssertion,
+    index: usize,
+    step_log_cursors: &[usize],
+    previous_js_assert: Option<usize>,
+) -> usize {
+    if assertion.since_last_js_assert {
+        previous_js_assert
+            .and_then(|previous| step_log_cursors.get(previous + 1).copied())
+            .unwrap_or(0)
+    } else {
+        log_scope_start(assertion.since_previous_step, index, step_log_cursors)
+    }
+}
+
+/// METRO6: what one run knows about symbolicating its React Native errors.
+#[derive(Default)]
+struct RnSymbolication {
+    memo: crate::symbolicate::SymbolicationMemo,
+    /// `(first log index, bundle revision)`, in order: lines from that index on
+    /// were collected while the dev server served that revision.
+    revisions: Vec<(usize, String)>,
+}
+
+impl RnSymbolication {
+    fn note_revision(&mut self, from: usize, revision: Option<&str>) {
+        if let Some(revision) = revision {
+            if self.revisions.last().is_none_or(|(_, last)| last != revision) {
+                self.revisions.push((from, revision.to_string()));
+            }
+        }
+    }
+
+    /// The revision of an error. One read from the log (`at`) has the revision
+    /// its line was collected under; one read from the screen has a known
+    /// revision only when the run never served a second one.
+    fn revision_of(&self, at: Option<usize>) -> Option<&str> {
+        let mark = match at {
+            Some(at) => self.revisions.iter().rev().find(|(from, _)| *from <= at),
+            None if self.revisions.len() == 1 => self.revisions.first(),
+            None => None,
+        };
+        mark.map(|(_, revision)| revision.as_str())
+    }
+
+    /// Symbolicate `error` against the bundle that produced it. `origin` is its
+    /// log record `(index, seq)`; `current` the revision served now.
+    fn symbolicate(
+        &mut self,
+        mut symbolicator: crate::symbolicate::Symbolicator,
+        origin: Option<(usize, u64)>,
+        current: Option<&str>,
+        error: &mut acos_protocol::rn::JsError,
+        retry_after: Duration,
+    ) {
+        let revision = self.revision_of(origin.map(|(at, _)| at)).map(str::to_string);
+        symbolicator.metro_serves_revision =
+            revision.is_none() || revision.as_deref() == current;
+        symbolicator.revision = revision;
+        self.memo.symbolicate(
+            &symbolicator,
+            origin.map(|(_, seq)| seq),
+            error,
+            retry_after,
+        );
+    }
+}
+
+/// One `assert_js_error` step's scope and symbolication.
+struct JsStep<'a> {
+    scope_start: usize,
+    symbolicator: crate::symbolicate::Symbolicator,
+    current_revision: Option<String>,
+    retry_after: Duration,
+    symbols: &'a mut RnSymbolication,
+}
+
+/// One poll of an `assert_js_error` wait: judge what the step would judge now.
+fn js_wait_settled(
+    assertion: &acos_protocol::scenario::JsErrorAssertion,
+    all_logs: &[LogRecord],
+    step: JsStep<'_>,
+) -> bool {
+    let start = step.scope_start;
+    let mut parsed = crate::rn_errors::parse_logs_located(&all_logs[start..]);
+    if crate::rn_errors::needs_mapping(assertion) {
+        let origin = parsed
+            .js_error_at
+            .map(|at| (start + at, all_logs[start + at].seq));
+        if let Some(error) = parsed.state.js_error.as_mut() {
+            step.symbols.symbolicate(
+                step.symbolicator,
+                origin,
+                step.current_revision.as_deref(),
+                error,
+                step.retry_after,
+            );
+        }
+    }
+    crate::rn_errors::wait_settled(assertion, &parsed.state, parsed.unreachable_last)
+}
+
 /// METRO6: the symbolicator for this point of the run: Metro on the running
 /// (or last) dev-server port, maps cached under `<artifacts>/source-maps`.
 fn run_symbolicator(
@@ -2230,11 +2383,16 @@ fn js_error_step(
     backend: &mut dyn Backend,
     caps: Capabilities,
     assertion: &acos_protocol::scenario::JsErrorAssertion,
-    scoped: &[LogRecord],
-    symbolicator: Option<&crate::symbolicate::Symbolicator>,
+    all_logs: &[LogRecord],
+    js_step: Option<JsStep<'_>>,
 ) -> StepExec {
     use crate::rn_errors::JsCheck;
-    let (mut state, mut unreachable_last) = crate::rn_errors::parse_logs_ordered(scoped);
+    let scope_start = js_step.as_ref().map_or(0, |step| step.scope_start);
+    let parsed = crate::rn_errors::parse_logs_located(&all_logs[scope_start..]);
+    let origin = parsed
+        .js_error_at
+        .map(|at| (scope_start + at, all_logs[scope_start + at].seq));
+    let (mut state, mut unreachable_last) = (parsed.state, parsed.unreachable_last);
     // The redbox itself, from a **fresh** traversal (after a fix + reload the
     // previous step's frame may still show it): only fills what the log did
     // not say (the log carries the frames; the tree proves the dialog is up).
@@ -2261,8 +2419,14 @@ fn js_error_step(
             observed = Some(observation);
         }
     }
-    if let (Some(error), Some(symbolicator)) = (state.js_error.as_mut(), symbolicator) {
-        symbolicator.symbolicate(error);
+    if let (Some(error), Some(step)) = (state.js_error.as_mut(), js_step) {
+        step.symbols.symbolicate(
+            step.symbolicator,
+            origin,
+            step.current_revision.as_deref(),
+            error,
+            step.retry_after,
+        );
     }
     let expected = serde_json::to_value(assertion).unwrap_or(serde_json::Value::Null);
     let actual = serde_json::to_value(&state).unwrap_or(serde_json::Value::Null);
@@ -6992,5 +7156,120 @@ mod metro3_tests {
             .contains("stale or doubled root"));
         let unknown = ("nope".to_string(), None);
         assert!(!eval_tree_size(1, Some(&unknown)).result.passed);
+    }
+}
+
+#[cfg(test)]
+mod rn_symbolication_tests {
+    use super::*;
+    use std::io::{Read, Write};
+    use std::sync::{Arc, Mutex};
+
+    /// A Metro that maps generated line 1 to `Other.js` and line 2 to `App.js`.
+    fn mock_metro() -> (u16, Arc<Mutex<usize>>) {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let requests = Arc::new(Mutex::new(0));
+        let count = Arc::clone(&requests);
+        std::thread::spawn(move || {
+            for mut stream in listener.incoming().flatten() {
+                let mut raw = Vec::new();
+                let mut chunk = [0u8; 4096];
+                // the whole request: its JSON body ends the stream we need
+                while !raw.ends_with(b"]}") {
+                    match stream.read(&mut chunk) {
+                        Ok(0) | Err(_) => break,
+                        Ok(n) => raw.extend_from_slice(&chunk[..n]),
+                    }
+                }
+                *count.lock().unwrap() += 1;
+                let file = if String::from_utf8_lossy(&raw).contains("\"lineNumber\":1,") {
+                    "Other.js"
+                } else {
+                    "App.js"
+                };
+                let body = serde_json::json!({"stack": [{"file": file, "lineNumber": 7, "column": 0}]})
+                    .to_string();
+                let _ = stream.write_all(
+                    format!("HTTP/1.1 200 OK\r\nContent-Length: {}\r\n\r\n{body}", body.len())
+                        .as_bytes(),
+                );
+            }
+        });
+        (port, requests)
+    }
+
+    fn thrown(seq: u64, line: u32) -> LogRecord {
+        LogRecord {
+            seq,
+            timestamp_ms: seq,
+            level: acos_protocol::LogLevel::Error,
+            tag: "ReactNative".into(),
+            message: format!("TypeError: x, stack:\nonPress@{line}:5"),
+        }
+    }
+
+    fn step<'a>(
+        port: u16,
+        current: Option<&str>,
+        symbols: &'a mut RnSymbolication,
+    ) -> JsStep<'a> {
+        JsStep {
+            scope_start: 0,
+            symbolicator: crate::symbolicate::Symbolicator::new(Some(port), None),
+            current_revision: current.map(str::to_string),
+            retry_after: SYMBOLICATE_RETRY,
+            symbols,
+        }
+    }
+
+    #[test]
+    fn a_wait_continues_past_an_error_that_maps_to_another_file() {
+        let assertion: acos_protocol::scenario::JsErrorAssertion =
+            serde_json::from_value(serde_json::json!({"name": "TypeError", "file": "App.js"})).unwrap();
+        let (port, requests) = mock_metro();
+        let mut symbols = RnSymbolication::default();
+        let mut logs = vec![thrown(1, 1)];
+        for _ in 0..3 {
+            assert!(!js_wait_settled(&assertion, &logs, step(port, None, &mut symbols)));
+        }
+        assert_eq!(*requests.lock().unwrap(), 1, "one request per occurrence");
+        logs.push(thrown(2, 2));
+        assert!(js_wait_settled(&assertion, &logs, step(port, None, &mut symbols)));
+        assert_eq!(*requests.lock().unwrap(), 2);
+
+        // `symbolicated: false` does not end on a raw view of a mappable error
+        let raw: acos_protocol::scenario::JsErrorAssertion =
+            serde_json::from_value(serde_json::json!({"symbolicated": false})).unwrap();
+        assert!(!js_wait_settled(&raw, &logs, step(port, None, &mut symbols)));
+    }
+
+    #[test]
+    fn an_error_is_mapped_against_the_revision_it_was_logged_under() {
+        let mut symbols = RnSymbolication::default();
+        assert_eq!(symbols.revision_of(Some(0)), None);
+        symbols.note_revision(0, Some("a"));
+        assert_eq!(symbols.revision_of(None), Some("a"), "one revision: the screen's too");
+        symbols.note_revision(0, Some("a"));
+        symbols.note_revision(3, Some("b"));
+        assert_eq!(symbols.revision_of(Some(2)), Some("a"));
+        assert_eq!(symbols.revision_of(Some(3)), Some("b"));
+        assert_eq!(symbols.revision_of(None), None, "two revisions: unknown");
+
+        // an error older than the served bundle is never sent to Metro
+        let (port, requests) = mock_metro();
+        let mut error = crate::rn_errors::parse_logs(&[thrown(1, 2)]).js_error.unwrap();
+        let symbolicator = crate::symbolicate::Symbolicator::new(Some(port), None);
+        symbols.symbolicate(symbolicator.clone(), Some((1, 1)), Some("b"), &mut error, Duration::ZERO);
+        assert!(!error.symbolicated);
+        assert!(error.symbolication_reason.as_deref().unwrap().contains("the bundle changed"));
+        assert_eq!(*requests.lock().unwrap(), 0);
+        // mapped while its revision was served, it keeps that answer afterwards
+        symbols.symbolicate(symbolicator.clone(), Some((4, 9)), Some("b"), &mut error, Duration::ZERO);
+        assert!(error.symbolicated);
+        let mut again = crate::rn_errors::parse_logs(&[thrown(9, 2)]).js_error.unwrap();
+        symbols.symbolicate(symbolicator, Some((4, 9)), Some("c"), &mut again, Duration::ZERO);
+        assert_eq!(again.frames, error.frames);
+        assert_eq!(*requests.lock().unwrap(), 1);
     }
 }

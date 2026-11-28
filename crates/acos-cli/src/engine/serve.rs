@@ -96,6 +96,9 @@ struct HeldArtSession {
     /// `Mutex` because two connections may address the same session id; the
     /// guest takes one command at a time.
     session: Mutex<ArtSession>,
+    /// METRO6: `acos_logs` symbolication results. Its own lock, so Metro is
+    /// never contacted while `session` is held.
+    rn_symbols: Mutex<acos_verify::symbolicate::SymbolicationMemo>,
 }
 
 impl HeldArtSession {
@@ -1129,6 +1132,7 @@ impl ServeEngine {
                     guest_token: new_launch_token(),
                     default_settle: Mutex::new(default_settle),
                     session: Mutex::new(session),
+                    rn_symbols: Mutex::default(),
                 });
                 held.note_launch(&agent_label);
                 self.art
@@ -1360,6 +1364,8 @@ impl ServeEngine {
         // P12b: one per-request settle deadline for whichever verb runs next;
         // the guest still answers a timeout with the latest tree/frame identity.
         session.set_settle_timeout(settle_timeout_arg(args));
+        // The part of an `acos_logs` reply finished after the session is released.
+        let mut rn_pending = None;
         let outcome = match tool {
             "acos_observe_tree" => observe_tree(&mut session, &held.artifacts, args),
             "acos_observe" => observe(&mut session, &held.artifacts, args),
@@ -1367,7 +1373,10 @@ impl ServeEngine {
             "acos_text" => type_text(&mut session, args),
             "acos_key" => key(&mut session, args),
             "acos_assert" => assert(&mut session, args, trust),
-            "acos_logs" => logs(&mut session, &held.artifacts, args),
+            "acos_logs" => logs(&mut session, &held.artifacts, args).map(|(reply, rn)| {
+                rn_pending = rn;
+                reply
+            }),
             "acos_status" => Ok(status_value(&session)),
             // ADR-0029 item 4: list/status/attach/detach on the live guest.
             // The launcher's peer thread owns the service table, so this is a
@@ -1435,6 +1444,15 @@ impl ServeEngine {
                 if matches!(tool, "acos_tap" | "acos_text" | "acos_key" | "acos_action") {
                     if let Some(settle) = session.input_settle_timeout() {
                         return settle_timeout_envelope(request_id, id, trust, &settle, result);
+                    }
+                }
+                // Everything the reply reads from the guest is in hand: release
+                // it before any request to Metro.
+                drop(session);
+                if let Some(pending) = rn_pending {
+                    pending.finish(&held.rn_symbols, &mut result);
+                    if let Some(total) = result.pointer_mut("/timing/total_ms") {
+                        *total = json!(started.elapsed().as_millis() as u64);
                     }
                 }
                 let envelope = Envelope::pass(
@@ -3635,9 +3653,75 @@ fn core_service_ctl(session: &mut ArtSession, args: &Value) -> Result<Value, Bac
     session.ctl(module, op, inner)
 }
 
-fn logs(session: &mut ArtSession, artifacts: &Path, args: &Value) -> Result<Value, BackendError> {
-    // Arguments first: an invalid one fails before the guest buffer is read
-    // or Metro is contacted for symbolication (which holds the session).
+/// METRO4/METRO6: the React Native block of an `acos_logs` reply, collected
+/// under the session lock and symbolicated after it is released.
+struct PendingRn {
+    state: acos_protocol::rn::RnDevState,
+    symbolicator: acos_verify::symbolicate::Symbolicator,
+    /// The log `seq` of the error's first line: which occurrence it is.
+    occurrence: Option<u64>,
+}
+
+/// How long a failed live symbolication is answered from the memo before Metro
+/// is asked again.
+const RN_LOGS_RETRY: std::time::Duration = std::time::Duration::from_secs(10);
+
+impl PendingRn {
+    /// The block for `records`; `None` for an app that is not React Native.
+    ///
+    /// Only an app that logged on a React Native tag has one; symbolication runs
+    /// only for an error that needs it, against the Metro port the app's own
+    /// bundle URL names (host-port forwarded, so the same port on the host).
+    /// A live session cannot know which bundle revision is being served (the
+    /// project is edited outside it), so no source map is cached on disk: the
+    /// answer is remembered per error occurrence instead.
+    fn from_records(records: &[acos_verify::backend::LogRecord]) -> Option<Self> {
+        let parsed = acos_verify::rn_errors::parse_logs_located(records);
+        if parsed.state.is_empty() {
+            return None;
+        }
+        let mut symbolicator = acos_verify::symbolicate::Symbolicator::new(
+            acos_verify::rn_errors::metro_port_hint(records),
+            None,
+        );
+        symbolicator.timeout = std::time::Duration::from_secs(2);
+        symbolicator.budget = Some(std::time::Duration::from_secs(4));
+        Some(Self {
+            occurrence: parsed.js_error_at.map(|at| records[at].seq),
+            state: parsed.state,
+            symbolicator,
+        })
+    }
+
+    /// Symbolicate (or recall) the error and put the block into `reply["rn"]`.
+    fn finish(
+        mut self,
+        memo: &Mutex<acos_verify::symbolicate::SymbolicationMemo>,
+        reply: &mut Value,
+    ) {
+        if let Some(error) = self.state.js_error.as_mut() {
+            memo.lock().unwrap_or_else(|e| e.into_inner()).symbolicate(
+                &self.symbolicator,
+                self.occurrence,
+                error,
+                RN_LOGS_RETRY,
+            );
+        }
+        if let Some(object) = reply.as_object_mut() {
+            object.insert(
+                "rn".to_string(),
+                serde_json::to_value(&self.state).unwrap_or(Value::Null),
+            );
+        }
+    }
+}
+
+fn logs(
+    session: &mut ArtSession,
+    artifacts: &Path,
+    args: &Value,
+) -> Result<(Value, Option<PendingRn>), BackendError> {
+    // Arguments first: an invalid one fails before the guest buffer is read.
     let all = args.get("all").and_then(Value::as_bool).unwrap_or(false);
     let requested = args.get("min_priority");
     let explicit_priority = match requested {
@@ -3667,23 +3751,8 @@ fn logs(session: &mut ArtSession, artifacts: &Path, args: &Value) -> Result<Valu
         .map(str::to_ascii_lowercase);
     let records = session.logs_since(0)?;
     // METRO4/METRO6: the React Native redbox as data, read from the whole
-    // buffer (not the filtered view). Only an app that logged on a React Native
-    // tag has one; symbolication runs only for an error that needs it, against
-    // the Metro port the app's own bundle URL names (host-port forwarded, so
-    // the same port on the host) with a strict timeout and the session's map
-    // cache.
-    let rn = {
-        let mut state = acos_verify::rn_errors::parse_logs(&records);
-        if let Some(error) = state.js_error.as_mut().filter(|error| !error.symbolicated) {
-            let mut symbolicator = acos_verify::symbolicate::Symbolicator::new(
-                acos_verify::rn_errors::metro_port_hint(&records),
-                Some(artifacts.join("source-maps")),
-            );
-            symbolicator.timeout = std::time::Duration::from_secs(2);
-            symbolicator.symbolicate(error);
-        }
-        (!state.is_empty()).then(|| serde_json::to_value(&state).unwrap_or(Value::Null))
-    };
+    // buffer (not the filtered view).
+    let rn = PendingRn::from_records(&records);
     let crash = session.last_crash();
     // The default view is small, but the guest's full buffer is still evidence:
     // write it before filtering so `log_path` always names the whole run.
@@ -3784,10 +3853,7 @@ fn logs(session: &mut ArtSession, artifacts: &Path, args: &Value) -> Result<Valu
             ""
         },
     });
-    if let (Some(rn), Some(object)) = (rn, reply.as_object_mut()) {
-        object.insert("rn".to_string(), rn);
-    }
-    Ok(reply)
+    Ok((reply, rn))
 }
 
 /// MPROC1: the session's extra APKs as reply data — the caller's spelling of
@@ -6660,5 +6726,70 @@ mod tests {
         assert_eq!(destroy.result().unwrap()["engine"], json!(ENGINE_NATIVE_CHILD));
         assert_eq!(destroy.result().unwrap()["engine_frozen"], json!(false));
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// METRO6: polling `acos_logs` on the same error asks Metro once. The work
+    /// is done by `PendingRn::finish`, which has no session to hold.
+    #[test]
+    fn repeated_log_polls_symbolicate_one_error_once() {
+        use super::PendingRn;
+        use std::io::{Read, Write};
+        use std::sync::{Arc, Mutex};
+
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let requests = Arc::new(Mutex::new(0));
+        let count = Arc::clone(&requests);
+        std::thread::spawn(move || {
+            for mut stream in listener.incoming().flatten() {
+                let mut raw = Vec::new();
+                let mut chunk = [0u8; 4096];
+                while !raw.ends_with(b"]}") {
+                    match stream.read(&mut chunk) {
+                        Ok(0) | Err(_) => break,
+                        Ok(n) => raw.extend_from_slice(&chunk[..n]),
+                    }
+                }
+                *count.lock().unwrap() += 1;
+                let body =
+                    json!({"stack": [{"file": "App.js", "lineNumber": 26, "column": 4}]}).to_string();
+                let _ = stream.write_all(
+                    format!("HTTP/1.1 200 OK\r\nContent-Length: {}\r\n\r\n{body}", body.len())
+                        .as_bytes(),
+                );
+            }
+        });
+        let record = |seq, tag: &str, message: String| acos_verify::backend::LogRecord {
+            seq,
+            timestamp_ms: seq,
+            level: LogLevel::Error,
+            tag: tag.to_string(),
+            message,
+        };
+        assert!(PendingRn::from_records(&[record(1, "AcosFixture", "Error: x".into())]).is_none());
+
+        let thrown = |seq| {
+            record(
+                seq,
+                "ReactNativeJS",
+                format!("TypeError: x\n    at onPress (http://localhost:{port}/index.bundle?platform=android:1:120)"),
+            )
+        };
+        let memo = Mutex::default();
+        let poll = |records: &[acos_verify::backend::LogRecord]| {
+            let mut reply = json!({});
+            PendingRn::from_records(records)
+                .expect("a React Native error")
+                .finish(&memo, &mut reply);
+            reply["rn"]["js_error"].clone()
+        };
+        let first = poll(&[thrown(1)]);
+        assert_eq!(first["symbolicated"], json!(true), "{first}");
+        assert_eq!(first["frames"][0]["file"], json!("App.js"));
+        assert_eq!(poll(&[thrown(1)]), first);
+        assert_eq!(*requests.lock().unwrap(), 1);
+        // the same text thrown again is a new occurrence
+        poll(&[thrown(1), thrown(2)]);
+        assert_eq!(*requests.lock().unwrap(), 2);
     }
 }

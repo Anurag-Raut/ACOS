@@ -1210,6 +1210,12 @@ pub struct JsErrorAssertion {
     /// the whole run; a `none: true` after a reload usually wants `true`).
     #[serde(default)]
     pub since_previous_step: bool,
+    /// Only consider log lines produced after the previous `assert_js_error`
+    /// step: from the start of the step that follows it. Use it to prove that a
+    /// fix and its refresh, spread over several steps, logged no new error.
+    /// Needs an earlier `assert_js_error`; exclusive with `since_previous_step`.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub since_last_js_assert: bool,
     /// Wait up to this long for the condition (1..=300000 ms); the last
     /// observation decides.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1808,6 +1814,12 @@ fn validate_js_error(v: &mut ScenarioValidation, path: &str, a: &JsErrorAssertio
         if !(1..=300_000).contains(&timeout) {
             v.push(format!("{path}.timeout_ms"), "timeout_ms must be between 1 and 300000");
         }
+    }
+    if a.since_last_js_assert && a.since_previous_step {
+        v.push(
+            format!("{path}.since_last_js_assert"),
+            "`since_last_js_assert` and `since_previous_step` are two different log scopes; pick one",
+        );
     }
 }
 
@@ -2615,7 +2627,19 @@ pub fn validate_scenario(scenario: &Scenario) -> ScenarioValidation {
                 );
             }
             StepRef::DevServer(dev) => validate_dev_server(&mut v, &path, dev, scenario, index),
-            StepRef::AssertJsError(assertion) => validate_js_error(&mut v, &path, assertion),
+            StepRef::AssertJsError(assertion) => {
+                validate_js_error(&mut v, &path, assertion);
+                if assertion.since_last_js_assert
+                    && !scenario.steps[..index]
+                        .iter()
+                        .any(|earlier| earlier.assert_js_error.is_some())
+                {
+                    v.push(
+                        format!("{path}.since_last_js_assert"),
+                        "`since_last_js_assert` needs an earlier `assert_js_error` step",
+                    );
+                }
+            }
             StepRef::AssertTree(tree) => {
                 match (&tree.record, &tree.not_grown_since) {
                     (Some(_), Some(_)) | (None, None) => v.push(
@@ -2925,6 +2949,7 @@ steps:
             "  - assert_js_error: {message: boom, symbolicated: true, timeout_ms: 5000}\n",
             "  - assert_js_error: {none: true, since_previous_step: true}\n",
             "  - assert_js_error: {bundle_unreachable: true}\n",
+            "  - assert_js_error: {name: E}\n  - wait: {ms: 5}\n  - assert_js_error: {none: true, since_last_js_assert: true}\n",
             "  - dev_server: {op: start, project: p, port: 8081, debug_http_host: true}\n  - dev_server: {op: dev_menu}\n",
             "  - wait: {ms: 5}\n  - dev_server: {op: start, project: p, port: 8081, debug_http_host: true}\n",
         ] {
@@ -2932,6 +2957,8 @@ steps:
         }
         for (bad, needle) in [
             ("  - assert_js_error: {}\n", "needs `none: true`"),
+            ("  - assert_js_error: {none: true, since_last_js_assert: true}\n", "needs an earlier `assert_js_error`"),
+            ("  - assert_js_error: {name: E}\n  - assert_js_error: {none: true, since_last_js_assert: true, since_previous_step: true}\n", "pick one"),
             ("  - assert_js_error: {none: true, name: TypeError}\n", "cannot be combined"),
             ("  - assert_js_error: {bundle_unreachable: true, message: x}\n", "cannot be combined"),
             ("  - assert_js_error: {line: 3}\n", "`line` needs `file`"),

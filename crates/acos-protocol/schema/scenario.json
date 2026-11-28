@@ -561,6 +561,10 @@
             "null"
           ]
         },
+        "since_last_js_assert": {
+          "description": "Only consider log lines produced after the previous `assert_js_error` step: from the start of the step that follows it. Use it to prove that a fix and its refresh, spread over several steps, logged no new error. Needs an earlier `assert_js_error`; exclusive with `since_previous_step`.",
+          "type": "boolean"
+        },
         "since_previous_step": {
           "default": false,
           "description": "Only consider log lines produced since the previous step (default: the whole run; a `none: true` after a reload usually wants `true`).",

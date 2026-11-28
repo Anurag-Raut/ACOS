@@ -51,22 +51,41 @@ pub fn parse_logs(records: &[LogRecord]) -> RnDevState {
 /// failure is the most recent dev-loop event).
 #[must_use]
 pub fn parse_logs_ordered(records: &[LogRecord]) -> (RnDevState, bool) {
-    let mut state = RnDevState::default();
-    let mut unreachable_last = false;
+    let parsed = parse_logs_located(records);
+    (parsed.state, parsed.unreachable_last)
+}
+
+/// The dev-loop state of a slice of log records, with where its error is.
+#[derive(Debug, Default)]
+pub struct ParsedLogs {
+    /// The last JS error and the last bundle-fetch failure.
+    pub state: RnDevState,
+    /// The bundle failure is the most recent dev-loop event.
+    pub unreachable_last: bool,
+    /// Index (in the parsed slice) of the first record of `state.js_error`: which
+    /// occurrence of the error this is.
+    pub js_error_at: Option<usize>,
+}
+
+/// [`parse_logs_ordered`] plus the record the latest JS error starts at.
+#[must_use]
+pub fn parse_logs_located(records: &[LogRecord]) -> ParsedLogs {
+    let mut parsed = ParsedLogs::default();
     for block in blocks(records) {
         match classify(&block) {
             Some(Event::Js(error)) => {
-                state.js_error = Some(error);
-                unreachable_last = false;
+                parsed.state.js_error = Some(error);
+                parsed.js_error_at = Some(block.first);
+                parsed.unreachable_last = false;
             }
             Some(Event::Unreachable(failure)) => {
-                state.bundle_unreachable = Some(failure);
-                unreachable_last = true;
+                parsed.state.bundle_unreachable = Some(failure);
+                parsed.unreachable_last = true;
             }
             None => {}
         }
     }
-    (state, unreachable_last)
+    parsed
 }
 
 /// The dev-server port a debug app is using, read from the bundle URLs it
@@ -90,13 +109,20 @@ pub fn metro_port_hint(records: &[LogRecord]) -> Option<u16> {
         })
 }
 
-/// Whether an `assert_js_error` wait can stop on this (un-symbolicated) slice.
+/// Whether the assertion's verdict depends on symbolication, so a wait has to
+/// map the latest error before it judges it.
+#[must_use]
+pub fn needs_mapping(assertion: &acos_protocol::scenario::JsErrorAssertion) -> bool {
+    assertion.file.is_some() || assertion.symbolicated.is_some()
+}
+
+/// Whether an `assert_js_error` wait can stop on this slice. `state` is the one
+/// the step would judge: already symbolicated when [`needs_mapping`].
 ///
-/// It stops when the assertion already holds; on a bundle failure for a
-/// JS-error assertion (a distinct terminal verdict); and when the latest JS
-/// error matches every constraint that does not need symbolication
-/// (`file`/`line`/`symbolicated` are judged after the step symbolicates).
-/// `none: true` and `bundle_unreachable: true` wait until they hold.
+/// It stops when the whole assertion holds (the same [`check`] the step
+/// applies), or on a bundle failure for a JS-error assertion (a distinct
+/// terminal verdict). `none: true` and `bundle_unreachable: true` wait until
+/// they hold. Anything else keeps waiting: a later error may satisfy it.
 #[must_use]
 pub fn wait_settled(
     assertion: &acos_protocol::scenario::JsErrorAssertion,
@@ -105,24 +131,10 @@ pub fn wait_settled(
 ) -> bool {
     match check(assertion, state, unreachable_last) {
         JsCheck::Pass(_) => true,
-        _ if assertion.none == Some(true) || assertion.bundle_unreachable == Some(true) => false,
-        JsCheck::Unreachable(_) => true,
-        JsCheck::Fail(_) => {
-            let needs_mapping = assertion.file.is_some() || assertion.symbolicated == Some(true);
-            let unmapped = state.js_error.as_ref().is_some_and(|error| !error.symbolicated);
-            if !(needs_mapping && unmapped) {
-                return false;
-            }
-            let relaxed = acos_protocol::scenario::JsErrorAssertion {
-                file: None,
-                line: None,
-                symbolicated: None,
-                ..assertion.clone()
-            };
-            let has_other = relaxed.name.is_some() || relaxed.message.is_some();
-            // nothing else to match: any unmapped error may become the frame asked for
-            !has_other || matches!(check(&relaxed, state, unreachable_last), JsCheck::Pass(_))
+        JsCheck::Unreachable(_) => {
+            assertion.none != Some(true) && assertion.bundle_unreachable != Some(true)
         }
+        JsCheck::Fail(_) => false,
     }
 }
 
@@ -283,15 +295,20 @@ pub fn parse_ui(nodes: &[UiText<'_>]) -> RnDevState {
         .map(|(_, text)| text.trim().to_string())
         .filter(|text| !text.is_empty())
         .collect();
-    if let Some(error) = unreachable_from_text(&texts.join("\n")) {
-        state.bundle_unreachable = Some(error);
-        return state;
-    }
     let title = nodes
         .iter()
         .find(|(rid, _)| has_id(rid, "catalyst_redbox_title"))
         .map(|(_, text)| text.trim().to_string())
         .or_else(|| texts.iter().find(|text| split_name(text).is_some()).cloned());
+    // The title says what this redbox is. A JS exception (`TypeError: ...`) ran
+    // in a loaded bundle, whatever its message says; only otherwise are the
+    // texts read for the native loader's own diagnosis.
+    if !title.as_deref().is_some_and(is_js_title) {
+        if let Some(error) = unreachable_from_text(&texts.join("\n")) {
+            state.bundle_unreachable = Some(error);
+            return state;
+        }
+    }
     let Some(title) = title else {
         return state;
     };
@@ -335,8 +352,17 @@ pub fn parse_ui(nodes: &[UiText<'_>]) -> RnDevState {
     state
 }
 
+/// A redbox title that names a thrown JS error. The dev loader's own
+/// `DebugServerException` is the fetch failing, not app JS.
+fn is_js_title(title: &str) -> bool {
+    split_name(title.lines().next().unwrap_or("").trim())
+        .is_some_and(|(name, _)| name != "DebugServerException")
+}
+
 /// One message (or a run of continuation lines on the same tag).
 struct Block {
+    /// Index of its first record.
+    first: usize,
     tag: String,
     level: LogLevel,
     text: String,
@@ -357,7 +383,7 @@ fn is_rn_tag(tag: &str) -> bool {
 /// across records parses like one that did not.
 fn blocks(records: &[LogRecord]) -> Vec<Block> {
     let mut out: Vec<Block> = Vec::new();
-    for record in records {
+    for (index, record) in records.iter().enumerate() {
         if !is_rn_tag(&record.tag) {
             continue;
         }
@@ -383,6 +409,7 @@ fn blocks(records: &[LogRecord]) -> Vec<Block> {
             }
         }
         out.push(Block {
+            first: index,
             tag: record.tag.clone(),
             level: record.level,
             text: record.message.clone(),
@@ -776,9 +803,16 @@ pub fn is_source_frame(frame: &JsFrame) -> bool {
         && frame.file.as_deref().is_some_and(|file| {
             !file.is_empty()
                 && !file.contains(".bundle")
-                && !file.starts_with("http")
+                && !is_http_url(file)
                 && !is_generated_frame_id(file)
         })
+}
+
+/// An `http://` / `https://` URL — not a source file such as `httpClient.ts`.
+fn is_http_url(file: &str) -> bool {
+    file.split_once("://").is_some_and(|(scheme, _)| {
+        scheme.eq_ignore_ascii_case("http") || scheme.eq_ignore_ascii_case("https")
+    })
 }
 
 fn frames_are_source(frames: &[JsFrame]) -> bool {
@@ -1111,6 +1145,59 @@ mod tests {
     }
 
     #[test]
+    fn a_js_redbox_title_outranks_the_loader_wording() {
+        let redbox = |title: &str| {
+            parse_ui(&[
+                ("a:id/catalyst_redbox_title", title),
+                ("a:id/rn_frame_method", "load"),
+                ("a:id/rn_frame_file", "App.js:5:1"),
+            ])
+        };
+        let js = redbox("TypeError: Unable to load script from cache");
+        assert!(js.bundle_unreachable.is_none(), "{js:?}");
+        assert_eq!(js.js_error.unwrap().name, "TypeError");
+        for loader in [
+            "Unable to load script. Make sure you're either running Metro or that your bundle is packaged correctly.",
+            "DebugServerException: Could not connect to development server.",
+            "Could not connect to development server.",
+        ] {
+            let state = redbox(loader);
+            assert!(state.bundle_unreachable.is_some(), "{loader}");
+            assert!(state.js_error.is_none(), "{loader}");
+        }
+    }
+
+    #[test]
+    fn only_a_real_http_url_is_not_a_source_file() {
+        let frame = |file: &str| JsFrame {
+            file: Some(file.into()),
+            line: Some(18),
+            column: Some(1),
+            function: None,
+        };
+        for file in ["httpClient.ts", "http.js", "src/httpsAgent.js", "https/index.ts"] {
+            assert!(is_source_frame(&frame(file)), "{file}");
+        }
+        for file in ["http://localhost:8081/App.js", "https://example.invalid/x.js", "HTTP://h/x.js"] {
+            assert!(!is_source_frame(&frame(file)), "{file}");
+        }
+    }
+
+    #[test]
+    fn the_parsed_error_names_the_record_it_starts_at() {
+        let logs = vec![
+            rec(10, LogLevel::Error, "ReactNative", "Error: one, stack:\nf@1:2"),
+            rec(11, LogLevel::Info, "ActivityManager", "noise"),
+            rec(12, LogLevel::Error, "ReactNative", "Error: two, stack:"),
+            rec(13, LogLevel::Error, "ReactNative", "f@1:3"),
+        ];
+        let parsed = parse_logs_located(&logs);
+        assert_eq!(parsed.state.js_error.unwrap().message, "two");
+        assert_eq!(parsed.js_error_at, Some(2));
+        assert_eq!(parse_logs_located(&[]).js_error_at, None);
+    }
+
+    #[test]
     fn generated_frame_ids_are_not_source_files() {
         for id in ["1.js", "123.js", "seg-1.js", "seg-1_2.js"] {
             assert!(is_generated_frame_id(id), "{id}");
@@ -1181,9 +1268,27 @@ mod tests {
         // an earlier TypeError does not end a wait for a SyntaxError
         assert!(!wait_settled(&assertion("{name: SyntaxError}"), &type_error, false));
         assert!(wait_settled(&assertion("{name: TypeError}"), &type_error, false));
-        // file constraints are judged after symbolication: a matching name stops the wait
-        assert!(wait_settled(&assertion("{name: TypeError, file: App.js}"), &type_error, false));
-        assert!(!wait_settled(&assertion("{name: SyntaxError, file: App.js}"), &type_error, false));
+        // a matching name alone does not end a wait for a source frame
+        let file = assertion("{name: TypeError, file: App.js}");
+        assert!(needs_mapping(&file));
+        assert!(!wait_settled(&file, &type_error, false));
+        let mapped_to = |path: &str| {
+            let mut state = type_error.clone();
+            let error = state.js_error.as_mut().unwrap();
+            error.frames[0].file = Some(path.into());
+            error.symbolicated = true;
+            state
+        };
+        assert!(!wait_settled(&file, &mapped_to("Other.js"), false));
+        assert!(wait_settled(&file, &mapped_to("App.js"), false));
+        assert!(!wait_settled(&assertion("{name: TypeError, file: App.js, line: 99}"), &mapped_to("App.js"), false));
+        assert!(!wait_settled(&assertion("{name: SyntaxError, file: App.js}"), &mapped_to("App.js"), false));
+        // `symbolicated: false` is judged like the step judges it
+        let raw = assertion("{symbolicated: false}");
+        assert!(needs_mapping(&raw));
+        assert!(wait_settled(&raw, &type_error, false));
+        assert!(!wait_settled(&raw, &mapped_to("App.js"), false));
+        assert!(!needs_mapping(&assertion("{name: TypeError}")));
         assert!(!wait_settled(&assertion("{none: true}"), &type_error, false));
         assert!(wait_settled(&assertion("{none: true}"), &RnDevState::default(), false));
         assert!(!wait_settled(&assertion("{bundle_unreachable: true}"), &type_error, false));
