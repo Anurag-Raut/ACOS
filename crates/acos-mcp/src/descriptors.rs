@@ -66,6 +66,7 @@ pub const SESSION_TOOL_NAMES: &[&str] = &[
     "acos_doctor",
     "acos_services",
     "acos_service_ctl",
+    "acos_annotations",
 ];
 
 /// Identify a command from its wire name (`run-dex`).
@@ -1083,6 +1084,82 @@ fn session_tool_spec(name: &str) -> (&'static str, Value) {
                     "base": base.clone()
                 }
             }),
+        ),
+        "acos_annotations" => (
+            "Read and manage visual review annotations pinned to a live session in `acos view` \
+             (or added directly by an agent). Annotations are stored host-side per session (max \
+             64) with zero guest window-stack contamination; each entry snapshots its own \
+             `activity`, `package`, `display`, `bounds`, matched Android UI `nodes`, `comment`, \
+             `kind` (`element`/`box`/`freehand`), `status` (`open`/`resolved`), `created_ms`, \
+             and optional annotated PNG `screenshot_path` on disk so multi-screen batches stay \
+             intact across navigation. Default `action` is `list` (`status: \"open\"` default). \
+             Use `resolve` (with `id` and optional `resolution_note`) after fixing an item, \
+             `delete` to remove one, or `clear` to wipe matching items.",
+            with_base(json!({
+                "action": {
+                    "type": "string",
+                    "enum": ["list", "add", "resolve", "delete", "clear"],
+                    "description": "Operation to perform (default `list`)."
+                },
+                "status": {
+                    "type": "string",
+                    "enum": ["open", "resolved", "all"],
+                    "description": "Filter for `list` (default `open`) or `clear` (default `all`)."
+                },
+                "id": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Annotation id for `resolve` or `delete`."
+                },
+                "comment": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "`add`: human or agent review comment describing the issue or requested change."
+                },
+                "kind": {
+                    "type": "string",
+                    "enum": ["element", "box", "freehand"],
+                    "description": "`add`: annotation capture mode (`element` default, `box`, or `freehand`)."
+                },
+                "bounds": {
+                    "type": "array",
+                    "items": {"type": "integer"},
+                    "minItems": 4,
+                    "maxItems": 4,
+                    "description": "`add`: target display bounding box `[left, top, right, bottom]`."
+                },
+                "nodes": {
+                    "type": "array",
+                    "items": {"type": "object"},
+                    "description": "`add`: matched Android UI node metadata snapshots (class, resource_id, text, content_desc, bounds, clickable)."
+                },
+                "activity": {
+                    "type": "string",
+                    "description": "`add`: Activity name at capture time (defaults to the session's current activity)."
+                },
+                "package": {
+                    "type": "string",
+                    "description": "`add`: package name at capture time (defaults to the session's package)."
+                },
+                "display": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["w", "h"],
+                    "properties": {
+                        "w": {"type": "integer", "minimum": 1},
+                        "h": {"type": "integer", "minimum": 1}
+                    },
+                    "description": "`add`: display size `{w, h}` at capture time (defaults to the session's display)."
+                },
+                "image_png_base64": {
+                    "type": "string",
+                    "description": "`add`: optional base64-encoded PNG (max 4 MiB decoded) saved under `<session_artifacts>/annotations/<id>.png` and returned as `screenshot_path`."
+                },
+                "resolution_note": {
+                    "type": "string",
+                    "description": "`resolve`: optional short note recording how the annotation was addressed."
+                }
+            })),
         ),
         "acos_doctor" => (
             "Run the host preflight (`acos doctor`) and return its JSON report. Call it FIRST when \

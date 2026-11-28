@@ -366,6 +366,7 @@ fn tool_returns(tool: &ToolInfo) -> &'static str {
         "acos_status" => "`launched`, `stage_reached`, `published_frames`, `package`/`activity`, `capabilities`, `modules_summary`",
         "acos_services" => "`attached[]` (`id`, `profile`) and full `modules[]` (`id`, `profile`, `attach`, `state`, `fidelity`, `reason`); attach/detach answer with the set they produced",
         "acos_service_ctl" => "`id`, `op`, `value` (the module's own answer) and `modules_summary` after the control (call `acos_services` for full module rows); a detached module is a structured refusal",
+        "acos_annotations" => "`annotations[]` (or single `annotation` on `add`/`resolve`, `deleted_id` on `delete`, `cleared` on `clear`) with `id`, `kind`, `status`, `comment`, `bounds`, `nodes`, `activity`, `package`, `display`, `screenshot_path`, and `open_count`/`resolved_count`/`total_count`",
         "acos_capabilities" => "the implemented command list, the resolved `acos` binary/version, the server limits and — with `session_id` — that session's attached modules",
         "acos_net" => "`action`, the relay state (`up`, `pasta_version`, `host_ports`) and this \n                       session's own row (`networked`, `offline`, `delay_ms`, `loss_pct`); \n                       `hostport` also returns the relay's `host_ports` list",        "acos_doctor" => "`checks[]` with pass/fail and a concrete `fix` per failing check",
         "acos_help" => "`guide` (the requested section), `guide_topics`, `fidelity_rules`, `supported`/`unsupported`",

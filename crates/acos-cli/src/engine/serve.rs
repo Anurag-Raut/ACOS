@@ -96,6 +96,8 @@ struct HeldArtSession {
     /// `Mutex` because two connections may address the same session id; the
     /// guest takes one command at a time.
     session: Mutex<ArtSession>,
+    /// Per-session host-side visual annotation store (`acos_annotations`).
+    annotations: Mutex<super::annotations::AnnotationStore>,
 }
 
 impl HeldArtSession {
@@ -1129,6 +1131,7 @@ impl ServeEngine {
                     guest_token: new_launch_token(),
                     default_settle: Mutex::new(default_settle),
                     session: Mutex::new(session),
+                    annotations: Mutex::new(super::annotations::AnnotationStore::new()),
                 });
                 held.note_launch(&agent_label);
                 self.art
@@ -1323,6 +1326,22 @@ impl ServeEngine {
         args: &Value,
     ) -> Envelope {
         let trust = held.trust;
+        if let Some(expected) = args.get("expected_launch_token").and_then(Value::as_str) {
+            if expected != held.guest_token {
+                return art_failure(
+                    request_id,
+                    Some(id),
+                    trust,
+                    ErrorCode::SessionNotFound,
+                    format!("SESSION_REPLACED: session `{id}` was replaced by a newer guest"),
+                    json!({
+                        "reason": "SESSION_REPLACED",
+                        "tool": tool,
+                        "expected_launch_token": expected,
+                    }),
+                );
+            }
+        }
         let mut session = held.session.lock().unwrap_or_else(|e| e.into_inner());
         // REL3A: every serve verb starts from the strict observation rule. Serve
         // never asks for a content observation (its tree verbs select
@@ -1369,6 +1388,9 @@ impl ServeEngine {
             "acos_assert" => assert(&mut session, args, trust),
             "acos_logs" => logs(&mut session, &held.artifacts, args),
             "acos_status" => Ok(status_value(&session)),
+            "acos_annotations" => {
+                annotations_verb(&session, &held.annotations, &held.artifacts, args)
+            }
             // ADR-0029 item 4: list/status/attach/detach on the live guest.
             // The launcher's peer thread owns the service table, so this is a
             // command; an `at-launch` module is refused by the launcher with
@@ -1988,6 +2010,7 @@ fn evidence_for(tool: &str) -> &'static str {
     match tool {
         "acos_observe" | "acos_screenshot" => EVIDENCE_HOST_PIXEL,
         "acos_observe_tree" | "acos_assert" => EVIDENCE_GUEST_ASSERTED,
+        "acos_annotations" => EVIDENCE_NO_GUEST,
         _ => EVIDENCE_HOST_PIXEL,
     }
 }
@@ -2000,6 +2023,7 @@ fn capabilities_for(tool: &str) -> Vec<&'static str> {
         "acos_logs" => vec!["logs"],
         "acos_reset" => vec!["reset"],
         "acos_status" => vec!["lifecycle"],
+        "acos_annotations" => vec!["annotations"],
         _ => Vec::new(),
     }
 }
@@ -2837,8 +2861,11 @@ fn observe_tree(
             ),
         );
     }
+    let (display_w, display_h) = session.display_size();
     let mut result = json!({
         "package": session.package(),
+        "activity": session.activity(),
+        "display": {"w": display_w, "h": display_h},
         "stage_reached": "first_frame",
         "windows": distinct_windows(&tree),
         "truncated": truncated,
@@ -2864,6 +2891,24 @@ fn observe_tree(
         shot["windows"] = json!(tree.windows.len());
     }
     Ok(result)
+}
+
+fn annotations_verb(
+    session: &ArtSession,
+    store: &Mutex<super::annotations::AnnotationStore>,
+    artifacts: &Path,
+    args: &Value,
+) -> Result<Value, BackendError> {
+    let (w, h) = session.display_size();
+    let defaults = super::annotations::AnnotationDefaults {
+        activity: session.activity().map(str::to_string),
+        package: (!session.package().is_empty()).then(|| session.package().to_string()),
+        display: (w > 0 && h > 0).then_some(super::annotations::DisplaySize { w, h }),
+    };
+    store
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .apply(args, artifacts, defaults)
 }
 
 fn observe(

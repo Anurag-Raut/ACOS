@@ -3,7 +3,7 @@
 //! agent opened), so every API call appends it to its own query string.
 
 /// The page (inline CSS/JS; no network beyond this origin).
-pub const PAGE: &str = r##"<!doctype html>
+pub const PAGE: &str = r####"<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -150,6 +150,76 @@ pub const PAGE: &str = r##"<!doctype html>
   .cap-status { font: 11px/1.3 var(--mono); margin-top: 7px; color: var(--muted); }
   .cap-status.ok { color: var(--ok); }
   .cap-status.bad { color: var(--bad); }
+  #mirror-dom { position: absolute; z-index: 1; pointer-events: none; overflow: hidden; }
+  .acos-mirror-node { position: absolute; background: transparent; border: 0; margin: 0; padding: 0;
+    box-sizing: border-box; pointer-events: auto; cursor: inherit; }
+  .screenwrap.annotating { cursor: crosshair; }
+  .screenwrap.annotating.tool-pick { cursor: pointer; }
+  #annot-layer { position: absolute; inset: 0; pointer-events: none; z-index: 5; overflow: hidden; }
+  #annot-svg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: hidden; }
+  .annot-hover-box { position: absolute; border: 2px solid var(--accent); background: rgba(79, 156, 249, .15);
+    border-radius: 3px; pointer-events: none; }
+  .annot-hover-label { position: absolute; font: 11px/1.25 var(--mono); background: rgba(13, 17, 23, .94);
+    color: var(--text); border: 1px solid var(--accent); border-radius: 5px; padding: 2px 6px;
+    white-space: nowrap; max-width: min(360px, 90%); overflow: hidden; text-overflow: ellipsis;
+    pointer-events: none; box-shadow: 0 4px 12px rgba(0, 0, 0, .5); }
+  .annot-draft-box { position: absolute; border: 2px dashed #ff6b4a; background: rgba(255, 107, 74, .16);
+    border-radius: 3px; pointer-events: none; }
+  .annot-pin-box { position: absolute; border: 2px solid #ff6b4a; background: rgba(255, 107, 74, .10);
+    border-radius: 3px; pointer-events: none; }
+  .annot-pin-badge { position: absolute; min-width: 20px; height: 20px; padding: 0 5px; border-radius: 999px;
+    background: #ff6b4a; color: #0d1117; font: 700 11px/20px var(--mono); text-align: center;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, .6); pointer-events: none; transform: translate(-35%, -35%); }
+  #annot-popover { position: absolute; z-index: 6; width: min(295px, calc(100% - 16px));
+    background: rgba(22, 27, 34, .98); border: 1px solid var(--accent); border-radius: 10px;
+    padding: 10px 12px; box-shadow: 0 12px 32px rgba(0, 0, 0, .65); pointer-events: auto; }
+  .annot-pop-target { font: 11px/1.35 var(--mono); color: var(--accent); margin-bottom: 6px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #annot-comment { width: 100%; min-height: 62px; resize: vertical; background: var(--bg);
+    color: var(--text); border: 1px solid var(--line); border-radius: 7px; padding: 6px 8px;
+    font: 12px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; outline: none; }
+  #annot-comment:focus { border-color: var(--accent); }
+  .annot-pop-err { color: var(--bad); font: 11px/1.3 var(--mono); margin-top: 5px; }
+  .annot-pop-actions { display: flex; gap: 6px; justify-content: flex-end; margin-top: 8px; }
+  .annot-pop-actions button { background: var(--bg); color: var(--text); border: 1px solid var(--line);
+    border-radius: 7px; padding: 4px 10px; cursor: pointer; font-size: 12px; }
+  .annot-pop-actions button:hover:not(:disabled) { border-color: var(--accent); }
+  .annot-pop-actions button.primary { background: rgba(79, 156, 249, .22); border-color: var(--accent); color: #d6e8ff; font-weight: 600; }
+  #annot-tools { display: inline-flex; gap: 4px; align-items: center; flex-wrap: wrap; }
+  .aside-tabs { display: flex; gap: 6px; border-bottom: 1px solid var(--line); padding-bottom: 8px; margin-bottom: 8px; flex-shrink: 0; }
+  .aside-tab { flex: 1; background: transparent; color: var(--muted); border: 1px solid transparent;
+    border-radius: 7px; padding: 4px 8px; cursor: pointer; font-size: 11px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: .04em; text-align: center; }
+  .aside-tab:hover { color: var(--text); border-color: var(--line); }
+  .aside-tab.active { color: var(--text); background: rgba(79, 156, 249, .14); border-color: #264f78; }
+  #pane-activity { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+  #pane-annotations { display: flex; flex-direction: column; flex: 1; min-height: 0; gap: 8px; }
+  #annot-bar { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; flex-shrink: 0; }
+  #annot-bar button { background: var(--bg); color: var(--text); border: 1px solid var(--line);
+    border-radius: 7px; padding: 4px 8px; cursor: pointer; font-size: 11px; }
+  #annot-bar button:hover:not(:disabled) { border-color: var(--accent); }
+  #annot-bar button.primary { background: rgba(79, 156, 249, .18); border-color: var(--accent); color: #cde3ff; font-weight: 600; }
+  #annot-bar button:disabled { opacity: .45; cursor: not-allowed; }
+  .annot-filter { margin-left: auto; display: inline-flex; align-items: center; gap: 4px; font-size: 11px; color: var(--muted); cursor: pointer; user-select: none; }
+  .annot-empty { color: var(--muted); font-size: 12px; padding: 14px 2px; line-height: 1.45; }
+  #annot-list { list-style: none; margin: 0; padding: 0; flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
+  .annot-item { background: rgba(13, 17, 23, .65); border: 1px solid var(--line); border-radius: 8px; padding: 8px 9px; font-size: 12px; }
+  .annot-item.resolved { opacity: .65; }
+  .annot-item-head { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 4px; }
+  .annot-num { display: inline-block; min-width: 22px; padding: 0 5px; border-radius: 999px;
+    background: #ff6b4a; color: #0d1117; font: 700 11px/18px var(--mono); text-align: center; }
+  .annot-item.resolved .annot-num { background: var(--muted); }
+  .annot-tag { font: 10px/1.3 var(--mono); border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px; color: var(--muted); }
+  .annot-tag.ok { color: var(--ok); border-color: #1f6f36; }
+  .annot-act { font: 11px/1.3 var(--mono); color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0; }
+  .annot-view { font: 11px/1.35 var(--mono); color: var(--accent); overflow-wrap: anywhere; margin-bottom: 4px; }
+  .annot-comment { color: var(--text); line-height: 1.4; white-space: pre-wrap; overflow-wrap: anywhere; margin-bottom: 6px; }
+  .annot-shot { font: 10px/1.3 var(--mono); color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-bottom: 6px; }
+  .annot-item-actions { display: flex; gap: 5px; flex-wrap: wrap; }
+  .annot-item-actions button { background: var(--panel); color: var(--text); border: 1px solid var(--line);
+    border-radius: 6px; padding: 2px 7px; cursor: pointer; font-size: 11px; }
+  .annot-item-actions button:hover:not(:disabled) { border-color: var(--accent); }
+  .annot-item-actions button.danger:hover:not(:disabled) { border-color: var(--bad); color: var(--bad); }
   body.watching { height: 100vh; overflow: hidden; }
   body.watching header { display: none; }
   @media (max-width: 820px) {
@@ -188,6 +258,14 @@ pub const PAGE: &str = r##"<!doctype html>
       <span class="sep" aria-hidden="true"></span>
       <button id="btn-pinch" type="button" aria-pressed="false" title="Two-finger pinch mode (or Alt + drag, or Ctrl + wheel)">Pinch</button>
       <button id="btn-shot" type="button" title="Save PNG screenshot" disabled>Shot</button>
+      <span class="sep" aria-hidden="true"></span>
+      <button id="btn-annotate" type="button" aria-pressed="false" title="Inspect Android views and draw visual annotations">Annotate</button>
+      <span id="annot-tools" hidden>
+        <button id="btn-annot-pick" type="button" class="active" aria-pressed="true" title="Click an Android view to annotate">Pick</button>
+        <button id="btn-annot-box" type="button" aria-pressed="false" title="Drag a bounding box to annotate">Box</button>
+        <button id="btn-annot-draw" type="button" aria-pressed="false" title="Draw a freehand highlight to annotate">Draw</button>
+        <button id="btn-annot-copy" type="button" title="Copy all open annotations for your coding agent">Copy for Agent</button>
+      </span>
     </div>
     <span class="spacer"></span>
     <span class="pill" id="dinput">idle</span>
@@ -196,16 +274,42 @@ pub const PAGE: &str = r##"<!doctype html>
   <div class="stage">
     <div class="screenwrap" id="screenwrap" tabindex="0">
       <canvas id="frame" width="0" height="0" aria-label="live screen"></canvas>
+      <div id="mirror-dom" aria-label="Android UI hierarchy mirror"></div>
       <svg id="gesture-svg" aria-hidden="true"></svg>
       <div id="overlay"></div>
+      <div id="annot-layer" aria-hidden="true"><svg id="annot-svg" aria-hidden="true"></svg></div>
+      <div id="annot-popover" hidden>
+        <div class="annot-pop-target" id="annot-pop-target"></div>
+        <textarea id="annot-comment" rows="3" placeholder="Describe the issue or change… (Enter to add, Esc to cancel)"></textarea>
+        <div class="annot-pop-err" id="annot-pop-err" hidden></div>
+        <div class="annot-pop-actions">
+          <button id="annot-cancel" type="button">Cancel</button>
+          <button id="annot-submit" type="button" class="primary">Add</button>
+        </div>
+      </div>
       <div id="offline" hidden>stream offline · reconnecting…</div>
     </div>
     <aside>
       <h2>activity</h2>
-      <div class="mono" id="dactivity" style="font-size:12px;color:var(--muted);margin-bottom:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">-</div>
-      <h2>agent &amp; human activity</h2>
-      <ol id="events" reversed></ol>
-      <div class="note">Click: tap · Drag: swipe/fling · Hold: long-press · Wheel: scroll · Alt+drag / Ctrl+wheel: pinch · Type / Ctrl+V: text. Verify sessions stay read-only.</div>
+      <div class="mono" id="dactivity" style="font-size:12px;color:var(--muted);margin-bottom:8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">-</div>
+      <div class="aside-tabs" role="tablist">
+        <button id="tab-activity" class="aside-tab active" type="button" role="tab" aria-selected="true">Activity</button>
+        <button id="tab-annotations" class="aside-tab" type="button" role="tab" aria-selected="false">Annotations (0)</button>
+      </div>
+      <div id="pane-activity">
+        <h2>agent &amp; human activity</h2>
+        <ol id="events" reversed></ol>
+        <div class="note">Click: tap · Drag: swipe/fling · Hold: long-press · Wheel: scroll · Alt+drag / Ctrl+wheel: pinch · Type / Ctrl+V: text. Verify sessions stay read-only.</div>
+      </div>
+      <div id="pane-annotations" hidden>
+        <div id="annot-bar">
+          <button id="btn-annot-copy-all" type="button" class="primary">Copy All for Agent</button>
+          <label class="annot-filter"><input id="annot-show-resolved" type="checkbox"> Resolved</label>
+          <button id="btn-annot-clear" type="button">Clear</button>
+        </div>
+        <div id="annot-empty" class="annot-empty">No open annotations yet. Click Annotate to pick a view, draw a box, or sketch on the screen.</div>
+        <ol id="annot-list"></ol>
+      </div>
     </aside>
   </div>
   <div id="cap-tray" aria-live="polite"></div>
@@ -216,9 +320,12 @@ const token = new URLSearchParams(location.search).get("t") || "";
 const auth = (path) => path + (path.includes("?") ? "&" : "?") + "t=" + encodeURIComponent(token);
 const $ = (id) => document.getElementById(id);
 const grid = $("grid"), detail = $("detail"), statusPill = $("status");
-const frame = $("frame"), frameCtx = frame.getContext("2d"), screenWrap = $("screenwrap"), gestureSvg = $("gesture-svg"), overlay = $("overlay"), eventsList = $("events"), capTray = $("cap-tray");
+const frame = $("frame"), frameCtx = frame.getContext("2d"), screenWrap = $("screenwrap"), mirrorDom = $("mirror-dom"), gestureSvg = $("gesture-svg"), overlay = $("overlay"), annotLayer = $("annot-layer"), annotSvg = $("annot-svg"), annotPopover = $("annot-popover"), annotPopTarget = $("annot-pop-target"), annotComment = $("annot-comment"), annotPopErr = $("annot-pop-err"), annotSubmit = $("annot-submit"), annotCancel = $("annot-cancel"), eventsList = $("events"), capTray = $("cap-tray");
 const btnBack = $("btn-back"), btnHome = $("btn-home"), btnRecents = $("btn-recents"), btnRotate = $("btn-rotate");
 const btnVolDown = $("btn-vol-down"), btnVolUp = $("btn-vol-up"), btnPower = $("btn-power"), btnPinch = $("btn-pinch"), btnShot = $("btn-shot");
+const btnAnnotate = $("btn-annotate"), annotTools = $("annot-tools"), btnAnnotPick = $("btn-annot-pick"), btnAnnotBox = $("btn-annot-box"), btnAnnotDraw = $("btn-annot-draw"), btnAnnotCopy = $("btn-annot-copy");
+const tabActivity = $("tab-activity"), tabAnnotations = $("tab-annotations"), paneActivity = $("pane-activity"), paneAnnotations = $("pane-annotations");
+const btnAnnotCopyAll = $("btn-annot-copy-all"), btnAnnotClear = $("btn-annot-clear"), annotShowResolved = $("annot-show-resolved"), annotEmpty = $("annot-empty"), annotList = $("annot-list");
 const verifyBanner = $("verify-banner"), dinput = $("dinput");
 const SVG_NS = "http://www.w3.org/2000/svg";
 const capabilityCards = new Map();
@@ -253,6 +360,26 @@ const activePointers = new Map();
 const heldGuestKeys = new Set();
 let pinchMode = false;
 let panelTouchState = { active: 0, maxPointers: 0, startX: 0, startY: 0, startTs: 0, gesture: null };
+
+let mirrorNodes = [];
+let mirrorMeta = { activity: "", package: "", display: { w: 0, h: 0 } };
+let mirrorFetchTimer = null;
+let mirrorFetchInFlight = false;
+let mirrorFetchPending = false;
+let mirrorGeneration = 0;
+let lastTreeFrameSeq = -1;
+
+let annotMode = false;
+let annotTool = "pick"; // "pick" | "box" | "draw"
+let annotItems = [];
+let annotOpenCount = 0;
+let annotShowResolvedFlag = false;
+let asideTab = "activity"; // "activity" | "annotations"
+let hoveredMirrorNode = null;
+let annotDraft = null;
+let annotPending = null;
+let annotSubmitting = false;
+let annotGeneration = 0;
 
 const KEY_MAP = {
   Backspace: "KEYCODE_DEL",
@@ -365,12 +492,37 @@ function applyToolbarUi() {
 
   btnShot.disabled = !hasDecodedFrame();
 
-  if (isWatchOnly) {
+  if (sessionEnded && annotMode) {
+    annotMode = false;
+  }
+  const annotDisabled = !current || sessionEnded;
+  btnAnnotate.disabled = annotDisabled;
+  btnAnnotate.classList.toggle("active", annotMode);
+  btnAnnotate.setAttribute("aria-pressed", String(annotMode));
+  btnAnnotate.textContent = annotOpenCount > 0 ? "Annotate (" + annotOpenCount + ")" : "Annotate";
+  annotTools.hidden = !annotMode;
+  btnAnnotPick.classList.toggle("active", annotTool === "pick");
+  btnAnnotPick.setAttribute("aria-pressed", String(annotTool === "pick"));
+  btnAnnotBox.classList.toggle("active", annotTool === "box");
+  btnAnnotBox.setAttribute("aria-pressed", String(annotTool === "box"));
+  btnAnnotDraw.classList.toggle("active", annotTool === "draw");
+  btnAnnotDraw.setAttribute("aria-pressed", String(annotTool === "draw"));
+  btnAnnotCopy.disabled = annotOpenCount === 0;
+  screenWrap.classList.toggle("annotating", annotMode);
+  screenWrap.classList.toggle("tool-pick", annotMode && annotTool === "pick");
+
+  if (annotMode) {
+    dinput.textContent = "annotating";
+    dinput.className = "pill warn";
+  } else if (isWatchOnly) {
     dinput.textContent = "watch-only";
     dinput.className = "pill warn";
   } else if (!ws) {
     dinput.textContent = "idle";
     dinput.className = "pill";
+  } else if (ws.readyState === WebSocket.OPEN) {
+    dinput.textContent = "interactive";
+    dinput.className = "pill ok";
   }
 }
 
@@ -480,6 +632,7 @@ async function refresh() {
         }
         if (!sessionEnded) {
           const prevHasHome = current.has_home;
+          const prevAct = current.activity || "";
           current = updated;
           if (typeof current.has_home !== "boolean" && typeof prevHasHome === "boolean") {
             current.has_home = prevHasHome;
@@ -493,8 +646,15 @@ async function refresh() {
           ) {
             display = { w: updated.display.w, h: updated.display.h };
             setAspect(display.w, display.h);
+            positionMirrorDom();
           }
-          if (updated.activity) $("dactivity").textContent = updated.activity;
+          if (updated.activity) {
+            $("dactivity").textContent = updated.activity;
+            if (updated.activity !== prevAct) {
+              scheduleTreeRefresh(300);
+              renderAnnotOverlay();
+            }
+          }
           applyToolbarUi();
         }
       }
@@ -871,6 +1031,10 @@ async function drawDecodedFrame(part, sid, gen, ctrl) {
   if (wasRotatePending !== isRotationPending()) {
     applyToolbarUi();
   }
+  positionMirrorDom();
+  if (prevOrientationFlipped || lastFrameSeq !== lastTreeFrameSeq) {
+    scheduleTreeRefresh(prevOrientationFlipped ? 150 : 300);
+  }
 }
 
 async function startFrameStream(sid) {
@@ -999,6 +1163,8 @@ function openSession(s) {
   overlay.textContent = "";
   gestureSvg.textContent = "";
   clearCapabilityPrompts();
+  resetMirrorDom();
+  resetAnnotationsState();
   sessionEnded = false;
   sessionEverConnected = false;
   disconnectedPolls = 0;
@@ -1018,6 +1184,7 @@ function openSession(s) {
   $("dstate").className = "pill";
   $("offline").textContent = "stream offline · reconnecting…";
   $("offline").hidden = true;
+  setAsideTab("activity");
   applyToolbarUi();
   if (s.stream) {
     setAspect(display.w, display.h);
@@ -1029,6 +1196,8 @@ function openSession(s) {
       }
     });
   }
+  scheduleTreeRefresh(150);
+  fetchAnnotations();
   location.hash = "s=" + encodeURIComponent(s.session_id);
   history.replaceState(null, "", location.pathname + location.search + location.hash);
   screenWrap.focus({ preventScroll: true });
@@ -1047,6 +1216,8 @@ function closeSession() {
   overlay.textContent = "";
   gestureSvg.textContent = "";
   clearCapabilityPrompts();
+  resetMirrorDom();
+  resetAnnotationsState();
   current = null;
   currentGuestGen = null;
   pendingRotate = null;
@@ -1074,11 +1245,17 @@ function markSessionEnded(sid) {
   if (!current || (sid && current.session_id !== sid)) return;
   sessionEnded = true;
   pinchMode = false;
+  annotMode = false;
+  annotDraft = null;
+  hoveredMirrorNode = null;
+  closeAnnotPopover();
+  cancelMirrorFetch();
   resetPanelTouchState();
   closeWs();
   stopFrameStream();
   if (source) { source.close(); source = null; }
   applyToolbarUi();
+  renderAnnotOverlay();
   $("offline").textContent = "session ended";
   $("offline").hidden = false;
   $("dstate").textContent = "session ended";
@@ -1111,7 +1288,9 @@ function connectEvents(s) {
     ) {
       display = { w: entry.display.w, h: entry.display.h };
       setAspect(display.w, display.h);
+      positionMirrorDom();
     }
+    const prevAct = current ? (current.activity || "") : "";
     if (current) {
       if (typeof entry.watch_only === "boolean") {
         current.watch_only = entry.watch_only;
@@ -1121,9 +1300,18 @@ function connectEvents(s) {
       } else if (typeof hello.has_home === "boolean") {
         current.has_home = hello.has_home;
       }
+      if (entry.activity) {
+        current.activity = entry.activity;
+      }
       applyToolbarUi();
     }
-    if (entry.activity) $("dactivity").textContent = entry.activity;
+    if (entry.activity) {
+      $("dactivity").textContent = entry.activity;
+      if (entry.activity !== prevAct) {
+        scheduleTreeRefresh(300);
+        renderAnnotOverlay();
+      }
+    }
     if (data.connected === true) {
       sessionEverConnected = true;
       disconnectedPolls = 0;
@@ -1235,10 +1423,11 @@ function clearCapabilityPrompts() {
   if (capTray) capTray.textContent = "";
 }
 
-function copyTextToClipboard(text, button, fallbackLabel) {
+function copyTextToClipboard(text, button, fallbackLabel, copiedLabel) {
   const done = () => {
+    if (!button) return;
     const prev = button.textContent;
-    button.textContent = "Copied";
+    button.textContent = copiedLabel || "Copied";
     setTimeout(() => { button.textContent = fallbackLabel || prev; }, 1400);
   };
   if (navigator.clipboard && navigator.clipboard.writeText) {
@@ -1447,12 +1636,18 @@ function onEvent(event, kind) {
   }
   if (kind === "activity") {
     $("dactivity").textContent = event.activity || "-";
+    if (current && event.activity) current.activity = event.activity;
     addEvent(event, kind);
+    scheduleTreeRefresh(300);
+    renderAnnotOverlay();
     return;
   }
   if (event.kind === "activity" && event.activity) {
     $("dactivity").textContent = event.activity;
+    if (current) current.activity = event.activity;
     addEvent(event, "activity");
+    scheduleTreeRefresh(300);
+    renderAnnotOverlay();
     return;
   }
   if (event.kind === "action" && event.cmd === "rotate" && event.status === "ok") {
@@ -1470,6 +1665,7 @@ function onEvent(event, kind) {
       };
       applyToolbarUi();
     }
+    scheduleTreeRefresh(300);
   }
   if (event.kind === "action" && event.source === "panel" && event.cmd === "touch") {
     const ok = !event.status || event.status === "ok";
@@ -1541,6 +1737,7 @@ function onEvent(event, kind) {
         ripple(summary);
       }
       addEvent(summary, kind);
+      scheduleTreeRefresh(300);
       return;
     }
     if (event.phase === "cancel") {
@@ -1553,6 +1750,9 @@ function onEvent(event, kind) {
     ripple(event);
   }
   addEvent(event, kind);
+  if (event.kind === "action") {
+    scheduleTreeRefresh(300);
+  }
 }
 
 function ripple(event) {
@@ -1629,12 +1829,1081 @@ function addEvent(event, kind) {
   while (eventsList.children.length > 40) eventsList.lastChild.remove();
 }
 
+// ---- Mirror DOM (native T3 Code & Paseo support) + Built-in Annotate UI ----
+
+function isInsideElement(node, ancestor) {
+  let cur = node;
+  while (cur) {
+    if (cur === ancestor) return true;
+    cur = cur.parentNode;
+  }
+  return false;
+}
+
+function isEditableElement(node) {
+  if (!node) return false;
+  const tag = node.tagName;
+  return tag === "TEXTAREA" || tag === "INPUT" || tag === "SELECT" || !!node.isContentEditable;
+}
+
+function parseBounds(raw) {
+  if (!raw) return null;
+  let l, t, r, b;
+  if (Array.isArray(raw) && raw.length === 4) {
+    [l, t, r, b] = raw.map(Number);
+  } else if (typeof raw === "string") {
+    const m = raw.match(/^\[\s*(-?\d+)\s*,\s*(-?\d+)\s*\]\[\s*(-?\d+)\s*,\s*(-?\d+)\s*\]$/)
+      || raw.match(/^\[\s*(-?\d+)\s*,\s*(-?\d+)\s*,\s*(-?\d+)\s*,\s*(-?\d+)\s*\]$/);
+    if (!m) return null;
+    l = Number(m[1]);
+    t = Number(m[2]);
+    r = Number(m[3]);
+    b = Number(m[4]);
+  } else if (typeof raw === "object" && typeof raw.left === "number") {
+    l = raw.left; t = raw.top; r = raw.right; b = raw.bottom;
+  } else {
+    return null;
+  }
+  if (![l, t, r, b].every(Number.isFinite) || r <= l || b <= t) return null;
+  return [Math.round(l), Math.round(t), Math.round(r), Math.round(b)];
+}
+
+function shortClassName(cls) {
+  if (!cls) return "View";
+  const str = String(cls);
+  const dot = str.lastIndexOf(".");
+  return dot >= 0 ? str.slice(dot + 1) : str;
+}
+
+function shortResourceId(rid) {
+  if (!rid) return "";
+  const str = String(rid);
+  const slash = str.indexOf(":id/");
+  return slash >= 0 ? str.slice(slash + 4) : str;
+}
+
+function trimSnippet(s, maxLen) {
+  if (!s) return "";
+  const clean = String(s).replace(/\s+/g, " ").trim();
+  if (!clean) return "";
+  return clean.length > maxLen ? clean.slice(0, maxLen - 1) + "…" : clean;
+}
+
+function formatMirrorAriaLabel(n) {
+  const parts = [shortClassName(n.class)];
+  const labelText = trimSnippet(n.text, 60) || trimSnippet(n.content_desc, 60);
+  if (labelText) parts.push('"' + labelText + '"');
+  if (n.resource_id) parts.push("(id: " + shortResourceId(n.resource_id) + ")");
+  if (n.bounds) parts.push("[" + n.bounds.join(",") + "]");
+  return parts.join(" ");
+}
+
+function formatNodeSummary(n) {
+  if (!n) return "";
+  const parts = [shortClassName(n.class)];
+  if (n.resource_id) parts.push("#" + shortResourceId(n.resource_id));
+  const txt = trimSnippet(n.text, 44) || trimSnippet(n.content_desc, 44);
+  if (txt) parts.push('"' + txt + '"');
+  const b = parseBounds(n.bounds);
+  if (b) parts.push("[" + b.join(",") + "]");
+  return parts.join(" · ");
+}
+
+function snapshotNode(n) {
+  const out = {
+    class: n.class || "",
+    bounds: n.bounds,
+    clickable: !!n.clickable,
+  };
+  if (n.resource_id) out.resource_id = n.resource_id;
+  if (n.text) out.text = trimSnippet(n.text, 200);
+  if (n.content_desc) out.content_desc = trimSnippet(n.content_desc, 200);
+  if (n.window) out.window = n.window;
+  return out;
+}
+
+function currentDisplaySize() {
+  const dw = mirrorMeta.display.w || display.w || frameSize.w || frame.width || 1080;
+  const dh = mirrorMeta.display.h || display.h || frameSize.h || frame.height || 2400;
+  return { w: dw, h: dh };
+}
+
+function currentActivityName() {
+  const act = mirrorMeta.activity || (current && current.activity) || "";
+  if (act) return act;
+  const shown = $("dactivity").textContent;
+  return shown && shown !== "-" ? shown : "";
+}
+
+function flattenTreeNodes(tree, activity, pkg, disp) {
+  const out = [];
+  if (!tree) return out;
+  const roots = Array.isArray(tree.nodes)
+    ? tree.nodes
+    : (Array.isArray(tree) ? tree : (typeof tree === "object" ? [tree] : []));
+  const dw = (disp && disp.w) || currentDisplaySize().w;
+  const dh = (disp && disp.h) || currentDisplaySize().h;
+  const MAX_MIRROR_NODES = 1500;
+
+  function walk(node, depth) {
+    if (!node || typeof node !== "object" || out.length >= MAX_MIRROR_NODES) return false;
+    if (node.visible === false) return false;
+    const b = parseBounds(node.visible_bounds) || parseBounds(node.bounds);
+    const onScreen = b && b[2] > 0 && b[3] > 0 && b[0] < dw && b[1] < dh;
+    const clamped = onScreen
+      ? [
+          Math.max(0, Math.min(dw, b[0])),
+          Math.max(0, Math.min(dh, b[1])),
+          Math.max(0, Math.min(dw, b[2])),
+          Math.max(0, Math.min(dh, b[3])),
+        ]
+      : null;
+    const valid = clamped && clamped[2] > clamped[0] && clamped[3] > clamped[1];
+    let rec = null;
+    if (valid) {
+      rec = {
+        class: typeof node.class === "string" ? node.class : "",
+        resource_id: typeof node.resource_id === "string" ? node.resource_id : "",
+        text: typeof node.text === "string" ? node.text.trim() : "",
+        content_desc: typeof node.content_desc === "string" ? node.content_desc.trim() : "",
+        bounds: clamped,
+        clickable: !!node.clickable,
+        scrollable: !!node.scrollable,
+        window: typeof node.window === "string" ? node.window : "",
+        activity: activity || "",
+        package: (typeof node.package === "string" && node.package) ? node.package : (pkg || ""),
+        depth,
+        order: out.length,
+        isLeaf: true,
+      };
+      out.push(rec);
+    }
+    let anyVisibleChild = false;
+    if (Array.isArray(node.children)) {
+      for (const child of node.children) {
+        if (walk(child, depth + 1)) anyVisibleChild = true;
+      }
+    }
+    if (rec && anyVisibleChild) rec.isLeaf = false;
+    return valid || anyVisibleChild;
+  }
+
+  for (const root of roots) {
+    walk(root, 0);
+  }
+  return out;
+}
+
+function positionMirrorDom() {
+  if (!mirrorDom || !screenWrap) return;
+  const imgRect = renderedImageRect();
+  const wrapRect = screenWrap.getBoundingClientRect();
+  if (imgRect.width > 0 && imgRect.height > 0 && wrapRect.width > 0 && wrapRect.height > 0) {
+    mirrorDom.style.left = (imgRect.left - wrapRect.left).toFixed(2) + "px";
+    mirrorDom.style.top = (imgRect.top - wrapRect.top).toFixed(2) + "px";
+    mirrorDom.style.width = imgRect.width.toFixed(2) + "px";
+    mirrorDom.style.height = imgRect.height.toFixed(2) + "px";
+  }
+  renderAnnotOverlay();
+}
+
+function renderMirrorDom() {
+  if (!mirrorDom) return;
+  positionMirrorDom();
+  mirrorDom.textContent = "";
+  if (!mirrorNodes.length) return;
+  const { w: dw, h: dh } = currentDisplaySize();
+  if (!(dw > 0 && dh > 0)) return;
+  for (const n of mirrorNodes) {
+    const [l, t, r, b] = n.bounds;
+    const div = el("div", "acos-mirror-node");
+    div.style.left = ((l / dw) * 100).toFixed(4) + "%";
+    div.style.top = ((t / dh) * 100).toFixed(4) + "%";
+    div.style.width = (((r - l) / dw) * 100).toFixed(4) + "%";
+    div.style.height = (((b - t) / dh) * 100).toFixed(4) + "%";
+    div.setAttribute("data-acos-node", "1");
+    if (n.class) div.setAttribute("data-android-class", n.class);
+    if (n.resource_id) div.setAttribute("data-resource-id", n.resource_id);
+    if (n.text) div.setAttribute("data-text", trimSnippet(n.text, 120));
+    if (n.content_desc) div.setAttribute("data-content-desc", trimSnippet(n.content_desc, 120));
+    div.setAttribute("data-bounds", "[" + n.bounds.join(",") + "]");
+    div.setAttribute("data-clickable", String(!!n.clickable));
+    if (n.activity) div.setAttribute("data-activity", n.activity);
+    if (n.package) div.setAttribute("data-package", n.package);
+    div.setAttribute("aria-label", formatMirrorAriaLabel(n));
+    div._acosNode = n;
+    mirrorDom.appendChild(div);
+  }
+}
+
+function cancelMirrorFetch() {
+  mirrorGeneration += 1;
+  if (mirrorFetchTimer) {
+    clearTimeout(mirrorFetchTimer);
+    mirrorFetchTimer = null;
+  }
+  mirrorFetchPending = false;
+}
+
+function resetMirrorDom() {
+  cancelMirrorFetch();
+  mirrorNodes = [];
+  mirrorMeta = { activity: "", package: "", display: { w: 0, h: 0 } };
+  lastTreeFrameSeq = -1;
+  hoveredMirrorNode = null;
+  if (mirrorDom) mirrorDom.textContent = "";
+}
+
+function scheduleTreeRefresh(delayMs) {
+  if (!current || sessionEnded) return;
+  const wait = typeof delayMs === "number" ? delayMs : 300;
+  if (mirrorFetchTimer) clearTimeout(mirrorFetchTimer);
+  mirrorFetchTimer = setTimeout(() => {
+    mirrorFetchTimer = null;
+    fetchTreeNow();
+  }, wait);
+}
+
+async function fetchTreeNow() {
+  if (!current || sessionEnded) return;
+  if (mirrorFetchInFlight) {
+    mirrorFetchPending = true;
+    return;
+  }
+  const sid = current.session_id;
+  const gen = mirrorGeneration;
+  const g = (typeof currentGuestGen === "number" && currentGuestGen > 0) ? currentGuestGen : null;
+  const seqAtStart = lastFrameSeq;
+  mirrorFetchInFlight = true;
+  try {
+    const path = "/api/tree/" + encodeURIComponent(sid)
+      + (g !== null ? "?g=" + encodeURIComponent(g) : "");
+    const resp = await fetch(auth(path), { cache: "no-store" });
+    if (mirrorGeneration !== gen || !current || current.session_id !== sid || sessionEnded) return;
+    if (resp.status === 409) {
+      markSessionEnded(sid);
+      return;
+    }
+    if (!resp.ok) return;
+    const data = await resp.json();
+    if (mirrorGeneration !== gen || !current || current.session_id !== sid || sessionEnded) return;
+    if (!data || !data.ok) return;
+    lastTreeFrameSeq = seqAtStart;
+    const act = (typeof data.activity === "string" && data.activity) ? data.activity : currentActivityName();
+    const pkg = (typeof data.package === "string" && data.package) ? data.package : ((current && current.package) || "");
+    const disp = (data.display && data.display.w > 0 && data.display.h > 0)
+      ? { w: data.display.w, h: data.display.h }
+      : { w: display.w || frameSize.w || 0, h: display.h || frameSize.h || 0 };
+    mirrorMeta = { activity: act, package: pkg, display: disp };
+    if (act) {
+      $("dactivity").textContent = act;
+      if (current) current.activity = act;
+    }
+    mirrorNodes = flattenTreeNodes(data.tree, act, pkg, disp);
+    renderMirrorDom();
+  } catch (_) {
+    // Tree fetch is best-effort; ignore transient disconnects while frame/SSE handle health.
+  } finally {
+    mirrorFetchInFlight = false;
+    if (mirrorFetchPending && current && !sessionEnded) {
+      mirrorFetchPending = false;
+      scheduleTreeRefresh(300);
+    }
+  }
+}
+
+function findDeepestNodeAt(pt) {
+  if (!pt || !mirrorNodes.length) return null;
+  const hits = [];
+  for (let i = mirrorNodes.length - 1; i >= 0; i--) {
+    const n = mirrorNodes[i];
+    const [l, t, r, b] = n.bounds;
+    if (pt.x >= l && pt.x <= r && pt.y >= t && pt.y <= b) {
+      hits.push(n);
+    }
+  }
+  if (!hits.length) return null;
+  hits.sort((a, b) => {
+    const areaA = (a.bounds[2] - a.bounds[0]) * (a.bounds[3] - a.bounds[1]);
+    const areaB = (b.bounds[2] - b.bounds[0]) * (b.bounds[3] - b.bounds[1]);
+    if (areaA !== areaB) return areaA - areaB;
+    if (a.depth !== b.depth) return b.depth - a.depth;
+    return b.order - a.order;
+  });
+  return hits[0];
+}
+
+function findNodesIntersecting(rect) {
+  if (!rect || !mirrorNodes.length) return [];
+  const [rl, rt, rr, rb] = rect;
+  const { w: dw, h: dh } = currentDisplaySize();
+  const screenArea = Math.max(1, dw * dh);
+  const matches = [];
+  for (const n of mirrorNodes) {
+    const [l, t, r, b] = n.bounds;
+    if (r <= rl || l >= rr || b <= rt || t >= rb) continue;
+    const ix = Math.max(0, Math.min(r, rr) - Math.max(l, rl));
+    const iy = Math.max(0, Math.min(b, rb) - Math.max(t, rt));
+    const interArea = ix * iy;
+    if (interArea <= 0) continue;
+    const nodeArea = Math.max(1, (r - l) * (b - t));
+    const meaningful = !!(n.clickable || n.resource_id || n.text || n.content_desc || n.isLeaf);
+    matches.push({
+      node: n,
+      nodeArea,
+      interRatio: interArea / nodeArea,
+      meaningful,
+      isFullScreenContainer: !meaningful && (nodeArea / screenArea) > 0.85,
+    });
+  }
+  if (!matches.length) return [];
+  const filtered = matches.some((m) => !m.isFullScreenContainer)
+    ? matches.filter((m) => !m.isFullScreenContainer)
+    : matches;
+  filtered.sort((a, b) => {
+    if (a.meaningful !== b.meaningful) return a.meaningful ? -1 : 1;
+    if (a.node.clickable !== b.node.clickable) return a.node.clickable ? -1 : 1;
+    if (a.node.isLeaf !== b.node.isLeaf) return a.node.isLeaf ? -1 : 1;
+    if (a.nodeArea !== b.nodeArea) return a.nodeArea - b.nodeArea;
+    return b.node.depth - a.node.depth;
+  });
+  return filtered.slice(0, 16).map((m) => snapshotNode(m.node));
+}
+
+function displayRectToOverlay(bounds) {
+  const b = parseBounds(bounds);
+  if (!b) return null;
+  const p1 = displayToOverlayPx({ x: b[0], y: b[1] });
+  const p2 = displayToOverlayPx({ x: b[2], y: b[3] });
+  if (!p1 || !p2) return null;
+  return {
+    left: Math.min(p1.x, p2.x),
+    top: Math.min(p1.y, p2.y),
+    width: Math.max(2, Math.abs(p2.x - p1.x)),
+    height: Math.max(2, Math.abs(p2.y - p1.y)),
+  };
+}
+
+function clearAnnotLayer() {
+  if (!annotLayer) return;
+  const children = Array.from(annotLayer.children);
+  for (const ch of children) {
+    if (ch !== annotSvg) ch.remove();
+  }
+  if (annotSvg) annotSvg.textContent = "";
+}
+
+function renderAnnotOverlay() {
+  if (!annotLayer) return;
+  clearAnnotLayer();
+  if (!current || sessionEnded) return;
+
+  const curAct = currentActivityName();
+  // Draw persistent numbered pins for open annotations belonging to the current activity while annotating.
+  if (annotMode) {
+    for (const item of annotItems) {
+      if (item.status !== "open") continue;
+      if (item.activity && curAct && item.activity !== curAct) continue;
+      const box = displayRectToOverlay(item.bounds);
+      if (!box) continue;
+      const pinBox = el("div", "annot-pin-box");
+      pinBox.style.left = box.left.toFixed(1) + "px";
+      pinBox.style.top = box.top.toFixed(1) + "px";
+      pinBox.style.width = box.width.toFixed(1) + "px";
+      pinBox.style.height = box.height.toFixed(1) + "px";
+      annotLayer.appendChild(pinBox);
+
+      const badge = el("div", "annot-pin-badge", "#" + item.id);
+      badge.style.left = Math.max(10, box.left).toFixed(1) + "px";
+      badge.style.top = Math.max(10, box.top).toFixed(1) + "px";
+      annotLayer.appendChild(badge);
+    }
+  }
+
+  // Hover inspector in Pick mode
+  if (annotMode && annotTool === "pick" && !annotDraft && !annotPending && hoveredMirrorNode) {
+    const box = displayRectToOverlay(hoveredMirrorNode.bounds);
+    if (box) {
+      const hbox = el("div", "annot-hover-box");
+      hbox.style.left = box.left.toFixed(1) + "px";
+      hbox.style.top = box.top.toFixed(1) + "px";
+      hbox.style.width = box.width.toFixed(1) + "px";
+      hbox.style.height = box.height.toFixed(1) + "px";
+      annotLayer.appendChild(hbox);
+
+      const lbl = el("div", "annot-hover-label", formatNodeSummary(hoveredMirrorNode));
+      const lblTop = box.top >= 26 ? (box.top - 24) : (box.top + box.height + 4);
+      lbl.style.left = Math.max(4, box.left).toFixed(1) + "px";
+      lbl.style.top = Math.max(4, lblTop).toFixed(1) + "px";
+      annotLayer.appendChild(lbl);
+    }
+  }
+
+  // Live drag / draw draft
+  if (annotDraft) {
+    if (annotDraft.tool === "box" && annotDraft.bounds) {
+      const box = displayRectToOverlay(annotDraft.bounds);
+      if (box) {
+        const dbox = el("div", "annot-draft-box");
+        dbox.style.left = box.left.toFixed(1) + "px";
+        dbox.style.top = box.top.toFixed(1) + "px";
+        dbox.style.width = box.width.toFixed(1) + "px";
+        dbox.style.height = box.height.toFixed(1) + "px";
+        annotLayer.appendChild(dbox);
+      }
+    } else if (annotDraft.tool === "draw" && annotDraft.points.length > 1 && annotSvg) {
+      const pts = [];
+      for (const p of annotDraft.points) {
+        const px = displayToOverlayPx(p);
+        if (px) pts.push(px.x.toFixed(1) + "," + px.y.toFixed(1));
+      }
+      if (pts.length > 1) {
+        annotSvg.appendChild(svgEl("polyline", {
+          points: pts.join(" "),
+          fill: "none",
+          stroke: "#ff6b4a",
+          "stroke-width": "3.5",
+          "stroke-linecap": "round",
+          "stroke-linejoin": "round",
+        }));
+      }
+    }
+  }
+
+  // Pending selection awaiting popover comment
+  if (annotPending) {
+    const box = displayRectToOverlay(annotPending.bounds);
+    if (box) {
+      const dbox = el("div", "annot-draft-box");
+      dbox.style.left = box.left.toFixed(1) + "px";
+      dbox.style.top = box.top.toFixed(1) + "px";
+      dbox.style.width = box.width.toFixed(1) + "px";
+      dbox.style.height = box.height.toFixed(1) + "px";
+      annotLayer.appendChild(dbox);
+    }
+    if (annotPending.strokePts && annotPending.strokePts.length > 1 && annotSvg) {
+      const pts = [];
+      for (const p of annotPending.strokePts) {
+        const px = displayToOverlayPx(p);
+        if (px) pts.push(px.x.toFixed(1) + "," + px.y.toFixed(1));
+      }
+      if (pts.length > 1) {
+        annotSvg.appendChild(svgEl("polyline", {
+          points: pts.join(" "),
+          fill: "none",
+          stroke: "#ff6b4a",
+          "stroke-width": "3.5",
+          "stroke-linecap": "round",
+          "stroke-linejoin": "round",
+        }));
+      }
+    }
+  }
+}
+
+function nextAnnotationNumber() {
+  let maxId = 0;
+  for (const item of annotItems) {
+    if (typeof item.id === "number" && item.id > maxId) maxId = item.id;
+  }
+  return maxId + 1;
+}
+
+function compositeAnnotationPng(selection, badgeNum) {
+  if (!hasDecodedFrame() || !selection) return null;
+  try {
+    const off = document.createElement("canvas");
+    off.width = frame.width;
+    off.height = frame.height;
+    const ctx = off.getContext && off.getContext("2d");
+    if (!ctx || typeof off.toDataURL !== "function") return null;
+    ctx.drawImage(frame, 0, 0);
+
+    const { w: dw, h: dh } = currentDisplaySize();
+    const sx = dw > 0 ? (off.width / dw) : 1;
+    const sy = dh > 0 ? (off.height / dh) : 1;
+    const lineW = Math.max(3, Math.round(off.width / 220));
+    const b = parseBounds(selection.bounds);
+
+    if (selection.kind === "freehand" && Array.isArray(selection.strokePts) && selection.strokePts.length > 1) {
+      if (b) {
+        ctx.save();
+        ctx.strokeStyle = "rgba(255, 107, 74, 0.55)";
+        ctx.lineWidth = Math.max(2, Math.round(lineW * 0.6));
+        if (typeof ctx.setLineDash === "function") ctx.setLineDash([8, 6]);
+        ctx.strokeRect(b[0] * sx, b[1] * sy, (b[2] - b[0]) * sx, (b[3] - b[1]) * sy);
+        ctx.restore();
+      }
+      ctx.save();
+      ctx.strokeStyle = "#ff6b4a";
+      ctx.lineWidth = Math.max(4, Math.round(lineW * 1.4));
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
+      ctx.beginPath();
+      for (let i = 0; i < selection.strokePts.length; i++) {
+        const px = selection.strokePts[i].x * sx;
+        const py = selection.strokePts[i].y * sy;
+        if (i === 0) ctx.moveTo(px, py);
+        else ctx.lineTo(px, py);
+      }
+      ctx.stroke();
+      ctx.restore();
+    } else if (b) {
+      const rx = b[0] * sx;
+      const ry = b[1] * sy;
+      const rw = Math.max(4, (b[2] - b[0]) * sx);
+      const rh = Math.max(4, (b[3] - b[1]) * sy);
+      ctx.save();
+      ctx.fillStyle = "rgba(255, 107, 74, 0.16)";
+      ctx.fillRect(rx, ry, rw, rh);
+      ctx.strokeStyle = "#ff6b4a";
+      ctx.lineWidth = lineW;
+      ctx.strokeRect(rx, ry, rw, rh);
+      ctx.restore();
+    }
+
+    if (b) {
+      const radius = Math.max(14, Math.round(off.width / 54));
+      const bx = Math.max(radius + 4, Math.min(off.width - radius - 4, b[0] * sx));
+      const by = Math.max(radius + 4, Math.min(off.height - radius - 4, b[1] * sy));
+      ctx.save();
+      ctx.fillStyle = "#ff6b4a";
+      ctx.beginPath();
+      ctx.arc(bx, by, radius, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#0d1117";
+      ctx.font = "bold " + Math.max(12, Math.round(radius * 0.95)) + "px monospace";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText("#" + badgeNum, bx, by + 1);
+      ctx.restore();
+    }
+
+    const dataUrl = off.toDataURL("image/png");
+    const prefix = "data:image/png;base64,";
+    if (typeof dataUrl === "string" && dataUrl.startsWith(prefix)) {
+      return dataUrl.slice(prefix.length);
+    }
+    return null;
+  } catch (_) {
+    return null;
+  }
+}
+
+function openAnnotPopover(selection) {
+  annotPending = selection;
+  annotSubmitting = false;
+  hoveredMirrorNode = null;
+  const primary = selection.nodes && selection.nodes.length ? selection.nodes[0] : null;
+  if (primary) {
+    const extra = selection.nodes.length > 1 ? " (+" + (selection.nodes.length - 1) + " more)" : "";
+    annotPopTarget.textContent = formatNodeSummary(primary) + extra;
+  } else {
+    annotPopTarget.textContent = selection.kind + " [" + selection.bounds.join(",") + "]";
+  }
+  annotComment.value = "";
+  annotPopErr.textContent = "";
+  annotPopErr.hidden = true;
+  annotSubmit.disabled = false;
+  annotPopover.hidden = false;
+
+  const box = displayRectToOverlay(selection.bounds);
+  const wrapRect = screenWrap.getBoundingClientRect();
+  const popW = Math.min(295, Math.max(200, (wrapRect.width || 320) - 16));
+  const popH = 155;
+  let left = 8;
+  let top = 8;
+  if (box) {
+    left = Math.max(8, Math.min((wrapRect.width || popW + 16) - popW - 8, box.left));
+    if (box.top + box.height + popH + 12 <= (wrapRect.height || 400)) {
+      top = box.top + box.height + 8;
+    } else if (box.top - popH - 8 >= 8) {
+      top = box.top - popH - 8;
+    } else {
+      top = Math.max(8, Math.min((wrapRect.height || popH + 16) - popH - 8, box.top + 8));
+    }
+  }
+  annotPopover.style.left = left.toFixed(0) + "px";
+  annotPopover.style.top = top.toFixed(0) + "px";
+  renderAnnotOverlay();
+  annotComment.focus();
+}
+
+function closeAnnotPopover() {
+  annotPending = null;
+  annotSubmitting = false;
+  if (annotPopover) annotPopover.hidden = true;
+  if (annotPopErr) { annotPopErr.textContent = ""; annotPopErr.hidden = true; }
+  if (annotSubmit) annotSubmit.disabled = false;
+  renderAnnotOverlay();
+}
+
+function annotationsApiPath(extra) {
+  const sid = encodeURIComponent(current.session_id);
+  const g = (typeof currentGuestGen === "number" && currentGuestGen > 0)
+    ? ("g=" + encodeURIComponent(currentGuestGen))
+    : "";
+  const base = "/api/annotations/" + sid + (extra || "");
+  if (!g) return auth(base);
+  return auth(base + (base.includes("?") ? "&" : "?") + g);
+}
+
+function resetAnnotationsState() {
+  annotGeneration += 1;
+  annotMode = false;
+  annotTool = "pick";
+  annotItems = [];
+  annotOpenCount = 0;
+  annotDraft = null;
+  hoveredMirrorNode = null;
+  closeAnnotPopover();
+  renderAnnotationsPanel();
+  renderAnnotOverlay();
+}
+
+function setAnnotMode(enabled) {
+  const next = !!enabled && !!current && !sessionEnded;
+  if (next === annotMode) return;
+  annotMode = next;
+  if (annotMode) {
+    cancelActivePointers();
+    releaseHeldGuestKeys();
+    pinchMode = false;
+    scheduleTreeRefresh(50);
+    fetchAnnotations();
+  } else {
+    annotDraft = null;
+    hoveredMirrorNode = null;
+    closeAnnotPopover();
+  }
+  applyToolbarUi();
+  renderAnnotOverlay();
+}
+
+function setAnnotTool(tool) {
+  if (tool !== "pick" && tool !== "box" && tool !== "draw") return;
+  annotTool = tool;
+  if (tool !== "pick") hoveredMirrorNode = null;
+  applyToolbarUi();
+  renderAnnotOverlay();
+}
+
+function setAsideTab(tab) {
+  asideTab = tab === "annotations" ? "annotations" : "activity";
+  const isAnnot = asideTab === "annotations";
+  tabActivity.classList.toggle("active", !isAnnot);
+  tabActivity.setAttribute("aria-selected", String(!isAnnot));
+  tabAnnotations.classList.toggle("active", isAnnot);
+  tabAnnotations.setAttribute("aria-selected", String(isAnnot));
+  paneActivity.hidden = isAnnot;
+  paneAnnotations.hidden = !isAnnot;
+  if (isAnnot && current && !sessionEnded) {
+    fetchAnnotations();
+  }
+}
+
+async function fetchAnnotations() {
+  if (!current || sessionEnded) return;
+  const sid = current.session_id;
+  const gen = annotGeneration;
+  try {
+    const resp = await fetch(annotationsApiPath("?status=all"), { cache: "no-store" });
+    if (annotGeneration !== gen || !current || current.session_id !== sid || sessionEnded) return;
+    if (resp.status === 409) {
+      markSessionEnded(sid);
+      return;
+    }
+    if (!resp.ok) return;
+    const data = await resp.json();
+    if (annotGeneration !== gen || !current || current.session_id !== sid || sessionEnded) return;
+    if (!data || !data.ok) return;
+    annotItems = Array.isArray(data.annotations) ? data.annotations : [];
+    renderAnnotationsPanel();
+    renderAnnotOverlay();
+  } catch (_) {}
+}
+
+async function submitAnnotation() {
+  if (!current || sessionEnded || !annotPending || annotSubmitting) return;
+  const comment = String(annotComment.value || "").trim();
+  if (!comment) {
+    annotPopErr.textContent = "Please enter a comment.";
+    annotPopErr.hidden = false;
+    annotComment.focus();
+    return;
+  }
+  annotSubmitting = true;
+  annotSubmit.disabled = true;
+  annotPopErr.hidden = true;
+  const badgeNum = nextAnnotationNumber();
+  const pngBase64 = compositeAnnotationPng(annotPending, badgeNum);
+  const { w: dw, h: dh } = currentDisplaySize();
+  const payload = {
+    action: "add",
+    comment,
+    kind: annotPending.kind,
+    bounds: annotPending.bounds,
+    nodes: annotPending.nodes || [],
+    display: annotPending.display || { w: dw, h: dh },
+  };
+  if (annotPending.activity) payload.activity = annotPending.activity;
+  if (annotPending.package) payload.package = annotPending.package;
+  if (pngBase64) payload.image_png_base64 = pngBase64;
+
+  try {
+    const resp = await fetch(annotationsApiPath(""), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const data = await resp.json().catch(() => ({}));
+    if (resp.status === 409) {
+      markSessionEnded(current.session_id);
+      return;
+    }
+    if (!resp.ok || !data.ok) {
+      annotPopErr.textContent = (data && data.error) || ("Failed (HTTP " + resp.status + ")");
+      annotPopErr.hidden = false;
+      annotSubmitting = false;
+      annotSubmit.disabled = false;
+      return;
+    }
+    if (data.annotation) {
+      annotItems.push(data.annotation);
+    }
+    closeAnnotPopover();
+    setAsideTab("annotations");
+    renderAnnotationsPanel();
+    renderAnnotOverlay();
+  } catch (err) {
+    annotPopErr.textContent = err && err.message ? err.message : "Network error";
+    annotPopErr.hidden = false;
+    annotSubmitting = false;
+    annotSubmit.disabled = false;
+  }
+}
+
+async function resolveAnnotation(id) {
+  if (!current || sessionEnded) return;
+  try {
+    const resp = await fetch(annotationsApiPath(""), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "resolve", id }),
+    });
+    const data = await resp.json().catch(() => ({}));
+    if (resp.ok && data.ok) {
+      const idx = annotItems.findIndex((a) => a.id === id);
+      if (idx >= 0 && data.annotation) annotItems[idx] = data.annotation;
+      renderAnnotationsPanel();
+      renderAnnotOverlay();
+    }
+  } catch (_) {}
+}
+
+async function deleteAnnotation(id) {
+  if (!current || sessionEnded) return;
+  try {
+    const resp = await fetch(annotationsApiPath("/" + encodeURIComponent(id)), {
+      method: "DELETE",
+    });
+    const data = await resp.json().catch(() => ({}));
+    if (resp.ok && data.ok) {
+      annotItems = annotItems.filter((a) => a.id !== id);
+      renderAnnotationsPanel();
+      renderAnnotOverlay();
+    }
+  } catch (_) {}
+}
+
+async function clearAnnotations() {
+  if (!current || sessionEnded) return;
+  try {
+    const resp = await fetch(annotationsApiPath(""), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "clear", status: "all" }),
+    });
+    const data = await resp.json().catch(() => ({}));
+    if (resp.ok && data.ok) {
+      annotItems = [];
+      renderAnnotationsPanel();
+      renderAnnotOverlay();
+    }
+  } catch (_) {}
+}
+
+function formatAnnotationBlock(item) {
+  const lines = [];
+  const act = item.activity || "unknown activity";
+  const statusTag = item.status === "resolved" ? " (resolved)" : "";
+  lines.push("### #" + item.id + " [" + (item.kind || "element") + "] — " + act + statusTag);
+  const nodes = Array.isArray(item.nodes) ? item.nodes : [];
+  if (nodes.length > 0) {
+    lines.push("- **Element:** " + formatNodeSummary(nodes[0]));
+    if (nodes.length > 1) {
+      const extras = nodes.slice(1, 5).map((n) => formatNodeSummary(n)).join("; ");
+      lines.push("- **Other intersecting views:** " + extras + (nodes.length > 5 ? " (+" + (nodes.length - 5) + " more)" : ""));
+    }
+  } else if (item.bounds) {
+    lines.push("- **Bounds:** `[" + item.bounds.join(",") + "]`");
+  }
+  lines.push("- **Comment:** " + item.comment);
+  if (item.screenshot_path) {
+    lines.push("- **Screenshot:** `" + item.screenshot_path + "`");
+  }
+  return lines.join("\n");
+}
+
+function formatAnnotationsForAgent(items) {
+  const list = Array.isArray(items) ? items : [];
+  if (!list.length) return "";
+  const sid = current ? current.session_id : "session";
+  const pkg = (current && current.package) || mirrorMeta.package || "";
+  const header = "Please address the following Android UI annotation" + (list.length === 1 ? "" : "s")
+    + " from ACOS session `" + sid + "`" + (pkg ? " (" + pkg + ")" : "") + ":";
+  const blocks = list.map(formatAnnotationBlock);
+  const footer = "Use `acos_annotations` (`{\"action\": \"resolve\", \"id\": <id>}`) once each item is fixed.";
+  return [header, "", blocks.join("\n\n"), "", footer].join("\n");
+}
+
+function renderAnnotationsPanel() {
+  const openItems = annotItems.filter((a) => a.status === "open");
+  annotOpenCount = openItems.length;
+  if (tabAnnotations) {
+    tabAnnotations.textContent = "Annotations (" + annotOpenCount + ")";
+  }
+  applyToolbarUi();
+  if (btnAnnotCopyAll) btnAnnotCopyAll.disabled = openItems.length === 0;
+  if (btnAnnotClear) btnAnnotClear.disabled = annotItems.length === 0;
+  if (!annotList || !annotEmpty) return;
+
+  const visible = annotShowResolvedFlag ? annotItems : openItems;
+  annotList.textContent = "";
+  annotEmpty.hidden = visible.length > 0;
+  if (!visible.length) {
+    annotEmpty.textContent = annotItems.length > 0
+      ? "All annotations are resolved. Toggle Resolved to review them."
+      : "No open annotations yet. Click Annotate to pick a view, draw a box, or sketch on the screen.";
+    return;
+  }
+
+  for (const item of visible) {
+    const li = el("li", "annot-item" + (item.status === "resolved" ? " resolved" : ""));
+    const head = el("div", "annot-item-head");
+    head.appendChild(el("span", "annot-num", "#" + item.id));
+    head.appendChild(el("span", "annot-tag", item.kind || "element"));
+    if (item.status === "resolved") {
+      head.appendChild(el("span", "annot-tag ok", "resolved"));
+    }
+    const actName = item.activity ? shortClassName(item.activity) : "-";
+    const actEl = el("span", "annot-act", actName);
+    actEl.title = item.activity || "";
+    head.appendChild(actEl);
+    li.appendChild(head);
+
+    const nodes = Array.isArray(item.nodes) ? item.nodes : [];
+    const viewSummary = nodes.length > 0
+      ? formatNodeSummary(nodes[0]) + (nodes.length > 1 ? " (+" + (nodes.length - 1) + " more)" : "")
+      : (item.bounds ? "[" + item.bounds.join(",") + "]" : "");
+    if (viewSummary) {
+      li.appendChild(el("div", "annot-view", viewSummary));
+    }
+
+    li.appendChild(el("div", "annot-comment", item.comment));
+
+    if (item.screenshot_path) {
+      const shotEl = el("div", "annot-shot", "png: " + projectName(item.screenshot_path));
+      shotEl.title = item.screenshot_path;
+      li.appendChild(shotEl);
+    }
+
+    const actions = el("div", "annot-item-actions");
+    const copyBtn = el("button", null, "Copy");
+    copyBtn.type = "button";
+    copyBtn.addEventListener("click", () => {
+      copyTextToClipboard(formatAnnotationsForAgent([item]), copyBtn, "Copy", "Copied!");
+    });
+    actions.appendChild(copyBtn);
+
+    if (item.status === "open") {
+      const resBtn = el("button", null, "Resolve");
+      resBtn.type = "button";
+      resBtn.addEventListener("click", () => resolveAnnotation(item.id));
+      actions.appendChild(resBtn);
+    }
+
+    const delBtn = el("button", "danger", "Delete");
+    delBtn.type = "button";
+    delBtn.addEventListener("click", () => deleteAnnotation(item.id));
+    actions.appendChild(delBtn);
+
+    li.appendChild(actions);
+    annotList.appendChild(li);
+  }
+}
+
+function handleAnnotPointerDown(e, pt) {
+  if (annotPending) closeAnnotPopover();
+  const { w: dw, h: dh } = currentDisplaySize();
+  const act = currentActivityName();
+  const pkg = mirrorMeta.package || (current && current.package) || "";
+
+  if (annotTool === "pick") {
+    const node = findDeepestNodeAt(pt);
+    const bounds = node
+      ? node.bounds
+      : [
+          Math.max(0, pt.x - 24),
+          Math.max(0, pt.y - 24),
+          Math.min(dw, pt.x + 24),
+          Math.min(dh, pt.y + 24),
+        ];
+    openAnnotPopover({
+      kind: "element",
+      bounds,
+      nodes: node ? [snapshotNode(node)] : [],
+      activity: act,
+      package: pkg,
+      display: { w: dw, h: dh },
+    });
+    return;
+  }
+
+  try { screenWrap.setPointerCapture(e.pointerId); } catch (_) {}
+  if (annotTool === "box") {
+    annotDraft = {
+      pointerId: e.pointerId,
+      tool: "box",
+      startPt: pt,
+      curPt: pt,
+      bounds: [pt.x, pt.y, Math.min(dw, pt.x + 1), Math.min(dh, pt.y + 1)],
+    };
+  } else {
+    annotDraft = {
+      pointerId: e.pointerId,
+      tool: "draw",
+      points: [pt],
+      bounds: [pt.x, pt.y, Math.min(dw, pt.x + 1), Math.min(dh, pt.y + 1)],
+    };
+  }
+  renderAnnotOverlay();
+}
+
+function handleAnnotPointerMove(e) {
+  if (annotDraft && e.pointerId === annotDraft.pointerId) {
+    const pt = clientToDisplay(e.clientX, e.clientY, true);
+    if (!pt) return;
+    if (annotDraft.tool === "box") {
+      annotDraft.curPt = pt;
+      annotDraft.bounds = [
+        Math.min(annotDraft.startPt.x, pt.x),
+        Math.min(annotDraft.startPt.y, pt.y),
+        Math.max(annotDraft.startPt.x, pt.x),
+        Math.max(annotDraft.startPt.y, pt.y),
+      ];
+    } else if (annotDraft.tool === "draw") {
+      const last = annotDraft.points[annotDraft.points.length - 1];
+      if (!last || Math.hypot(pt.x - last.x, pt.y - last.y) >= 3) {
+        if (annotDraft.points.length < 512) annotDraft.points.push(pt);
+      }
+    }
+    renderAnnotOverlay();
+    return;
+  }
+  if (annotTool === "pick" && !annotPending) {
+    const pt = clientToDisplay(e.clientX, e.clientY, false);
+    const hit = pt ? findDeepestNodeAt(pt) : null;
+    if (hit !== hoveredMirrorNode) {
+      hoveredMirrorNode = hit;
+      renderAnnotOverlay();
+    }
+  }
+}
+
+function finishAnnotPointer(e, cancelled) {
+  if (!annotDraft || e.pointerId !== annotDraft.pointerId) return;
+  const draft = annotDraft;
+  annotDraft = null;
+  try {
+    if (screenWrap.hasPointerCapture && screenWrap.hasPointerCapture(e.pointerId)) {
+      screenWrap.releasePointerCapture(e.pointerId);
+    }
+  } catch (_) {}
+  if (cancelled) {
+    renderAnnotOverlay();
+    return;
+  }
+  const { w: dw, h: dh } = currentDisplaySize();
+  const act = currentActivityName();
+  const pkg = mirrorMeta.package || (current && current.package) || "";
+
+  if (draft.tool === "box") {
+    const endPt = clientToDisplay(e.clientX, e.clientY, true) || draft.curPt;
+    const l = Math.min(draft.startPt.x, endPt.x);
+    const t = Math.min(draft.startPt.y, endPt.y);
+    const r = Math.max(draft.startPt.x, endPt.x);
+    const b = Math.max(draft.startPt.y, endPt.y);
+    if ((r - l) < 8 && (b - t) < 8) {
+      // Tiny drag: fall back to picking deepest element at click point
+      const node = findDeepestNodeAt(endPt);
+      const bounds = node
+        ? node.bounds
+        : [Math.max(0, l - 20), Math.max(0, t - 20), Math.min(dw, r + 20), Math.min(dh, b + 20)];
+      openAnnotPopover({
+        kind: "element",
+        bounds,
+        nodes: node ? [snapshotNode(node)] : [],
+        activity: act,
+        package: pkg,
+        display: { w: dw, h: dh },
+      });
+      return;
+    }
+    const bounds = [l, t, r, b];
+    openAnnotPopover({
+      kind: "box",
+      bounds,
+      nodes: findNodesIntersecting(bounds),
+      activity: act,
+      package: pkg,
+      display: { w: dw, h: dh },
+    });
+  } else if (draft.tool === "draw") {
+    const pts = draft.points;
+    let minX = dw, minY = dh, maxX = 0, maxY = 0;
+    for (const p of pts) {
+      if (p.x < minX) minX = p.x;
+      if (p.y < minY) minY = p.y;
+      if (p.x > maxX) maxX = p.x;
+      if (p.y > maxY) maxY = p.y;
+    }
+    if (maxX - minX < 12) { minX = Math.max(0, minX - 12); maxX = Math.min(dw, maxX + 12); }
+    if (maxY - minY < 12) { minY = Math.max(0, minY - 12); maxY = Math.min(dh, maxY + 12); }
+    const bounds = [Math.round(minX), Math.round(minY), Math.round(maxX), Math.round(maxY)];
+    openAnnotPopover({
+      kind: "freehand",
+      bounds,
+      nodes: findNodesIntersecting(bounds),
+      strokePts: pts,
+      activity: act,
+      package: pkg,
+      display: { w: dw, h: dh },
+    });
+  }
+}
+
 screenWrap.addEventListener("pointerdown", (e) => {
   if (!current || sessionEnded) return;
+  if (isInsideElement(e.target, annotPopover)) return;
   if (e.pointerType === "mouse" && e.button !== 0) return;
   const pt = clientToDisplay(e.clientX, e.clientY, false);
   if (!pt) return;
   e.preventDefault();
+  if (annotMode) {
+    handleAnnotPointerDown(e, pt);
+    return;
+  }
   screenWrap.focus({ preventScroll: true });
   if (current.watch_only) {
     applyToolbarUi();
@@ -1706,6 +2975,10 @@ screenWrap.addEventListener("pointerdown", (e) => {
 });
 
 screenWrap.addEventListener("pointermove", (e) => {
+  if (annotMode) {
+    handleAnnotPointerMove(e);
+    return;
+  }
   const entry = activePointers.get(e.pointerId);
   if (!entry) return;
   const pt = clientToDisplay(e.clientX, e.clientY, true);
@@ -1724,7 +2997,19 @@ screenWrap.addEventListener("pointermove", (e) => {
   updatePointerVisuals(entry);
 });
 
+screenWrap.addEventListener("pointerleave", () => {
+  if (hoveredMirrorNode) {
+    hoveredMirrorNode = null;
+    renderAnnotOverlay();
+  }
+});
+
 function finishPointer(e, phase) {
+  if (annotDraft && e.pointerId === annotDraft.pointerId) {
+    finishAnnotPointer(e, phase === "cancel");
+    return;
+  }
+  if (annotMode) return;
   const entry = activePointers.get(e.pointerId);
   if (!entry) return;
   const pt = clientToDisplay(e.clientX, e.clientY, true) || { x: entry.x, y: entry.y };
@@ -1760,7 +3045,8 @@ screenWrap.addEventListener("pointerup", (e) => finishPointer(e, "up"));
 screenWrap.addEventListener("pointercancel", (e) => finishPointer(e, "cancel"));
 
 screenWrap.addEventListener("wheel", (e) => {
-  if (!current || sessionEnded) return;
+  if (!current || sessionEnded || annotMode) return;
+  if (isInsideElement(e.target, annotPopover)) return;
   if (!hasDecodedFrame() || isRotationPending() || activePointers.size > 0) return;
   const pt = clientToDisplay(e.clientX, e.clientY, false);
   if (!pt) return;
@@ -1786,7 +3072,23 @@ screenWrap.addEventListener("wheel", (e) => {
 }, { passive: false });
 
 document.addEventListener("keydown", (e) => {
-  if (!current || detail.hidden || current.watch_only || sessionEnded) return;
+  if (!current || detail.hidden || sessionEnded) return;
+  if (!annotPopover.hidden) {
+    if (e.key === "Escape") {
+      e.preventDefault();
+      closeAnnotPopover();
+    }
+    return;
+  }
+  if (isEditableElement(e.target) || isEditableElement(document.activeElement)) return;
+  if (annotMode) {
+    if (e.key === "Escape") {
+      e.preventDefault();
+      setAnnotMode(false);
+    }
+    return;
+  }
+  if (current.watch_only) return;
   if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey) {
     if (e.key && e.key.toLowerCase() === "a" && document.activeElement === screenWrap) {
       e.preventDefault();
@@ -1817,6 +3119,9 @@ document.addEventListener("keydown", (e) => {
 
 document.addEventListener("keyup", (e) => {
   if (!current || detail.hidden) return;
+  if (!annotPopover.hidden || annotMode || isEditableElement(e.target) || isEditableElement(document.activeElement)) {
+    return;
+  }
   const kc = KEY_MAP[e.key];
   if (kc && heldGuestKeys.delete(kc)) {
     e.preventDefault();
@@ -1826,6 +3131,9 @@ document.addEventListener("keyup", (e) => {
 
 document.addEventListener("paste", (e) => {
   if (!current || detail.hidden || current.watch_only || sessionEnded) return;
+  if (!annotPopover.hidden || annotMode || isEditableElement(e.target) || isEditableElement(document.activeElement)) {
+    return;
+  }
   const raw = (e.clipboardData && e.clipboardData.getData("text/plain")) || "";
   if (!raw) return;
   e.preventDefault();
@@ -1907,6 +3215,53 @@ btnRotate.addEventListener("click", () => {
   screenWrap.focus({ preventScroll: true });
 });
 
+btnAnnotate.addEventListener("click", () => {
+  setAnnotMode(!annotMode);
+});
+btnAnnotPick.addEventListener("click", () => setAnnotTool("pick"));
+btnAnnotBox.addEventListener("click", () => setAnnotTool("box"));
+btnAnnotDraw.addEventListener("click", () => setAnnotTool("draw"));
+btnAnnotCopy.addEventListener("click", () => {
+  const openItems = annotItems.filter((a) => a.status === "open");
+  if (!openItems.length) return;
+  copyTextToClipboard(formatAnnotationsForAgent(openItems), btnAnnotCopy, "Copy for Agent", "Copied!");
+});
+annotSubmit.addEventListener("click", () => submitAnnotation());
+annotCancel.addEventListener("click", () => closeAnnotPopover());
+annotComment.addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && !e.shiftKey) {
+    e.preventDefault();
+    submitAnnotation();
+  } else if (e.key === "Escape") {
+    e.preventDefault();
+    closeAnnotPopover();
+  }
+});
+tabActivity.addEventListener("click", () => setAsideTab("activity"));
+tabAnnotations.addEventListener("click", () => setAsideTab("annotations"));
+btnAnnotCopyAll.addEventListener("click", () => {
+  const openItems = annotItems.filter((a) => a.status === "open");
+  if (!openItems.length) return;
+  copyTextToClipboard(formatAnnotationsForAgent(openItems), btnAnnotCopyAll, "Copy All for Agent", "Copied!");
+});
+btnAnnotClear.addEventListener("click", () => clearAnnotations());
+annotShowResolved.addEventListener("change", () => {
+  annotShowResolvedFlag = !!annotShowResolved.checked;
+  renderAnnotationsPanel();
+});
+
+window.addEventListener("resize", () => {
+  if (current && !detail.hidden) positionMirrorDom();
+});
+if (typeof ResizeObserver === "function" && screenWrap) {
+  try {
+    const ro = new ResizeObserver(() => {
+      if (current && !detail.hidden) positionMirrorDom();
+    });
+    ro.observe(screenWrap);
+  } catch (_) {}
+}
+
 $("back").addEventListener("click", closeSession);
 window.addEventListener("blur", () => {
   releaseHeldGuestKeys();
@@ -1919,6 +3274,7 @@ document.addEventListener("visibilitychange", () => {
   }
 });
 window.addEventListener("pagehide", () => {
+  cancelMirrorFetch();
   closeWs();
   stopFrameStream();
   if (source) { source.close(); source = null; }
@@ -1927,6 +3283,8 @@ window.addEventListener("pageshow", (e) => {
   if (e.persisted && current && !sessionEnded && current.stream) {
     connectEvents(current);
     startFrameStream(current.session_id);
+    scheduleTreeRefresh(200);
+    fetchAnnotations();
   }
 });
 refresh();
@@ -1941,7 +3299,7 @@ if (location.hash.startsWith("#s=")) {
 </script>
 </body>
 </html>
-"##;
+"####;
 
 #[cfg(test)]
 mod tests {
@@ -2382,6 +3740,143 @@ assert.equal(h.capTray.children.includes(recC.card), true);
 h.advanceTimers(1);
 assert.equal(h.eval(`capabilityCards.has(1)`), false);
 assert.equal(h.capTray.children.includes(recC.card), false);
+"#,
+        );
+    }
+
+    #[test]
+    fn mirror_dom_and_annotate_mode_js_behavior() {
+        run_page_js_scenario(
+            r#"
+const h = createHarness();
+h.eval(`
+  openSession({
+    session_id: "sess-annot",
+    guest_gen: 1,
+    stream: false,
+    watch_only: false,
+    package: "com.example.shop",
+    activity: "com.example.shop/.LoginActivity",
+    display: { w: 1000, h: 2000 },
+  });
+  frame.width = 1000;
+  frame.height = 2000;
+  frameSize = { w: 1000, h: 2000 };
+  display = { w: 1000, h: 2000 };
+  mirrorMeta = {
+    activity: "com.example.shop/.LoginActivity",
+    package: "com.example.shop",
+    display: { w: 1000, h: 2000 },
+  };
+  mirrorNodes = flattenTreeNodes(
+    {
+      nodes: [
+        {
+          class: "android.widget.LinearLayout",
+          bounds: "[0,0][1000,2000]",
+          visible: true,
+          clickable: false,
+          children: [
+            {
+              class: "android.widget.Button",
+              resource_id: "com.example.shop:id/btn_login",
+              text: "Sign in",
+              bounds: "[100,400][900,600]",
+              visible: true,
+              clickable: true,
+              children: [],
+            },
+            {
+              class: "android.widget.TextView",
+              text: "Hidden",
+              bounds: "[0,0][100,100]",
+              visible: false,
+              clickable: false,
+              children: [],
+            },
+          ],
+        },
+      ],
+    },
+    "com.example.shop/.LoginActivity",
+    "com.example.shop",
+    { w: 1000, h: 2000 }
+  );
+  renderMirrorDom();
+`);
+
+// 1. Preorder Mirror DOM: LinearLayout parent before Button child, invisible node excluded.
+assert.equal(h.eval(`mirrorDom.children.length`), 2);
+assert.equal(h.eval(`mirrorDom.children[0].attrs.get("data-android-class")`), "android.widget.LinearLayout");
+assert.equal(h.eval(`mirrorDom.children[1].attrs.get("data-acos-node")`), "1");
+assert.equal(h.eval(`mirrorDom.children[1].attrs.get("data-android-class")`), "android.widget.Button");
+assert.equal(h.eval(`mirrorDom.children[1].attrs.get("data-resource-id")`), "com.example.shop:id/btn_login");
+assert.equal(h.eval(`mirrorDom.children[1].attrs.get("data-text")`), "Sign in");
+assert.equal(h.eval(`mirrorDom.children[1].attrs.get("data-bounds")`), "[100,400,900,600]");
+assert.equal(h.eval(`mirrorDom.children[1].attrs.get("data-clickable")`), "true");
+assert.equal(
+  h.eval(`mirrorDom.children[1].attrs.get("aria-label")`),
+  'Button "Sign in" (id: btn_login) [100,400,900,600]'
+);
+
+// 2. Normal phone interaction still works when Annotate mode is OFF even if target is a mirror node.
+h.eval(`
+  screenWrap.dispatchEvent({
+    type: "pointerdown",
+    pointerType: "mouse",
+    button: 0,
+    pointerId: 1,
+    clientX: 50,
+    clientY: 50,
+    target: mirrorDom.children[1],
+    preventDefault() {},
+  });
+`);
+assert.equal(h.createdSockets.length, 1);
+assert.equal(h.createdSockets[0].sent.length, 1);
+assert.equal(JSON.parse(h.createdSockets[0].sent[0]).t, "touch");
+assert.equal(JSON.parse(h.createdSockets[0].sent[0]).phase, "down");
+
+// 3. Turning Annotate mode ON cancels active pointers and pauses guest touch forwarding.
+h.eval(`setAnnotMode(true);`);
+const sentBeforeAnnot = h.createdSockets[0].sent.length;
+h.eval(`
+  screenWrap.dispatchEvent({
+    type: "pointerdown",
+    pointerType: "mouse",
+    button: 0,
+    pointerId: 2,
+    clientX: 50,
+    clientY: 50,
+    target: mirrorDom.children[1],
+    preventDefault() {},
+  });
+`);
+assert.equal(h.createdSockets[0].sent.length, sentBeforeAnnot, "annotating must not send guest touches");
+assert.equal(h.eval(`annotPopover.hidden`), false);
+assert.equal(h.eval(`annotPending.kind`), "element");
+assert.equal(h.eval(`annotPending.nodes.length`), 1);
+assert.equal(h.eval(`annotPending.nodes[0].resource_id`), "com.example.shop:id/btn_login");
+
+// 4. Copy for Agent formatting includes id, activity, element metadata, comment, and screenshot path.
+const md = h.eval(`
+  formatAnnotationsForAgent([
+    {
+      id: 1,
+      kind: "element",
+      status: "open",
+      activity: "com.example.shop/.LoginActivity",
+      bounds: [100, 400, 900, 600],
+      nodes: [{ class: "android.widget.Button", resource_id: "com.example.shop:id/btn_login", text: "Sign in", bounds: [100, 400, 900, 600] }],
+      comment: "Increase button height to 48dp",
+      screenshot_path: "/tmp/acos/annotations/1.png",
+    },
+  ])
+`);
+assert.match(md, /### #1 \[element\] — com\.example\.shop\/\.LoginActivity/);
+assert.match(md, /Button · #btn_login · "Sign in" · \[100,400,900,600\]/);
+assert.match(md, /Increase button height to 48dp/);
+assert.match(md, /\/tmp\/acos\/annotations\/1\.png/);
 "#,
         );
     }

@@ -2473,6 +2473,16 @@ impl SessionBackend {
             "acos_destroy" => Some(self.call_destroy(&request_id, args, ctx)),
             "acos_text" => Some(self.call_text(&request_id, args, ctx)),
             "acos_doctor" => Some(self.cli.call_doctor(&request_id, args, ctx)),
+            "acos_annotations" => Some(Envelope::failure(
+                &request_id,
+                ProtocolBackend::AcosNative,
+                Fidelity::NativeRuntime,
+                ProtocolError::new(
+                    ErrorCode::UnsupportedBackend,
+                    "acos_annotations requires a live ART session daemon (`acos serve`)",
+                ),
+                Metrics::wall_ms(0),
+            )),
             _ => None,
         }
     }
