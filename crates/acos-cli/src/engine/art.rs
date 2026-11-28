@@ -2956,6 +2956,7 @@ impl ArtSession {
                 if let Some(port) = metro_port {
                     let metro = acos_verify::symbolicate::http_call(
                         "127.0.0.1", port, "POST", "/reload", None, Duration::from_secs(5),
+                        64 * 1024,
                     );
                     value["metro_reload"] = match metro {
                         Ok((status, body)) if (200..300).contains(&status) => {

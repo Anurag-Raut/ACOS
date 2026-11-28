@@ -97,16 +97,7 @@ pub fn merge_string_pref(existing: Option<&str>, key: &str, value: &str) -> Resu
         let Some(start) = rest[..at].rfind('<') else {
             break;
         };
-        let tail = &rest[at..];
-        let end = match (tail.find("/>"), tail.find("</")) {
-            (Some(self_close), Some(close_tag)) if self_close < close_tag => at + self_close + 2,
-            (_, Some(close_tag)) => {
-                let after = at + close_tag;
-                after + rest[after..].find('>').map_or(0, |i| i + 1)
-            }
-            (Some(self_close), None) => at + self_close + 2,
-            (None, None) => return Err(format!("unterminated entry for `{key}`")),
-        };
+        let end = start + element_end(&rest[start..]).ok_or_else(|| format!("unterminated entry for `{key}`"))?;
         // the element's own line (indentation + newline) goes with it
         let line_start = rest[..start].rfind('\n').map_or(start, |i| i + 1);
         let line_start = if rest[line_start..start].trim().is_empty() {
@@ -129,6 +120,52 @@ pub fn merge_string_pref(existing: Option<&str>, key: &str, value: &str) -> Resu
     body.push_str(&element);
     body.push_str(&text[close..]);
     Ok(body)
+}
+
+/// The byte length of the element that starts at `text[0] == '<'`: a
+/// self-closing `<tag ... />`, or `<tag ...>` up to its **matching** `</tag>`
+/// (same-name nesting counted), so a `<set name="k"><string>v</string></set>`
+/// is removed whole instead of at its first inner `</string>`.
+fn element_end(text: &str) -> Option<usize> {
+    let open_end = text.find('>')?;
+    if text[..open_end].ends_with('/') {
+        return Some(open_end + 1);
+    }
+    let name: String = text[1..]
+        .chars()
+        .take_while(|c| !c.is_whitespace() && *c != '>' && *c != '/')
+        .collect();
+    if name.is_empty() {
+        return None;
+    }
+    let (open, close) = (format!("<{name}"), format!("</{name}>"));
+    let mut depth = 1usize;
+    let mut cursor = open_end + 1;
+    while depth > 0 {
+        let rest = &text[cursor..];
+        let next_close = rest.find(&close)?;
+        // a nested opening tag of the same name before that close
+        let nested = rest[..next_close].match_indices(&open).find(|(i, _)| {
+            rest[i + open.len()..]
+                .chars()
+                .next()
+                .is_some_and(|c| c.is_whitespace() || c == '>' || c == '/')
+        });
+        match nested {
+            Some((i, _)) => {
+                let tag_end = rest[i..].find('>')? + i;
+                if !rest[..tag_end].ends_with('/') {
+                    depth += 1;
+                }
+                cursor += tag_end + 1;
+            }
+            None => {
+                depth -= 1;
+                cursor += next_close + close.len();
+            }
+        }
+    }
+    Some(cursor)
 }
 
 /// Write `debug_http_host = host_port` into `<data_dir>`'s default prefs.
@@ -160,18 +197,30 @@ pub fn write_debug_http_host(
     Ok(path)
 }
 
-/// The launcher hook: apply [`DEBUG_HTTP_HOST_ENV`] when it is set. Returns a
-/// diagnostic line for the launch log (`None` when unset: zero work).
-pub fn apply_from_env(data_dir: &Path, package: &str) -> Option<String> {
-    let value = std::env::var(DEBUG_HTTP_HOST_ENV).ok()?;
+/// The launcher hook: apply [`DEBUG_HTTP_HOST_ENV`] when it is set.
+///
+/// Unset (or empty) is `Ok(None)` and does no work. Set, it is an explicit
+/// request: an invalid value or a failed write is an `Err` the launch must
+/// report, never a log line next to a session that silently dials the wrong host.
+pub fn apply_from_env(data_dir: &Path, package: &str) -> io::Result<Option<String>> {
+    let Ok(value) = std::env::var(DEBUG_HTTP_HOST_ENV) else {
+        return Ok(None);
+    };
+    apply_value(data_dir, package, &value)
+}
+
+fn apply_value(data_dir: &Path, package: &str, value: &str) -> io::Result<Option<String>> {
     let value = value.trim();
     if value.is_empty() {
-        return None;
+        return Ok(None);
     }
-    Some(match write_debug_http_host(data_dir, package, value) {
-        Ok(path) => format!("rn: debug_http_host={value} -> {}", path.display()),
-        Err(error) => format!("rn: debug_http_host not written: {error}"),
-    })
+    let path = write_debug_http_host(data_dir, package, value).map_err(|error| {
+        io::Error::new(
+            error.kind(),
+            format!("{DEBUG_HTTP_HOST_ENV} was set but debug_http_host was not written: {error}"),
+        )
+    })?;
+    Ok(Some(format!("rn: debug_http_host={value} -> {}", path.display())))
 }
 
 #[cfg(test)]
@@ -208,6 +257,41 @@ mod tests {
             text.contains("<map>\n    <string name=\"k\">v</string>\n</map>"),
             "{text}"
         );
+    }
+
+    #[test]
+    fn a_nested_set_entry_is_removed_whole() {
+        let existing = "<?xml version='1.0' ?>\n<map>\n    <set name=\"debug_http_host\">\n        <string>old</string>\n        <string>older</string>\n    </set>\n    <string name=\"keep\">yes</string>\n</map>\n";
+        let text = merge_string_pref(Some(existing), DEBUG_HTTP_HOST_KEY, "localhost:8081").unwrap();
+        assert!(!text.contains("old"), "{text}");
+        assert!(!text.contains("</set>"), "{text}");
+        assert!(text.contains("<string name=\"keep\">yes</string>"), "{text}");
+        assert_eq!(
+            text,
+            "<?xml version='1.0' ?>\n<map>\n    <string name=\"keep\">yes</string>\n    <string name=\"debug_http_host\">localhost:8081</string>\n</map>\n"
+        );
+        // a self-closing entry
+        let text = merge_string_pref(
+            Some("<map>\n    <int name=\"debug_http_host\" value=\"3\" />\n</map>\n"),
+            DEBUG_HTTP_HOST_KEY,
+            "localhost:1",
+        )
+        .unwrap();
+        assert_eq!(text, "<map>\n    <string name=\"debug_http_host\">localhost:1</string>\n</map>\n");
+        // unterminated is refused, never clobbered
+        assert!(merge_string_pref(Some("<map><set name=\"debug_http_host\"><string>x</string></map>"), DEBUG_HTTP_HOST_KEY, "a:1").is_err());
+    }
+
+    #[test]
+    fn an_explicit_invalid_request_is_an_error_and_unset_is_a_no_op() {
+        let dir = std::env::temp_dir().join(format!("acos-rn-prefs-env-{}", std::process::id()));
+        assert!(apply_value(&dir, "p", "").unwrap().is_none());
+        assert!(apply_value(&dir, "p", "   ").unwrap().is_none());
+        let error = apply_value(&dir, "p", "10.0.2.2").unwrap_err();
+        assert!(error.to_string().contains("was set but debug_http_host was not written"), "{error}");
+        assert!(!dir.exists(), "nothing is written for a refused value");
+        assert!(apply_value(&dir, "p", "localhost:8081").unwrap().is_some());
+        let _ = fs::remove_dir_all(&dir);
     }
 
     #[test]

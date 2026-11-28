@@ -55,13 +55,31 @@ steps:
       text: {exact: "Hello ACOS"}
       timeout_ms: 120000
 
-  # The bug: onPress calls an undefined function (a runtime ReferenceError).
+  # The bug: onPress calls an undefined function (a runtime ReferenceError),
+  # paired with a visible marker change so we can wait for the guest to apply
+  # the /hot update before tapping. Editing the marker second also keeps
+  # `fast_refresh`'s bundle probe on plain string text (independent of Babel's
+  # trailing-comma and arrow-parameter formatting).
   - dev_server:
       op: edit
       file: App.js
-      find: "onPress: () => setCount((c) => c + 1),"
-      replace: "onPress: () => acosMissingFunction(),"
+      find: "onPress: () => setCount((c) => c + 1)"
+      replace: "onPress: () => acosMissingFunction()"
+  - dev_server:
+      op: edit
+      file: App.js
+      find: "Hello ACOS"
+      replace: "Hello Redbox"
+  - dev_server:
+      op: wait_serves
+      contains: "acosMissingFunction"
+      timeout_ms: 120000
   - dev_server: {op: fast_refresh, timeout_ms: 120000}
+
+  - assert_text:
+      selector: {text: {exact: "Hello Redbox"}}
+      text: {exact: "Hello Redbox"}
+      timeout_ms: 60000
 
   - tap:
       x: 540
@@ -75,22 +93,42 @@ steps:
       symbolicated: true
       timeout_ms: 60000
 
-  # The fix, delivered by Fast Refresh; the redbox must be gone.
+  # The fix, delivered by Fast Refresh: wait for the restored marker, confirm
+  # the redbox is gone, and prove the button increments the counter again.
   - dev_server:
       op: edit
       file: App.js
-      find: "onPress: () => acosMissingFunction(),"
-      replace: "onPress: () => setCount((c) => c + 1),"
+      find: "onPress: () => acosMissingFunction()"
+      replace: "onPress: () => setCount((c) => c + 1)"
+  - dev_server:
+      op: edit
+      file: App.js
+      find: "Hello Redbox"
+      replace: "Hello Fixed"
+  - dev_server:
+      op: wait_serves
+      contains: "setCount"
+      absent: "acosMissingFunction"
+      timeout_ms: 120000
   - dev_server: {op: fast_refresh, timeout_ms: 120000}
+
+  - assert_text:
+      selector: {text: {exact: "Hello Fixed"}}
+      text: {exact: "Hello Fixed"}
+      timeout_ms: 60000
 
   - assert_js_error:
       none: true
       since_previous_step: true
       timeout_ms: 30000
 
+  - tap:
+      x: 540
+      y: 1277
+
   - assert_text:
-      selector: {text: {exact: "Hello ACOS"}}
-      text: {exact: "Hello ACOS"}
-      timeout_ms: 60000
+      selector: {text: {exact: "count: 1"}}
+      text: {exact: "count: 1"}
+      timeout_ms: 30000
 
   - dev_server: {op: stop}

@@ -513,6 +513,16 @@ impl Step {
         self.as_step().map(|step| step.kind()).unwrap_or("empty")
     }
 
+    /// Whether running this step can boot a **deferred** guest (METRO3b: a
+    /// scenario whose `dev_server` starts first boots the guest on the first
+    /// step that needs it). Only host-side steps (`dev_server`, `wait`) never
+    /// touch the guest; every other step may observe, drive or launch it, so a
+    /// launch-time setting (`debug_http_host`) must come before all of them.
+    #[must_use]
+    pub fn may_boot_guest(&self) -> bool {
+        !matches!(self.as_step(), Some(StepRef::DevServer(_) | StepRef::Wait(_)) | None)
+    }
+
     /// Convenience: a `back` step.
     pub fn back() -> Self {
         Step {
@@ -1696,13 +1706,16 @@ fn validate_dev_server(
             if running {
                 v.push(path, "a dev server is already running; `stop` it first");
             }
-            if dev.debug_http_host == Some(true)
-                && scenario.steps[..index].iter().any(|step| step.launch.is_some())
-            {
-                v.push(
-                    format!("{path}.debug_http_host"),
-                    "`debug_http_host` is written before the guest boots: the `start` step must come before the first `launch`",
-                );
+            if dev.debug_http_host == Some(true) {
+                if let Some(boot) = scenario.steps[..index].iter().find(|step| step.may_boot_guest()) {
+                    v.push(
+                        format!("{path}.debug_http_host"),
+                        format!(
+                            "`debug_http_host` is written before the guest boots: the `start` step must come before the first guest step (an earlier `{}` boots it)",
+                            boot.kind()
+                        ),
+                    );
+                }
             }
             match &dev.project {
                 None => v.push(format!("{path}.project"), "`start` needs `project`"),
@@ -2913,6 +2926,7 @@ steps:
             "  - assert_js_error: {none: true, since_previous_step: true}\n",
             "  - assert_js_error: {bundle_unreachable: true}\n",
             "  - dev_server: {op: start, project: p, port: 8081, debug_http_host: true}\n  - dev_server: {op: dev_menu}\n",
+            "  - wait: {ms: 5}\n  - dev_server: {op: start, project: p, port: 8081, debug_http_host: true}\n",
         ] {
             assert!(check(ok).is_empty(), "{ok}: {:?}", check(ok));
         }
@@ -2926,7 +2940,8 @@ steps:
             ("  - assert_js_error: {name: E, timeout_ms: 0}\n", "between 1 and 300000"),
             ("  - assert_js_error: {name: E, nope: 1}\n", "unknown field"),
             ("  - dev_server: {op: dev_menu}\n", "no dev server is running"),
-            ("  - launch: {activity: a/.M}\n  - dev_server: {op: start, project: p, port: 8081, debug_http_host: true}\n", "before the first `launch`"),
+            ("  - launch: {activity: a/.M}\n  - dev_server: {op: start, project: p, port: 8081, debug_http_host: true}\n", "an earlier `launch` boots it"),
+            ("  - key: {key: menu}\n  - dev_server: {op: start, project: p, port: 8081, debug_http_host: true}\n", "an earlier `key` boots it"),
             ("  - dev_server: {op: start, project: p, port: 8081}\n  - dev_server: {op: reload, debug_http_host: true}\n", "only applies to op `start`"),
             ("  - dev_server: {op: start, project: p, port: 8081}\n  - dev_server: {op: dev_menu, timeout_ms: 5}\n", "only applies to"),
         ] {

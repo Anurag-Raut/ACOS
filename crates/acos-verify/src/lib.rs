@@ -36,6 +36,7 @@ pub mod artifacts;
 pub mod assertions;
 pub mod backend;
 pub mod clock;
+pub mod deadline_io;
 pub mod dev_server;
 pub mod display;
 pub mod error;

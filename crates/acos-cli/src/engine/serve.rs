@@ -3636,6 +3636,35 @@ fn core_service_ctl(session: &mut ArtSession, args: &Value) -> Result<Value, Bac
 }
 
 fn logs(session: &mut ArtSession, artifacts: &Path, args: &Value) -> Result<Value, BackendError> {
+    // Arguments first: an invalid one fails before the guest buffer is read
+    // or Metro is contacted for symbolication (which holds the session).
+    let all = args.get("all").and_then(Value::as_bool).unwrap_or(false);
+    let requested = args.get("min_priority");
+    let explicit_priority = match requested {
+        None | Some(Value::Null) => None,
+        Some(value) => {
+            let text = match value {
+                Value::String(text) => text.clone(),
+                Value::Number(number) => number.to_string(),
+                other => other.to_string(),
+            };
+            match acos_runtime::session::parse_log_priority(&text) {
+                Some(priority) => Some(priority),
+                None => {
+                    return Err(BackendError::Error {
+                        code: ErrorCode::InvalidArgument,
+                        detail: format!(
+                        "min_priority `{text}` is not a logcat priority; use V/D/I/W/E/F or 2..7"
+                    ),
+                    })
+                }
+            }
+        }
+    };
+    let tag = args
+        .get("tag")
+        .and_then(Value::as_str)
+        .map(str::to_ascii_lowercase);
     let records = session.logs_since(0)?;
     // METRO4/METRO6: the React Native redbox as data, read from the whole
     // buffer (not the filtered view). Only an app that logged on a React Native
@@ -3666,33 +3695,6 @@ fn logs(session: &mut ArtSession, artifacts: &Path, args: &Value) -> Result<Valu
                 .display()
                 .to_string()
         });
-    let all = args.get("all").and_then(Value::as_bool).unwrap_or(false);
-    let requested = args.get("min_priority");
-    let explicit_priority = match requested {
-        None | Some(Value::Null) => None,
-        Some(value) => {
-            let text = match value {
-                Value::String(text) => text.clone(),
-                Value::Number(number) => number.to_string(),
-                other => other.to_string(),
-            };
-            match acos_runtime::session::parse_log_priority(&text) {
-                Some(priority) => Some(priority),
-                None => {
-                    return Err(BackendError::Error {
-                        code: ErrorCode::InvalidArgument,
-                        detail: format!(
-                        "min_priority `{text}` is not a logcat priority; use V/D/I/W/E/F or 2..7"
-                    ),
-                    })
-                }
-            }
-        }
-    };
-    let tag = args
-        .get("tag")
-        .and_then(Value::as_str)
-        .map(str::to_ascii_lowercase);
     let package = session.package().to_string();
     // An explicit request disables the default package union: the caller asked
     // for one filter and must get exactly that.

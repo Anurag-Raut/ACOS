@@ -910,18 +910,21 @@ fn scenario_debug_http_host(scenario_path: &Path) -> Option<String> {
     debug_http_host_of(&parsed)
 }
 
+/// The **latest** explicit request before the first step that can boot the
+/// guest (`start 8081 -> stop -> start 19000 -> launch` points at 19000).
 fn debug_http_host_of(scenario: &acos_protocol::scenario::Scenario) -> Option<String> {
+    let mut requested = None;
     for step in &scenario.steps {
-        if step.launch.is_some() {
-            return None;
+        if step.may_boot_guest() {
+            break;
         }
         if let Some(dev) = &step.dev_server {
             if dev.op == acos_protocol::scenario::DevServerOp::Start && dev.debug_http_host == Some(true) {
-                return Some(format!("localhost:{}", dev.port.unwrap_or(8081)));
+                requested = Some(format!("localhost:{}", dev.port.unwrap_or(8081)));
             }
         }
     }
-    None
+    requested
 }
 
 /// The verifier reads the guest's log **between steps**, so the entries the
@@ -1736,6 +1739,10 @@ mod final_logd_merge_tests {
         assert_eq!(super::debug_http_host_of(&without), None, "opt-in only");
         let after = parse("  - launch: {activity: a/.Main}\n  - dev_server: {op: start, project: p, port: 8081, debug_http_host: true}\n");
         assert_eq!(super::debug_http_host_of(&after), None);
+        let restarted = parse("  - dev_server: {op: start, project: p, port: 8081, debug_http_host: true}\n  - dev_server: {op: stop}\n  - dev_server: {op: start, project: p, port: 19000, debug_http_host: true}\n  - launch: {activity: a/.Main}\n");
+        assert_eq!(super::debug_http_host_of(&restarted).as_deref(), Some("localhost:19000"), "the latest request wins");
+        let key_first = parse("  - key: {key: menu}\n  - dev_server: {op: start, project: p, port: 8081, debug_http_host: true}\n");
+        assert_eq!(super::debug_http_host_of(&key_first), None, "a key step already booted the guest");
     }
 
     #[test]

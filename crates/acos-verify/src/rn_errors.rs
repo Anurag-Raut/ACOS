@@ -90,6 +90,42 @@ pub fn metro_port_hint(records: &[LogRecord]) -> Option<u16> {
         })
 }
 
+/// Whether an `assert_js_error` wait can stop on this (un-symbolicated) slice.
+///
+/// It stops when the assertion already holds; on a bundle failure for a
+/// JS-error assertion (a distinct terminal verdict); and when the latest JS
+/// error matches every constraint that does not need symbolication
+/// (`file`/`line`/`symbolicated` are judged after the step symbolicates).
+/// `none: true` and `bundle_unreachable: true` wait until they hold.
+#[must_use]
+pub fn wait_settled(
+    assertion: &acos_protocol::scenario::JsErrorAssertion,
+    state: &RnDevState,
+    unreachable_last: bool,
+) -> bool {
+    match check(assertion, state, unreachable_last) {
+        JsCheck::Pass(_) => true,
+        _ if assertion.none == Some(true) || assertion.bundle_unreachable == Some(true) => false,
+        JsCheck::Unreachable(_) => true,
+        JsCheck::Fail(_) => {
+            let needs_mapping = assertion.file.is_some() || assertion.symbolicated == Some(true);
+            let unmapped = state.js_error.as_ref().is_some_and(|error| !error.symbolicated);
+            if !(needs_mapping && unmapped) {
+                return false;
+            }
+            let relaxed = acos_protocol::scenario::JsErrorAssertion {
+                file: None,
+                line: None,
+                symbolicated: None,
+                ..assertion.clone()
+            };
+            let has_other = relaxed.name.is_some() || relaxed.message.is_some();
+            // nothing else to match: any unmapped error may become the frame asked for
+            !has_other || matches!(check(&relaxed, state, unreachable_last), JsCheck::Pass(_))
+        }
+    }
+}
+
 /// The outcome of an `assert_js_error` check.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum JsCheck {
@@ -215,53 +251,73 @@ pub fn check(
     }
 }
 
-/// Parse the texts of a UI tree (the redbox dialog itself), in tree order.
+/// One UI node as the redbox parser needs it: `(resource_id, text)`, in tree order.
+pub type UiText<'a> = (&'a str, &'a str);
+
+/// The redbox's own view ids (`res/devsupport/layout/redbox_*.xml`).
+fn has_id(resource_id: &str, id: &str) -> bool {
+    resource_id == id || resource_id.ends_with(&format!(":id/{id}")) || resource_id.ends_with(&format!("/{id}"))
+}
+
+/// Parse the redbox dialog itself from the UI tree, in tree order.
 ///
-/// `RedBoxContentView` shows the message as the first row and every frame as a
-/// method-name row followed by a `file:line:column` row.
+/// Only React Native's `RedBoxContentView` counts: it is recognised by its own
+/// view ids (`rn_redbox_stack`, `catalyst_redbox_title`,
+/// `rn_redbox_dismiss_button` + `rn_redbox_reload_button`), never by labels —
+/// an app screen with an "Error: ..." text and its own Dismiss/Reload buttons
+/// is not a redbox. The title is `catalyst_redbox_title`; every frame is an
+/// `rn_frame_method` row followed by its `rn_frame_file` row
+/// (`StackTraceHelper.formatFrameSource`: `file[:line[:column]]`).
 #[must_use]
-pub fn parse_ui_texts(texts: &[String]) -> RnDevState {
+pub fn parse_ui(nodes: &[UiText<'_>]) -> RnDevState {
     let mut state = RnDevState::default();
-    let joined = texts.join("\n");
-    if let Some(error) = unreachable_from_text(&joined, "ui") {
+    let any = |id: &str| nodes.iter().any(|(rid, _)| has_id(rid, id));
+    let redbox = any("rn_redbox_stack")
+        || any("catalyst_redbox_title")
+        || (any("rn_redbox_dismiss_button") && any("rn_redbox_reload_button"));
+    if !redbox {
+        return state;
+    }
+    let texts: Vec<String> = nodes
+        .iter()
+        .map(|(_, text)| text.trim().to_string())
+        .filter(|text| !text.is_empty())
+        .collect();
+    if let Some(error) = unreachable_from_text(&texts.join("\n")) {
         state.bundle_unreachable = Some(error);
         return state;
     }
-    // Only a redbox is a redbox: an app screen that merely shows "Error: ..."
-    // must never read as a JS error. `RedBoxContentView` always has its
-    // Dismiss and Reload buttons.
-    let has_button = |prefix: &str| texts.iter().any(|text| text.trim().starts_with(prefix));
-    if !(has_button("Dismiss") && has_button("Reload")) {
-        return state;
-    }
-    let Some(header_index) = texts
+    let title = nodes
         .iter()
-        .position(|text| split_name(text.trim()).is_some())
-    else {
+        .find(|(rid, _)| has_id(rid, "catalyst_redbox_title"))
+        .map(|(_, text)| text.trim().to_string())
+        .or_else(|| texts.iter().find(|text| split_name(text).is_some()).cloned());
+    let Some(title) = title else {
         return state;
     };
-    let header = texts[header_index].trim();
-    let Some((name, message)) = split_name(header) else {
-        return state;
-    };
+    let first_line = title.lines().next().unwrap_or("").trim().to_string();
+    let (name, message) = split_name(&first_line).unwrap_or(("Error".to_string(), first_line));
     let mut frames = Vec::new();
     let mut pending_fn: Option<String> = None;
-    for text in &texts[header_index + 1..] {
-        let text = text.trim();
-        if let Some(captures) = re(
-            &UI_LOCATION,
-            r"^(?P<file>[^\s:]+(?:\.[A-Za-z]+)?[^\s]*?):(?P<line>\d+):(?P<col>\d+)$",
-        )
-        .captures(text)
-        {
+    for (rid, text) in nodes {
+        if has_id(rid, "rn_frame_method") {
+            pending_fn = Some(text.trim().to_string()).filter(|t| !t.is_empty());
+        } else if has_id(rid, "rn_frame_file") {
+            let mut parts: Vec<&str> = text.trim().rsplitn(3, ':').collect();
+            parts.reverse();
+            let (file, line, column) = match parts.as_slice() {
+                [file, line, col] if line.parse::<u32>().is_ok() => {
+                    (file.to_string(), line.parse().ok(), col.parse().ok())
+                }
+                [file, line] if line.parse::<u32>().is_ok() => (file.to_string(), line.parse().ok(), None),
+                _ => (text.trim().to_string(), None, None),
+            };
             frames.push(JsFrame {
-                file: Some(captures["file"].to_string()),
-                line: captures["line"].parse().ok(),
-                column: captures["col"].parse().ok(),
+                file: Some(file).filter(|f| !f.is_empty()),
+                line,
+                column,
                 function: pending_fn.take(),
             });
-        } else if !text.is_empty() && !text.contains(' ') && frames.len() < 64 {
-            pending_fn = Some(text.to_string());
         }
     }
     let symbolicated = frames_are_source(&frames);
@@ -272,7 +328,7 @@ pub fn parse_ui_texts(texts: &[String]) -> RnDevState {
         component_stack: None,
         kind: "fatal".to_string(),
         source: "ui".to_string(),
-        log_tail: texts.iter().take(LOG_TAIL_LINES).cloned().collect(),
+        log_tail: texts.into_iter().take(LOG_TAIL_LINES).collect(),
         symbolicated,
         symbolication_reason: (!symbolicated).then(|| "not symbolicated yet".to_string()),
     });
@@ -305,8 +361,13 @@ fn blocks(records: &[LogRecord]) -> Vec<Block> {
         if !is_rn_tag(&record.tag) {
             continue;
         }
-        let continuation = out.last().is_some_and(|last: &Block| {
+        // A new JS error header always starts a block, even indented: it must
+        // never be glued onto the previous (say, Info) message and dropped
+        // with it. Indented frames below it still attach to it.
+        let header = split_name(record.message.lines().next().unwrap_or("").trim()).is_some();
+        let continuation = !header && out.last().is_some_and(|last: &Block| {
             last.tag == record.tag
+                && last.level == record.level
                 && (record.message.starts_with(char::is_whitespace)
                     || record.message.starts_with("Caused by:")
                     || record.message.starts_with("at ")
@@ -338,8 +399,17 @@ fn classify(block: &Block) -> Option<Event> {
     if block.tag == "AndroidRuntime" && !text.contains("JavascriptException") {
         return None;
     }
-    if let Some(failure) = unreachable_from_text(text, "log") {
-        return Some(Event::Unreachable(failure));
+    // `bundle_unreachable` is the **native** loader's diagnosis (DevSupport,
+    // BundleDownloader, CatalystInstance on `ReactNative*` native tags). A JS
+    // exception whose message happens to say "Unable to load script" is a JS
+    // error, not a missing bundle.
+    let js_exception = block.tag.starts_with("ReactNativeJS")
+        || text.contains("JavascriptException")
+        || text.contains(", stack:");
+    if !js_exception {
+        if let Some(failure) = unreachable_from_text(text) {
+            return Some(Event::Unreachable(failure));
+        }
     }
     if let Some(error) = transform_error(text) {
         return Some(Event::Js(error));
@@ -369,7 +439,6 @@ fn re(cell: &'static OnceLock<Regex>, pattern: &str) -> &'static Regex {
     cell.get_or_init(|| Regex::new(pattern).expect("static regex"))
 }
 
-static UI_LOCATION: OnceLock<Regex> = OnceLock::new();
 static URL: OnceLock<Regex> = OnceLock::new();
 static CAUSE: OnceLock<Regex> = OnceLock::new();
 static ERRNO: OnceLock<Regex> = OnceLock::new();
@@ -381,7 +450,7 @@ static TRANSFORM_AT: OnceLock<Regex> = OnceLock::new();
 static ENGINE_SUFFIX: OnceLock<Regex> = OnceLock::new();
 
 /// `bundle_unreachable`: RN never got a bundle (no answer from Metro).
-fn unreachable_from_text(text: &str, _source: &str) -> Option<BundleUnreachable> {
+fn unreachable_from_text(text: &str) -> Option<BundleUnreachable> {
     let unreachable = text.contains("Could not connect to development server")
         || text.contains("Unable to load script")
         || text.contains(CATALYST_RELOAD_ERROR)
@@ -690,16 +759,30 @@ fn strip_engine(message: &str) -> String {
         .to_string()
 }
 
-/// A frame position is a **source** position when its file is not a bundle.
-fn frames_are_source(frames: &[JsFrame]) -> bool {
-    !frames.is_empty()
-        && frames.iter().all(|frame| {
-            frame.line.is_some()
-                && frame
-                    .file
-                    .as_deref()
-                    .is_some_and(|file| !file.contains(".bundle") && !file.starts_with("http"))
+/// `JSStackTrace.kt`'s generated frame ids — a RAM-bundle module (`1.js`), a
+/// segment (`seg-1.js`) or a RAM segment module (`seg-1_2.js`). They name a
+/// position in *generated* code, never a source file an agent can edit.
+#[must_use]
+pub fn is_generated_frame_id(file: &str) -> bool {
+    static GENERATED: OnceLock<Regex> = OnceLock::new();
+    re(&GENERATED, r"^(?:seg-\d+(?:_\d+)?|\d+)\.js$").is_match(file)
+}
+
+/// A frame is a **source** position when it has a line and its file is a real
+/// source path: not a bundle URL, not a generated frame id.
+#[must_use]
+pub fn is_source_frame(frame: &JsFrame) -> bool {
+    frame.line.is_some()
+        && frame.file.as_deref().is_some_and(|file| {
+            !file.is_empty()
+                && !file.contains(".bundle")
+                && !file.starts_with("http")
+                && !is_generated_frame_id(file)
         })
+}
+
+fn frames_are_source(frames: &[JsFrame]) -> bool {
+    !frames.is_empty() && frames.iter().all(is_source_frame)
 }
 
 fn unsymbolicated(mut error: JsError) -> JsError {
@@ -946,35 +1029,100 @@ mod tests {
     }
 
     #[test]
-    fn redbox_ui_texts() {
-        let texts: Vec<String> = [
-            "TypeError: undefined is not a function",
-            "onPress",
-            "App.js:26:4",
-            "dispatch",
-            "index.bundle:1:900",
-            "Dismiss",
-            "Reload",
-        ]
-        .iter()
-        .map(|s| s.to_string())
-        .collect();
-        let error = parse_ui_texts(&texts).js_error.expect("ui error");
+    fn redbox_ui_requires_the_redbox_views() {
+        let p = "dev.acos.fixtures.rnhello:id/";
+        let ids: Vec<(String, &str)> = vec![
+            (format!("{p}catalyst_redbox_title"), "TypeError: undefined is not a function"),
+            (format!("{p}rn_frame_method"), "onPress"),
+            (format!("{p}rn_frame_file"), "App.js:26:4"),
+            (format!("{p}rn_frame_method"), "dispatch"),
+            (format!("{p}rn_frame_file"), "index.bundle:1:900"),
+            (format!("{p}rn_redbox_dismiss_button"), "Dismiss"),
+            (format!("{p}rn_redbox_reload_button"), "Reload"),
+        ];
+        let nodes: Vec<UiText<'_>> = ids.iter().map(|(rid, text)| (rid.as_str(), *text)).collect();
+        let error = parse_ui(&nodes).js_error.expect("ui error");
         assert_eq!(error.source, "ui");
+        assert_eq!(error.name, "TypeError");
         assert_eq!(error.frames.len(), 2);
         assert_eq!(error.frames[0].function.as_deref(), Some("onPress"));
         assert_eq!(error.frames[0].file.as_deref(), Some("App.js"));
-        assert!(
-            !error.symbolicated,
-            "a bundle frame is not a source position"
-        );
-        let unreachable = parse_ui_texts(&["Could not connect to development server.".to_string()]);
+        assert_eq!(error.frames[0].line, Some(26));
+        assert!(!error.symbolicated, "a bundle frame is not a source position");
+
+        let unreachable = parse_ui(&[
+            ("android:id/rn_redbox_stack", ""),
+            ("", "Could not connect to development server."),
+        ]);
         assert!(unreachable.bundle_unreachable.is_some());
-        assert!(parse_ui_texts(&["Hello ACOS".to_string()]).is_empty());
-        assert!(
-            parse_ui_texts(&["Error: could not save".to_string(), "Retry".to_string()]).is_empty(),
-            "an app's own error text is not a redbox"
-        );
+    }
+
+    #[test]
+    fn an_app_screen_with_error_text_and_dismiss_reload_buttons_is_not_a_redbox() {
+        let nodes: Vec<UiText<'_>> = vec![
+            ("com.example:id/title", "TypeError: could not save your draft"),
+            ("com.example:id/dismiss", "Dismiss"),
+            ("com.example:id/reload", "Reload"),
+            ("com.example:id/msg", "Could not connect to development server"),
+        ];
+        assert!(parse_ui(&nodes).is_empty());
+        assert!(parse_ui(&[("", "Hello ACOS")]).is_empty());
+    }
+
+    #[test]
+    fn an_indented_error_after_an_info_line_is_its_own_block() {
+        let logs = vec![
+            rec(1, LogLevel::Info, "ReactNativeJS", "Running \"rnhello\""),
+            rec(2, LogLevel::Error, "ReactNativeJS", "  TypeError: boom"),
+            rec(3, LogLevel::Error, "ReactNativeJS", "    at onPress (http://localhost:8081/index.bundle?platform=android:10:2)"),
+        ];
+        let error = parse_logs(&logs).js_error.expect("the error is not swallowed by the Info block");
+        assert_eq!(error.name, "TypeError");
+        assert_eq!(error.frames.len(), 1, "the indented frame still attaches to its error");
+    }
+
+    #[test]
+    fn a_js_exception_saying_unable_to_load_script_is_a_js_error() {
+        let js = parse_logs(&[rec(
+            1,
+            LogLevel::Error,
+            "ReactNativeJS",
+            "TypeError: Unable to load script from cache\n    at load (http://localhost:8081/index.bundle?platform=android:5:1)",
+        )]);
+        assert!(js.bundle_unreachable.is_none());
+        assert_eq!(js.js_error.unwrap().name, "TypeError");
+        let wrapped = parse_logs(&[rec(
+            1,
+            LogLevel::Error,
+            "ReactNative",
+            "Exception in native call from JS\ncom.facebook.react.common.JavascriptException: Error: Unable to load script, stack:\nf@1:2",
+        )]);
+        assert!(wrapped.bundle_unreachable.is_none());
+        assert!(wrapped.js_error.is_some());
+        // the native loader's own diagnosis stays bundle_unreachable
+        let native = parse_logs(&[rec(
+            1,
+            LogLevel::Error,
+            "ReactNative",
+            "java.lang.RuntimeException: Unable to load script. Make sure you're either running Metro or that your bundle is packaged correctly.",
+        )]);
+        assert!(native.bundle_unreachable.is_some());
+        assert!(native.js_error.is_none());
+    }
+
+    #[test]
+    fn generated_frame_ids_are_not_source_files() {
+        for id in ["1.js", "123.js", "seg-1.js", "seg-1_2.js"] {
+            assert!(is_generated_frame_id(id), "{id}");
+        }
+        for file in ["App.js", "src/1.js", "seg-a.js", "index.js"] {
+            assert!(!is_generated_frame_id(file), "{file}");
+        }
+        let error = parse_logs(&[rec(1, LogLevel::Error, "ReactNative", "Error: x, stack:\nf@1.js:10:2\ng@seg-1_2.js:3:4")])
+            .js_error
+            .unwrap();
+        assert_eq!(error.frames[0].file.as_deref(), Some("1.js"));
+        assert!(!error.symbolicated, "generated ids are not source positions");
     }
 
     /// `{key: value, ...}` (flat flow mapping) -> the assertion.
@@ -1025,6 +1173,22 @@ mod tests {
             check(&assertion("{name: TypeError}"), &RnDevState::default(), false),
             JsCheck::Fail(m) if m.contains("no JS error")
         ));
+    }
+
+    #[test]
+    fn the_wait_follows_the_requested_constraints() {
+        let type_error = parse_logs(&[rec(1, LogLevel::Error, "ReactNative", "TypeError: early, stack:\nf@1:2")]);
+        // an earlier TypeError does not end a wait for a SyntaxError
+        assert!(!wait_settled(&assertion("{name: SyntaxError}"), &type_error, false));
+        assert!(wait_settled(&assertion("{name: TypeError}"), &type_error, false));
+        // file constraints are judged after symbolication: a matching name stops the wait
+        assert!(wait_settled(&assertion("{name: TypeError, file: App.js}"), &type_error, false));
+        assert!(!wait_settled(&assertion("{name: SyntaxError, file: App.js}"), &type_error, false));
+        assert!(!wait_settled(&assertion("{none: true}"), &type_error, false));
+        assert!(wait_settled(&assertion("{none: true}"), &RnDevState::default(), false));
+        assert!(!wait_settled(&assertion("{bundle_unreachable: true}"), &type_error, false));
+        // already source-level and wrong: keep waiting
+        assert!(!wait_settled(&assertion("{file: Other.js}"), &state_with_error(), false));
     }
 
     #[test]

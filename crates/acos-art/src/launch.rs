@@ -1965,8 +1965,10 @@ pub(crate) fn launch_session(
     // Native app at its dev server through RN's own `debug_http_host`
     // preference, before the guest's `Application.onCreate` reads it. Unset is
     // the default and costs nothing.
+    // Set, it is an explicit request: a refused value or failed write fails
+    // the launch instead of booting an app that dials the wrong host.
     if let Some(line) =
-        crate::rn_prefs::apply_from_env(&run.dir("app-data").join(&package), &package)
+        crate::rn_prefs::apply_from_env(&run.dir("app-data").join(&package), &package)?
     {
         eprintln!("acos-art: launch: {line}");
     }

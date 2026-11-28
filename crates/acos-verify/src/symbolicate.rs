@@ -22,9 +22,11 @@
 use std::collections::BTreeMap;
 use std::fs;
 use std::io::{Read, Write};
-use std::net::{SocketAddr, TcpStream, ToSocketAddrs};
+use std::net::{SocketAddr, ToSocketAddrs};
 use std::path::{Path, PathBuf};
-use std::time::Duration;
+use std::time::{Duration, Instant};
+
+use crate::rn_errors::{is_generated_frame_id, is_source_frame};
 
 use acos_protocol::rn::{JsError, JsFrame};
 use serde_json::{json, Value};
@@ -34,6 +36,13 @@ use sha2::{Digest, Sha256};
 /// frames that carry no file (`JSStackTrace.format` drops it).
 pub const DEFAULT_BUNDLE_PATH: &str =
     "/index.bundle?platform=android&dev=true&minify=false&modulesOnly=false&runModule=true";
+
+/// The largest `/symbolicate` JSON reply read (a stack of a few hundred frames
+/// is kilobytes; anything near this is not Metro).
+pub const MAX_SYMBOLICATE_BYTES: usize = 4 * 1024 * 1024;
+
+/// The largest source map read (a dev bundle's map is ~10–20 MiB).
+pub const MAX_MAP_BYTES: usize = 64 * 1024 * 1024;
 
 /// Where Metro is and where to keep maps.
 #[derive(Debug, Clone)]
@@ -77,44 +86,67 @@ impl Symbolicator {
             error.symbolication_reason = Some("no frames with a position".to_string());
             return;
         }
+        // `JSStackTrace.kt` ids (`1.js`, `seg-1_2.js`) name RAM-bundle modules /
+        // segments: neither Metro's dev `/symbolicate` nor the dev bundle's map
+        // can place them, so they are never "mapped" by guesswork.
+        if let Some(id) = error
+            .frames
+            .iter()
+            .filter(|frame| frame.line.is_some())
+            .find_map(|frame| frame.file.as_deref().filter(|file| is_generated_frame_id(file)))
+        {
+            error.symbolicated = false;
+            error.symbolication_reason = Some(format!(
+                "generated frame id `{id}` (RAM bundle module / segment) needs that bundle's own segment map; not supported"
+            ));
+            return;
+        }
         let mut reasons: Vec<String> = Vec::new();
+        let mut frames = error.frames.clone();
         if let Some(port) = self.port {
             match self.via_metro(port, &error.frames) {
-                Ok(frames) => {
-                    if self.accept(error, frames, "metro /symbolicate") {
+                Ok(mapped) => {
+                    if self.accept(error, mapped, "metro /symbolicate") {
+                        // Keep the offline cache warm while Metro is up, so an
+                        // error after it stops still maps (best effort: the
+                        // online answer stands whatever happens here).
+                        if self.cache_dir.is_some() {
+                            for path in self.map_paths(&frames) {
+                                let _ = self.fetch_map(port, &path);
+                            }
+                        }
                         return;
                     }
                     reasons.push("metro /symbolicate returned bundle positions".to_string());
                 }
                 Err(reason) => reasons.push(format!("symbolicate_unreachable: {reason}")),
             }
-            match self.fetch_map(port, &error.frames) {
-                Ok(map) => {
-                    let frames = map.map_frames(&error.frames, self);
-                    if self.accept(error, frames, "source map") {
-                        return;
-                    }
-                    reasons.push("source map has no mapping for these frames".to_string());
-                }
-                Err(reason) => reasons.push(format!("no map: {reason}")),
+            let (mapped, missing) = self.map_by_bundle(&frames, |path| self.fetch_map(port, path));
+            frames = mapped;
+            if self.accept(error, frames.clone(), "source map") {
+                return;
             }
+            reasons.extend(missing.into_iter().map(|reason| format!("no map: {reason}")));
         } else {
             reasons.push("no metro configured".to_string());
         }
-        match self.cached_map(&error.frames) {
-            Some(Ok(map)) => {
-                let frames = map.map_frames(&error.frames, self);
-                if self.accept(error, frames, "source map (cached)") {
-                    return;
-                }
-                reasons.push("cached map has no mapping for these frames".to_string());
-            }
-            Some(Err(reason)) => reasons.push(format!("cached map unreadable: {reason}")),
-            None => {
-                if self.port.is_none() {
-                    reasons.push("no map".to_string());
-                }
-            }
+        let mapped_online = frames != error.frames;
+        let (mapped, missing) = self.map_by_bundle(&frames, |path| match self.cached_map(path) {
+            Some(result) => result,
+            None => Err(format!("{path}: not cached")),
+        });
+        let how = if !mapped_online {
+            "source map (cached)"
+        } else {
+            "source map (online + cached)"
+        };
+        if self.accept(error, mapped, how) {
+            return;
+        }
+        if self.port.is_none() && missing.iter().all(|reason| reason.ends_with("not cached")) {
+            reasons.push("no map".to_string());
+        } else {
+            reasons.extend(missing.into_iter().map(|reason| format!("cache: {reason}")));
         }
         error.symbolicated = false;
         error.symbolication_reason = Some(reasons.join("; "));
@@ -133,6 +165,47 @@ impl Symbolicator {
             error.symbolication_reason = Some(how.to_string());
         }
         complete
+    }
+
+    /// The map path of every bundle the generated frames came from.
+    fn map_paths(&self, frames: &[JsFrame]) -> Vec<String> {
+        let mut paths: Vec<String> = frames
+            .iter()
+            .filter(|frame| frame.line.is_some() && !is_source_frame(frame))
+            .map(|frame| self.map_path_of(frame))
+            .collect();
+        paths.sort();
+        paths.dedup();
+        paths
+    }
+
+    /// Map each generated frame with **its own bundle's** map (an `index.bundle`
+    /// frame and a split-bundle frame never share one), leaving frames that are
+    /// already source positions untouched. Returns the frames and, per bundle
+    /// that could not be mapped, why.
+    fn map_by_bundle(
+        &self,
+        frames: &[JsFrame],
+        mut get: impl FnMut(&str) -> Result<SourceMap, String>,
+    ) -> (Vec<JsFrame>, Vec<String>) {
+        let mut out = frames.to_vec();
+        let mut missing = Vec::new();
+        for path in self.map_paths(frames) {
+            match get(&path) {
+                Ok(map) => {
+                    for frame in out.iter_mut() {
+                        if frame.line.is_some()
+                            && !is_source_frame(frame)
+                            && self.map_path_of(frame) == path
+                        {
+                            *frame = map.map_frame(frame, self);
+                        }
+                    }
+                }
+                Err(reason) => missing.push(reason),
+            }
+        }
+        (out, missing)
     }
 
     fn bundle_of<'a>(&'a self, frame: &'a JsFrame) -> String {
@@ -166,6 +239,7 @@ impl Symbolicator {
             "/symbolicate",
             Some(&body),
             self.timeout,
+            MAX_SYMBOLICATE_BYTES,
         )?;
         if !(200..300).contains(&status) {
             return Err(format!("HTTP {status}"));
@@ -213,23 +287,18 @@ impl Symbolicator {
             .collect())
     }
 
-    fn map_path(&self, frames: &[JsFrame]) -> String {
-        let bundle = frames
-            .iter()
-            .find(|frame| frame.line.is_some())
-            .map(|frame| self.bundle_of(frame))
-            .unwrap_or_else(|| self.bundle_path.clone());
-        bundle.replacen(".bundle", ".map", 1)
+    fn map_path_of(&self, frame: &JsFrame) -> String {
+        self.bundle_of(frame).replacen(".bundle", ".map", 1)
     }
 
-    fn fetch_map(&self, port: u16, frames: &[JsFrame]) -> Result<SourceMap, String> {
-        let path = self.map_path(frames);
-        let (status, bytes) = http_call(&self.host, port, "GET", &path, None, self.timeout)?;
+    fn fetch_map(&self, port: u16, path: &str) -> Result<SourceMap, String> {
+        let (status, bytes) =
+            http_call(&self.host, port, "GET", path, None, self.timeout, MAX_MAP_BYTES)?;
         if !(200..300).contains(&status) {
             return Err(format!("GET {path}: HTTP {status}"));
         }
-        let map = SourceMap::parse(&bytes)?;
-        self.store(&path, &bytes);
+        let map = SourceMap::parse(&bytes).map_err(|e| format!("{path}: {e}"))?;
+        self.store(path, &bytes);
         Ok(map)
     }
 
@@ -254,11 +323,11 @@ impl Symbolicator {
         }
     }
 
-    fn cached_map(&self, frames: &[JsFrame]) -> Option<Result<SourceMap, String>> {
+    fn cached_map(&self, map_path: &str) -> Option<Result<SourceMap, String>> {
         let dir = self.cache_dir.as_ref()?;
         let index: BTreeMap<String, String> =
             serde_json::from_slice(&fs::read(dir.join("index.json")).ok()?).ok()?;
-        let file = index.get(&self.map_path(frames))?;
+        let file = index.get(map_path)?;
         Some(
             fs::read(dir.join(file))
                 .map_err(|e| e.to_string())
@@ -274,14 +343,6 @@ impl Symbolicator {
         }
         file.to_string()
     }
-}
-
-fn is_source_frame(frame: &JsFrame) -> bool {
-    frame.line.is_some()
-        && frame
-            .file
-            .as_deref()
-            .is_some_and(|file| !file.contains(".bundle") && !file.is_empty())
 }
 
 /// `http://localhost:8081/index.bundle?x` -> `/index.bundle?x`.
@@ -375,25 +436,24 @@ impl SourceMap {
         let name = segment
             .name
             .and_then(|name| self.names.get(name as usize).cloned());
-        Some((file, src_line + 1, src_column, name))
+        // 0-based -> 1-based, checked: a corrupt map's `u32::MAX` line is a
+        // failed lookup, never a panic or a wrapped-around line 0.
+        Some((file, src_line.checked_add(1)?, src_column, name))
     }
 
-    fn map_frames(&self, frames: &[JsFrame], owner: &Symbolicator) -> Vec<JsFrame> {
-        frames
-            .iter()
-            .map(|frame| match frame.line {
-                Some(line) => match self.lookup(line, frame.column.unwrap_or(0)) {
-                    Some((file, line, column, name)) => JsFrame {
-                        file: Some(owner.strip(&file)),
-                        line: Some(line),
-                        column: Some(column),
-                        function: frame.function.clone().filter(|f| !f.is_empty()).or(name),
-                    },
-                    None => frame.clone(),
+    fn map_frame(&self, frame: &JsFrame, owner: &Symbolicator) -> JsFrame {
+        match frame.line {
+            Some(line) => match self.lookup(line, frame.column.unwrap_or(0)) {
+                Some((file, line, column, name)) => JsFrame {
+                    file: Some(owner.strip(&file)),
+                    line: Some(line),
+                    column: Some(column),
+                    function: frame.function.clone().filter(|f| !f.is_empty()).or(name),
                 },
                 None => frame.clone(),
-            })
-            .collect()
+            },
+            None => frame.clone(),
+        }
     }
 }
 
@@ -472,8 +532,12 @@ fn decode_mappings(mappings: &str) -> Result<Vec<Vec<Segment>>, String> {
     Ok(lines)
 }
 
-/// One HTTP/1.0 request with a strict connect + read budget; returns
-/// `(status, body)` (a chunked body is decoded).
+/// One HTTP/1.0 request under **one absolute deadline** (connect, write and
+/// every read together stay within `timeout`) and a hard `max_bytes` body cap
+/// (an oversized reply is an error before it is buffered). Reading stops as
+/// soon as `Content-Length` bytes (or the chunked terminator) arrived, so a
+/// server that keeps the connection open cannot hold the call. Returns
+/// `(status, body)`; a chunked body is decoded.
 pub fn http_call(
     host: &str,
     port: u16,
@@ -481,20 +545,16 @@ pub fn http_call(
     path: &str,
     body: Option<&[u8]>,
     timeout: Duration,
+    max_bytes: usize,
 ) -> Result<(u16, Vec<u8>), String> {
+    let deadline = Instant::now() + timeout;
     let addr: SocketAddr = (host, port)
         .to_socket_addrs()
         .map_err(|e| e.to_string())?
         .next()
         .ok_or("no address")?;
-    let connect = timeout.min(Duration::from_secs(2));
-    let mut stream = TcpStream::connect_timeout(&addr, connect).map_err(|e| e.to_string())?;
-    stream
-        .set_read_timeout(Some(timeout))
-        .map_err(|e| e.to_string())?;
-    stream
-        .set_write_timeout(Some(timeout))
-        .map_err(|e| e.to_string())?;
+    let mut stream =
+        crate::deadline_io::DeadlineStream::connect(&addr, deadline).map_err(|e| e.to_string())?;
     let body = body.unwrap_or(&[]);
     let head = format!(
         "{method} {path} HTTP/1.0\r\nHost: {host}:{port}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
@@ -504,21 +564,71 @@ pub fn http_call(
         .write_all(head.as_bytes())
         .map_err(|e| e.to_string())?;
     stream.write_all(body).map_err(|e| e.to_string())?;
-    let mut raw = Vec::new();
-    stream.read_to_end(&mut raw).map_err(|e| e.to_string())?;
-    let split = raw
-        .windows(4)
-        .position(|w| w == b"\r\n\r\n")
-        .ok_or("malformed HTTP reply")?;
+
+    const MAX_HEAD: usize = 64 * 1024;
+    let mut raw: Vec<u8> = Vec::new();
+    let mut chunk = [0u8; 64 * 1024];
+    let split = loop {
+        if let Some(split) = raw.windows(4).position(|w| w == b"\r\n\r\n") {
+            break split;
+        }
+        if raw.len() > MAX_HEAD {
+            return Err("oversized HTTP header".to_string());
+        }
+        let n = stream.read(&mut chunk).map_err(|e| e.to_string())?;
+        if n == 0 {
+            return Err("malformed HTTP reply".to_string());
+        }
+        raw.extend_from_slice(&chunk[..n]);
+    };
     let head = String::from_utf8_lossy(&raw[..split]).to_ascii_lowercase();
     let status: u16 = head
         .split_whitespace()
         .nth(1)
         .and_then(|code| code.parse().ok())
         .ok_or("no HTTP status")?;
+    let chunked = head.contains("transfer-encoding: chunked");
+    let content_length: Option<usize> = head.lines().find_map(|line| {
+        line.strip_prefix("content-length:")
+            .and_then(|value| value.trim().parse().ok())
+    });
+    if let Some(length) = content_length {
+        if length > max_bytes {
+            return Err(format!("response is {length} bytes, larger than the {max_bytes}-byte cap"));
+        }
+    }
     let mut payload = raw[split + 4..].to_vec();
-    if head.contains("transfer-encoding: chunked") {
+    let too_large = |len: usize| format!("response of {len}+ bytes is larger than the {max_bytes}-byte cap");
+    loop {
+        let complete = match content_length {
+            _ if chunked => payload.ends_with(b"0\r\n\r\n") && dechunk(&payload).is_ok(),
+            Some(length) => payload.len() >= length,
+            None => false,
+        };
+        if complete {
+            break;
+        }
+        // a chunked body may carry framing beyond the cap; allow a little slack
+        if payload.len() > max_bytes + if chunked { 64 * 1024 } else { 0 } {
+            return Err(too_large(payload.len()));
+        }
+        let n = stream.read(&mut chunk).map_err(|e| e.to_string())?;
+        if n == 0 {
+            break;
+        }
+        payload.extend_from_slice(&chunk[..n]);
+    }
+    if let Some(length) = content_length.filter(|_| !chunked) {
+        if payload.len() < length {
+            return Err(format!("truncated reply: {} of {length} bytes", payload.len()));
+        }
+        payload.truncate(length);
+    }
+    if chunked {
         payload = dechunk(&payload)?;
+    }
+    if payload.len() > max_bytes {
+        return Err(too_large(payload.len()));
     }
     Ok((status, payload))
 }
@@ -855,5 +965,168 @@ mod tests {
             Some("f"),
             "an empty methodName keeps the original"
         );
+    }
+
+    #[test]
+    fn a_u32_max_source_line_is_a_failed_lookup_not_a_panic() {
+        let map = json!({
+            "version": 3,
+            "sources": ["App.js"],
+            "names": [],
+            "mappings": encode(&[0, 0, i64::from(u32::MAX), 0]),
+        })
+        .to_string();
+        let map = SourceMap::parse(map.as_bytes()).unwrap();
+        assert_eq!(map.lookup(1, 0), None);
+    }
+
+    /// A server that streams an endless body: the cap stops it before it is
+    /// buffered, a declared oversized `Content-Length` is refused up front, and
+    /// a kept-open connection returns as soon as `Content-Length` bytes arrived.
+    #[test]
+    fn replies_are_capped_and_end_at_content_length() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        std::thread::spawn(move || {
+            for (index, stream) in listener.incoming().flatten().enumerate() {
+                let mut stream = stream;
+                let mut head = [0u8; 4096];
+                let _ = stream.read(&mut head);
+                match index {
+                    0 => {
+                        let _ = stream.write_all(b"HTTP/1.1 200 OK\r\n\r\n");
+                        let block = [b'x'; 16 * 1024];
+                        while stream.write_all(&block).is_ok() {}
+                    }
+                    1 => {
+                        let _ = stream
+                            .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 999999999\r\n\r\nabc");
+                    }
+                    _ => {
+                        // keeps the socket open after the body
+                        let _ = stream.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok");
+                        std::thread::sleep(Duration::from_secs(5));
+                    }
+                }
+            }
+        });
+        let timeout = Duration::from_secs(3);
+        let error = http_call("127.0.0.1", port, "GET", "/", None, timeout, 64 * 1024).unwrap_err();
+        assert!(error.contains("larger than the 65536-byte cap"), "{error}");
+        let error = http_call("127.0.0.1", port, "GET", "/", None, timeout, 64 * 1024).unwrap_err();
+        assert!(error.contains("999999999 bytes"), "{error}");
+        let started = Instant::now();
+        let (status, body) = http_call("127.0.0.1", port, "GET", "/", None, timeout, 1024).unwrap();
+        assert_eq!((status, body.as_slice()), (200, &b"ok"[..]));
+        assert!(started.elapsed() < Duration::from_secs(2), "{:?}", started.elapsed());
+    }
+
+    /// A trickling server cannot stretch one call past its total budget.
+    #[test]
+    fn one_deadline_bounds_the_whole_exchange() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        std::thread::spawn(move || {
+            if let Some(Ok(mut stream)) = listener.incoming().next() {
+                let mut head = [0u8; 4096];
+                let _ = stream.read(&mut head);
+                let _ = stream.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 100\r\n\r\n");
+                for _ in 0..100 {
+                    if stream.write_all(b"x").is_err() {
+                        return;
+                    }
+                    std::thread::sleep(Duration::from_millis(100));
+                }
+            }
+        });
+        let started = Instant::now();
+        let error = http_call("127.0.0.1", port, "GET", "/", None, Duration::from_millis(600), 1024)
+            .unwrap_err();
+        assert!(started.elapsed() < Duration::from_millis(1500), "{:?}", started.elapsed());
+        assert!(!error.is_empty());
+    }
+
+    /// Frames from two bundles: each maps with its own bundle's map.
+    #[test]
+    fn split_bundle_frames_map_against_their_own_maps() {
+        let index_map = sample_map();
+        let split_map = json!({
+            "version": 3,
+            "sources": ["/tmp/acos-dev-server-1/project/Lazy.js"],
+            "names": [],
+            "mappings": encode(&[0, 0, 41, 2]),
+        })
+        .to_string();
+        let (port, seen) = mock_metro(move |method, path, _| match (method, path) {
+            ("POST", "/symbolicate") => (404, String::new()),
+            ("GET", p) if p.starts_with("/index.map?") => (200, index_map.clone()),
+            ("GET", p) if p.starts_with("/Lazy.map?") => (200, split_map.clone()),
+            _ => (500, String::new()),
+        });
+        let mut symbolicator = Symbolicator::new(Some(port), None);
+        symbolicator.strip_prefix = Some(PathBuf::from("/tmp/acos-dev-server-1/project"));
+        let lazy = JsFrame {
+            file: Some("http://localhost:8081/Lazy.bundle?platform=android&dev=true".into()),
+            line: Some(1),
+            column: Some(5),
+            function: Some("render".into()),
+        };
+        let mut error = error_with(vec![lazy, bundle_frame(1, 120)]);
+        symbolicator.symbolicate(&mut error);
+        assert!(error.symbolicated, "{:?}", error.symbolication_reason);
+        assert_eq!(error.frames[0].file.as_deref(), Some("Lazy.js"));
+        assert_eq!(error.frames[0].line, Some(42));
+        assert_eq!(error.frames[1].file.as_deref(), Some("App.js"));
+        assert_eq!(error.frames[1].line, Some(26));
+        let seen = seen.lock().unwrap();
+        assert!(seen.iter().any(|r| r.starts_with("GET /Lazy.map?")), "{seen:?}");
+        assert!(seen.iter().any(|r| r.starts_with("GET /index.map?")), "{seen:?}");
+    }
+
+    #[test]
+    fn generated_frame_ids_stay_unsymbolicated_with_a_reason() {
+        for id in ["1.js", "seg-1_2.js"] {
+            let mut error = error_with(vec![JsFrame {
+                file: Some(id.into()),
+                line: Some(3),
+                column: Some(7),
+                function: Some("f".into()),
+            }]);
+            Symbolicator::new(None, None).symbolicate(&mut error);
+            assert!(!error.symbolicated, "{id}");
+            let reason = error.symbolication_reason.unwrap();
+            assert!(reason.contains("generated frame id"), "{reason}");
+            assert_eq!(error.frames[0].file.as_deref(), Some(id));
+        }
+    }
+
+    /// After an online `/symbolicate` success the map is fetched and cached, so
+    /// a later error still maps once Metro is gone.
+    #[test]
+    fn an_online_success_warms_the_offline_cache() {
+        let map = sample_map();
+        let (port, seen) = mock_metro(move |method, path, _| match (method, path) {
+            ("POST", "/symbolicate") => (
+                200,
+                json!({"stack": [{"file": "/tmp/acos-dev-server-1/project/App.js", "lineNumber": 26, "column": 4, "methodName": "onPress"}]}).to_string(),
+            ),
+            ("GET", p) if p.starts_with("/index.map?") => (200, map.clone()),
+            _ => (500, String::new()),
+        });
+        let cache = scratch("warm");
+        let mut error = error_with(vec![bundle_frame(1, 120)]);
+        Symbolicator::new(Some(port), Some(cache.clone())).symbolicate(&mut error);
+        assert_eq!(error.symbolication_reason.as_deref(), Some("metro /symbolicate"));
+        assert_eq!(
+            seen.lock().unwrap().as_slice(),
+            ["POST /symbolicate", "GET /index.map?platform=android&dev=true"]
+        );
+        let mut offline = Symbolicator::new(Some(closed_port()), Some(cache.clone()));
+        offline.timeout = Duration::from_millis(500);
+        let mut error = error_with(vec![bundle_frame(1, 120)]);
+        offline.symbolicate(&mut error);
+        assert!(error.symbolicated, "{:?}", error.symbolication_reason);
+        assert_eq!(error.symbolication_reason.as_deref(), Some("source map (cached)"));
+        let _ = fs::remove_dir_all(&cache);
     }
 }

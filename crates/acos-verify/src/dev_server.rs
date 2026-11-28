@@ -577,11 +577,12 @@ fn http_request(port: u16, method: &str, path: &str, timeout: Duration) -> Resul
 /// Open `ws://127.0.0.1:<port>/message`, ask the server for its peers, then
 /// broadcast `{version: 2, method}`. Returns the number of other peers (apps).
 pub fn message_broadcast(port: u16, method: &str, timeout: Duration) -> Result<usize, String> {
+    // One absolute deadline for connect + handshake + every frame: a stalled
+    // or trickling peer cannot stretch the exchange past `timeout`.
     let addr = SocketAddr::from(([127, 0, 0, 1], port));
-    let mut stream =
-        TcpStream::connect_timeout(&addr, Duration::from_secs(2)).map_err(|e| e.to_string())?;
-    stream.set_read_timeout(Some(timeout)).map_err(|e| e.to_string())?;
-    stream.set_write_timeout(Some(timeout)).map_err(|e| e.to_string())?;
+    let deadline = Instant::now() + timeout;
+    let mut stream = crate::deadline_io::DeadlineStream::connect(&addr, deadline)
+        .map_err(|e| e.to_string())?;
     let nonce = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_nanos())
@@ -630,12 +631,12 @@ pub fn message_broadcast(port: u16, method: &str, timeout: Duration) -> Result<u
     Ok(peers)
 }
 
-fn ws_send_text(stream: &mut TcpStream, text: &str) -> Result<(), String> {
+fn ws_send_text(stream: &mut impl Write, text: &str) -> Result<(), String> {
     ws_send(stream, 0x1, text.as_bytes())
 }
 
 /// A client frame (FIN, masked, as RFC 6455 requires of a client).
-fn ws_send(stream: &mut TcpStream, opcode: u8, payload: &[u8]) -> Result<(), String> {
+fn ws_send(stream: &mut impl Write, opcode: u8, payload: &[u8]) -> Result<(), String> {
     let mut frame = vec![0x80 | opcode];
     let len = payload.len();
     if len < 126 {
@@ -654,7 +655,7 @@ fn ws_send(stream: &mut TcpStream, opcode: u8, payload: &[u8]) -> Result<(), Str
 }
 
 /// Read the next text frame (skips ping/pong; a close is an error).
-fn ws_read_text(stream: &mut TcpStream) -> Result<String, String> {
+fn ws_read_text(stream: &mut impl Read) -> Result<String, String> {
     loop {
         let mut head = [0u8; 2];
         stream.read_exact(&mut head).map_err(|e| e.to_string())?;
@@ -962,6 +963,29 @@ mod tests {
         let error = host.dev_menu().unwrap_err();
         assert!(error.message.contains("no React Native app is connected"), "{}", error.message);
         host.shutdown();
+    }
+
+    /// A peer that upgrades and then never answers `getpeers` is cut at the
+    /// one deadline, not left to hang a step.
+    #[test]
+    fn a_stalled_message_socket_is_cut_at_the_deadline() {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut buf = [0u8; 1024];
+            let _ = stream.read(&mut buf);
+            // the handshake reply, one byte at a time, then silence
+            for byte in b"HTTP/1.1 101 Switching Protocols\r\n\r\n" {
+                let _ = stream.write_all(&[*byte]);
+                std::thread::sleep(Duration::from_millis(20));
+            }
+            std::thread::sleep(Duration::from_secs(5));
+        });
+        let started = Instant::now();
+        let error = message_broadcast(port, "devMenu", Duration::from_millis(500)).unwrap_err();
+        assert!(started.elapsed() < Duration::from_millis(1500), "{:?}", started.elapsed());
+        assert!(!error.is_empty());
     }
 
     #[test]

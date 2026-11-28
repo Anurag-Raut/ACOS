@@ -443,12 +443,12 @@ pub fn run_scenario(
                     let deadline = Instant::now() + Duration::from_millis(timeout_ms);
                     let mut backoff_ms = 10u64;
                     loop {
-                        let (state, _) = crate::rn_errors::parse_logs_ordered(&all_logs[start..]);
-                        let settled = if assertion.none == Some(true) {
-                            state.is_empty()
-                        } else {
-                            !state.is_empty()
-                        };
+                        // The step's own constraints decide when to stop: an
+                        // earlier TypeError does not end a wait for the
+                        // SyntaxError the scenario asked for.
+                        let (state, unreachable_last) =
+                            crate::rn_errors::parse_logs_ordered(&all_logs[start..]);
+                        let settled = crate::rn_errors::wait_settled(assertion, &state, unreachable_last);
                         if settled || Instant::now() >= deadline {
                             break;
                         }
@@ -2235,19 +2235,22 @@ fn js_error_step(
 ) -> StepExec {
     use crate::rn_errors::JsCheck;
     let (mut state, mut unreachable_last) = crate::rn_errors::parse_logs_ordered(scoped);
-    // The redbox itself: only fills what the log did not say (the log carries
-    // the frames; the tree proves the dialog is still up).
+    // The redbox itself, from a **fresh** traversal (after a fix + reload the
+    // previous step's frame may still show it): only fills what the log did
+    // not say (the log carries the frames; the tree proves the dialog is up).
+    // The observation is the step's evidence, so the frame ledger advances to
+    // it like any other waited assertion.
+    let mut observed: Option<SessionObservation> = None;
     if caps.ui_tree {
-        if let Ok(observation) = backend.observe() {
-            let texts: Vec<String> = observation
+        if let Ok(observation) = backend.refresh() {
+            let nodes: Vec<crate::rn_errors::UiText<'_>> = observation
                 .tree
                 .all_nodes()
-                .iter()
+                .into_iter()
                 .filter(|node| node.visible)
-                .map(|node| node.text.clone())
-                .filter(|text| !text.trim().is_empty())
+                .map(|node| (node.resource_id.as_str(), node.text.as_str()))
                 .collect();
-            let ui = crate::rn_errors::parse_ui_texts(&texts);
+            let ui = crate::rn_errors::parse_ui(&nodes);
             if state.js_error.is_none() && ui.js_error.is_some() {
                 state.js_error = ui.js_error;
             }
@@ -2255,6 +2258,7 @@ fn js_error_step(
                 state.bundle_unreachable = ui.bundle_unreachable;
                 unreachable_last = state.js_error.is_none();
             }
+            observed = Some(observation);
         }
     }
     if let (Some(error), Some(symbolicator)) = (state.js_error.as_mut(), symbolicator) {
@@ -2268,6 +2272,7 @@ fn js_error_step(
         JsCheck::Unreachable(message) => (false, Some(ErrorCode::BundleUnreachable), message),
     };
     let mut exec = StepExec::pass();
+    exec.observation = observed;
     exec.assertions.push(acos_protocol::assertion::AssertionResult {
         kind: "js_error".to_string(),
         passed,
@@ -3622,6 +3627,8 @@ fn rebinds_bound_frame(step: &Step, bound: Option<u64>, observed: u64) -> bool {
         }
         Some(StepRef::AssertState(assertion)) => assertion.timeout_ms.is_some(),
         Some(StepRef::AssertTree(assertion)) => assertion.timeout_ms.is_some(),
+        // METRO4: it always takes a fresh traversal of its own.
+        Some(StepRef::AssertJsError(_)) => true,
         _ => false,
     }
 }
