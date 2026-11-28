@@ -1584,25 +1584,27 @@ impl SecondaryPool {
 /// The `ProviderInfoList` a bind request carries for one package (K3c), from
 /// that package's own parsed manifest.
 fn provider_spec_of(state: &acos_services::pms::PmsState) -> String {
-    let mut seen: Vec<(&str, Vec<&str>)> = Vec::new();
+    let mut seen: Vec<(&str, Vec<&str>, i32)> = Vec::new();
     for p in state.providers() {
         if p.process_name != state.app().process_name {
             continue;
         }
-        match seen.iter_mut().find(|(class, _)| *class == p.name) {
-            Some((_, authorities)) => authorities.push(&p.authority),
-            None => seen.push((&p.name, vec![&p.authority])),
+        match seen.iter_mut().find(|(class, _, _)| *class == p.name) {
+            Some((_, authorities, _)) => authorities.push(&p.authority),
+            None => seen.push((&p.name, vec![&p.authority], p.init_order)),
         }
     }
+    // Descending `android:initOrder`, preserving manifest order on ties.
+    seen.sort_by(|a, b| b.2.cmp(&a.2));
     seen.iter()
-        .map(|(class, authorities)| {
+        .map(|(class, authorities, init_order)| {
             let declared = state.providers().iter().find(|p| p.name == *class);
             let read = declared.map_or("", |p| p.read_permission.as_str());
             let exported = declared.is_some_and(|p| p.exported);
             let grant_uri = declared.is_some_and(|p| p.grant_uri_permissions);
             let meta = declared.map_or_else(String::new, |p| meta_spec(&p.meta_data));
             format!(
-                "{class}|{}|{read}|{}|{}|{meta}",
+                "{class}|{}|{read}|{}|{}|{meta}|{init_order}",
                 authorities.join(";"),
                 u8::from(exported),
                 u8::from(grant_uri)
@@ -2009,7 +2011,10 @@ pub(crate) fn launch_session(
     // mounted at `/dev/socket`, so a `view.sock` there would be reachable from
     // the APK under test). Both are 0700 and owned by this uid.
     let view_dir = ShortSocketDir::new_named("view").map_err(Error::Io)?;
-    let logd = Logd::start(&sockets.0).map_err(Error::Io)?;
+    let live_logcat = (out.file_name().and_then(|n| n.to_str()) == Some("art-frames"))
+        .then(|| out.parent().map(|p| p.join("logs").join("logcat.txt")))
+        .flatten();
+    let logd = Logd::start_with_logcat(&sockets.0, live_logcat.as_deref()).map_err(Error::Io)?;
     crate::stage("props-logd");
 
     // --- peer (in-process, real ServiceHost) -------------------------------
@@ -2924,36 +2929,7 @@ pub(crate) fn launch_session(
     // the declared entries here as well: it only ever exposes what the app's own
     // manifest says, and it keeps `ProviderInfo.metaData` truthful for a
     // provider that reads it from `attachInfo`.
-    let provider_spec = installed.as_ref().map_or_else(String::new, |state| {
-        let mut seen: Vec<(&str, Vec<&str>)> = Vec::new();
-        for p in state.providers() {
-            if p.process_name != state.app().process_name {
-                continue;
-            }
-            match seen.iter_mut().find(|(class, _)| *class == p.name) {
-                // One `ProviderInfo` per `<provider>`, authorities joined with
-                // `;` exactly as `PackageParser` writes them.
-                Some((_, authorities)) => authorities.push(&p.authority),
-                None => seen.push((&p.name, vec![&p.authority])),
-            }
-        }
-        seen.iter()
-            .map(|(class, authorities)| {
-                let declared = state.providers().iter().find(|p| p.name == *class);
-                let read = declared.map_or("", |p| p.read_permission.as_str());
-                let exported = declared.is_some_and(|p| p.exported);
-                let grant_uri = declared.is_some_and(|p| p.grant_uri_permissions);
-                let meta = declared.map_or_else(String::new, |p| meta_spec(&p.meta_data));
-                format!(
-                    "{class}|{}|{read}|{}|{}|{meta}",
-                    authorities.join(";"),
-                    u8::from(exported),
-                    u8::from(grant_uri)
-                )
-            })
-            .collect::<Vec<_>>()
-            .join("\n")
-    });
+    let provider_spec = installed.as_ref().map_or_else(String::new, provider_spec_of);
     // K3 shipped this OFF because two gaps downstream of the delivery made it a
     // net regression. Both are fixed, so delivery is the default (K4
     // results/compat/K4.md):
@@ -3222,10 +3198,11 @@ pub(crate) fn launch_session(
     // one condvar covers both fact sources (a parsed guest sample and an applied
     // transaction). Nothing has subscribed to `ProbeState::default()`'s own wake
     // yet, so replacing it here cannot strand a waiter.
-    probe_state
-        .lock()
-        .unwrap_or_else(|e| e.into_inner())
-        .wake = Arc::clone(&settle_change);
+    {
+        let mut guard = probe_state.lock().unwrap_or_else(|e| e.into_inner());
+        guard.wake = Arc::clone(&settle_change);
+        guard.prompts = Some(Arc::clone(&live.prompts));
+    }
     // W59: one trace sink for the whole interactive session. The guest's looper
     // lines and the host's tap markers share `started`, so the two clocks are
     // directly comparable (both are the same CLOCK_MONOTONIC on this host).
@@ -4098,6 +4075,12 @@ struct ProbeState {
     stall_pending_ms: Option<u64>,
     commit_text_results: std::collections::BTreeMap<u64, CommitTextOutcome>,
     next_commit_text_seq: u64,
+    /// Shared session capability prompts so in-guest modules (e.g.
+    /// `security.keystore` off-mode diagnostic) can record `relaunch_required`
+    /// prompts visible to both `acos view` and MCP/CLI callers.
+    prompts: Option<
+        Arc<std::sync::Mutex<acos_services::capability_prompts::CapabilityPromptState>>,
+    >,
 }
 
 impl ProbeState {
@@ -4295,6 +4278,18 @@ fn logd_tail(logs: &[crate::LogEntry], limit: usize) -> Vec<String> {
         .collect()
 }
 
+/// Last `limit` error/fatal (`E`/`F`, prio >= 6) logd entries (oldest first).
+fn logd_error_tail(logs: &[crate::LogEntry], limit: usize) -> Vec<String> {
+    let mut errors: Vec<String> = logs
+        .iter()
+        .filter(|e| e.prio >= 6)
+        .map(|e| format!("{}/{}: {}", e.priority_name(), e.tag, e.message))
+        .collect();
+    let start = errors.len().saturating_sub(limit);
+    errors.drain(..start);
+    errors
+}
+
 /// Last `limit` non-empty lines of a captured stream (oldest first).
 fn stdout_tail(text: &str, limit: usize) -> Vec<String> {
     let mut lines: Vec<String> = text
@@ -4348,6 +4343,8 @@ fn write_session_exit(
         // `System.exit`, a kill) still has the framework's own logd trail and
         // its last stdout/stderr lines. Bounded, newest last.
         "logd_tail": logd_tail(&result.logs, 24),
+        "error_logs": logd_error_tail(&result.logs, 24),
+        "unsupported_apis": result.unsupported,
         "logd_final": FINAL_LOGD_FILE,
         "stdout_tail": stdout_tail(&result.stdout, 32),
         "stderr_tail": stdout_tail(&result.stderr, 16),
@@ -4958,6 +4955,18 @@ fn drain_tee_lines<R: std::io::Read>(
                     .and_then(|value| value.parse::<u64>().ok())
                 {
                     state.stall_pending_ms = Some(ms);
+                }
+            }
+            if let Some(module_id) = trimmed.strip_prefix("ACOSLAUNCH CAPABILITY_PROMPT ") {
+                if module_id.trim() == acos_services::modules::keystore::MODULE_ID {
+                    if let Some(prompts_arc) = state.prompts.as_ref() {
+                        if let Ok(mut prompts) = prompts_arc.lock() {
+                            acos_services::modules::keystore::record_off_capability_prompt(
+                                &mut prompts,
+                                host_ms(),
+                            );
+                        }
+                    }
                 }
             }
             state.marks.push_back(trimmed.to_string());
@@ -12365,6 +12374,7 @@ mod probe_line_tests {
                 touch_traced: self.touch_traced,
                 commit_text_results: self.commit_text_results.clone(),
                 next_commit_text_seq: self.next_commit_text_seq,
+                prompts: self.prompts.clone(),
             }
         }
     }
@@ -15149,6 +15159,52 @@ mod service_control_hot_attach_tests {
         let pkg = crate::app::apk_package(&apk_path).expect("parse synthetic settings.apk");
         assert_eq!(pkg, acos_services::modules::settings::SETTINGS_PACKAGE);
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn provider_spec_of_sorts_descending_by_init_order_preserving_ties() {
+        let mut state = acos_services::pms::PmsState::new();
+        let pkg = state.app().package_name.clone();
+        let proc_name = state.app().process_name.clone();
+        let mk = |name: &str, authority: &str, init_order: i32| acos_services::pms::ProviderInfo {
+            name: name.to_string(),
+            package_name: pkg.clone(),
+            process_name: proc_name.clone(),
+            authority: authority.to_string(),
+            read_permission: String::new(),
+            write_permission: String::new(),
+            exported: false,
+            grant_uri_permissions: false,
+            init_order,
+            meta_data: Vec::new(),
+        };
+        state.packages[state.primary].providers = vec![
+            mk("com.example.DefaultFirst", "com.example.default1", 0),
+            mk("com.example.Crashlytics", "com.example.crashlytics", 99),
+            mk("com.example.DefaultSecond", "com.example.default2", 0),
+            mk("com.example.FirebaseInit", "com.example.firebase", 100),
+            mk("com.example.CrashlyticsTie", "com.example.crashlytics2", 99),
+            mk("com.example.LateProvider", "com.example.late", -10),
+        ];
+        let spec = provider_spec_of(&state);
+        let names_and_orders: Vec<(&str, &str)> = spec
+            .lines()
+            .map(|entry| {
+                let f: Vec<&str> = entry.split('|').collect();
+                (f[0], f[6])
+            })
+            .collect();
+        assert_eq!(
+            names_and_orders,
+            vec![
+                ("com.example.FirebaseInit", "100"),
+                ("com.example.Crashlytics", "99"),
+                ("com.example.CrashlyticsTie", "99"),
+                ("com.example.DefaultFirst", "0"),
+                ("com.example.DefaultSecond", "0"),
+                ("com.example.LateProvider", "-10"),
+            ]
+        );
     }
 }
 

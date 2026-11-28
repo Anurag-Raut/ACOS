@@ -1,6 +1,6 @@
 //! The typed Android manifest model, built on the AXML DOM.
 
-use crate::arsc::ResourceTable;
+use crate::arsc::{ResValue, ResourceTable};
 use crate::axml::{TypedValue, XmlAttribute, XmlDocument, XmlNode};
 use crate::error::Result;
 
@@ -85,9 +85,11 @@ pub struct DeclaredPermission {
 /// ```
 ///
 /// `TYPE_FIRST_INT..=TYPE_LAST_INT` is `0x10..=0x1f`, i.e. int dec, int hex and
-/// the four colour types; all of them are `putInt`. A reference inside
-/// `android:value` is **not** one of those types, so `parseMetaData` logs it and
-/// stores nothing — only `android:resource` becomes a reference id.
+/// the four colour types; all of them are `putInt`. Stock `TypedArray.peekValue`
+/// resolves resource references in `android:value` (such as
+/// `android:value="@integer/google_play_services_version"`) through the APK's
+/// `resources.arsc` table before checking the resulting value type; only
+/// `android:resource` stores the raw resource id (`MetaDataValue::Reference`).
 #[derive(Debug, Clone, PartialEq, serde::Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum MetaDataValue {
@@ -260,6 +262,9 @@ pub struct Component {
     /// `android:grantUriPermissions` (`<provider>` only); `None` when absent,
     /// which is the platform default `false`.
     pub grant_uri_permissions: Option<bool>,
+    /// `android:initOrder` (`<provider>` only); `None` when absent (platform
+    /// default `0`). Higher values are installed first.
+    pub init_order: Option<i32>,
     pub label: Option<String>,
     pub label_ref: Option<u32>,
     pub intent_filters: Vec<IntentFilter>,
@@ -298,8 +303,52 @@ pub struct Manifest {
 }
 
 impl Manifest {
-    /// Build the typed model from an AXML DOM.
+    /// Build the typed model from an AXML DOM without resolving resource
+    /// references inside `<meta-data android:value="@...">`.
     pub fn parse(doc: &XmlDocument) -> Result<Manifest> {
+        Self::parse_with_resources(doc, None)
+    }
+
+    /// True if any `<meta-data>` under `<application>` or its components has a
+    /// `TypedValue::Reference` in `android:value` (so parsing `resources.arsc`
+    /// is worth doing).
+    #[must_use]
+    pub fn has_meta_data_value_reference(doc: &XmlDocument) -> bool {
+        fn node_has_ref(parent: &XmlNode) -> bool {
+            parent.children_named("meta-data").any(|md| {
+                // `android:resource` takes precedence over `android:value`.
+                if let Some(TypedValue::Reference(id)) = md.attribute("resource").map(|a| &a.value)
+                {
+                    if *id != 0 {
+                        return false;
+                    }
+                }
+                matches!(
+                    md.attribute("value").map(|a| &a.value),
+                    Some(TypedValue::Reference(id)) if *id != 0
+                )
+            })
+        }
+        let Some(app) = doc.root.children_named("application").next() else {
+            return false;
+        };
+        if node_has_ref(app) {
+            return true;
+        }
+        app.children.iter().any(|child| {
+            matches!(
+                child.name.as_str(),
+                "activity" | "activity-alias" | "service" | "receiver" | "provider"
+            ) && node_has_ref(child)
+        })
+    }
+
+    /// Build the typed model from an AXML DOM, resolving `<meta-data
+    /// android:value="@...">` references against `res` when supplied.
+    pub fn parse_with_resources(
+        doc: &XmlDocument,
+        res: Option<&ResourceTable>,
+    ) -> Result<Manifest> {
         let root = &doc.root;
         let package = attr_string(root, "package").unwrap_or_default();
         let version_code = attr_i64(root, "versionCode");
@@ -357,7 +406,7 @@ impl Manifest {
                 }
                 "supports-screens" => parse_supports_screens(child, &mut supports_screens),
                 "application" => {
-                    application = parse_application(child, &package);
+                    application = parse_application(child, &package, res);
                 }
                 _ => {}
             }
@@ -366,10 +415,10 @@ impl Manifest {
         let (activities, services, receivers, providers) =
             match root.children_named("application").next() {
                 Some(app) => (
-                    parse_activities(app, &package),
-                    parse_components(app, ComponentKind::Service, &package),
-                    parse_components(app, ComponentKind::Receiver, &package),
-                    parse_components(app, ComponentKind::Provider, &package),
+                    parse_activities(app, &package, res),
+                    parse_components(app, ComponentKind::Service, &package, res),
+                    parse_components(app, ComponentKind::Receiver, &package, res),
+                    parse_components(app, ComponentKind::Provider, &package, res),
                 ),
                 None => (Vec::new(), Vec::new(), Vec::new(), Vec::new()),
             };
@@ -574,7 +623,7 @@ impl Manifest {
     }
 }
 
-fn parse_application(app: &XmlNode, package: &str) -> ApplicationInfo {
+fn parse_application(app: &XmlNode, package: &str, res: Option<&ResourceTable>) -> ApplicationInfo {
     let (label, label_ref) = label_of(app);
     ApplicationInfo {
         name: attr_string(app, "name").map(|n| fq_name(package, &n)),
@@ -598,7 +647,7 @@ fn parse_application(app: &XmlNode, package: &str) -> ApplicationInfo {
         supports_screens: SupportsScreens::default(),
         theme: attr_ref(app, "theme"),
         process: attr_string(app, "process"),
-        meta_data: parse_meta_data(app),
+        meta_data: parse_meta_data(app, res),
     }
 }
 
@@ -659,7 +708,11 @@ fn parse_screen_value(node: &XmlNode, name: &str) -> Option<SupportsScreensValue
 /// An alias is kept in the activity list (§`PackageParser.parseActivityAlias`
 /// adds it to `owner.activities`) and carries its `targetActivity`, so the
 /// launcher filter on an alias is visible to [`Manifest::launcher_activity`].
-fn parse_activities(parent: &XmlNode, package: &str) -> Vec<Component> {
+fn parse_activities(
+    parent: &XmlNode,
+    package: &str,
+    res: Option<&ResourceTable>,
+) -> Vec<Component> {
     let mut out = Vec::new();
     for node in &parent.children {
         let kind = match node.name.as_str() {
@@ -667,14 +720,19 @@ fn parse_activities(parent: &XmlNode, package: &str) -> Vec<Component> {
             "activity-alias" => ComponentKind::ActivityAlias,
             _ => continue,
         };
-        if let Some(component) = parse_component(node, kind, package) {
+        if let Some(component) = parse_component(node, kind, package, res) {
             out.push(component);
         }
     }
     out
 }
 
-fn parse_components(parent: &XmlNode, kind: ComponentKind, package: &str) -> Vec<Component> {
+fn parse_components(
+    parent: &XmlNode,
+    kind: ComponentKind,
+    package: &str,
+    res: Option<&ResourceTable>,
+) -> Vec<Component> {
     let tag = match kind {
         ComponentKind::Activity | ComponentKind::ActivityAlias => "activity",
         ComponentKind::Service => "service",
@@ -683,14 +741,19 @@ fn parse_components(parent: &XmlNode, kind: ComponentKind, package: &str) -> Vec
     };
     let mut out = Vec::new();
     for node in parent.children_named(tag) {
-        if let Some(component) = parse_component(node, kind, package) {
+        if let Some(component) = parse_component(node, kind, package, res) {
             out.push(component);
         }
     }
     out
 }
 
-fn parse_component(node: &XmlNode, kind: ComponentKind, package: &str) -> Option<Component> {
+fn parse_component(
+    node: &XmlNode,
+    kind: ComponentKind,
+    package: &str,
+    res: Option<&ResourceTable>,
+) -> Option<Component> {
     let raw_name = attr_string(node, "name").unwrap_or_default();
     if raw_name.is_empty() {
         return None;
@@ -719,12 +782,13 @@ fn parse_component(node: &XmlNode, kind: ComponentKind, package: &str) -> Option
         process: attr_string(node, "process"),
         permission: attr_string(node, "permission"),
         grant_uri_permissions: attr_bool(node, "grantUriPermissions"),
+        init_order: attr_i32(node, "initOrder"),
         label,
         label_ref,
         intent_filters,
         target_activity: attr_string(node, "targetActivity").map(|t| fq_name(package, &t)),
         enabled: attr_bool(node, "enabled"),
-        meta_data: parse_meta_data(node),
+        meta_data: parse_meta_data(node, res),
     })
 }
 
@@ -733,7 +797,7 @@ fn parse_component(node: &XmlNode, kind: ComponentKind, package: &str) -> Option
 /// ACOS keeps the rest of the declaration rather than failing the whole parse),
 /// and an entry whose value type the platform does not support is not stored
 /// (`parseMetaData` logs it when `RIGID_PARSER` is off).
-fn parse_meta_data(node: &XmlNode) -> Vec<MetaDataEntry> {
+fn parse_meta_data(node: &XmlNode, res: Option<&ResourceTable>) -> Vec<MetaDataEntry> {
     let mut out = Vec::new();
     for md in node.children_named("meta-data") {
         let Some(name) = attr_string(md, "name") else {
@@ -742,7 +806,7 @@ fn parse_meta_data(node: &XmlNode) -> Vec<MetaDataEntry> {
         if name.is_empty() {
             continue;
         }
-        let Some(value) = meta_data_value(md) else {
+        let Some(value) = meta_data_value(md, res) else {
             continue;
         };
         out.push(MetaDataEntry { name, value });
@@ -750,7 +814,7 @@ fn parse_meta_data(node: &XmlNode) -> Vec<MetaDataEntry> {
     out
 }
 
-fn meta_data_value(node: &XmlNode) -> Option<MetaDataValue> {
+fn meta_data_value(node: &XmlNode, res: Option<&ResourceTable>) -> Option<MetaDataValue> {
     // `parseMetaData` reads `android:resource` first and prefers it whenever
     // the typed value carries a non-zero resource id.
     if let Some(TypedValue::Reference(id)) = node.attribute("resource").map(|a| &a.value) {
@@ -768,8 +832,21 @@ fn meta_data_value(node: &XmlNode) -> Option<MetaDataValue> {
         | TypedValue::ColorArgb4(colour)
         | TypedValue::ColorRgb4(colour) => Some(MetaDataValue::Int(*colour as i32)),
         TypedValue::Float(value) => Some(MetaDataValue::Float(*value)),
-        // Everything else (including a reference in `android:value`) is not a
-        // type `parseMetaData` stores.
+        // `TypedArray.peekValue` resolves resource references in `android:value`
+        // (e.g. `@integer/google_play_services_version`) against the APK's
+        // `resources.arsc` before `PackageParser.parseMetaData` stores them.
+        TypedValue::Reference(id) => {
+            let resolved = res?.resolve_value(*id)?;
+            match resolved {
+                ResValue::String(text) => Some(MetaDataValue::String(text.clone())),
+                ResValue::Boolean(flag) => Some(MetaDataValue::Boolean(*flag)),
+                ResValue::IntDec(value) => Some(MetaDataValue::Int(*value)),
+                ResValue::IntHex(value) => Some(MetaDataValue::Int(*value as i32)),
+                ResValue::Color(colour) => Some(MetaDataValue::Int(*colour as i32)),
+                ResValue::Float(value) => Some(MetaDataValue::Float(*value)),
+                _ => None,
+            }
+        }
         _ => None,
     }
 }
@@ -1556,6 +1633,211 @@ mod launcher_tests {
         assert!(
             manifest.launcher_activity().is_none(),
             "<application android:enabled=\"false\"> disables every component"
+        );
+    }
+
+    #[test]
+    fn provider_init_order_is_parsed() {
+        let dom = document(vec![
+            node(
+                "provider",
+                vec![
+                    attr("name", TypedValue::String(".First".into())),
+                    attr("authorities", TypedValue::String("pkg.first".into())),
+                    attr("initOrder", TypedValue::IntDec(100)),
+                ],
+                Vec::new(),
+            ),
+            node(
+                "provider",
+                vec![
+                    attr("name", TypedValue::String(".Default".into())),
+                    attr("authorities", TypedValue::String("pkg.default".into())),
+                ],
+                Vec::new(),
+            ),
+            node(
+                "provider",
+                vec![
+                    attr("name", TypedValue::String(".Late".into())),
+                    attr("authorities", TypedValue::String("pkg.late".into())),
+                    attr("initOrder", TypedValue::IntDec(-10)),
+                ],
+                Vec::new(),
+            ),
+        ]);
+        let manifest = Manifest::parse(&dom).expect("manifest");
+        assert_eq!(manifest.providers.len(), 3);
+        assert_eq!(manifest.providers[0].init_order, Some(100));
+        assert_eq!(manifest.providers[1].init_order, None);
+        assert_eq!(manifest.providers[2].init_order, Some(-10));
+    }
+
+    #[test]
+    fn meta_data_value_references_resolve_against_resource_table() {
+        use crate::arsc::{Config, ResourceEntry, ResourcePackage};
+
+        let meta = |name: &str, attribute: XmlAttribute| {
+            node(
+                "meta-data",
+                vec![
+                    attr("name", TypedValue::String(name.to_string())),
+                    attribute,
+                ],
+                Vec::new(),
+            )
+        };
+
+        let table = ResourceTable {
+            global_strings: Vec::new(),
+            packages: vec![ResourcePackage {
+                id: 0x7f,
+                name: "pkg".into(),
+                type_names: vec![
+                    "integer".into(),
+                    "string".into(),
+                    "bool".into(),
+                    "dimen".into(),
+                ],
+                key_names: Vec::new(),
+                type_specs: Vec::new(),
+                entries: vec![
+                    ResourceEntry {
+                        id: 0x7f01_0001,
+                        type_id: 1,
+                        entry_id: 1,
+                        type_name: "integer".into(),
+                        key: "google_play_services_version".into(),
+                        config: Config::default(),
+                        value: ResValue::IntDec(12_451_000),
+                    },
+                    ResourceEntry {
+                        id: 0x7f02_0001,
+                        type_id: 2,
+                        entry_id: 1,
+                        type_name: "string".into(),
+                        key: "api_endpoint".into(),
+                        config: Config::default(),
+                        value: ResValue::String("https://example.invalid".into()),
+                    },
+                    ResourceEntry {
+                        id: 0x7f03_0001,
+                        type_id: 3,
+                        entry_id: 1,
+                        type_name: "bool".into(),
+                        key: "feature_enabled".into(),
+                        config: Config::default(),
+                        value: ResValue::Boolean(true),
+                    },
+                    ResourceEntry {
+                        id: 0x7f04_0001,
+                        type_id: 4,
+                        entry_id: 1,
+                        type_name: "dimen".into(),
+                        key: "scale".into(),
+                        config: Config::default(),
+                        value: ResValue::Float(1.5),
+                    },
+                    ResourceEntry {
+                        id: 0x7f01_0002,
+                        type_id: 1,
+                        entry_id: 2,
+                        type_name: "integer".into(),
+                        key: "version_alias".into(),
+                        config: Config::default(),
+                        value: ResValue::Reference(0x7f01_0001),
+                    },
+                ],
+            }],
+        };
+
+        let dom = document(vec![
+            meta(
+                "com.google.android.gms.version",
+                attr("value", TypedValue::Reference(0x7f01_0001)),
+            ),
+            meta(
+                "api.endpoint",
+                attr("value", TypedValue::Reference(0x7f02_0001)),
+            ),
+            meta(
+                "feature.enabled",
+                attr("value", TypedValue::Reference(0x7f03_0001)),
+            ),
+            meta(
+                "scale.factor",
+                attr("value", TypedValue::Reference(0x7f04_0001)),
+            ),
+            meta(
+                "version.alias",
+                attr("value", TypedValue::Reference(0x7f01_0002)),
+            ),
+            meta(
+                "xml.config",
+                attr("resource", TypedValue::Reference(0x7f09_0001)),
+            ),
+            node(
+                "provider",
+                vec![
+                    attr("name", TypedValue::String(".InitProvider".into())),
+                    attr("authorities", TypedValue::String("pkg.init".into())),
+                ],
+                vec![meta(
+                    "provider.version",
+                    attr("value", TypedValue::Reference(0x7f01_0001)),
+                )],
+            ),
+        ]);
+
+        assert!(Manifest::has_meta_data_value_reference(&dom));
+
+        // Without resources, value references are skipped while android:resource stays.
+        let without_res = Manifest::parse(&dom).expect("manifest without res");
+        assert_eq!(
+            without_res.application.meta_data,
+            vec![MetaDataEntry {
+                name: "xml.config".into(),
+                value: MetaDataValue::Reference(0x7f09_0001),
+            }]
+        );
+
+        // With resources, value references resolve to typed values while android:resource stays a Reference.
+        let with_res = Manifest::parse_with_resources(&dom, Some(&table)).expect("manifest");
+        assert_eq!(
+            with_res.application.meta_data,
+            vec![
+                MetaDataEntry {
+                    name: "com.google.android.gms.version".into(),
+                    value: MetaDataValue::Int(12_451_000),
+                },
+                MetaDataEntry {
+                    name: "api.endpoint".into(),
+                    value: MetaDataValue::String("https://example.invalid".into()),
+                },
+                MetaDataEntry {
+                    name: "feature.enabled".into(),
+                    value: MetaDataValue::Boolean(true),
+                },
+                MetaDataEntry {
+                    name: "scale.factor".into(),
+                    value: MetaDataValue::Float(1.5),
+                },
+                MetaDataEntry {
+                    name: "version.alias".into(),
+                    value: MetaDataValue::Int(12_451_000),
+                },
+                MetaDataEntry {
+                    name: "xml.config".into(),
+                    value: MetaDataValue::Reference(0x7f09_0001),
+                },
+            ]
+        );
+        assert_eq!(
+            with_res.providers[0].meta_data,
+            vec![MetaDataEntry {
+                name: "provider.version".into(),
+                value: MetaDataValue::Int(12_451_000),
+            }]
         );
     }
 }

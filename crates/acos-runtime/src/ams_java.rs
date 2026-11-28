@@ -734,6 +734,8 @@ pub(crate) fn app_provider_info(
     }
     vm.set_field(h, "exported", JavaValue::Boolean(spec.exported))
         .map_err(err)?;
+    vm.set_field(h, "initOrder", JavaValue::Int(spec.init_order))
+        .map_err(err)?;
     Ok(h)
 }
 
@@ -1177,11 +1179,16 @@ pub fn transact(
                     }
                     _ => 0,
                 };
+                let init_order = match vm.get_field(info, "initOrder").map_err(err)? {
+                    JavaValue::Int(v) => v,
+                    _ => 0,
+                };
                 records.push(acos_services::ams::ProviderRecord {
                     authority,
                     package,
                     class,
                     binder,
+                    init_order,
                 });
             }
             state.publish_content_providers(records);

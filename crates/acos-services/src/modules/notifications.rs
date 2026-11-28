@@ -785,6 +785,8 @@ impl ServiceObject for NotificationsService {
             "getHintsFromListenerNoToken" => vec![WireValue::Int(0)],
             "isNotificationListenerAccessGranted" => vec![WireValue::Bool(false)],
             "getEnabledNotificationListeners" => vec![WireValue::List(Some(Vec::new()))],
+            // No notification delegate is configured by default on a fresh device.
+            "getNotificationDelegate" => vec![WireValue::Str(None)],
             _ => {
                 return Err(ServiceError::UnsupportedAndroidApi {
                     interface: interface.to_string(),
@@ -1242,6 +1244,31 @@ mod tests {
         )
         .expect("cfg");
         assert_eq!(shade_apk(&cfg), cfg_override);
+    }
+
+    #[test]
+    fn get_notification_delegate_returns_null_string() {
+        let mut svc = NotificationsService {
+            store: Arc::new(Mutex::new(NotificationStore::new("com.example.app"))),
+        };
+        let method = acos_aidl::MethodInfo {
+            code: 139,
+            name: "getNotificationDelegate".to_string(),
+            signature: "(Ljava/lang/String;)Ljava/lang/String;".to_string(),
+            return_type: "Ljava/lang/String;".to_string(),
+            oneway: false,
+            args: Vec::new(),
+            reply: Vec::new(),
+            incomplete: None,
+        };
+        let reply = svc
+            .call(
+                DESCRIPTOR,
+                &method,
+                &[WireValue::Str(Some("com.example.app".into()))],
+            )
+            .expect("getNotificationDelegate should succeed");
+        assert_eq!(reply.reply, vec![WireValue::Str(None)]);
     }
 }
 

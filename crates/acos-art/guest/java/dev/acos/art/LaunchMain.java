@@ -119,6 +119,9 @@ public final class LaunchMain {
     static final long[] sProbeDeltas = new long[PROBE_TARGET_FRAMES];
     static volatile long sProbeFirst;
     static volatile long sProbeLast;
+    /** Original process stdout/stderr before app stream redirection to logcat. */
+    static final java.io.PrintStream sOrigOut = System.out;
+    static final java.io.PrintStream sOrigErr = System.err;
 
     public static void main(String[] args) {
         long t0 = System.currentTimeMillis();
@@ -345,8 +348,170 @@ public final class LaunchMain {
         }
     }
 
+    /** Guard against recursive crash reporting in the default uncaught exception handler. */
+    static final java.util.concurrent.atomic.AtomicBoolean sUncaughtCrashing =
+            new java.util.concurrent.atomic.AtomicBoolean(false);
+
+    static boolean isAcosProtocolLine(String line) {
+        return line.startsWith("ACOSLAUNCH")
+                || line.startsWith("ACOSPROBE")
+                || line.startsWith("ACOSTRACE")
+                || line.startsWith("ACOSSTUCK")
+                || line.startsWith("ACOSUNSUPPORTED");
+    }
+
+    /**
+     * Line-buffered stream wrapper that mirrors every byte untouched to the
+     * original process stream (`sOrigOut` / `sOrigErr`) while forwarding
+     * non-protocol app lines to Android's logcat (`System.out` / `System.err`).
+     * ACOS harness protocol lines (`ACOSLAUNCH`, `ACOSPROBE`, `ACOSTRACE`,
+     * `ACOSSTUCK`, `ACOSUNSUPPORTED`) are never buffered or sent to logcat so
+     * host-guest IPC is completely unaffected.
+     */
+    static final class LogRedirectOutputStream extends java.io.OutputStream {
+        private static final int MAX_LOG_LINE = 4096;
+        private static final ThreadLocal<Boolean> IN_LOG = new ThreadLocal<Boolean>();
+
+        private final java.io.PrintStream orig;
+        private final int priority;
+        private final String tag;
+        private final java.io.ByteArrayOutputStream lineBuf =
+                new java.io.ByteArrayOutputStream(256);
+        private boolean skipCurrentLine = false;
+
+        LogRedirectOutputStream(java.io.PrintStream orig, int priority, String tag) {
+            this.orig = orig;
+            this.priority = priority;
+            this.tag = tag;
+        }
+
+        private void flushLineLocked() {
+            if (!skipCurrentLine && lineBuf.size() > 0 && !Boolean.TRUE.equals(IN_LOG.get())) {
+                byte[] bytes = lineBuf.toByteArray();
+                int len = bytes.length;
+                while (len > 0 && bytes[len - 1] == '\r') {
+                    len--;
+                }
+                if (len > 0) {
+                    String text = new String(bytes, 0, len, java.nio.charset.StandardCharsets.UTF_8);
+                    if (!isAcosProtocolLine(text)) {
+                        IN_LOG.set(Boolean.TRUE);
+                        try {
+                            android.util.Log.println(priority, tag, text);
+                        } catch (Throwable ignored) {
+                        } finally {
+                            IN_LOG.remove();
+                        }
+                    }
+                }
+            }
+            lineBuf.reset();
+            skipCurrentLine = false;
+        }
+
+        private void feedLocked(byte b) {
+            if (b == '\n') {
+                flushLineLocked();
+                return;
+            }
+            if (skipCurrentLine) {
+                return;
+            }
+            if (lineBuf.size() < MAX_LOG_LINE) {
+                lineBuf.write(b);
+                // Fast-path skip for large ACOS protocol lines (e.g. ACOSPROBE JSON)
+                // once we have enough prefix bytes to identify them.
+                if (lineBuf.size() == 16) {
+                    String prefix = new String(
+                            lineBuf.toByteArray(), java.nio.charset.StandardCharsets.UTF_8);
+                    if (isAcosProtocolLine(prefix)) {
+                        skipCurrentLine = true;
+                        lineBuf.reset();
+                    }
+                }
+            }
+        }
+
+        @Override
+        public synchronized void write(int b) throws java.io.IOException {
+            orig.write(b);
+            feedLocked((byte) b);
+        }
+
+        @Override
+        public synchronized void write(byte[] b, int off, int len) throws java.io.IOException {
+            orig.write(b, off, len);
+            int end = off + len;
+            for (int i = off; i < end; i++) {
+                feedLocked(b[i]);
+            }
+        }
+
+        @Override
+        public synchronized void flush() throws java.io.IOException {
+            orig.flush();
+        }
+    }
+
+    /**
+     * Install the stock Android runtime diagnostics before any app code runs:
+     * (1) redirect guest `System.err` -> logcat (`System.err`, priority W) and
+     * `System.out` -> logcat (`System.out`, priority I) while preserving raw
+     * `sOrigOut` / `sOrigErr` for ACOS host-guest IPC, and
+     * (2) install a default `Thread.UncaughtExceptionHandler` that logs
+     * `FATAL EXCEPTION` with stack trace to `AndroidRuntime` (priority E) and
+     * emits a structured `ACOSLAUNCH` crash line before exit.
+     */
+    static void installRuntimeDiagnostics() {
+        try {
+            System.setErr(new java.io.PrintStream(
+                    new LogRedirectOutputStream(sOrigErr, android.util.Log.WARN, "System.err"),
+                    true,
+                    "UTF-8"));
+            System.setOut(new java.io.PrintStream(
+                    new LogRedirectOutputStream(sOrigOut, android.util.Log.INFO, "System.out"),
+                    true,
+                    "UTF-8"));
+        } catch (Throwable ignored) {
+        }
+        Thread.setDefaultUncaughtExceptionHandler(new Thread.UncaughtExceptionHandler() {
+            @Override
+            public void uncaughtException(Thread t, Throwable e) {
+                if (!sUncaughtCrashing.compareAndSet(false, true)) {
+                    return;
+                }
+                Throwable cause = unwrap(e);
+                String threadName = t != null ? t.getName() : "unknown";
+                try {
+                    StringBuilder msg = new StringBuilder();
+                    msg.append("FATAL EXCEPTION: ").append(threadName).append('\n');
+                    msg.append("Process: ").append(sPkg)
+                            .append(", PID: ").append(android.os.Process.myPid()).append('\n');
+                    msg.append(android.util.Log.getStackTraceString(cause));
+                    android.util.Log.e("AndroidRuntime", msg.toString());
+                } catch (Throwable ignored) {
+                }
+                try {
+                    cause.printStackTrace(sOrigErr);
+                    sOrigErr.flush();
+                } catch (Throwable ignored) {
+                }
+                try {
+                    sOrigOut.println("ACOSLAUNCH {\"outcome\":\"crash\",\"code\":\"GUEST_ERROR\","
+                            + "\"thread\":\"" + esc(threadName) + "\","
+                            + "\"message\":\"" + esc(String.valueOf(cause)) + "\""
+                            + crashDetail(cause) + "}");
+                    sOrigOut.flush();
+                } catch (Throwable ignored) {
+                }
+                System.exit(1);
+            }
+        });
+    }
+
     static void run(long t0) throws Throwable {
         registerNatives();
+        installRuntimeDiagnostics();
         disableWindowRenderer();
         new File(sOut).mkdirs();
         Looper.prepareMainLooper();
@@ -548,15 +713,25 @@ public final class LaunchMain {
             // *before* `WindowManagerGlobal.addView`, so a window-path throw does
             // not undo the resume.
             boolean resumed = recordResumeAfterLooperFailure(thread, at, fatal);
+            Throwable cause = unwrap(fatal);
+            try {
+                StringBuilder msg = new StringBuilder();
+                msg.append("FATAL EXCEPTION: main\n");
+                msg.append("Process: ").append(sPkg)
+                        .append(", PID: ").append(android.os.Process.myPid()).append('\n');
+                msg.append(android.util.Log.getStackTraceString(cause));
+                android.util.Log.e("AndroidRuntime", msg.toString());
+            } catch (Throwable ignored) {
+            }
             // The stack is the diagnosis of the *next* wall: print it before the
             // one-line outcome so a `--until activity-resumed` run that got past
             // the resume still names what stopped it.
-            unwrap(fatal).printStackTrace(System.out);
-            System.out.println("ACOSLAUNCH {\"outcome\":\"crash\",\"code\":\"LOOPER_THREW\","
+            cause.printStackTrace(sOrigOut);
+            sOrigOut.println("ACOSLAUNCH {\"outcome\":\"crash\",\"code\":\"LOOPER_THREW\","
                     + "\"activity_resumed\":" + resumed + ",\"message\":\""
-                    + esc(String.valueOf(unwrap(fatal))) + "\""
-                    + crashDetail(unwrap(fatal)) + "}");
-            System.out.flush();
+                    + esc(String.valueOf(cause)) + "\""
+                    + crashDetail(cause) + "}");
+            sOrigOut.flush();
             System.exit(1);
             return;
         }
@@ -1008,9 +1183,79 @@ public final class LaunchMain {
         return b.toString();
     }
 
+    /**
+     * Android 14 sets `RippleDrawable.FORCE_PATTERNED_STYLE = true`, which logs
+     * `E RippleDrawable: The RippleDrawable.STYLE_PATTERNED animation is not
+     * supported for a non-hardware accelerated Canvas. Skipping animation.` on
+     * every frame of a tap animation when rendered on ACOS's software Canvas.
+     * Switching `mState.mRippleStyle` to `STYLE_SOLID` (0) preserves the
+     * `RippleDrawable` instance (never breaking callers that cast
+     * `getBackground()`) and renders via pure software `drawSolid(Canvas)`.
+     */
+    static boolean sRippleFieldsResolved = false;
+    static java.lang.reflect.Field sRippleStateField = null;
+    static java.lang.reflect.Field sRippleStyleField = null;
+
+    static void ensureRippleFields() {
+        if (sRippleFieldsResolved) return;
+        sRippleFieldsResolved = true;
+        try {
+            java.lang.reflect.Field stateField =
+                    android.graphics.drawable.RippleDrawable.class.getDeclaredField("mState");
+            stateField.setAccessible(true);
+            java.lang.reflect.Field styleField =
+                    stateField.getType().getDeclaredField("mRippleStyle");
+            styleField.setAccessible(true);
+            sRippleStateField = stateField;
+            sRippleStyleField = styleField;
+        } catch (Throwable ignored) {
+        }
+    }
+
+    static void quietDrawableRipples(android.graphics.drawable.Drawable d, int depth) {
+        if (d == null || depth > 6) return;
+        try {
+            if (d instanceof android.graphics.drawable.RippleDrawable) {
+                ensureRippleFields();
+                if (sRippleStateField != null && sRippleStyleField != null) {
+                    Object state = sRippleStateField.get(d);
+                    if (state != null && sRippleStyleField.getInt(state) != 0) {
+                        sRippleStyleField.setInt(state, 0);
+                    }
+                }
+            } else if (d instanceof android.graphics.drawable.DrawableWrapper) {
+                quietDrawableRipples(
+                        ((android.graphics.drawable.DrawableWrapper) d).getDrawable(), depth + 1);
+            } else if (d instanceof android.graphics.drawable.LayerDrawable) {
+                android.graphics.drawable.LayerDrawable ld =
+                        (android.graphics.drawable.LayerDrawable) d;
+                int count = ld.getNumberOfLayers();
+                for (int i = 0; i < count; i++) {
+                    quietDrawableRipples(ld.getDrawable(i), depth + 1);
+                }
+            } else if (d instanceof android.graphics.drawable.DrawableContainer) {
+                android.graphics.drawable.Drawable current = d.getCurrent();
+                if (current != null && current != d) {
+                    quietDrawableRipples(current, depth + 1);
+                }
+            }
+        } catch (Throwable ignored) {
+        }
+    }
+
+    static void quietViewRipples(View v) {
+        if (v == null) return;
+        try {
+            quietDrawableRipples(v.getBackground(), 0);
+            quietDrawableRipples(v.getForeground(), 0);
+        } catch (Throwable ignored) {
+        }
+    }
+
     /** Check every View for layout/animation work the tree itself must finish. */
     static void checkViewAnimations(View v, SettleSignals s) {
         if (v == null) return;
+        quietViewRipples(v);
         try {
             android.view.animation.Animation a = v.getAnimation();
             if (a != null && !a.hasEnded()) addPending(s, "anim");
@@ -2437,8 +2682,8 @@ public final class LaunchMain {
                         if (pendingSince == 0) {
                             pendingSince = now;
                         } else if (now - pendingSince > 2000) {
-                            System.err.println("ACOSPROBE-STALL-DETECT pending_ms=" + (now - pendingSince));
-                            System.err.flush();
+                            sOrigErr.println("ACOSPROBE-STALL-DETECT pending_ms=" + (now - pendingSince));
+                            sOrigErr.flush();
                             dumpMainStack();
                             pendingSince = now;
                         }
@@ -2561,10 +2806,10 @@ public final class LaunchMain {
                 if (n++ >= 40) break;
                 b.append(" | ").append(f);
             }
-            System.out.println(b);
-            System.err.println(b);
-            System.out.flush();
-            System.err.flush();
+            sOrigOut.println(b);
+            sOrigErr.println(b);
+            sOrigOut.flush();
+            sOrigErr.flush();
         } catch (Throwable ignored) {
         }
     }
@@ -2598,10 +2843,10 @@ public final class LaunchMain {
         }
         b.append("]}");
         String line = b.toString();
-        System.out.println(line);
-        System.err.println(line);
-        System.out.flush();
-        System.err.flush();
+        sOrigOut.println(line);
+        sOrigErr.println(line);
+        sOrigOut.flush();
+        sOrigErr.flush();
     }
 
     /**
@@ -2634,15 +2879,15 @@ public final class LaunchMain {
                     }
                 }
                 long c0 = runtimeStat("art.gc.gc-count");
-                System.out.println("ACOSLAUNCH EARLY_RELEASE start delay_ms=" + delayMs
+                sOrigOut.println("ACOSLAUNCH EARLY_RELEASE start delay_ms=" + delayMs
                         + " gc_count_before=" + c0);
-                System.out.flush();
+                sOrigOut.flush();
                 try {
                     Class<?> vm = Class.forName("dalvik.system.VMRuntime");
                     Object rt = vm.getMethod("getRuntime").invoke(null);
                     vm.getMethod("requestConcurrentGC").invoke(rt);
                 } catch (Throwable x) {
-                    System.err.println("ACOSLAUNCH EARLY_RELEASE concurrent_error " + x);
+                    sOrigErr.println("ACOSLAUNCH EARLY_RELEASE concurrent_error " + x);
                 }
                 long c1 = runtimeStat("art.gc.gc-count");
                 System.out.println("ACOSLAUNCH EARLY_RELEASE done ms="
@@ -3184,6 +3429,7 @@ public final class LaunchMain {
             truncated[0] = true;
             return;
         }
+        quietViewRipples(v);
         int[] loc = new int[2];
         try {
             v.getLocationInWindow(loc);
@@ -4676,6 +4922,7 @@ public final class LaunchMain {
                 "register_android_os_Parcel",
                 "register_android_os_Binder",
                 "register_android_os_MessageQueue",
+                "register_android_os_FileObserver",
                 "register_android_os_Process",
                 "register_android_os_GraphicsEnvironment",
                 "register_android_content_StringBlock",
@@ -5223,7 +5470,8 @@ public final class LaunchMain {
      * appear here.
      */
     static Object providerList(ApplicationInfo ai) throws Throwable {
-        java.util.List<Object> list = new java.util.ArrayList<Object>();
+        java.util.List<android.content.pm.ProviderInfo> list =
+                new java.util.ArrayList<android.content.pm.ProviderInfo>();
         String spec = System.getenv("ACOSLAUNCH_PROVIDERS");
         if (spec != null && spec.length() > 0) {
             for (String rec : spec.split("\n")) {
@@ -5241,7 +5489,15 @@ public final class LaunchMain {
                 pi.processName = sPkg;
                 pi.applicationInfo = ai;
                 pi.enabled = true;
-                pi.initOrder = 0;
+                int initOrder = 0;
+                if (f.length > 6 && f[6].length() > 0) {
+                    try {
+                        initOrder = Integer.parseInt(f[6]);
+                    } catch (NumberFormatException ignored) {
+                        initOrder = 0;
+                    }
+                }
+                pi.initOrder = initOrder;
                 pi.isSyncable = false;
                 pi.multiprocess = false;
                 // K3d: the provider's own `<meta-data>`, host-parsed from the
@@ -5255,6 +5511,18 @@ public final class LaunchMain {
                 list.add(pi);
             }
         }
+        // Android installs ContentProviders in descending `initOrder` order
+        // (preserving manifest declaration order on ties — `Collections.sort`
+        // is guaranteed stable).
+        java.util.Collections.sort(list,
+                new java.util.Comparator<android.content.pm.ProviderInfo>() {
+                    @Override
+                    public int compare(
+                            android.content.pm.ProviderInfo a,
+                            android.content.pm.ProviderInfo b) {
+                        return Integer.compare(b.initOrder, a.initOrder);
+                    }
+                });
         System.out.println("ACOSLAUNCH MARK providers count=" + list.size());
         System.out.flush();
         Class<?> cls = Class.forName("android.content.pm.ProviderInfoList");

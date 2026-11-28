@@ -906,6 +906,7 @@ fn append_screenshot_content(
     if let Some(dir) = std::env::var_os("ACOS_SERVE_ARTIFACTS") {
         roots.push(PathBuf::from(dir));
     }
+    roots.push(std::env::temp_dir());
     if !path_within_allowed_roots(full, &roots) {
         return;
     }

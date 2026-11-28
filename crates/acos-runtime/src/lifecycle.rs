@@ -894,7 +894,7 @@ fn provider_specs(apk_path: &Path) -> Result<Vec<bind_app::ProviderSpec>, Lifecy
     let manifest = apk
         .manifest()
         .map_err(|e| LifecycleError::Bind(BindAppError::Materialize(format!("manifest: {e}"))))?;
-    Ok(manifest
+    let mut specs: Vec<bind_app::ProviderSpec> = manifest
         .providers
         .iter()
         .flat_map(|c| {
@@ -903,6 +903,7 @@ fn provider_specs(apk_path: &Path) -> Result<Vec<bind_app::ProviderSpec>, Lifecy
             let shared = c.permission.clone().unwrap_or_default();
             let class = acos_apk::manifest::fq_name(&manifest.package, &c.name);
             let exported = c.exported.unwrap_or(false);
+            let init_order = c.init_order.unwrap_or(0);
             c.authorities
                 .iter()
                 .map(move |authority| bind_app::ProviderSpec {
@@ -911,9 +912,12 @@ fn provider_specs(apk_path: &Path) -> Result<Vec<bind_app::ProviderSpec>, Lifecy
                     read_permission: shared.clone(),
                     write_permission: shared.clone(),
                     exported,
+                    init_order,
                 })
         })
-        .collect())
+        .collect();
+    specs.sort_by(|a, b| b.init_order.cmp(&a.init_order));
+    Ok(specs)
 }
 
 /// Run the interpreter until no green thread is runnable (the main looper has

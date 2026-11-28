@@ -1291,6 +1291,8 @@ pub struct ProviderRecord {
     pub class: String,
     /// The `IContentProvider` binder the app published (0 when not published).
     pub binder: u64,
+    /// `android:initOrder` (higher values initialize first; default 0).
+    pub init_order: i32,
 }
 
 /// Who asked for a recorded launch (MERGEFIX2).
@@ -2747,6 +2749,7 @@ impl AmsState {
                 package: "com.android.providers.settings".into(),
                 class: "SettingsProvider".into(),
                 binder: 0,
+                init_order: 0,
             });
         }
         self.providers.get(authority).cloned()
@@ -3117,6 +3120,12 @@ pub fn dispatch_with_caller(
             }]
         }
         "getRunningAppProcesses" => vec![Value::List(Some(Vec::new()))],
+        // No prior process exits exist on a fresh single-session guest.
+        "getHistoricalProcessExitReasons" => {
+            vec![Value::TypedObject(crate::parcelable::parceled_list_of(
+                Vec::new(),
+            ))]
+        }
         // MODNOTIF4: `PendingIntent` senders. The argument layout is the
         // decoded table's (`tables.rs:2068` for code 62, `:2091` for 63):
         // `(type, [featureId,] packageName, activity, who, requestCode,
@@ -3302,7 +3311,7 @@ fn provider_holder_parcelable(provider: &ProviderRecord) -> Parcelable {
         write_permission: String::new(),
         exported: false,
         grant_uri_permissions: false,
-        init_order: 0,
+        init_order: provider.init_order,
         meta_data: Vec::new(),
     }
     .to_parcelable(&app);
@@ -3334,6 +3343,7 @@ fn provider_from_holder(holder: &Parcelable) -> Option<ProviderRecord> {
             .and_then(Value::as_binder)
             .map(|b| b.0)
             .unwrap_or(0),
+        init_order: info.field(25).and_then(Value::as_int).unwrap_or(0),
     })
 }
 
@@ -3561,11 +3571,16 @@ mod tests {
             package: declared.package.clone(),
             class: declared.class.clone(),
             binder: 0x1234,
+            init_order: 100,
         }]);
         let provider = state
             .get_content_provider(&declared.authority)
             .expect("published");
         assert_eq!(provider.binder, 0x1234);
+        assert_eq!(provider.init_order, 100);
+        let round_trip = provider_from_holder(&provider_holder_parcelable(&provider))
+            .expect("holder round-trip");
+        assert_eq!(round_trip.init_order, 100);
     }
 
     #[test]
@@ -4135,6 +4150,40 @@ mod tests {
         assert_eq!(
             ams.tasks.last().and_then(|t| t.activities.last().copied()),
             Some(primary_token)
+        );
+    }
+
+    #[test]
+    fn get_historical_process_exit_reasons_returns_empty_parceled_list() {
+        let mut state = AmsState::new();
+        let method = MethodInfo {
+            code: 221,
+            name: "getHistoricalProcessExitReasons".to_string(),
+            signature: "(Ljava/lang/String;III)Landroid/content/pm/ParceledListSlice;".to_string(),
+            return_type: "Landroid/content/pm/ParceledListSlice;".to_string(),
+            oneway: false,
+            args: Vec::new(),
+            reply: Vec::new(),
+            incomplete: None,
+        };
+        let reply = dispatch(
+            &mut state,
+            "android.app.IActivityManager",
+            &method,
+            &[
+                Value::Str(Some("com.example.app".into())),
+                Value::Int(0),
+                Value::Int(10),
+                Value::Int(0),
+            ],
+        )
+        .expect("dispatch ok")
+        .expect("getHistoricalProcessExitReasons handled");
+        assert_eq!(
+            reply.reply,
+            vec![Value::TypedObject(crate::parcelable::parceled_list_of(
+                Vec::new()
+            ))]
         );
     }
 }

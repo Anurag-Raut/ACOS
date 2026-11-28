@@ -182,6 +182,7 @@ public final class SessionMain {
         String[] extra = {
                 "register_android_util_EventLog",
                 "register_android_os_Debug",
+                "register_android_os_FileObserver",
                 "register_android_os_StatFs",
                 "register_android_os_HidlSupport",
                 "register_android_util_SeempLog",

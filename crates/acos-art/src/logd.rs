@@ -154,11 +154,28 @@ impl Logd {
     /// Bind `<dir>/logdw` and start the reader thread. `<dir>` is bound at
     /// `/dev/socket` inside the sandbox.
     pub fn start(dir: &Path) -> io::Result<Self> {
-        Self::start_with_cap(dir, log_cap_from_env())
+        Self::start_with_cap_and_logcat(dir, log_cap_from_env(), None)
+    }
+
+    /// Bind `<dir>/logdw` and mirror every absorbed entry directly to `logcat`
+    /// (Android logcat format) so session artifacts always have a fresh
+    /// `logs/logcat.txt` without waiting for an explicit `acos_logs` call.
+    pub fn start_with_logcat(dir: &Path, logcat: Option<&Path>) -> io::Result<Self> {
+        Self::start_with_cap_and_logcat(dir, log_cap_from_env(), logcat)
     }
 
     /// [`Logd::start`] with an explicit entry ceiling (tests, deliberate runs).
     pub fn start_with_cap(dir: &Path, cap: usize) -> io::Result<Self> {
+        Self::start_with_cap_and_logcat(dir, cap, None)
+    }
+
+    /// [`Logd::start`] with both an explicit entry ceiling and an optional
+    /// live `logs/logcat.txt` mirror file.
+    pub fn start_with_cap_and_logcat(
+        dir: &Path,
+        cap: usize,
+        logcat: Option<&Path>,
+    ) -> io::Result<Self> {
         std::fs::create_dir_all(dir)?;
         let path = dir.join("logdw");
         let _ = std::fs::remove_file(&path);
@@ -167,6 +184,15 @@ impl Logd {
         // timeout is only a safety bound, not the stop path. 1 s removes a
         // 10/s idle timer per session without delaying teardown.
         sock.set_read_timeout(Some(Duration::from_secs(1)))?;
+        let mut mirror_file = logcat.and_then(|dest| {
+            if let Some(parent) = dest.parent() {
+                let _ = std::fs::create_dir_all(parent);
+            }
+            let mut file = std::fs::File::create(dest).ok()?;
+            use std::io::Write as _;
+            let _ = file.write_all(b"--------- beginning of main\n");
+            Some(file)
+        });
         let entries: Arc<Mutex<Vec<LogEntry>>> = Arc::new(Mutex::new(Vec::new()));
         let stats = Arc::new(Mutex::new(LogStats {
             cap,
@@ -203,6 +229,7 @@ impl Logd {
                             let mut v = e.lock().unwrap();
                             let mut s = st.lock().unwrap();
                             s.total = s.total.saturating_add(1);
+                            let seq = s.total;
                             // Drop in batches so a spammer does not turn every
                             // push into an O(n) memmove of the whole window.
                             if v.len() >= cap {
@@ -212,6 +239,21 @@ impl Logd {
                                 }
                                 v.drain(..drop_n);
                                 s.dropped = s.dropped.saturating_add(drop_n as u64);
+                            }
+                            if let Some(file) = mirror_file.as_mut() {
+                                use std::io::Write as _;
+                                let level = match entry.prio {
+                                    2 => 'V',
+                                    3 => 'D',
+                                    5 => 'W',
+                                    6 | 7 => 'E',
+                                    _ => 'I',
+                                };
+                                let _ = writeln!(
+                                    file,
+                                    "{:>6}  {:>5}  {} {}: {}",
+                                    entry.ts_ms, seq, level, entry.tag, entry.message
+                                );
                             }
                             // `ACOS_ART_LOG_TRACE=1` names the flood in-band: this
                             // is how R1's trigger (`ServiceManagerCppClient`
@@ -481,6 +523,41 @@ mod tests {
         let entries = logd.finish();
         assert_eq!(entries.len(), 1);
         assert!(entries[0].is_fatal());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn live_logcat_mirror_flushes_entries_without_finish() {
+        let dir = std::env::temp_dir().join(format!("acos-art-logd-mirror-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let logcat = dir.join("logs/logcat.txt");
+        let logd = Logd::start_with_logcat(&dir, Some(&logcat)).unwrap();
+        let path = logd.path().to_path_buf();
+        let s = UnixDatagram::unbound().unwrap();
+        s.connect(&path).unwrap();
+        let tag = b"AndroidRuntime";
+        let msg = b"FATAL EXCEPTION: main";
+        let mut f = vec![6u8, tag.len() as u8, 0, msg.len() as u8, 0];
+        f.push(0);
+        f.extend_from_slice(tag);
+        f.extend_from_slice(msg);
+        s.send(&f).unwrap();
+        let deadline = std::time::Instant::now() + Duration::from_secs(2);
+        let mut text = String::new();
+        while std::time::Instant::now() < deadline {
+            if let Ok(t) = std::fs::read_to_string(&logcat) {
+                if t.contains("FATAL EXCEPTION: main") {
+                    text = t;
+                    break;
+                }
+            }
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        assert!(
+            text.contains("E AndroidRuntime: FATAL EXCEPTION: main"),
+            "live logcat did not mirror record: {text:?}"
+        );
+        let _ = logd.finish();
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

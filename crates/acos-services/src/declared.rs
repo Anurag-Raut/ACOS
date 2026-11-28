@@ -1060,6 +1060,7 @@ impl ServiceObject for NotificationService {
                 vec![Value::TypedObject(crate::value::Parcelable::Null)]
             }
             "getZenRules" => vec![Value::List(Some(Vec::new()))],
+            "getNotificationDelegate" => vec![Value::Str(None)],
             "setInterruptionFilter"
             | "setNotificationDelegate"
             | "setToastRateLimitingEnabled"

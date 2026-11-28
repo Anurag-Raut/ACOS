@@ -111,6 +111,7 @@ fn app_provider_is_installed_published_and_reachable_through_the_binder() {
                     read_permission: shared.clone(),
                     write_permission: shared.clone(),
                     exported,
+                    init_order: c.init_order.unwrap_or(0),
                 })
         })
         .collect();

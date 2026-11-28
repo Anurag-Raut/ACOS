@@ -1939,9 +1939,13 @@ impl<'a> Sandbox<'a> {
                 a.push(node.into());
             }
         }
+        let (synth_passwd, synth_group) = ensure_synthetic_etc(&r.data)?;
         a.push("--ro-bind".into());
+        a.push(synth_passwd.into());
         a.push("/etc/passwd".into());
-        a.push("/etc/passwd".into());
+        a.push("--ro-bind".into());
+        a.push(synth_group.into());
+        a.push("/etc/group".into());
         for d in &self.dirs {
             a.push("--dir".into());
             a.push(d.into());
@@ -2112,6 +2116,55 @@ impl<'a> Sandbox<'a> {
         }
         b.args(a);
         Ok(b)
+    }
+}
+
+/// Stage non-empty, bionic-clean synthetic `/etc/passwd` and `/etc/group` files
+/// for the bwrap sandbox.
+///
+/// Android's bionic resolves all standard AIDs (`root`, `system`, `shell`,
+/// `u0_a*`, etc.) in memory via `android_ids` and `app_id_to_passwd` before
+/// consulting `/etc/passwd` or `/etc/group`. When those files exist, bionic's
+/// `grp_pwd.cpp` parses every non-empty line (it does NOT skip `#` comments)
+/// and logs an error for every entry whose name lacks the `system_` prefix
+/// (which includes all host Linux accounts and even standard Android names).
+/// Binding empty files prevents host username disclosure and eliminates all
+/// bionic `Found user/group name` logcat spam.
+fn ensure_synthetic_etc(data: &Path) -> Result<(PathBuf, PathBuf)> {
+    const PASSWD_CONTENT: &[u8] = b"";
+    const GROUP_CONTENT: &[u8] = b"";
+
+    fn write_pair(dir: &Path) -> std::io::Result<(PathBuf, PathBuf)> {
+        fs::create_dir_all(dir)?;
+        let write_if_changed = |name: &str, expected: &[u8]| -> std::io::Result<PathBuf> {
+            let path = dir.join(name);
+            if fs::read(&path).ok().as_deref() == Some(expected) {
+                return Ok(path);
+            }
+            let tmp = dir.join(format!(".{name}.tmp.{}", std::process::id()));
+            fs::write(&tmp, expected)?;
+            // `rename` is atomic on POSIX; ignore NotFound if another process raced us.
+            if let Err(e) = fs::rename(&tmp, &path) {
+                let _ = fs::remove_file(&tmp);
+                if fs::read(&path).ok().as_deref() != Some(expected) {
+                    return Err(e);
+                }
+            }
+            Ok(path)
+        };
+        let passwd = write_if_changed("passwd", PASSWD_CONTENT)?;
+        let group = write_if_changed("group", GROUP_CONTENT)?;
+        Ok((passwd, group))
+    }
+
+    match write_pair(&data.join("etc")) {
+        Ok(pair) => Ok(pair),
+        Err(_) => {
+            let fallback = std::env::temp_dir().join(format!("acos-etc-{}", unsafe {
+                libc::geteuid()
+            }));
+            write_pair(&fallback).map_err(Error::Io)
+        }
     }
 }
 

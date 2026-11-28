@@ -552,7 +552,7 @@ impl ServeEngine {
             }
             _ => {
                 if let Some(held) = art_target {
-                    return self.call_art(&request_id, &id, &held, tool, args);
+                    return self.call_art(&request_id, &id, &held, tool, args, &ctx.allowed_roots);
                 }
                 // Decide which engine owns this id without guessing: an
                 // explicit engine wins, otherwise only a session this daemon
@@ -1321,6 +1321,7 @@ impl ServeEngine {
         held: &Arc<HeldArtSession>,
         tool: &str,
         args: &Value,
+        allowed_roots: &[PathBuf],
     ) -> Envelope {
         let trust = held.trust;
         let mut session = held.session.lock().unwrap_or_else(|e| e.into_inner());
@@ -1361,8 +1362,8 @@ impl ServeEngine {
         // the guest still answers a timeout with the latest tree/frame identity.
         session.set_settle_timeout(settle_timeout_arg(args));
         let outcome = match tool {
-            "acos_observe_tree" => observe_tree(&mut session, &held.artifacts, args),
-            "acos_observe" => observe(&mut session, &held.artifacts, args),
+            "acos_observe_tree" => observe_tree(&mut session, &held.artifacts, allowed_roots, args),
+            "acos_observe" => observe(&mut session, &held.artifacts, allowed_roots, args),
             "acos_tap" => tap(&mut session, args),
             "acos_text" => type_text(&mut session, args),
             "acos_key" => key(&mut session, args),
@@ -1915,6 +1916,22 @@ fn trust_refusal(trust: Trust, tool: &str, args: &Value) -> Option<(&'static str
 /// session's own `session-exit.json` when it wrote one, else from the child's
 /// exit status (`crate::failure::classify_child_exit`), else `GUEST_EXITED`.
 /// `INTERNAL` is never used for a guest death (W53/W55).
+/// Ensure `<artifacts>/logs/logcat.txt` exists and carries any entries written
+/// to `art-frames/logd-final.jsonl` at teardown (trusted runs only).
+fn flush_logcat_from_final(artifacts: &Path) {
+    let logcat = artifacts.join(acos_protocol::artifacts::logcat_file_name());
+    if !logcat.is_file() {
+        let dump = artifacts.join("art-frames").join("logd-final.jsonl");
+        if dump.is_file() {
+            if let Some(parent) = logcat.parent() {
+                let _ = std::fs::create_dir_all(parent);
+            }
+            let _ = std::fs::write(&logcat, "--------- beginning of main\n");
+        }
+    }
+    crate::verify::merge_final_logd(artifacts);
+}
+
 fn guest_exit_envelope(
     request_id: &str,
     id: &str,
@@ -1924,6 +1941,10 @@ fn guest_exit_envelope(
     exit: &GuestExit,
 ) -> Envelope {
     let discarded = session.invalidate_frame();
+    if held.trust == Trust::Trusted {
+        flush_logcat_from_final(&held.artifacts);
+    }
+    let exit_doc = crate::failure::read_session_exit(&held.artifacts);
     let classified = crate::failure::classify_session_exit(&held.artifacts).or_else(|| {
         exit.exit_code
             .or(exit.signal)
@@ -1938,7 +1959,7 @@ fn guest_exit_envelope(
          live frame to observe; the cached frame was discarded, not served",
         describe_exit(exit)
     );
-    let details = json!({
+    let mut details = json!({
         "verb": verb,
         "guest_exit": exit.to_json(),
         "session_exit": facts,
@@ -1953,11 +1974,41 @@ fn guest_exit_envelope(
         })),
         "launch_hint": "call acos_launch with this session id to start a fresh guest",
     });
+    if let Some(doc) = exit_doc.as_ref() {
+        if let Some(error_logs) = doc
+            .get("error_logs")
+            .and_then(Value::as_array)
+            .filter(|a| !a.is_empty())
+        {
+            details["error_logs"] = Value::Array(error_logs.clone());
+        } else if let Some(logd_tail) = doc
+            .get("logd_tail")
+            .and_then(Value::as_array)
+            .filter(|a| !a.is_empty())
+        {
+            details["logd_tail"] = Value::Array(logd_tail.clone());
+        }
+        if let Some(unsupported) = doc
+            .get("unsupported_apis")
+            .and_then(Value::as_array)
+            .filter(|a| !a.is_empty())
+        {
+            details["unsupported_apis"] = Value::Array(unsupported.clone());
+        }
+        if let Some(stderr_tail) = doc
+            .get("stderr_tail")
+            .and_then(Value::as_array)
+            .filter(|a| !a.is_empty())
+        {
+            details["stderr_tail"] = Value::Array(stderr_tail.clone());
+        }
+    }
     with_hint(
         art_failure(request_id, Some(id), held.trust, code, detail, details),
         "The guest process ended. `acos_launch` on this session id relaunches a fresh guest \
          (it never returns the dead session's frame). Read details.session_exit / \
-         details.guest_exit and the session's logcat before retrying the same app.",
+         details.error_logs / details.unsupported_apis / details.guest_exit and the session's \
+         logcat before retrying the same app.",
     )
 }
 
@@ -2334,9 +2385,21 @@ fn launch_reply(
     // placeholder-content` and the first log line that explains it.
     // FB2c: the label is not sticky — `placeholder_frame_report()` answers only
     // while the *current* bound frame is still the placeholder.
+    let logcat_path = held
+        .artifacts
+        .join(acos_protocol::artifacts::logcat_file_name());
+    let mut cached_log_lines: Option<Vec<String>> = None;
+    if held.trust == Trust::Trusted
+        && (!logcat_path.is_file() || session.placeholder_frame_report().is_some())
+    {
+        if let Ok(records) = session.logs_since(0) {
+            let _ = acos_verify::artifacts::write_logcat(&held.artifacts, &records);
+            cached_log_lines = Some(format_log_lines_for_hint(&records));
+        }
+    }
     let placeholder_failure = match session.placeholder_frame_report().cloned() {
         Some(report) => {
-            let lines = log_lines_for_hint(session);
+            let lines = cached_log_lines.unwrap_or_else(|| log_lines_for_hint(session));
             Some(placeholder_launch_error(
                 id,
                 &report,
@@ -2392,12 +2455,7 @@ fn launch_reply(
     .with_capabilities(["apk.inspect", "lifecycle", "ui.frame", "ui.tree"])
 }
 
-/// FB2: the guest log lines a launch reply may quote.
-///
-/// The sink drops oldest first and a React Native launch opens with hundreds of
-/// SoLoader lines, so the launch reply carries at most one *chosen* line rather
-/// than a wall of them; `acos_logs` remains the whole record.
-fn log_lines_for_hint(session: &mut ArtSession) -> Vec<String> {
+fn format_log_lines_for_hint(records: &[acos_verify::LogRecord]) -> Vec<String> {
     let priority = |level: LogLevel| match level {
         LogLevel::Verbose => "V",
         LogLevel::Debug => "D",
@@ -2405,18 +2463,27 @@ fn log_lines_for_hint(session: &mut ArtSession) -> Vec<String> {
         LogLevel::Warn => "W",
         LogLevel::Error => "E",
     };
+    records
+        .iter()
+        .map(|record| {
+            format!(
+                "{} {:<8} {}",
+                priority(record.level),
+                record.tag,
+                record.message
+            )
+        })
+        .collect()
+}
+
+/// FB2: the guest log lines a launch reply may quote.
+///
+/// The sink drops oldest first and a React Native launch opens with hundreds of
+/// SoLoader lines, so the launch reply carries at most one *chosen* line rather
+/// than a wall of them; `acos_logs` remains the whole record.
+fn log_lines_for_hint(session: &mut ArtSession) -> Vec<String> {
     match session.logs_since(0) {
-        Ok(records) => records
-            .iter()
-            .map(|record| {
-                format!(
-                    "{} {:<8} {}",
-                    priority(record.level),
-                    record.tag,
-                    record.message
-                )
-            })
-            .collect(),
+        Ok(records) => format_log_lines_for_hint(&records),
         // A launch whose guest is wedged cannot promise a log snapshot; the
         // error still says `placeholder-content` and points at `acos_logs`.
         Err(_) => Vec::new(),
@@ -2427,13 +2494,13 @@ fn log_lines_for_hint(session: &mut ArtSession) -> Vec<String> {
 ///
 /// Ordered by how much it tells an agent: a missing native symbol names the
 /// library, SoLoader's "couldn't find" line names it too, then a fatal JS/
-/// runtime line, then any error-level line. Never a guess: when no line matches,
-/// the reply says so instead of quoting noise.
+/// runtime line, then the first Error/Fatal (`E`/`F`) line. Benign `I`/`W`
+/// `SoLoader` startup chatter is skipped so real `ReactNativeJS` /
+/// `AndroidRuntime` errors are surfaced instead.
 fn placeholder_hint_line(lines: &[String]) -> Option<String> {
-    const MARKERS: [&str; 5] = [
+    const MARKERS: [&str; 4] = [
         "UnsatisfiedLinkError",
         "couldn't find",
-        "SoLoader",
         "FATAL EXCEPTION",
         "FATAL",
     ];
@@ -2444,8 +2511,21 @@ fn placeholder_hint_line(lines: &[String]) -> Option<String> {
     }
     lines
         .iter()
-        .find(|line| line.starts_with('E'))
+        .find(|line| {
+            let trimmed = line.trim_start();
+            trimmed.starts_with("E ")
+                || trimmed.starts_with("E/")
+                || trimmed.starts_with("F ")
+                || trimmed.starts_with("F/")
+        })
         .map(|line| line.trim().to_string())
+}
+
+fn is_native_library_hint(line: &str) -> bool {
+    line.contains("UnsatisfiedLinkError")
+        || line.contains("couldn't find")
+        || line.contains("dlopen")
+        || line.contains("SoLoader")
 }
 
 /// FB2: the structured failure for a launch that reached only the window.
@@ -2484,21 +2564,31 @@ fn placeholder_launch_error(
     let hint = match &log_hint {
         Some(line) => {
             details["log_hint"] = json!(line);
-            format!(
-                "The window exists; the app's own content never mounted. The launch already waited its \
-                 whole content budget (`ACOS_ART_FIRST_FRAME_MS`, {} ms), so a longer timeout cannot \
-                 mount content that is not there: the guest log names the cause in this line: \
-                 `{line}`. A native library the app references but the APK does not ship for the host \
-                 ABI is the usual cause: run `acos_inspect` and read its `warnings`, then `acos_logs` \
-                 around that line.",
-                report.budget_ms
-            )
+            if is_native_library_hint(line) {
+                format!(
+                    "The window exists; the app's own content never mounted. The launch already waited its \
+                     whole content budget (`ACOS_ART_FIRST_FRAME_MS`, {} ms), so a longer timeout cannot \
+                     mount content that is not there: the guest log names the cause in this line: \
+                     `{line}`. A native library the app references but the APK does not ship for the host \
+                     ABI is the usual cause: run `acos_inspect` and read its `warnings`, then `acos_logs` \
+                     around that line.",
+                    report.budget_ms
+                )
+            } else {
+                format!(
+                    "The window exists; the app's own content never mounted. The launch already waited its \
+                     whole content budget (`ACOS_ART_FIRST_FRAME_MS`, {} ms), so a longer timeout cannot \
+                     mount content that is not there: the guest log reported `{line}`. Read `acos_logs` \
+                     around that line for the full error context.",
+                    report.budget_ms
+                )
+            }
         }
         None => format!(
             "The window exists; the app's own content never mounted and the guest log carried no \
              explaining line. The launch already waited its whole content budget \
              (`ACOS_ART_FIRST_FRAME_MS`, {} ms); a longer timeout only reproduces this. Read \
-             `acos_logs` for the first UnsatisfiedLinkError / SoLoader / fatal JS line; \
+             `acos_logs` for the first error, exception, or missing-library line; \
              `acos_inspect` cross-checks the APK's referenced native libraries against lib/<abi>/.",
             report.budget_ms
         ),
@@ -2587,6 +2677,7 @@ fn png_pixel_size(path: &Path) -> Option<(u32, u32)> {
 fn attach_screenshot(
     session: &mut ArtSession,
     artifacts: &Path,
+    allowed_roots: &[PathBuf],
     request: ScreenshotRequest,
     verb: &str,
     result: &mut Value,
@@ -2602,6 +2693,7 @@ fn attach_screenshot(
     let (source, frame_seq, md5, bytes) = session.screenshot_source()?;
     write_screenshot(
         artifacts,
+        allowed_roots,
         request_dest,
         verb,
         (&source, frame_seq, &md5, bytes),
@@ -2625,17 +2717,19 @@ fn placeholder_screenshot_error(verb: &str) -> BackendError {
     ))
 }
 
-/// FB2c: confine a screenshot destination to the session's artifacts directory.
+/// FB2c: confine a screenshot destination to a safe allowed root.
 ///
-/// The argument came from an MCP caller, so it is untrusted input: `true` means
-/// the session's own `screenshots/` dir, a relative path resolves **against that
-/// directory** (never the daemon's cwd), and an absolute path must stay inside
-/// it. `..` components, a symlink leaving the directory and a destination that
-/// is the source frame itself are all refused before anything is created or
-/// copied — the old code called `create_dir_all` on any path and could truncate
-/// the frame artifact to zero bytes.
+/// The argument came from an MCP/CLI caller, so it is untrusted input: `true`
+/// means the session's own `screenshots/` dir, a relative path resolves
+/// **against the session artifacts directory** (never the daemon's cwd), and
+/// an absolute path must stay inside the session artifacts directory, one of
+/// the server's `allowed_roots` (workspace/cwd), or the OS temp directory.
+/// `..` components, a symlink leaving the allowed roots, a symlink leaf, and a
+/// destination that is the source frame itself are all refused before anything
+/// is created or copied.
 fn confine_screenshot_dest(
     artifacts: &Path,
+    allowed_roots: &[PathBuf],
     request_dest: Option<PathBuf>,
     verb: &str,
     frame_seq: u64,
@@ -2668,12 +2762,27 @@ fn confine_screenshot_dest(
             suffix += 1;
         }
     };
+    let mut permitted_roots = vec![base.clone()];
+    for root in allowed_roots {
+        if let Ok(real) = std::fs::canonicalize(root) {
+            if !permitted_roots.contains(&real) {
+                permitted_roots.push(real);
+            }
+        }
+    }
+    let temp_root = std::fs::canonicalize(std::env::temp_dir())
+        .unwrap_or_else(|_| std::env::temp_dir());
+    if !permitted_roots.contains(&temp_root) {
+        permitted_roots.push(temp_root.clone());
+    }
+    let within_permitted = |path: &Path| permitted_roots.iter().any(|root| path.starts_with(root));
     let reject = |why: &str| BackendError::Error {
         code: ErrorCode::InvalidArgument,
         detail: format!(
-            "`screenshot` must be true or a path inside the session's artifacts directory ({}); \
-             {why}",
-            base.display()
+            "`screenshot` must be true or a path inside the session's artifacts directory ({}), \
+             an allowed workspace root, or {}; {why}",
+            base.display(),
+            temp_root.display()
         ),
     };
     if requested
@@ -2697,7 +2806,7 @@ fn confine_screenshot_dest(
         return Err(reject("the path names no directory"));
     };
     // Refuse *before* creating anything: resolve the deepest ancestor that
-    // already exists, so a symlink that leaves the artifacts directory is caught
+    // already exists, so a symlink that leaves the allowed roots is caught
     // without mkdir'ing through it.
     let mut probe = parent.to_path_buf();
     while !probe.exists() {
@@ -2710,9 +2819,9 @@ fn confine_screenshot_dest(
         code: ErrorCode::RenderIo,
         detail: format!("cannot resolve {}: {error}", probe.display()),
     })?;
-    if !probe_real.starts_with(&base) {
+    if !within_permitted(&probe_real) {
         return Err(reject(&format!(
-            "{} is outside the artifacts directory",
+            "{} is outside the allowed roots",
             probe_real.display()
         )));
     }
@@ -2721,14 +2830,14 @@ fn confine_screenshot_dest(
         detail: format!("cannot create {}: {error}", parent.display()),
     })?;
     // Canonicalize *after* creating the directory: symlinks resolve, so a link
-    // that leaves the artifacts directory is caught here, not by the write.
+    // that leaves the allowed roots is caught here, not by the write.
     let parent_real = std::fs::canonicalize(parent).map_err(|error| BackendError::Error {
         code: ErrorCode::RenderIo,
         detail: format!("cannot resolve {}: {error}", parent.display()),
     })?;
-    if !parent_real.starts_with(&base) {
+    if !within_permitted(&parent_real) {
         return Err(reject(&format!(
-            "{} is outside the artifacts directory",
+            "{} is outside the allowed roots",
             parent_real.display()
         )));
     }
@@ -2752,6 +2861,7 @@ fn confine_screenshot_dest(
 /// holds the frame's artifact (a verb that just captured one).
 fn write_screenshot(
     artifacts: &Path,
+    allowed_roots: &[PathBuf],
     request_dest: Option<PathBuf>,
     verb: &str,
     (source, frame_seq, md5, bytes): (&Path, u64, &str, u64),
@@ -2764,7 +2874,14 @@ fn write_screenshot(
             "the frame artifact for this screenshot is empty",
         ));
     }
-    let dest = confine_screenshot_dest(artifacts, request_dest, verb, frame_seq, source)?;
+    let dest = confine_screenshot_dest(
+        artifacts,
+        allowed_roots,
+        request_dest,
+        verb,
+        frame_seq,
+        source,
+    )?;
     std::fs::copy(source, &dest).map_err(|error| BackendError::Error {
         code: ErrorCode::RenderIo,
         detail: format!(
@@ -2799,6 +2916,7 @@ fn write_screenshot(
 fn observe_tree(
     session: &mut ArtSession,
     artifacts: &Path,
+    allowed_roots: &[PathBuf],
     args: &Value,
 ) -> Result<Value, BackendError> {
     // FB2: `screenshot: true` is an argument error before any work is done.
@@ -2854,6 +2972,7 @@ fn observe_tree(
     attach_screenshot(
         session,
         artifacts,
+        allowed_roots,
         screenshot,
         "acos_observe_tree",
         &mut result,
@@ -2869,6 +2988,7 @@ fn observe_tree(
 fn observe(
     session: &mut ArtSession,
     artifacts: &Path,
+    allowed_roots: &[PathBuf],
     args: &Value,
 ) -> Result<Value, BackendError> {
     let want_tree = args.get("tree").and_then(Value::as_bool).unwrap_or(false);
@@ -2916,7 +3036,14 @@ fn observe(
         // FB2: `screenshot` used to be silently ignored on the tree path (the
         // agent got a tree, no file, no error). It is honoured here on the same
         // bound frame.
-        attach_screenshot(session, artifacts, screenshot, "acos_observe", &mut result)?;
+        attach_screenshot(
+            session,
+            artifacts,
+            allowed_roots,
+            screenshot,
+            "acos_observe",
+            &mut result,
+        )?;
         if let (Some(shot), false) = (result.get_mut("screenshot"), tree.windows.is_empty()) {
             shot["windows"] = json!(tree.windows.len());
         }
@@ -2951,6 +3078,7 @@ fn observe(
     let t_write = m5_now_us();
     write_screenshot(
         artifacts,
+        allowed_roots,
         path,
         "acos_observe",
         (&frame.path, frame.frame_seq, &frame.md5, frame.bytes),
@@ -3758,12 +3886,20 @@ fn logs(session: &mut ArtSession, artifacts: &Path, args: &Value) -> Result<Valu
             "message": crash.message,
             "fatal": crash.fatal,
         })),
-        "note": if records.is_empty() {
-            "the guest logd sink is empty; the app reached first_frame, so this is an empty sink, not a missing one"
-        } else {
-            ""
-        },
+        "note": logs_empty_note(total, records.len()),
     }))
+}
+
+fn logs_empty_note(total: usize, matched: usize) -> String {
+    if matched > 0 {
+        String::new()
+    } else if total == 0 {
+        "the guest logd sink is empty; the app reached first_frame, so this is an empty sink, not a missing one".to_string()
+    } else {
+        format!(
+            "0 of {total} buffered log records matched the active filter; pass \"all\": true (or min_priority \"V\") or inspect logs/logcat.txt for the full buffer"
+        )
+    }
 }
 
 /// MPROC1: the session's extra APKs as reply data — the caller's spelling of
@@ -5780,6 +5916,7 @@ mod tests {
         let mut result = json!({"node_count": 9});
         write_screenshot(
             &artifacts,
+            &[],
             None,
             "acos_observe_tree",
             (&source, 7, "m7", crate::engine::fake::TINY_PNG.len() as u64),
@@ -5843,6 +5980,7 @@ mod tests {
         let mut result = json!({});
         write_screenshot(
             &artifacts,
+            &[],
             Some(PathBuf::from("out/agent.png")),
             "acos_observe",
             (&source, 3, "m3", crate::engine::fake::TINY_PNG.len() as u64),
@@ -5859,13 +5997,49 @@ mod tests {
             dest.is_file(),
             "a relative path lands under the artifacts dir"
         );
+        // An absolute path inside an allowed workspace root or OS temp dir is
+        // also permitted.
+        let workspace = dir.join("workspace");
+        std::fs::create_dir_all(&workspace).unwrap();
+        let ws_dest = workspace.join("sub/ws.png");
+        let mut ws_result = json!({});
+        write_screenshot(
+            &artifacts,
+            std::slice::from_ref(&workspace),
+            Some(ws_dest.clone()),
+            "acos_observe",
+            (&source, 4, "m4", crate::engine::fake::TINY_PNG.len() as u64),
+            (1080, 2400),
+            (0, 0),
+            &mut ws_result,
+        )
+        .unwrap();
+        assert!(ws_dest.is_file(), "allowed workspace root should succeed");
+
+        let tmp_dest = std::env::temp_dir()
+            .join(format!("acos-shot-tmp-{}", std::process::id()))
+            .join("capture.png");
+        let mut tmp_result = json!({});
+        write_screenshot(
+            &artifacts,
+            &[],
+            Some(tmp_dest.clone()),
+            "acos_observe",
+            (&source, 5, "m5", crate::engine::fake::TINY_PNG.len() as u64),
+            (1080, 2400),
+            (0, 0),
+            &mut tmp_result,
+        )
+        .unwrap();
+        assert!(tmp_dest.is_file(), "temp dir destination should succeed");
+        let _ = std::fs::remove_dir_all(tmp_dest.parent().unwrap());
         let _ = std::fs::remove_dir_all(&dir);
     }
 
     /// FB2c item 5: the screenshot destination is caller input, so it is confined
-    /// to the session's artifacts directory: `..`, an absolute path outside it, a
-    /// symlink that leaves it and the frame artifact itself are all refused, and a
-    /// refusal writes nothing.
+    /// to safe allowed roots: `..`, an absolute path outside them, a symlink that
+    /// leaves them and the frame artifact itself are all refused, and a refusal
+    /// writes nothing.
     #[test]
     fn a_screenshot_destination_cannot_leave_the_session_artifacts() {
         let dir = fb2_scratch("confine");
@@ -5877,6 +6051,7 @@ mod tests {
             let mut result = json!({});
             write_screenshot(
                 &artifacts,
+                &[],
                 dest,
                 "acos_observe",
                 (&source, 3, "m3", crate::engine::fake::TINY_PNG.len() as u64),
@@ -6491,6 +6666,7 @@ mod tests {
             let mut result = json!({});
             write_screenshot(
                 &artifacts,
+                &[],
                 None,
                 "acos_observe_tree",
                 (&source, 7, "m7", crate::engine::fake::TINY_PNG.len() as u64),
@@ -6508,6 +6684,47 @@ mod tests {
             assert!(Path::new(path).is_file(), "missing {path}");
         }
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn placeholder_hint_skips_benign_soloader_warnings_and_quotes_real_errors() {
+        let lines = vec![
+            "I SoLoader: Initializing SoLoader".to_string(),
+            "W SoLoader: libfoo.so already loaded from backup source".to_string(),
+            "E ReactNativeJS: TypeError: undefined is not a function".to_string(),
+        ];
+        assert_eq!(
+            placeholder_hint_line(&lines).as_deref(),
+            Some("E ReactNativeJS: TypeError: undefined is not a function")
+        );
+        let err = placeholder_launch_error(
+            "s_rn",
+            &placeholder_report(9, true),
+            Some(1),
+            placeholder_hint_line(&lines),
+        );
+        assert!(
+            err.hint.contains("ReactNativeJS: TypeError"),
+            "hint should quote the real error line: {}",
+            err.hint
+        );
+        assert!(
+            !err.hint.contains("host ABI"),
+            "non-native error should not blame host ABI: {}",
+            err.hint
+        );
+    }
+
+    #[test]
+    fn logs_empty_note_distinguishes_empty_sink_from_filtered_buffer() {
+        assert_eq!(logs_empty_note(10, 3), "");
+        assert!(logs_empty_note(0, 0).contains("guest logd sink is empty"));
+        let filtered = logs_empty_note(42, 0);
+        assert!(
+            filtered.contains("0 of 42 buffered log records matched"),
+            "unexpected filtered note: {filtered}"
+        );
+        assert!(!filtered.contains("guest logd sink is empty"));
     }
 
     fn test_serve_engine(artifacts_root: PathBuf) -> ServeEngine {

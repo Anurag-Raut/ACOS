@@ -524,7 +524,11 @@ impl SessionBackend {
         // EOF can destroy exactly those sessions (a daemon outlives this process
         // by design; its guests must not outlive their purpose). SERVELEAK2/F3:
         // the launch token makes ownership provable, not just a name.
-        if tool == "acos_launch" && envelope.ok() {
+        if tool == "acos_launch"
+            && (envelope.ok()
+                || envelope.error().map(|error| error.code)
+                    == Some(ErrorCode::PlaceholderContent))
+        {
             let effective_ttl = self.remember_owned(&id, args, &launch_token(&envelope));
             annotate_launch(&mut envelope, args, effective_ttl);
         } else if tool == "acos_destroy" && envelope.ok() {
@@ -2610,9 +2614,14 @@ impl SessionBackend {
     /// an external daemon or a CLI launched, a native/Flutter/RN child — keeps
     /// its old path and gains the `sessions` array.
     fn call_status(&self, request_id: &str, args: &Value, ctx: &CallContext) -> Envelope {
-        let id = session_id(args);
-        if let Some(envelope) = self.expired_envelope(&id, request_id) {
-            return envelope;
+        let explicit = explicit_session_id(args);
+        let id = explicit
+            .clone()
+            .unwrap_or_else(|| default_session_id().to_string());
+        if explicit.is_some() {
+            if let Some(envelope) = self.expired_envelope(&id, request_id) {
+                return envelope;
+            }
         }
         let sessions = self.owned_status(ctx);
         let mine = sessions
@@ -2630,29 +2639,31 @@ impl SessionBackend {
             .with_session_id(id)
             .with_value_result(session);
         }
-        // This server launched it, but the daemon no longer holds it (it was
-        // destroyed, or the guest died): never a pass on a session with no
-        // guest. The idle-TTL case is answered above, with its reason.
-        let owned_here = self
-            .owned
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .contains_key(&id);
-        if owned_here {
-            let envelope = Envelope::failure(
-                request_id,
-                ProtocolBackend::AcosNative,
-                Fidelity::NativeRuntime,
-                ProtocolError::new(
-                    ErrorCode::SessionNotFound,
-                    format!("no live ART session `{id}`: it was destroyed or its guest exited"),
+        if explicit.is_some() {
+            // This server launched it, but the daemon no longer holds it (it was
+            // destroyed, or the guest died): never a pass on a session with no
+            // guest. The idle-TTL case is answered above, with its reason.
+            let owned_here = self
+                .owned
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .contains_key(&id);
+            if owned_here {
+                let envelope = Envelope::failure(
+                    request_id,
+                    ProtocolBackend::AcosNative,
+                    Fidelity::NativeRuntime,
+                    ProtocolError::new(
+                        ErrorCode::SessionNotFound,
+                        format!("no live ART session `{id}`: it was destroyed or its guest exited"),
+                    )
+                    .with_details(json!({"session_id": id, "reason": "no_live_guest"}))
+                    .with_hint("launch the APK again with `acos_launch`"),
+                    Metrics::wall_ms(0),
                 )
-                .with_details(json!({"session_id": id, "reason": "no_live_guest"}))
-                .with_hint("launch the APK again with `acos_launch`"),
-                Metrics::wall_ms(0),
-            )
-            .with_session_id(id);
-            return envelope;
+                .with_session_id(id);
+                return envelope;
+            }
         }
         if self.rn.contains(&id) {
             return self.status_rn(request_id, &id);
@@ -2669,8 +2680,41 @@ impl SessionBackend {
         // Not ours: the daemon's own status for that id (a CLI-launched session
         // on a shared daemon), or the in-process session of the legacy engine.
         if let Some(mut envelope) = self.forward_session_tool("acos_status", args) {
+            if explicit.is_none()
+                && !envelope.ok()
+                && envelope.error().map(|error| error.code) == Some(ErrorCode::SessionNotFound)
+            {
+                return Envelope::pass(
+                    request_id,
+                    ProtocolBackend::AcosNative,
+                    Fidelity::NativeRuntime,
+                    Metrics::wall_ms(0),
+                )
+                .with_session_id(id.clone())
+                .with_value_result(json!({
+                    "session_id": id,
+                    "launched": false,
+                    "count": sessions.len(),
+                    "sessions": sessions,
+                }));
+            }
             attach_sessions(&mut envelope, sessions);
             return envelope;
+        }
+        if explicit.is_none() && !sessions.is_empty() {
+            return Envelope::pass(
+                request_id,
+                ProtocolBackend::AcosNative,
+                Fidelity::NativeRuntime,
+                Metrics::wall_ms(0),
+            )
+            .with_session_id(id.clone())
+            .with_value_result(json!({
+                "session_id": id,
+                "launched": false,
+                "count": sessions.len(),
+                "sessions": sessions,
+            }));
         }
         let mut envelope = self.with_session(&id, |session| match session.status() {
             Ok(state) => Envelope::pass(
@@ -2763,15 +2807,19 @@ impl Backend for SessionBackend {
     }
 }
 
-fn session_id(args: &Value) -> String {
+fn explicit_session_id(args: &Value) -> Option<String> {
     args.pointer("/base/session_id")
         .and_then(Value::as_str)
         // Older clients (and `mcp_smoke.py`'s first form) send `session_id` at
         // the top level; accept it here too, so `acos_status` addresses the
         // session the client named.
         .or_else(|| args.get("session_id").and_then(Value::as_str))
+        .filter(|id| !id.trim().is_empty())
         .map(str::to_string)
-        .unwrap_or_else(|| default_session_id().to_string())
+}
+
+fn session_id(args: &Value) -> String {
+    explicit_session_id(args).unwrap_or_else(|| default_session_id().to_string())
 }
 
 /// SERVELEAK2/F3: this **server instance's** default session id.
