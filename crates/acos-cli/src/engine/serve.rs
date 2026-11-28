@@ -3637,6 +3637,24 @@ fn core_service_ctl(session: &mut ArtSession, args: &Value) -> Result<Value, Bac
 
 fn logs(session: &mut ArtSession, artifacts: &Path, args: &Value) -> Result<Value, BackendError> {
     let records = session.logs_since(0)?;
+    // METRO4/METRO6: the React Native redbox as data, read from the whole
+    // buffer (not the filtered view). Only an app that logged on a React Native
+    // tag has one; symbolication runs only for an error that needs it, against
+    // the Metro port the app's own bundle URL names (host-port forwarded, so
+    // the same port on the host) with a strict timeout and the session's map
+    // cache.
+    let rn = {
+        let mut state = acos_verify::rn_errors::parse_logs(&records);
+        if let Some(error) = state.js_error.as_mut().filter(|error| !error.symbolicated) {
+            let mut symbolicator = acos_verify::symbolicate::Symbolicator::new(
+                acos_verify::rn_errors::metro_port_hint(&records),
+                Some(artifacts.join("source-maps")),
+            );
+            symbolicator.timeout = std::time::Duration::from_secs(2);
+            symbolicator.symbolicate(error);
+        }
+        (!state.is_empty()).then(|| serde_json::to_value(&state).unwrap_or(Value::Null))
+    };
     let crash = session.last_crash();
     // The default view is small, but the guest's full buffer is still evidence:
     // write it before filtering so `log_path` always names the whole run.
@@ -3733,7 +3751,7 @@ fn logs(session: &mut ArtSession, artifacts: &Path, args: &Value) -> Result<Valu
             })
         })
         .collect();
-    Ok(json!({
+    let mut reply = json!({
         "launched": true,
         "stage_reached": "first_frame",
         "total": total,
@@ -3763,7 +3781,11 @@ fn logs(session: &mut ArtSession, artifacts: &Path, args: &Value) -> Result<Valu
         } else {
             ""
         },
-    }))
+    });
+    if let (Some(rn), Some(object)) = (rn, reply.as_object_mut()) {
+        object.insert("rn".to_string(), rn);
+    }
+    Ok(reply)
 }
 
 /// MPROC1: the session's extra APKs as reply data — the caller's spelling of

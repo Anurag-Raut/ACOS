@@ -159,6 +159,13 @@
             "stop"
           ],
           "type": "string"
+        },
+        {
+          "description": "METRO5: open the React Native dev menu without a shake: Metro's `/message` broadcast `devMenu` (the CLI's `d` key). The app's `DevSupportManager` shows the menu; the steps after it read the items.",
+          "enum": [
+            "dev_menu"
+          ],
+          "type": "string"
         }
       ]
     },
@@ -184,6 +191,13 @@
           "description": "`edit`: replace the whole file instead.",
           "type": [
             "string",
+            "null"
+          ]
+        },
+        "debug_http_host": {
+          "description": "`start` (METRO5): point the debug app at this server — the launcher writes `debug_http_host = localhost:<port>` into the app's default SharedPreferences before the guest boots (React Native's own \"Debug server host & port\" setting). ACOS never emulates `10.0.2.2`.",
+          "type": [
+            "boolean",
             "null"
           ]
         },
@@ -498,6 +512,78 @@
           "type": "string"
         }
       ]
+    },
+    "JsErrorAssertion": {
+      "additionalProperties": false,
+      "description": "`assert_js_error` (METRO4): the React Native JS error on screen / in the log.\n\nEvery field is a constraint on the **most recent** JS error in scope; all given constraints must hold. `none: true` instead requires that no JS error was reported in scope (a fix + reload cleared the redbox).",
+      "properties": {
+        "bundle_unreachable": {
+          "description": "Expect the bundle-fetch failure instead of a JS error (`BUNDLE_UNREACHABLE` is then the pass condition; exclusive with the JS-error fields).",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "file": {
+          "description": "A frame's file ends with this (`App.js`, `src/screens/Home.tsx`).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "line": {
+          "description": "That frame's line (needs `file`).",
+          "format": "uint32",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "message": {
+          "description": "Substring of the error message.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "name": {
+          "description": "Exact error class (`TypeError`, `SyntaxError`, ...).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "none": {
+          "description": "No JS error in scope (exclusive with every other constraint).",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "since_previous_step": {
+          "default": false,
+          "description": "Only consider log lines produced since the previous step (default: the whole run; a `none: true` after a reload usually wants `true`).",
+          "type": "boolean"
+        },
+        "symbolicated": {
+          "description": "Require the frames to be symbolicated (source positions).",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "timeout_ms": {
+          "description": "Wait up to this long for the condition (1..=300000 ms); the last observation decides.",
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
     },
     "KeyName": {
       "description": "A symbolic key.",
@@ -1557,6 +1643,17 @@
     "Step": {
       "description": "A scenario step.\n\nOn the wire a step is a one-key map: `- launch: {activity: .MainActivity}`. The struct has one optional field per step kind; validation enforces that **exactly one** is present. (A Rust enum would map to YAML `!tag` syntax with `serde_yaml_ng`, which is not the agent-facing format.)",
       "properties": {
+        "assert_js_error": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/JsErrorAssertion"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "METRO4: assert the React Native JS error the app reported (redbox, LogBox, `ExceptionsManager`), or `none: true` that there is none (a reload cleared it). A bundle that could not be fetched is **not** a JS error: it fails this step as `BUNDLE_UNREACHABLE` unless the step asks for `bundle_unreachable: true`."
+        },
         "assert_log": {
           "anyOf": [
             {

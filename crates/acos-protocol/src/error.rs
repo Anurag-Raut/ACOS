@@ -303,6 +303,16 @@ pub enum ErrorCode {
     /// (fail closed, ADR-0030 amendment 3). The supervisor restarts `pasta`
     /// itself, so a retry after the relay is back succeeds.
     NetworkUnavailable,
+    /// METRO4: the React Native app reported a JS error (redbox / LogBox /
+    /// `ExceptionsManager`). `error.details.js_error` carries name, message,
+    /// frames (symbolicated when Metro or a source map was available) and the
+    /// component stack.
+    JsError,
+    /// METRO4: the React Native debug app could not fetch its JS bundle from the
+    /// dev server (Metro down, wrong `debug_http_host`, port not exposed).
+    /// No JS ran, so this is never a `JS_ERROR`. `error.details.bundle_unreachable`
+    /// carries the URL and the low-level error.
+    BundleUnreachable,
     /// The session daemon answered (or refused to identify itself) from a
     /// **different build** than the caller: crate version, build id (git sha +
     /// source digest) or the binary at the same path differ. The client never
@@ -488,6 +498,8 @@ impl ErrorCode {
             ErrorCode::GuestExited => "GUEST_EXITED",
             ErrorCode::ZygoteDead => "ZYGOTE_DEAD",
             ErrorCode::NetworkUnavailable => "NETWORK_UNAVAILABLE",
+            ErrorCode::JsError => "JS_ERROR",
+            ErrorCode::BundleUnreachable => "BUNDLE_UNREACHABLE",
             ErrorCode::DaemonVersionMismatch => "DAEMON_VERSION_MISMATCH",
             ErrorCode::Internal => "INTERNAL",
         }
@@ -742,6 +754,12 @@ impl ErrorCode {
             ErrorCode::NetworkUnavailable => {
                 "The shared network relay (`acos-netd`) is down, so this session has no network. This is a host condition, not app behaviour: the guest's own failure (an exception in the app) is a different code. The relay supervisor restarts `pasta` on its next tick, so retry once it is back; `acos net status` reports `up`."
             }
+            ErrorCode::JsError => {
+                "The React Native app threw: read error.details.js_error (name, message, frames, component_stack). Frames point at source when `symbolicated` is true; otherwise `symbolication_reason` says why (no Metro, no map). Fix the JS, then reload (`dev_server: {op: reload}` or `acos_service_ctl {module: react_native, op: reload}`) and assert `assert_js_error: {none: true}`."
+            }
+            ErrorCode::BundleUnreachable => {
+                "The debug app never got its JS bundle, so no app code ran: this is the dev loop, not your JS. Check error.details.bundle_unreachable.url/error: Metro must be running (`dev_server: {op: start}`), its port opted in to the session (`acos_net {action: hostport, port: PORT}`, the `adb reverse` equivalent), and the app pointed at `localhost:PORT` (`debug_http_host`), never 10.0.2.2. Retry once Metro answers /status."
+            }
             ErrorCode::DaemonVersionMismatch => {
                 "Do not use that daemon's answer: it runs a different build (error.details carries rule, client and daemon identities). `acos session …` and the MCP server replace an idle auto-started daemon and otherwise start a build-private one, so rerunning the same command is safe. An operator-started `acos serve` must be restarted after an upgrade; `acos doctor` prints its identity next to the CLI's."
             }
@@ -773,6 +791,7 @@ impl ErrorCode {
                 | ErrorCode::ZygoteDead
                 | ErrorCode::NetworkUnavailable
                 | ErrorCode::HostMemoryLow
+                | ErrorCode::BundleUnreachable
         )
     }
 
@@ -809,7 +828,10 @@ impl ErrorCode {
             | ErrorCode::UntrustedApkNotCertified => ErrorClass::Unsupported,
 
             // The app is wrong, or the evidence check is.
-            ErrorCode::JavaException | ErrorCode::AppCrashed | ErrorCode::AppNotResponding => {
+            ErrorCode::JavaException
+            | ErrorCode::AppCrashed
+            | ErrorCode::AppNotResponding
+            | ErrorCode::JsError => {
                 ErrorClass::AppCrash
             }
             ErrorCode::AssertionFailed
@@ -832,6 +854,7 @@ impl ErrorCode {
             | ErrorCode::HostMemoryLimit
             | ErrorCode::ZygoteDead
             | ErrorCode::NetworkUnavailable
+            | ErrorCode::BundleUnreachable
             | ErrorCode::HostMemoryLow => ErrorClass::HostGuard,
 
             // Harness/parse/protocol/invariant failures and codes that need
@@ -862,7 +885,8 @@ impl ErrorCode {
             | ErrorCode::TreeTruncated
             | ErrorCode::EndOfList
             | ErrorCode::InputNotHandled
-            | ErrorCode::InsufficientHostEvidence => Status::Fail,
+            | ErrorCode::InsufficientHostEvidence
+            | ErrorCode::JsError => Status::Fail,
             ErrorCode::AppCrashed => Status::Crash,
             ErrorCode::AppNotResponding | ErrorCode::Timeout => Status::Timeout,
             ErrorCode::SessionBusy
@@ -878,6 +902,7 @@ impl ErrorCode {
             | ErrorCode::HostMemoryLimit
             | ErrorCode::HostMemoryLow
             | ErrorCode::PlaceholderContent
+            | ErrorCode::BundleUnreachable
             | ErrorCode::UntrustedApkNotCertified => Status::Blocked,
             ErrorCode::UnsupportedAndroidApi
             | ErrorCode::UnsupportedJavaApi
@@ -1117,6 +1142,8 @@ pub const ALL_ERROR_CODES: &[ErrorCode] = &[
     ErrorCode::GuestExited,
     ErrorCode::ZygoteDead,
     ErrorCode::NetworkUnavailable,
+    ErrorCode::JsError,
+    ErrorCode::BundleUnreachable,
     ErrorCode::DaemonVersionMismatch,
     ErrorCode::Internal,
 ];

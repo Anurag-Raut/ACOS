@@ -357,6 +357,13 @@ pub fn run_scenario(
     let mut dev_host = crate::dev_server::DevServerHost::default();
     dev_host.set_log_dir(options.artifacts_dir.join("dev-server"));
     let mut tree_marks: BTreeMap<String, usize> = BTreeMap::new();
+    // METRO6: the port of the last dev server this run started (Metro may have
+    // been stopped since; its source maps stay cached in the artifacts).
+    let mut last_dev_port: Option<u16> = None;
+    let uses_dev_loop = scenario
+        .steps
+        .iter()
+        .any(|step| step.dev_server.is_some() || step.assert_js_error.is_some());
 
     for (index, step) in scenario.steps.iter().enumerate() {
         // Flush any logs the previous step produced.
@@ -424,6 +431,48 @@ pub fn run_scenario(
                 }
             }
         }
+
+        // METRO4: `assert_js_error.timeout_ms` waits for the dev-loop event the
+        // way `assert_log` waits for its line: until a JS error / bundle failure
+        // is in scope (or, for `none: true`, until none is), then the step below
+        // judges (and symbolicates) the final slice. A miss is a normal failure.
+        if caps.logs {
+            if let Some(StepRef::AssertJsError(assertion)) = step.as_step() {
+                if let Some(timeout_ms) = assertion.timeout_ms {
+                    let start = log_scope_start(assertion.since_previous_step, index, &step_log_cursors);
+                    let deadline = Instant::now() + Duration::from_millis(timeout_ms);
+                    let mut backoff_ms = 10u64;
+                    loop {
+                        let (state, _) = crate::rn_errors::parse_logs_ordered(&all_logs[start..]);
+                        let settled = if assertion.none == Some(true) {
+                            state.is_empty()
+                        } else {
+                            !state.is_empty()
+                        };
+                        if settled || Instant::now() >= deadline {
+                            break;
+                        }
+                        std::thread::sleep(Duration::from_millis(backoff_ms));
+                        backoff_ms = (backoff_ms * 2).min(100);
+                        match backend.logs_since(last_log_seq) {
+                            Ok(new) => {
+                                for record in new {
+                                    last_log_seq = last_log_seq.max(record.seq);
+                                    all_logs.push(record);
+                                }
+                                log_failure = None;
+                            }
+                            Err(error) => {
+                                log_failure = Some(error);
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        let symbolicator = matches!(step.as_step(), Some(StepRef::AssertJsError(_)))
+            .then(|| run_symbolicator(&dev_host, last_dev_port, &options.artifacts_dir));
 
         // The step's log scope, computed once: `assert_log` (this step's own
         // assertion, below) reads it as `since_logs`, and the wait above judged
@@ -499,8 +548,12 @@ pub fn run_scenario(
                 &mut capabilities_used,
                 &mut dev_host,
                 &mut tree_marks,
+                symbolicator.as_ref(),
             )
         };
+        if let Some(port) = dev_host.port() {
+            last_dev_port = Some(port);
+        }
         // ---- SE2: a requested content settle must be honoured ----------------
         // If a step asked for `settle: content` and the backend returned a
         // frame with no content record (or another rule's record), the step did
@@ -655,7 +708,7 @@ pub fn run_scenario(
         }
         if matches!(
             step.as_step(),
-            Some(StepRef::AssertLog(_) | StepRef::AssertNoCrash(_))
+            Some(StepRef::AssertLog(_) | StepRef::AssertNoCrash(_) | StepRef::AssertJsError(_))
         ) && caps.logs
         {
             step_result.evidence.push(ArtifactRef::new(
@@ -726,6 +779,22 @@ pub fn run_scenario(
             ));
             break;
         }
+    }
+
+    // METRO4/METRO6: the dev-loop state the run ended with, read from the
+    // whole log (and symbolicated while Metro is still up). A dev-loop scenario
+    // first collects the last step's lines; any run reports an RN error it saw.
+    if uses_dev_loop && caps.logs {
+        if let Ok(new) = backend.logs_since(last_log_seq) {
+            for record in new {
+                last_log_seq = last_log_seq.max(record.seq);
+                all_logs.push(record);
+            }
+        }
+    }
+    let mut rn_state = crate::rn_errors::parse_logs(&all_logs);
+    if let Some(error) = rn_state.js_error.as_mut() {
+        run_symbolicator(&dev_host, last_dev_port, &options.artifacts_dir).symbolicate(error);
     }
 
     // METRO3: the dev server never outlives the scenario, pass or fail.
@@ -878,6 +947,7 @@ pub fn run_scenario(
     verdict.captures = captures;
     verdict.failure = failure;
     verdict.notes = notes;
+    verdict.rn = (!rn_state.is_empty()).then_some(rn_state);
 
     // PROVENANCE: which inputs produced this verdict. The block is built here,
     // not in the CLI, so every front door (CLI, `acos serve`, MCP) and every
@@ -1183,6 +1253,7 @@ fn execute_step(
     capabilities_used: &mut BTreeSet<String>,
     dev_host: &mut crate::dev_server::DevServerHost,
     tree_marks: &mut BTreeMap<String, usize>,
+    symbolicator: Option<&crate::symbolicate::Symbolicator>,
 ) -> StepExec {
     let Some(step_ref) = step.as_step() else {
         return StepExec::unsupported(Capability::StaticManifest, "step has no recognised kind");
@@ -1919,6 +1990,24 @@ fn execute_step(
         ),
         StepRef::ServiceCtl(ctl) => service_ctl_step(backend, ctl),
         StepRef::DevServer(dev) => dev_server_step(backend, dev_host, dev),
+        StepRef::AssertJsError(assertion) => {
+            capabilities_used.insert(Capability::Logs.as_str().to_string());
+            if !caps.logs {
+                return StepExec::unsupported(
+                    Capability::Logs,
+                    "assert_js_error reads the guest log, which this backend cannot expose",
+                );
+            }
+            if let Some(error) = log_failure {
+                return StepExec::failed_backend(error);
+            }
+            let scoped: &[LogRecord] = if assertion.since_previous_step {
+                since_logs
+            } else {
+                all_logs
+            };
+            js_error_step(backend, caps, assertion, scoped, symbolicator)
+        }
         StepRef::AssertTree(assertion) => {
             capabilities_used.insert(Capability::UiTree.as_str().to_string());
             if !caps.ui_tree {
@@ -2058,6 +2147,7 @@ fn dev_server_step(
         DevServerOp::FastRefresh => host.fast_refresh(timeout(120_000)),
         DevServerOp::Reload => host.reload(),
         DevServerOp::Stop => host.stop(),
+        DevServerOp::DevMenu => host.dev_menu(),
     };
     match outcome {
         Ok(mut reply) => {
@@ -2112,6 +2202,95 @@ fn dev_server_step(
             exec
         }
     }
+}
+
+/// METRO6: the symbolicator for this point of the run: Metro on the running
+/// (or last) dev-server port, maps cached under `<artifacts>/source-maps`.
+fn run_symbolicator(
+    dev_host: &crate::dev_server::DevServerHost,
+    last_port: Option<u16>,
+    artifacts_dir: &Path,
+) -> crate::symbolicate::Symbolicator {
+    let mut symbolicator = crate::symbolicate::Symbolicator::new(
+        dev_host.port().or(last_port),
+        Some(artifacts_dir.join("source-maps")),
+    );
+    symbolicator.strip_prefix = dev_host.project_root().map(Path::to_path_buf);
+    symbolicator.bundle_path = crate::dev_server::BUNDLE_PATH.to_string();
+    // Metro is down: say so fast, the cached map still answers.
+    if !dev_host.is_running() {
+        symbolicator.timeout = Duration::from_millis(500);
+    }
+    symbolicator
+}
+
+/// METRO4: one `assert_js_error` step over the log slice in scope (plus the
+/// redbox on screen, when the backend can show its tree).
+fn js_error_step(
+    backend: &mut dyn Backend,
+    caps: Capabilities,
+    assertion: &acos_protocol::scenario::JsErrorAssertion,
+    scoped: &[LogRecord],
+    symbolicator: Option<&crate::symbolicate::Symbolicator>,
+) -> StepExec {
+    use crate::rn_errors::JsCheck;
+    let (mut state, mut unreachable_last) = crate::rn_errors::parse_logs_ordered(scoped);
+    // The redbox itself: only fills what the log did not say (the log carries
+    // the frames; the tree proves the dialog is still up).
+    if caps.ui_tree {
+        if let Ok(observation) = backend.observe() {
+            let texts: Vec<String> = observation
+                .tree
+                .all_nodes()
+                .iter()
+                .filter(|node| node.visible)
+                .map(|node| node.text.clone())
+                .filter(|text| !text.trim().is_empty())
+                .collect();
+            let ui = crate::rn_errors::parse_ui_texts(&texts);
+            if state.js_error.is_none() && ui.js_error.is_some() {
+                state.js_error = ui.js_error;
+            }
+            if state.bundle_unreachable.is_none() && ui.bundle_unreachable.is_some() {
+                state.bundle_unreachable = ui.bundle_unreachable;
+                unreachable_last = state.js_error.is_none();
+            }
+        }
+    }
+    if let (Some(error), Some(symbolicator)) = (state.js_error.as_mut(), symbolicator) {
+        symbolicator.symbolicate(error);
+    }
+    let expected = serde_json::to_value(assertion).unwrap_or(serde_json::Value::Null);
+    let actual = serde_json::to_value(&state).unwrap_or(serde_json::Value::Null);
+    let (passed, code, message) = match crate::rn_errors::check(assertion, &state, unreachable_last) {
+        JsCheck::Pass(message) => (true, None, message),
+        JsCheck::Fail(message) => (false, Some(ErrorCode::AssertionFailed), message),
+        JsCheck::Unreachable(message) => (false, Some(ErrorCode::BundleUnreachable), message),
+    };
+    let mut exec = StepExec::pass();
+    exec.assertions.push(acos_protocol::assertion::AssertionResult {
+        kind: "js_error".to_string(),
+        passed,
+        expected: Some(expected),
+        actual: Some(actual.clone()),
+        diff: None,
+        matched_node_ids: Vec::new(),
+        message: Some(message.clone()),
+    });
+    if let Some(code) = code {
+        exec.status = code.default_status();
+        let hint = if code == ErrorCode::BundleUnreachable {
+            "No JS ran: start Metro (`dev_server: {op: start}`), open its port to the session (`acos_net {action: hostport, port: PORT}`, the `adb reverse` equivalent) and point the app at localhost:PORT (`debug_http_host: true`)."
+        } else {
+            "Read details.js_error (name, message, frames, component_stack); frames are source positions when `symbolicated` is true."
+        };
+        exec.error = Some(
+            ProtocolError::new(code, format!("assert_js_error: {message}"))
+                .with_hint(hint)
+                .with_details(actual),
+        );
+    }
+    exec
 }
 
 /// ADR-0029 item 4: one `service_ctl` step (attach/detach/control).

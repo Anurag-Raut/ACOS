@@ -60,6 +60,7 @@ pub mod launcher;
 pub mod live_view;
 pub mod logd;
 pub mod props;
+pub mod rn_prefs;
 pub mod seccomp;
 pub mod session;
 // WV4: the guest path ⇄ host path mapping of the WebView session socket.

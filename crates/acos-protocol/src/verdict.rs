@@ -456,6 +456,13 @@ pub struct Verdict {
     /// whose pass relied on `stub`/`scripted` names it here and in `notes`.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub modules: Vec<ModuleState>,
+    /// METRO4/METRO6: the React Native dev-loop record of the run — the last JS
+    /// error it reported (symbolicated when a Metro host or map was available)
+    /// and the last bundle-fetch failure, kept apart. A later fix does not erase
+    /// it: `assert_js_error: {none: true}` is the check for a cleared redbox.
+    /// Absent for a run whose app never reported on a React Native tag.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rn: Option<crate::rn::RnDevState>,
 }
 
 /// One module row in `verdict.json`.
@@ -514,6 +521,7 @@ impl Verdict {
             provenance: None,
             notes: Vec::new(),
             modules: Vec::new(),
+            rn: None,
         }
     }
 

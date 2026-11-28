@@ -232,6 +232,13 @@ pub struct Step {
     /// second root doubles the tree; this is the named check for it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub assert_tree: Option<TreeSizeAssertion>,
+    /// METRO4: assert the React Native JS error the app reported (redbox,
+    /// LogBox, `ExceptionsManager`), or `none: true` that there is none (a
+    /// reload cleared it). A bundle that could not be fetched is **not** a JS
+    /// error: it fails this step as `BUNDLE_UNREACHABLE` unless the step asks
+    /// for `bundle_unreachable: true`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub assert_js_error: Option<JsErrorAssertion>,
     /// ADR-0029 item 4/5: module ids this step needs attached (`feedback.vibrator`).
     ///
     /// A step whose module is `off` is `unsupported`, never `pass`: the executor
@@ -305,6 +312,8 @@ pub enum StepRef<'a> {
     DevServer(&'a DevServerStep),
     /// See [`Step::assert_tree`].
     AssertTree(&'a TreeSizeAssertion),
+    /// See [`Step::assert_js_error`].
+    AssertJsError(&'a JsErrorAssertion),
 }
 
 impl StepRef<'_> {
@@ -342,6 +351,7 @@ impl StepRef<'_> {
             StepRef::ServiceCtl(_) => "service_ctl",
             StepRef::DevServer(_) => "dev_server",
             StepRef::AssertTree(_) => "assert_tree",
+            StepRef::AssertJsError(_) => "assert_js_error",
         }
     }
 }
@@ -381,6 +391,7 @@ impl Step {
             self.service_ctl.is_some(),
             self.dev_server.is_some(),
             self.assert_tree.is_some(),
+            self.assert_js_error.is_some(),
         ]
         .into_iter()
         .filter(|present| *present)
@@ -490,6 +501,9 @@ impl Step {
         }
         if self.assert_tree.is_some() {
             return self.assert_tree.as_ref().map(StepRef::AssertTree);
+        }
+        if self.assert_js_error.is_some() {
+            return self.assert_js_error.as_ref().map(StepRef::AssertJsError);
         }
         None
     }
@@ -1095,6 +1109,10 @@ pub enum DevServerOp {
     Reload,
     /// Stop Metro and delete the project copy (also done at scenario end).
     Stop,
+    /// METRO5: open the React Native dev menu without a shake: Metro's
+    /// `/message` broadcast `devMenu` (the CLI's `d` key). The app's
+    /// `DevSupportManager` shows the menu; the steps after it read the items.
+    DevMenu,
 }
 
 /// `dev_server` (METRO3): one operation on the host dev server the run owns.
@@ -1138,6 +1156,52 @@ pub struct DevServerStep {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub absent: Option<String>,
     /// `start`/`wait_serves`/`fast_refresh`: how long to wait (1..=300000 ms).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub timeout_ms: Option<u64>,
+    /// `start` (METRO5): point the debug app at this server — the launcher
+    /// writes `debug_http_host = localhost:<port>` into the app's default
+    /// SharedPreferences before the guest boots (React Native's own "Debug
+    /// server host & port" setting). ACOS never emulates `10.0.2.2`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub debug_http_host: Option<bool>,
+}
+
+/// `assert_js_error` (METRO4): the React Native JS error on screen / in the log.
+///
+/// Every field is a constraint on the **most recent** JS error in scope; all
+/// given constraints must hold. `none: true` instead requires that no JS error
+/// was reported in scope (a fix + reload cleared the redbox).
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct JsErrorAssertion {
+    /// No JS error in scope (exclusive with every other constraint).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub none: Option<bool>,
+    /// Exact error class (`TypeError`, `SyntaxError`, ...).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    /// Substring of the error message.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub message: Option<String>,
+    /// A frame's file ends with this (`App.js`, `src/screens/Home.tsx`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub file: Option<String>,
+    /// That frame's line (needs `file`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub line: Option<u32>,
+    /// Require the frames to be symbolicated (source positions).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub symbolicated: Option<bool>,
+    /// Expect the bundle-fetch failure instead of a JS error (`BUNDLE_UNREACHABLE`
+    /// is then the pass condition; exclusive with the JS-error fields).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bundle_unreachable: Option<bool>,
+    /// Only consider log lines produced since the previous step (default:
+    /// the whole run; a `none: true` after a reload usually wants `true`).
+    #[serde(default)]
+    pub since_previous_step: bool,
+    /// Wait up to this long for the condition (1..=300000 ms); the last
+    /// observation decides.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub timeout_ms: Option<u64>,
 }
@@ -1559,6 +1623,12 @@ fn validate_dev_server(
     );
     stray(
         v,
+        "debug_http_host",
+        dev.debug_http_host.is_some() && !is(DevServerOp::Start),
+        "op `start`",
+    );
+    stray(
+        v,
         "file",
         dev.file.is_some() && !is(DevServerOp::Edit),
         "op `edit`",
@@ -1600,7 +1670,10 @@ fn validate_dev_server(
                 "timeout_ms must be between 1 and 300000",
             );
         }
-        if matches!(dev.op, DevServerOp::Edit | DevServerOp::Reload | DevServerOp::Stop) {
+        if matches!(
+            dev.op,
+            DevServerOp::Edit | DevServerOp::Reload | DevServerOp::Stop | DevServerOp::DevMenu
+        ) {
             v.push(
                 format!("{path}.timeout_ms"),
                 "`timeout_ms` only applies to `start`, `wait_serves` and `fast_refresh`",
@@ -1622,6 +1695,14 @@ fn validate_dev_server(
         DevServerOp::Start => {
             if running {
                 v.push(path, "a dev server is already running; `stop` it first");
+            }
+            if dev.debug_http_host == Some(true)
+                && scenario.steps[..index].iter().any(|step| step.launch.is_some())
+            {
+                v.push(
+                    format!("{path}.debug_http_host"),
+                    "`debug_http_host` is written before the guest boots: the `start` step must come before the first `launch`",
+                );
             }
             match &dev.project {
                 None => v.push(format!("{path}.project"), "`start` needs `project`"),
@@ -1666,6 +1747,53 @@ fn validate_dev_server(
             if op == DevServerOp::WaitServes && dev.contains.is_none() && dev.absent.is_none() {
                 v.push(path, "`wait_serves` needs `contains` and/or `absent`");
             }
+        }
+    }
+}
+
+/// METRO4: `assert_js_error` — `none` and `bundle_unreachable` are each
+/// exclusive with the JS-error constraints, and `line` names a frame of `file`.
+fn validate_js_error(v: &mut ScenarioValidation, path: &str, a: &JsErrorAssertion) {
+    let error_fields = a.name.is_some()
+        || a.message.is_some()
+        || a.file.is_some()
+        || a.line.is_some()
+        || a.symbolicated.is_some();
+    if a.none == Some(false) {
+        v.push(format!("{path}.none"), "`none: false` says nothing; omit it or assert the error's fields");
+    }
+    if a.bundle_unreachable == Some(false) {
+        v.push(
+            format!("{path}.bundle_unreachable"),
+            "`bundle_unreachable: false` says nothing; omit it (a JS-error assertion already fails on an unreachable bundle)",
+        );
+    }
+    if a.none == Some(true) && (error_fields || a.bundle_unreachable.is_some()) {
+        v.push(path, "`none: true` cannot be combined with other constraints");
+    }
+    if a.bundle_unreachable == Some(true) && error_fields {
+        v.push(
+            path,
+            "`bundle_unreachable: true` asserts that no bundle ran; it cannot be combined with JS-error fields",
+        );
+    }
+    if a.none.is_none() && a.bundle_unreachable.is_none() && !error_fields {
+        v.push(
+            path,
+            "assert_js_error needs `none: true`, `bundle_unreachable: true` or at least one of name/message/file/line/symbolicated",
+        );
+    }
+    if a.line.is_some() && a.file.is_none() {
+        v.push(format!("{path}.line"), "`line` needs `file` (the frame it belongs to)");
+    }
+    for (field, value) in [("name", &a.name), ("message", &a.message), ("file", &a.file)] {
+        if value.as_deref().is_some_and(|text| text.trim().is_empty()) {
+            v.push(format!("{path}.{field}"), format!("{field} must not be empty"));
+        }
+    }
+    if let Some(timeout) = a.timeout_ms {
+        if !(1..=300_000).contains(&timeout) {
+            v.push(format!("{path}.timeout_ms"), "timeout_ms must be between 1 and 300000");
         }
     }
 }
@@ -2474,6 +2602,7 @@ pub fn validate_scenario(scenario: &Scenario) -> ScenarioValidation {
                 );
             }
             StepRef::DevServer(dev) => validate_dev_server(&mut v, &path, dev, scenario, index),
+            StepRef::AssertJsError(assertion) => validate_js_error(&mut v, &path, assertion),
             StepRef::AssertTree(tree) => {
                 match (&tree.record, &tree.not_grown_since) {
                     (Some(_), Some(_)) | (None, None) => v.push(
@@ -2767,6 +2896,45 @@ steps:
     }
 
     /// METRO3: `dev_server` and `assert_tree` have the rules a dev loop needs.
+    /// METRO4/METRO5: `assert_js_error` constraints and the `dev_menu` /
+    /// `debug_http_host` additions to `dev_server`.
+    #[test]
+    fn metro4_assert_js_error_and_metro5_dev_server_rules() {
+        let head = "version: 1\nname: m\napp: a.apk\nisolation: process\ndisplay: {mode: offscreen, width: 1080, height: 2400, density_dpi: 420}\nneeds_env: [metro]\nexpectation_reason: host needs node and Metro\nsteps:\n";
+        let check = |body: &str| -> Vec<String> {
+            match Scenario::from_yaml_str(&format!("{head}{body}")) {
+                Ok(_) => Vec::new(),
+                Err(error) => error.errors.iter().map(|e| e.message.clone()).collect(),
+            }
+        };
+        for ok in [
+            "  - assert_js_error: {name: SyntaxError, file: App.js, line: 26}\n",
+            "  - assert_js_error: {message: boom, symbolicated: true, timeout_ms: 5000}\n",
+            "  - assert_js_error: {none: true, since_previous_step: true}\n",
+            "  - assert_js_error: {bundle_unreachable: true}\n",
+            "  - dev_server: {op: start, project: p, port: 8081, debug_http_host: true}\n  - dev_server: {op: dev_menu}\n",
+        ] {
+            assert!(check(ok).is_empty(), "{ok}: {:?}", check(ok));
+        }
+        for (bad, needle) in [
+            ("  - assert_js_error: {}\n", "needs `none: true`"),
+            ("  - assert_js_error: {none: true, name: TypeError}\n", "cannot be combined"),
+            ("  - assert_js_error: {bundle_unreachable: true, message: x}\n", "cannot be combined"),
+            ("  - assert_js_error: {line: 3}\n", "`line` needs `file`"),
+            ("  - assert_js_error: {name: \"\"}\n", "must not be empty"),
+            ("  - assert_js_error: {none: false}\n", "says nothing"),
+            ("  - assert_js_error: {name: E, timeout_ms: 0}\n", "between 1 and 300000"),
+            ("  - assert_js_error: {name: E, nope: 1}\n", "unknown field"),
+            ("  - dev_server: {op: dev_menu}\n", "no dev server is running"),
+            ("  - launch: {activity: a/.M}\n  - dev_server: {op: start, project: p, port: 8081, debug_http_host: true}\n", "before the first `launch`"),
+            ("  - dev_server: {op: start, project: p, port: 8081}\n  - dev_server: {op: reload, debug_http_host: true}\n", "only applies to op `start`"),
+            ("  - dev_server: {op: start, project: p, port: 8081}\n  - dev_server: {op: dev_menu, timeout_ms: 5}\n", "only applies to"),
+        ] {
+            let problems = check(bad);
+            assert!(problems.iter().any(|m| m.contains(needle)), "{bad}: {problems:?}");
+        }
+    }
+
     #[test]
     fn metro3_dev_server_and_assert_tree_rules() {
         let head = "version: 1\nname: m\napp: a.apk\nisolation: process\ndisplay: {mode: offscreen, width: 1080, height: 2400, density_dpi: 420}\nneeds_env: [metro]\nexpectation_reason: host needs node and Metro\nsteps:\n";

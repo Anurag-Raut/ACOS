@@ -1961,6 +1961,15 @@ pub(crate) fn launch_session(
         let _ = fs::remove_file(staging.join(stale));
     }
     fs::create_dir_all(run.dir("app-data").join(&package))?;
+    // METRO5: `ACOS_RN_DEBUG_HTTP_HOST=localhost:<port>` points a debug React
+    // Native app at its dev server through RN's own `debug_http_host`
+    // preference, before the guest's `Application.onCreate` reads it. Unset is
+    // the default and costs nothing.
+    if let Some(line) =
+        crate::rn_prefs::apply_from_env(&run.dir("app-data").join(&package), &package)
+    {
+        eprintln!("acos-art: launch: {line}");
+    }
     // MPROC1: every extra package gets the same private data root the launched
     // package gets, so its own `dataDir` exists before it runs.
     for extra in &extras {
@@ -11833,6 +11842,30 @@ fn service_request(
                 Err(error) => Err(error),
             }
         }
+        // METRO5: React Native's reload receiver (`DevSupportManagerBase`
+        // registers `<package>.RELOAD_APP_ACTION`), delivered as a broadcast
+        // the session's own activity manager originates — what `adb shell am
+        // broadcast -a <package>.RELOAD_APP_ACTION` is on a device. The count
+        // of receivers is the answer: zero means the app has no RN dev support
+        // registered (a release build, or not React Native), never a success.
+        "rn_reload" => {
+            let Some(package) = request
+                .get("package")
+                .and_then(|v| v.as_str())
+                .filter(|p| !p.is_empty())
+            else {
+                return serde_json::json!({
+                    "ok": false, "cmd": "services", "op": "rn_reload", "code": "BAD_REQUEST",
+                    "error": "rn_reload needs a string `package`",
+                });
+            };
+            let action = format!("{package}.RELOAD_APP_ACTION");
+            let mut intent = acos_services::ams::IntentFacts::action(action.clone());
+            intent.package = Some(package.to_string());
+            peer.host_mut()
+                .broadcast_intent(&intent)
+                .map(|receivers| serde_json::json!({"action": action, "receivers": receivers}))
+        }
         "launch_home" => match peer.host_mut().launch_home() {
             Ok(code) => Ok(serde_json::json!({ "start_result": code })),
             Err(acos_services::ServiceError::IllegalState { detail, .. }) => {
@@ -15051,6 +15084,51 @@ mod service_control_hot_attach_tests {
         assert!(!atms_has_package(peer.host_mut(), SETTINGS_PACKAGE));
 
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// METRO5: `rn_reload` is a host-originated `<package>.RELOAD_APP_ACTION`
+    /// broadcast; its answer is the receiver count, and zero is reported as
+    /// zero (the launcher side turns it into `UNSUPPORTED_RN`), never inflated.
+    #[test]
+    fn rn_reload_broadcasts_the_reload_action_and_counts_receivers() {
+        use acos_services::module::SessionModules;
+        let mut session = SessionModules::new();
+        session.attach(&[]).expect("attach core");
+        let (host, mut modules) = session.into_parts();
+        let mut peer = Peer::with_host(host, None);
+        let package = "dev.acos.fixtures.rnhello";
+        let request = serde_json::json!({"op": "rn_reload", "package": package});
+
+        let reply = service_request(&mut peer, &mut modules, &request);
+        assert_eq!(reply["ok"], true, "{reply}");
+        assert_eq!(reply["receivers"], 0, "no RN dev support registered yet");
+        assert_eq!(reply["action"], format!("{package}.RELOAD_APP_ACTION"));
+
+        {
+            let obj = peer
+                .host_mut()
+                .ensure("android.app.IActivityManager")
+                .expect("activity manager");
+            let atms = obj
+                .as_any_mut()
+                .and_then(|any| any.downcast_mut::<acos_services::atms::AtmsService>())
+                .expect("AtmsService");
+            // what `DevSupportManagerBase.reenableDevSupport` registers
+            atms.register_receiver(
+                77,
+                package,
+                vec![format!("{package}.RELOAD_APP_ACTION")],
+                Vec::new(),
+                0x2,
+            );
+        }
+        let reply = service_request(&mut peer, &mut modules, &request);
+        assert_eq!(reply["ok"], true, "{reply}");
+        assert_eq!(reply["receivers"], 1, "{reply}");
+
+        let bad = service_request(&mut peer, &mut modules, &serde_json::json!({"op": "rn_reload"}));
+        assert_eq!(bad["ok"], false);
+        assert_eq!(bad["code"], "BAD_REQUEST");
     }
 
     #[test]

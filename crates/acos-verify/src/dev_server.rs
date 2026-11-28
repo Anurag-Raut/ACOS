@@ -21,7 +21,7 @@ use serde_json::{json, Value};
 
 /// The bundle URL React Native's debug app asks for (`DevServerHelper`), so the
 /// "does Metro serve my edit" probe builds the same bundle the guest fetches.
-const BUNDLE_PATH: &str =
+pub const BUNDLE_PATH: &str =
     "/index.bundle?platform=android&dev=true&minify=false&app=rnhello&modulesOnly=false&runModule=true";
 
 /// What the host provides: `node`, and a `node_modules` holding Metro + React Native.
@@ -148,6 +148,11 @@ impl DevServerHost {
     /// The port of the running server.
     pub fn port(&self) -> Option<u16> {
         self.inner.as_ref().map(|running| running.port)
+    }
+
+    /// The project copy Metro serves (source paths in its maps start here).
+    pub fn project_root(&self) -> Option<&Path> {
+        self.inner.as_ref().map(|running| running.project.as_path())
     }
 
     /// Where `stop` saved Metro's log (relative reporting is the caller's job).
@@ -407,6 +412,29 @@ impl DevServerHost {
         }))
     }
 
+    /// `dev_menu` (METRO5): Metro's `/message` broadcast `devMenu` — the CLI's
+    /// `d` key, delivered to every connected app's `DevServerHelper`
+    /// (`onPackagerDevMenuCommand` -> `showDevOptionsDialog`). No shake.
+    ///
+    /// The socket's own `getpeers` answer says how many apps are connected; zero
+    /// is a failure (nobody would receive the broadcast), never a silent pass.
+    pub fn dev_menu(&mut self) -> Outcome {
+        let port = self.running()?.port;
+        let outcome = message_broadcast(port, "devMenu", Duration::from_secs(5))
+            .map_err(|error| DevServerError::fail(format!("Metro /message devMenu failed: {error}"), Value::Null))?;
+        if outcome == 0 {
+            return Err(DevServerError::fail(
+                "no React Native app is connected to Metro's /message socket, so the dev menu cannot reach it (is the app a debug build pointed at this server?)",
+                json!({"apps_connected": 0}),
+            ));
+        }
+        Ok(json!({
+            "mode": "dev_menu",
+            "transport": "metro /message broadcast devMenu",
+            "apps_connected": outcome,
+        }))
+    }
+
     /// `stop`: stop Metro and delete the project copy.
     pub fn stop(&mut self) -> Outcome {
         let mut running = self.inner.take().ok_or_else(|| {
@@ -544,6 +572,141 @@ fn http_request(port: u16, method: &str, path: &str, timeout: Duration) -> Resul
         return Err(format!("HTTP {status}"));
     }
     Ok(raw[split + 4..].to_vec())
+}
+
+/// Open `ws://127.0.0.1:<port>/message`, ask the server for its peers, then
+/// broadcast `{version: 2, method}`. Returns the number of other peers (apps).
+pub fn message_broadcast(port: u16, method: &str, timeout: Duration) -> Result<usize, String> {
+    let addr = SocketAddr::from(([127, 0, 0, 1], port));
+    let mut stream =
+        TcpStream::connect_timeout(&addr, Duration::from_secs(2)).map_err(|e| e.to_string())?;
+    stream.set_read_timeout(Some(timeout)).map_err(|e| e.to_string())?;
+    stream.set_write_timeout(Some(timeout)).map_err(|e| e.to_string())?;
+    let nonce = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or(0)
+        .to_le_bytes();
+    let key = base64(&nonce[..16]);
+    let request = format!(
+        "GET /message HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: {key}\r\nSec-WebSocket-Version: 13\r\n\r\n"
+    );
+    stream.write_all(request.as_bytes()).map_err(|e| e.to_string())?;
+    let mut head = Vec::new();
+    let mut byte = [0u8; 1];
+    while !head.ends_with(b"\r\n\r\n") {
+        if stream.read(&mut byte).map_err(|e| e.to_string())? == 0 {
+            return Err("the server closed the websocket handshake".to_string());
+        }
+        head.push(byte[0]);
+        if head.len() > 16 * 1024 {
+            return Err("oversized handshake reply".to_string());
+        }
+    }
+    let status = String::from_utf8_lossy(&head);
+    if status.split_whitespace().nth(1) != Some("101") {
+        return Err(format!(
+            "no websocket upgrade: {}",
+            status.lines().next().unwrap_or("").trim()
+        ));
+    }
+    ws_send_text(&mut stream, r#"{"version":2,"target":"server","method":"getpeers","id":1}"#)?;
+    let peers = loop {
+        let text = ws_read_text(&mut stream)?;
+        let value: Value = serde_json::from_str(&text).map_err(|e| format!("bad message: {e}"))?;
+        if value.get("id").and_then(Value::as_u64) == Some(1) {
+            if let Some(error) = value.get("error") {
+                return Err(format!("getpeers refused: {error}"));
+            }
+            break value
+                .get("result")
+                .and_then(Value::as_object)
+                .map_or(0, serde_json::Map::len);
+        }
+    };
+    ws_send_text(&mut stream, &json!({"version": 2, "method": method}).to_string())?;
+    // A clean close, so the broadcast is flushed before the socket goes away.
+    let _ = ws_send(&mut stream, 0x8, &[]);
+    Ok(peers)
+}
+
+fn ws_send_text(stream: &mut TcpStream, text: &str) -> Result<(), String> {
+    ws_send(stream, 0x1, text.as_bytes())
+}
+
+/// A client frame (FIN, masked, as RFC 6455 requires of a client).
+fn ws_send(stream: &mut TcpStream, opcode: u8, payload: &[u8]) -> Result<(), String> {
+    let mut frame = vec![0x80 | opcode];
+    let len = payload.len();
+    if len < 126 {
+        frame.push(0x80 | len as u8);
+    } else if len <= 0xFFFF {
+        frame.push(0x80 | 126);
+        frame.extend_from_slice(&(len as u16).to_be_bytes());
+    } else {
+        frame.push(0x80 | 127);
+        frame.extend_from_slice(&(len as u64).to_be_bytes());
+    }
+    let mask = [0x5a, 0x1c, 0xe3, 0x07];
+    frame.extend_from_slice(&mask);
+    frame.extend(payload.iter().enumerate().map(|(i, b)| b ^ mask[i % 4]));
+    stream.write_all(&frame).map_err(|e| e.to_string())
+}
+
+/// Read the next text frame (skips ping/pong; a close is an error).
+fn ws_read_text(stream: &mut TcpStream) -> Result<String, String> {
+    loop {
+        let mut head = [0u8; 2];
+        stream.read_exact(&mut head).map_err(|e| e.to_string())?;
+        let opcode = head[0] & 0x0F;
+        let masked = head[1] & 0x80 != 0;
+        let mut len = u64::from(head[1] & 0x7F);
+        if len == 126 {
+            let mut ext = [0u8; 2];
+            stream.read_exact(&mut ext).map_err(|e| e.to_string())?;
+            len = u64::from(u16::from_be_bytes(ext));
+        } else if len == 127 {
+            let mut ext = [0u8; 8];
+            stream.read_exact(&mut ext).map_err(|e| e.to_string())?;
+            len = u64::from_be_bytes(ext);
+        }
+        if len > 1024 * 1024 {
+            return Err("oversized websocket frame".to_string());
+        }
+        let mut mask = [0u8; 4];
+        if masked {
+            stream.read_exact(&mut mask).map_err(|e| e.to_string())?;
+        }
+        let mut payload = vec![0u8; len as usize];
+        stream.read_exact(&mut payload).map_err(|e| e.to_string())?;
+        if masked {
+            for (i, b) in payload.iter_mut().enumerate() {
+                *b ^= mask[i % 4];
+            }
+        }
+        match opcode {
+            0x1 => return String::from_utf8(payload).map_err(|e| e.to_string()),
+            0x8 => return Err("the server closed the websocket".to_string()),
+            _ => continue,
+        }
+    }
+}
+
+fn base64(bytes: &[u8]) -> String {
+    const CHARS: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut out = String::new();
+    for chunk in bytes.chunks(3) {
+        let b = [chunk[0], *chunk.get(1).unwrap_or(&0), *chunk.get(2).unwrap_or(&0)];
+        let n = (u32::from(b[0]) << 16) | (u32::from(b[1]) << 8) | u32::from(b[2]);
+        for i in 0..4 {
+            if i <= chunk.len() {
+                out.push(CHARS[((n >> (18 - 6 * i)) & 63) as usize] as char);
+            } else {
+                out.push('=');
+            }
+        }
+    }
+    out
 }
 
 #[cfg(test)]
@@ -716,5 +879,96 @@ mod tests {
             "descendant worker pid {worker_pid} survived process-group teardown"
         );
         assert!(!copy.exists(), "scratch dir was not cleaned up");
+    }
+
+    /// A mock Metro `/message` endpoint: upgrade, answer `getpeers` with
+    /// `peers` apps, record the broadcast.
+    fn mock_message_socket(peers: usize) -> (u16, std::sync::mpsc::Receiver<String>) {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let (tx, rx) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut head = Vec::new();
+            let mut byte = [0u8; 1];
+            while !head.ends_with(b"\r\n\r\n") {
+                stream.read_exact(&mut byte).unwrap();
+                head.push(byte[0]);
+            }
+            let text = String::from_utf8_lossy(&head).to_string();
+            assert!(text.starts_with("GET /message HTTP/1.1"), "{text}");
+            assert!(text.contains("Upgrade: websocket"));
+            stream
+                .write_all(b"HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n\r\n")
+                .unwrap();
+            let read_client = |stream: &mut TcpStream| -> (u8, String) {
+                let mut h = [0u8; 2];
+                stream.read_exact(&mut h).unwrap();
+                assert!(h[1] & 0x80 != 0, "client frames are masked");
+                let len = (h[1] & 0x7F) as usize;
+                let mut mask = [0u8; 4];
+                stream.read_exact(&mut mask).unwrap();
+                let mut p = vec![0u8; len];
+                stream.read_exact(&mut p).unwrap();
+                for (i, b) in p.iter_mut().enumerate() {
+                    *b ^= mask[i % 4];
+                }
+                (h[0] & 0x0F, String::from_utf8(p).unwrap())
+            };
+            let (_, request) = read_client(&mut stream);
+            assert!(request.contains("getpeers"), "{request}");
+            let result: serde_json::Map<String, Value> = (0..peers)
+                .map(|i| (format!("client#{i}"), json!({})))
+                .collect();
+            let reply = json!({"version": 2, "result": result, "id": 1}).to_string();
+            let mut frame = vec![0x81, reply.len() as u8];
+            frame.extend_from_slice(reply.as_bytes());
+            stream.write_all(&frame).unwrap();
+            let (opcode, broadcast) = read_client(&mut stream);
+            assert_eq!(opcode, 1);
+            tx.send(broadcast).unwrap();
+        });
+        (port, rx)
+    }
+
+    fn fake_running(port: u16, name: &str) -> DevServerHost {
+        let copy = scratch(name);
+        let mut host = DevServerHost::default();
+        host.inner = Some(Running {
+            child: Command::new("sleep").arg("30").spawn().unwrap(),
+            port,
+            root: copy.clone(),
+            project: copy,
+            log: PathBuf::from("/nonexistent/metro.log"),
+        });
+        host
+    }
+
+    #[test]
+    fn dev_menu_broadcasts_over_the_message_socket() {
+        let (port, rx) = mock_message_socket(1);
+        let mut host = fake_running(port, "devmenu");
+        let reply = host.dev_menu().expect("dev menu delivered");
+        assert_eq!(reply["apps_connected"], 1);
+        let broadcast: Value = serde_json::from_str(&rx.recv().unwrap()).unwrap();
+        assert_eq!(broadcast, json!({"version": 2, "method": "devMenu"}));
+        host.shutdown();
+    }
+
+    #[test]
+    fn dev_menu_with_no_connected_app_fails_honestly() {
+        let (port, _rx) = mock_message_socket(0);
+        let mut host = fake_running(port, "devmenu-none");
+        let error = host.dev_menu().unwrap_err();
+        assert!(error.message.contains("no React Native app is connected"), "{}", error.message);
+        host.shutdown();
+    }
+
+    #[test]
+    fn base64_matches_rfc4648() {
+        assert_eq!(base64(b""), "");
+        assert_eq!(base64(b"f"), "Zg==");
+        assert_eq!(base64(b"fo"), "Zm8=");
+        assert_eq!(base64(b"foobar"), "Zm9vYmFy");
     }
 }

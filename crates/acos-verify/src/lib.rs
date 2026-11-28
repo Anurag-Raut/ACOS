@@ -44,6 +44,8 @@ pub mod manifest;
 pub mod native;
 pub mod reference;
 pub mod retention;
+pub mod rn_errors;
+pub mod symbolicate;
 pub mod screenshot;
 pub mod settle;
 pub mod verify;
