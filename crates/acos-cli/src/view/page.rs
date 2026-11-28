@@ -331,6 +331,7 @@ const btnAnnotCopyAll = $("btn-annot-copy-all"), btnAnnotClear = $("btn-annot-cl
 const verifyBanner = $("verify-banner"), dinput = $("dinput");
 const SVG_NS = "http://www.w3.org/2000/svg";
 const MAX_ANNOTATION_PNG_BYTES = 4 * 1024 * 1024;
+const ANNOT_REFRESH_FAILED = "Could not refresh the list, so its current state is unknown.";
 const capabilityCards = new Map();
 // prompt_seq of capability actions sent (or queued) but not yet answered.
 const pendingCapabilities = new Set();
@@ -389,6 +390,9 @@ let annotPending = null;
 let annotSubmittingDraftId = null;
 let nextAnnotDraftId = 1;
 let annotGeneration = 0;
+let annotListSeq = 0; // newest list GET issued; older replies are dropped
+let annotListLatest = null; // promise of that newest GET
+let annotRevision = 0; // bumped when a mutation reply changes annotItems
 
 const KEY_MAP = {
   Backspace: "KEYCODE_DEL",
@@ -2690,7 +2694,7 @@ function setAnnotTool(tool) {
   renderAnnotOverlay();
 }
 
-function setAsideTab(tab) {
+function setAsideTab(tab, preserveNotice) {
   asideTab = tab === "annotations" ? "annotations" : "activity";
   const isAnnot = asideTab === "annotations";
   tabActivity.classList.toggle("active", !isAnnot);
@@ -2700,31 +2704,124 @@ function setAsideTab(tab) {
   paneActivity.hidden = isAnnot;
   paneAnnotations.hidden = !isAnnot;
   if (isAnnot && current && !sessionEnded && canAnnotateSession(current)) {
-    fetchAnnotations();
+    return fetchAnnotations(preserveNotice);
   }
+  return null;
 }
 
-async function fetchAnnotations(preserveNotice) {
-  if (!current || sessionEnded || !canAnnotateSession(current)) return;
+// Resolves true only when a list snapshot from this GET, or from a newer one,
+// was applied to the panel.
+function fetchAnnotations(preserveNotice) {
+  if (!current || sessionEnded || !canAnnotateSession(current)) return Promise.resolve(false);
+  const seq = ++annotListSeq;
+  annotListLatest = loadAnnotations(seq, preserveNotice);
+  return annotListLatest;
+}
+
+async function loadAnnotations(seq, preserveNotice) {
+  const view = captureAnnotView();
+  const revision = annotRevision;
+  let list = null;
+  try {
+    const resp = await fetch(annotationsApiPath("?status=all"), { cache: "no-store" });
+    if (!view.same()) return false;
+    if (resp.status === 409) {
+      markSessionEnded(view.sid);
+      return false;
+    }
+    if (resp.ok) {
+      const data = await resp.json();
+      if (data && data.ok && Array.isArray(data.annotations)) list = data.annotations;
+    }
+  } catch (_) {}
+  if (!view.same()) return false;
+  if (seq !== annotListSeq) return annotListLatest;
+  if (!list) return false;
+  // A mutation reply landed while this GET was in flight, so it may predate it.
+  if (revision !== annotRevision) return fetchAnnotations(preserveNotice);
+  annotItems = list;
+  if (!preserveNotice) showAnnotPanelNotice("");
+  renderAnnotationsPanel();
+  renderAnnotOverlay();
+  return true;
+}
+
+function captureAnnotView() {
   const sid = current.session_id;
   const gen = annotGeneration;
   const guestGen = currentGuestGen;
+  return { sid, same: () => isSameAnnotSession(sid, gen, guestGen) };
+}
+
+// Sends one mutation. `outcome` is "ok" (confirmed), "rejected" (the server
+// answered with an error), "unknown" (it may have run: no reply, an unreadable
+// success body, or OUTCOME_UNKNOWN) or "stale" (this view is gone).
+async function sendAnnotationMutation(view, path, init) {
+  let resp = null;
+  let data = null;
   try {
-    const resp = await fetch(annotationsApiPath("?status=all"), { cache: "no-store" });
-    if (!isSameAnnotSession(sid, gen, guestGen)) return;
-    if (resp.status === 409) {
-      markSessionEnded(sid);
-      return;
-    }
-    if (!resp.ok) return;
-    const data = await resp.json();
-    if (!isSameAnnotSession(sid, gen, guestGen)) return;
-    if (!data || !data.ok) return;
-    annotItems = Array.isArray(data.annotations) ? data.annotations : [];
-    if (!preserveNotice) showAnnotPanelNotice("");
-    renderAnnotationsPanel();
-    renderAnnotOverlay();
+    resp = await fetch(path, init);
+    data = await resp.json();
   } catch (_) {}
+  if (!view.same()) return { outcome: "stale" };
+  if (resp && resp.status === 409) {
+    markSessionEnded(view.sid);
+    return { outcome: "stale" };
+  }
+  if (
+    !resp ||
+    isOutcomeUnknownResponse(resp, data) ||
+    (resp.ok && !(data && typeof data.ok === "boolean"))
+  ) {
+    return { outcome: "unknown", resp, data };
+  }
+  return { outcome: resp.ok && data.ok ? "ok" : "rejected", resp, data };
+}
+
+async function reconcileUnknownMutation(view, summary) {
+  showAnnotPanelNotice(summary + " Refreshing the list…");
+  const refreshed = await fetchAnnotations(true);
+  if (!view.same()) return;
+  showAnnotPanelNotice(summary + " " + (refreshed ? "Refreshed list." : ANNOT_REFRESH_FAILED));
+}
+
+async function warnIfListStale(view, refresh) {
+  if ((await refresh) || !view.same()) return;
+  showAnnotPanelNotice("The change was saved, but the list could not be refreshed; it may be out of date.");
+}
+
+// Finds an item on the refreshed list that an unconfirmed Add created: new
+// since that attempt was sent, with the same kind, comment and bounds.
+function findSavedAttempt(attempts) {
+  for (const attempt of attempts) {
+    const item = annotItems.find((a) =>
+      !attempt.knownIds.has(a.id) &&
+      a.kind === attempt.kind &&
+      String(a.comment || "").trim() === attempt.comment &&
+      String(a.bounds) === attempt.bounds
+    );
+    if (item) return { item, attempt };
+  }
+  return null;
+}
+
+function finishSavedDraft(draft, saved) {
+  const id = saved.item.id;
+  draft.unknownSaves = draft.unknownSaves.filter((a) => a !== saved.attempt);
+  for (const attempt of draft.unknownSaves) attempt.knownIds.add(id);
+  if (!draft.unknownSaves.length) draft.unknownSaves = null;
+  showAnnotPanelNotice("Annotation #" + id + " was saved (found in the refreshed list). It was not sent again.");
+  if (!annotPending || annotPending.draftId !== draft.draftId) return;
+  if (String(annotComment.value || "").trim() === saved.attempt.comment) {
+    closeAnnotPopover();
+    setAsideTab("annotations", true);
+    return;
+  }
+  annotPopErr.textContent =
+    "Your earlier text was saved as #" + id + ". Add saves the edited text as a new annotation.";
+  annotPopErr.hidden = false;
+  annotSubmit.disabled = false;
+  if (annotSubmitNoShot) annotSubmitNoShot.disabled = false;
 }
 
 async function submitAnnotation(skipScreenshot) {
@@ -2733,11 +2830,41 @@ async function submitAnnotation(skipScreenshot) {
   const submittedDraftId = draft.draftId;
   if (annotSubmittingDraftId === submittedDraftId) return;
   const isSameDraft = () => !!(annotPending && annotPending.draftId === submittedDraftId);
+  const enableSubmit = () => {
+    annotSubmit.disabled = false;
+    if (annotSubmitNoShot) annotSubmitNoShot.disabled = false;
+  };
 
+  const view = captureAnnotView();
+  if (draft.unknownSaves) {
+    // An earlier Add was never confirmed: look for it before sending again.
+    annotSubmittingDraftId = submittedDraftId;
+    annotSubmit.disabled = true;
+    if (annotSubmitNoShot) annotSubmitNoShot.disabled = true;
+    annotPopErr.textContent = "Checking whether the earlier attempt was saved…";
+    annotPopErr.hidden = false;
+    const refreshed = await fetchAnnotations(true);
+    if (!view.same() || !isSameDraft()) return;
+    annotSubmittingDraftId = null;
+    if (!refreshed) {
+      annotPopErr.textContent =
+        "Save outcome unknown — nothing was resent. " + ANNOT_REFRESH_FAILED;
+      enableSubmit();
+      return;
+    }
+    const saved = findSavedAttempt(draft.unknownSaves);
+    if (saved) {
+      finishSavedDraft(draft, saved);
+      return;
+    }
+  }
+
+  // Read after the check above, so text edited while it ran is what gets sent.
   const comment = String(annotComment.value || "").trim();
   if (!comment) {
     annotPopErr.textContent = "Please enter a comment.";
     annotPopErr.hidden = false;
+    enableSubmit();
     annotComment.focus();
     return;
   }
@@ -2764,9 +2891,6 @@ async function submitAnnotation(skipScreenshot) {
   if (annotSubmitNoShot) annotSubmitNoShot.disabled = true;
   annotPopErr.hidden = true;
 
-  const sid = current.session_id;
-  const gen = annotGeneration;
-  const guestGen = currentGuestGen;
   const { w: dw, h: dh } = currentDisplaySize();
   const payload = {
     action: "add",
@@ -2779,164 +2903,142 @@ async function submitAnnotation(skipScreenshot) {
   if (draft.activity) payload.activity = draft.activity;
   if (draft.package) payload.package = draft.package;
   if (pngBase64) payload.image_png_base64 = pngBase64;
+  const attempt = {
+    knownIds: new Set(annotItems.map((a) => a.id)),
+    kind: draft.kind,
+    comment,
+    bounds: String(draft.bounds),
+  };
 
-  try {
-    const resp = await fetch(annotationsApiPath(""), {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    const data = await resp.json().catch(() => ({}));
-    if (!isSameAnnotSession(sid, gen, guestGen)) return;
-    if (annotSubmittingDraftId === submittedDraftId) annotSubmittingDraftId = null;
-    if (resp.status === 409) {
-      markSessionEnded(sid);
-      return;
-    }
-    if (isOutcomeUnknownResponse(resp, data)) {
-      fetchAnnotations(true);
-      showAnnotPanelNotice(
-        "Annotation save timed out — it may have already succeeded. Refreshed list."
-      );
-      if (isSameDraft()) {
-        annotPopErr.textContent =
-          "Save outcome unknown — this annotation may have already been saved. Refreshed the list; check before retrying.";
-        annotPopErr.hidden = false;
-        annotSubmit.disabled = false;
-        if (annotSubmitNoShot) annotSubmitNoShot.disabled = false;
-      }
-      return;
-    }
-    if (!resp.ok || !data.ok) {
-      if (isSameDraft()) {
-        annotPopErr.textContent = (data && data.error) || ("Failed (HTTP " + resp.status + ")");
-        annotPopErr.hidden = false;
-        if (annotSubmitNoShot && (resp.status === 413 || String(annotPopErr.textContent).includes("image_png_base64"))) {
-          annotSubmitNoShot.hidden = false;
-          annotSubmitNoShot.disabled = false;
-        }
-        annotSubmit.disabled = false;
-      }
-      return;
-    }
-    if (data.annotation && !annotItems.some((a) => a.id === data.annotation.id)) {
-      annotItems.push(data.annotation);
-    }
-    showAnnotPanelNotice("");
+  const { outcome, resp, data } = await sendAnnotationMutation(view, annotationsApiPath(""), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (outcome === "stale") return;
+  if (outcome === "unknown") {
+    draft.unknownSaves = (draft.unknownSaves || []).concat(attempt);
+    const timedOut = !!resp && isOutcomeUnknownResponse(resp, data);
+    const summary = "Annotation save " + (timedOut ? "timed out" : "was not confirmed")
+      + " — it may have already succeeded.";
+    showAnnotPanelNotice(summary + " Refreshing the list…");
     if (isSameDraft()) {
-      closeAnnotPopover();
-    }
-    setAsideTab("annotations");
-    renderAnnotationsPanel();
-    renderAnnotOverlay();
-  } catch (err) {
-    if (!isSameAnnotSession(sid, gen, guestGen)) return;
-    if (annotSubmittingDraftId === submittedDraftId) annotSubmittingDraftId = null;
-    if (isSameDraft()) {
-      annotPopErr.textContent = err && err.message ? err.message : "Network error";
+      annotPopErr.textContent = "Save outcome unknown — checking the list…";
       annotPopErr.hidden = false;
-      annotSubmit.disabled = false;
-      if (annotSubmitNoShot) annotSubmitNoShot.disabled = false;
     }
+    // Add stays disabled until the list answers.
+    const refreshed = await fetchAnnotations(true);
+    if (!view.same()) return;
+    if (annotSubmittingDraftId === submittedDraftId) annotSubmittingDraftId = null;
+    const saved = refreshed ? findSavedAttempt(draft.unknownSaves || []) : null;
+    if (saved) {
+      finishSavedDraft(draft, saved);
+      return;
+    }
+    const listState = refreshed
+      ? "Refreshed list; this annotation is not shown yet."
+      : ANNOT_REFRESH_FAILED;
+    showAnnotPanelNotice(summary + " " + listState);
+    if (isSameDraft()) {
+      annotPopErr.textContent =
+        "Save outcome unknown — this annotation may have already been saved. " + listState
+        + " Add checks the list again before resending.";
+      annotPopErr.hidden = false;
+      enableSubmit();
+    }
+    return;
   }
+  if (annotSubmittingDraftId === submittedDraftId) annotSubmittingDraftId = null;
+  if (outcome === "rejected") {
+    if (isSameDraft()) {
+      annotPopErr.textContent = (data && data.error) || ("Failed (HTTP " + resp.status + ")");
+      annotPopErr.hidden = false;
+      if (annotSubmitNoShot && (resp.status === 413 || String(annotPopErr.textContent).includes("image_png_base64"))) {
+        annotSubmitNoShot.hidden = false;
+        annotSubmitNoShot.disabled = false;
+      }
+      annotSubmit.disabled = false;
+    }
+    return;
+  }
+  annotRevision += 1;
+  if (data.annotation && !annotItems.some((a) => a.id === data.annotation.id)) {
+    annotItems.push(data.annotation);
+  }
+  showAnnotPanelNotice("");
+  if (isSameDraft()) {
+    closeAnnotPopover();
+  }
+  const refresh = setAsideTab("annotations");
+  renderAnnotationsPanel();
+  renderAnnotOverlay();
+  await warnIfListStale(view, refresh);
+}
+
+// Applies a confirmed mutation locally, then reloads the server's list: replies
+// can arrive in a different order from the one the server processed them in.
+async function applyConfirmedMutation(view, change) {
+  annotRevision += 1;
+  change();
+  showAnnotPanelNotice("");
+  renderAnnotationsPanel();
+  renderAnnotOverlay();
+  await warnIfListStale(view, fetchAnnotations());
 }
 
 async function resolveAnnotation(id) {
   if (!current || sessionEnded || !canAnnotateSession(current)) return;
-  const sid = current.session_id;
-  const gen = annotGeneration;
-  const guestGen = currentGuestGen;
-  try {
-    const resp = await fetch(annotationsApiPath(""), {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "resolve", id }),
-    });
-    const data = await resp.json().catch(() => ({}));
-    if (!isSameAnnotSession(sid, gen, guestGen)) return;
-    if (resp.status === 409) {
-      markSessionEnded(sid);
-      return;
-    }
-    if (isOutcomeUnknownResponse(resp, data)) {
-      showAnnotPanelNotice(
-        "Resolve outcome unknown — annotation #" + id + " may already be resolved. Refreshed list."
-      );
-      fetchAnnotations(true);
-      return;
-    }
-    if (resp.ok && data.ok) {
-      showAnnotPanelNotice("");
+  const view = captureAnnotView();
+  const { outcome, data } = await sendAnnotationMutation(view, annotationsApiPath(""), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action: "resolve", id }),
+  });
+  if (outcome === "unknown") {
+    await reconcileUnknownMutation(view,
+      "Resolve outcome unknown — annotation #" + id + " may already be resolved.");
+  } else if (outcome === "ok") {
+    await applyConfirmedMutation(view, () => {
       const idx = annotItems.findIndex((a) => a.id === id);
       if (idx >= 0 && data.annotation) annotItems[idx] = data.annotation;
-      renderAnnotationsPanel();
-      renderAnnotOverlay();
-    }
-  } catch (_) {}
+    });
+  }
 }
 
 async function deleteAnnotation(id) {
   if (!current || sessionEnded || !canAnnotateSession(current)) return;
-  const sid = current.session_id;
-  const gen = annotGeneration;
-  const guestGen = currentGuestGen;
-  try {
-    const resp = await fetch(annotationsApiPath("/" + encodeURIComponent(id)), {
-      method: "DELETE",
-    });
-    const data = await resp.json().catch(() => ({}));
-    if (!isSameAnnotSession(sid, gen, guestGen)) return;
-    if (resp.status === 409) {
-      markSessionEnded(sid);
-      return;
-    }
-    if (isOutcomeUnknownResponse(resp, data)) {
-      showAnnotPanelNotice(
-        "Delete outcome unknown — annotation #" + id + " may already be deleted. Refreshed list."
-      );
-      fetchAnnotations(true);
-      return;
-    }
-    if (resp.ok && data.ok) {
-      showAnnotPanelNotice("");
+  const view = captureAnnotView();
+  const { outcome } = await sendAnnotationMutation(view,
+    annotationsApiPath("/" + encodeURIComponent(id)), { method: "DELETE" });
+  if (outcome === "unknown") {
+    await reconcileUnknownMutation(view,
+      "Delete outcome unknown — annotation #" + id + " may already be deleted.");
+  } else if (outcome === "ok") {
+    await applyConfirmedMutation(view, () => {
       annotItems = annotItems.filter((a) => a.id !== id);
-      renderAnnotationsPanel();
-      renderAnnotOverlay();
-    }
-  } catch (_) {}
+    });
+  }
 }
 
 async function clearAnnotations() {
   if (!current || sessionEnded || !canAnnotateSession(current)) return;
-  const sid = current.session_id;
-  const gen = annotGeneration;
-  const guestGen = currentGuestGen;
-  try {
-    const resp = await fetch(annotationsApiPath(""), {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "clear", status: "all" }),
+  const view = captureAnnotView();
+  // Only what was listed when Clear was sent is known to be gone; anything
+  // added since may have been accepted after the Clear.
+  const sentIds = new Set(annotItems.map((a) => a.id));
+  const { outcome } = await sendAnnotationMutation(view, annotationsApiPath(""), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action: "clear", status: "all" }),
+  });
+  if (outcome === "unknown") {
+    await reconcileUnknownMutation(view,
+      "Clear outcome unknown — annotations may already have been cleared.");
+  } else if (outcome === "ok") {
+    await applyConfirmedMutation(view, () => {
+      annotItems = annotItems.filter((a) => !sentIds.has(a.id));
     });
-    const data = await resp.json().catch(() => ({}));
-    if (!isSameAnnotSession(sid, gen, guestGen)) return;
-    if (resp.status === 409) {
-      markSessionEnded(sid);
-      return;
-    }
-    if (isOutcomeUnknownResponse(resp, data)) {
-      showAnnotPanelNotice(
-        "Clear outcome unknown — annotations may already have been cleared. Refreshed list."
-      );
-      fetchAnnotations(true);
-      return;
-    }
-    if (resp.ok && data.ok) {
-      showAnnotPanelNotice("");
-      annotItems = [];
-      renderAnnotationsPanel();
-      renderAnnotOverlay();
-    }
-  } catch (_) {}
+  }
 }
 
 function formatAnnotationBlock(item) {
@@ -3087,6 +3189,7 @@ function handleAnnotPointerDown(e, pt) {
   if (annotTool === "box") {
     annotDraft = {
       pointerId: e.pointerId,
+      epoch: screenEpoch,
       tool: "box",
       startPt: pt,
       curPt: pt,
@@ -3095,6 +3198,7 @@ function handleAnnotPointerDown(e, pt) {
   } else {
     annotDraft = {
       pointerId: e.pointerId,
+      epoch: screenEpoch,
       tool: "draw",
       points: [pt],
       bounds: [pt.x, pt.y, Math.min(dw, pt.x + 1), Math.min(dh, pt.y + 1)],
@@ -3144,6 +3248,12 @@ function finishAnnotPointer(e, cancelled) {
     }
   } catch (_) {}
   if (cancelled) {
+    renderAnnotOverlay();
+    return;
+  }
+  if (draft.epoch !== screenEpoch || isRotationPending()) {
+    // The drawn coordinates belong to a screen that is no longer shown.
+    showAnnotPanelNotice("Screen changed during the gesture; it was discarded. Draw it again.");
     renderAnnotOverlay();
     return;
   }
@@ -4705,6 +4815,372 @@ postRequests[2].resolve({
 await flushMicrotasks();
 assert.equal(h.eval(`current.session_id`), "sess-2");
 assert.equal(h.eval(`sessionEnded`), false, "late 409 from Session 1 must not mark Session 2 ended");
+"#,
+        );
+    }
+
+    /// Annotation session whose `/api/annotations` requests stay pending until
+    /// the scenario answers them, so reply order and loss are explicit.
+    const ANNOT_PENDING_SERVER_JS: &str = r#"
+const sess = {
+  session_id: "sess-r", guest_gen: 1, stream: false, watch_only: false,
+  can_annotate: true, activity: ".Main", display: { w: 1000, h: 2000 },
+};
+const pending = [];
+const reply = (status, body) => ({ ok: status < 300, status, json: async () => body });
+const unreadable = (status) => ({
+  ok: status < 300, status, json: async () => { throw new SyntaxError("truncated body"); },
+});
+const h = createHarness({
+  fetch: (url, init) => {
+    if (String(url).includes("/annotations")) {
+      return new Promise((resolve, reject) => pending.push({
+        method: (init && init.method) || "GET",
+        body: init && init.body ? JSON.parse(init.body) : null,
+        resolve, reject,
+      }));
+    }
+    return Promise.resolve(reply(200, { ok: true, sessions: [sess], tree: { nodes: [] } }));
+  },
+});
+const settle = () => flushMicrotasks(64);
+const count = (method) => pending.filter((p) => p.method === method).length;
+function take(method) {
+  const i = pending.findIndex((p) => p.method === method);
+  assert.ok(i >= 0, "no pending " + method + " request");
+  return pending.splice(i, 1)[0];
+}
+const lost = () => new TypeError("Failed to fetch");
+const list = (...items) => reply(200, { ok: true, annotations: items });
+const item = (id, comment, extra) => Object.assign(
+  { id, kind: "element", status: "open", comment, bounds: [481, 487, 529, 535], nodes: [] }, extra);
+const panel = () => h.getEl("annot-panel-msg").textContent;
+const popErr = () => h.getEl("annot-pop-err").textContent;
+const popOpen = () => !h.getEl("annot-popover").hidden;
+const ids = () => h.eval(`annotItems.map((a) => a.id).join(",")`);
+function pointer(type, x, y) {
+  h.eval(`screenWrap.dispatchEvent({
+    type: "${type}", pointerType: "mouse", button: 0, pointerId: 1,
+    clientX: ${x}, clientY: ${y}, target: screenWrap, preventDefault() {},
+  });`);
+}
+async function start(...items) {
+  h.eval(`
+    openSession(${JSON.stringify(sess)});
+    frame.width = 1000; frame.height = 2000;
+    frameSize = { w: 1000, h: 2000 }; display = { w: 1000, h: 2000 };
+    setAnnotMode(true);
+  `);
+  while (count("GET")) take("GET").resolve(list(...items));
+  await settle();
+}
+// Picks a point on the screen, types `comment` and returns the bounds used.
+function draft(comment) {
+  pointer("pointerdown", 50, 50);
+  h.getEl("annot-comment").value = comment;
+  return h.eval(`annotPending.bounds`);
+}
+async function add() {
+  h.eval(`submitAnnotation(false);`);
+  await settle();
+}
+"#;
+
+    fn run_annot_scenario(test_body: &str) {
+        run_page_js_scenario(&format!("{ANNOT_PENDING_SERVER_JS}{test_body}"));
+    }
+
+    #[test]
+    fn unconfirmed_mutations_report_refreshed_only_after_the_list_get_succeeds() {
+        run_annot_scenario(
+            r#"
+await start(item(1, "one"));
+const cases = [
+  ["resolveAnnotation(1)", "POST", /Resolve outcome unknown/],
+  ["deleteAnnotation(1)", "DELETE", /Delete outcome unknown/],
+  ["clearAnnotations()", "POST", /Clear outcome unknown/],
+];
+const failures = [
+  (get) => get.reject(lost()),
+  (get) => get.resolve(reply(502, { ok: false })),
+  (get) => get.resolve(unreadable(200)),
+  (get) => get.resolve(reply(200, { ok: true })),
+];
+// Lost reply, unreadable success body and 504 all leave the outcome unknown.
+const losses = [
+  (m) => m.reject(lost()),
+  (m) => m.resolve(unreadable(200)),
+  (m) => m.resolve(reply(504, { ok: false, code: "OUTCOME_UNKNOWN", outcome_unknown: true })),
+];
+for (const [call, method, label] of cases) {
+  for (const lose of losses) {
+    for (const fail of failures) {
+      h.eval(call);
+      await settle();
+      lose(take(method));
+      await settle();
+      assert.match(panel(), label);
+      assert.doesNotMatch(panel(), /Refreshed list/, "GET still pending");
+      assert.equal(count("GET"), 1);
+      fail(take("GET"));
+      await settle();
+      assert.match(panel(), label);
+      assert.match(panel(), /Could not refresh the list, so its current state is unknown/);
+      assert.doesNotMatch(panel(), /Refreshed list/);
+      assert.equal(ids(), "1", "a failed refresh keeps the old list on screen");
+    }
+    h.eval(call);
+    await settle();
+    lose(take(method));
+    await settle();
+    take("GET").resolve(list(item(1, "one")));
+    await settle();
+    assert.match(panel(), label);
+    assert.match(panel(), /Refreshed list\./);
+  }
+}
+
+// An explicit rejection is not "unknown": no reconciliation.
+for (const [call, method] of cases) {
+  h.eval(`showAnnotPanelNotice("")`);
+  h.eval(call);
+  await settle();
+  take(method).resolve(reply(400, { ok: false, code: "INVALID_ARGUMENT", error: "no" }));
+  await settle();
+  assert.equal(count("GET"), 0);
+  assert.equal(panel(), "");
+}
+"#,
+        );
+    }
+
+    #[test]
+    fn lost_add_acknowledgement_reconciles_without_duplicating_or_losing_the_draft() {
+        run_annot_scenario(
+            r#"
+await start();
+
+// 1. Stored, reply lost: the refreshed list closes the draft, nothing is resent.
+let bounds = draft("  stored but unacknowledged ");
+await add();
+take("POST").reject(lost());
+await settle();
+assert.equal(h.getEl("annot-submit").disabled, true, "Add stays disabled while reconciling");
+await add();
+assert.equal(count("POST"), 0);
+assert.match(panel(), /was not confirmed/);
+assert.doesNotMatch(panel(), /Refreshed list/);
+take("GET").resolve(list(item(1, "stored but unacknowledged", { bounds })));
+await settle();
+while (count("GET")) take("GET").resolve(list(item(1, "stored but unacknowledged", { bounds })));
+await settle();
+assert.equal(popOpen(), false);
+assert.equal(count("POST"), 0);
+assert.equal(ids(), "1");
+assert.match(panel(), /#1 was saved/);
+
+// 2. Unreadable success body, refresh fails: draft kept, retry checks first.
+const old = item(1, "stored but unacknowledged", { bounds });
+bounds = draft("second");
+await add();
+take("POST").resolve(unreadable(200));
+await settle();
+take("GET").reject(lost());
+await settle();
+assert.equal(popOpen(), true);
+assert.equal(h.getEl("annot-comment").value, "second");
+assert.equal(h.getEl("annot-submit").disabled, false);
+assert.match(popErr(), /outcome unknown/i);
+assert.match(popErr(), /Could not refresh the list/);
+await add();
+assert.equal(count("POST"), 0, "retry must look at the list before sending");
+take("GET").reject(lost());
+await settle();
+assert.equal(count("POST"), 0, "nothing is resent while the list is unreadable");
+assert.match(popErr(), /nothing was resent/);
+assert.equal(h.getEl("annot-submit").disabled, false);
+// The first attempt landed late: the retry finds it and does not duplicate it.
+await add();
+take("GET").resolve(list(old, item(2, "second", { bounds })));
+await settle();
+while (count("GET")) take("GET").resolve(list(old, item(2, "second", { bounds })));
+await settle();
+assert.equal(count("POST"), 0);
+assert.equal(popOpen(), false);
+assert.equal(ids(), "1,2");
+
+// 3. Never stored: an identical *older* item does not count, so the retry sends.
+let saved = [old, item(2, "second", { bounds })];
+bounds = draft("second");
+await add();
+take("POST").reject(lost());
+await settle();
+take("GET").resolve(list(...saved));
+await settle();
+assert.equal(popOpen(), true);
+assert.match(popErr(), /not shown yet/);
+await add();
+take("GET").resolve(list(...saved));
+await settle();
+assert.equal(count("POST"), 1);
+saved = saved.concat(item(3, "second", { bounds }));
+take("POST").resolve(reply(200, { ok: true, annotation: saved[2] }));
+await settle();
+while (count("GET")) take("GET").resolve(list(...saved));
+await settle();
+assert.equal(popOpen(), false);
+assert.equal(ids(), "1,2,3");
+
+// 4. Text edited after the lost reply: the edit is kept, then saved on request.
+bounds = draft("before edit");
+await add();
+take("POST").reject(lost());
+await settle();
+take("GET").resolve(list(...saved));
+await settle();
+h.getEl("annot-comment").value = "after edit";
+saved = saved.concat(item(4, "before edit", { bounds }));
+await add();
+take("GET").resolve(list(...saved));
+await settle();
+assert.equal(count("POST"), 0);
+assert.equal(popOpen(), true);
+assert.equal(h.getEl("annot-comment").value, "after edit");
+assert.match(popErr(), /saved as #4/);
+await add();
+assert.equal(take("POST").body.comment, "after edit");
+
+// 5. Explicit rejection stays a rejection.
+h.eval(`closeAnnotPopover()`);
+pending.length = 0;
+draft("rejected");
+await add();
+take("POST").resolve(reply(400, { ok: false, error: "annotation limit reached" }));
+await settle();
+assert.equal(count("GET"), 0);
+assert.equal(popErr(), "annotation limit reached");
+await add();
+assert.equal(count("POST"), 1, "a rejected draft is resent without a list check");
+"#,
+        );
+    }
+
+    #[test]
+    fn late_list_and_mutation_replies_cannot_drop_or_revive_annotations() {
+        run_annot_scenario(
+            r#"
+const newer = item(2, "accepted after clear");
+const accepted = reply(200, { ok: true, annotation: newer });
+const cleared = reply(200, { ok: true, cleared: 1 });
+async function clearThenAdd() {
+  h.eval(`closeAnnotPopover(); clearAnnotations();`);
+  await settle();
+  draft("accepted after clear");
+  await add();
+  const clear = take("POST");
+  assert.equal(clear.body.action, "clear");
+  const added = take("POST");
+  assert.equal(added.body.action, "add");
+  return { clear, added };
+}
+
+// 1. Server: Clear then Add. The Add reply and its list GET arrive first.
+await start(item(1, "old"));
+let { clear, added } = await clearThenAdd();
+added.resolve(accepted);
+await settle();
+take("GET").resolve(list(newer));
+await settle();
+clear.resolve(cleared);
+await settle();
+assert.equal(ids(), "2", "late Clear reply must keep the newer item");
+take("GET").resolve(list(newer));
+await settle();
+assert.equal(ids(), "2");
+
+// 2. Same order, and the reload after Clear fails: still kept, and flagged.
+h.eval(`annotItems = [${JSON.stringify(item(1, "old"))}]`);
+({ clear, added } = await clearThenAdd());
+added.resolve(accepted);
+await settle();
+take("GET").resolve(list(newer));
+await settle();
+clear.resolve(cleared);
+await settle();
+take("GET").reject(lost());
+await settle();
+assert.equal(ids(), "2");
+assert.match(panel(), /could not be refreshed; it may be out of date/);
+
+// 3. Server: Add then Clear, Add reply last. The reload drops the cleared item.
+pending.length = 0;
+h.eval(`annotItems = [${JSON.stringify(item(1, "old"))}]`);
+({ clear, added } = await clearThenAdd());
+clear.resolve(cleared);
+await settle();
+const afterClear = take("GET");
+added.resolve(accepted);
+await settle();
+afterClear.resolve(list(newer)); // stale snapshot from before the Clear
+await settle();
+while (count("GET")) take("GET").resolve(list());
+await settle();
+assert.equal(ids(), "");
+
+// 4. A GET sent before a mutation reply cannot overwrite it; it is reissued.
+pending.length = 0;
+h.eval(`annotItems = [${JSON.stringify(item(1, "old"))}]; setAsideTab("annotations");`);
+await settle();
+const early = take("GET");
+h.eval(`deleteAnnotation(1)`);
+await settle();
+take("DELETE").resolve(reply(200, { ok: true }));
+await settle();
+const reload = take("GET");
+reload.resolve(list());
+await settle();
+early.resolve(list(item(1, "old")));
+await settle();
+assert.equal(ids(), "", "superseded GET must not revive a deleted item");
+"#,
+        );
+    }
+
+    #[test]
+    fn annotation_gesture_is_discarded_when_the_screen_changes_mid_drag() {
+        run_annot_scenario(
+            r#"
+await start();
+const changes = {
+  rotateEvent: `onEvent({ kind: "action", cmd: "rotate", status: "ok" }, "action")`,
+  frameSize: `screenEpoch += 1; invalidateMirrorTree(true)`,
+  rotatePending: `pendingRotate = { minSeq: 1, expectedW: 0, expectedH: 0, awaitingReply: true }`,
+};
+for (const tool of ["box", "draw"]) {
+  for (const [name, change] of Object.entries(changes)) {
+    h.eval(`pendingRotate = null; showAnnotPanelNotice(""); setAnnotTool("${tool}")`);
+    pointer("pointerdown", 10, 10);
+    pointer("pointermove", 60, 60);
+    h.eval(change);
+    pointer("pointerup", 60, 60);
+    const at = tool + " / " + name;
+    assert.equal(h.eval(`annotDraft`), null, at);
+    assert.equal(h.eval(`annotPending`), null, at);
+    assert.equal(popOpen(), false, at);
+    assert.match(panel(), /gesture; it was discarded/, at);
+  }
+  // An unchanged screen completes, and a later change leaves that draft alone.
+  h.eval(`pendingRotate = null; setAnnotTool("${tool}")`);
+  pointer("pointerdown", 10, 10);
+  pointer("pointermove", 60, 60);
+  pointer("pointerup", 60, 60);
+  assert.equal(popOpen(), true, tool);
+  const before = h.eval(`JSON.stringify([annotPending.bounds, annotPending.display])`);
+  h.eval(changes.rotateEvent);
+  assert.equal(popOpen(), true, tool);
+  assert.equal(h.eval(`JSON.stringify([annotPending.bounds, annotPending.display])`), before);
+  h.eval(`closeAnnotPopover()`);
+}
 "#,
         );
     }
