@@ -284,6 +284,7 @@ pub const PAGE: &str = r####"<!doctype html>
         <div class="annot-pop-err" id="annot-pop-err" hidden></div>
         <div class="annot-pop-actions">
           <button id="annot-cancel" type="button">Cancel</button>
+          <button id="annot-submit-no-shot" type="button" hidden>Save without screenshot</button>
           <button id="annot-submit" type="button" class="primary">Add</button>
         </div>
       </div>
@@ -307,6 +308,7 @@ pub const PAGE: &str = r####"<!doctype html>
           <label class="annot-filter"><input id="annot-show-resolved" type="checkbox"> Resolved</label>
           <button id="btn-annot-clear" type="button">Clear</button>
         </div>
+        <div id="annot-panel-msg" class="annot-pop-err" hidden></div>
         <div id="annot-empty" class="annot-empty">No open annotations yet. Click Annotate to pick a view, draw a box, or sketch on the screen.</div>
         <ol id="annot-list"></ol>
       </div>
@@ -320,7 +322,7 @@ const token = new URLSearchParams(location.search).get("t") || "";
 const auth = (path) => path + (path.includes("?") ? "&" : "?") + "t=" + encodeURIComponent(token);
 const $ = (id) => document.getElementById(id);
 const grid = $("grid"), detail = $("detail"), statusPill = $("status");
-const frame = $("frame"), frameCtx = frame.getContext("2d"), screenWrap = $("screenwrap"), mirrorDom = $("mirror-dom"), gestureSvg = $("gesture-svg"), overlay = $("overlay"), annotLayer = $("annot-layer"), annotSvg = $("annot-svg"), annotPopover = $("annot-popover"), annotPopTarget = $("annot-pop-target"), annotComment = $("annot-comment"), annotPopErr = $("annot-pop-err"), annotSubmit = $("annot-submit"), annotCancel = $("annot-cancel"), eventsList = $("events"), capTray = $("cap-tray");
+const frame = $("frame"), frameCtx = frame.getContext("2d"), screenWrap = $("screenwrap"), mirrorDom = $("mirror-dom"), gestureSvg = $("gesture-svg"), overlay = $("overlay"), annotLayer = $("annot-layer"), annotSvg = $("annot-svg"), annotPopover = $("annot-popover"), annotPopTarget = $("annot-pop-target"), annotComment = $("annot-comment"), annotPopErr = $("annot-pop-err"), annotSubmit = $("annot-submit"), annotSubmitNoShot = $("annot-submit-no-shot"), annotCancel = $("annot-cancel"), annotPanelMsg = $("annot-panel-msg"), eventsList = $("events"), capTray = $("cap-tray");
 const btnBack = $("btn-back"), btnHome = $("btn-home"), btnRecents = $("btn-recents"), btnRotate = $("btn-rotate");
 const btnVolDown = $("btn-vol-down"), btnVolUp = $("btn-vol-up"), btnPower = $("btn-power"), btnPinch = $("btn-pinch"), btnShot = $("btn-shot");
 const btnAnnotate = $("btn-annotate"), annotTools = $("annot-tools"), btnAnnotPick = $("btn-annot-pick"), btnAnnotBox = $("btn-annot-box"), btnAnnotDraw = $("btn-annot-draw"), btnAnnotCopy = $("btn-annot-copy");
@@ -328,6 +330,7 @@ const tabActivity = $("tab-activity"), tabAnnotations = $("tab-annotations"), pa
 const btnAnnotCopyAll = $("btn-annot-copy-all"), btnAnnotClear = $("btn-annot-clear"), annotShowResolved = $("annot-show-resolved"), annotEmpty = $("annot-empty"), annotList = $("annot-list");
 const verifyBanner = $("verify-banner"), dinput = $("dinput");
 const SVG_NS = "http://www.w3.org/2000/svg";
+const MAX_ANNOTATION_PNG_BYTES = 4 * 1024 * 1024;
 const capabilityCards = new Map();
 // prompt_seq of capability actions sent (or queued) but not yet answered.
 const pendingCapabilities = new Set();
@@ -363,11 +366,16 @@ let panelTouchState = { active: 0, maxPointers: 0, startX: 0, startY: 0, startTs
 
 let mirrorNodes = [];
 let mirrorMeta = { activity: "", package: "", display: { w: 0, h: 0 } };
+let mirrorTreeValid = false;
 let mirrorFetchTimer = null;
-let mirrorFetchInFlight = false;
+let mirrorFetchDeadline = 0;
+let mirrorFetchCtrl = null;
+let mirrorFetchGen = 0;
 let mirrorFetchPending = false;
 let mirrorGeneration = 0;
 let lastTreeFrameSeq = -1;
+let screenEpoch = 0;
+let liveActivity = "";
 
 let annotMode = false;
 let annotTool = "pick"; // "pick" | "box" | "draw"
@@ -378,7 +386,8 @@ let asideTab = "activity"; // "activity" | "annotations"
 let hoveredMirrorNode = null;
 let annotDraft = null;
 let annotPending = null;
-let annotSubmitting = false;
+let annotSubmittingDraftId = null;
+let nextAnnotDraftId = 1;
 let annotGeneration = 0;
 
 const KEY_MAP = {
@@ -447,8 +456,15 @@ function projectName(path) {
   return parts.length ? parts[parts.length - 1] : path;
 }
 
+function canAnnotateSession(s) {
+  if (!s) return false;
+  if (typeof s.can_annotate === "boolean") return s.can_annotate;
+  return !s.watch_only;
+}
+
 function applyToolbarUi() {
   const isWatchOnly = !!(current && current.watch_only);
+  const canAnnot = canAnnotateSession(current);
   const noLauncher = !!(current && current.has_home === false);
   const inputBlocked = isWatchOnly || sessionEnded;
   verifyBanner.hidden = !isWatchOnly;
@@ -492,13 +508,19 @@ function applyToolbarUi() {
 
   btnShot.disabled = !hasDecodedFrame();
 
-  if (sessionEnded && annotMode) {
+  if ((sessionEnded || !canAnnot) && annotMode) {
     annotMode = false;
+    annotDraft = null;
+    hoveredMirrorNode = null;
+    closeAnnotPopover();
   }
-  const annotDisabled = !current || sessionEnded;
+  const annotDisabled = !current || sessionEnded || !canAnnot;
   btnAnnotate.disabled = annotDisabled;
   btnAnnotate.classList.toggle("active", annotMode);
   btnAnnotate.setAttribute("aria-pressed", String(annotMode));
+  btnAnnotate.title = !canAnnot
+    ? "Annotations require an interactive acos serve session"
+    : "Inspect Android views and draw visual annotations";
   btnAnnotate.textContent = annotOpenCount > 0 ? "Annotate (" + annotOpenCount + ")" : "Annotate";
   annotTools.hidden = !annotMode;
   btnAnnotPick.classList.toggle("active", annotTool === "pick");
@@ -537,7 +559,7 @@ let lastGridSig = "";
 function gridSignature(list) {
   if (!list.length) return "empty";
   return JSON.stringify(list.map((s) => [
-    s.session_id, s.stream, s.connected, s.watchers > 0, s.watch_only,
+    s.session_id, s.stream, s.connected, s.watchers > 0, s.watch_only, s.can_annotate,
     s.has_home, s.device_name, s.app_label, s.package, s.activity,
     s.display ? s.display.w : 0, s.display ? s.display.h : 0,
     s.project_dir, clientLabel(s),
@@ -632,7 +654,6 @@ async function refresh() {
         }
         if (!sessionEnded) {
           const prevHasHome = current.has_home;
-          const prevAct = current.activity || "";
           current = updated;
           if (typeof current.has_home !== "boolean" && typeof prevHasHome === "boolean") {
             current.has_home = prevHasHome;
@@ -644,16 +665,19 @@ async function refresh() {
             (!frameSize.w || !frameSize.h ||
               ((updated.display.w < updated.display.h) === (frameSize.w < frameSize.h)))
           ) {
+            const dispChanged =
+              display.w > 0 && display.h > 0 &&
+              (display.w !== updated.display.w || display.h !== updated.display.h);
             display = { w: updated.display.w, h: updated.display.h };
             setAspect(display.w, display.h);
+            if (dispChanged) {
+              screenEpoch += 1;
+              invalidateMirrorTree(true);
+            }
             positionMirrorDom();
           }
           if (updated.activity) {
-            $("dactivity").textContent = updated.activity;
-            if (updated.activity !== prevAct) {
-              scheduleTreeRefresh(300);
-              renderAnnotOverlay();
-            }
+            setLiveActivity(updated.activity, true);
           }
           applyToolbarUi();
         }
@@ -811,11 +835,17 @@ function ensureWs() {
     }
     if (msg.ok && msg.t === "rotate") {
       cancelActivePointers();
+      let dispChanged = false;
       if (msg.width > 0 && msg.height > 0) {
+        dispChanged = display.w > 0 && display.h > 0 && (display.w !== msg.width || display.h !== msg.height);
         display = { w: msg.width, h: msg.height };
         setAspect(display.w, display.h);
       }
       if (typeof msg.rotation === "number") currentRotation = msg.rotation;
+      if (dispChanged) {
+        screenEpoch += 1;
+        invalidateMirrorTree(true);
+      }
       const targetSeq = Math.max(
         pendingRotate ? pendingRotate.minSeq : lastFrameSeq + 1,
         typeof msg.frame_seq === "number" ? msg.frame_seq : 0
@@ -995,9 +1025,12 @@ async function drawDecodedFrame(part, sid, gen, ctrl) {
     bmp.close();
     return;
   }
+  const prevW = frameSize.w;
+  const prevH = frameSize.h;
+  const coordSpaceChanged =
+    prevW > 0 && prevH > 0 && (prevW !== bmp.width || prevH !== bmp.height);
   const prevOrientationFlipped =
-    frameSize.w > 0 && frameSize.h > 0 &&
-    ((frameSize.w < frameSize.h) !== (bmp.width < bmp.height));
+    prevW > 0 && prevH > 0 && ((prevW < prevH) !== (bmp.width < bmp.height));
   if (prevOrientationFlipped) {
     cancelActivePointers();
   }
@@ -1031,9 +1064,13 @@ async function drawDecodedFrame(part, sid, gen, ctrl) {
   if (wasRotatePending !== isRotationPending()) {
     applyToolbarUi();
   }
+  if (coordSpaceChanged) {
+    screenEpoch += 1;
+    invalidateMirrorTree(true);
+  }
   positionMirrorDom();
-  if (prevOrientationFlipped || lastFrameSeq !== lastTreeFrameSeq) {
-    scheduleTreeRefresh(prevOrientationFlipped ? 150 : 300);
+  if (!coordSpaceChanged && lastFrameSeq !== lastTreeFrameSeq) {
+    scheduleTreeRefresh(300, false);
   }
 }
 
@@ -1169,6 +1206,8 @@ function openSession(s) {
   sessionEverConnected = false;
   disconnectedPolls = 0;
   current = s;
+  liveActivity = (s && typeof s.activity === "string") ? s.activity : "";
+  screenEpoch += 1;
   currentGuestGen = (typeof s.guest_gen === "number" && s.guest_gen > 0) ? s.guest_gen : null;
   pendingRotate = null;
   display = { w: (s.display && s.display.w) || 0, h: (s.display && s.display.h) || 0 };
@@ -1178,7 +1217,7 @@ function openSession(s) {
   document.body.classList.add("watching");
   $("dtitle").textContent = sessionTitle(s);
   $("dsub").textContent = s.session_id + " · " + clientLabel(s) + " · " + projectName(s.project_dir);
-  $("dactivity").textContent = s.activity || "-";
+  $("dactivity").textContent = liveActivity || "-";
   eventsList.textContent = "";
   $("dstate").textContent = s.stream ? "connecting" : "no stream";
   $("dstate").className = "pill";
@@ -1196,8 +1235,10 @@ function openSession(s) {
       }
     });
   }
-  scheduleTreeRefresh(150);
-  fetchAnnotations();
+  if (canAnnotateSession(s)) {
+    scheduleTreeRefresh(150, true);
+    fetchAnnotations();
+  }
   location.hash = "s=" + encodeURIComponent(s.session_id);
   history.replaceState(null, "", location.pathname + location.search + location.hash);
   screenWrap.focus({ preventScroll: true });
@@ -1219,6 +1260,8 @@ function closeSession() {
   resetMirrorDom();
   resetAnnotationsState();
   current = null;
+  liveActivity = "";
+  screenEpoch += 1;
   currentGuestGen = null;
   pendingRotate = null;
   detail.hidden = true;
@@ -1286,14 +1329,23 @@ function connectEvents(s) {
       (!frameSize.w || !frameSize.h ||
         ((entry.display.w < entry.display.h) === (frameSize.w < frameSize.h)))
     ) {
+      const dispChanged =
+        display.w > 0 && display.h > 0 &&
+        (display.w !== entry.display.w || display.h !== entry.display.h);
       display = { w: entry.display.w, h: entry.display.h };
       setAspect(display.w, display.h);
+      if (dispChanged) {
+        screenEpoch += 1;
+        invalidateMirrorTree(true);
+      }
       positionMirrorDom();
     }
-    const prevAct = current ? (current.activity || "") : "";
     if (current) {
       if (typeof entry.watch_only === "boolean") {
         current.watch_only = entry.watch_only;
+      }
+      if (typeof entry.can_annotate === "boolean") {
+        current.can_annotate = entry.can_annotate;
       }
       if (typeof entry.has_home === "boolean") {
         current.has_home = entry.has_home;
@@ -1301,16 +1353,11 @@ function connectEvents(s) {
         current.has_home = hello.has_home;
       }
       if (entry.activity) {
-        current.activity = entry.activity;
+        setLiveActivity(entry.activity, true);
       }
       applyToolbarUi();
-    }
-    if (entry.activity) {
-      $("dactivity").textContent = entry.activity;
-      if (entry.activity !== prevAct) {
-        scheduleTreeRefresh(300);
-        renderAnnotOverlay();
-      }
+    } else if (entry.activity) {
+      setLiveActivity(entry.activity, false);
     }
     if (data.connected === true) {
       sessionEverConnected = true;
@@ -1635,19 +1682,17 @@ function onEvent(event, kind) {
     return;
   }
   if (kind === "activity") {
-    $("dactivity").textContent = event.activity || "-";
-    if (current && event.activity) current.activity = event.activity;
+    if (event.activity) {
+      setLiveActivity(event.activity, true);
+    } else {
+      $("dactivity").textContent = "-";
+    }
     addEvent(event, kind);
-    scheduleTreeRefresh(300);
-    renderAnnotOverlay();
     return;
   }
   if (event.kind === "activity" && event.activity) {
-    $("dactivity").textContent = event.activity;
-    if (current) current.activity = event.activity;
+    setLiveActivity(event.activity, true);
     addEvent(event, "activity");
-    scheduleTreeRefresh(300);
-    renderAnnotOverlay();
     return;
   }
   if (event.kind === "action" && event.cmd === "rotate" && event.status === "ok") {
@@ -1665,7 +1710,8 @@ function onEvent(event, kind) {
       };
       applyToolbarUi();
     }
-    scheduleTreeRefresh(300);
+    screenEpoch += 1;
+    invalidateMirrorTree(true);
   }
   if (event.kind === "action" && event.source === "panel" && event.cmd === "touch") {
     const ok = !event.status || event.status === "ok";
@@ -1923,16 +1969,33 @@ function snapshotNode(n) {
 }
 
 function currentDisplaySize() {
-  const dw = mirrorMeta.display.w || display.w || frameSize.w || frame.width || 1080;
-  const dh = mirrorMeta.display.h || display.h || frameSize.h || frame.height || 2400;
+  const dw = (mirrorTreeValid && mirrorMeta.display.w) || display.w || frameSize.w || frame.width || 1080;
+  const dh = (mirrorTreeValid && mirrorMeta.display.h) || display.h || frameSize.h || frame.height || 2400;
   return { w: dw, h: dh };
 }
 
 function currentActivityName() {
-  const act = mirrorMeta.activity || (current && current.activity) || "";
-  if (act) return act;
+  if (liveActivity) return liveActivity;
+  if (current && current.activity) return current.activity;
+  if (mirrorTreeValid && mirrorMeta.activity) return mirrorMeta.activity;
   const shown = $("dactivity").textContent;
   return shown && shown !== "-" ? shown : "";
+}
+
+function setLiveActivity(act, triggerInvalidate) {
+  const next = typeof act === "string" ? act.trim() : "";
+  if (!next) return false;
+  const changed = next !== liveActivity;
+  liveActivity = next;
+  if (current) current.activity = next;
+  $("dactivity").textContent = next;
+  if (changed) {
+    screenEpoch += 1;
+    if (triggerInvalidate) {
+      invalidateMirrorTree(true);
+    }
+  }
+  return changed;
 }
 
 function flattenTreeNodes(tree, activity, pkg, disp) {
@@ -2011,7 +2074,7 @@ function renderMirrorDom() {
   if (!mirrorDom) return;
   positionMirrorDom();
   mirrorDom.textContent = "";
-  if (!mirrorNodes.length) return;
+  if (!mirrorTreeValid || !mirrorNodes.length) return;
   const { w: dw, h: dh } = currentDisplaySize();
   if (!(dw > 0 && dh > 0)) return;
   for (const n of mirrorNodes) {
@@ -2036,17 +2099,45 @@ function renderMirrorDom() {
   }
 }
 
+function isMirrorFetchInFlight() {
+  return mirrorFetchCtrl !== null && mirrorFetchGen === mirrorGeneration;
+}
+
 function cancelMirrorFetch() {
   mirrorGeneration += 1;
   if (mirrorFetchTimer) {
     clearTimeout(mirrorFetchTimer);
     mirrorFetchTimer = null;
   }
+  mirrorFetchDeadline = 0;
+  if (mirrorFetchCtrl) {
+    try { mirrorFetchCtrl.abort(); } catch (_) {}
+    mirrorFetchCtrl = null;
+  }
+  mirrorFetchGen = 0;
   mirrorFetchPending = false;
+}
+
+function invalidateMirrorTree(triggerRefresh) {
+  mirrorTreeValid = false;
+  mirrorNodes = [];
+  mirrorMeta = {
+    activity: "",
+    package: (current && current.package) || "",
+    display: { w: 0, h: 0 },
+  };
+  hoveredMirrorNode = null;
+  if (mirrorDom) mirrorDom.textContent = "";
+  renderAnnotOverlay();
+  if (triggerRefresh && current && !sessionEnded && canAnnotateSession(current)) {
+    cancelMirrorFetch();
+    scheduleTreeRefresh(0, true);
+  }
 }
 
 function resetMirrorDom() {
   cancelMirrorFetch();
+  mirrorTreeValid = false;
   mirrorNodes = [];
   mirrorMeta = { activity: "", package: "", display: { w: 0, h: 0 } };
   lastTreeFrameSeq = -1;
@@ -2054,66 +2145,101 @@ function resetMirrorDom() {
   if (mirrorDom) mirrorDom.textContent = "";
 }
 
-function scheduleTreeRefresh(delayMs) {
-  if (!current || sessionEnded) return;
-  const wait = typeof delayMs === "number" ? delayMs : 300;
-  if (mirrorFetchTimer) clearTimeout(mirrorFetchTimer);
+function scheduleTreeRefresh(delayMs, urgent) {
+  if (!current || sessionEnded || !canAnnotateSession(current)) return;
+  const wait = Math.max(0, typeof delayMs === "number" ? delayMs : 300);
+  const desiredAt = Date.now() + wait;
+  if (mirrorFetchTimer) {
+    // Coalesce pending refreshes without pushing an already-scheduled deadline
+    // later (prevents 10+ fps frames from starving tree updates). Urgent
+    // triggers (activity/orientation change) may pull the deadline forward.
+    if (!urgent || desiredAt >= mirrorFetchDeadline) {
+      return;
+    }
+    clearTimeout(mirrorFetchTimer);
+    mirrorFetchTimer = null;
+  }
+  mirrorFetchDeadline = desiredAt;
   mirrorFetchTimer = setTimeout(() => {
     mirrorFetchTimer = null;
+    mirrorFetchDeadline = 0;
     fetchTreeNow();
   }, wait);
 }
 
 async function fetchTreeNow() {
-  if (!current || sessionEnded) return;
-  if (mirrorFetchInFlight) {
+  if (!current || sessionEnded || !canAnnotateSession(current)) return;
+  if (isMirrorFetchInFlight()) {
     mirrorFetchPending = true;
     return;
   }
   const sid = current.session_id;
   const gen = mirrorGeneration;
+  const epochAtStart = screenEpoch;
   const g = (typeof currentGuestGen === "number" && currentGuestGen > 0) ? currentGuestGen : null;
   const seqAtStart = lastFrameSeq;
-  mirrorFetchInFlight = true;
+  const ctrl = new AbortController();
+  mirrorFetchCtrl = ctrl;
+  mirrorFetchGen = gen;
+  let staleEpoch = false;
   try {
     const path = "/api/tree/" + encodeURIComponent(sid)
       + (g !== null ? "?g=" + encodeURIComponent(g) : "");
-    const resp = await fetch(auth(path), { cache: "no-store" });
-    if (mirrorGeneration !== gen || !current || current.session_id !== sid || sessionEnded) return;
+    const resp = await fetch(auth(path), { cache: "no-store", signal: ctrl.signal });
+    if (ctrl.signal.aborted || mirrorGeneration !== gen || !current || current.session_id !== sid || sessionEnded) return;
     if (resp.status === 409) {
       markSessionEnded(sid);
       return;
     }
     if (!resp.ok) return;
     const data = await resp.json();
-    if (mirrorGeneration !== gen || !current || current.session_id !== sid || sessionEnded) return;
+    if (ctrl.signal.aborted || mirrorGeneration !== gen || !current || current.session_id !== sid || sessionEnded) return;
     if (!data || !data.ok) return;
-    lastTreeFrameSeq = seqAtStart;
-    const act = (typeof data.activity === "string" && data.activity) ? data.activity : currentActivityName();
+    if (screenEpoch !== epochAtStart) {
+      staleEpoch = true;
+      return;
+    }
+    const treeAct = (typeof data.activity === "string" && data.activity.trim()) ? data.activity.trim() : "";
+    // Never overwrite a newer live activity from the event stream, and reject
+    // a lagging tree response whose activity no longer matches liveActivity.
+    if (liveActivity && treeAct && treeAct !== liveActivity) {
+      staleEpoch = true;
+      return;
+    }
+    const act = liveActivity || treeAct;
     const pkg = (typeof data.package === "string" && data.package) ? data.package : ((current && current.package) || "");
     const disp = (data.display && data.display.w > 0 && data.display.h > 0)
       ? { w: data.display.w, h: data.display.h }
       : { w: display.w || frameSize.w || 0, h: display.h || frameSize.h || 0 };
+    if (frameSize.w > 0 && frameSize.h > 0 && disp.w > 0 && disp.h > 0 &&
+        ((disp.w < disp.h) !== (frameSize.w < frameSize.h))) {
+      staleEpoch = true;
+      return;
+    }
+    lastTreeFrameSeq = seqAtStart;
     mirrorMeta = { activity: act, package: pkg, display: disp };
-    if (act) {
-      $("dactivity").textContent = act;
-      if (current) current.activity = act;
+    if (!liveActivity && treeAct) {
+      $("dactivity").textContent = treeAct;
     }
     mirrorNodes = flattenTreeNodes(data.tree, act, pkg, disp);
+    mirrorTreeValid = true;
     renderMirrorDom();
   } catch (_) {
-    // Tree fetch is best-effort; ignore transient disconnects while frame/SSE handle health.
+    // Tree fetch is best-effort; ignore aborts and transient disconnects.
   } finally {
-    mirrorFetchInFlight = false;
-    if (mirrorFetchPending && current && !sessionEnded) {
-      mirrorFetchPending = false;
-      scheduleTreeRefresh(300);
+    if (mirrorFetchCtrl === ctrl && mirrorFetchGen === gen) {
+      mirrorFetchCtrl = null;
+      mirrorFetchGen = 0;
+      if ((mirrorFetchPending || staleEpoch) && mirrorGeneration === gen && current && current.session_id === sid && !sessionEnded && canAnnotateSession(current)) {
+        mirrorFetchPending = false;
+        scheduleTreeRefresh(staleEpoch ? 100 : 300, staleEpoch);
+      }
     }
   }
 }
 
 function findDeepestNodeAt(pt) {
-  if (!pt || !mirrorNodes.length) return null;
+  if (!pt || !mirrorTreeValid || !mirrorNodes.length) return null;
   const hits = [];
   for (let i = mirrorNodes.length - 1; i >= 0; i--) {
     const n = mirrorNodes[i];
@@ -2134,7 +2260,7 @@ function findDeepestNodeAt(pt) {
 }
 
 function findNodesIntersecting(rect) {
-  if (!rect || !mirrorNodes.length) return [];
+  if (!rect || !mirrorTreeValid || !mirrorNodes.length) return [];
   const [rl, rt, rr, rb] = rect;
   const { w: dw, h: dh } = currentDisplaySize();
   const screenArea = Math.max(1, dw * dh);
@@ -2199,11 +2325,15 @@ function renderAnnotOverlay() {
   if (!current || sessionEnded) return;
 
   const curAct = currentActivityName();
-  // Draw persistent numbered pins for open annotations belonging to the current activity while annotating.
+  const curDisp = currentDisplaySize();
+  // Draw persistent numbered pins for open annotations belonging to the current activity & coordinate space while annotating.
   if (annotMode) {
     for (const item of annotItems) {
       if (item.status !== "open") continue;
       if (item.activity && curAct && item.activity !== curAct) continue;
+      if (item.display && item.display.w > 0 && item.display.h > 0 && curDisp.w > 0 && curDisp.h > 0) {
+        if (item.display.w !== curDisp.w || item.display.h !== curDisp.h) continue;
+      }
       const box = displayRectToOverlay(item.bounds);
       if (!box) continue;
       const pinBox = el("div", "annot-pin-box");
@@ -2309,19 +2439,53 @@ function nextAnnotationNumber() {
   return maxId + 1;
 }
 
+function decodedBase64ByteLength(b64) {
+  if (typeof b64 !== "string" || !b64.length) return 0;
+  const clean = b64.replace(/\s+/g, "");
+  const pad = clean.endsWith("==") ? 2 : (clean.endsWith("=") ? 1 : 0);
+  return Math.max(0, Math.floor((clean.length * 3) / 4) - pad);
+}
+
+function captureFrameSnapshot() {
+  if (!hasDecodedFrame()) return null;
+  try {
+    const snap = document.createElement("canvas");
+    snap.width = frame.width;
+    snap.height = frame.height;
+    const ctx = snap.getContext && snap.getContext("2d");
+    if (!ctx || typeof ctx.drawImage !== "function") return null;
+    ctx.drawImage(frame, 0, 0);
+    const disp = currentDisplaySize();
+    return {
+      canvas: snap,
+      width: snap.width,
+      height: snap.height,
+      display: { w: disp.w, h: disp.h },
+    };
+  } catch (_) {
+    return null;
+  }
+}
+
 function compositeAnnotationPng(selection, badgeNum) {
-  if (!hasDecodedFrame() || !selection) return null;
+  if (!selection || !selection.frameSnapshot || !selection.frameSnapshot.canvas) return null;
+  const snap = selection.frameSnapshot;
+  if (!(snap.width > 0 && snap.height > 0)) return null;
   try {
     const off = document.createElement("canvas");
-    off.width = frame.width;
-    off.height = frame.height;
+    off.width = snap.width;
+    off.height = snap.height;
     const ctx = off.getContext && off.getContext("2d");
     if (!ctx || typeof off.toDataURL !== "function") return null;
-    ctx.drawImage(frame, 0, 0);
+    ctx.drawImage(snap.canvas, 0, 0);
 
-    const { w: dw, h: dh } = currentDisplaySize();
-    const sx = dw > 0 ? (off.width / dw) : 1;
-    const sy = dh > 0 ? (off.height / dh) : 1;
+    const snapDisp = (snap.display && snap.display.w > 0 && snap.display.h > 0)
+      ? snap.display
+      : (selection.display && selection.display.w > 0 && selection.display.h > 0
+          ? selection.display
+          : { w: snap.width, h: snap.height });
+    const sx = snapDisp.w > 0 ? (off.width / snapDisp.w) : 1;
+    const sy = snapDisp.h > 0 ? (off.height / snapDisp.h) : 1;
     const lineW = Math.max(3, Math.round(off.width / 220));
     const b = parseBounds(selection.bounds);
 
@@ -2391,23 +2555,28 @@ function compositeAnnotationPng(selection, badgeNum) {
 }
 
 function openAnnotPopover(selection) {
-  annotPending = selection;
-  annotSubmitting = false;
+  const draftId = nextAnnotDraftId++;
+  annotPending = Object.assign({ draftId }, selection);
+  if (annotSubmittingDraftId === draftId) annotSubmittingDraftId = null;
   hoveredMirrorNode = null;
-  const primary = selection.nodes && selection.nodes.length ? selection.nodes[0] : null;
+  const primary = annotPending.nodes && annotPending.nodes.length ? annotPending.nodes[0] : null;
   if (primary) {
-    const extra = selection.nodes.length > 1 ? " (+" + (selection.nodes.length - 1) + " more)" : "";
+    const extra = annotPending.nodes.length > 1 ? " (+" + (annotPending.nodes.length - 1) + " more)" : "";
     annotPopTarget.textContent = formatNodeSummary(primary) + extra;
   } else {
-    annotPopTarget.textContent = selection.kind + " [" + selection.bounds.join(",") + "]";
+    annotPopTarget.textContent = annotPending.kind + " [" + annotPending.bounds.join(",") + "]";
   }
   annotComment.value = "";
   annotPopErr.textContent = "";
   annotPopErr.hidden = true;
   annotSubmit.disabled = false;
+  if (annotSubmitNoShot) {
+    annotSubmitNoShot.hidden = true;
+    annotSubmitNoShot.disabled = false;
+  }
   annotPopover.hidden = false;
 
-  const box = displayRectToOverlay(selection.bounds);
+  const box = displayRectToOverlay(annotPending.bounds);
   const wrapRect = screenWrap.getBoundingClientRect();
   const popW = Math.min(295, Math.max(200, (wrapRect.width || 320) - 16));
   const popH = 155;
@@ -2431,11 +2600,43 @@ function openAnnotPopover(selection) {
 
 function closeAnnotPopover() {
   annotPending = null;
-  annotSubmitting = false;
+  annotSubmittingDraftId = null;
   if (annotPopover) annotPopover.hidden = true;
   if (annotPopErr) { annotPopErr.textContent = ""; annotPopErr.hidden = true; }
   if (annotSubmit) annotSubmit.disabled = false;
+  if (annotSubmitNoShot) {
+    annotSubmitNoShot.hidden = true;
+    annotSubmitNoShot.disabled = false;
+  }
   renderAnnotOverlay();
+}
+
+function showAnnotPanelNotice(msg) {
+  if (!annotPanelMsg) return;
+  if (!msg) {
+    annotPanelMsg.textContent = "";
+    annotPanelMsg.hidden = true;
+  } else {
+    annotPanelMsg.textContent = msg;
+    annotPanelMsg.hidden = false;
+  }
+}
+
+function isSameAnnotSession(sid, gen, guestGen) {
+  return (
+    annotGeneration === gen &&
+    !sessionEnded &&
+    !!current &&
+    current.session_id === sid &&
+    currentGuestGen === guestGen
+  );
+}
+
+function isOutcomeUnknownResponse(resp, data) {
+  return (
+    resp.status === 504 ||
+    !!(data && (data.outcome_unknown === true || data.code === "OUTCOME_UNKNOWN"))
+  );
 }
 
 function annotationsApiPath(extra) {
@@ -2456,20 +2657,21 @@ function resetAnnotationsState() {
   annotOpenCount = 0;
   annotDraft = null;
   hoveredMirrorNode = null;
+  showAnnotPanelNotice("");
   closeAnnotPopover();
   renderAnnotationsPanel();
   renderAnnotOverlay();
 }
 
 function setAnnotMode(enabled) {
-  const next = !!enabled && !!current && !sessionEnded;
+  const next = !!enabled && !!current && !sessionEnded && canAnnotateSession(current);
   if (next === annotMode) return;
   annotMode = next;
   if (annotMode) {
     cancelActivePointers();
     releaseHeldGuestKeys();
     pinchMode = false;
-    scheduleTreeRefresh(50);
+    scheduleTreeRefresh(50, true);
     fetchAnnotations();
   } else {
     annotDraft = null;
@@ -2497,34 +2699,41 @@ function setAsideTab(tab) {
   tabAnnotations.setAttribute("aria-selected", String(isAnnot));
   paneActivity.hidden = isAnnot;
   paneAnnotations.hidden = !isAnnot;
-  if (isAnnot && current && !sessionEnded) {
+  if (isAnnot && current && !sessionEnded && canAnnotateSession(current)) {
     fetchAnnotations();
   }
 }
 
-async function fetchAnnotations() {
-  if (!current || sessionEnded) return;
+async function fetchAnnotations(preserveNotice) {
+  if (!current || sessionEnded || !canAnnotateSession(current)) return;
   const sid = current.session_id;
   const gen = annotGeneration;
+  const guestGen = currentGuestGen;
   try {
     const resp = await fetch(annotationsApiPath("?status=all"), { cache: "no-store" });
-    if (annotGeneration !== gen || !current || current.session_id !== sid || sessionEnded) return;
+    if (!isSameAnnotSession(sid, gen, guestGen)) return;
     if (resp.status === 409) {
       markSessionEnded(sid);
       return;
     }
     if (!resp.ok) return;
     const data = await resp.json();
-    if (annotGeneration !== gen || !current || current.session_id !== sid || sessionEnded) return;
+    if (!isSameAnnotSession(sid, gen, guestGen)) return;
     if (!data || !data.ok) return;
     annotItems = Array.isArray(data.annotations) ? data.annotations : [];
+    if (!preserveNotice) showAnnotPanelNotice("");
     renderAnnotationsPanel();
     renderAnnotOverlay();
   } catch (_) {}
 }
 
-async function submitAnnotation() {
-  if (!current || sessionEnded || !annotPending || annotSubmitting) return;
+async function submitAnnotation(skipScreenshot) {
+  if (!current || sessionEnded || !canAnnotateSession(current) || !annotPending) return;
+  const draft = annotPending;
+  const submittedDraftId = draft.draftId;
+  if (annotSubmittingDraftId === submittedDraftId) return;
+  const isSameDraft = () => !!(annotPending && annotPending.draftId === submittedDraftId);
+
   const comment = String(annotComment.value || "").trim();
   if (!comment) {
     annotPopErr.textContent = "Please enter a comment.";
@@ -2532,22 +2741,43 @@ async function submitAnnotation() {
     annotComment.focus();
     return;
   }
-  annotSubmitting = true;
-  annotSubmit.disabled = true;
-  annotPopErr.hidden = true;
+
   const badgeNum = nextAnnotationNumber();
-  const pngBase64 = compositeAnnotationPng(annotPending, badgeNum);
+  let pngBase64 = null;
+  if (!skipScreenshot) {
+    pngBase64 = compositeAnnotationPng(draft, badgeNum);
+    if (pngBase64 && decodedBase64ByteLength(pngBase64) > MAX_ANNOTATION_PNG_BYTES) {
+      annotPopErr.textContent =
+        "Annotated screenshot exceeds the 4 MiB limit. Click \"Save without screenshot\" to save without an image.";
+      annotPopErr.hidden = false;
+      if (annotSubmitNoShot) {
+        annotSubmitNoShot.hidden = false;
+        annotSubmitNoShot.disabled = false;
+      }
+      annotSubmit.disabled = false;
+      return;
+    }
+  }
+
+  annotSubmittingDraftId = submittedDraftId;
+  annotSubmit.disabled = true;
+  if (annotSubmitNoShot) annotSubmitNoShot.disabled = true;
+  annotPopErr.hidden = true;
+
+  const sid = current.session_id;
+  const gen = annotGeneration;
+  const guestGen = currentGuestGen;
   const { w: dw, h: dh } = currentDisplaySize();
   const payload = {
     action: "add",
     comment,
-    kind: annotPending.kind,
-    bounds: annotPending.bounds,
-    nodes: annotPending.nodes || [],
-    display: annotPending.display || { w: dw, h: dh },
+    kind: draft.kind,
+    bounds: draft.bounds,
+    nodes: draft.nodes || [],
+    display: draft.display || { w: dw, h: dh },
   };
-  if (annotPending.activity) payload.activity = annotPending.activity;
-  if (annotPending.package) payload.package = annotPending.package;
+  if (draft.activity) payload.activity = draft.activity;
+  if (draft.package) payload.package = draft.package;
   if (pngBase64) payload.image_png_base64 = pngBase64;
 
   try {
@@ -2557,34 +2787,65 @@ async function submitAnnotation() {
       body: JSON.stringify(payload),
     });
     const data = await resp.json().catch(() => ({}));
+    if (!isSameAnnotSession(sid, gen, guestGen)) return;
+    if (annotSubmittingDraftId === submittedDraftId) annotSubmittingDraftId = null;
     if (resp.status === 409) {
-      markSessionEnded(current.session_id);
+      markSessionEnded(sid);
+      return;
+    }
+    if (isOutcomeUnknownResponse(resp, data)) {
+      fetchAnnotations(true);
+      showAnnotPanelNotice(
+        "Annotation save timed out — it may have already succeeded. Refreshed list."
+      );
+      if (isSameDraft()) {
+        annotPopErr.textContent =
+          "Save outcome unknown — this annotation may have already been saved. Refreshed the list; check before retrying.";
+        annotPopErr.hidden = false;
+        annotSubmit.disabled = false;
+        if (annotSubmitNoShot) annotSubmitNoShot.disabled = false;
+      }
       return;
     }
     if (!resp.ok || !data.ok) {
-      annotPopErr.textContent = (data && data.error) || ("Failed (HTTP " + resp.status + ")");
-      annotPopErr.hidden = false;
-      annotSubmitting = false;
-      annotSubmit.disabled = false;
+      if (isSameDraft()) {
+        annotPopErr.textContent = (data && data.error) || ("Failed (HTTP " + resp.status + ")");
+        annotPopErr.hidden = false;
+        if (annotSubmitNoShot && (resp.status === 413 || String(annotPopErr.textContent).includes("image_png_base64"))) {
+          annotSubmitNoShot.hidden = false;
+          annotSubmitNoShot.disabled = false;
+        }
+        annotSubmit.disabled = false;
+      }
       return;
     }
-    if (data.annotation) {
+    if (data.annotation && !annotItems.some((a) => a.id === data.annotation.id)) {
       annotItems.push(data.annotation);
     }
-    closeAnnotPopover();
+    showAnnotPanelNotice("");
+    if (isSameDraft()) {
+      closeAnnotPopover();
+    }
     setAsideTab("annotations");
     renderAnnotationsPanel();
     renderAnnotOverlay();
   } catch (err) {
-    annotPopErr.textContent = err && err.message ? err.message : "Network error";
-    annotPopErr.hidden = false;
-    annotSubmitting = false;
-    annotSubmit.disabled = false;
+    if (!isSameAnnotSession(sid, gen, guestGen)) return;
+    if (annotSubmittingDraftId === submittedDraftId) annotSubmittingDraftId = null;
+    if (isSameDraft()) {
+      annotPopErr.textContent = err && err.message ? err.message : "Network error";
+      annotPopErr.hidden = false;
+      annotSubmit.disabled = false;
+      if (annotSubmitNoShot) annotSubmitNoShot.disabled = false;
+    }
   }
 }
 
 async function resolveAnnotation(id) {
-  if (!current || sessionEnded) return;
+  if (!current || sessionEnded || !canAnnotateSession(current)) return;
+  const sid = current.session_id;
+  const gen = annotGeneration;
+  const guestGen = currentGuestGen;
   try {
     const resp = await fetch(annotationsApiPath(""), {
       method: "POST",
@@ -2592,7 +2853,20 @@ async function resolveAnnotation(id) {
       body: JSON.stringify({ action: "resolve", id }),
     });
     const data = await resp.json().catch(() => ({}));
+    if (!isSameAnnotSession(sid, gen, guestGen)) return;
+    if (resp.status === 409) {
+      markSessionEnded(sid);
+      return;
+    }
+    if (isOutcomeUnknownResponse(resp, data)) {
+      showAnnotPanelNotice(
+        "Resolve outcome unknown — annotation #" + id + " may already be resolved. Refreshed list."
+      );
+      fetchAnnotations(true);
+      return;
+    }
     if (resp.ok && data.ok) {
+      showAnnotPanelNotice("");
       const idx = annotItems.findIndex((a) => a.id === id);
       if (idx >= 0 && data.annotation) annotItems[idx] = data.annotation;
       renderAnnotationsPanel();
@@ -2602,13 +2876,29 @@ async function resolveAnnotation(id) {
 }
 
 async function deleteAnnotation(id) {
-  if (!current || sessionEnded) return;
+  if (!current || sessionEnded || !canAnnotateSession(current)) return;
+  const sid = current.session_id;
+  const gen = annotGeneration;
+  const guestGen = currentGuestGen;
   try {
     const resp = await fetch(annotationsApiPath("/" + encodeURIComponent(id)), {
       method: "DELETE",
     });
     const data = await resp.json().catch(() => ({}));
+    if (!isSameAnnotSession(sid, gen, guestGen)) return;
+    if (resp.status === 409) {
+      markSessionEnded(sid);
+      return;
+    }
+    if (isOutcomeUnknownResponse(resp, data)) {
+      showAnnotPanelNotice(
+        "Delete outcome unknown — annotation #" + id + " may already be deleted. Refreshed list."
+      );
+      fetchAnnotations(true);
+      return;
+    }
     if (resp.ok && data.ok) {
+      showAnnotPanelNotice("");
       annotItems = annotItems.filter((a) => a.id !== id);
       renderAnnotationsPanel();
       renderAnnotOverlay();
@@ -2617,7 +2907,10 @@ async function deleteAnnotation(id) {
 }
 
 async function clearAnnotations() {
-  if (!current || sessionEnded) return;
+  if (!current || sessionEnded || !canAnnotateSession(current)) return;
+  const sid = current.session_id;
+  const gen = annotGeneration;
+  const guestGen = currentGuestGen;
   try {
     const resp = await fetch(annotationsApiPath(""), {
       method: "POST",
@@ -2625,7 +2918,20 @@ async function clearAnnotations() {
       body: JSON.stringify({ action: "clear", status: "all" }),
     });
     const data = await resp.json().catch(() => ({}));
+    if (!isSameAnnotSession(sid, gen, guestGen)) return;
+    if (resp.status === 409) {
+      markSessionEnded(sid);
+      return;
+    }
+    if (isOutcomeUnknownResponse(resp, data)) {
+      showAnnotPanelNotice(
+        "Clear outcome unknown — annotations may already have been cleared. Refreshed list."
+      );
+      fetchAnnotations(true);
+      return;
+    }
     if (resp.ok && data.ok) {
+      showAnnotPanelNotice("");
       annotItems = [];
       renderAnnotationsPanel();
       renderAnnotOverlay();
@@ -2674,17 +2980,22 @@ function renderAnnotationsPanel() {
     tabAnnotations.textContent = "Annotations (" + annotOpenCount + ")";
   }
   applyToolbarUi();
-  if (btnAnnotCopyAll) btnAnnotCopyAll.disabled = openItems.length === 0;
-  if (btnAnnotClear) btnAnnotClear.disabled = annotItems.length === 0;
+  const canAnnot = canAnnotateSession(current);
+  if (btnAnnotCopyAll) btnAnnotCopyAll.disabled = !canAnnot || openItems.length === 0;
+  if (btnAnnotClear) btnAnnotClear.disabled = !canAnnot || annotItems.length === 0;
   if (!annotList || !annotEmpty) return;
 
   const visible = annotShowResolvedFlag ? annotItems : openItems;
   annotList.textContent = "";
   annotEmpty.hidden = visible.length > 0;
   if (!visible.length) {
-    annotEmpty.textContent = annotItems.length > 0
-      ? "All annotations are resolved. Toggle Resolved to review them."
-      : "No open annotations yet. Click Annotate to pick a view, draw a box, or sketch on the screen.";
+    if (current && !canAnnot) {
+      annotEmpty.textContent = "Annotations require an interactive acos serve session.";
+    } else {
+      annotEmpty.textContent = annotItems.length > 0
+        ? "All annotations are resolved. Toggle Resolved to review them."
+        : "No open annotations yet. Click Annotate to pick a view, draw a box, or sketch on the screen.";
+    }
     return;
   }
 
@@ -2750,6 +3061,7 @@ function handleAnnotPointerDown(e, pt) {
   const pkg = mirrorMeta.package || (current && current.package) || "";
 
   if (annotTool === "pick") {
+    const frameSnapshot = captureFrameSnapshot();
     const node = findDeepestNodeAt(pt);
     const bounds = node
       ? node.bounds
@@ -2766,6 +3078,7 @@ function handleAnnotPointerDown(e, pt) {
       activity: act,
       package: pkg,
       display: { w: dw, h: dh },
+      frameSnapshot,
     });
     return;
   }
@@ -2834,6 +3147,7 @@ function finishAnnotPointer(e, cancelled) {
     renderAnnotOverlay();
     return;
   }
+  const frameSnapshot = captureFrameSnapshot();
   const { w: dw, h: dh } = currentDisplaySize();
   const act = currentActivityName();
   const pkg = mirrorMeta.package || (current && current.package) || "";
@@ -2857,6 +3171,7 @@ function finishAnnotPointer(e, cancelled) {
         activity: act,
         package: pkg,
         display: { w: dw, h: dh },
+        frameSnapshot,
       });
       return;
     }
@@ -2868,6 +3183,7 @@ function finishAnnotPointer(e, cancelled) {
       activity: act,
       package: pkg,
       display: { w: dw, h: dh },
+      frameSnapshot,
     });
   } else if (draft.tool === "draw") {
     const pts = draft.points;
@@ -2889,6 +3205,7 @@ function finishAnnotPointer(e, cancelled) {
       activity: act,
       package: pkg,
       display: { w: dw, h: dh },
+      frameSnapshot,
     });
   }
 }
@@ -3226,12 +3543,15 @@ btnAnnotCopy.addEventListener("click", () => {
   if (!openItems.length) return;
   copyTextToClipboard(formatAnnotationsForAgent(openItems), btnAnnotCopy, "Copy for Agent", "Copied!");
 });
-annotSubmit.addEventListener("click", () => submitAnnotation());
+annotSubmit.addEventListener("click", () => submitAnnotation(false));
+if (annotSubmitNoShot) {
+  annotSubmitNoShot.addEventListener("click", () => submitAnnotation(true));
+}
 annotCancel.addEventListener("click", () => closeAnnotPopover());
 annotComment.addEventListener("keydown", (e) => {
   if (e.key === "Enter" && !e.shiftKey) {
     e.preventDefault();
-    submitAnnotation();
+    submitAnnotation(false);
   } else if (e.key === "Escape") {
     e.preventDefault();
     closeAnnotPopover();
@@ -3283,8 +3603,10 @@ window.addEventListener("pageshow", (e) => {
   if (e.persisted && current && !sessionEnded && current.stream) {
     connectEvents(current);
     startFrameStream(current.session_id);
-    scheduleTreeRefresh(200);
-    fetchAnnotations();
+    if (canAnnotateSession(current)) {
+      scheduleTreeRefresh(200);
+      fetchAnnotations();
+    }
   }
 });
 refresh();
@@ -3327,10 +3649,24 @@ const vm = require("node:vm");
 
 const pageJs = {page_js};
 
-function createHarness() {{
+async function flushMicrotasks(n = 16) {{
+  for (let i = 0; i < n; i++) {{
+    await Promise.resolve();
+  }}
+}}
+
+function createHarness(opts = {{}}) {{
   let nowMs = 1000000;
   let nextTimerId = 1;
   const timers = new Map();
+
+  class FakeDate extends Date {{
+    constructor(...args) {{
+      if (args.length === 0) super(nowMs);
+      else super(...args);
+    }}
+    static now() {{ return nowMs; }}
+  }}
 
   function fakeSetTimeout(fn, delay = 0, ...args) {{
     const id = nextTimerId++;
@@ -3387,6 +3723,9 @@ function createHarness() {{
     contains(name) {{ return this.set.has(name); }}
   }}
 
+  let canvasToDataUrlHook = opts.canvasToDataUrl || null;
+  let canvasDrawImageHook = opts.canvasDrawImage || null;
+
   class StubElement {{
     constructor(tagName, id = "") {{
       this.tagName = String(tagName || "div").toUpperCase();
@@ -3407,6 +3746,8 @@ function createHarness() {{
       this.listeners = new Map();
       this.attrs = new Map();
       this.style = {{ setProperty() {{}} }};
+      this._drawOps = [];
+      this._snapTag = null;
     }}
     get textContent() {{ return this._textContent; }}
     set textContent(v) {{
@@ -3437,6 +3778,14 @@ function createHarness() {{
       if (idx >= 0) this.parentNode.children.splice(idx, 1);
       this.parentNode = null;
     }}
+    contains(node) {{
+      let cur = node;
+      while (cur) {{
+        if (cur === this) return true;
+        cur = cur.parentNode;
+      }}
+      return false;
+    }}
     addEventListener(type, fn) {{
       if (!this.listeners.has(type)) this.listeners.set(type, []);
       this.listeners.get(type).push(fn);
@@ -3449,7 +3798,33 @@ function createHarness() {{
       this.dispatchEvent({{ type: "click", preventDefault() {{}} }});
     }}
     setAttribute(k, v) {{ this.attrs.set(k, String(v)); }}
-    getContext() {{ return {{ clearRect() {{}}, drawImage() {{}} }}; }}
+    getContext() {{
+      const el = this;
+      return {{
+        clearRect() {{}},
+        drawImage(src, ...rest) {{
+          el._drawOps.push({{ src, args: rest, srcTag: src && src._snapTag }});
+          if (src && src._snapTag) el._snapTag = src._snapTag;
+          if (canvasDrawImageHook) canvasDrawImageHook(el, src, rest);
+        }},
+        strokeRect() {{}},
+        fillRect() {{}},
+        beginPath() {{}},
+        moveTo() {{}},
+        lineTo() {{}},
+        stroke() {{}},
+        arc() {{}},
+        fill() {{}},
+        fillText() {{}},
+        save() {{}},
+        restore() {{}},
+      }};
+    }}
+    toDataURL(mime) {{
+      if (canvasToDataUrlHook) return canvasToDataUrlHook(this, mime);
+      const tag = this._snapTag || "default";
+      return "data:image/png;base64," + Buffer.from("png:" + tag).toString("base64");
+    }}
     focus() {{}}
     getBoundingClientRect() {{ return {{ left: 0, top: 0, width: 100, height: 200, right: 100, bottom: 200 }}; }}
     querySelector() {{ return null; }}
@@ -3511,12 +3886,22 @@ function createHarness() {{
   MockWebSocket.CLOSING = 2;
   MockWebSocket.CLOSED = 3;
 
+  const createdEventSources = [];
   class MockEventSource {{
     constructor(url) {{
       this.url = url;
       this.closed = false;
+      this.listeners = new Map();
+      createdEventSources.push(this);
     }}
-    addEventListener() {{}}
+    addEventListener(type, fn) {{
+      if (!this.listeners.has(type)) this.listeners.set(type, []);
+      this.listeners.get(type).push(fn);
+    }}
+    emit(type, data) {{
+      const list = this.listeners.get(type) || [];
+      for (const fn of list) fn({{ data: typeof data === "string" ? data : JSON.stringify(data) }});
+    }}
     close() {{ this.closed = true; }}
   }}
 
@@ -3527,8 +3912,11 @@ function createHarness() {{
     }},
   }};
 
+  let fetchHandler = opts.fetch || (async () => ({{ ok: true, status: 200, json: async () => ({{ sessions: [] }}) }}));
+
   const sandbox = {{
     console,
+    Date: FakeDate,
     URLSearchParams,
     AbortController,
     TextDecoder,
@@ -3547,7 +3935,7 @@ function createHarness() {{
       hash: "",
     }},
     history: {{ replaceState() {{}} }},
-    fetch: async () => ({{ ok: true, json: async () => ({{ sessions: [] }}) }}),
+    fetch: (url, init) => fetchHandler(url, init),
     setTimeout: fakeSetTimeout,
     clearTimeout: fakeClearTimeout,
     setInterval: fakeSetInterval,
@@ -3568,13 +3956,24 @@ function createHarness() {{
     ctx,
     eval: (code) => vm.runInContext(code, ctx),
     advanceTimers,
+    now: () => nowMs,
     createdSockets,
+    createdEventSources,
     dispatchWindow,
+    setFetch: (fn) => {{ fetchHandler = fn; }},
+    setCanvasToDataUrl: (fn) => {{ canvasToDataUrlHook = fn; }},
+    setCanvasDrawImage: (fn) => {{ canvasDrawImageHook = fn; }},
+    getEl: (id) => documentStub.getElementById(id),
     capTray: documentStub.getElementById("cap-tray"),
   }};
 }}
 
+(async () => {{
 {test_body}
+}})().catch((err) => {{
+  console.error(err);
+  process.exit(1);
+}});
 "#,
             page_js = page_js,
             test_body = test_body,
@@ -3755,6 +4154,7 @@ h.eval(`
     guest_gen: 1,
     stream: false,
     watch_only: false,
+    can_annotate: true,
     package: "com.example.shop",
     activity: "com.example.shop/.LoginActivity",
     display: { w: 1000, h: 2000 },
@@ -3802,6 +4202,7 @@ h.eval(`
     "com.example.shop",
     { w: 1000, h: 2000 }
   );
+  mirrorTreeValid = true;
   renderMirrorDom();
 `);
 
@@ -3877,6 +4278,433 @@ assert.match(md, /### #1 \[element\] — com\.example\.shop\/\.LoginActivity/);
 assert.match(md, /Button · #btn_login · "Sign in" · \[100,400,900,600\]/);
 assert.match(md, /Increase button height to 48dp/);
 assert.match(md, /\/tmp\/acos\/annotations\/1\.png/);
+"#,
+        );
+    }
+
+    #[test]
+    fn watch_only_without_serve_socket_disables_annotate_and_skips_api_polling() {
+        run_page_js_scenario(
+            r#"
+const requestedUrls = [];
+const watchSession = {
+  session_id: "sess-watch-only",
+  guest_gen: 1,
+  stream: true,
+  watch_only: true,
+  can_annotate: false,
+  package: "com.example.watch",
+  activity: ".MainActivity",
+  display: { w: 1080, h: 1920 },
+};
+const h = createHarness({
+  fetch: async (url) => {
+    requestedUrls.push(String(url));
+    return { ok: true, status: 200, json: async () => ({ sessions: [watchSession] }) };
+  },
+});
+await flushMicrotasks();
+requestedUrls.length = 0;
+
+h.eval(`openSession(${JSON.stringify(watchSession)});`);
+h.advanceTimers(1000);
+await flushMicrotasks();
+
+assert.equal(h.getEl("btn-annotate").disabled, true);
+assert.equal(h.getEl("btn-annotate").title, "Annotations require an interactive acos serve session");
+assert.equal(h.eval(`annotMode`), false);
+assert.equal(
+  requestedUrls.some((u) => u.includes("/tree") || u.includes("/annotations")),
+  false,
+  "watch-only session with can_annotate=false must not poll /tree or /annotations: " + JSON.stringify(requestedUrls)
+);
+
+// Attempting to enable annotate mode or triggering pageshow still skips tree/annotations fetches.
+h.eval(`setAnnotMode(true);`);
+h.dispatchWindow("pageshow", { persisted: true });
+h.advanceTimers(1000);
+await flushMicrotasks();
+assert.equal(h.eval(`annotMode`), false);
+assert.equal(
+  requestedUrls.some((u) => u.includes("/tree") || u.includes("/annotations")),
+  false
+);
+"#,
+        );
+    }
+
+    #[test]
+    fn tree_refresh_coalescing_prevents_starvation_and_aborts_across_sessions() {
+        run_page_js_scenario(
+            r#"
+const sessA = {
+  session_id: "sess-a",
+  guest_gen: 1,
+  stream: false,
+  watch_only: false,
+  can_annotate: true,
+  activity: ".Home",
+  display: { w: 1000, h: 2000 },
+};
+const sessB = {
+  session_id: "sess-b",
+  guest_gen: 1,
+  stream: false,
+  watch_only: false,
+  can_annotate: true,
+  activity: ".Settings",
+  display: { w: 1000, h: 2000 },
+};
+const calls = [];
+const h = createHarness({
+  fetch: (url, init) => {
+    const u = String(url);
+    if (u.includes("/tree")) {
+      let resolveResp;
+      const p = new Promise((resolve, reject) => {
+        resolveResp = resolve;
+        if (init && init.signal) {
+          init.signal.addEventListener("abort", () => reject(new Error("aborted")));
+        }
+      });
+      calls.push({ url: u, signal: init && init.signal, resolve: resolveResp });
+      return p;
+    }
+    return Promise.resolve({
+      ok: true,
+      status: 200,
+      json: async () => ({ ok: true, annotations: [], sessions: [sessA, sessB] }),
+    });
+  },
+});
+await flushMicrotasks();
+
+h.eval(`openSession(${JSON.stringify(sessA)});`);
+// Clear initial openSession scheduled fetch (150ms) first, then resolve it.
+h.advanceTimers(200);
+assert.equal(calls.length, 1);
+calls[0].resolve({
+  ok: true,
+  status: 200,
+  json: async () => ({ ok: true, tree: { nodes: [] }, activity: ".Home", display: { w: 1000, h: 2000 } }),
+});
+await flushMicrotasks();
+
+// 1. Continuous 100ms frame updates (10 fps) calling scheduleTreeRefresh(500) must NOT starve!
+for (let i = 0; i < 5; i++) {
+  h.eval(`scheduleTreeRefresh(500);`);
+  h.advanceTimers(100);
+}
+assert.equal(calls.length, 2, "coalesced 500ms timer must fire on time under 100ms frame cadence");
+
+// 2. Session switch while Session A's tree fetch is still in flight aborts Session A and lets Session B fetch cleanly.
+assert.equal(calls[1].signal.aborted, false);
+h.eval(`openSession(${JSON.stringify(sessB)});`);
+assert.equal(calls[1].signal.aborted, true, "switching sessions must abort prior tree fetch");
+await flushMicrotasks();
+
+// Urgent trigger (delay=50) pulls openSession's 150ms deadline forward to 50ms.
+h.eval(`scheduleTreeRefresh(50, true);`);
+h.advanceTimers(50);
+assert.equal(calls.length, 3, "Session B fetch must not be blocked by Session A in-flight state and urgent delay pulls deadline forward");
+assert.match(calls[2].url, /\/api\/tree\/sess-b/);
+"#,
+        );
+    }
+
+    #[test]
+    fn stale_tree_response_does_not_clobber_live_activity_and_invalidates_mirror_dom() {
+        run_page_js_scenario(
+            r#"
+const sessAct = {
+  session_id: "sess-act",
+  guest_gen: 1,
+  stream: false,
+  watch_only: false,
+  can_annotate: true,
+  package: "com.example.app",
+  activity: ".OldActivity",
+  display: { w: 1000, h: 2000 },
+};
+const treeRequests = [];
+const h = createHarness({
+  fetch: (url) => {
+    const u = String(url);
+    if (u.includes("/tree")) {
+      return new Promise((resolve) => { treeRequests.push({ url: u, resolve }); });
+    }
+    return Promise.resolve({
+      ok: true,
+      status: 200,
+      json: async () => ({ ok: true, annotations: [], sessions: [sessAct] }),
+    });
+  },
+});
+await flushMicrotasks();
+
+h.eval(`
+  openSession(${JSON.stringify(sessAct)});
+  frame.width = 1000;
+  frame.height = 2000;
+  frameSize = { w: 1000, h: 2000 };
+  display = { w: 1000, h: 2000 };
+`);
+
+// Initial tree fetch fires and loads OldActivity nodes.
+h.advanceTimers(200);
+assert.equal(treeRequests.length, 1);
+treeRequests[0].resolve({
+  ok: true,
+  status: 200,
+  json: async () => ({
+    ok: true,
+    activity: ".OldActivity",
+    package: "com.example.app",
+    display: { w: 1000, h: 2000 },
+    tree: {
+      nodes: [
+        { class: "android.widget.Button", text: "Old", bounds: "[100,400][900,600]", visible: true, clickable: true, children: [] },
+      ],
+    },
+  }),
+});
+await flushMicrotasks();
+assert.equal(h.eval(`mirrorTreeValid`), true);
+assert.equal(h.eval(`mirrorNodes.length`), 1);
+assert.equal(h.getEl("dactivity").textContent, ".OldActivity");
+
+// Start a second tree fetch while still on OldActivity, then live activity changes to NewActivity before it returns.
+h.eval(`fetchTreeNow();`);
+assert.equal(treeRequests.length, 2);
+
+// Simulate live activity event arriving (onEvent(ev, kind)).
+h.eval(`onEvent({ activity: ".NewActivity" }, "activity");`);
+assert.equal(h.getEl("dactivity").textContent, ".NewActivity");
+assert.equal(h.eval(`mirrorTreeValid`), false, "activity change must immediately invalidate cached Mirror DOM");
+assert.equal(h.eval(`mirrorNodes.length`), 0);
+assert.equal(h.getEl("mirror-dom").children.length, 0);
+
+// Picking while tree is invalidated falls back to coordinate-only selection (no stale OldActivity nodes).
+h.eval(`
+  setAnnotMode(true);
+  screenWrap.dispatchEvent({
+    type: "pointerdown",
+    pointerType: "mouse",
+    button: 0,
+    pointerId: 9,
+    clientX: 50,
+    clientY: 50,
+    target: screenWrap,
+    preventDefault() {},
+  });
+`);
+assert.equal(h.eval(`annotPending.kind`), "element");
+assert.equal(h.eval(`annotPending.nodes.length`), 0, "must not attach stale nodes before new tree arrives");
+assert.equal(h.eval(`annotPending.activity`), ".NewActivity");
+h.eval(`closeAnnotPopover();`);
+
+// Now the stale OldActivity tree response arrives — it must be discarded and must NOT clobber #dactivity!
+treeRequests[1].resolve({
+  ok: true,
+  status: 200,
+  json: async () => ({
+    ok: true,
+    activity: ".OldActivity",
+    package: "com.example.app",
+    display: { w: 1000, h: 2000 },
+    tree: {
+      nodes: [
+        { class: "android.widget.Button", text: "Stale", bounds: "[100,400][900,600]", visible: true, clickable: true, children: [] },
+      ],
+    },
+  }),
+});
+await flushMicrotasks();
+assert.equal(h.getEl("dactivity").textContent, ".NewActivity");
+assert.equal(h.eval(`mirrorTreeValid`), false);
+assert.equal(h.eval(`mirrorNodes.length`), 0);
+"#,
+        );
+    }
+
+    #[test]
+    fn snapshot_at_selection_oversized_png_fallback_draft_isolation_and_outcome_unknown() {
+        run_page_js_scenario(
+            r#"
+const sess1 = {
+  session_id: "sess-1",
+  guest_gen: 1,
+  stream: false,
+  watch_only: false,
+  can_annotate: true,
+  activity: ".Main",
+  display: { w: 1000, h: 2000 },
+};
+const sess2 = {
+  session_id: "sess-2",
+  guest_gen: 1,
+  stream: false,
+  watch_only: false,
+  can_annotate: true,
+  activity: ".Other",
+  display: { w: 1000, h: 2000 },
+};
+const postRequests = [];
+const serverAnnotations = [];
+let listFetchCount = 0;
+const h = createHarness({
+  fetch: (url, init) => {
+    const u = String(url);
+    if (u.includes("/annotations") && init && init.method === "POST") {
+      return new Promise((resolve) => {
+        postRequests.push({
+          url: u,
+          body: JSON.parse(init.body),
+          resolve,
+        });
+      });
+    }
+    if (u.includes("/annotations")) {
+      listFetchCount++;
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        json: async () => ({ ok: true, annotations: serverAnnotations.slice() }),
+      });
+    }
+    return Promise.resolve({
+      ok: true,
+      status: 200,
+      json: async () => ({ ok: true, sessions: [sess1, sess2], tree: { nodes: [] } }),
+    });
+  },
+});
+await flushMicrotasks();
+
+h.eval(`
+  openSession(${JSON.stringify(sess1)});
+  frame.width = 1000;
+  frame.height = 2000;
+  frame._snapTag = "frame-at-selection";
+  frameSize = { w: 1000, h: 2000 };
+  display = { w: 1000, h: 2000 };
+  setAnnotMode(true);
+`);
+
+// 1. Snapshot is captured at selection completion, NOT at Add time.
+h.eval(`
+  screenWrap.dispatchEvent({
+    type: "pointerdown",
+    pointerType: "mouse",
+    button: 0,
+    pointerId: 1,
+    clientX: 50,
+    clientY: 50,
+    target: screenWrap,
+    preventDefault() {},
+  });
+  // Live frame mutates before the user finishes typing & clicks Add.
+  frame._snapTag = "later-frame";
+  annotComment.value = "Draft 1";
+`);
+
+// 2. Oversized (>4 MiB decoded) PNG triggers inline error + Save without screenshot fallback.
+const hugeBase64 = "A".repeat(Math.ceil((4 * 1024 * 1024 + 32) * 4 / 3));
+h.setCanvasToDataUrl(() => "data:image/png;base64," + hugeBase64);
+h.eval(`submitAnnotation(false);`);
+await flushMicrotasks();
+assert.equal(postRequests.length, 0, "oversized PNG must be blocked before POST");
+assert.equal(h.getEl("annot-pop-err").hidden, false);
+assert.match(h.getEl("annot-pop-err").textContent, /4 MiB/);
+assert.equal(h.getEl("annot-submit-no-shot").hidden, false);
+
+// Clicking "Save without screenshot" submits with no image_png_base64.
+h.getEl("annot-submit-no-shot").click();
+await flushMicrotasks();
+assert.equal(postRequests.length, 1);
+assert.equal("image_png_base64" in postRequests[0].body, false);
+
+// Reset to normal PNG encoder; verify Draft 1 vs Draft 2 isolation while Draft 1 is still in flight.
+h.setCanvasToDataUrl(null);
+h.eval(`
+  closeAnnotPopover();
+  frame._snapTag = "frame-for-draft-2";
+  screenWrap.dispatchEvent({
+    type: "pointerdown",
+    pointerType: "mouse",
+    button: 0,
+    pointerId: 2,
+    clientX: 50,
+    clientY: 50,
+    target: screenWrap,
+    preventDefault() {},
+  });
+  frame._snapTag = "frame-after-draft-2";
+  annotComment.value = "Draft 2";
+`);
+const draft2Id = h.eval(`annotPending.draftId`);
+
+// Draft 1 settles while Draft 2's popover is open: must NOT close Draft 2 popover, but still adds #1 to annotItems.
+const created1 = {
+  id: 1,
+  kind: "element",
+  status: "open",
+  comment: "Draft 1",
+  bounds: [490, 490, 510, 510],
+  nodes: [],
+};
+serverAnnotations.push(created1);
+postRequests[0].resolve({
+  ok: true,
+  status: 200,
+  json: async () => ({
+    ok: true,
+    annotation: created1,
+  }),
+});
+await flushMicrotasks();
+assert.equal(h.getEl("annot-popover").hidden, false, "late Draft 1 completion must not close Draft 2 popover");
+assert.equal(h.eval(`annotPending && annotPending.draftId`), draft2Id);
+assert.equal(h.eval(`annotItems.some((a) => a.id === 1)`), true);
+
+// Submitting Draft 2 uses the captured "frame-for-draft-2" snapshot, not "frame-after-draft-2".
+h.eval(`submitAnnotation(false);`);
+await flushMicrotasks();
+assert.equal(postRequests.length, 2);
+const decodedPng = Buffer.from(postRequests[1].body.image_png_base64, "base64").toString("utf8");
+assert.equal(decodedPng, "png:frame-for-draft-2");
+
+// 3. 504 OUTCOME_UNKNOWN refreshes annotation list and shows clear notice without falsely closing popover.
+const listBeforeUnknown = listFetchCount;
+postRequests[1].resolve({
+  ok: false,
+  status: 504,
+  json: async () => ({
+    ok: false,
+    code: "OUTCOME_UNKNOWN",
+    outcome_unknown: true,
+    error: "daemon connection closed after writing request",
+  }),
+});
+await flushMicrotasks();
+assert.equal(h.getEl("annot-popover").hidden, false);
+assert.match(h.getEl("annot-pop-err").textContent, /outcome unknown/i);
+assert.match(h.getEl("annot-panel-msg").textContent, /timed out/i);
+assert.ok(listFetchCount > listBeforeUnknown, "OUTCOME_UNKNOWN must refresh the annotation list");
+
+// 4. Late 409 from Session 1 after switching to Session 2 must NOT end Session 2.
+h.eval(`submitAnnotation(true);`);
+await flushMicrotasks();
+assert.equal(postRequests.length, 3);
+h.eval(`openSession(${JSON.stringify(sess2)});`);
+postRequests[2].resolve({
+  ok: false,
+  status: 409,
+  json: async () => ({ ok: false, code: "SESSION_REPLACED" }),
+});
+await flushMicrotasks();
+assert.equal(h.eval(`current.session_id`), "sess-2");
+assert.equal(h.eval(`sessionEnded`), false, "late 409 from Session 1 must not mark Session 2 ended");
 "#,
         );
     }

@@ -28,6 +28,12 @@ pub const MAX_ANNOTATION_COMMENT_BYTES: usize = 8 * 1024;
 /// Maximum matched UI node snapshots attached to one annotation.
 pub const MAX_ANNOTATION_NODES: usize = 32;
 
+/// Maximum UTF-8 byte length for any projected string field inside a node snapshot.
+pub const MAX_ANNOTATION_NODE_STR_BYTES: usize = 512;
+
+/// Maximum total serialized JSON size across all `nodes` in one annotation (64 KiB).
+pub const MAX_ANNOTATION_NODES_BYTES: usize = 64 * 1024;
+
 const PNG_MAGIC: &[u8; 8] = b"\x89PNG\r\n\x1a\n";
 
 /// Display dimensions stored with an annotation.
@@ -404,6 +410,70 @@ fn parse_bounds(value: Option<&Value>) -> Result<Option<[i32; 4]>, BackendError>
     }
 }
 
+fn truncate_utf8(s: &str, max_bytes: usize) -> &str {
+    if s.len() <= max_bytes {
+        return s;
+    }
+    let mut end = max_bytes;
+    while end > 0 && !s.is_char_boundary(end) {
+        end -= 1;
+    }
+    &s[..end]
+}
+
+fn project_node_snapshot(raw: &serde_json::Map<String, Value>) -> Result<Value, BackendError> {
+    let mut out = serde_json::Map::new();
+    for key in [
+        "class",
+        "resource_id",
+        "text",
+        "content_desc",
+        "package",
+        "activity",
+        "window",
+    ] {
+        if let Some(Value::String(s)) = raw.get(key) {
+            let trimmed = s.trim();
+            if !trimmed.is_empty() {
+                out.insert(
+                    key.to_string(),
+                    Value::String(truncate_utf8(trimmed, MAX_ANNOTATION_NODE_STR_BYTES).to_string()),
+                );
+            }
+        }
+    }
+    for key in ["clickable", "enabled", "scrollable"] {
+        if let Some(Value::Bool(flag)) = raw.get(key) {
+            out.insert(key.to_string(), Value::Bool(*flag));
+        }
+    }
+    if let Some(raw_bounds) = raw.get("bounds") {
+        match raw_bounds {
+            Value::Null => {}
+            Value::Array(_) => {
+                if let Some(b) = parse_bounds(Some(raw_bounds))? {
+                    out.insert("bounds".to_string(), json!(b));
+                }
+            }
+            Value::String(s) => {
+                let trimmed = s.trim();
+                if !trimmed.is_empty() {
+                    out.insert(
+                        "bounds".to_string(),
+                        Value::String(truncate_utf8(trimmed, 64).to_string()),
+                    );
+                }
+            }
+            _ => {
+                return Err(invalid_arg(
+                    "`nodes[*].bounds` must be a 4-element array or bounds string",
+                ));
+            }
+        }
+    }
+    Ok(Value::Object(out))
+}
+
 fn parse_nodes(value: Option<&Value>) -> Result<Vec<Value>, BackendError> {
     match value {
         None | Some(Value::Null) => Ok(Vec::new()),
@@ -413,12 +483,22 @@ fn parse_nodes(value: Option<&Value>) -> Result<Vec<Value>, BackendError> {
                     "`nodes` exceeds maximum of {MAX_ANNOTATION_NODES} items"
                 )));
             }
+            let mut projected = Vec::with_capacity(items.len());
             for item in items {
-                if !item.is_object() {
+                let Some(map) = item.as_object() else {
                     return Err(invalid_arg("every entry in `nodes` must be an object"));
-                }
+                };
+                projected.push(project_node_snapshot(map)?);
             }
-            Ok(items.clone())
+            let serialized_len = serde_json::to_vec(&projected)
+                .map(|bytes| bytes.len())
+                .unwrap_or(usize::MAX);
+            if serialized_len > MAX_ANNOTATION_NODES_BYTES {
+                return Err(invalid_arg(format!(
+                    "`nodes` metadata ({serialized_len} bytes) exceeds maximum of {MAX_ANNOTATION_NODES_BYTES} bytes"
+                )));
+            }
+            Ok(projected)
         }
         Some(_) => Err(invalid_arg("`nodes` must be an array of objects")),
     }
@@ -761,6 +841,83 @@ mod tests {
             )
             .unwrap_err();
         assert!(format!("{overflow:?}").contains("limit reached"));
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn bounds_node_metadata_projection_and_aggregate_size_cap() {
+        let dir = temp_dir("nodes-cap");
+        let mut store = AnnotationStore::new();
+
+        // Oversized unknown field is dropped and long UTF-8 string fields are truncated cleanly.
+        let huge_text = "é".repeat(1000); // 2000 UTF-8 bytes
+        let huge_unknown = "X".repeat(200_000);
+        let added = store
+            .apply(
+                &json!({
+                    "action": "add",
+                    "comment": "Check truncation",
+                    "nodes": [{
+                        "class": "android.widget.TextView",
+                        "resource_id": "com.app:id/title",
+                        "text": huge_text,
+                        "clickable": true,
+                        "enabled": true,
+                        "bounds": [10, 20, 300, 400],
+                        "arbitrary_blob": huge_unknown,
+                    }],
+                }),
+                &dir,
+                AnnotationDefaults::default(),
+            )
+            .expect("projected node should succeed");
+        let stored_node = &added["annotation"]["nodes"][0];
+        assert!(stored_node.get("arbitrary_blob").is_none(), "unknown fields must be stripped");
+        assert_eq!(stored_node["clickable"], true);
+        assert_eq!(stored_node["enabled"], true);
+        assert_eq!(stored_node["bounds"], json!([10, 20, 300, 400]));
+        let stored_text = stored_node["text"].as_str().expect("text");
+        assert!(
+            stored_text.len() <= MAX_ANNOTATION_NODE_STR_BYTES,
+            "stored text len {} must be <= {}",
+            stored_text.len(),
+            MAX_ANNOTATION_NODE_STR_BYTES
+        );
+        assert!(!stored_text.is_empty());
+
+        // Aggregate cap: 32 nodes each saturated across all 7 string fields (~115 KiB > 64 KiB) must be rejected.
+        let saturated = "a".repeat(MAX_ANNOTATION_NODE_STR_BYTES);
+        let oversized_nodes: Vec<Value> = (0..MAX_ANNOTATION_NODES)
+            .map(|_| {
+                json!({
+                    "class": saturated,
+                    "resource_id": saturated,
+                    "text": saturated,
+                    "content_desc": saturated,
+                    "package": saturated,
+                    "activity": saturated,
+                    "window": saturated,
+                    "bounds": [0, 0, 100, 100],
+                    "clickable": true,
+                })
+            })
+            .collect();
+        let err = store
+            .apply(
+                &json!({
+                    "action": "add",
+                    "comment": "Should fail aggregate node byte cap",
+                    "nodes": oversized_nodes,
+                }),
+                &dir,
+                AnnotationDefaults::default(),
+            )
+            .unwrap_err();
+        assert!(
+            format!("{err:?}").contains("exceeds maximum of"),
+            "expected aggregate node byte cap error, got: {err:?}"
+        );
 
         let _ = std::fs::remove_dir_all(&dir);
     }

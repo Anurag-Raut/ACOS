@@ -197,6 +197,7 @@ impl Entry {
             "app_label": self.app_label,
             "device_name": self.device_name,
             "watch_only": self.watch_only,
+            "can_annotate": self.serve_socket.is_some(),
             "activity": self.activity,
             "display": {"w": self.display.0, "h": self.display.1},
             "stream": self.stream_socket.is_some(),
@@ -267,6 +268,9 @@ pub enum SessionRpcError {
     Replaced,
     /// The live session has no `serve_socket` published.
     NoServeSocket,
+    /// A mutation request was written to the daemon, but the reply failed or
+    /// timed out so the mutation may already have been applied.
+    OutcomeUnknown { cause: String, message: String },
     /// The session daemon rejected the call or could not be reached.
     DaemonError { code: String, message: String },
 }
@@ -643,7 +647,7 @@ impl Hub {
         }
         let result = conn
             .call("acos_observe_tree", args)
-            .map_err(map_daemon_rpc_err)?;
+            .map_err(|err| map_daemon_rpc_err(err, false))?;
         let tree = result.get("tree").cloned().unwrap_or(Value::Null);
         let activity = result
             .get("activity")
@@ -675,8 +679,10 @@ impl Hub {
     }
 
     /// Proxy one `acos_annotations` request (`list`, `add`, `resolve`, `delete`,
-    /// `clear`) over the session's `serve_socket`. Allowed on watch-only
-    /// sessions too because annotations are strictly host-side.
+    /// `clear`) over the session's `serve_socket`. Requires a live `serve_socket`
+    /// hosted by an `acos serve` daemon — `acos verify` watch-only sessions have
+    /// `serve_socket: None`, do not support annotations, and return
+    /// [`SessionRpcError::NoServeSocket`] (`503 SERVE_UNAVAILABLE`).
     pub fn call_annotations(
         &self,
         session_id: &str,
@@ -690,6 +696,11 @@ impl Hub {
                 message: "annotation request body must be a JSON object".to_string(),
             }
         })?;
+        let is_mutation = obj
+            .get("action")
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .is_some_and(|a| !a.is_empty() && a != "list");
         obj.insert("base".to_string(), json!({ "session_id": session_id }));
         if let Some(token) = entry.launch_token.as_deref() {
             obj.insert("expected_launch_token".to_string(), json!(token));
@@ -702,7 +713,7 @@ impl Hub {
         .map_err(|(code, message)| SessionRpcError::DaemonError { code, message })?;
         let mut result = conn
             .call("acos_annotations", args)
-            .map_err(map_daemon_rpc_err)?;
+            .map_err(|err| map_daemon_rpc_err(err, is_mutation))?;
         if let Some(map) = result.as_object_mut() {
             map.insert("ok".to_string(), json!(true));
             Ok(result)
@@ -1910,8 +1921,14 @@ fn is_guest_gone_code(code: &str) -> bool {
     matches!(code, "SESSION_REPLACED" | "SESSION_NOT_FOUND")
 }
 
-fn map_daemon_rpc_err(err: DaemonCallErr) -> SessionRpcError {
-    let (code, message, _) = err.into_outcome();
+fn map_daemon_rpc_err(err: DaemonCallErr, is_mutation: bool) -> SessionRpcError {
+    let (code, message, may_have_fired) = err.into_outcome();
+    if is_mutation && may_have_fired {
+        return SessionRpcError::OutcomeUnknown {
+            cause: code,
+            message,
+        };
+    }
     match code.as_str() {
         "SESSION_REPLACED" => SessionRpcError::Replaced,
         "SESSION_NOT_FOUND" => SessionRpcError::NotFound,

@@ -401,6 +401,17 @@ fn respond_rpc_result(
                 "error": "session has no serve_socket",
             }),
         ),
+        Err(hub::SessionRpcError::OutcomeUnknown { cause, message }) => respond_json(
+            connection,
+            504,
+            &json!({
+                "ok": false,
+                "code": "OUTCOME_UNKNOWN",
+                "outcome_unknown": true,
+                "cause": cause,
+                "error": format!("annotation mutation outcome is unknown (it may have already succeeded): {message}"),
+            }),
+        ),
         Err(hub::SessionRpcError::DaemonError { code, message }) => {
             let status = match code.as_str() {
                 "INVALID_ARGUMENT" => 400,
@@ -2621,7 +2632,7 @@ mod tests {
             }
         });
 
-        // Register a watch-only session (e.g. acos verify) to prove annotations still work.
+        // Register an interactive acos serve session (with serve_socket).
         let entry_path = server.registry.join("s_annot.json");
         std::fs::write(
             &entry_path,
@@ -2633,7 +2644,7 @@ mod tests {
                 "started_ms": crate::live_registry::now_ms(),
                 "serve_socket": serve_sock.to_string_lossy(),
                 "launch_token": "tok-annot-1",
-                "watch_only": true,
+                "watch_only": false,
                 "package": "com.example.app",
                 "activity": "com.example.app/.ScreenOne",
                 "display": {"w": 1080, "h": 2400},
@@ -2641,6 +2652,16 @@ mod tests {
             .to_string(),
         )
         .expect("write s_annot");
+
+        let sessions_resp = server.raw(&format!("/api/sessions?t={}", server.token));
+        assert_eq!(status_of(&sessions_resp), 200);
+        let sessions_json: serde_json::Value =
+            serde_json::from_slice(body_of(&sessions_resp)).expect("sessions json");
+        assert_eq!(sessions_json["sessions"][0]["can_annotate"], true);
+        assert!(
+            sessions_json["sessions"][0].get("serve_socket").is_none(),
+            "serve_socket must never be exposed to browsers"
+        );
 
         let guest_gen = server.hub.list()[0].guest_gen;
         let base_path = format!("/api/annotations/s_annot?t={}&g={}", server.token, guest_gen);
@@ -2758,6 +2779,131 @@ mod tests {
             guest_gen + 7
         ));
         assert_eq!(status_of(&stale), 409);
+
+        daemon.join().expect("daemon join");
+    }
+
+    #[test]
+    fn watch_only_without_serve_socket_returns_503_and_can_annotate_false() {
+        let server = Server::start("watch-only-no-annot");
+        let entry_path = server.registry.join("s_verify.json");
+        std::fs::write(
+            &entry_path,
+            json!({
+                "v": 1,
+                "session_id": "s_verify",
+                "daemon_pid": std::process::id(),
+                "launcher_pid": std::process::id(),
+                "started_ms": crate::live_registry::now_ms(),
+                "watch_only": true,
+                "package": "com.example.verify",
+                "activity": "com.example.verify/.MainActivity",
+                "display": {"w": 1080, "h": 2400},
+            })
+            .to_string(),
+        )
+        .expect("write s_verify");
+
+        // /api/sessions exposes can_annotate: false and never leaks serve_socket.
+        let sessions_resp = server.raw(&format!("/api/sessions?t={}", server.token));
+        assert_eq!(status_of(&sessions_resp), 200);
+        let sessions_json: serde_json::Value =
+            serde_json::from_slice(body_of(&sessions_resp)).expect("sessions json");
+        assert_eq!(sessions_json["sessions"][0]["watch_only"], true);
+        assert_eq!(sessions_json["sessions"][0]["can_annotate"], false);
+        assert!(sessions_json["sessions"][0].get("serve_socket").is_none());
+
+        let guest_gen = server.hub.list()[0].guest_gen;
+        let tree = server.raw(&format!("/api/tree/s_verify?t={}&g={}", server.token, guest_gen));
+        assert_eq!(status_of(&tree), 503);
+        let tree_json: serde_json::Value = serde_json::from_slice(body_of(&tree)).expect("tree");
+        assert_eq!(tree_json["code"], "SERVE_UNAVAILABLE");
+
+        let list = server.raw(&format!(
+            "/api/annotations/s_verify?t={}&g={}",
+            server.token, guest_gen
+        ));
+        assert_eq!(status_of(&list), 503);
+        let list_json: serde_json::Value = serde_json::from_slice(body_of(&list)).expect("list");
+        assert_eq!(list_json["code"], "SERVE_UNAVAILABLE");
+
+        let add = post_json(
+            server.port,
+            &format!("/api/annotations/s_verify?t={}&g={}", server.token, guest_gen),
+            &json!({ "comment": "hello" }),
+        );
+        assert_eq!(status_of(&add), 503);
+        let add_json: serde_json::Value = serde_json::from_slice(body_of(&add)).expect("add");
+        assert_eq!(add_json["code"], "SERVE_UNAVAILABLE");
+
+        let del = delete_req(
+            server.port,
+            &format!("/api/annotations/s_verify/1?t={}&g={}", server.token, guest_gen),
+        );
+        assert_eq!(status_of(&del), 503);
+        let del_json: serde_json::Value = serde_json::from_slice(body_of(&del)).expect("del");
+        assert_eq!(del_json["code"], "SERVE_UNAVAILABLE");
+    }
+
+    #[test]
+    fn annotations_mutation_post_write_eof_returns_504_outcome_unknown() {
+        let server = Server::start("annot-unknown");
+        let serve_sock = server.registry.join("unknown.serve.sock");
+        let listener = UnixListener::bind(&serve_sock).expect("bind fake serve");
+
+        // Fake daemon reads each request line (confirming write succeeded) then drops the
+        // socket without replying — a post-write ambiguous outcome.
+        let daemon = std::thread::spawn(move || {
+            for incoming in listener.incoming().take(2) {
+                let Ok(stream) = incoming else { break };
+                let mut reader = std::io::BufReader::new(stream);
+                let mut line = String::new();
+                let _ = reader.read_line(&mut line);
+                // Drop without writing a reply -> EOF after write.
+            }
+        });
+
+        let entry_path = server.registry.join("s_unk.json");
+        std::fs::write(
+            &entry_path,
+            json!({
+                "v": 1,
+                "session_id": "s_unk",
+                "daemon_pid": std::process::id(),
+                "launcher_pid": std::process::id(),
+                "started_ms": crate::live_registry::now_ms(),
+                "serve_socket": serve_sock.to_string_lossy(),
+                "launch_token": "tok-unk-1",
+                "display": {"w": 1080, "h": 2400},
+            })
+            .to_string(),
+        )
+        .expect("write s_unk");
+
+        let guest_gen = server.hub.list()[0].guest_gen;
+
+        let post_resp = post_json(
+            server.port,
+            &format!("/api/annotations/s_unk?t={}&g={}", server.token, guest_gen),
+            &json!({ "action": "add", "comment": "May have saved" }),
+        );
+        assert_eq!(status_of(&post_resp), 504);
+        let post_body: serde_json::Value =
+            serde_json::from_slice(body_of(&post_resp)).expect("504 post json");
+        assert_eq!(post_body["ok"], false);
+        assert_eq!(post_body["code"], "OUTCOME_UNKNOWN");
+        assert_eq!(post_body["outcome_unknown"], true);
+
+        let del_resp = delete_req(
+            server.port,
+            &format!("/api/annotations/s_unk/1?t={}&g={}", server.token, guest_gen),
+        );
+        assert_eq!(status_of(&del_resp), 504);
+        let del_body: serde_json::Value =
+            serde_json::from_slice(body_of(&del_resp)).expect("504 del json");
+        assert_eq!(del_body["ok"], false);
+        assert_eq!(del_body["code"], "OUTCOME_UNKNOWN");
+        assert_eq!(del_body["outcome_unknown"], true);
 
         daemon.join().expect("daemon join");
     }
