@@ -29,6 +29,7 @@ use acos_verify::{
     SessionObservation,
 };
 
+pub mod annotations;
 pub mod art;
 #[cfg(test)]
 pub mod fake;

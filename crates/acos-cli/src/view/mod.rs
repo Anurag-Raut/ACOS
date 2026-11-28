@@ -34,8 +34,12 @@ use serde_json::json;
 
 pub use hub::{Hub, SessionView};
 
-/// Largest HTTP request head the hub accepts (no bodies are read: GET only).
+/// Largest HTTP request head the hub accepts.
 const MAX_HEAD: usize = 8 * 1024;
+/// Largest JSON body accepted on `POST /api/annotations/<session_id>` (6 MiB).
+const MAX_ANNOTATION_BODY: usize = 6 * 1024 * 1024;
+/// Total deadline to read a POST body on `/api/annotations/<session_id>`.
+const BODY_DEADLINE: Duration = Duration::from_secs(10);
 /// How long a browser may stall a single write before its connection is dropped.
 const WRITE_TIMEOUT: Duration = Duration::from_secs(2);
 /// How often an idle stream checks whether the browser went away.
@@ -270,7 +274,13 @@ fn handle(mut connection: TcpStream, token: &str, hub: &Arc<Hub>, port: u16) {
         );
         return;
     }
-    if request.method != "GET" {
+    let is_annotations = request.path.starts_with("/api/annotations/");
+    let method_allowed = match request.method.as_str() {
+        "GET" => true,
+        "POST" | "DELETE" => is_annotations,
+        _ => false,
+    };
+    if !method_allowed {
         let _ = respond(
             &mut connection,
             405,
@@ -279,7 +289,7 @@ fn handle(mut connection: TcpStream, token: &str, hub: &Arc<Hub>, port: u16) {
         );
         return;
     }
-    // Every route requires the token, including the page and the streams.
+    // Every route requires the token, including the page, streams, tree, and annotations.
     let authorized = request
         .param("t")
         .is_some_and(|given| token_matches(token, given.as_bytes()));
@@ -321,6 +331,10 @@ fn handle(mut connection: TcpStream, token: &str, hub: &Arc<Hub>, port: u16) {
         stream_events(connection, hub, decode_component(session_id));
     } else if let Some(session_id) = path.strip_prefix("/api/input/") {
         handle_input_ws(connection, &request, hub, decode_component(session_id));
+    } else if let Some(session_id) = path.strip_prefix("/api/tree/") {
+        handle_tree(connection, &request, hub, decode_component(session_id));
+    } else if let Some(rest) = path.strip_prefix("/api/annotations/") {
+        handle_annotations(connection, &request, hub, rest);
     } else {
         let _ = respond(
             &mut connection,
@@ -329,6 +343,335 @@ fn handle(mut connection: TcpStream, token: &str, hub: &Arc<Hub>, port: u16) {
             b"404 not found\n",
         );
     }
+}
+
+fn parse_optional_guest_gen(request: &Request) -> Result<Option<u64>, &'static str> {
+    match request.param("g") {
+        None => Ok(None),
+        Some(raw) => raw
+            .trim()
+            .parse::<u64>()
+            .ok()
+            .filter(|&g| g > 0)
+            .map(Some)
+            .ok_or("invalid guest generation parameter g"),
+    }
+}
+
+fn respond_json(connection: &mut TcpStream, status: u16, value: &serde_json::Value) {
+    let body = value.to_string();
+    let _ = respond(
+        connection,
+        status,
+        "application/json; charset=utf-8",
+        body.as_bytes(),
+    );
+}
+
+fn respond_rpc_result(
+    connection: &mut TcpStream,
+    result: Result<serde_json::Value, hub::SessionRpcError>,
+) {
+    match result {
+        Ok(value) => respond_json(connection, 200, &value),
+        Err(hub::SessionRpcError::NotFound) => respond_json(
+            connection,
+            404,
+            &json!({
+                "ok": false,
+                "code": "SESSION_NOT_FOUND",
+                "error": "no live session for that session_id",
+            }),
+        ),
+        Err(hub::SessionRpcError::Replaced) => respond_json(
+            connection,
+            409,
+            &json!({
+                "ok": false,
+                "code": "SESSION_REPLACED",
+                "error": "session was replaced by a newer guest; reopen detail view",
+            }),
+        ),
+        Err(hub::SessionRpcError::NoServeSocket) => respond_json(
+            connection,
+            503,
+            &json!({
+                "ok": false,
+                "code": "SERVE_UNAVAILABLE",
+                "error": "session has no serve_socket",
+            }),
+        ),
+        Err(hub::SessionRpcError::OutcomeUnknown { cause, message }) => respond_json(
+            connection,
+            504,
+            &json!({
+                "ok": false,
+                "code": "OUTCOME_UNKNOWN",
+                "outcome_unknown": true,
+                "cause": cause,
+                "error": format!("annotation mutation outcome is unknown (it may have already succeeded): {message}"),
+            }),
+        ),
+        Err(hub::SessionRpcError::DaemonError { code, message }) => {
+            let status = match code.as_str() {
+                "INVALID_ARGUMENT" => 400,
+                "SESSION_NOT_FOUND" => 404,
+                "SESSION_REPLACED" => 409,
+                "INPUT_UNAVAILABLE" | "UNSUPPORTED_BACKEND" => 503,
+                _ => 502,
+            };
+            respond_json(
+                connection,
+                status,
+                &json!({
+                    "ok": false,
+                    "code": code,
+                    "error": message,
+                }),
+            );
+        }
+    }
+}
+
+/// `GET /api/tree/<session_id>?t=<token>&g=<guest_gen>`: lightweight UI tree
+/// JSON (no screenshot) via `serve_socket` for Mirror DOM & Visual Inspector.
+fn handle_tree(
+    mut connection: TcpStream,
+    request: &Request,
+    hub: &Arc<Hub>,
+    session_id: String,
+) {
+    if session_id.is_empty() || session_id.contains('/') {
+        respond_json(
+            &mut connection,
+            404,
+            &json!({"ok": false, "code": "SESSION_NOT_FOUND", "error": "missing session_id"}),
+        );
+        return;
+    }
+    let expected_guest_gen = match parse_optional_guest_gen(request) {
+        Ok(g) => g,
+        Err(msg) => {
+            respond_json(
+                &mut connection,
+                400,
+                &json!({"ok": false, "code": "INVALID_ARGUMENT", "error": msg}),
+            );
+            return;
+        }
+    };
+    respond_rpc_result(
+        &mut connection,
+        hub.observe_tree(&session_id, expected_guest_gen),
+    );
+}
+
+/// `GET/POST /api/annotations/<session_id>` and
+/// `DELETE /api/annotations/<session_id>/<ann_id>`.
+fn handle_annotations(
+    mut connection: TcpStream,
+    request: &Request,
+    hub: &Arc<Hub>,
+    rest: &str,
+) {
+    let expected_guest_gen = match parse_optional_guest_gen(request) {
+        Ok(g) => g,
+        Err(msg) => {
+            respond_json(
+                &mut connection,
+                400,
+                &json!({"ok": false, "code": "INVALID_ARGUMENT", "error": msg}),
+            );
+            return;
+        }
+    };
+
+    match request.method.as_str() {
+        "GET" => {
+            if rest.is_empty() || rest.contains('/') {
+                respond_json(
+                    &mut connection,
+                    404,
+                    &json!({"ok": false, "code": "NOT_FOUND", "error": "expected /api/annotations/<session_id>"}),
+                );
+                return;
+            }
+            let session_id = decode_component(rest);
+            let mut args = json!({ "action": "list" });
+            if let Some(status) = request.param("status") {
+                args["status"] = json!(status);
+            }
+            respond_rpc_result(
+                &mut connection,
+                hub.call_annotations(&session_id, expected_guest_gen, args),
+            );
+        }
+        "POST" => {
+            if rest.is_empty() || rest.contains('/') {
+                respond_json(
+                    &mut connection,
+                    404,
+                    &json!({"ok": false, "code": "NOT_FOUND", "error": "expected /api/annotations/<session_id>"}),
+                );
+                return;
+            }
+            let session_id = decode_component(rest);
+            let mut body = match read_json_body(
+                &mut connection,
+                request,
+                MAX_ANNOTATION_BODY,
+                BODY_DEADLINE,
+            ) {
+                Ok(val) => val,
+                Err((status, code, msg)) => {
+                    respond_json(
+                        &mut connection,
+                        status,
+                        &json!({"ok": false, "code": code, "error": msg}),
+                    );
+                    return;
+                }
+            };
+            let Some(map) = body.as_object_mut() else {
+                respond_json(
+                    &mut connection,
+                    400,
+                    &json!({"ok": false, "code": "INVALID_ARGUMENT", "error": "JSON body must be an object"}),
+                );
+                return;
+            };
+            if map.get("action").is_none_or(serde_json::Value::is_null) {
+                map.insert("action".to_string(), json!("add"));
+            }
+            respond_rpc_result(
+                &mut connection,
+                hub.call_annotations(&session_id, expected_guest_gen, body),
+            );
+        }
+        "DELETE" => {
+            let Some((raw_sid, raw_id)) = rest.split_once('/') else {
+                respond_json(
+                    &mut connection,
+                    400,
+                    &json!({"ok": false, "code": "INVALID_ARGUMENT", "error": "expected /api/annotations/<session_id>/<id>"}),
+                );
+                return;
+            };
+            if raw_sid.is_empty() || raw_id.contains('/') {
+                respond_json(
+                    &mut connection,
+                    400,
+                    &json!({"ok": false, "code": "INVALID_ARGUMENT", "error": "invalid annotation path"}),
+                );
+                return;
+            }
+            let session_id = decode_component(raw_sid);
+            let Some(ann_id) = raw_id.trim().parse::<u64>().ok().filter(|&v| v >= 1) else {
+                respond_json(
+                    &mut connection,
+                    400,
+                    &json!({"ok": false, "code": "INVALID_ARGUMENT", "error": "annotation id must be a positive integer"}),
+                );
+                return;
+            };
+            respond_rpc_result(
+                &mut connection,
+                hub.call_annotations(
+                    &session_id,
+                    expected_guest_gen,
+                    json!({"action": "delete", "id": ann_id}),
+                ),
+            );
+        }
+        _ => {
+            let _ = respond(
+                &mut connection,
+                405,
+                "text/plain; charset=utf-8",
+                b"405 method not allowed\n",
+            );
+        }
+    }
+}
+
+fn read_json_body(
+    connection: &mut TcpStream,
+    request: &Request,
+    max_bytes: usize,
+    deadline_dur: Duration,
+) -> Result<serde_json::Value, (u16, &'static str, String)> {
+    if request.transfer_encoding.is_some() {
+        return Err((
+            400,
+            "INVALID_ARGUMENT",
+            "Transfer-Encoding is not supported; send a fixed Content-Length".to_string(),
+        ));
+    }
+    let content_length = match request.content_length {
+        None => {
+            return Err((
+                411,
+                "LENGTH_REQUIRED",
+                "POST /api/annotations requires a Content-Length header".to_string(),
+            ));
+        }
+        Some(Err(())) => {
+            return Err((
+                400,
+                "INVALID_ARGUMENT",
+                "invalid or conflicting Content-Length header".to_string(),
+            ));
+        }
+        Some(Ok(len)) => len,
+    };
+    if content_length > max_bytes {
+        return Err((
+            413,
+            "PAYLOAD_TOO_LARGE",
+            format!("request body ({content_length} bytes) exceeds {max_bytes}-byte limit"),
+        ));
+    }
+    let mut body = Vec::with_capacity(content_length);
+    let prefix_take = request.body_prefix.len().min(content_length);
+    body.extend_from_slice(&request.body_prefix[..prefix_take]);
+    let deadline = Instant::now() + deadline_dur;
+    let mut buf = [0u8; 8192];
+    while body.len() < content_length {
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        if remaining.is_zero() || connection.set_read_timeout(Some(remaining)).is_err() {
+            return Err((
+                408,
+                "TIMEOUT",
+                "timed out reading request body".to_string(),
+            ));
+        }
+        let want = (content_length - body.len()).min(buf.len());
+        match connection.read(&mut buf[..want]) {
+            Ok(0) => {
+                return Err((
+                    400,
+                    "INVALID_ARGUMENT",
+                    "unexpected EOF while reading request body".to_string(),
+                ));
+            }
+            Ok(n) => body.extend_from_slice(&buf[..n]),
+            Err(err) if err.kind() == ErrorKind::Interrupted => continue,
+            Err(_) => {
+                return Err((
+                    408,
+                    "TIMEOUT",
+                    "timed out reading request body".to_string(),
+                ));
+            }
+        }
+    }
+    serde_json::from_slice(&body).map_err(|err| {
+        (
+            400,
+            "INVALID_ARGUMENT",
+            format!("invalid JSON body: {err}"),
+        )
+    })
 }
 
 /// WebSocket endpoint `/api/input/<session_id>?t=<token>&g=<guest_gen>` (HUMANVIEW1).
@@ -716,7 +1059,12 @@ fn respond(
         403 => "Forbidden",
         404 => "Not Found",
         405 => "Method Not Allowed",
+        408 => "Request Timeout",
         409 => "Conflict",
+        411 => "Length Required",
+        413 => "Payload Too Large",
+        502 => "Bad Gateway",
+        503 => "Service Unavailable",
         _ => "Error",
     };
     write!(
@@ -743,6 +1091,9 @@ struct Request {
     connection: Option<String>,
     sec_websocket_key: Option<String>,
     sec_websocket_version: Option<String>,
+    content_length: Option<Result<usize, ()>>,
+    transfer_encoding: Option<String>,
+    body_prefix: Vec<u8>,
 }
 
 impl Request {
@@ -763,14 +1114,17 @@ fn read_request(connection: &mut TcpStream) -> Option<Request> {
     let mut head = Vec::with_capacity(512);
     let mut buffer = [0u8; 1024];
     let deadline = Instant::now() + HEAD_DEADLINE;
-    loop {
+    let sep = loop {
         // One total deadline for the whole head, not a per-read timeout.
         let remaining = deadline.saturating_duration_since(Instant::now());
         if remaining.is_zero() || connection.set_read_timeout(Some(remaining)).is_err() {
             return None;
         }
-        if head.windows(4).any(|window| window == b"\r\n\r\n") {
-            break;
+        if let Some(pos) = head.windows(4).position(|window| window == b"\r\n\r\n") {
+            if pos > MAX_HEAD {
+                return None;
+            }
+            break pos;
         }
         if head.len() > MAX_HEAD {
             return None;
@@ -781,8 +1135,10 @@ fn read_request(connection: &mut TcpStream) -> Option<Request> {
             Err(error) if error.kind() == ErrorKind::Interrupted => continue,
             Err(_) => return None,
         }
-    }
-    let text = String::from_utf8_lossy(&head);
+    };
+    let head_bytes = &head[..sep];
+    let body_prefix = head[sep + 4..].to_vec();
+    let text = String::from_utf8_lossy(head_bytes);
     let line = text.lines().next()?;
     let mut fields = line.split_whitespace();
     let method = fields.next()?.to_string();
@@ -796,6 +1152,8 @@ fn read_request(connection: &mut TcpStream) -> Option<Request> {
     let mut conn_hdr = None;
     let mut sec_websocket_key = None;
     let mut sec_websocket_version = None;
+    let mut content_length: Option<Result<usize, ()>> = None;
+    let mut transfer_encoding = None;
     for header_line in text.lines().skip(1).take_while(|line| !line.is_empty()) {
         let Some((name, value)) = header_line.split_once(':') else {
             continue;
@@ -812,6 +1170,15 @@ fn read_request(connection: &mut TcpStream) -> Option<Request> {
             sec_websocket_key = Some(value);
         } else if name.eq_ignore_ascii_case("sec-websocket-version") {
             sec_websocket_version = Some(value);
+        } else if name.eq_ignore_ascii_case("content-length") {
+            let parsed = value.parse::<usize>().map_err(|_| ());
+            content_length = match (content_length, parsed) {
+                (None, res) => Some(res),
+                (Some(Ok(prev)), Ok(next)) if prev == next => Some(Ok(prev)),
+                _ => Some(Err(())),
+            };
+        } else if name.eq_ignore_ascii_case("transfer-encoding") {
+            transfer_encoding = Some(value);
         }
     }
     Some(Request {
@@ -823,6 +1190,9 @@ fn read_request(connection: &mut TcpStream) -> Option<Request> {
         connection: conn_hdr,
         sec_websocket_key,
         sec_websocket_version,
+        content_length,
+        transfer_encoding,
+        body_prefix,
     })
 }
 
@@ -1982,6 +2352,592 @@ mod tests {
         );
         drop(conn2);
         drop(conn);
+    }
+
+    fn request_raw(
+        port: u16,
+        method: &str,
+        path: &str,
+        host: &str,
+        extra_headers: &str,
+        body: &[u8],
+    ) -> Vec<u8> {
+        let mut stream = TcpStream::connect((Ipv4Addr::LOCALHOST, port)).expect("connect");
+        let _ = stream.set_read_timeout(Some(Duration::from_secs(5)));
+        let mut req = format!(
+            "{method} {path} HTTP/1.1\r\nHost: {host}\r\nConnection: close\r\n{extra_headers}\r\n"
+        )
+        .into_bytes();
+        req.extend_from_slice(body);
+        stream.write_all(&req).expect("write request");
+        let mut response = Vec::new();
+        let _ = stream.read_to_end(&mut response);
+        response
+    }
+
+    fn post_json(port: u16, path: &str, body: &serde_json::Value) -> Vec<u8> {
+        let bytes = body.to_string().into_bytes();
+        let headers = format!(
+            "Content-Type: application/json\r\nContent-Length: {}\r\n",
+            bytes.len()
+        );
+        request_raw(
+            port,
+            "POST",
+            path,
+            &format!("127.0.0.1:{port}"),
+            &headers,
+            &bytes,
+        )
+    }
+
+    fn delete_req(port: u16, path: &str) -> Vec<u8> {
+        request_raw(port, "DELETE", path, &format!("127.0.0.1:{port}"), "", b"")
+    }
+
+    #[test]
+    fn tree_and_annotations_enforce_token_host_and_method() {
+        let server = Server::start("annot-auth");
+        let host = format!("127.0.0.1:{}", server.port);
+        let bad_host = format!("evil.example:{}", server.port);
+
+        // Missing or wrong token -> 403 on tree and annotations (GET/POST/DELETE).
+        for (method, path) in [
+            ("GET", "/api/tree/s1"),
+            ("GET", "/api/annotations/s1"),
+            ("POST", "/api/annotations/s1"),
+            ("DELETE", "/api/annotations/s1/1"),
+            ("GET", "/api/tree/s1?t=wrong"),
+            ("POST", "/api/annotations/s1?t=wrong"),
+        ] {
+            let resp = request_raw(server.port, method, path, &host, "", b"");
+            assert_eq!(status_of(&resp), 403, "{method} {path} must require token");
+        }
+
+        // Bad Host header -> 403 even with valid token.
+        for (method, path) in [
+            ("GET", format!("/api/tree/s1?t={}", server.token)),
+            ("GET", format!("/api/annotations/s1?t={}", server.token)),
+            ("POST", format!("/api/annotations/s1?t={}", server.token)),
+            ("DELETE", format!("/api/annotations/s1/1?t={}", server.token)),
+        ] {
+            let resp = request_raw(server.port, method, &path, &bad_host, "", b"");
+            assert_eq!(status_of(&resp), 403, "{method} {path} must reject bad Host");
+        }
+
+        // POST / DELETE are rejected with 405 on all non-annotation routes.
+        for (method, path) in [
+            ("POST", format!("/?t={}", server.token)),
+            ("POST", format!("/api/sessions?t={}", server.token)),
+            ("POST", format!("/api/tree/s1?t={}", server.token)),
+            ("DELETE", format!("/api/tree/s1?t={}", server.token)),
+            ("PUT", format!("/api/annotations/s1?t={}", server.token)),
+        ] {
+            let resp = request_raw(server.port, method, &path, &host, "", b"");
+            assert_eq!(status_of(&resp), 405, "{method} {path} must be 405");
+        }
+    }
+
+    #[test]
+    fn annotations_post_rejects_oversized_body_with_413() {
+        let server = Server::start("annot-413");
+        let host = format!("127.0.0.1:{}", server.port);
+        let path = format!("/api/annotations/s1?t={}", server.token);
+        let huge_len = MAX_ANNOTATION_BODY + 1024;
+        let headers = format!("Content-Type: application/json\r\nContent-Length: {huge_len}\r\n");
+        let resp = request_raw(server.port, "POST", &path, &host, &headers, b"{}");
+        assert_eq!(status_of(&resp), 413, "oversized POST must return 413");
+        let body: serde_json::Value = serde_json::from_slice(body_of(&resp)).expect("413 json");
+        assert_eq!(body["ok"], false);
+        assert_eq!(body["code"], "PAYLOAD_TOO_LARGE");
+    }
+
+    #[test]
+    fn tree_endpoint_proxies_lightweight_observe_tree_and_enforces_guest_gen() {
+        let server = Server::start("tree-rpc");
+
+        // Missing session -> 404.
+        let missing = server.raw(&format!("/api/tree/nope?t={}", server.token));
+        assert_eq!(status_of(&missing), 404);
+
+        // Live session without serve_socket -> 503 SERVE_UNAVAILABLE.
+        let no_sock_entry = server.registry.join("s_nosock.json");
+        std::fs::write(
+            &no_sock_entry,
+            json!({
+                "v": 1,
+                "session_id": "s_nosock",
+                "daemon_pid": std::process::id(),
+                "launcher_pid": std::process::id(),
+                "started_ms": crate::live_registry::now_ms(),
+                "display": {"w": 1080, "h": 2400},
+            })
+            .to_string(),
+        )
+        .expect("write s_nosock");
+        let no_sock = server.raw(&format!("/api/tree/s_nosock?t={}", server.token));
+        assert_eq!(status_of(&no_sock), 503);
+        let no_sock_json: serde_json::Value =
+            serde_json::from_slice(body_of(&no_sock)).expect("503 json");
+        assert_eq!(no_sock_json["code"], "SERVE_UNAVAILABLE");
+
+        // Live session with a fake serve_socket verifying no screenshot is requested.
+        let serve_sock = server.registry.join("tree.serve.sock");
+        let listener = UnixListener::bind(&serve_sock).expect("bind fake serve");
+        let observed_req = Arc::new(Mutex::new(None::<serde_json::Value>));
+        let observed_req_bg = Arc::clone(&observed_req);
+        let daemon = std::thread::spawn(move || {
+            if let Ok((mut stream, _)) = listener.accept() {
+                let mut reader = std::io::BufReader::new(stream.try_clone().expect("clone"));
+                let mut line = String::new();
+                if reader.read_line(&mut line).unwrap_or(0) > 0 {
+                    let req: serde_json::Value = serde_json::from_str(&line).expect("req json");
+                    *observed_req_bg.lock().expect("lock") = Some(req.clone());
+                    let id = req["id"].as_u64().unwrap_or(1);
+                    let reply = json!({
+                        "id": id,
+                        "envelope": {
+                            "ok": true,
+                            "result": {
+                                "package": "com.example.shop",
+                                "activity": "com.example.shop/.LoginActivity",
+                                "display": {"w": 1080, "h": 2400},
+                                "tree": {
+                                    "nodes": [{
+                                        "class": "android.widget.Button",
+                                        "resource_id": "com.example.shop:id/btn_login",
+                                        "text": "Sign in",
+                                        "bounds": "[120,400][960,520]",
+                                        "visible": true,
+                                        "clickable": true,
+                                        "children": []
+                                    }]
+                                }
+                            }
+                        }
+                    });
+                    let _ = writeln!(stream, "{reply}");
+                    let _ = stream.flush();
+                }
+            }
+        });
+
+        let entry_path = server.registry.join("s_tree.json");
+        std::fs::write(
+            &entry_path,
+            json!({
+                "v": 1,
+                "session_id": "s_tree",
+                "daemon_pid": std::process::id(),
+                "launcher_pid": std::process::id(),
+                "started_ms": crate::live_registry::now_ms(),
+                "serve_socket": serve_sock.to_string_lossy(),
+                "launch_token": "tok-tree-1",
+                "package": "com.example.shop",
+                "activity": "com.example.shop/.LoginActivity",
+                "display": {"w": 1080, "h": 2400},
+            })
+            .to_string(),
+        )
+        .expect("write s_tree");
+
+        let guest_gen = server
+            .hub
+            .list()
+            .into_iter()
+            .find(|s| s.entry.session_id == "s_tree")
+            .expect("s_tree listed")
+            .guest_gen;
+
+        // Invalid g=0 -> 400.
+        let bad_g = server.raw(&format!("/api/tree/s_tree?t={}&g=0", server.token));
+        assert_eq!(status_of(&bad_g), 400);
+
+        // Stale g -> 409 SESSION_REPLACED.
+        let stale = server.raw(&format!(
+            "/api/tree/s_tree?t={}&g={}",
+            server.token,
+            guest_gen + 99
+        ));
+        assert_eq!(status_of(&stale), 409);
+        let stale_json: serde_json::Value =
+            serde_json::from_slice(body_of(&stale)).expect("stale json");
+        assert_eq!(stale_json["code"], "SESSION_REPLACED");
+
+        // Matching g -> 200 OK with tree/activity/package/display and NO screenshot arg.
+        let ok = server.raw(&format!(
+            "/api/tree/s_tree?t={}&g={}",
+            server.token, guest_gen
+        ));
+        assert_eq!(status_of(&ok), 200);
+        let body: serde_json::Value = serde_json::from_slice(body_of(&ok)).expect("tree json");
+        assert_eq!(body["ok"], true);
+        assert_eq!(body["activity"], "com.example.shop/.LoginActivity");
+        assert_eq!(body["package"], "com.example.shop");
+        assert_eq!(body["display"], json!({"w": 1080, "h": 2400}));
+        assert_eq!(body["tree"]["nodes"][0]["text"], "Sign in");
+
+        daemon.join().expect("daemon join");
+        let sent = observed_req.lock().expect("lock").clone().expect("req sent");
+        assert_eq!(sent["tool"], "acos_observe_tree");
+        assert_eq!(sent["args"]["full"], true);
+        assert_eq!(sent["args"]["expected_launch_token"], "tok-tree-1");
+        assert!(
+            sent["args"].get("screenshot").is_none(),
+            "/api/tree must never request screenshot: true"
+        );
+    }
+
+    #[test]
+    fn annotations_http_lifecycle_png_disk_multiscreen_and_watch_only() {
+        let server = Server::start("annot-life");
+        let artifacts_dir = server.registry.join("artifacts");
+        std::fs::create_dir_all(&artifacts_dir).expect("mkdir artifacts");
+        let serve_sock = server.registry.join("annot.serve.sock");
+        let listener = UnixListener::bind(&serve_sock).expect("bind fake serve");
+        let store = Arc::new(Mutex::new(crate::engine::annotations::AnnotationStore::new()));
+        let store_bg = Arc::clone(&store);
+        let artifacts_bg = artifacts_dir.clone();
+
+        let daemon = std::thread::spawn(move || {
+            for incoming in listener.incoming().take(8) {
+                let Ok(mut stream) = incoming else { break };
+                let mut reader = std::io::BufReader::new(stream.try_clone().expect("clone"));
+                let mut line = String::new();
+                if reader.read_line(&mut line).unwrap_or(0) == 0 {
+                    continue;
+                }
+                let req: serde_json::Value = serde_json::from_str(&line).expect("req json");
+                let id = req["id"].as_u64().unwrap_or(1);
+                assert_eq!(req["tool"], "acos_annotations");
+                assert_eq!(req["args"]["expected_launch_token"], "tok-annot-1");
+                let defaults = crate::engine::annotations::AnnotationDefaults {
+                    activity: Some("com.example.app/.DefaultActivity".to_string()),
+                    package: Some("com.example.app".to_string()),
+                    display: Some(crate::engine::annotations::DisplaySize { w: 1080, h: 2400 }),
+                };
+                let envelope = match store_bg
+                    .lock()
+                    .expect("store")
+                    .apply(&req["args"], &artifacts_bg, defaults)
+                {
+                    Ok(result) => json!({ "ok": true, "result": result }),
+                    Err(err) => json!({
+                        "ok": false,
+                        "error": { "code": format!("{:?}", err.code()), "message": err.to_string() }
+                    }),
+                };
+                let _ = writeln!(stream, "{}", json!({ "id": id, "envelope": envelope }));
+                let _ = stream.flush();
+            }
+        });
+
+        // Register an interactive acos serve session (with serve_socket).
+        let entry_path = server.registry.join("s_annot.json");
+        std::fs::write(
+            &entry_path,
+            json!({
+                "v": 1,
+                "session_id": "s_annot",
+                "daemon_pid": std::process::id(),
+                "launcher_pid": std::process::id(),
+                "started_ms": crate::live_registry::now_ms(),
+                "serve_socket": serve_sock.to_string_lossy(),
+                "launch_token": "tok-annot-1",
+                "watch_only": false,
+                "package": "com.example.app",
+                "activity": "com.example.app/.ScreenOne",
+                "display": {"w": 1080, "h": 2400},
+            })
+            .to_string(),
+        )
+        .expect("write s_annot");
+
+        let sessions_resp = server.raw(&format!("/api/sessions?t={}", server.token));
+        assert_eq!(status_of(&sessions_resp), 200);
+        let sessions_json: serde_json::Value =
+            serde_json::from_slice(body_of(&sessions_resp)).expect("sessions json");
+        assert_eq!(sessions_json["sessions"][0]["can_annotate"], true);
+        assert!(
+            sessions_json["sessions"][0].get("serve_socket").is_none(),
+            "serve_socket must never be exposed to browsers"
+        );
+
+        let guest_gen = server.hub.list()[0].guest_gen;
+        let base_path = format!("/api/annotations/s_annot?t={}&g={}", server.token, guest_gen);
+
+        // Valid PNG magic + 4 bytes (\x89PNG\r\n\x1a\nABCD) base64-encoded.
+        let valid_png_b64 = "iVBORw0KGgpBQkNE";
+
+        // 1. Add #1 on ScreenOne with PNG screenshot (omitting `action` defaults to `add`).
+        let add1 = post_json(
+            server.port,
+            &base_path,
+            &json!({
+                "comment": "Button text wraps awkwardly",
+                "kind": "element",
+                "bounds": [120, 400, 960, 520],
+                "activity": "com.example.app/.ScreenOne",
+                "nodes": [{"class": "android.widget.Button", "resource_id": "btn_go", "text": "Go"}],
+                "image_png_base64": valid_png_b64,
+            }),
+        );
+        assert_eq!(status_of(&add1), 200);
+        let add1_json: serde_json::Value = serde_json::from_slice(body_of(&add1)).expect("add1");
+        assert_eq!(add1_json["ok"], true);
+        assert_eq!(add1_json["annotation"]["id"], 1);
+        assert_eq!(add1_json["annotation"]["activity"], "com.example.app/.ScreenOne");
+        let shot_path = add1_json["annotation"]["screenshot_path"]
+            .as_str()
+            .expect("screenshot_path")
+            .to_string();
+        let disk_bytes = std::fs::read(&shot_path).expect("annotation png written on disk");
+        assert_eq!(&disk_bytes, b"\x89PNG\r\n\x1a\nABCD");
+
+        // 2. Add #2 on ScreenTwo (multi-screen batch preservation).
+        let add2 = post_json(
+            server.port,
+            &base_path,
+            &json!({
+                "action": "add",
+                "comment": "Checkout total overlaps badge",
+                "kind": "box",
+                "bounds": [40, 1800, 1040, 2100],
+                "activity": "com.example.app/.ScreenTwo",
+            }),
+        );
+        assert_eq!(status_of(&add2), 200);
+        let add2_json: serde_json::Value = serde_json::from_slice(body_of(&add2)).expect("add2");
+        assert_eq!(add2_json["annotation"]["id"], 2);
+        assert_eq!(add2_json["open_count"], 2);
+
+        // 3. GET open list contains both ScreenOne (#1) and ScreenTwo (#2).
+        let list_open = server.raw(&base_path);
+        assert_eq!(status_of(&list_open), 200);
+        let list_json: serde_json::Value =
+            serde_json::from_slice(body_of(&list_open)).expect("list");
+        assert_eq!(list_json["ok"], true);
+        assert_eq!(list_json["open_count"], 2);
+        let items = list_json["annotations"].as_array().expect("annotations array");
+        assert_eq!(items.len(), 2);
+        assert_eq!(items[0]["activity"], "com.example.app/.ScreenOne");
+        assert_eq!(items[1]["activity"], "com.example.app/.ScreenTwo");
+
+        // 4. Resolve #1.
+        let res1 = post_json(
+            server.port,
+            &base_path,
+            &json!({ "action": "resolve", "id": 1, "resolution_note": "Increased padding" }),
+        );
+        assert_eq!(status_of(&res1), 200);
+        let res1_json: serde_json::Value = serde_json::from_slice(body_of(&res1)).expect("res1");
+        assert_eq!(res1_json["annotation"]["status"], "resolved");
+        assert_eq!(res1_json["open_count"], 1);
+
+        // 5. GET ?status=resolved returns only #1.
+        let list_res = server.raw(&format!("{base_path}&status=resolved"));
+        assert_eq!(status_of(&list_res), 200);
+        let list_res_json: serde_json::Value =
+            serde_json::from_slice(body_of(&list_res)).expect("list resolved");
+        assert_eq!(list_res_json["count"], 1);
+        assert_eq!(list_res_json["annotations"][0]["id"], 1);
+
+        // 6. DELETE /api/annotations/s_annot/1 removes #1 and deletes its PNG file.
+        let del1 = delete_req(
+            server.port,
+            &format!("/api/annotations/s_annot/1?t={}&g={}", server.token, guest_gen),
+        );
+        assert_eq!(status_of(&del1), 200);
+        assert!(
+            !std::path::Path::new(&shot_path).exists(),
+            "deleting annotation must remove its PNG artifact"
+        );
+
+        // 7. POST clear removes remaining open annotation #2.
+        let cleared = post_json(
+            server.port,
+            &base_path,
+            &json!({ "action": "clear", "status": "all" }),
+        );
+        assert_eq!(status_of(&cleared), 200);
+        let cleared_json: serde_json::Value =
+            serde_json::from_slice(body_of(&cleared)).expect("cleared");
+        assert_eq!(cleared_json["cleared"], 1);
+        assert_eq!(cleared_json["total_count"], 0);
+
+        // 8. Final list is empty.
+        let empty_list = server.raw(&format!("{base_path}&status=all"));
+        assert_eq!(status_of(&empty_list), 200);
+        let empty_json: serde_json::Value =
+            serde_json::from_slice(body_of(&empty_list)).expect("empty");
+        assert_eq!(empty_json["count"], 0);
+
+        // Stale guest_gen is rejected with 409 before touching serve_socket.
+        let stale = server.raw(&format!(
+            "/api/annotations/s_annot?t={}&g={}",
+            server.token,
+            guest_gen + 7
+        ));
+        assert_eq!(status_of(&stale), 409);
+
+        daemon.join().expect("daemon join");
+    }
+
+    #[test]
+    fn watch_only_without_serve_socket_returns_503_and_can_annotate_false() {
+        let server = Server::start("watch-only-no-annot");
+        let entry_path = server.registry.join("s_verify.json");
+        std::fs::write(
+            &entry_path,
+            json!({
+                "v": 1,
+                "session_id": "s_verify",
+                "daemon_pid": std::process::id(),
+                "launcher_pid": std::process::id(),
+                "started_ms": crate::live_registry::now_ms(),
+                "watch_only": true,
+                "package": "com.example.verify",
+                "activity": "com.example.verify/.MainActivity",
+                "display": {"w": 1080, "h": 2400},
+            })
+            .to_string(),
+        )
+        .expect("write s_verify");
+
+        // /api/sessions exposes can_annotate: false and never leaks serve_socket.
+        let sessions_resp = server.raw(&format!("/api/sessions?t={}", server.token));
+        assert_eq!(status_of(&sessions_resp), 200);
+        let sessions_json: serde_json::Value =
+            serde_json::from_slice(body_of(&sessions_resp)).expect("sessions json");
+        assert_eq!(sessions_json["sessions"][0]["watch_only"], true);
+        assert_eq!(sessions_json["sessions"][0]["can_annotate"], false);
+        assert!(sessions_json["sessions"][0].get("serve_socket").is_none());
+
+        let guest_gen = server.hub.list()[0].guest_gen;
+        let tree = server.raw(&format!("/api/tree/s_verify?t={}&g={}", server.token, guest_gen));
+        assert_eq!(status_of(&tree), 503);
+        let tree_json: serde_json::Value = serde_json::from_slice(body_of(&tree)).expect("tree");
+        assert_eq!(tree_json["code"], "SERVE_UNAVAILABLE");
+
+        let list = server.raw(&format!(
+            "/api/annotations/s_verify?t={}&g={}",
+            server.token, guest_gen
+        ));
+        assert_eq!(status_of(&list), 503);
+        let list_json: serde_json::Value = serde_json::from_slice(body_of(&list)).expect("list");
+        assert_eq!(list_json["code"], "SERVE_UNAVAILABLE");
+
+        let add = post_json(
+            server.port,
+            &format!("/api/annotations/s_verify?t={}&g={}", server.token, guest_gen),
+            &json!({ "comment": "hello" }),
+        );
+        assert_eq!(status_of(&add), 503);
+        let add_json: serde_json::Value = serde_json::from_slice(body_of(&add)).expect("add");
+        assert_eq!(add_json["code"], "SERVE_UNAVAILABLE");
+
+        let del = delete_req(
+            server.port,
+            &format!("/api/annotations/s_verify/1?t={}&g={}", server.token, guest_gen),
+        );
+        assert_eq!(status_of(&del), 503);
+        let del_json: serde_json::Value = serde_json::from_slice(body_of(&del)).expect("del");
+        assert_eq!(del_json["code"], "SERVE_UNAVAILABLE");
+    }
+
+    #[test]
+    fn annotations_mutation_post_write_eof_returns_504_outcome_unknown() {
+        let server = Server::start("annot-unknown");
+        let serve_sock = server.registry.join("unknown.serve.sock");
+        let listener = UnixListener::bind(&serve_sock).expect("bind fake serve");
+
+        // Fake daemon reads each request line (confirming write succeeded) then drops the
+        // socket without replying — a post-write ambiguous outcome.
+        let daemon = std::thread::spawn(move || {
+            for incoming in listener.incoming().take(2) {
+                let Ok(stream) = incoming else { break };
+                let mut reader = std::io::BufReader::new(stream);
+                let mut line = String::new();
+                let _ = reader.read_line(&mut line);
+                // Drop without writing a reply -> EOF after write.
+            }
+        });
+
+        let entry_path = server.registry.join("s_unk.json");
+        std::fs::write(
+            &entry_path,
+            json!({
+                "v": 1,
+                "session_id": "s_unk",
+                "daemon_pid": std::process::id(),
+                "launcher_pid": std::process::id(),
+                "started_ms": crate::live_registry::now_ms(),
+                "serve_socket": serve_sock.to_string_lossy(),
+                "launch_token": "tok-unk-1",
+                "display": {"w": 1080, "h": 2400},
+            })
+            .to_string(),
+        )
+        .expect("write s_unk");
+
+        let guest_gen = server.hub.list()[0].guest_gen;
+
+        let post_resp = post_json(
+            server.port,
+            &format!("/api/annotations/s_unk?t={}&g={}", server.token, guest_gen),
+            &json!({ "action": "add", "comment": "May have saved" }),
+        );
+        assert_eq!(status_of(&post_resp), 504);
+        let post_body: serde_json::Value =
+            serde_json::from_slice(body_of(&post_resp)).expect("504 post json");
+        assert_eq!(post_body["ok"], false);
+        assert_eq!(post_body["code"], "OUTCOME_UNKNOWN");
+        assert_eq!(post_body["outcome_unknown"], true);
+
+        let del_resp = delete_req(
+            server.port,
+            &format!("/api/annotations/s_unk/1?t={}&g={}", server.token, guest_gen),
+        );
+        assert_eq!(status_of(&del_resp), 504);
+        let del_body: serde_json::Value =
+            serde_json::from_slice(body_of(&del_resp)).expect("504 del json");
+        assert_eq!(del_body["ok"], false);
+        assert_eq!(del_body["code"], "OUTCOME_UNKNOWN");
+        assert_eq!(del_body["outcome_unknown"], true);
+
+        daemon.join().expect("daemon join");
+    }
+
+    #[test]
+    fn page_contains_mirror_dom_and_annotate_ui_markers() {
+        let server = Server::start("page-annot");
+        let page = server.raw(&format!("/?t={}", server.token));
+        assert_eq!(status_of(&page), 200);
+        let html = String::from_utf8_lossy(body_of(&page)).to_string();
+        for needle in [
+            "id=\"mirror-dom\"",
+            "acos-mirror-node",
+            "data-acos-node",
+            "data-android-class",
+            "data-resource-id",
+            "data-bounds",
+            "/api/tree/",
+            "/api/annotations/",
+            "btn-annotate",
+            "btn-annot-pick",
+            "btn-annot-box",
+            "btn-annot-draw",
+            "btn-annot-copy",
+            "annot-popover",
+            "annot-comment",
+            "tab-annotations",
+            "Copy All for Agent",
+            "Copy for Agent",
+            "compositeAnnotationPng",
+            "formatAnnotationsForAgent",
+        ] {
+            assert!(html.contains(needle), "page missing {needle}");
+        }
     }
 
     fn send(

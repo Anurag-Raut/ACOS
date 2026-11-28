@@ -83,19 +83,23 @@ struct HeldArtSession {
     /// replaced by another one can tell that the session is no longer its guest
     /// (and must not destroy it on exit).
     launch_token: Mutex<String>,
-    /// Immutable per-guest-instance token published in `LiveEntry.launch_token`.
+    /// Per-guest-instance token published in `LiveEntry.launch_token`.
     /// Unlike `launch_token` (which renews on idempotent relaunch of the same
-    /// live guest), `guest_token` changes only when a brand-new guest process
-    /// replaces the session id, letting interactive `acos view` sockets reject
-    /// commands targeted at a replaced guest (`SESSION_REPLACED`) without
-    /// breaking live viewers on idempotent relaunch.
-    guest_token: String,
+    /// live guest), `guest_token` stays unchanged across idempotent relaunches
+    /// and rotates whenever a fresh guest process replaces the session (e.g.
+    /// `acos_reset` or dead-guest relaunch), letting `acos view` reject
+    /// commands targeted at a replaced guest (`SESSION_REPLACED`). Mutated and
+    /// checked under `self.session` lock to serialize with `reset` and verb
+    /// dispatch.
+    guest_token: Mutex<String>,
     /// Default verb settle inherited by `observe*`/input verbs when `settle`
     /// is omitted (`"content"` if launched with `settle: "content"`, else `"strict"`).
     default_settle: Mutex<&'static str>,
     /// `Mutex` because two connections may address the same session id; the
     /// guest takes one command at a time.
     session: Mutex<ArtSession>,
+    /// Per-session host-side visual annotation store (`acos_annotations`).
+    annotations: Mutex<super::annotations::AnnotationStore>,
 }
 
 impl HeldArtSession {
@@ -125,6 +129,19 @@ impl HeldArtSession {
     #[allow(dead_code)]
     fn default_settle(&self) -> &'static str {
         *self.default_settle.lock().unwrap_or_else(|e| e.into_inner())
+    }
+
+    fn guest_token(&self) -> String {
+        self.guest_token
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
+    }
+
+    fn rotate_guest_token(&self) -> String {
+        let next = new_launch_token();
+        *self.guest_token.lock().unwrap_or_else(|e| e.into_inner()) = next.clone();
+        next
     }
 
     fn device_name(&self) -> Option<String> {
@@ -348,7 +365,7 @@ impl ServeEngine {
                 .stream_socket()
                 .map(|path| path.display().to_string()),
             has_home: session.has_home(),
-            launch_token: Some(held.guest_token.clone()),
+            launch_token: Some(held.guest_token()),
         };
         if let Err(error) = self.live.write(&entry) {
             eprintln!(
@@ -360,9 +377,10 @@ impl ServeEngine {
 
     /// VIEW1a: refresh a session's `activity` in the registry.
     fn refresh_live_activity(&self, id: &str, held: &HeldArtSession, session: &ArtSession) {
+        let token = held.guest_token();
         if let Err(error) =
             self.live
-                .update_activity_if_token(id, Some(&held.guest_token), session.activity())
+                .update_activity_if_token(id, Some(&token), session.activity())
         {
             eprintln!("acos serve: live view: cannot update session {id} activity: {error}");
         }
@@ -1126,9 +1144,10 @@ impl ServeEngine {
                     device_name: Mutex::new(device_name),
                     started_ms: Mutex::new(0),
                     launch_token: Mutex::new(String::new()),
-                    guest_token: new_launch_token(),
+                    guest_token: Mutex::new(new_launch_token()),
                     default_settle: Mutex::new(default_settle),
                     session: Mutex::new(session),
+                    annotations: Mutex::new(super::annotations::AnnotationStore::new()),
                 });
                 held.note_launch(&agent_label);
                 self.art
@@ -1188,7 +1207,8 @@ impl ServeEngine {
             // first, and gate removal by `guest_token` so a concurrent
             // replacement session's registry entry is never deleted.
             let mut session = held.session.lock().unwrap_or_else(|e| e.into_inner());
-            self.live.remove_if_token(id, Some(&held.guest_token));
+            let token = held.guest_token();
+            self.live.remove_if_token(id, Some(&token));
             let report = session.teardown();
             // GL1: name the destruction path and prove the *session*, not just
             // the spawned process group, is gone. `lifecycle` = the guest ended
@@ -1324,6 +1344,11 @@ impl ServeEngine {
     ) -> Envelope {
         let trust = held.trust;
         let mut session = held.session.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(rejection) =
+            check_expected_launch_token(request_id, id, trust, &held.guest_token(), tool, args)
+        {
+            return rejection;
+        }
         // REL3A: every serve verb starts from the strict observation rule. Serve
         // never asks for a content observation (its tree verbs select
         // `settle: strict|fast|content` explicitly through `tree_with_settle`),
@@ -1369,6 +1394,9 @@ impl ServeEngine {
             "acos_assert" => assert(&mut session, args, trust),
             "acos_logs" => logs(&mut session, &held.artifacts, args),
             "acos_status" => Ok(status_value(&session)),
+            "acos_annotations" => {
+                annotations_verb(&session, &held.annotations, &held.artifacts, args)
+            }
             // ADR-0029 item 4: list/status/attach/detach on the live guest.
             // The launcher's peer thread owns the service table, so this is a
             // command; an `at-launch` module is refused by the launcher with
@@ -1377,7 +1405,10 @@ impl ServeEngine {
             // MPROC1: session control ops (`acos_service_ctl`). The module and
             // op are the session's own vocabulary; nothing is translated here.
             "acos_service_ctl" => service_ctl(&mut session, args),
-            "acos_reset" => reset(&mut session, &held.artifacts, args),
+            "acos_reset" => reset(&mut session, &held.artifacts, args, |fresh| {
+                held.rotate_guest_token();
+                self.publish_live(id, held, fresh);
+            }),
             "acos_swipe" => swipe(&mut session, args),
             "acos_action" => action(&mut session, args),
             // NET2/NET4: the session's own network controls (the module wraps
@@ -1478,23 +1509,12 @@ impl ServeEngine {
         args: &Value,
     ) -> Envelope {
         let trust = held.trust;
-        if let Some(expected) = args.get("expected_launch_token").and_then(Value::as_str) {
-            if expected != held.guest_token {
-                return art_failure(
-                    request_id,
-                    Some(id),
-                    trust,
-                    ErrorCode::SessionNotFound,
-                    format!("SESSION_REPLACED: session `{id}` was replaced by a newer guest"),
-                    json!({
-                        "reason": "SESSION_REPLACED",
-                        "tool": tool,
-                        "expected_launch_token": expected,
-                    }),
-                );
-            }
-        }
         let mut session = held.session.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(rejection) =
+            check_expected_launch_token(request_id, id, trust, &held.guest_token(), tool, args)
+        {
+            return rejection;
+        }
         if let Some(exit) = session.liveness() {
             return guest_exit_envelope(request_id, id, held, &mut session, tool, &exit);
         }
@@ -1763,9 +1783,10 @@ impl ServeEngine {
             Ok(result) => {
                 self.refresh_live_activity(id, held, &session);
                 if tool == "panel_rotate" {
+                    let token = held.guest_token();
                     let _ = self.live.update_display_if_token(
                         id,
-                        Some(&held.guest_token),
+                        Some(&token),
                         session.display_size(),
                     );
                 }
@@ -1988,6 +2009,7 @@ fn evidence_for(tool: &str) -> &'static str {
     match tool {
         "acos_observe" | "acos_screenshot" => EVIDENCE_HOST_PIXEL,
         "acos_observe_tree" | "acos_assert" => EVIDENCE_GUEST_ASSERTED,
+        "acos_annotations" => EVIDENCE_NO_GUEST,
         _ => EVIDENCE_HOST_PIXEL,
     }
 }
@@ -2000,6 +2022,7 @@ fn capabilities_for(tool: &str) -> Vec<&'static str> {
         "acos_logs" => vec!["logs"],
         "acos_reset" => vec!["reset"],
         "acos_status" => vec!["lifecycle"],
+        "acos_annotations" => vec!["annotations"],
         _ => Vec::new(),
     }
 }
@@ -2837,8 +2860,11 @@ fn observe_tree(
             ),
         );
     }
+    let (display_w, display_h) = session.display_size();
     let mut result = json!({
         "package": session.package(),
+        "activity": session.activity(),
+        "display": {"w": display_w, "h": display_h},
         "stage_reached": "first_frame",
         "windows": distinct_windows(&tree),
         "truncated": truncated,
@@ -2864,6 +2890,24 @@ fn observe_tree(
         shot["windows"] = json!(tree.windows.len());
     }
     Ok(result)
+}
+
+fn annotations_verb(
+    session: &ArtSession,
+    store: &Mutex<super::annotations::AnnotationStore>,
+    artifacts: &Path,
+    args: &Value,
+) -> Result<Value, BackendError> {
+    let (w, h) = session.display_size();
+    let defaults = super::annotations::AnnotationDefaults {
+        activity: session.activity().map(str::to_string),
+        package: (!session.package().is_empty()).then(|| session.package().to_string()),
+        display: (w > 0 && h > 0).then_some(super::annotations::DisplaySize { w, h }),
+    };
+    store
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .apply(args, artifacts, defaults)
 }
 
 fn observe(
@@ -4106,7 +4150,41 @@ fn service_control(session: &mut ArtSession, args: &Value) -> Result<Value, Back
     Ok(reply)
 }
 
-fn reset(session: &mut ArtSession, artifacts: &Path, args: &Value) -> Result<Value, BackendError> {
+fn check_expected_launch_token(
+    request_id: &str,
+    id: &str,
+    trust: Trust,
+    current_token: &str,
+    tool: &str,
+    args: &Value,
+) -> Option<Envelope> {
+    let expected = args.get("expected_launch_token").and_then(Value::as_str)?;
+    if expected == current_token {
+        return None;
+    }
+    Some(art_failure(
+        request_id,
+        Some(id),
+        trust,
+        ErrorCode::SessionNotFound,
+        format!("SESSION_REPLACED: session `{id}` was replaced by a newer guest"),
+        json!({
+            "reason": "SESSION_REPLACED",
+            "tool": tool,
+            "expected_launch_token": expected,
+        }),
+    ))
+}
+
+fn reset<F>(
+    session: &mut ArtSession,
+    artifacts: &Path,
+    args: &Value,
+    on_process_replaced: F,
+) -> Result<Value, BackendError>
+where
+    F: FnOnce(&ArtSession),
+{
     // P9: reset consumes the same settle vocabulary as launch. `strict` is the
     // default and unchanged (150 ms quiet window + capture); `fast` binds the
     // relaunched guest's first traversal from a fresh probe sample, with no
@@ -4119,6 +4197,11 @@ fn reset(session: &mut ArtSession, artifacts: &Path, args: &Value) -> Result<Val
     let before = session.last_frame_seq();
     session.set_reset_bind(settle, pixels, settle_timeout_arg(args));
     session.reset()?;
+    // Rotate `guest_token` and republish the live registry entry under the
+    // held session lock as soon as the fresh guest process replaces the old
+    // one, so stale viewers bound to the pre-reset guest fail closed with
+    // `SESSION_REPLACED`.
+    on_process_replaced(session);
     let tree = session.ensure_bound_tree()?;
     // P9: the reset reply carries the relaunched app's bound tree, so "reset ->
     // first correct screen" is one round trip (the tree was already bound by
@@ -6636,5 +6719,72 @@ mod tests {
         assert_eq!(destroy.result().unwrap()["engine"], json!(ENGINE_NATIVE_CHILD));
         assert_eq!(destroy.result().unwrap()["engine_frozen"], json!(false));
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn guest_token_rotation_rejects_stale_token_with_session_replaced() {
+        let initial_token = new_launch_token();
+        let token_slot = Mutex::new(initial_token.clone());
+
+        // Matching token is accepted (idempotent launch retains the same guest token).
+        let ok = check_expected_launch_token(
+            "req-1",
+            "sess-reset",
+            Trust::Trusted,
+            &token_slot.lock().unwrap(),
+            "acos_annotations",
+            &json!({ "expected_launch_token": initial_token }),
+        );
+        assert!(ok.is_none(), "matching token must be accepted");
+
+        // Omitting expected_launch_token is also accepted for direct MCP callers.
+        let omitted = check_expected_launch_token(
+            "req-2",
+            "sess-reset",
+            Trust::Trusted,
+            &token_slot.lock().unwrap(),
+            "acos_annotations",
+            &json!({}),
+        );
+        assert!(omitted.is_none(), "missing expected_launch_token must be accepted");
+
+        // Simulate acos_reset rotating the guest token under the session lock.
+        let rotated_token = new_launch_token();
+        assert_ne!(initial_token, rotated_token);
+        *token_slot.lock().unwrap() = rotated_token.clone();
+
+        // Stale pre-reset token is rejected with SESSION_REPLACED.
+        let rejected = check_expected_launch_token(
+            "req-3",
+            "sess-reset",
+            Trust::Trusted,
+            &token_slot.lock().unwrap(),
+            "acos_annotations",
+            &json!({ "expected_launch_token": initial_token }),
+        )
+        .expect("stale pre-reset token must be rejected");
+        assert!(!rejected.ok());
+        let err = rejected.error().expect("error envelope");
+        assert_eq!(err.code, ErrorCode::SessionNotFound);
+        assert!(
+            err.message.contains("SESSION_REPLACED"),
+            "expected SESSION_REPLACED message, got: {}",
+            err.message
+        );
+        assert_eq!(
+            err.details.as_ref().unwrap()["reason"],
+            json!("SESSION_REPLACED")
+        );
+
+        // Fresh post-reset token is accepted.
+        let accepted = check_expected_launch_token(
+            "req-4",
+            "sess-reset",
+            Trust::Trusted,
+            &token_slot.lock().unwrap(),
+            "acos_annotations",
+            &json!({ "expected_launch_token": rotated_token }),
+        );
+        assert!(accepted.is_none(), "post-reset token must be accepted");
     }
 }

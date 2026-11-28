@@ -545,6 +545,7 @@ server.
 | `acos_doctor` | server | - | `n/a` | - |
 | `acos_services` | server | - | `native-runtime` | `op` |
 | `acos_service_ctl` | server | - | `native-runtime` | `module`, `op` |
+| `acos_annotations` | server | - | `native-runtime` | - |
 
 <!-- ACOS_TOOLS_END -->
 

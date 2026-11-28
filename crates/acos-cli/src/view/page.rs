@@ -3,7 +3,7 @@
 //! agent opened), so every API call appends it to its own query string.
 
 /// The page (inline CSS/JS; no network beyond this origin).
-pub const PAGE: &str = r##"<!doctype html>
+pub const PAGE: &str = r####"<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -150,6 +150,76 @@ pub const PAGE: &str = r##"<!doctype html>
   .cap-status { font: 11px/1.3 var(--mono); margin-top: 7px; color: var(--muted); }
   .cap-status.ok { color: var(--ok); }
   .cap-status.bad { color: var(--bad); }
+  #mirror-dom { position: absolute; z-index: 1; pointer-events: none; overflow: hidden; }
+  .acos-mirror-node { position: absolute; background: transparent; border: 0; margin: 0; padding: 0;
+    box-sizing: border-box; pointer-events: auto; cursor: inherit; }
+  .screenwrap.annotating { cursor: crosshair; }
+  .screenwrap.annotating.tool-pick { cursor: pointer; }
+  #annot-layer { position: absolute; inset: 0; pointer-events: none; z-index: 5; overflow: hidden; }
+  #annot-svg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: hidden; }
+  .annot-hover-box { position: absolute; border: 2px solid var(--accent); background: rgba(79, 156, 249, .15);
+    border-radius: 3px; pointer-events: none; }
+  .annot-hover-label { position: absolute; font: 11px/1.25 var(--mono); background: rgba(13, 17, 23, .94);
+    color: var(--text); border: 1px solid var(--accent); border-radius: 5px; padding: 2px 6px;
+    white-space: nowrap; max-width: min(360px, 90%); overflow: hidden; text-overflow: ellipsis;
+    pointer-events: none; box-shadow: 0 4px 12px rgba(0, 0, 0, .5); }
+  .annot-draft-box { position: absolute; border: 2px dashed #ff6b4a; background: rgba(255, 107, 74, .16);
+    border-radius: 3px; pointer-events: none; }
+  .annot-pin-box { position: absolute; border: 2px solid #ff6b4a; background: rgba(255, 107, 74, .10);
+    border-radius: 3px; pointer-events: none; }
+  .annot-pin-badge { position: absolute; min-width: 20px; height: 20px; padding: 0 5px; border-radius: 999px;
+    background: #ff6b4a; color: #0d1117; font: 700 11px/20px var(--mono); text-align: center;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, .6); pointer-events: none; transform: translate(-35%, -35%); }
+  #annot-popover { position: absolute; z-index: 6; width: min(295px, calc(100% - 16px));
+    background: rgba(22, 27, 34, .98); border: 1px solid var(--accent); border-radius: 10px;
+    padding: 10px 12px; box-shadow: 0 12px 32px rgba(0, 0, 0, .65); pointer-events: auto; }
+  .annot-pop-target { font: 11px/1.35 var(--mono); color: var(--accent); margin-bottom: 6px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #annot-comment { width: 100%; min-height: 62px; resize: vertical; background: var(--bg);
+    color: var(--text); border: 1px solid var(--line); border-radius: 7px; padding: 6px 8px;
+    font: 12px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; outline: none; }
+  #annot-comment:focus { border-color: var(--accent); }
+  .annot-pop-err { color: var(--bad); font: 11px/1.3 var(--mono); margin-top: 5px; }
+  .annot-pop-actions { display: flex; gap: 6px; justify-content: flex-end; margin-top: 8px; }
+  .annot-pop-actions button { background: var(--bg); color: var(--text); border: 1px solid var(--line);
+    border-radius: 7px; padding: 4px 10px; cursor: pointer; font-size: 12px; }
+  .annot-pop-actions button:hover:not(:disabled) { border-color: var(--accent); }
+  .annot-pop-actions button.primary { background: rgba(79, 156, 249, .22); border-color: var(--accent); color: #d6e8ff; font-weight: 600; }
+  #annot-tools { display: inline-flex; gap: 4px; align-items: center; flex-wrap: wrap; }
+  .aside-tabs { display: flex; gap: 6px; border-bottom: 1px solid var(--line); padding-bottom: 8px; margin-bottom: 8px; flex-shrink: 0; }
+  .aside-tab { flex: 1; background: transparent; color: var(--muted); border: 1px solid transparent;
+    border-radius: 7px; padding: 4px 8px; cursor: pointer; font-size: 11px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: .04em; text-align: center; }
+  .aside-tab:hover { color: var(--text); border-color: var(--line); }
+  .aside-tab.active { color: var(--text); background: rgba(79, 156, 249, .14); border-color: #264f78; }
+  #pane-activity { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+  #pane-annotations { display: flex; flex-direction: column; flex: 1; min-height: 0; gap: 8px; }
+  #annot-bar { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; flex-shrink: 0; }
+  #annot-bar button { background: var(--bg); color: var(--text); border: 1px solid var(--line);
+    border-radius: 7px; padding: 4px 8px; cursor: pointer; font-size: 11px; }
+  #annot-bar button:hover:not(:disabled) { border-color: var(--accent); }
+  #annot-bar button.primary { background: rgba(79, 156, 249, .18); border-color: var(--accent); color: #cde3ff; font-weight: 600; }
+  #annot-bar button:disabled { opacity: .45; cursor: not-allowed; }
+  .annot-filter { margin-left: auto; display: inline-flex; align-items: center; gap: 4px; font-size: 11px; color: var(--muted); cursor: pointer; user-select: none; }
+  .annot-empty { color: var(--muted); font-size: 12px; padding: 14px 2px; line-height: 1.45; }
+  #annot-list { list-style: none; margin: 0; padding: 0; flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
+  .annot-item { background: rgba(13, 17, 23, .65); border: 1px solid var(--line); border-radius: 8px; padding: 8px 9px; font-size: 12px; }
+  .annot-item.resolved { opacity: .65; }
+  .annot-item-head { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 4px; }
+  .annot-num { display: inline-block; min-width: 22px; padding: 0 5px; border-radius: 999px;
+    background: #ff6b4a; color: #0d1117; font: 700 11px/18px var(--mono); text-align: center; }
+  .annot-item.resolved .annot-num { background: var(--muted); }
+  .annot-tag { font: 10px/1.3 var(--mono); border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px; color: var(--muted); }
+  .annot-tag.ok { color: var(--ok); border-color: #1f6f36; }
+  .annot-act { font: 11px/1.3 var(--mono); color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0; }
+  .annot-view { font: 11px/1.35 var(--mono); color: var(--accent); overflow-wrap: anywhere; margin-bottom: 4px; }
+  .annot-comment { color: var(--text); line-height: 1.4; white-space: pre-wrap; overflow-wrap: anywhere; margin-bottom: 6px; }
+  .annot-shot { font: 10px/1.3 var(--mono); color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-bottom: 6px; }
+  .annot-item-actions { display: flex; gap: 5px; flex-wrap: wrap; }
+  .annot-item-actions button { background: var(--panel); color: var(--text); border: 1px solid var(--line);
+    border-radius: 6px; padding: 2px 7px; cursor: pointer; font-size: 11px; }
+  .annot-item-actions button:hover:not(:disabled) { border-color: var(--accent); }
+  .annot-item-actions button.danger:hover:not(:disabled) { border-color: var(--bad); color: var(--bad); }
   body.watching { height: 100vh; overflow: hidden; }
   body.watching header { display: none; }
   @media (max-width: 820px) {
@@ -188,6 +258,14 @@ pub const PAGE: &str = r##"<!doctype html>
       <span class="sep" aria-hidden="true"></span>
       <button id="btn-pinch" type="button" aria-pressed="false" title="Two-finger pinch mode (or Alt + drag, or Ctrl + wheel)">Pinch</button>
       <button id="btn-shot" type="button" title="Save PNG screenshot" disabled>Shot</button>
+      <span class="sep" aria-hidden="true"></span>
+      <button id="btn-annotate" type="button" aria-pressed="false" title="Inspect Android views and draw visual annotations">Annotate</button>
+      <span id="annot-tools" hidden>
+        <button id="btn-annot-pick" type="button" class="active" aria-pressed="true" title="Click an Android view to annotate">Pick</button>
+        <button id="btn-annot-box" type="button" aria-pressed="false" title="Drag a bounding box to annotate">Box</button>
+        <button id="btn-annot-draw" type="button" aria-pressed="false" title="Draw a freehand highlight to annotate">Draw</button>
+        <button id="btn-annot-copy" type="button" title="Copy all open annotations for your coding agent">Copy for Agent</button>
+      </span>
     </div>
     <span class="spacer"></span>
     <span class="pill" id="dinput">idle</span>
@@ -196,16 +274,44 @@ pub const PAGE: &str = r##"<!doctype html>
   <div class="stage">
     <div class="screenwrap" id="screenwrap" tabindex="0">
       <canvas id="frame" width="0" height="0" aria-label="live screen"></canvas>
+      <div id="mirror-dom" aria-label="Android UI hierarchy mirror"></div>
       <svg id="gesture-svg" aria-hidden="true"></svg>
       <div id="overlay"></div>
+      <div id="annot-layer" aria-hidden="true"><svg id="annot-svg" aria-hidden="true"></svg></div>
+      <div id="annot-popover" hidden>
+        <div class="annot-pop-target" id="annot-pop-target"></div>
+        <textarea id="annot-comment" rows="3" placeholder="Describe the issue or change… (Enter to add, Esc to cancel)"></textarea>
+        <div class="annot-pop-err" id="annot-pop-err" hidden></div>
+        <div class="annot-pop-actions">
+          <button id="annot-cancel" type="button">Cancel</button>
+          <button id="annot-submit-no-shot" type="button" hidden>Save without screenshot</button>
+          <button id="annot-submit" type="button" class="primary">Add</button>
+        </div>
+      </div>
       <div id="offline" hidden>stream offline · reconnecting…</div>
     </div>
     <aside>
       <h2>activity</h2>
-      <div class="mono" id="dactivity" style="font-size:12px;color:var(--muted);margin-bottom:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">-</div>
-      <h2>agent &amp; human activity</h2>
-      <ol id="events" reversed></ol>
-      <div class="note">Click: tap · Drag: swipe/fling · Hold: long-press · Wheel: scroll · Alt+drag / Ctrl+wheel: pinch · Type / Ctrl+V: text. Verify sessions stay read-only.</div>
+      <div class="mono" id="dactivity" style="font-size:12px;color:var(--muted);margin-bottom:8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">-</div>
+      <div class="aside-tabs" role="tablist">
+        <button id="tab-activity" class="aside-tab active" type="button" role="tab" aria-selected="true">Activity</button>
+        <button id="tab-annotations" class="aside-tab" type="button" role="tab" aria-selected="false">Annotations (0)</button>
+      </div>
+      <div id="pane-activity">
+        <h2>agent &amp; human activity</h2>
+        <ol id="events" reversed></ol>
+        <div class="note">Click: tap · Drag: swipe/fling · Hold: long-press · Wheel: scroll · Alt+drag / Ctrl+wheel: pinch · Type / Ctrl+V: text. Verify sessions stay read-only.</div>
+      </div>
+      <div id="pane-annotations" hidden>
+        <div id="annot-bar">
+          <button id="btn-annot-copy-all" type="button" class="primary">Copy All for Agent</button>
+          <label class="annot-filter"><input id="annot-show-resolved" type="checkbox"> Resolved</label>
+          <button id="btn-annot-clear" type="button">Clear</button>
+        </div>
+        <div id="annot-panel-msg" class="annot-pop-err" hidden></div>
+        <div id="annot-empty" class="annot-empty">No open annotations yet. Click Annotate to pick a view, draw a box, or sketch on the screen.</div>
+        <ol id="annot-list"></ol>
+      </div>
     </aside>
   </div>
   <div id="cap-tray" aria-live="polite"></div>
@@ -216,11 +322,16 @@ const token = new URLSearchParams(location.search).get("t") || "";
 const auth = (path) => path + (path.includes("?") ? "&" : "?") + "t=" + encodeURIComponent(token);
 const $ = (id) => document.getElementById(id);
 const grid = $("grid"), detail = $("detail"), statusPill = $("status");
-const frame = $("frame"), frameCtx = frame.getContext("2d"), screenWrap = $("screenwrap"), gestureSvg = $("gesture-svg"), overlay = $("overlay"), eventsList = $("events"), capTray = $("cap-tray");
+const frame = $("frame"), frameCtx = frame.getContext("2d"), screenWrap = $("screenwrap"), mirrorDom = $("mirror-dom"), gestureSvg = $("gesture-svg"), overlay = $("overlay"), annotLayer = $("annot-layer"), annotSvg = $("annot-svg"), annotPopover = $("annot-popover"), annotPopTarget = $("annot-pop-target"), annotComment = $("annot-comment"), annotPopErr = $("annot-pop-err"), annotSubmit = $("annot-submit"), annotSubmitNoShot = $("annot-submit-no-shot"), annotCancel = $("annot-cancel"), annotPanelMsg = $("annot-panel-msg"), eventsList = $("events"), capTray = $("cap-tray");
 const btnBack = $("btn-back"), btnHome = $("btn-home"), btnRecents = $("btn-recents"), btnRotate = $("btn-rotate");
 const btnVolDown = $("btn-vol-down"), btnVolUp = $("btn-vol-up"), btnPower = $("btn-power"), btnPinch = $("btn-pinch"), btnShot = $("btn-shot");
+const btnAnnotate = $("btn-annotate"), annotTools = $("annot-tools"), btnAnnotPick = $("btn-annot-pick"), btnAnnotBox = $("btn-annot-box"), btnAnnotDraw = $("btn-annot-draw"), btnAnnotCopy = $("btn-annot-copy");
+const tabActivity = $("tab-activity"), tabAnnotations = $("tab-annotations"), paneActivity = $("pane-activity"), paneAnnotations = $("pane-annotations");
+const btnAnnotCopyAll = $("btn-annot-copy-all"), btnAnnotClear = $("btn-annot-clear"), annotShowResolved = $("annot-show-resolved"), annotEmpty = $("annot-empty"), annotList = $("annot-list");
 const verifyBanner = $("verify-banner"), dinput = $("dinput");
 const SVG_NS = "http://www.w3.org/2000/svg";
+const MAX_ANNOTATION_PNG_BYTES = 4 * 1024 * 1024;
+const ANNOT_REFRESH_FAILED = "Could not refresh the list, so its current state is unknown.";
 const capabilityCards = new Map();
 // prompt_seq of capability actions sent (or queued) but not yet answered.
 const pendingCapabilities = new Set();
@@ -253,6 +364,35 @@ const activePointers = new Map();
 const heldGuestKeys = new Set();
 let pinchMode = false;
 let panelTouchState = { active: 0, maxPointers: 0, startX: 0, startY: 0, startTs: 0, gesture: null };
+
+let mirrorNodes = [];
+let mirrorMeta = { activity: "", package: "", display: { w: 0, h: 0 } };
+let mirrorTreeValid = false;
+let mirrorFetchTimer = null;
+let mirrorFetchDeadline = 0;
+let mirrorFetchCtrl = null;
+let mirrorFetchGen = 0;
+let mirrorFetchPending = false;
+let mirrorGeneration = 0;
+let lastTreeFrameSeq = -1;
+let screenEpoch = 0;
+let liveActivity = "";
+
+let annotMode = false;
+let annotTool = "pick"; // "pick" | "box" | "draw"
+let annotItems = [];
+let annotOpenCount = 0;
+let annotShowResolvedFlag = false;
+let asideTab = "activity"; // "activity" | "annotations"
+let hoveredMirrorNode = null;
+let annotDraft = null;
+let annotPending = null;
+let annotSubmittingDraftId = null;
+let nextAnnotDraftId = 1;
+let annotGeneration = 0;
+let annotListSeq = 0; // newest list GET issued; older replies are dropped
+let annotListLatest = null; // promise of that newest GET
+let annotRevision = 0; // bumped when a mutation reply changes annotItems
 
 const KEY_MAP = {
   Backspace: "KEYCODE_DEL",
@@ -320,8 +460,15 @@ function projectName(path) {
   return parts.length ? parts[parts.length - 1] : path;
 }
 
+function canAnnotateSession(s) {
+  if (!s) return false;
+  if (typeof s.can_annotate === "boolean") return s.can_annotate;
+  return !s.watch_only;
+}
+
 function applyToolbarUi() {
   const isWatchOnly = !!(current && current.watch_only);
+  const canAnnot = canAnnotateSession(current);
   const noLauncher = !!(current && current.has_home === false);
   const inputBlocked = isWatchOnly || sessionEnded;
   verifyBanner.hidden = !isWatchOnly;
@@ -365,12 +512,43 @@ function applyToolbarUi() {
 
   btnShot.disabled = !hasDecodedFrame();
 
-  if (isWatchOnly) {
+  if ((sessionEnded || !canAnnot) && annotMode) {
+    annotMode = false;
+    annotDraft = null;
+    hoveredMirrorNode = null;
+    closeAnnotPopover();
+  }
+  const annotDisabled = !current || sessionEnded || !canAnnot;
+  btnAnnotate.disabled = annotDisabled;
+  btnAnnotate.classList.toggle("active", annotMode);
+  btnAnnotate.setAttribute("aria-pressed", String(annotMode));
+  btnAnnotate.title = !canAnnot
+    ? "Annotations require an interactive acos serve session"
+    : "Inspect Android views and draw visual annotations";
+  btnAnnotate.textContent = annotOpenCount > 0 ? "Annotate (" + annotOpenCount + ")" : "Annotate";
+  annotTools.hidden = !annotMode;
+  btnAnnotPick.classList.toggle("active", annotTool === "pick");
+  btnAnnotPick.setAttribute("aria-pressed", String(annotTool === "pick"));
+  btnAnnotBox.classList.toggle("active", annotTool === "box");
+  btnAnnotBox.setAttribute("aria-pressed", String(annotTool === "box"));
+  btnAnnotDraw.classList.toggle("active", annotTool === "draw");
+  btnAnnotDraw.setAttribute("aria-pressed", String(annotTool === "draw"));
+  btnAnnotCopy.disabled = annotOpenCount === 0;
+  screenWrap.classList.toggle("annotating", annotMode);
+  screenWrap.classList.toggle("tool-pick", annotMode && annotTool === "pick");
+
+  if (annotMode) {
+    dinput.textContent = "annotating";
+    dinput.className = "pill warn";
+  } else if (isWatchOnly) {
     dinput.textContent = "watch-only";
     dinput.className = "pill warn";
   } else if (!ws) {
     dinput.textContent = "idle";
     dinput.className = "pill";
+  } else if (ws.readyState === WebSocket.OPEN) {
+    dinput.textContent = "interactive";
+    dinput.className = "pill ok";
   }
 }
 
@@ -385,7 +563,7 @@ let lastGridSig = "";
 function gridSignature(list) {
   if (!list.length) return "empty";
   return JSON.stringify(list.map((s) => [
-    s.session_id, s.stream, s.connected, s.watchers > 0, s.watch_only,
+    s.session_id, s.stream, s.connected, s.watchers > 0, s.watch_only, s.can_annotate,
     s.has_home, s.device_name, s.app_label, s.package, s.activity,
     s.display ? s.display.w : 0, s.display ? s.display.h : 0,
     s.project_dir, clientLabel(s),
@@ -491,10 +669,20 @@ async function refresh() {
             (!frameSize.w || !frameSize.h ||
               ((updated.display.w < updated.display.h) === (frameSize.w < frameSize.h)))
           ) {
+            const dispChanged =
+              display.w > 0 && display.h > 0 &&
+              (display.w !== updated.display.w || display.h !== updated.display.h);
             display = { w: updated.display.w, h: updated.display.h };
             setAspect(display.w, display.h);
+            if (dispChanged) {
+              screenEpoch += 1;
+              invalidateMirrorTree(true);
+            }
+            positionMirrorDom();
           }
-          if (updated.activity) $("dactivity").textContent = updated.activity;
+          if (updated.activity) {
+            setLiveActivity(updated.activity, true);
+          }
           applyToolbarUi();
         }
       }
@@ -651,11 +839,17 @@ function ensureWs() {
     }
     if (msg.ok && msg.t === "rotate") {
       cancelActivePointers();
+      let dispChanged = false;
       if (msg.width > 0 && msg.height > 0) {
+        dispChanged = display.w > 0 && display.h > 0 && (display.w !== msg.width || display.h !== msg.height);
         display = { w: msg.width, h: msg.height };
         setAspect(display.w, display.h);
       }
       if (typeof msg.rotation === "number") currentRotation = msg.rotation;
+      if (dispChanged) {
+        screenEpoch += 1;
+        invalidateMirrorTree(true);
+      }
       const targetSeq = Math.max(
         pendingRotate ? pendingRotate.minSeq : lastFrameSeq + 1,
         typeof msg.frame_seq === "number" ? msg.frame_seq : 0
@@ -835,9 +1029,12 @@ async function drawDecodedFrame(part, sid, gen, ctrl) {
     bmp.close();
     return;
   }
+  const prevW = frameSize.w;
+  const prevH = frameSize.h;
+  const coordSpaceChanged =
+    prevW > 0 && prevH > 0 && (prevW !== bmp.width || prevH !== bmp.height);
   const prevOrientationFlipped =
-    frameSize.w > 0 && frameSize.h > 0 &&
-    ((frameSize.w < frameSize.h) !== (bmp.width < bmp.height));
+    prevW > 0 && prevH > 0 && ((prevW < prevH) !== (bmp.width < bmp.height));
   if (prevOrientationFlipped) {
     cancelActivePointers();
   }
@@ -870,6 +1067,14 @@ async function drawDecodedFrame(part, sid, gen, ctrl) {
   }
   if (wasRotatePending !== isRotationPending()) {
     applyToolbarUi();
+  }
+  if (coordSpaceChanged) {
+    screenEpoch += 1;
+    invalidateMirrorTree(true);
+  }
+  positionMirrorDom();
+  if (!coordSpaceChanged && lastFrameSeq !== lastTreeFrameSeq) {
+    scheduleTreeRefresh(300, false);
   }
 }
 
@@ -999,10 +1204,14 @@ function openSession(s) {
   overlay.textContent = "";
   gestureSvg.textContent = "";
   clearCapabilityPrompts();
+  resetMirrorDom();
+  resetAnnotationsState();
   sessionEnded = false;
   sessionEverConnected = false;
   disconnectedPolls = 0;
   current = s;
+  liveActivity = (s && typeof s.activity === "string") ? s.activity : "";
+  screenEpoch += 1;
   currentGuestGen = (typeof s.guest_gen === "number" && s.guest_gen > 0) ? s.guest_gen : null;
   pendingRotate = null;
   display = { w: (s.display && s.display.w) || 0, h: (s.display && s.display.h) || 0 };
@@ -1012,12 +1221,13 @@ function openSession(s) {
   document.body.classList.add("watching");
   $("dtitle").textContent = sessionTitle(s);
   $("dsub").textContent = s.session_id + " · " + clientLabel(s) + " · " + projectName(s.project_dir);
-  $("dactivity").textContent = s.activity || "-";
+  $("dactivity").textContent = liveActivity || "-";
   eventsList.textContent = "";
   $("dstate").textContent = s.stream ? "connecting" : "no stream";
   $("dstate").className = "pill";
   $("offline").textContent = "stream offline · reconnecting…";
   $("offline").hidden = true;
+  setAsideTab("activity");
   applyToolbarUi();
   if (s.stream) {
     setAspect(display.w, display.h);
@@ -1028,6 +1238,10 @@ function openSession(s) {
         startFrameStream(sid);
       }
     });
+  }
+  if (canAnnotateSession(s)) {
+    scheduleTreeRefresh(150, true);
+    fetchAnnotations();
   }
   location.hash = "s=" + encodeURIComponent(s.session_id);
   history.replaceState(null, "", location.pathname + location.search + location.hash);
@@ -1047,7 +1261,11 @@ function closeSession() {
   overlay.textContent = "";
   gestureSvg.textContent = "";
   clearCapabilityPrompts();
+  resetMirrorDom();
+  resetAnnotationsState();
   current = null;
+  liveActivity = "";
+  screenEpoch += 1;
   currentGuestGen = null;
   pendingRotate = null;
   detail.hidden = true;
@@ -1074,11 +1292,17 @@ function markSessionEnded(sid) {
   if (!current || (sid && current.session_id !== sid)) return;
   sessionEnded = true;
   pinchMode = false;
+  annotMode = false;
+  annotDraft = null;
+  hoveredMirrorNode = null;
+  closeAnnotPopover();
+  cancelMirrorFetch();
   resetPanelTouchState();
   closeWs();
   stopFrameStream();
   if (source) { source.close(); source = null; }
   applyToolbarUi();
+  renderAnnotOverlay();
   $("offline").textContent = "session ended";
   $("offline").hidden = false;
   $("dstate").textContent = "session ended";
@@ -1109,21 +1333,36 @@ function connectEvents(s) {
       (!frameSize.w || !frameSize.h ||
         ((entry.display.w < entry.display.h) === (frameSize.w < frameSize.h)))
     ) {
+      const dispChanged =
+        display.w > 0 && display.h > 0 &&
+        (display.w !== entry.display.w || display.h !== entry.display.h);
       display = { w: entry.display.w, h: entry.display.h };
       setAspect(display.w, display.h);
+      if (dispChanged) {
+        screenEpoch += 1;
+        invalidateMirrorTree(true);
+      }
+      positionMirrorDom();
     }
     if (current) {
       if (typeof entry.watch_only === "boolean") {
         current.watch_only = entry.watch_only;
+      }
+      if (typeof entry.can_annotate === "boolean") {
+        current.can_annotate = entry.can_annotate;
       }
       if (typeof entry.has_home === "boolean") {
         current.has_home = entry.has_home;
       } else if (typeof hello.has_home === "boolean") {
         current.has_home = hello.has_home;
       }
+      if (entry.activity) {
+        setLiveActivity(entry.activity, true);
+      }
       applyToolbarUi();
+    } else if (entry.activity) {
+      setLiveActivity(entry.activity, false);
     }
-    if (entry.activity) $("dactivity").textContent = entry.activity;
     if (data.connected === true) {
       sessionEverConnected = true;
       disconnectedPolls = 0;
@@ -1235,10 +1474,11 @@ function clearCapabilityPrompts() {
   if (capTray) capTray.textContent = "";
 }
 
-function copyTextToClipboard(text, button, fallbackLabel) {
+function copyTextToClipboard(text, button, fallbackLabel, copiedLabel) {
   const done = () => {
+    if (!button) return;
     const prev = button.textContent;
-    button.textContent = "Copied";
+    button.textContent = copiedLabel || "Copied";
     setTimeout(() => { button.textContent = fallbackLabel || prev; }, 1400);
   };
   if (navigator.clipboard && navigator.clipboard.writeText) {
@@ -1446,12 +1686,16 @@ function onEvent(event, kind) {
     return;
   }
   if (kind === "activity") {
-    $("dactivity").textContent = event.activity || "-";
+    if (event.activity) {
+      setLiveActivity(event.activity, true);
+    } else {
+      $("dactivity").textContent = "-";
+    }
     addEvent(event, kind);
     return;
   }
   if (event.kind === "activity" && event.activity) {
-    $("dactivity").textContent = event.activity;
+    setLiveActivity(event.activity, true);
     addEvent(event, "activity");
     return;
   }
@@ -1470,6 +1714,8 @@ function onEvent(event, kind) {
       };
       applyToolbarUi();
     }
+    screenEpoch += 1;
+    invalidateMirrorTree(true);
   }
   if (event.kind === "action" && event.source === "panel" && event.cmd === "touch") {
     const ok = !event.status || event.status === "ok";
@@ -1541,6 +1787,7 @@ function onEvent(event, kind) {
         ripple(summary);
       }
       addEvent(summary, kind);
+      scheduleTreeRefresh(300);
       return;
     }
     if (event.phase === "cancel") {
@@ -1553,6 +1800,9 @@ function onEvent(event, kind) {
     ripple(event);
   }
   addEvent(event, kind);
+  if (event.kind === "action") {
+    scheduleTreeRefresh(300);
+  }
 }
 
 function ripple(event) {
@@ -1629,12 +1879,1458 @@ function addEvent(event, kind) {
   while (eventsList.children.length > 40) eventsList.lastChild.remove();
 }
 
+// ---- Mirror DOM (native T3 Code & Paseo support) + Built-in Annotate UI ----
+
+function isInsideElement(node, ancestor) {
+  let cur = node;
+  while (cur) {
+    if (cur === ancestor) return true;
+    cur = cur.parentNode;
+  }
+  return false;
+}
+
+function isEditableElement(node) {
+  if (!node) return false;
+  const tag = node.tagName;
+  return tag === "TEXTAREA" || tag === "INPUT" || tag === "SELECT" || !!node.isContentEditable;
+}
+
+function parseBounds(raw) {
+  if (!raw) return null;
+  let l, t, r, b;
+  if (Array.isArray(raw) && raw.length === 4) {
+    [l, t, r, b] = raw.map(Number);
+  } else if (typeof raw === "string") {
+    const m = raw.match(/^\[\s*(-?\d+)\s*,\s*(-?\d+)\s*\]\[\s*(-?\d+)\s*,\s*(-?\d+)\s*\]$/)
+      || raw.match(/^\[\s*(-?\d+)\s*,\s*(-?\d+)\s*,\s*(-?\d+)\s*,\s*(-?\d+)\s*\]$/);
+    if (!m) return null;
+    l = Number(m[1]);
+    t = Number(m[2]);
+    r = Number(m[3]);
+    b = Number(m[4]);
+  } else if (typeof raw === "object" && typeof raw.left === "number") {
+    l = raw.left; t = raw.top; r = raw.right; b = raw.bottom;
+  } else {
+    return null;
+  }
+  if (![l, t, r, b].every(Number.isFinite) || r <= l || b <= t) return null;
+  return [Math.round(l), Math.round(t), Math.round(r), Math.round(b)];
+}
+
+function shortClassName(cls) {
+  if (!cls) return "View";
+  const str = String(cls);
+  const dot = str.lastIndexOf(".");
+  return dot >= 0 ? str.slice(dot + 1) : str;
+}
+
+function shortResourceId(rid) {
+  if (!rid) return "";
+  const str = String(rid);
+  const slash = str.indexOf(":id/");
+  return slash >= 0 ? str.slice(slash + 4) : str;
+}
+
+function trimSnippet(s, maxLen) {
+  if (!s) return "";
+  const clean = String(s).replace(/\s+/g, " ").trim();
+  if (!clean) return "";
+  return clean.length > maxLen ? clean.slice(0, maxLen - 1) + "…" : clean;
+}
+
+function formatMirrorAriaLabel(n) {
+  const parts = [shortClassName(n.class)];
+  const labelText = trimSnippet(n.text, 60) || trimSnippet(n.content_desc, 60);
+  if (labelText) parts.push('"' + labelText + '"');
+  if (n.resource_id) parts.push("(id: " + shortResourceId(n.resource_id) + ")");
+  if (n.bounds) parts.push("[" + n.bounds.join(",") + "]");
+  return parts.join(" ");
+}
+
+function formatNodeSummary(n) {
+  if (!n) return "";
+  const parts = [shortClassName(n.class)];
+  if (n.resource_id) parts.push("#" + shortResourceId(n.resource_id));
+  const txt = trimSnippet(n.text, 44) || trimSnippet(n.content_desc, 44);
+  if (txt) parts.push('"' + txt + '"');
+  const b = parseBounds(n.bounds);
+  if (b) parts.push("[" + b.join(",") + "]");
+  return parts.join(" · ");
+}
+
+function snapshotNode(n) {
+  const out = {
+    class: n.class || "",
+    bounds: n.bounds,
+    clickable: !!n.clickable,
+  };
+  if (n.resource_id) out.resource_id = n.resource_id;
+  if (n.text) out.text = trimSnippet(n.text, 200);
+  if (n.content_desc) out.content_desc = trimSnippet(n.content_desc, 200);
+  if (n.window) out.window = n.window;
+  return out;
+}
+
+function currentDisplaySize() {
+  const dw = (mirrorTreeValid && mirrorMeta.display.w) || display.w || frameSize.w || frame.width || 1080;
+  const dh = (mirrorTreeValid && mirrorMeta.display.h) || display.h || frameSize.h || frame.height || 2400;
+  return { w: dw, h: dh };
+}
+
+function currentActivityName() {
+  if (liveActivity) return liveActivity;
+  if (current && current.activity) return current.activity;
+  if (mirrorTreeValid && mirrorMeta.activity) return mirrorMeta.activity;
+  const shown = $("dactivity").textContent;
+  return shown && shown !== "-" ? shown : "";
+}
+
+function setLiveActivity(act, triggerInvalidate) {
+  const next = typeof act === "string" ? act.trim() : "";
+  if (!next) return false;
+  const changed = next !== liveActivity;
+  liveActivity = next;
+  if (current) current.activity = next;
+  $("dactivity").textContent = next;
+  if (changed) {
+    screenEpoch += 1;
+    if (triggerInvalidate) {
+      invalidateMirrorTree(true);
+    }
+  }
+  return changed;
+}
+
+function flattenTreeNodes(tree, activity, pkg, disp) {
+  const out = [];
+  if (!tree) return out;
+  const roots = Array.isArray(tree.nodes)
+    ? tree.nodes
+    : (Array.isArray(tree) ? tree : (typeof tree === "object" ? [tree] : []));
+  const dw = (disp && disp.w) || currentDisplaySize().w;
+  const dh = (disp && disp.h) || currentDisplaySize().h;
+  const MAX_MIRROR_NODES = 1500;
+
+  function walk(node, depth) {
+    if (!node || typeof node !== "object" || out.length >= MAX_MIRROR_NODES) return false;
+    if (node.visible === false) return false;
+    const b = parseBounds(node.visible_bounds) || parseBounds(node.bounds);
+    const onScreen = b && b[2] > 0 && b[3] > 0 && b[0] < dw && b[1] < dh;
+    const clamped = onScreen
+      ? [
+          Math.max(0, Math.min(dw, b[0])),
+          Math.max(0, Math.min(dh, b[1])),
+          Math.max(0, Math.min(dw, b[2])),
+          Math.max(0, Math.min(dh, b[3])),
+        ]
+      : null;
+    const valid = clamped && clamped[2] > clamped[0] && clamped[3] > clamped[1];
+    let rec = null;
+    if (valid) {
+      rec = {
+        class: typeof node.class === "string" ? node.class : "",
+        resource_id: typeof node.resource_id === "string" ? node.resource_id : "",
+        text: typeof node.text === "string" ? node.text.trim() : "",
+        content_desc: typeof node.content_desc === "string" ? node.content_desc.trim() : "",
+        bounds: clamped,
+        clickable: !!node.clickable,
+        scrollable: !!node.scrollable,
+        window: typeof node.window === "string" ? node.window : "",
+        activity: activity || "",
+        package: (typeof node.package === "string" && node.package) ? node.package : (pkg || ""),
+        depth,
+        order: out.length,
+        isLeaf: true,
+      };
+      out.push(rec);
+    }
+    let anyVisibleChild = false;
+    if (Array.isArray(node.children)) {
+      for (const child of node.children) {
+        if (walk(child, depth + 1)) anyVisibleChild = true;
+      }
+    }
+    if (rec && anyVisibleChild) rec.isLeaf = false;
+    return valid || anyVisibleChild;
+  }
+
+  for (const root of roots) {
+    walk(root, 0);
+  }
+  return out;
+}
+
+function positionMirrorDom() {
+  if (!mirrorDom || !screenWrap) return;
+  const imgRect = renderedImageRect();
+  const wrapRect = screenWrap.getBoundingClientRect();
+  if (imgRect.width > 0 && imgRect.height > 0 && wrapRect.width > 0 && wrapRect.height > 0) {
+    mirrorDom.style.left = (imgRect.left - wrapRect.left).toFixed(2) + "px";
+    mirrorDom.style.top = (imgRect.top - wrapRect.top).toFixed(2) + "px";
+    mirrorDom.style.width = imgRect.width.toFixed(2) + "px";
+    mirrorDom.style.height = imgRect.height.toFixed(2) + "px";
+  }
+  renderAnnotOverlay();
+}
+
+function renderMirrorDom() {
+  if (!mirrorDom) return;
+  positionMirrorDom();
+  mirrorDom.textContent = "";
+  if (!mirrorTreeValid || !mirrorNodes.length) return;
+  const { w: dw, h: dh } = currentDisplaySize();
+  if (!(dw > 0 && dh > 0)) return;
+  for (const n of mirrorNodes) {
+    const [l, t, r, b] = n.bounds;
+    const div = el("div", "acos-mirror-node");
+    div.style.left = ((l / dw) * 100).toFixed(4) + "%";
+    div.style.top = ((t / dh) * 100).toFixed(4) + "%";
+    div.style.width = (((r - l) / dw) * 100).toFixed(4) + "%";
+    div.style.height = (((b - t) / dh) * 100).toFixed(4) + "%";
+    div.setAttribute("data-acos-node", "1");
+    if (n.class) div.setAttribute("data-android-class", n.class);
+    if (n.resource_id) div.setAttribute("data-resource-id", n.resource_id);
+    if (n.text) div.setAttribute("data-text", trimSnippet(n.text, 120));
+    if (n.content_desc) div.setAttribute("data-content-desc", trimSnippet(n.content_desc, 120));
+    div.setAttribute("data-bounds", "[" + n.bounds.join(",") + "]");
+    div.setAttribute("data-clickable", String(!!n.clickable));
+    if (n.activity) div.setAttribute("data-activity", n.activity);
+    if (n.package) div.setAttribute("data-package", n.package);
+    div.setAttribute("aria-label", formatMirrorAriaLabel(n));
+    div._acosNode = n;
+    mirrorDom.appendChild(div);
+  }
+}
+
+function isMirrorFetchInFlight() {
+  return mirrorFetchCtrl !== null && mirrorFetchGen === mirrorGeneration;
+}
+
+function cancelMirrorFetch() {
+  mirrorGeneration += 1;
+  if (mirrorFetchTimer) {
+    clearTimeout(mirrorFetchTimer);
+    mirrorFetchTimer = null;
+  }
+  mirrorFetchDeadline = 0;
+  if (mirrorFetchCtrl) {
+    try { mirrorFetchCtrl.abort(); } catch (_) {}
+    mirrorFetchCtrl = null;
+  }
+  mirrorFetchGen = 0;
+  mirrorFetchPending = false;
+}
+
+function invalidateMirrorTree(triggerRefresh) {
+  mirrorTreeValid = false;
+  mirrorNodes = [];
+  mirrorMeta = {
+    activity: "",
+    package: (current && current.package) || "",
+    display: { w: 0, h: 0 },
+  };
+  hoveredMirrorNode = null;
+  if (mirrorDom) mirrorDom.textContent = "";
+  renderAnnotOverlay();
+  if (triggerRefresh && current && !sessionEnded && canAnnotateSession(current)) {
+    cancelMirrorFetch();
+    scheduleTreeRefresh(0, true);
+  }
+}
+
+function resetMirrorDom() {
+  cancelMirrorFetch();
+  mirrorTreeValid = false;
+  mirrorNodes = [];
+  mirrorMeta = { activity: "", package: "", display: { w: 0, h: 0 } };
+  lastTreeFrameSeq = -1;
+  hoveredMirrorNode = null;
+  if (mirrorDom) mirrorDom.textContent = "";
+}
+
+function scheduleTreeRefresh(delayMs, urgent) {
+  if (!current || sessionEnded || !canAnnotateSession(current)) return;
+  const wait = Math.max(0, typeof delayMs === "number" ? delayMs : 300);
+  const desiredAt = Date.now() + wait;
+  if (mirrorFetchTimer) {
+    // Coalesce pending refreshes without pushing an already-scheduled deadline
+    // later (prevents 10+ fps frames from starving tree updates). Urgent
+    // triggers (activity/orientation change) may pull the deadline forward.
+    if (!urgent || desiredAt >= mirrorFetchDeadline) {
+      return;
+    }
+    clearTimeout(mirrorFetchTimer);
+    mirrorFetchTimer = null;
+  }
+  mirrorFetchDeadline = desiredAt;
+  mirrorFetchTimer = setTimeout(() => {
+    mirrorFetchTimer = null;
+    mirrorFetchDeadline = 0;
+    fetchTreeNow();
+  }, wait);
+}
+
+async function fetchTreeNow() {
+  if (!current || sessionEnded || !canAnnotateSession(current)) return;
+  if (isMirrorFetchInFlight()) {
+    mirrorFetchPending = true;
+    return;
+  }
+  const sid = current.session_id;
+  const gen = mirrorGeneration;
+  const epochAtStart = screenEpoch;
+  const g = (typeof currentGuestGen === "number" && currentGuestGen > 0) ? currentGuestGen : null;
+  const seqAtStart = lastFrameSeq;
+  const ctrl = new AbortController();
+  mirrorFetchCtrl = ctrl;
+  mirrorFetchGen = gen;
+  let staleEpoch = false;
+  try {
+    const path = "/api/tree/" + encodeURIComponent(sid)
+      + (g !== null ? "?g=" + encodeURIComponent(g) : "");
+    const resp = await fetch(auth(path), { cache: "no-store", signal: ctrl.signal });
+    if (ctrl.signal.aborted || mirrorGeneration !== gen || !current || current.session_id !== sid || sessionEnded) return;
+    if (resp.status === 409) {
+      markSessionEnded(sid);
+      return;
+    }
+    if (!resp.ok) return;
+    const data = await resp.json();
+    if (ctrl.signal.aborted || mirrorGeneration !== gen || !current || current.session_id !== sid || sessionEnded) return;
+    if (!data || !data.ok) return;
+    if (screenEpoch !== epochAtStart) {
+      staleEpoch = true;
+      return;
+    }
+    const treeAct = (typeof data.activity === "string" && data.activity.trim()) ? data.activity.trim() : "";
+    // Never overwrite a newer live activity from the event stream, and reject
+    // a lagging tree response whose activity no longer matches liveActivity.
+    if (liveActivity && treeAct && treeAct !== liveActivity) {
+      staleEpoch = true;
+      return;
+    }
+    const act = liveActivity || treeAct;
+    const pkg = (typeof data.package === "string" && data.package) ? data.package : ((current && current.package) || "");
+    const disp = (data.display && data.display.w > 0 && data.display.h > 0)
+      ? { w: data.display.w, h: data.display.h }
+      : { w: display.w || frameSize.w || 0, h: display.h || frameSize.h || 0 };
+    if (frameSize.w > 0 && frameSize.h > 0 && disp.w > 0 && disp.h > 0 &&
+        ((disp.w < disp.h) !== (frameSize.w < frameSize.h))) {
+      staleEpoch = true;
+      return;
+    }
+    lastTreeFrameSeq = seqAtStart;
+    mirrorMeta = { activity: act, package: pkg, display: disp };
+    if (!liveActivity && treeAct) {
+      $("dactivity").textContent = treeAct;
+    }
+    mirrorNodes = flattenTreeNodes(data.tree, act, pkg, disp);
+    mirrorTreeValid = true;
+    renderMirrorDom();
+  } catch (_) {
+    // Tree fetch is best-effort; ignore aborts and transient disconnects.
+  } finally {
+    if (mirrorFetchCtrl === ctrl && mirrorFetchGen === gen) {
+      mirrorFetchCtrl = null;
+      mirrorFetchGen = 0;
+      if ((mirrorFetchPending || staleEpoch) && mirrorGeneration === gen && current && current.session_id === sid && !sessionEnded && canAnnotateSession(current)) {
+        mirrorFetchPending = false;
+        scheduleTreeRefresh(staleEpoch ? 100 : 300, staleEpoch);
+      }
+    }
+  }
+}
+
+function findDeepestNodeAt(pt) {
+  if (!pt || !mirrorTreeValid || !mirrorNodes.length) return null;
+  const hits = [];
+  for (let i = mirrorNodes.length - 1; i >= 0; i--) {
+    const n = mirrorNodes[i];
+    const [l, t, r, b] = n.bounds;
+    if (pt.x >= l && pt.x <= r && pt.y >= t && pt.y <= b) {
+      hits.push(n);
+    }
+  }
+  if (!hits.length) return null;
+  hits.sort((a, b) => {
+    const areaA = (a.bounds[2] - a.bounds[0]) * (a.bounds[3] - a.bounds[1]);
+    const areaB = (b.bounds[2] - b.bounds[0]) * (b.bounds[3] - b.bounds[1]);
+    if (areaA !== areaB) return areaA - areaB;
+    if (a.depth !== b.depth) return b.depth - a.depth;
+    return b.order - a.order;
+  });
+  return hits[0];
+}
+
+function findNodesIntersecting(rect) {
+  if (!rect || !mirrorTreeValid || !mirrorNodes.length) return [];
+  const [rl, rt, rr, rb] = rect;
+  const { w: dw, h: dh } = currentDisplaySize();
+  const screenArea = Math.max(1, dw * dh);
+  const matches = [];
+  for (const n of mirrorNodes) {
+    const [l, t, r, b] = n.bounds;
+    if (r <= rl || l >= rr || b <= rt || t >= rb) continue;
+    const ix = Math.max(0, Math.min(r, rr) - Math.max(l, rl));
+    const iy = Math.max(0, Math.min(b, rb) - Math.max(t, rt));
+    const interArea = ix * iy;
+    if (interArea <= 0) continue;
+    const nodeArea = Math.max(1, (r - l) * (b - t));
+    const meaningful = !!(n.clickable || n.resource_id || n.text || n.content_desc || n.isLeaf);
+    matches.push({
+      node: n,
+      nodeArea,
+      interRatio: interArea / nodeArea,
+      meaningful,
+      isFullScreenContainer: !meaningful && (nodeArea / screenArea) > 0.85,
+    });
+  }
+  if (!matches.length) return [];
+  const filtered = matches.some((m) => !m.isFullScreenContainer)
+    ? matches.filter((m) => !m.isFullScreenContainer)
+    : matches;
+  filtered.sort((a, b) => {
+    if (a.meaningful !== b.meaningful) return a.meaningful ? -1 : 1;
+    if (a.node.clickable !== b.node.clickable) return a.node.clickable ? -1 : 1;
+    if (a.node.isLeaf !== b.node.isLeaf) return a.node.isLeaf ? -1 : 1;
+    if (a.nodeArea !== b.nodeArea) return a.nodeArea - b.nodeArea;
+    return b.node.depth - a.node.depth;
+  });
+  return filtered.slice(0, 16).map((m) => snapshotNode(m.node));
+}
+
+function displayRectToOverlay(bounds) {
+  const b = parseBounds(bounds);
+  if (!b) return null;
+  const p1 = displayToOverlayPx({ x: b[0], y: b[1] });
+  const p2 = displayToOverlayPx({ x: b[2], y: b[3] });
+  if (!p1 || !p2) return null;
+  return {
+    left: Math.min(p1.x, p2.x),
+    top: Math.min(p1.y, p2.y),
+    width: Math.max(2, Math.abs(p2.x - p1.x)),
+    height: Math.max(2, Math.abs(p2.y - p1.y)),
+  };
+}
+
+function clearAnnotLayer() {
+  if (!annotLayer) return;
+  const children = Array.from(annotLayer.children);
+  for (const ch of children) {
+    if (ch !== annotSvg) ch.remove();
+  }
+  if (annotSvg) annotSvg.textContent = "";
+}
+
+function renderAnnotOverlay() {
+  if (!annotLayer) return;
+  clearAnnotLayer();
+  if (!current || sessionEnded) return;
+
+  const curAct = currentActivityName();
+  const curDisp = currentDisplaySize();
+  // Draw persistent numbered pins for open annotations belonging to the current activity & coordinate space while annotating.
+  if (annotMode) {
+    for (const item of annotItems) {
+      if (item.status !== "open") continue;
+      if (item.activity && curAct && item.activity !== curAct) continue;
+      if (item.display && item.display.w > 0 && item.display.h > 0 && curDisp.w > 0 && curDisp.h > 0) {
+        if (item.display.w !== curDisp.w || item.display.h !== curDisp.h) continue;
+      }
+      const box = displayRectToOverlay(item.bounds);
+      if (!box) continue;
+      const pinBox = el("div", "annot-pin-box");
+      pinBox.style.left = box.left.toFixed(1) + "px";
+      pinBox.style.top = box.top.toFixed(1) + "px";
+      pinBox.style.width = box.width.toFixed(1) + "px";
+      pinBox.style.height = box.height.toFixed(1) + "px";
+      annotLayer.appendChild(pinBox);
+
+      const badge = el("div", "annot-pin-badge", "#" + item.id);
+      badge.style.left = Math.max(10, box.left).toFixed(1) + "px";
+      badge.style.top = Math.max(10, box.top).toFixed(1) + "px";
+      annotLayer.appendChild(badge);
+    }
+  }
+
+  // Hover inspector in Pick mode
+  if (annotMode && annotTool === "pick" && !annotDraft && !annotPending && hoveredMirrorNode) {
+    const box = displayRectToOverlay(hoveredMirrorNode.bounds);
+    if (box) {
+      const hbox = el("div", "annot-hover-box");
+      hbox.style.left = box.left.toFixed(1) + "px";
+      hbox.style.top = box.top.toFixed(1) + "px";
+      hbox.style.width = box.width.toFixed(1) + "px";
+      hbox.style.height = box.height.toFixed(1) + "px";
+      annotLayer.appendChild(hbox);
+
+      const lbl = el("div", "annot-hover-label", formatNodeSummary(hoveredMirrorNode));
+      const lblTop = box.top >= 26 ? (box.top - 24) : (box.top + box.height + 4);
+      lbl.style.left = Math.max(4, box.left).toFixed(1) + "px";
+      lbl.style.top = Math.max(4, lblTop).toFixed(1) + "px";
+      annotLayer.appendChild(lbl);
+    }
+  }
+
+  // Live drag / draw draft
+  if (annotDraft) {
+    if (annotDraft.tool === "box" && annotDraft.bounds) {
+      const box = displayRectToOverlay(annotDraft.bounds);
+      if (box) {
+        const dbox = el("div", "annot-draft-box");
+        dbox.style.left = box.left.toFixed(1) + "px";
+        dbox.style.top = box.top.toFixed(1) + "px";
+        dbox.style.width = box.width.toFixed(1) + "px";
+        dbox.style.height = box.height.toFixed(1) + "px";
+        annotLayer.appendChild(dbox);
+      }
+    } else if (annotDraft.tool === "draw" && annotDraft.points.length > 1 && annotSvg) {
+      const pts = [];
+      for (const p of annotDraft.points) {
+        const px = displayToOverlayPx(p);
+        if (px) pts.push(px.x.toFixed(1) + "," + px.y.toFixed(1));
+      }
+      if (pts.length > 1) {
+        annotSvg.appendChild(svgEl("polyline", {
+          points: pts.join(" "),
+          fill: "none",
+          stroke: "#ff6b4a",
+          "stroke-width": "3.5",
+          "stroke-linecap": "round",
+          "stroke-linejoin": "round",
+        }));
+      }
+    }
+  }
+
+  // Pending selection awaiting popover comment
+  if (annotPending) {
+    const box = displayRectToOverlay(annotPending.bounds);
+    if (box) {
+      const dbox = el("div", "annot-draft-box");
+      dbox.style.left = box.left.toFixed(1) + "px";
+      dbox.style.top = box.top.toFixed(1) + "px";
+      dbox.style.width = box.width.toFixed(1) + "px";
+      dbox.style.height = box.height.toFixed(1) + "px";
+      annotLayer.appendChild(dbox);
+    }
+    if (annotPending.strokePts && annotPending.strokePts.length > 1 && annotSvg) {
+      const pts = [];
+      for (const p of annotPending.strokePts) {
+        const px = displayToOverlayPx(p);
+        if (px) pts.push(px.x.toFixed(1) + "," + px.y.toFixed(1));
+      }
+      if (pts.length > 1) {
+        annotSvg.appendChild(svgEl("polyline", {
+          points: pts.join(" "),
+          fill: "none",
+          stroke: "#ff6b4a",
+          "stroke-width": "3.5",
+          "stroke-linecap": "round",
+          "stroke-linejoin": "round",
+        }));
+      }
+    }
+  }
+}
+
+function nextAnnotationNumber() {
+  let maxId = 0;
+  for (const item of annotItems) {
+    if (typeof item.id === "number" && item.id > maxId) maxId = item.id;
+  }
+  return maxId + 1;
+}
+
+function decodedBase64ByteLength(b64) {
+  if (typeof b64 !== "string" || !b64.length) return 0;
+  const clean = b64.replace(/\s+/g, "");
+  const pad = clean.endsWith("==") ? 2 : (clean.endsWith("=") ? 1 : 0);
+  return Math.max(0, Math.floor((clean.length * 3) / 4) - pad);
+}
+
+function captureFrameSnapshot() {
+  if (!hasDecodedFrame()) return null;
+  try {
+    const snap = document.createElement("canvas");
+    snap.width = frame.width;
+    snap.height = frame.height;
+    const ctx = snap.getContext && snap.getContext("2d");
+    if (!ctx || typeof ctx.drawImage !== "function") return null;
+    ctx.drawImage(frame, 0, 0);
+    const disp = currentDisplaySize();
+    return {
+      canvas: snap,
+      width: snap.width,
+      height: snap.height,
+      display: { w: disp.w, h: disp.h },
+    };
+  } catch (_) {
+    return null;
+  }
+}
+
+function compositeAnnotationPng(selection, badgeNum) {
+  if (!selection || !selection.frameSnapshot || !selection.frameSnapshot.canvas) return null;
+  const snap = selection.frameSnapshot;
+  if (!(snap.width > 0 && snap.height > 0)) return null;
+  try {
+    const off = document.createElement("canvas");
+    off.width = snap.width;
+    off.height = snap.height;
+    const ctx = off.getContext && off.getContext("2d");
+    if (!ctx || typeof off.toDataURL !== "function") return null;
+    ctx.drawImage(snap.canvas, 0, 0);
+
+    const snapDisp = (snap.display && snap.display.w > 0 && snap.display.h > 0)
+      ? snap.display
+      : (selection.display && selection.display.w > 0 && selection.display.h > 0
+          ? selection.display
+          : { w: snap.width, h: snap.height });
+    const sx = snapDisp.w > 0 ? (off.width / snapDisp.w) : 1;
+    const sy = snapDisp.h > 0 ? (off.height / snapDisp.h) : 1;
+    const lineW = Math.max(3, Math.round(off.width / 220));
+    const b = parseBounds(selection.bounds);
+
+    if (selection.kind === "freehand" && Array.isArray(selection.strokePts) && selection.strokePts.length > 1) {
+      if (b) {
+        ctx.save();
+        ctx.strokeStyle = "rgba(255, 107, 74, 0.55)";
+        ctx.lineWidth = Math.max(2, Math.round(lineW * 0.6));
+        if (typeof ctx.setLineDash === "function") ctx.setLineDash([8, 6]);
+        ctx.strokeRect(b[0] * sx, b[1] * sy, (b[2] - b[0]) * sx, (b[3] - b[1]) * sy);
+        ctx.restore();
+      }
+      ctx.save();
+      ctx.strokeStyle = "#ff6b4a";
+      ctx.lineWidth = Math.max(4, Math.round(lineW * 1.4));
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
+      ctx.beginPath();
+      for (let i = 0; i < selection.strokePts.length; i++) {
+        const px = selection.strokePts[i].x * sx;
+        const py = selection.strokePts[i].y * sy;
+        if (i === 0) ctx.moveTo(px, py);
+        else ctx.lineTo(px, py);
+      }
+      ctx.stroke();
+      ctx.restore();
+    } else if (b) {
+      const rx = b[0] * sx;
+      const ry = b[1] * sy;
+      const rw = Math.max(4, (b[2] - b[0]) * sx);
+      const rh = Math.max(4, (b[3] - b[1]) * sy);
+      ctx.save();
+      ctx.fillStyle = "rgba(255, 107, 74, 0.16)";
+      ctx.fillRect(rx, ry, rw, rh);
+      ctx.strokeStyle = "#ff6b4a";
+      ctx.lineWidth = lineW;
+      ctx.strokeRect(rx, ry, rw, rh);
+      ctx.restore();
+    }
+
+    if (b) {
+      const radius = Math.max(14, Math.round(off.width / 54));
+      const bx = Math.max(radius + 4, Math.min(off.width - radius - 4, b[0] * sx));
+      const by = Math.max(radius + 4, Math.min(off.height - radius - 4, b[1] * sy));
+      ctx.save();
+      ctx.fillStyle = "#ff6b4a";
+      ctx.beginPath();
+      ctx.arc(bx, by, radius, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#0d1117";
+      ctx.font = "bold " + Math.max(12, Math.round(radius * 0.95)) + "px monospace";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText("#" + badgeNum, bx, by + 1);
+      ctx.restore();
+    }
+
+    const dataUrl = off.toDataURL("image/png");
+    const prefix = "data:image/png;base64,";
+    if (typeof dataUrl === "string" && dataUrl.startsWith(prefix)) {
+      return dataUrl.slice(prefix.length);
+    }
+    return null;
+  } catch (_) {
+    return null;
+  }
+}
+
+function openAnnotPopover(selection) {
+  const draftId = nextAnnotDraftId++;
+  annotPending = Object.assign({ draftId }, selection);
+  if (annotSubmittingDraftId === draftId) annotSubmittingDraftId = null;
+  hoveredMirrorNode = null;
+  const primary = annotPending.nodes && annotPending.nodes.length ? annotPending.nodes[0] : null;
+  if (primary) {
+    const extra = annotPending.nodes.length > 1 ? " (+" + (annotPending.nodes.length - 1) + " more)" : "";
+    annotPopTarget.textContent = formatNodeSummary(primary) + extra;
+  } else {
+    annotPopTarget.textContent = annotPending.kind + " [" + annotPending.bounds.join(",") + "]";
+  }
+  annotComment.value = "";
+  annotPopErr.textContent = "";
+  annotPopErr.hidden = true;
+  annotSubmit.disabled = false;
+  if (annotSubmitNoShot) {
+    annotSubmitNoShot.hidden = true;
+    annotSubmitNoShot.disabled = false;
+  }
+  annotPopover.hidden = false;
+
+  const box = displayRectToOverlay(annotPending.bounds);
+  const wrapRect = screenWrap.getBoundingClientRect();
+  const popW = Math.min(295, Math.max(200, (wrapRect.width || 320) - 16));
+  const popH = 155;
+  let left = 8;
+  let top = 8;
+  if (box) {
+    left = Math.max(8, Math.min((wrapRect.width || popW + 16) - popW - 8, box.left));
+    if (box.top + box.height + popH + 12 <= (wrapRect.height || 400)) {
+      top = box.top + box.height + 8;
+    } else if (box.top - popH - 8 >= 8) {
+      top = box.top - popH - 8;
+    } else {
+      top = Math.max(8, Math.min((wrapRect.height || popH + 16) - popH - 8, box.top + 8));
+    }
+  }
+  annotPopover.style.left = left.toFixed(0) + "px";
+  annotPopover.style.top = top.toFixed(0) + "px";
+  renderAnnotOverlay();
+  annotComment.focus();
+}
+
+function closeAnnotPopover() {
+  annotPending = null;
+  annotSubmittingDraftId = null;
+  if (annotPopover) annotPopover.hidden = true;
+  if (annotPopErr) { annotPopErr.textContent = ""; annotPopErr.hidden = true; }
+  if (annotSubmit) annotSubmit.disabled = false;
+  if (annotSubmitNoShot) {
+    annotSubmitNoShot.hidden = true;
+    annotSubmitNoShot.disabled = false;
+  }
+  renderAnnotOverlay();
+}
+
+function showAnnotPanelNotice(msg) {
+  if (!annotPanelMsg) return;
+  if (!msg) {
+    annotPanelMsg.textContent = "";
+    annotPanelMsg.hidden = true;
+  } else {
+    annotPanelMsg.textContent = msg;
+    annotPanelMsg.hidden = false;
+  }
+}
+
+function isSameAnnotSession(sid, gen, guestGen) {
+  return (
+    annotGeneration === gen &&
+    !sessionEnded &&
+    !!current &&
+    current.session_id === sid &&
+    currentGuestGen === guestGen
+  );
+}
+
+function isOutcomeUnknownResponse(resp, data) {
+  return (
+    resp.status === 504 ||
+    !!(data && (data.outcome_unknown === true || data.code === "OUTCOME_UNKNOWN"))
+  );
+}
+
+function annotationsApiPath(extra) {
+  const sid = encodeURIComponent(current.session_id);
+  const g = (typeof currentGuestGen === "number" && currentGuestGen > 0)
+    ? ("g=" + encodeURIComponent(currentGuestGen))
+    : "";
+  const base = "/api/annotations/" + sid + (extra || "");
+  if (!g) return auth(base);
+  return auth(base + (base.includes("?") ? "&" : "?") + g);
+}
+
+function resetAnnotationsState() {
+  annotGeneration += 1;
+  annotMode = false;
+  annotTool = "pick";
+  annotItems = [];
+  annotOpenCount = 0;
+  annotDraft = null;
+  hoveredMirrorNode = null;
+  showAnnotPanelNotice("");
+  closeAnnotPopover();
+  renderAnnotationsPanel();
+  renderAnnotOverlay();
+}
+
+function setAnnotMode(enabled) {
+  const next = !!enabled && !!current && !sessionEnded && canAnnotateSession(current);
+  if (next === annotMode) return;
+  annotMode = next;
+  if (annotMode) {
+    cancelActivePointers();
+    releaseHeldGuestKeys();
+    pinchMode = false;
+    scheduleTreeRefresh(50, true);
+    fetchAnnotations();
+  } else {
+    annotDraft = null;
+    hoveredMirrorNode = null;
+    closeAnnotPopover();
+  }
+  applyToolbarUi();
+  renderAnnotOverlay();
+}
+
+function setAnnotTool(tool) {
+  if (tool !== "pick" && tool !== "box" && tool !== "draw") return;
+  annotTool = tool;
+  if (tool !== "pick") hoveredMirrorNode = null;
+  applyToolbarUi();
+  renderAnnotOverlay();
+}
+
+function setAsideTab(tab, preserveNotice) {
+  asideTab = tab === "annotations" ? "annotations" : "activity";
+  const isAnnot = asideTab === "annotations";
+  tabActivity.classList.toggle("active", !isAnnot);
+  tabActivity.setAttribute("aria-selected", String(!isAnnot));
+  tabAnnotations.classList.toggle("active", isAnnot);
+  tabAnnotations.setAttribute("aria-selected", String(isAnnot));
+  paneActivity.hidden = isAnnot;
+  paneAnnotations.hidden = !isAnnot;
+  if (isAnnot && current && !sessionEnded && canAnnotateSession(current)) {
+    return fetchAnnotations(preserveNotice);
+  }
+  return null;
+}
+
+// Resolves true only when a list snapshot from this GET, or from a newer one,
+// was applied to the panel.
+function fetchAnnotations(preserveNotice) {
+  if (!current || sessionEnded || !canAnnotateSession(current)) return Promise.resolve(false);
+  const seq = ++annotListSeq;
+  annotListLatest = loadAnnotations(seq, preserveNotice);
+  return annotListLatest;
+}
+
+async function loadAnnotations(seq, preserveNotice) {
+  const view = captureAnnotView();
+  const revision = annotRevision;
+  let list = null;
+  try {
+    const resp = await fetch(annotationsApiPath("?status=all"), { cache: "no-store" });
+    if (!view.same()) return false;
+    if (resp.status === 409) {
+      markSessionEnded(view.sid);
+      return false;
+    }
+    if (resp.ok) {
+      const data = await resp.json();
+      if (data && data.ok && Array.isArray(data.annotations)) list = data.annotations;
+    }
+  } catch (_) {}
+  if (!view.same()) return false;
+  if (seq !== annotListSeq) return annotListLatest;
+  if (!list) return false;
+  // A mutation reply landed while this GET was in flight, so it may predate it.
+  if (revision !== annotRevision) return fetchAnnotations(preserveNotice);
+  annotItems = list;
+  if (!preserveNotice) showAnnotPanelNotice("");
+  renderAnnotationsPanel();
+  renderAnnotOverlay();
+  return true;
+}
+
+function captureAnnotView() {
+  const sid = current.session_id;
+  const gen = annotGeneration;
+  const guestGen = currentGuestGen;
+  return { sid, same: () => isSameAnnotSession(sid, gen, guestGen) };
+}
+
+// Sends one mutation. `outcome` is "ok" (confirmed), "rejected" (the server
+// answered with an error), "unknown" (it may have run: no reply, an unreadable
+// success body, or OUTCOME_UNKNOWN) or "stale" (this view is gone).
+async function sendAnnotationMutation(view, path, init) {
+  let resp = null;
+  let data = null;
+  try {
+    resp = await fetch(path, init);
+    data = await resp.json();
+  } catch (_) {}
+  if (!view.same()) return { outcome: "stale" };
+  if (resp && resp.status === 409) {
+    markSessionEnded(view.sid);
+    return { outcome: "stale" };
+  }
+  if (
+    !resp ||
+    isOutcomeUnknownResponse(resp, data) ||
+    (resp.ok && !(data && typeof data.ok === "boolean"))
+  ) {
+    return { outcome: "unknown", resp, data };
+  }
+  return { outcome: resp.ok && data.ok ? "ok" : "rejected", resp, data };
+}
+
+async function reconcileUnknownMutation(view, summary) {
+  showAnnotPanelNotice(summary + " Refreshing the list…");
+  const refreshed = await fetchAnnotations(true);
+  if (!view.same()) return;
+  showAnnotPanelNotice(summary + " " + (refreshed ? "Refreshed list." : ANNOT_REFRESH_FAILED));
+}
+
+async function warnIfListStale(view, refresh) {
+  if ((await refresh) || !view.same()) return;
+  showAnnotPanelNotice("The change was saved, but the list could not be refreshed; it may be out of date.");
+}
+
+// Finds an item on the refreshed list that an unconfirmed Add created: new
+// since that attempt was sent, with the same kind, comment and bounds.
+function findSavedAttempt(attempts) {
+  for (const attempt of attempts) {
+    const item = annotItems.find((a) =>
+      !attempt.knownIds.has(a.id) &&
+      a.kind === attempt.kind &&
+      String(a.comment || "").trim() === attempt.comment &&
+      String(a.bounds) === attempt.bounds
+    );
+    if (item) return { item, attempt };
+  }
+  return null;
+}
+
+function finishSavedDraft(draft, saved) {
+  const id = saved.item.id;
+  draft.unknownSaves = draft.unknownSaves.filter((a) => a !== saved.attempt);
+  for (const attempt of draft.unknownSaves) attempt.knownIds.add(id);
+  if (!draft.unknownSaves.length) draft.unknownSaves = null;
+  showAnnotPanelNotice("Annotation #" + id + " was saved (found in the refreshed list). It was not sent again.");
+  if (!annotPending || annotPending.draftId !== draft.draftId) return;
+  if (String(annotComment.value || "").trim() === saved.attempt.comment) {
+    closeAnnotPopover();
+    setAsideTab("annotations", true);
+    return;
+  }
+  annotPopErr.textContent =
+    "Your earlier text was saved as #" + id + ". Add saves the edited text as a new annotation.";
+  annotPopErr.hidden = false;
+  annotSubmit.disabled = false;
+  if (annotSubmitNoShot) annotSubmitNoShot.disabled = false;
+}
+
+async function submitAnnotation(skipScreenshot) {
+  if (!current || sessionEnded || !canAnnotateSession(current) || !annotPending) return;
+  const draft = annotPending;
+  const submittedDraftId = draft.draftId;
+  if (annotSubmittingDraftId === submittedDraftId) return;
+  const isSameDraft = () => !!(annotPending && annotPending.draftId === submittedDraftId);
+  const enableSubmit = () => {
+    annotSubmit.disabled = false;
+    if (annotSubmitNoShot) annotSubmitNoShot.disabled = false;
+  };
+
+  const view = captureAnnotView();
+  if (draft.unknownSaves) {
+    // An earlier Add was never confirmed: look for it before sending again.
+    annotSubmittingDraftId = submittedDraftId;
+    annotSubmit.disabled = true;
+    if (annotSubmitNoShot) annotSubmitNoShot.disabled = true;
+    annotPopErr.textContent = "Checking whether the earlier attempt was saved…";
+    annotPopErr.hidden = false;
+    const refreshed = await fetchAnnotations(true);
+    if (!view.same() || !isSameDraft()) return;
+    annotSubmittingDraftId = null;
+    if (!refreshed) {
+      annotPopErr.textContent =
+        "Save outcome unknown — nothing was resent. " + ANNOT_REFRESH_FAILED;
+      enableSubmit();
+      return;
+    }
+    const saved = findSavedAttempt(draft.unknownSaves);
+    if (saved) {
+      finishSavedDraft(draft, saved);
+      return;
+    }
+  }
+
+  // Read after the check above, so text edited while it ran is what gets sent.
+  const comment = String(annotComment.value || "").trim();
+  if (!comment) {
+    annotPopErr.textContent = "Please enter a comment.";
+    annotPopErr.hidden = false;
+    enableSubmit();
+    annotComment.focus();
+    return;
+  }
+
+  const badgeNum = nextAnnotationNumber();
+  let pngBase64 = null;
+  if (!skipScreenshot) {
+    pngBase64 = compositeAnnotationPng(draft, badgeNum);
+    if (pngBase64 && decodedBase64ByteLength(pngBase64) > MAX_ANNOTATION_PNG_BYTES) {
+      annotPopErr.textContent =
+        "Annotated screenshot exceeds the 4 MiB limit. Click \"Save without screenshot\" to save without an image.";
+      annotPopErr.hidden = false;
+      if (annotSubmitNoShot) {
+        annotSubmitNoShot.hidden = false;
+        annotSubmitNoShot.disabled = false;
+      }
+      annotSubmit.disabled = false;
+      return;
+    }
+  }
+
+  annotSubmittingDraftId = submittedDraftId;
+  annotSubmit.disabled = true;
+  if (annotSubmitNoShot) annotSubmitNoShot.disabled = true;
+  annotPopErr.hidden = true;
+
+  const { w: dw, h: dh } = currentDisplaySize();
+  const payload = {
+    action: "add",
+    comment,
+    kind: draft.kind,
+    bounds: draft.bounds,
+    nodes: draft.nodes || [],
+    display: draft.display || { w: dw, h: dh },
+  };
+  if (draft.activity) payload.activity = draft.activity;
+  if (draft.package) payload.package = draft.package;
+  if (pngBase64) payload.image_png_base64 = pngBase64;
+  const attempt = {
+    knownIds: new Set(annotItems.map((a) => a.id)),
+    kind: draft.kind,
+    comment,
+    bounds: String(draft.bounds),
+  };
+
+  const { outcome, resp, data } = await sendAnnotationMutation(view, annotationsApiPath(""), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (outcome === "stale") return;
+  if (outcome === "unknown") {
+    draft.unknownSaves = (draft.unknownSaves || []).concat(attempt);
+    const timedOut = !!resp && isOutcomeUnknownResponse(resp, data);
+    const summary = "Annotation save " + (timedOut ? "timed out" : "was not confirmed")
+      + " — it may have already succeeded.";
+    showAnnotPanelNotice(summary + " Refreshing the list…");
+    if (isSameDraft()) {
+      annotPopErr.textContent = "Save outcome unknown — checking the list…";
+      annotPopErr.hidden = false;
+    }
+    // Add stays disabled until the list answers.
+    const refreshed = await fetchAnnotations(true);
+    if (!view.same()) return;
+    if (annotSubmittingDraftId === submittedDraftId) annotSubmittingDraftId = null;
+    const saved = refreshed ? findSavedAttempt(draft.unknownSaves || []) : null;
+    if (saved) {
+      finishSavedDraft(draft, saved);
+      return;
+    }
+    const listState = refreshed
+      ? "Refreshed list; this annotation is not shown yet."
+      : ANNOT_REFRESH_FAILED;
+    showAnnotPanelNotice(summary + " " + listState);
+    if (isSameDraft()) {
+      annotPopErr.textContent =
+        "Save outcome unknown — this annotation may have already been saved. " + listState
+        + " Add checks the list again before resending.";
+      annotPopErr.hidden = false;
+      enableSubmit();
+    }
+    return;
+  }
+  if (annotSubmittingDraftId === submittedDraftId) annotSubmittingDraftId = null;
+  if (outcome === "rejected") {
+    if (isSameDraft()) {
+      annotPopErr.textContent = (data && data.error) || ("Failed (HTTP " + resp.status + ")");
+      annotPopErr.hidden = false;
+      if (annotSubmitNoShot && (resp.status === 413 || String(annotPopErr.textContent).includes("image_png_base64"))) {
+        annotSubmitNoShot.hidden = false;
+        annotSubmitNoShot.disabled = false;
+      }
+      annotSubmit.disabled = false;
+    }
+    return;
+  }
+  annotRevision += 1;
+  if (data.annotation && !annotItems.some((a) => a.id === data.annotation.id)) {
+    annotItems.push(data.annotation);
+  }
+  showAnnotPanelNotice("");
+  if (isSameDraft()) {
+    closeAnnotPopover();
+  }
+  const refresh = setAsideTab("annotations");
+  renderAnnotationsPanel();
+  renderAnnotOverlay();
+  await warnIfListStale(view, refresh);
+}
+
+// Applies a confirmed mutation locally, then reloads the server's list: replies
+// can arrive in a different order from the one the server processed them in.
+async function applyConfirmedMutation(view, change) {
+  annotRevision += 1;
+  change();
+  showAnnotPanelNotice("");
+  renderAnnotationsPanel();
+  renderAnnotOverlay();
+  await warnIfListStale(view, fetchAnnotations());
+}
+
+async function resolveAnnotation(id) {
+  if (!current || sessionEnded || !canAnnotateSession(current)) return;
+  const view = captureAnnotView();
+  const { outcome, data } = await sendAnnotationMutation(view, annotationsApiPath(""), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action: "resolve", id }),
+  });
+  if (outcome === "unknown") {
+    await reconcileUnknownMutation(view,
+      "Resolve outcome unknown — annotation #" + id + " may already be resolved.");
+  } else if (outcome === "ok") {
+    await applyConfirmedMutation(view, () => {
+      const idx = annotItems.findIndex((a) => a.id === id);
+      if (idx >= 0 && data.annotation) annotItems[idx] = data.annotation;
+    });
+  }
+}
+
+async function deleteAnnotation(id) {
+  if (!current || sessionEnded || !canAnnotateSession(current)) return;
+  const view = captureAnnotView();
+  const { outcome } = await sendAnnotationMutation(view,
+    annotationsApiPath("/" + encodeURIComponent(id)), { method: "DELETE" });
+  if (outcome === "unknown") {
+    await reconcileUnknownMutation(view,
+      "Delete outcome unknown — annotation #" + id + " may already be deleted.");
+  } else if (outcome === "ok") {
+    await applyConfirmedMutation(view, () => {
+      annotItems = annotItems.filter((a) => a.id !== id);
+    });
+  }
+}
+
+async function clearAnnotations() {
+  if (!current || sessionEnded || !canAnnotateSession(current)) return;
+  const view = captureAnnotView();
+  // Only what was listed when Clear was sent is known to be gone; anything
+  // added since may have been accepted after the Clear.
+  const sentIds = new Set(annotItems.map((a) => a.id));
+  const { outcome } = await sendAnnotationMutation(view, annotationsApiPath(""), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action: "clear", status: "all" }),
+  });
+  if (outcome === "unknown") {
+    await reconcileUnknownMutation(view,
+      "Clear outcome unknown — annotations may already have been cleared.");
+  } else if (outcome === "ok") {
+    await applyConfirmedMutation(view, () => {
+      annotItems = annotItems.filter((a) => !sentIds.has(a.id));
+    });
+  }
+}
+
+function formatAnnotationBlock(item) {
+  const lines = [];
+  const act = item.activity || "unknown activity";
+  const statusTag = item.status === "resolved" ? " (resolved)" : "";
+  lines.push("### #" + item.id + " [" + (item.kind || "element") + "] — " + act + statusTag);
+  const nodes = Array.isArray(item.nodes) ? item.nodes : [];
+  if (nodes.length > 0) {
+    lines.push("- **Element:** " + formatNodeSummary(nodes[0]));
+    if (nodes.length > 1) {
+      const extras = nodes.slice(1, 5).map((n) => formatNodeSummary(n)).join("; ");
+      lines.push("- **Other intersecting views:** " + extras + (nodes.length > 5 ? " (+" + (nodes.length - 5) + " more)" : ""));
+    }
+  } else if (item.bounds) {
+    lines.push("- **Bounds:** `[" + item.bounds.join(",") + "]`");
+  }
+  lines.push("- **Comment:** " + item.comment);
+  if (item.screenshot_path) {
+    lines.push("- **Screenshot:** `" + item.screenshot_path + "`");
+  }
+  return lines.join("\n");
+}
+
+function formatAnnotationsForAgent(items) {
+  const list = Array.isArray(items) ? items : [];
+  if (!list.length) return "";
+  const sid = current ? current.session_id : "session";
+  const pkg = (current && current.package) || mirrorMeta.package || "";
+  const header = "Please address the following Android UI annotation" + (list.length === 1 ? "" : "s")
+    + " from ACOS session `" + sid + "`" + (pkg ? " (" + pkg + ")" : "") + ":";
+  const blocks = list.map(formatAnnotationBlock);
+  const footer = "Use `acos_annotations` (`{\"action\": \"resolve\", \"id\": <id>}`) once each item is fixed.";
+  return [header, "", blocks.join("\n\n"), "", footer].join("\n");
+}
+
+function renderAnnotationsPanel() {
+  const openItems = annotItems.filter((a) => a.status === "open");
+  annotOpenCount = openItems.length;
+  if (tabAnnotations) {
+    tabAnnotations.textContent = "Annotations (" + annotOpenCount + ")";
+  }
+  applyToolbarUi();
+  const canAnnot = canAnnotateSession(current);
+  if (btnAnnotCopyAll) btnAnnotCopyAll.disabled = !canAnnot || openItems.length === 0;
+  if (btnAnnotClear) btnAnnotClear.disabled = !canAnnot || annotItems.length === 0;
+  if (!annotList || !annotEmpty) return;
+
+  const visible = annotShowResolvedFlag ? annotItems : openItems;
+  annotList.textContent = "";
+  annotEmpty.hidden = visible.length > 0;
+  if (!visible.length) {
+    if (current && !canAnnot) {
+      annotEmpty.textContent = "Annotations require an interactive acos serve session.";
+    } else {
+      annotEmpty.textContent = annotItems.length > 0
+        ? "All annotations are resolved. Toggle Resolved to review them."
+        : "No open annotations yet. Click Annotate to pick a view, draw a box, or sketch on the screen.";
+    }
+    return;
+  }
+
+  for (const item of visible) {
+    const li = el("li", "annot-item" + (item.status === "resolved" ? " resolved" : ""));
+    const head = el("div", "annot-item-head");
+    head.appendChild(el("span", "annot-num", "#" + item.id));
+    head.appendChild(el("span", "annot-tag", item.kind || "element"));
+    if (item.status === "resolved") {
+      head.appendChild(el("span", "annot-tag ok", "resolved"));
+    }
+    const actName = item.activity ? shortClassName(item.activity) : "-";
+    const actEl = el("span", "annot-act", actName);
+    actEl.title = item.activity || "";
+    head.appendChild(actEl);
+    li.appendChild(head);
+
+    const nodes = Array.isArray(item.nodes) ? item.nodes : [];
+    const viewSummary = nodes.length > 0
+      ? formatNodeSummary(nodes[0]) + (nodes.length > 1 ? " (+" + (nodes.length - 1) + " more)" : "")
+      : (item.bounds ? "[" + item.bounds.join(",") + "]" : "");
+    if (viewSummary) {
+      li.appendChild(el("div", "annot-view", viewSummary));
+    }
+
+    li.appendChild(el("div", "annot-comment", item.comment));
+
+    if (item.screenshot_path) {
+      const shotEl = el("div", "annot-shot", "png: " + projectName(item.screenshot_path));
+      shotEl.title = item.screenshot_path;
+      li.appendChild(shotEl);
+    }
+
+    const actions = el("div", "annot-item-actions");
+    const copyBtn = el("button", null, "Copy");
+    copyBtn.type = "button";
+    copyBtn.addEventListener("click", () => {
+      copyTextToClipboard(formatAnnotationsForAgent([item]), copyBtn, "Copy", "Copied!");
+    });
+    actions.appendChild(copyBtn);
+
+    if (item.status === "open") {
+      const resBtn = el("button", null, "Resolve");
+      resBtn.type = "button";
+      resBtn.addEventListener("click", () => resolveAnnotation(item.id));
+      actions.appendChild(resBtn);
+    }
+
+    const delBtn = el("button", "danger", "Delete");
+    delBtn.type = "button";
+    delBtn.addEventListener("click", () => deleteAnnotation(item.id));
+    actions.appendChild(delBtn);
+
+    li.appendChild(actions);
+    annotList.appendChild(li);
+  }
+}
+
+function handleAnnotPointerDown(e, pt) {
+  if (annotPending) closeAnnotPopover();
+  const { w: dw, h: dh } = currentDisplaySize();
+  const act = currentActivityName();
+  const pkg = mirrorMeta.package || (current && current.package) || "";
+
+  if (annotTool === "pick") {
+    const frameSnapshot = captureFrameSnapshot();
+    const node = findDeepestNodeAt(pt);
+    const bounds = node
+      ? node.bounds
+      : [
+          Math.max(0, pt.x - 24),
+          Math.max(0, pt.y - 24),
+          Math.min(dw, pt.x + 24),
+          Math.min(dh, pt.y + 24),
+        ];
+    openAnnotPopover({
+      kind: "element",
+      bounds,
+      nodes: node ? [snapshotNode(node)] : [],
+      activity: act,
+      package: pkg,
+      display: { w: dw, h: dh },
+      frameSnapshot,
+    });
+    return;
+  }
+
+  try { screenWrap.setPointerCapture(e.pointerId); } catch (_) {}
+  if (annotTool === "box") {
+    annotDraft = {
+      pointerId: e.pointerId,
+      epoch: screenEpoch,
+      tool: "box",
+      startPt: pt,
+      curPt: pt,
+      bounds: [pt.x, pt.y, Math.min(dw, pt.x + 1), Math.min(dh, pt.y + 1)],
+    };
+  } else {
+    annotDraft = {
+      pointerId: e.pointerId,
+      epoch: screenEpoch,
+      tool: "draw",
+      points: [pt],
+      bounds: [pt.x, pt.y, Math.min(dw, pt.x + 1), Math.min(dh, pt.y + 1)],
+    };
+  }
+  renderAnnotOverlay();
+}
+
+function handleAnnotPointerMove(e) {
+  if (annotDraft && e.pointerId === annotDraft.pointerId) {
+    const pt = clientToDisplay(e.clientX, e.clientY, true);
+    if (!pt) return;
+    if (annotDraft.tool === "box") {
+      annotDraft.curPt = pt;
+      annotDraft.bounds = [
+        Math.min(annotDraft.startPt.x, pt.x),
+        Math.min(annotDraft.startPt.y, pt.y),
+        Math.max(annotDraft.startPt.x, pt.x),
+        Math.max(annotDraft.startPt.y, pt.y),
+      ];
+    } else if (annotDraft.tool === "draw") {
+      const last = annotDraft.points[annotDraft.points.length - 1];
+      if (!last || Math.hypot(pt.x - last.x, pt.y - last.y) >= 3) {
+        if (annotDraft.points.length < 512) annotDraft.points.push(pt);
+      }
+    }
+    renderAnnotOverlay();
+    return;
+  }
+  if (annotTool === "pick" && !annotPending) {
+    const pt = clientToDisplay(e.clientX, e.clientY, false);
+    const hit = pt ? findDeepestNodeAt(pt) : null;
+    if (hit !== hoveredMirrorNode) {
+      hoveredMirrorNode = hit;
+      renderAnnotOverlay();
+    }
+  }
+}
+
+function finishAnnotPointer(e, cancelled) {
+  if (!annotDraft || e.pointerId !== annotDraft.pointerId) return;
+  const draft = annotDraft;
+  annotDraft = null;
+  try {
+    if (screenWrap.hasPointerCapture && screenWrap.hasPointerCapture(e.pointerId)) {
+      screenWrap.releasePointerCapture(e.pointerId);
+    }
+  } catch (_) {}
+  if (cancelled) {
+    renderAnnotOverlay();
+    return;
+  }
+  if (draft.epoch !== screenEpoch || isRotationPending()) {
+    // The drawn coordinates belong to a screen that is no longer shown.
+    showAnnotPanelNotice("Screen changed during the gesture; it was discarded. Draw it again.");
+    renderAnnotOverlay();
+    return;
+  }
+  const frameSnapshot = captureFrameSnapshot();
+  const { w: dw, h: dh } = currentDisplaySize();
+  const act = currentActivityName();
+  const pkg = mirrorMeta.package || (current && current.package) || "";
+
+  if (draft.tool === "box") {
+    const endPt = clientToDisplay(e.clientX, e.clientY, true) || draft.curPt;
+    const l = Math.min(draft.startPt.x, endPt.x);
+    const t = Math.min(draft.startPt.y, endPt.y);
+    const r = Math.max(draft.startPt.x, endPt.x);
+    const b = Math.max(draft.startPt.y, endPt.y);
+    if ((r - l) < 8 && (b - t) < 8) {
+      // Tiny drag: fall back to picking deepest element at click point
+      const node = findDeepestNodeAt(endPt);
+      const bounds = node
+        ? node.bounds
+        : [Math.max(0, l - 20), Math.max(0, t - 20), Math.min(dw, r + 20), Math.min(dh, b + 20)];
+      openAnnotPopover({
+        kind: "element",
+        bounds,
+        nodes: node ? [snapshotNode(node)] : [],
+        activity: act,
+        package: pkg,
+        display: { w: dw, h: dh },
+        frameSnapshot,
+      });
+      return;
+    }
+    const bounds = [l, t, r, b];
+    openAnnotPopover({
+      kind: "box",
+      bounds,
+      nodes: findNodesIntersecting(bounds),
+      activity: act,
+      package: pkg,
+      display: { w: dw, h: dh },
+      frameSnapshot,
+    });
+  } else if (draft.tool === "draw") {
+    const pts = draft.points;
+    let minX = dw, minY = dh, maxX = 0, maxY = 0;
+    for (const p of pts) {
+      if (p.x < minX) minX = p.x;
+      if (p.y < minY) minY = p.y;
+      if (p.x > maxX) maxX = p.x;
+      if (p.y > maxY) maxY = p.y;
+    }
+    if (maxX - minX < 12) { minX = Math.max(0, minX - 12); maxX = Math.min(dw, maxX + 12); }
+    if (maxY - minY < 12) { minY = Math.max(0, minY - 12); maxY = Math.min(dh, maxY + 12); }
+    const bounds = [Math.round(minX), Math.round(minY), Math.round(maxX), Math.round(maxY)];
+    openAnnotPopover({
+      kind: "freehand",
+      bounds,
+      nodes: findNodesIntersecting(bounds),
+      strokePts: pts,
+      activity: act,
+      package: pkg,
+      display: { w: dw, h: dh },
+      frameSnapshot,
+    });
+  }
+}
+
 screenWrap.addEventListener("pointerdown", (e) => {
   if (!current || sessionEnded) return;
+  if (isInsideElement(e.target, annotPopover)) return;
   if (e.pointerType === "mouse" && e.button !== 0) return;
   const pt = clientToDisplay(e.clientX, e.clientY, false);
   if (!pt) return;
   e.preventDefault();
+  if (annotMode) {
+    handleAnnotPointerDown(e, pt);
+    return;
+  }
   screenWrap.focus({ preventScroll: true });
   if (current.watch_only) {
     applyToolbarUi();
@@ -1706,6 +3402,10 @@ screenWrap.addEventListener("pointerdown", (e) => {
 });
 
 screenWrap.addEventListener("pointermove", (e) => {
+  if (annotMode) {
+    handleAnnotPointerMove(e);
+    return;
+  }
   const entry = activePointers.get(e.pointerId);
   if (!entry) return;
   const pt = clientToDisplay(e.clientX, e.clientY, true);
@@ -1724,7 +3424,19 @@ screenWrap.addEventListener("pointermove", (e) => {
   updatePointerVisuals(entry);
 });
 
+screenWrap.addEventListener("pointerleave", () => {
+  if (hoveredMirrorNode) {
+    hoveredMirrorNode = null;
+    renderAnnotOverlay();
+  }
+});
+
 function finishPointer(e, phase) {
+  if (annotDraft && e.pointerId === annotDraft.pointerId) {
+    finishAnnotPointer(e, phase === "cancel");
+    return;
+  }
+  if (annotMode) return;
   const entry = activePointers.get(e.pointerId);
   if (!entry) return;
   const pt = clientToDisplay(e.clientX, e.clientY, true) || { x: entry.x, y: entry.y };
@@ -1760,7 +3472,8 @@ screenWrap.addEventListener("pointerup", (e) => finishPointer(e, "up"));
 screenWrap.addEventListener("pointercancel", (e) => finishPointer(e, "cancel"));
 
 screenWrap.addEventListener("wheel", (e) => {
-  if (!current || sessionEnded) return;
+  if (!current || sessionEnded || annotMode) return;
+  if (isInsideElement(e.target, annotPopover)) return;
   if (!hasDecodedFrame() || isRotationPending() || activePointers.size > 0) return;
   const pt = clientToDisplay(e.clientX, e.clientY, false);
   if (!pt) return;
@@ -1786,7 +3499,23 @@ screenWrap.addEventListener("wheel", (e) => {
 }, { passive: false });
 
 document.addEventListener("keydown", (e) => {
-  if (!current || detail.hidden || current.watch_only || sessionEnded) return;
+  if (!current || detail.hidden || sessionEnded) return;
+  if (!annotPopover.hidden) {
+    if (e.key === "Escape") {
+      e.preventDefault();
+      closeAnnotPopover();
+    }
+    return;
+  }
+  if (isEditableElement(e.target) || isEditableElement(document.activeElement)) return;
+  if (annotMode) {
+    if (e.key === "Escape") {
+      e.preventDefault();
+      setAnnotMode(false);
+    }
+    return;
+  }
+  if (current.watch_only) return;
   if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey) {
     if (e.key && e.key.toLowerCase() === "a" && document.activeElement === screenWrap) {
       e.preventDefault();
@@ -1817,6 +3546,9 @@ document.addEventListener("keydown", (e) => {
 
 document.addEventListener("keyup", (e) => {
   if (!current || detail.hidden) return;
+  if (!annotPopover.hidden || annotMode || isEditableElement(e.target) || isEditableElement(document.activeElement)) {
+    return;
+  }
   const kc = KEY_MAP[e.key];
   if (kc && heldGuestKeys.delete(kc)) {
     e.preventDefault();
@@ -1826,6 +3558,9 @@ document.addEventListener("keyup", (e) => {
 
 document.addEventListener("paste", (e) => {
   if (!current || detail.hidden || current.watch_only || sessionEnded) return;
+  if (!annotPopover.hidden || annotMode || isEditableElement(e.target) || isEditableElement(document.activeElement)) {
+    return;
+  }
   const raw = (e.clipboardData && e.clipboardData.getData("text/plain")) || "";
   if (!raw) return;
   e.preventDefault();
@@ -1907,6 +3642,56 @@ btnRotate.addEventListener("click", () => {
   screenWrap.focus({ preventScroll: true });
 });
 
+btnAnnotate.addEventListener("click", () => {
+  setAnnotMode(!annotMode);
+});
+btnAnnotPick.addEventListener("click", () => setAnnotTool("pick"));
+btnAnnotBox.addEventListener("click", () => setAnnotTool("box"));
+btnAnnotDraw.addEventListener("click", () => setAnnotTool("draw"));
+btnAnnotCopy.addEventListener("click", () => {
+  const openItems = annotItems.filter((a) => a.status === "open");
+  if (!openItems.length) return;
+  copyTextToClipboard(formatAnnotationsForAgent(openItems), btnAnnotCopy, "Copy for Agent", "Copied!");
+});
+annotSubmit.addEventListener("click", () => submitAnnotation(false));
+if (annotSubmitNoShot) {
+  annotSubmitNoShot.addEventListener("click", () => submitAnnotation(true));
+}
+annotCancel.addEventListener("click", () => closeAnnotPopover());
+annotComment.addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && !e.shiftKey) {
+    e.preventDefault();
+    submitAnnotation(false);
+  } else if (e.key === "Escape") {
+    e.preventDefault();
+    closeAnnotPopover();
+  }
+});
+tabActivity.addEventListener("click", () => setAsideTab("activity"));
+tabAnnotations.addEventListener("click", () => setAsideTab("annotations"));
+btnAnnotCopyAll.addEventListener("click", () => {
+  const openItems = annotItems.filter((a) => a.status === "open");
+  if (!openItems.length) return;
+  copyTextToClipboard(formatAnnotationsForAgent(openItems), btnAnnotCopyAll, "Copy All for Agent", "Copied!");
+});
+btnAnnotClear.addEventListener("click", () => clearAnnotations());
+annotShowResolved.addEventListener("change", () => {
+  annotShowResolvedFlag = !!annotShowResolved.checked;
+  renderAnnotationsPanel();
+});
+
+window.addEventListener("resize", () => {
+  if (current && !detail.hidden) positionMirrorDom();
+});
+if (typeof ResizeObserver === "function" && screenWrap) {
+  try {
+    const ro = new ResizeObserver(() => {
+      if (current && !detail.hidden) positionMirrorDom();
+    });
+    ro.observe(screenWrap);
+  } catch (_) {}
+}
+
 $("back").addEventListener("click", closeSession);
 window.addEventListener("blur", () => {
   releaseHeldGuestKeys();
@@ -1919,6 +3704,7 @@ document.addEventListener("visibilitychange", () => {
   }
 });
 window.addEventListener("pagehide", () => {
+  cancelMirrorFetch();
   closeWs();
   stopFrameStream();
   if (source) { source.close(); source = null; }
@@ -1927,6 +3713,10 @@ window.addEventListener("pageshow", (e) => {
   if (e.persisted && current && !sessionEnded && current.stream) {
     connectEvents(current);
     startFrameStream(current.session_id);
+    if (canAnnotateSession(current)) {
+      scheduleTreeRefresh(200);
+      fetchAnnotations();
+    }
   }
 });
 refresh();
@@ -1941,7 +3731,7 @@ if (location.hash.startsWith("#s=")) {
 </script>
 </body>
 </html>
-"##;
+"####;
 
 #[cfg(test)]
 mod tests {
@@ -1969,10 +3759,24 @@ const vm = require("node:vm");
 
 const pageJs = {page_js};
 
-function createHarness() {{
+async function flushMicrotasks(n = 16) {{
+  for (let i = 0; i < n; i++) {{
+    await Promise.resolve();
+  }}
+}}
+
+function createHarness(opts = {{}}) {{
   let nowMs = 1000000;
   let nextTimerId = 1;
   const timers = new Map();
+
+  class FakeDate extends Date {{
+    constructor(...args) {{
+      if (args.length === 0) super(nowMs);
+      else super(...args);
+    }}
+    static now() {{ return nowMs; }}
+  }}
 
   function fakeSetTimeout(fn, delay = 0, ...args) {{
     const id = nextTimerId++;
@@ -2029,6 +3833,9 @@ function createHarness() {{
     contains(name) {{ return this.set.has(name); }}
   }}
 
+  let canvasToDataUrlHook = opts.canvasToDataUrl || null;
+  let canvasDrawImageHook = opts.canvasDrawImage || null;
+
   class StubElement {{
     constructor(tagName, id = "") {{
       this.tagName = String(tagName || "div").toUpperCase();
@@ -2049,6 +3856,8 @@ function createHarness() {{
       this.listeners = new Map();
       this.attrs = new Map();
       this.style = {{ setProperty() {{}} }};
+      this._drawOps = [];
+      this._snapTag = null;
     }}
     get textContent() {{ return this._textContent; }}
     set textContent(v) {{
@@ -2079,6 +3888,14 @@ function createHarness() {{
       if (idx >= 0) this.parentNode.children.splice(idx, 1);
       this.parentNode = null;
     }}
+    contains(node) {{
+      let cur = node;
+      while (cur) {{
+        if (cur === this) return true;
+        cur = cur.parentNode;
+      }}
+      return false;
+    }}
     addEventListener(type, fn) {{
       if (!this.listeners.has(type)) this.listeners.set(type, []);
       this.listeners.get(type).push(fn);
@@ -2091,7 +3908,33 @@ function createHarness() {{
       this.dispatchEvent({{ type: "click", preventDefault() {{}} }});
     }}
     setAttribute(k, v) {{ this.attrs.set(k, String(v)); }}
-    getContext() {{ return {{ clearRect() {{}}, drawImage() {{}} }}; }}
+    getContext() {{
+      const el = this;
+      return {{
+        clearRect() {{}},
+        drawImage(src, ...rest) {{
+          el._drawOps.push({{ src, args: rest, srcTag: src && src._snapTag }});
+          if (src && src._snapTag) el._snapTag = src._snapTag;
+          if (canvasDrawImageHook) canvasDrawImageHook(el, src, rest);
+        }},
+        strokeRect() {{}},
+        fillRect() {{}},
+        beginPath() {{}},
+        moveTo() {{}},
+        lineTo() {{}},
+        stroke() {{}},
+        arc() {{}},
+        fill() {{}},
+        fillText() {{}},
+        save() {{}},
+        restore() {{}},
+      }};
+    }}
+    toDataURL(mime) {{
+      if (canvasToDataUrlHook) return canvasToDataUrlHook(this, mime);
+      const tag = this._snapTag || "default";
+      return "data:image/png;base64," + Buffer.from("png:" + tag).toString("base64");
+    }}
     focus() {{}}
     getBoundingClientRect() {{ return {{ left: 0, top: 0, width: 100, height: 200, right: 100, bottom: 200 }}; }}
     querySelector() {{ return null; }}
@@ -2153,12 +3996,22 @@ function createHarness() {{
   MockWebSocket.CLOSING = 2;
   MockWebSocket.CLOSED = 3;
 
+  const createdEventSources = [];
   class MockEventSource {{
     constructor(url) {{
       this.url = url;
       this.closed = false;
+      this.listeners = new Map();
+      createdEventSources.push(this);
     }}
-    addEventListener() {{}}
+    addEventListener(type, fn) {{
+      if (!this.listeners.has(type)) this.listeners.set(type, []);
+      this.listeners.get(type).push(fn);
+    }}
+    emit(type, data) {{
+      const list = this.listeners.get(type) || [];
+      for (const fn of list) fn({{ data: typeof data === "string" ? data : JSON.stringify(data) }});
+    }}
     close() {{ this.closed = true; }}
   }}
 
@@ -2169,8 +4022,11 @@ function createHarness() {{
     }},
   }};
 
+  let fetchHandler = opts.fetch || (async () => ({{ ok: true, status: 200, json: async () => ({{ sessions: [] }}) }}));
+
   const sandbox = {{
     console,
+    Date: FakeDate,
     URLSearchParams,
     AbortController,
     TextDecoder,
@@ -2189,7 +4045,7 @@ function createHarness() {{
       hash: "",
     }},
     history: {{ replaceState() {{}} }},
-    fetch: async () => ({{ ok: true, json: async () => ({{ sessions: [] }}) }}),
+    fetch: (url, init) => fetchHandler(url, init),
     setTimeout: fakeSetTimeout,
     clearTimeout: fakeClearTimeout,
     setInterval: fakeSetInterval,
@@ -2210,13 +4066,24 @@ function createHarness() {{
     ctx,
     eval: (code) => vm.runInContext(code, ctx),
     advanceTimers,
+    now: () => nowMs,
     createdSockets,
+    createdEventSources,
     dispatchWindow,
+    setFetch: (fn) => {{ fetchHandler = fn; }},
+    setCanvasToDataUrl: (fn) => {{ canvasToDataUrlHook = fn; }},
+    setCanvasDrawImage: (fn) => {{ canvasDrawImageHook = fn; }},
+    getEl: (id) => documentStub.getElementById(id),
     capTray: documentStub.getElementById("cap-tray"),
   }};
 }}
 
+(async () => {{
 {test_body}
+}})().catch((err) => {{
+  console.error(err);
+  process.exit(1);
+}});
 "#,
             page_js = page_js,
             test_body = test_body,
@@ -2382,6 +4249,938 @@ assert.equal(h.capTray.children.includes(recC.card), true);
 h.advanceTimers(1);
 assert.equal(h.eval(`capabilityCards.has(1)`), false);
 assert.equal(h.capTray.children.includes(recC.card), false);
+"#,
+        );
+    }
+
+    #[test]
+    fn mirror_dom_and_annotate_mode_js_behavior() {
+        run_page_js_scenario(
+            r#"
+const h = createHarness();
+h.eval(`
+  openSession({
+    session_id: "sess-annot",
+    guest_gen: 1,
+    stream: false,
+    watch_only: false,
+    can_annotate: true,
+    package: "com.example.shop",
+    activity: "com.example.shop/.LoginActivity",
+    display: { w: 1000, h: 2000 },
+  });
+  frame.width = 1000;
+  frame.height = 2000;
+  frameSize = { w: 1000, h: 2000 };
+  display = { w: 1000, h: 2000 };
+  mirrorMeta = {
+    activity: "com.example.shop/.LoginActivity",
+    package: "com.example.shop",
+    display: { w: 1000, h: 2000 },
+  };
+  mirrorNodes = flattenTreeNodes(
+    {
+      nodes: [
+        {
+          class: "android.widget.LinearLayout",
+          bounds: "[0,0][1000,2000]",
+          visible: true,
+          clickable: false,
+          children: [
+            {
+              class: "android.widget.Button",
+              resource_id: "com.example.shop:id/btn_login",
+              text: "Sign in",
+              bounds: "[100,400][900,600]",
+              visible: true,
+              clickable: true,
+              children: [],
+            },
+            {
+              class: "android.widget.TextView",
+              text: "Hidden",
+              bounds: "[0,0][100,100]",
+              visible: false,
+              clickable: false,
+              children: [],
+            },
+          ],
+        },
+      ],
+    },
+    "com.example.shop/.LoginActivity",
+    "com.example.shop",
+    { w: 1000, h: 2000 }
+  );
+  mirrorTreeValid = true;
+  renderMirrorDom();
+`);
+
+// 1. Preorder Mirror DOM: LinearLayout parent before Button child, invisible node excluded.
+assert.equal(h.eval(`mirrorDom.children.length`), 2);
+assert.equal(h.eval(`mirrorDom.children[0].attrs.get("data-android-class")`), "android.widget.LinearLayout");
+assert.equal(h.eval(`mirrorDom.children[1].attrs.get("data-acos-node")`), "1");
+assert.equal(h.eval(`mirrorDom.children[1].attrs.get("data-android-class")`), "android.widget.Button");
+assert.equal(h.eval(`mirrorDom.children[1].attrs.get("data-resource-id")`), "com.example.shop:id/btn_login");
+assert.equal(h.eval(`mirrorDom.children[1].attrs.get("data-text")`), "Sign in");
+assert.equal(h.eval(`mirrorDom.children[1].attrs.get("data-bounds")`), "[100,400,900,600]");
+assert.equal(h.eval(`mirrorDom.children[1].attrs.get("data-clickable")`), "true");
+assert.equal(
+  h.eval(`mirrorDom.children[1].attrs.get("aria-label")`),
+  'Button "Sign in" (id: btn_login) [100,400,900,600]'
+);
+
+// 2. Normal phone interaction still works when Annotate mode is OFF even if target is a mirror node.
+h.eval(`
+  screenWrap.dispatchEvent({
+    type: "pointerdown",
+    pointerType: "mouse",
+    button: 0,
+    pointerId: 1,
+    clientX: 50,
+    clientY: 50,
+    target: mirrorDom.children[1],
+    preventDefault() {},
+  });
+`);
+assert.equal(h.createdSockets.length, 1);
+assert.equal(h.createdSockets[0].sent.length, 1);
+assert.equal(JSON.parse(h.createdSockets[0].sent[0]).t, "touch");
+assert.equal(JSON.parse(h.createdSockets[0].sent[0]).phase, "down");
+
+// 3. Turning Annotate mode ON cancels active pointers and pauses guest touch forwarding.
+h.eval(`setAnnotMode(true);`);
+const sentBeforeAnnot = h.createdSockets[0].sent.length;
+h.eval(`
+  screenWrap.dispatchEvent({
+    type: "pointerdown",
+    pointerType: "mouse",
+    button: 0,
+    pointerId: 2,
+    clientX: 50,
+    clientY: 50,
+    target: mirrorDom.children[1],
+    preventDefault() {},
+  });
+`);
+assert.equal(h.createdSockets[0].sent.length, sentBeforeAnnot, "annotating must not send guest touches");
+assert.equal(h.eval(`annotPopover.hidden`), false);
+assert.equal(h.eval(`annotPending.kind`), "element");
+assert.equal(h.eval(`annotPending.nodes.length`), 1);
+assert.equal(h.eval(`annotPending.nodes[0].resource_id`), "com.example.shop:id/btn_login");
+
+// 4. Copy for Agent formatting includes id, activity, element metadata, comment, and screenshot path.
+const md = h.eval(`
+  formatAnnotationsForAgent([
+    {
+      id: 1,
+      kind: "element",
+      status: "open",
+      activity: "com.example.shop/.LoginActivity",
+      bounds: [100, 400, 900, 600],
+      nodes: [{ class: "android.widget.Button", resource_id: "com.example.shop:id/btn_login", text: "Sign in", bounds: [100, 400, 900, 600] }],
+      comment: "Increase button height to 48dp",
+      screenshot_path: "/tmp/acos/annotations/1.png",
+    },
+  ])
+`);
+assert.match(md, /### #1 \[element\] — com\.example\.shop\/\.LoginActivity/);
+assert.match(md, /Button · #btn_login · "Sign in" · \[100,400,900,600\]/);
+assert.match(md, /Increase button height to 48dp/);
+assert.match(md, /\/tmp\/acos\/annotations\/1\.png/);
+"#,
+        );
+    }
+
+    #[test]
+    fn watch_only_without_serve_socket_disables_annotate_and_skips_api_polling() {
+        run_page_js_scenario(
+            r#"
+const requestedUrls = [];
+const watchSession = {
+  session_id: "sess-watch-only",
+  guest_gen: 1,
+  stream: true,
+  watch_only: true,
+  can_annotate: false,
+  package: "com.example.watch",
+  activity: ".MainActivity",
+  display: { w: 1080, h: 1920 },
+};
+const h = createHarness({
+  fetch: async (url) => {
+    requestedUrls.push(String(url));
+    return { ok: true, status: 200, json: async () => ({ sessions: [watchSession] }) };
+  },
+});
+await flushMicrotasks();
+requestedUrls.length = 0;
+
+h.eval(`openSession(${JSON.stringify(watchSession)});`);
+h.advanceTimers(1000);
+await flushMicrotasks();
+
+assert.equal(h.getEl("btn-annotate").disabled, true);
+assert.equal(h.getEl("btn-annotate").title, "Annotations require an interactive acos serve session");
+assert.equal(h.eval(`annotMode`), false);
+assert.equal(
+  requestedUrls.some((u) => u.includes("/tree") || u.includes("/annotations")),
+  false,
+  "watch-only session with can_annotate=false must not poll /tree or /annotations: " + JSON.stringify(requestedUrls)
+);
+
+// Attempting to enable annotate mode or triggering pageshow still skips tree/annotations fetches.
+h.eval(`setAnnotMode(true);`);
+h.dispatchWindow("pageshow", { persisted: true });
+h.advanceTimers(1000);
+await flushMicrotasks();
+assert.equal(h.eval(`annotMode`), false);
+assert.equal(
+  requestedUrls.some((u) => u.includes("/tree") || u.includes("/annotations")),
+  false
+);
+"#,
+        );
+    }
+
+    #[test]
+    fn tree_refresh_coalescing_prevents_starvation_and_aborts_across_sessions() {
+        run_page_js_scenario(
+            r#"
+const sessA = {
+  session_id: "sess-a",
+  guest_gen: 1,
+  stream: false,
+  watch_only: false,
+  can_annotate: true,
+  activity: ".Home",
+  display: { w: 1000, h: 2000 },
+};
+const sessB = {
+  session_id: "sess-b",
+  guest_gen: 1,
+  stream: false,
+  watch_only: false,
+  can_annotate: true,
+  activity: ".Settings",
+  display: { w: 1000, h: 2000 },
+};
+const calls = [];
+const h = createHarness({
+  fetch: (url, init) => {
+    const u = String(url);
+    if (u.includes("/tree")) {
+      let resolveResp;
+      const p = new Promise((resolve, reject) => {
+        resolveResp = resolve;
+        if (init && init.signal) {
+          init.signal.addEventListener("abort", () => reject(new Error("aborted")));
+        }
+      });
+      calls.push({ url: u, signal: init && init.signal, resolve: resolveResp });
+      return p;
+    }
+    return Promise.resolve({
+      ok: true,
+      status: 200,
+      json: async () => ({ ok: true, annotations: [], sessions: [sessA, sessB] }),
+    });
+  },
+});
+await flushMicrotasks();
+
+h.eval(`openSession(${JSON.stringify(sessA)});`);
+// Clear initial openSession scheduled fetch (150ms) first, then resolve it.
+h.advanceTimers(200);
+assert.equal(calls.length, 1);
+calls[0].resolve({
+  ok: true,
+  status: 200,
+  json: async () => ({ ok: true, tree: { nodes: [] }, activity: ".Home", display: { w: 1000, h: 2000 } }),
+});
+await flushMicrotasks();
+
+// 1. Continuous 100ms frame updates (10 fps) calling scheduleTreeRefresh(500) must NOT starve!
+for (let i = 0; i < 5; i++) {
+  h.eval(`scheduleTreeRefresh(500);`);
+  h.advanceTimers(100);
+}
+assert.equal(calls.length, 2, "coalesced 500ms timer must fire on time under 100ms frame cadence");
+
+// 2. Session switch while Session A's tree fetch is still in flight aborts Session A and lets Session B fetch cleanly.
+assert.equal(calls[1].signal.aborted, false);
+h.eval(`openSession(${JSON.stringify(sessB)});`);
+assert.equal(calls[1].signal.aborted, true, "switching sessions must abort prior tree fetch");
+await flushMicrotasks();
+
+// Urgent trigger (delay=50) pulls openSession's 150ms deadline forward to 50ms.
+h.eval(`scheduleTreeRefresh(50, true);`);
+h.advanceTimers(50);
+assert.equal(calls.length, 3, "Session B fetch must not be blocked by Session A in-flight state and urgent delay pulls deadline forward");
+assert.match(calls[2].url, /\/api\/tree\/sess-b/);
+"#,
+        );
+    }
+
+    #[test]
+    fn stale_tree_response_does_not_clobber_live_activity_and_invalidates_mirror_dom() {
+        run_page_js_scenario(
+            r#"
+const sessAct = {
+  session_id: "sess-act",
+  guest_gen: 1,
+  stream: false,
+  watch_only: false,
+  can_annotate: true,
+  package: "com.example.app",
+  activity: ".OldActivity",
+  display: { w: 1000, h: 2000 },
+};
+const treeRequests = [];
+const h = createHarness({
+  fetch: (url) => {
+    const u = String(url);
+    if (u.includes("/tree")) {
+      return new Promise((resolve) => { treeRequests.push({ url: u, resolve }); });
+    }
+    return Promise.resolve({
+      ok: true,
+      status: 200,
+      json: async () => ({ ok: true, annotations: [], sessions: [sessAct] }),
+    });
+  },
+});
+await flushMicrotasks();
+
+h.eval(`
+  openSession(${JSON.stringify(sessAct)});
+  frame.width = 1000;
+  frame.height = 2000;
+  frameSize = { w: 1000, h: 2000 };
+  display = { w: 1000, h: 2000 };
+`);
+
+// Initial tree fetch fires and loads OldActivity nodes.
+h.advanceTimers(200);
+assert.equal(treeRequests.length, 1);
+treeRequests[0].resolve({
+  ok: true,
+  status: 200,
+  json: async () => ({
+    ok: true,
+    activity: ".OldActivity",
+    package: "com.example.app",
+    display: { w: 1000, h: 2000 },
+    tree: {
+      nodes: [
+        { class: "android.widget.Button", text: "Old", bounds: "[100,400][900,600]", visible: true, clickable: true, children: [] },
+      ],
+    },
+  }),
+});
+await flushMicrotasks();
+assert.equal(h.eval(`mirrorTreeValid`), true);
+assert.equal(h.eval(`mirrorNodes.length`), 1);
+assert.equal(h.getEl("dactivity").textContent, ".OldActivity");
+
+// Start a second tree fetch while still on OldActivity, then live activity changes to NewActivity before it returns.
+h.eval(`fetchTreeNow();`);
+assert.equal(treeRequests.length, 2);
+
+// Simulate live activity event arriving (onEvent(ev, kind)).
+h.eval(`onEvent({ activity: ".NewActivity" }, "activity");`);
+assert.equal(h.getEl("dactivity").textContent, ".NewActivity");
+assert.equal(h.eval(`mirrorTreeValid`), false, "activity change must immediately invalidate cached Mirror DOM");
+assert.equal(h.eval(`mirrorNodes.length`), 0);
+assert.equal(h.getEl("mirror-dom").children.length, 0);
+
+// Picking while tree is invalidated falls back to coordinate-only selection (no stale OldActivity nodes).
+h.eval(`
+  setAnnotMode(true);
+  screenWrap.dispatchEvent({
+    type: "pointerdown",
+    pointerType: "mouse",
+    button: 0,
+    pointerId: 9,
+    clientX: 50,
+    clientY: 50,
+    target: screenWrap,
+    preventDefault() {},
+  });
+`);
+assert.equal(h.eval(`annotPending.kind`), "element");
+assert.equal(h.eval(`annotPending.nodes.length`), 0, "must not attach stale nodes before new tree arrives");
+assert.equal(h.eval(`annotPending.activity`), ".NewActivity");
+h.eval(`closeAnnotPopover();`);
+
+// Now the stale OldActivity tree response arrives — it must be discarded and must NOT clobber #dactivity!
+treeRequests[1].resolve({
+  ok: true,
+  status: 200,
+  json: async () => ({
+    ok: true,
+    activity: ".OldActivity",
+    package: "com.example.app",
+    display: { w: 1000, h: 2000 },
+    tree: {
+      nodes: [
+        { class: "android.widget.Button", text: "Stale", bounds: "[100,400][900,600]", visible: true, clickable: true, children: [] },
+      ],
+    },
+  }),
+});
+await flushMicrotasks();
+assert.equal(h.getEl("dactivity").textContent, ".NewActivity");
+assert.equal(h.eval(`mirrorTreeValid`), false);
+assert.equal(h.eval(`mirrorNodes.length`), 0);
+"#,
+        );
+    }
+
+    #[test]
+    fn snapshot_at_selection_oversized_png_fallback_draft_isolation_and_outcome_unknown() {
+        run_page_js_scenario(
+            r#"
+const sess1 = {
+  session_id: "sess-1",
+  guest_gen: 1,
+  stream: false,
+  watch_only: false,
+  can_annotate: true,
+  activity: ".Main",
+  display: { w: 1000, h: 2000 },
+};
+const sess2 = {
+  session_id: "sess-2",
+  guest_gen: 1,
+  stream: false,
+  watch_only: false,
+  can_annotate: true,
+  activity: ".Other",
+  display: { w: 1000, h: 2000 },
+};
+const postRequests = [];
+const serverAnnotations = [];
+let listFetchCount = 0;
+const h = createHarness({
+  fetch: (url, init) => {
+    const u = String(url);
+    if (u.includes("/annotations") && init && init.method === "POST") {
+      return new Promise((resolve) => {
+        postRequests.push({
+          url: u,
+          body: JSON.parse(init.body),
+          resolve,
+        });
+      });
+    }
+    if (u.includes("/annotations")) {
+      listFetchCount++;
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        json: async () => ({ ok: true, annotations: serverAnnotations.slice() }),
+      });
+    }
+    return Promise.resolve({
+      ok: true,
+      status: 200,
+      json: async () => ({ ok: true, sessions: [sess1, sess2], tree: { nodes: [] } }),
+    });
+  },
+});
+await flushMicrotasks();
+
+h.eval(`
+  openSession(${JSON.stringify(sess1)});
+  frame.width = 1000;
+  frame.height = 2000;
+  frame._snapTag = "frame-at-selection";
+  frameSize = { w: 1000, h: 2000 };
+  display = { w: 1000, h: 2000 };
+  setAnnotMode(true);
+`);
+
+// 1. Snapshot is captured at selection completion, NOT at Add time.
+h.eval(`
+  screenWrap.dispatchEvent({
+    type: "pointerdown",
+    pointerType: "mouse",
+    button: 0,
+    pointerId: 1,
+    clientX: 50,
+    clientY: 50,
+    target: screenWrap,
+    preventDefault() {},
+  });
+  // Live frame mutates before the user finishes typing & clicks Add.
+  frame._snapTag = "later-frame";
+  annotComment.value = "Draft 1";
+`);
+
+// 2. Oversized (>4 MiB decoded) PNG triggers inline error + Save without screenshot fallback.
+const hugeBase64 = "A".repeat(Math.ceil((4 * 1024 * 1024 + 32) * 4 / 3));
+h.setCanvasToDataUrl(() => "data:image/png;base64," + hugeBase64);
+h.eval(`submitAnnotation(false);`);
+await flushMicrotasks();
+assert.equal(postRequests.length, 0, "oversized PNG must be blocked before POST");
+assert.equal(h.getEl("annot-pop-err").hidden, false);
+assert.match(h.getEl("annot-pop-err").textContent, /4 MiB/);
+assert.equal(h.getEl("annot-submit-no-shot").hidden, false);
+
+// Clicking "Save without screenshot" submits with no image_png_base64.
+h.getEl("annot-submit-no-shot").click();
+await flushMicrotasks();
+assert.equal(postRequests.length, 1);
+assert.equal("image_png_base64" in postRequests[0].body, false);
+
+// Reset to normal PNG encoder; verify Draft 1 vs Draft 2 isolation while Draft 1 is still in flight.
+h.setCanvasToDataUrl(null);
+h.eval(`
+  closeAnnotPopover();
+  frame._snapTag = "frame-for-draft-2";
+  screenWrap.dispatchEvent({
+    type: "pointerdown",
+    pointerType: "mouse",
+    button: 0,
+    pointerId: 2,
+    clientX: 50,
+    clientY: 50,
+    target: screenWrap,
+    preventDefault() {},
+  });
+  frame._snapTag = "frame-after-draft-2";
+  annotComment.value = "Draft 2";
+`);
+const draft2Id = h.eval(`annotPending.draftId`);
+
+// Draft 1 settles while Draft 2's popover is open: must NOT close Draft 2 popover, but still adds #1 to annotItems.
+const created1 = {
+  id: 1,
+  kind: "element",
+  status: "open",
+  comment: "Draft 1",
+  bounds: [490, 490, 510, 510],
+  nodes: [],
+};
+serverAnnotations.push(created1);
+postRequests[0].resolve({
+  ok: true,
+  status: 200,
+  json: async () => ({
+    ok: true,
+    annotation: created1,
+  }),
+});
+await flushMicrotasks();
+assert.equal(h.getEl("annot-popover").hidden, false, "late Draft 1 completion must not close Draft 2 popover");
+assert.equal(h.eval(`annotPending && annotPending.draftId`), draft2Id);
+assert.equal(h.eval(`annotItems.some((a) => a.id === 1)`), true);
+
+// Submitting Draft 2 uses the captured "frame-for-draft-2" snapshot, not "frame-after-draft-2".
+h.eval(`submitAnnotation(false);`);
+await flushMicrotasks();
+assert.equal(postRequests.length, 2);
+const decodedPng = Buffer.from(postRequests[1].body.image_png_base64, "base64").toString("utf8");
+assert.equal(decodedPng, "png:frame-for-draft-2");
+
+// 3. 504 OUTCOME_UNKNOWN refreshes annotation list and shows clear notice without falsely closing popover.
+const listBeforeUnknown = listFetchCount;
+postRequests[1].resolve({
+  ok: false,
+  status: 504,
+  json: async () => ({
+    ok: false,
+    code: "OUTCOME_UNKNOWN",
+    outcome_unknown: true,
+    error: "daemon connection closed after writing request",
+  }),
+});
+await flushMicrotasks();
+assert.equal(h.getEl("annot-popover").hidden, false);
+assert.match(h.getEl("annot-pop-err").textContent, /outcome unknown/i);
+assert.match(h.getEl("annot-panel-msg").textContent, /timed out/i);
+assert.ok(listFetchCount > listBeforeUnknown, "OUTCOME_UNKNOWN must refresh the annotation list");
+
+// 4. Late 409 from Session 1 after switching to Session 2 must NOT end Session 2.
+h.eval(`submitAnnotation(true);`);
+await flushMicrotasks();
+assert.equal(postRequests.length, 3);
+h.eval(`openSession(${JSON.stringify(sess2)});`);
+postRequests[2].resolve({
+  ok: false,
+  status: 409,
+  json: async () => ({ ok: false, code: "SESSION_REPLACED" }),
+});
+await flushMicrotasks();
+assert.equal(h.eval(`current.session_id`), "sess-2");
+assert.equal(h.eval(`sessionEnded`), false, "late 409 from Session 1 must not mark Session 2 ended");
+"#,
+        );
+    }
+
+    /// Annotation session whose `/api/annotations` requests stay pending until
+    /// the scenario answers them, so reply order and loss are explicit.
+    const ANNOT_PENDING_SERVER_JS: &str = r#"
+const sess = {
+  session_id: "sess-r", guest_gen: 1, stream: false, watch_only: false,
+  can_annotate: true, activity: ".Main", display: { w: 1000, h: 2000 },
+};
+const pending = [];
+const reply = (status, body) => ({ ok: status < 300, status, json: async () => body });
+const unreadable = (status) => ({
+  ok: status < 300, status, json: async () => { throw new SyntaxError("truncated body"); },
+});
+const h = createHarness({
+  fetch: (url, init) => {
+    if (String(url).includes("/annotations")) {
+      return new Promise((resolve, reject) => pending.push({
+        method: (init && init.method) || "GET",
+        body: init && init.body ? JSON.parse(init.body) : null,
+        resolve, reject,
+      }));
+    }
+    return Promise.resolve(reply(200, { ok: true, sessions: [sess], tree: { nodes: [] } }));
+  },
+});
+const settle = () => flushMicrotasks(64);
+const count = (method) => pending.filter((p) => p.method === method).length;
+function take(method) {
+  const i = pending.findIndex((p) => p.method === method);
+  assert.ok(i >= 0, "no pending " + method + " request");
+  return pending.splice(i, 1)[0];
+}
+const lost = () => new TypeError("Failed to fetch");
+const list = (...items) => reply(200, { ok: true, annotations: items });
+const item = (id, comment, extra) => Object.assign(
+  { id, kind: "element", status: "open", comment, bounds: [481, 487, 529, 535], nodes: [] }, extra);
+const panel = () => h.getEl("annot-panel-msg").textContent;
+const popErr = () => h.getEl("annot-pop-err").textContent;
+const popOpen = () => !h.getEl("annot-popover").hidden;
+const ids = () => h.eval(`annotItems.map((a) => a.id).join(",")`);
+function pointer(type, x, y) {
+  h.eval(`screenWrap.dispatchEvent({
+    type: "${type}", pointerType: "mouse", button: 0, pointerId: 1,
+    clientX: ${x}, clientY: ${y}, target: screenWrap, preventDefault() {},
+  });`);
+}
+async function start(...items) {
+  h.eval(`
+    openSession(${JSON.stringify(sess)});
+    frame.width = 1000; frame.height = 2000;
+    frameSize = { w: 1000, h: 2000 }; display = { w: 1000, h: 2000 };
+    setAnnotMode(true);
+  `);
+  while (count("GET")) take("GET").resolve(list(...items));
+  await settle();
+}
+// Picks a point on the screen, types `comment` and returns the bounds used.
+function draft(comment) {
+  pointer("pointerdown", 50, 50);
+  h.getEl("annot-comment").value = comment;
+  return h.eval(`annotPending.bounds`);
+}
+async function add() {
+  h.eval(`submitAnnotation(false);`);
+  await settle();
+}
+"#;
+
+    fn run_annot_scenario(test_body: &str) {
+        run_page_js_scenario(&format!("{ANNOT_PENDING_SERVER_JS}{test_body}"));
+    }
+
+    #[test]
+    fn unconfirmed_mutations_report_refreshed_only_after_the_list_get_succeeds() {
+        run_annot_scenario(
+            r#"
+await start(item(1, "one"));
+const cases = [
+  ["resolveAnnotation(1)", "POST", /Resolve outcome unknown/],
+  ["deleteAnnotation(1)", "DELETE", /Delete outcome unknown/],
+  ["clearAnnotations()", "POST", /Clear outcome unknown/],
+];
+const failures = [
+  (get) => get.reject(lost()),
+  (get) => get.resolve(reply(502, { ok: false })),
+  (get) => get.resolve(unreadable(200)),
+  (get) => get.resolve(reply(200, { ok: true })),
+];
+// Lost reply, unreadable success body and 504 all leave the outcome unknown.
+const losses = [
+  (m) => m.reject(lost()),
+  (m) => m.resolve(unreadable(200)),
+  (m) => m.resolve(reply(504, { ok: false, code: "OUTCOME_UNKNOWN", outcome_unknown: true })),
+];
+for (const [call, method, label] of cases) {
+  for (const lose of losses) {
+    for (const fail of failures) {
+      h.eval(call);
+      await settle();
+      lose(take(method));
+      await settle();
+      assert.match(panel(), label);
+      assert.doesNotMatch(panel(), /Refreshed list/, "GET still pending");
+      assert.equal(count("GET"), 1);
+      fail(take("GET"));
+      await settle();
+      assert.match(panel(), label);
+      assert.match(panel(), /Could not refresh the list, so its current state is unknown/);
+      assert.doesNotMatch(panel(), /Refreshed list/);
+      assert.equal(ids(), "1", "a failed refresh keeps the old list on screen");
+    }
+    h.eval(call);
+    await settle();
+    lose(take(method));
+    await settle();
+    take("GET").resolve(list(item(1, "one")));
+    await settle();
+    assert.match(panel(), label);
+    assert.match(panel(), /Refreshed list\./);
+  }
+}
+
+// An explicit rejection is not "unknown": no reconciliation.
+for (const [call, method] of cases) {
+  h.eval(`showAnnotPanelNotice("")`);
+  h.eval(call);
+  await settle();
+  take(method).resolve(reply(400, { ok: false, code: "INVALID_ARGUMENT", error: "no" }));
+  await settle();
+  assert.equal(count("GET"), 0);
+  assert.equal(panel(), "");
+}
+"#,
+        );
+    }
+
+    #[test]
+    fn lost_add_acknowledgement_reconciles_without_duplicating_or_losing_the_draft() {
+        run_annot_scenario(
+            r#"
+await start();
+
+// 1. Stored, reply lost: the refreshed list closes the draft, nothing is resent.
+let bounds = draft("  stored but unacknowledged ");
+await add();
+take("POST").reject(lost());
+await settle();
+assert.equal(h.getEl("annot-submit").disabled, true, "Add stays disabled while reconciling");
+await add();
+assert.equal(count("POST"), 0);
+assert.match(panel(), /was not confirmed/);
+assert.doesNotMatch(panel(), /Refreshed list/);
+take("GET").resolve(list(item(1, "stored but unacknowledged", { bounds })));
+await settle();
+while (count("GET")) take("GET").resolve(list(item(1, "stored but unacknowledged", { bounds })));
+await settle();
+assert.equal(popOpen(), false);
+assert.equal(count("POST"), 0);
+assert.equal(ids(), "1");
+assert.match(panel(), /#1 was saved/);
+
+// 2. Unreadable success body, refresh fails: draft kept, retry checks first.
+const old = item(1, "stored but unacknowledged", { bounds });
+bounds = draft("second");
+await add();
+take("POST").resolve(unreadable(200));
+await settle();
+take("GET").reject(lost());
+await settle();
+assert.equal(popOpen(), true);
+assert.equal(h.getEl("annot-comment").value, "second");
+assert.equal(h.getEl("annot-submit").disabled, false);
+assert.match(popErr(), /outcome unknown/i);
+assert.match(popErr(), /Could not refresh the list/);
+await add();
+assert.equal(count("POST"), 0, "retry must look at the list before sending");
+take("GET").reject(lost());
+await settle();
+assert.equal(count("POST"), 0, "nothing is resent while the list is unreadable");
+assert.match(popErr(), /nothing was resent/);
+assert.equal(h.getEl("annot-submit").disabled, false);
+// The first attempt landed late: the retry finds it and does not duplicate it.
+await add();
+take("GET").resolve(list(old, item(2, "second", { bounds })));
+await settle();
+while (count("GET")) take("GET").resolve(list(old, item(2, "second", { bounds })));
+await settle();
+assert.equal(count("POST"), 0);
+assert.equal(popOpen(), false);
+assert.equal(ids(), "1,2");
+
+// 3. Never stored: an identical *older* item does not count, so the retry sends.
+let saved = [old, item(2, "second", { bounds })];
+bounds = draft("second");
+await add();
+take("POST").reject(lost());
+await settle();
+take("GET").resolve(list(...saved));
+await settle();
+assert.equal(popOpen(), true);
+assert.match(popErr(), /not shown yet/);
+await add();
+take("GET").resolve(list(...saved));
+await settle();
+assert.equal(count("POST"), 1);
+saved = saved.concat(item(3, "second", { bounds }));
+take("POST").resolve(reply(200, { ok: true, annotation: saved[2] }));
+await settle();
+while (count("GET")) take("GET").resolve(list(...saved));
+await settle();
+assert.equal(popOpen(), false);
+assert.equal(ids(), "1,2,3");
+
+// 4. Text edited after the lost reply: the edit is kept, then saved on request.
+bounds = draft("before edit");
+await add();
+take("POST").reject(lost());
+await settle();
+take("GET").resolve(list(...saved));
+await settle();
+h.getEl("annot-comment").value = "after edit";
+saved = saved.concat(item(4, "before edit", { bounds }));
+await add();
+take("GET").resolve(list(...saved));
+await settle();
+assert.equal(count("POST"), 0);
+assert.equal(popOpen(), true);
+assert.equal(h.getEl("annot-comment").value, "after edit");
+assert.match(popErr(), /saved as #4/);
+await add();
+assert.equal(take("POST").body.comment, "after edit");
+
+// 5. Explicit rejection stays a rejection.
+h.eval(`closeAnnotPopover()`);
+pending.length = 0;
+draft("rejected");
+await add();
+take("POST").resolve(reply(400, { ok: false, error: "annotation limit reached" }));
+await settle();
+assert.equal(count("GET"), 0);
+assert.equal(popErr(), "annotation limit reached");
+await add();
+assert.equal(count("POST"), 1, "a rejected draft is resent without a list check");
+"#,
+        );
+    }
+
+    #[test]
+    fn late_list_and_mutation_replies_cannot_drop_or_revive_annotations() {
+        run_annot_scenario(
+            r#"
+const newer = item(2, "accepted after clear");
+const accepted = reply(200, { ok: true, annotation: newer });
+const cleared = reply(200, { ok: true, cleared: 1 });
+async function clearThenAdd() {
+  h.eval(`closeAnnotPopover(); clearAnnotations();`);
+  await settle();
+  draft("accepted after clear");
+  await add();
+  const clear = take("POST");
+  assert.equal(clear.body.action, "clear");
+  const added = take("POST");
+  assert.equal(added.body.action, "add");
+  return { clear, added };
+}
+
+// 1. Server: Clear then Add. The Add reply and its list GET arrive first.
+await start(item(1, "old"));
+let { clear, added } = await clearThenAdd();
+added.resolve(accepted);
+await settle();
+take("GET").resolve(list(newer));
+await settle();
+clear.resolve(cleared);
+await settle();
+assert.equal(ids(), "2", "late Clear reply must keep the newer item");
+take("GET").resolve(list(newer));
+await settle();
+assert.equal(ids(), "2");
+
+// 2. Same order, and the reload after Clear fails: still kept, and flagged.
+h.eval(`annotItems = [${JSON.stringify(item(1, "old"))}]`);
+({ clear, added } = await clearThenAdd());
+added.resolve(accepted);
+await settle();
+take("GET").resolve(list(newer));
+await settle();
+clear.resolve(cleared);
+await settle();
+take("GET").reject(lost());
+await settle();
+assert.equal(ids(), "2");
+assert.match(panel(), /could not be refreshed; it may be out of date/);
+
+// 3. Server: Add then Clear, Add reply last. The reload drops the cleared item.
+pending.length = 0;
+h.eval(`annotItems = [${JSON.stringify(item(1, "old"))}]`);
+({ clear, added } = await clearThenAdd());
+clear.resolve(cleared);
+await settle();
+const afterClear = take("GET");
+added.resolve(accepted);
+await settle();
+afterClear.resolve(list(newer)); // stale snapshot from before the Clear
+await settle();
+while (count("GET")) take("GET").resolve(list());
+await settle();
+assert.equal(ids(), "");
+
+// 4. A GET sent before a mutation reply cannot overwrite it; it is reissued.
+pending.length = 0;
+h.eval(`annotItems = [${JSON.stringify(item(1, "old"))}]; setAsideTab("annotations");`);
+await settle();
+const early = take("GET");
+h.eval(`deleteAnnotation(1)`);
+await settle();
+take("DELETE").resolve(reply(200, { ok: true }));
+await settle();
+const reload = take("GET");
+reload.resolve(list());
+await settle();
+early.resolve(list(item(1, "old")));
+await settle();
+assert.equal(ids(), "", "superseded GET must not revive a deleted item");
+"#,
+        );
+    }
+
+    #[test]
+    fn annotation_gesture_is_discarded_when_the_screen_changes_mid_drag() {
+        run_annot_scenario(
+            r#"
+await start();
+const changes = {
+  rotateEvent: `onEvent({ kind: "action", cmd: "rotate", status: "ok" }, "action")`,
+  frameSize: `screenEpoch += 1; invalidateMirrorTree(true)`,
+  rotatePending: `pendingRotate = { minSeq: 1, expectedW: 0, expectedH: 0, awaitingReply: true }`,
+};
+for (const tool of ["box", "draw"]) {
+  for (const [name, change] of Object.entries(changes)) {
+    h.eval(`pendingRotate = null; showAnnotPanelNotice(""); setAnnotTool("${tool}")`);
+    pointer("pointerdown", 10, 10);
+    pointer("pointermove", 60, 60);
+    h.eval(change);
+    pointer("pointerup", 60, 60);
+    const at = tool + " / " + name;
+    assert.equal(h.eval(`annotDraft`), null, at);
+    assert.equal(h.eval(`annotPending`), null, at);
+    assert.equal(popOpen(), false, at);
+    assert.match(panel(), /gesture; it was discarded/, at);
+  }
+  // An unchanged screen completes, and a later change leaves that draft alone.
+  h.eval(`pendingRotate = null; setAnnotTool("${tool}")`);
+  pointer("pointerdown", 10, 10);
+  pointer("pointermove", 60, 60);
+  pointer("pointerup", 60, 60);
+  assert.equal(popOpen(), true, tool);
+  const before = h.eval(`JSON.stringify([annotPending.bounds, annotPending.display])`);
+  h.eval(changes.rotateEvent);
+  assert.equal(popOpen(), true, tool);
+  assert.equal(h.eval(`JSON.stringify([annotPending.bounds, annotPending.display])`), before);
+  h.eval(`closeAnnotPopover()`);
+}
 "#,
         );
     }

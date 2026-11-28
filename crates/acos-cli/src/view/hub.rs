@@ -197,6 +197,7 @@ impl Entry {
             "app_label": self.app_label,
             "device_name": self.device_name,
             "watch_only": self.watch_only,
+            "can_annotate": self.serve_socket.is_some(),
             "activity": self.activity,
             "display": {"w": self.display.0, "h": self.display.1},
             "stream": self.stream_socket.is_some(),
@@ -255,6 +256,23 @@ pub enum WatchError {
     NotFound,
     /// A newer guest replaced the expected `guest_gen` for this `session_id`.
     Replaced,
+}
+
+/// Failure reason for a synchronous `serve_socket` RPC from `acos view`
+/// (`/api/tree` or `/api/annotations`).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum SessionRpcError {
+    /// No live session exists in the registry for this `session_id`.
+    NotFound,
+    /// A newer guest replaced the expected `guest_gen` or `launch_token`.
+    Replaced,
+    /// The live session has no `serve_socket` published.
+    NoServeSocket,
+    /// A mutation request was written to the daemon, but the reply failed or
+    /// timed out so the mutation may already have been applied.
+    OutcomeUnknown { cause: String, message: String },
+    /// The session daemon rejected the call or could not be reached.
+    DaemonError { code: String, message: String },
 }
 
 /// A batch of events and the cursor to ask from next time.
@@ -576,6 +594,132 @@ impl Hub {
             inner.guest_gens.get(session_id).copied()?
         };
         self.open_input_checked(session_id, guest_gen).ok()
+    }
+
+    /// Resolve a live session's registry entry and `serve_socket` while
+    /// enforcing optional `guest_gen` matching. Releases `self.inner` before
+    /// returning so socket I/O never blocks other hub callers.
+    fn resolve_serve_entry(
+        &self,
+        session_id: &str,
+        expected_guest_gen: Option<u64>,
+    ) -> Result<(Entry, String), SessionRpcError> {
+        let mut inner = self.inner.lock().expect("hub");
+        self.refresh_locked(&mut inner);
+        let entry = inner
+            .entries
+            .get(session_id)
+            .ok_or(SessionRpcError::NotFound)?
+            .clone();
+        let current_gen = inner.guest_gens.get(session_id).copied().unwrap_or(0);
+        if let Some(expected) = expected_guest_gen {
+            if expected != current_gen {
+                return Err(SessionRpcError::Replaced);
+            }
+        }
+        let socket = entry
+            .serve_socket
+            .clone()
+            .filter(|s| !s.is_empty())
+            .ok_or(SessionRpcError::NoServeSocket)?;
+        Ok((entry, socket))
+    }
+
+    /// Fetch the lightweight UI hierarchy (`acos_observe_tree` without
+    /// screenshots) over the session's `serve_socket`.
+    pub fn observe_tree(
+        &self,
+        session_id: &str,
+        expected_guest_gen: Option<u64>,
+    ) -> Result<Value, SessionRpcError> {
+        let (entry, socket) = self.resolve_serve_entry(session_id, expected_guest_gen)?;
+        let mut conn = DaemonConn::connect(&socket).map_err(|(code, message)| {
+            SessionRpcError::DaemonError { code, message }
+        })?;
+        let mut args = json!({
+            "base": { "session_id": session_id },
+            "full": true,
+            "settle": "fast",
+            "max_nodes": 2000,
+        });
+        if let (Some(token), Some(obj)) = (entry.launch_token.as_deref(), args.as_object_mut()) {
+            obj.insert("expected_launch_token".to_string(), json!(token));
+        }
+        let result = conn
+            .call("acos_observe_tree", args)
+            .map_err(|err| map_daemon_rpc_err(err, false))?;
+        let tree = result.get("tree").cloned().unwrap_or(Value::Null);
+        let activity = result
+            .get("activity")
+            .and_then(Value::as_str)
+            .filter(|s| !s.is_empty())
+            .map(str::to_string)
+            .or_else(|| entry.activity.clone());
+        let package = result
+            .get("package")
+            .and_then(Value::as_str)
+            .filter(|s| !s.is_empty())
+            .map(str::to_string)
+            .unwrap_or_else(|| entry.package.clone());
+        let display = result
+            .get("display")
+            .filter(|d| {
+                d.get("w").and_then(Value::as_u64).unwrap_or(0) > 0
+                    && d.get("h").and_then(Value::as_u64).unwrap_or(0) > 0
+            })
+            .cloned()
+            .unwrap_or_else(|| json!({"w": entry.display.0, "h": entry.display.1}));
+        Ok(json!({
+            "ok": true,
+            "tree": tree,
+            "activity": activity,
+            "package": package,
+            "display": display,
+        }))
+    }
+
+    /// Proxy one `acos_annotations` request (`list`, `add`, `resolve`, `delete`,
+    /// `clear`) over the session's `serve_socket`. Requires a live `serve_socket`
+    /// hosted by an `acos serve` daemon — `acos verify` watch-only sessions have
+    /// `serve_socket: None`, do not support annotations, and return
+    /// [`SessionRpcError::NoServeSocket`] (`503 SERVE_UNAVAILABLE`).
+    pub fn call_annotations(
+        &self,
+        session_id: &str,
+        expected_guest_gen: Option<u64>,
+        mut args: Value,
+    ) -> Result<Value, SessionRpcError> {
+        let (entry, socket) = self.resolve_serve_entry(session_id, expected_guest_gen)?;
+        let obj = args.as_object_mut().ok_or_else(|| {
+            SessionRpcError::DaemonError {
+                code: "INVALID_ARGUMENT".to_string(),
+                message: "annotation request body must be a JSON object".to_string(),
+            }
+        })?;
+        let is_mutation = obj
+            .get("action")
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .is_some_and(|a| !a.is_empty() && a != "list");
+        obj.insert("base".to_string(), json!({ "session_id": session_id }));
+        if let Some(token) = entry.launch_token.as_deref() {
+            obj.insert("expected_launch_token".to_string(), json!(token));
+        }
+        let mut conn = DaemonConn::connect_with_timeouts(
+            &socket,
+            Duration::from_secs(5),
+            Duration::from_secs(5),
+        )
+        .map_err(|(code, message)| SessionRpcError::DaemonError { code, message })?;
+        let mut result = conn
+            .call("acos_annotations", args)
+            .map_err(|err| map_daemon_rpc_err(err, is_mutation))?;
+        if let Some(map) = result.as_object_mut() {
+            map.insert("ok".to_string(), json!(true));
+            Ok(result)
+        } else {
+            Ok(json!({ "ok": true, "result": result }))
+        }
     }
 
     /// Per-session counters (the hub's test seam, and what a test asserts on
@@ -1777,6 +1921,21 @@ fn is_guest_gone_code(code: &str) -> bool {
     matches!(code, "SESSION_REPLACED" | "SESSION_NOT_FOUND")
 }
 
+fn map_daemon_rpc_err(err: DaemonCallErr, is_mutation: bool) -> SessionRpcError {
+    let (code, message, may_have_fired) = err.into_outcome();
+    if is_mutation && may_have_fired {
+        return SessionRpcError::OutcomeUnknown {
+            cause: code,
+            message,
+        };
+    }
+    match code.as_str() {
+        "SESSION_REPLACED" => SessionRpcError::Replaced,
+        "SESSION_NOT_FOUND" => SessionRpcError::NotFound,
+        _ => SessionRpcError::DaemonError { code, message },
+    }
+}
+
 struct DaemonConn {
     socket_path: String,
     writer: UnixStream,
@@ -1786,6 +1945,14 @@ struct DaemonConn {
 
 impl DaemonConn {
     fn connect(socket_path: &str) -> Result<Self, (String, String)> {
+        Self::connect_with_timeouts(socket_path, Duration::from_secs(5), Duration::from_secs(2))
+    }
+
+    fn connect_with_timeouts(
+        socket_path: &str,
+        read_timeout: Duration,
+        write_timeout: Duration,
+    ) -> Result<Self, (String, String)> {
         let stream = UnixStream::connect(socket_path).map_err(|e| {
             (
                 "INPUT_UNAVAILABLE".to_string(),
@@ -1793,8 +1960,8 @@ impl DaemonConn {
             )
         })?;
         verify_peer_uid(&stream).map_err(|e| ("PERMISSION_DENIED".to_string(), e.to_string()))?;
-        let _ = stream.set_read_timeout(Some(Duration::from_secs(5)));
-        let _ = stream.set_write_timeout(Some(Duration::from_secs(2)));
+        let _ = stream.set_read_timeout(Some(read_timeout));
+        let _ = stream.set_write_timeout(Some(write_timeout));
         let writer = stream
             .try_clone()
             .map_err(|e| ("INPUT_UNAVAILABLE".to_string(), e.to_string()))?;
