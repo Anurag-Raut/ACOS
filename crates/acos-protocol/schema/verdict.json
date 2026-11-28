@@ -164,6 +164,34 @@
         }
       ]
     },
+    "BundleUnreachable": {
+      "description": "The app never got a JS bundle: Metro was unreachable or refused it.",
+      "properties": {
+        "error": {
+          "description": "The low-level reason (`ECONNREFUSED (Connection refused)`, `Failed to connect to localhost/127.0.0.1:8081`, ...).",
+          "type": "string"
+        },
+        "log_tail": {
+          "default": [],
+          "description": "The log lines it was read from (bounded).",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "url": {
+          "description": "The bundle URL the app asked for, when the log names it.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "error"
+      ],
+      "type": "object"
+    },
     "DisplaySpec": {
       "description": "The display a session renders to.\n\n`none` is headless: capture/observe must return `NO_DISPLAY` instead of silently allocating a surface.",
       "oneOf": [
@@ -985,6 +1013,20 @@
           "type": "string"
         },
         {
+          "description": "METRO4: the React Native app reported a JS error (redbox / LogBox / `ExceptionsManager`). `error.details.js_error` carries name, message, frames (symbolicated when Metro or a source map was available) and the component stack.",
+          "enum": [
+            "JS_ERROR"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "METRO4: the React Native debug app could not fetch its JS bundle from the dev server (Metro down, wrong `debug_http_host`, port not exposed). No JS ran, so this is never a `JS_ERROR`. `error.details.bundle_unreachable` carries the URL and the low-level error.",
+          "enum": [
+            "BUNDLE_UNREACHABLE"
+          ],
+          "type": "string"
+        },
+        {
           "description": "The session daemon answered (or refused to identify itself) from a **different build** than the caller: crate version, build id (git sha + source digest) or the binary at the same path differ. The client never mixes builds — it replaces an idle auto-started daemon or runs its own private one; `error.details` carries both identities. Never retry against the same daemon; never read its answer as this build's behaviour.",
           "enum": [
             "DAEMON_VERSION_MISMATCH"
@@ -1199,6 +1241,107 @@
           "type": "string"
         }
       ]
+    },
+    "JsError": {
+      "description": "A JS error React Native reported (redbox / LogBox / `ExceptionsManager`).",
+      "properties": {
+        "component_stack": {
+          "description": "React's component stack (`in App`, `at Counter (App.js:12)`), when reported.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "frames": {
+          "default": [],
+          "description": "Stack frames, innermost first.",
+          "items": {
+            "$ref": "#/definitions/JsFrame"
+          },
+          "type": "array"
+        },
+        "kind": {
+          "description": "`fatal` (redbox, `reportFatalException`, LogBox \"Uncaught Error\" / \"Render Error\"), `soft` (`reportSoftException` / `console.error`, or a logged line that does not say which) or `transform` (Metro could not build the bundle).",
+          "type": "string"
+        },
+        "log_tail": {
+          "default": [],
+          "description": "The log lines the error was parsed from (bounded).",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "message": {
+          "description": "The message without the `Name:` prefix and RN's `, js engine: ...` suffix.",
+          "type": "string"
+        },
+        "name": {
+          "description": "Error class (`TypeError`, `SyntaxError`, `ReferenceError`, `Error`, ...).",
+          "type": "string"
+        },
+        "source": {
+          "description": "Where it was read: `log` (guest logcat; the dialog on screen may add frames and kind) or `ui` (only the redbox / LogBox on screen).",
+          "type": "string"
+        },
+        "symbolicated": {
+          "description": "Every frame carries a source position an agent can edit.",
+          "type": "boolean"
+        },
+        "symbolication_reason": {
+          "description": "Why `symbolicated` is false (`no metro configured`, `symbolicate_unreachable`, `no map`, ...), or how it became true (`metro /symbolicate`, `source map`, `source map (cached)`, `metro transform error`, `react native logbox`).",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "kind",
+        "message",
+        "name",
+        "source",
+        "symbolicated"
+      ],
+      "type": "object"
+    },
+    "JsFrame": {
+      "description": "One JS stack frame.",
+      "properties": {
+        "column": {
+          "description": "Column as React Native reported it (the same convention Metro's `/symbolicate` consumes).",
+          "format": "uint32",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "file": {
+          "description": "Source file (after symbolication) or the bundle URL / file id (before).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "fn": {
+          "description": "Function / method name (`fn`), when known.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "line": {
+          "description": "1-based line.",
+          "format": "uint32",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
     },
     "ModuleState": {
       "description": "One module row in `verdict.json`.",
@@ -1425,6 +1568,34 @@
           "format": "uint64",
           "minimum": 0.0,
           "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "RnDevState": {
+      "description": "What the dev loop looks like right now (`verdict.json` `rn` block and the live `acos_logs` reply).",
+      "properties": {
+        "bundle_unreachable": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/BundleUnreachable"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The most recent bundle-fetch failure, when one was reported."
+        },
+        "js_error": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/JsError"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The most recent JS error, when one was reported."
         }
       },
       "type": "object"
@@ -1798,6 +1969,17 @@
         }
       ],
       "description": "Resource report."
+    },
+    "rn": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/RnDevState"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "METRO4/METRO6: the React Native dev-loop record of the run — the last JS error it reported (symbolicated when a Metro host or map was available) and the last bundle-fetch failure, kept apart. A later fix does not erase it: `assert_js_error: {none: true}` is the check for a cleared redbox. Absent for a run whose app never reported on a React Native tag."
     },
     "scenario": {
       "allOf": [

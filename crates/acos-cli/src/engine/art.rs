@@ -95,6 +95,49 @@ const SETTLE_POLL_GAP_MS: u64 = 250;
 /// `TIMEOUT` (the screen kept changing its content), never a pass.
 const DEFAULT_CONTENT_SETTLE_TIMEOUT_MS: u64 = 10_000;
 
+/// METRO5: the session control id of the React Native dev-loop ops.
+pub const REACT_NATIVE_CTL: &str = "react_native";
+
+/// METRO5: the launcher's `rn_reload` answer as the control's reply. Zero
+/// receivers is `UNSUPPORTED_RN` (React Native dev support is not registered),
+/// a refusal keeps the launcher's reason; neither is ever a pass.
+fn react_native_reload_result(
+    package: &str,
+    reply: &serde_json::Value,
+) -> Result<serde_json::Value, BackendError> {
+    if reply.get("ok").and_then(serde_json::Value::as_bool) != Some(true) {
+        return Err(BackendError::Failed {
+            code: acos_protocol::ErrorCode::Internal,
+            detail: format!(
+                "react_native reload: the session refused the broadcast: {}",
+                reply
+                    .get("error")
+                    .and_then(serde_json::Value::as_str)
+                    .unwrap_or("no reason")
+            ),
+        });
+    }
+    let receivers = reply
+        .get("receivers")
+        .and_then(serde_json::Value::as_i64)
+        .unwrap_or(0);
+    if receivers <= 0 {
+        return Err(BackendError::Failed {
+            code: acos_protocol::ErrorCode::UnsupportedRn,
+            detail: format!(
+                "react_native reload: no receiver for {package}.RELOAD_APP_ACTION is registered \
+                 (React Native dev support is off: a release build, or not a React Native app)"
+            ),
+        });
+    }
+    Ok(serde_json::json!({
+        "module": REACT_NATIVE_CTL,
+        "op": "reload",
+        "broadcast": reply.get("action").cloned().unwrap_or_default(),
+        "receivers": receivers,
+    }))
+}
+
 /// One ART session.
 pub struct ArtSession {
     child: Option<Child>,
@@ -333,6 +376,9 @@ pub struct ArtSession {
     /// MPROC7: the launcher's idle kill in seconds (`None` keeps the launcher
     /// default of 30; `Some(0)` disables it). Launch-time, like `extra_apks`.
     idle_kill_seconds: Option<u64>,
+    /// METRO5: `host:port` written as the RN app's `debug_http_host` before the
+    /// guest boots (launch-time; a `reset` relaunch writes it again).
+    rn_debug_http_host: Option<String>,
     /// P12b: per-request strict/fast settle deadline (`settle_timeout_ms`).
     /// `None` keeps the engine's documented default; on timeout the guest still
     /// returns the latest tree and frame identity with `settled:false`.
@@ -1774,6 +1820,37 @@ impl ArtSession {
         services: &[serde_json::Value],
         intent: &acos_protocol::LaunchIntent,
     ) -> Result<ArtSession, BackendError> {
+        Self::start_with_apks_session_and_rn(
+            apk,
+            extra_apks,
+            artifacts,
+            animations,
+            insets,
+            idle_kill_seconds,
+            zygote,
+            session_id,
+            services,
+            intent,
+            None,
+        )
+    }
+
+    /// METRO5: [`Self::start_with_apks_and_session`] plus the React Native
+    /// `debug_http_host` the launcher writes before the guest boots.
+    #[allow(clippy::too_many_arguments)]
+    pub fn start_with_apks_session_and_rn(
+        apk: &Path,
+        extra_apks: &[PathBuf],
+        artifacts: &Path,
+        animations: &str,
+        insets: &str,
+        idle_kill_seconds: Option<u64>,
+        zygote: Option<Arc<ZygoteHost>>,
+        session_id: Option<&str>,
+        services: &[serde_json::Value],
+        intent: &acos_protocol::LaunchIntent,
+        rn_debug_http_host: Option<&str>,
+    ) -> Result<ArtSession, BackendError> {
         let start = zygote.map(|host| ZygoteStart {
             key: zygote_key_of(apk, insets, animations, extra_apks),
             host,
@@ -1790,6 +1867,7 @@ impl ArtSession {
             session_id,
             services,
             intent,
+            rn_debug_http_host,
         )
     }
 
@@ -1804,6 +1882,7 @@ impl ArtSession {
         session_id: Option<&str>,
         services: &[serde_json::Value],
         intent: &acos_protocol::LaunchIntent,
+        rn_debug_http_host: Option<&str>,
     ) -> Result<ArtSession, BackendError> {
         // NET4: every session has an id. `acos serve` supplies its own (the id
         // a client addresses); a one-shot run gets one from this process, which
@@ -1962,6 +2041,11 @@ impl ArtSession {
         if let Some(seconds) = idle_kill_seconds {
             command.arg("--idle-kill-seconds").arg(seconds.to_string());
             command.env("ACOSLAUNCH_IDLE_KILL_SECS", seconds.to_string());
+        }
+        // METRO5: only a dev-loop launch sets it; otherwise the launcher reads
+        // nothing and writes nothing.
+        if let Some(host_port) = rn_debug_http_host {
+            command.env(acos_art::rn_prefs::DEBUG_HTTP_HOST_ENV, host_port);
         }
         command
             .stdin(Stdio::piped())
@@ -2306,6 +2390,7 @@ impl ArtSession {
             animations,
             extra_apks: extra_apks.to_vec(),
             idle_kill_seconds,
+            rn_debug_http_host: rn_debug_http_host.map(str::to_string),
             settle_timeout_ms: None,
             bound_settle: None,
             reset_settle_timeout_ms: None,
@@ -2501,6 +2586,19 @@ impl ArtSession {
         &mut self,
         request: serde_json::Value,
     ) -> Result<serde_json::Value, BackendError> {
+        // METRO5: `service_ctl: {module: react_native, ...}` is the session's
+        // own dev-loop control, not a service module.
+        if request.get("op").and_then(serde_json::Value::as_str) == Some("ctl")
+            && request.get("id").and_then(serde_json::Value::as_str) == Some(REACT_NATIVE_CTL)
+        {
+            let op = request
+                .get("ctl_op")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or("")
+                .to_string();
+            let args = request.get("args").cloned().unwrap_or(serde_json::Value::Null);
+            return self.react_native_ctl(&op, &args);
+        }
         let mut request = request;
         request["cmd"] = serde_json::json!("services");
         let reply = self.command(request)?;
@@ -2786,6 +2884,9 @@ impl ArtSession {
         op: &str,
         args: serde_json::Value,
     ) -> Result<serde_json::Value, BackendError> {
+        if module == REACT_NATIVE_CTL {
+            return self.react_native_ctl(op, &args);
+        }
         let request = serde_json::json!({
             "cmd": "ctl",
             "module": module,
@@ -2812,6 +2913,84 @@ impl ArtSession {
             });
         }
         Ok(reply)
+    }
+
+    /// METRO5: the React Native dev-loop control (`acos_service_ctl {module:
+    /// react_native, op}` / scenario `service_ctl`), the agent's shake and `r`:
+    ///
+    /// - `reload`: broadcast `<package>.RELOAD_APP_ACTION` through the session's
+    ///   activity manager (the receiver `DevSupportManagerBase` registers), and
+    ///   with `args.metro_port` also Metro's `POST /reload`.
+    /// - `dev_menu`: `KEYCODE_MENU` to the focused activity
+    ///   (`ReactActivity.onKeyUp` -> `showDevOptionsDialog`), and with
+    ///   `args.metro_port` also Metro's `/message` broadcast `devMenu`.
+    ///
+    /// A delivery nobody received is a structured failure: zero reload
+    /// receivers is `UNSUPPORTED_RN` (no RN dev support: a release build or not
+    /// React Native), never a pass.
+    pub fn react_native_ctl(
+        &mut self,
+        op: &str,
+        args: &serde_json::Value,
+    ) -> Result<serde_json::Value, BackendError> {
+        let metro_port = match args.get("metro_port") {
+            None | Some(serde_json::Value::Null) => None,
+            Some(value) => Some(
+                value
+                    .as_u64()
+                    .and_then(|port| u16::try_from(port).ok())
+                    .filter(|port| *port >= 1024)
+                    .ok_or_else(|| BackendError::Failed {
+                        code: acos_protocol::ErrorCode::InvalidArgument,
+                        detail: "react_native: `metro_port` must be a port 1024..=65535".into(),
+                    })?,
+            ),
+        };
+        match op {
+            "reload" => {
+                let package = self.package().to_string();
+                let reply = self.command(serde_json::json!({
+                    "cmd": "services", "op": "rn_reload", "package": package,
+                }))?;
+                let mut value = react_native_reload_result(&package, &reply)?;
+                if let Some(port) = metro_port {
+                    let metro = acos_verify::symbolicate::http_call(
+                        "127.0.0.1", port, "POST", "/reload", None, Duration::from_secs(5),
+                        64 * 1024,
+                    );
+                    value["metro_reload"] = match metro {
+                        Ok((status, body)) if (200..300).contains(&status) => {
+                            serde_json::json!({"status": status, "body": String::from_utf8_lossy(&body).trim()})
+                        }
+                        Ok((status, _)) => serde_json::json!({"error": format!("HTTP {status}")}),
+                        Err(error) => serde_json::json!({"error": error}),
+                    };
+                }
+                Ok(value)
+            }
+            "dev_menu" => {
+                self.key_code_i32(82)?;
+                let mut value = serde_json::json!({
+                    "module": REACT_NATIVE_CTL, "op": "dev_menu",
+                    "delivered": "KEYCODE_MENU",
+                });
+                if let Some(port) = metro_port {
+                    value["metro_dev_menu"] = match acos_verify::dev_server::message_broadcast(
+                        port, "devMenu", Duration::from_secs(5),
+                    ) {
+                        Ok(apps) => serde_json::json!({"apps_connected": apps}),
+                        Err(error) => serde_json::json!({"error": error}),
+                    };
+                }
+                Ok(value)
+            }
+            other => Err(BackendError::Failed {
+                code: acos_protocol::ErrorCode::InvalidArgument,
+                detail: format!(
+                    "react_native control op {other:?} does not exist (ops: reload, dev_menu)"
+                ),
+            }),
+        }
     }
 
     /// W7: the app-window inset model this guest was launched with.
@@ -6309,6 +6488,7 @@ impl SessionBackend for ArtSession {
                 Some(&self.session_id),
                 &self.services,
                 &self.intent,
+                self.rn_debug_http_host.as_deref(),
             ) {
                 Ok(session) => {
                     fresh = Some(session);
@@ -6466,6 +6646,8 @@ pub struct DeferredArtStart {
     pub services: Vec<serde_json::Value>,
     pub intent: acos_protocol::LaunchIntent,
     pub on_started: Option<Box<dyn FnOnce(&ArtSession) + Send>>,
+    /// METRO5: `dev_server: {op: start, debug_http_host: true}` before launch.
+    pub rn_debug_http_host: Option<String>,
 }
 
 /// Session metadata populated once a [`DeferredArtSession`] actually boots,
@@ -6525,7 +6707,7 @@ impl DeferredArtSession {
                 code: ErrorCode::Internal,
                 detail: "deferred ART session start parameters already consumed".to_string(),
             })?;
-            let mut session = ArtSession::start_with_apks_and_session(
+            let mut session = ArtSession::start_with_apks_session_and_rn(
                 &cfg.apk,
                 &cfg.extra_apks,
                 &cfg.artifacts,
@@ -6536,6 +6718,7 @@ impl DeferredArtSession {
                 cfg.session_id.as_deref(),
                 &cfg.services,
                 &cfg.intent,
+                cfg.rn_debug_http_host.as_deref(),
             )?;
             if let Ok(mut meta) = self.meta.lock() {
                 meta.session_id = Some(session.session_id().to_string());
@@ -7529,6 +7712,26 @@ mod tests {
     /// app never consumed; `acos-art` cannot depend on `acos-protocol` (it is the
     /// guest side of the wire), so the two literals are pinned equal here - in
     /// the one crate that sees both.
+    #[test]
+    fn metro5_react_native_reload_never_passes_without_a_receiver() {
+        let ok = react_native_reload_result(
+            "p",
+            &serde_json::json!({"ok": true, "action": "p.RELOAD_APP_ACTION", "receivers": 1}),
+        )
+        .unwrap();
+        assert_eq!(ok["receivers"], 1);
+        assert_eq!(ok["broadcast"], "p.RELOAD_APP_ACTION");
+        let none = react_native_reload_result("p", &serde_json::json!({"ok": true, "receivers": 0}))
+            .unwrap_err();
+        assert_eq!(none.to_protocol_error().code, ErrorCode::UnsupportedRn);
+        let refused = react_native_reload_result(
+            "p",
+            &serde_json::json!({"ok": false, "error": "rn_reload needs a string `package`"}),
+        )
+        .unwrap_err();
+        assert!(refused.to_protocol_error().message.contains("needs a string"));
+    }
+
     #[test]
     fn the_unhandled_input_settle_reason_is_one_string() {
         assert_eq!(

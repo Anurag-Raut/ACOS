@@ -1,6 +1,6 @@
 # METRO — the React Native dev loop on ACOS (v0.5.0)
 
-**Status: METRO1 landed the network leg; METRO2c root-caused the reload leg (RN legacy-arch race + one ACOS pool-leak bug, fixed) and proved Fast Refresh as the deterministic path — `results/handoff/METRO2/REPORT.md`.**
+**Status: METRO1 landed the network leg; METRO2c root-caused the reload leg (RN legacy-arch race + one ACOS pool-leak bug, fixed) and proved Fast Refresh as the deterministic path — `results/handoff/METRO2/REPORT.md`. METRO3 wired the scenario dev loop; METRO4 (redbox as data), METRO5 (dev menu / reload without a shake, `debug_http_host`, `adb reverse` equivalent) and METRO6 (symbolication) are wired with unit + mock-Metro tests; `scenarios/metro-redbox.yaml` passes on live ART with RN 0.81.4 (outcomes below).**
 Owner context: `docs/PLAN_2026-11-16.md` §3.3 (network module, host-port opt-in),
 ADR-0030 (+ amendments 1–3) and `docs/OWNER_DIRECTION_2026-11-18.md`
 (~100 % compatibility, beat the stock emulator, attachable building blocks,
@@ -140,6 +140,38 @@ An error overlay an agent can assert on, not a picture of a red screen.
 - Acceptance: a scenario that ships a deliberately broken JS file asserts the
   error text + frame, then fixes the file and asserts the reload clears it.
 
+#### METRO4 outcome (2026-11-28)
+
+- Parser: `crates/acos-verify/src/rn_errors.rs` reads React Native's own report
+  shapes (pinned to `react-native@0.81.4` sources): `JSStackTrace.format`
+  (`<message>, stack:\n<fn>@<line>:<col>`) from `ExceptionsManagerModule` /
+  `DevSupportManagerBase.logJSException`, `Error.stack` text with React's
+  `This error is located at:` component stack on `ReactNativeJS`, a JSON redbox
+  payload, Metro build errors (`DebugServerException.parse`: source-level
+  `SyntaxError` at `file:line:column`), and the redbox dialog's texts (gated on
+  its Dismiss/Reload buttons so an app's own "Error: ..." text never counts).
+  Only React Native tags are read; a non-RN app gets no `rn` block.
+- `bundle_unreachable` is a separate record and a separate code
+  (`BUNDLE_UNREACHABLE`, status `blocked`): `Could not connect to development
+  server`, `Unable to load script`, `catalyst_reload_error`, `ECONNREFUSED`,
+  with the bundle URL and the low-level errno. A JS-error assertion on an
+  unreachable bundle is `BUNDLE_UNREACHABLE`, never `ASSERTION_FAILED`.
+- `assert_js_error` (`acos-protocol` + `schema/scenario.json`, `acos-verify`):
+  `name`/`message`/`file`+`line`/`symbolicated`, `none: true`,
+  `bundle_unreachable: true`, `since_previous_step`, `since_last_js_assert`,
+  `timeout_ms` (the wait ends only when the whole assertion holds). `verdict.json`
+  carries `rn: {js_error, bundle_unreachable}`; the live `acos_logs` reply
+  carries the same `rn` block. New codes: `JS_ERROR`, `BUNDLE_UNREACHABLE`.
+
+- Live (RN 0.81.4, dev build): `__DEV__` `ExceptionsManager.reportException`
+  never calls the native `ExceptionsManager`, so none of the native shapes above
+  appear for a JS throw, and the native redbox is not shown. The error is one
+  `console.error` line (`[Name: message]`, no stack) plus the LogBox dialog.
+  The log line is the primary signal; the dialog (recognised by view structure,
+  `LogBoxDialog`'s own window holding an RN root view) supplies the symbolicated
+  frames and the fatal kind to the error with the same message. A dialog still
+  on screen fails `none: true`. No guest hook or protocol change.
+
 ### METRO5 — the dev menu without a shake, and the adb-reverse equivalent
 A phone gets the dev menu from a shake/`Ctrl+M` and its debug server from
 `adb reverse`. ACOS has neither, so it needs first-class equivalents.
@@ -155,6 +187,27 @@ A phone gets the dev menu from a shake/`Ctrl+M` and its debug server from
 - Acceptance: from a verdict, an agent can open the dev menu, trigger a reload,
   and read the menu's own items (`reload`, `toggle inspector`, `dev settings`).
 
+#### METRO5 outcome (2026-11-28)
+
+- Scenario: `dev_server: {op: dev_menu}` (Metro `/message` broadcast `devMenu`,
+  the CLI's `d`; `getpeers` first, so "no app connected" is a failure) next to
+  the existing `{op: reload}` (`POST /reload`).
+- Live session / scenario `service_ctl`: `acos_service_ctl {module:
+  "react_native", op: "reload" | "dev_menu", args: {metro_port?}}`. `reload` is a
+  host-originated `<package>.RELOAD_APP_ACTION` broadcast through the session's
+  activity manager (the launcher's `rn_reload` peer op); zero receivers is
+  `UNSUPPORTED_RN`. `dev_menu` is `KEYCODE_MENU` (`ReactActivity.onKeyUp` ->
+  `showDevOptionsDialog`). With `metro_port` both also send the Metro command.
+- `debug_http_host`: `dev_server: {op: start, debug_http_host: true}` (before
+  `launch`) or `ACOS_RN_DEBUG_HTTP_HOST=localhost:PORT` makes the launcher write
+  `<string name="debug_http_host">localhost:PORT</string>` into
+  `/data/app-data/<pkg>/shared_prefs/<pkg>_preferences.xml` before the guest
+  boots (merging with existing prefs, XML-escaped; `crates/acos-art/src/rn_prefs.rs`).
+  Unset is the default and does no work. No `10.0.2.2` emulation exists.
+- The `adb reverse` equivalent is the relay host-port opt-in, `acos_net
+  {action: "hostport", port: PORT}` (or `acos-netd hostport add PORT`), with the
+  app dialling `localhost:PORT` (`docs/AGENT_GUIDE.md`, Metro dev loop).
+
 ### METRO6 — source maps in stack traces
 Every JS stack ACOS reports should point at the *source* line an agent can edit,
 not at `index.bundle:1:483920`.
@@ -166,6 +219,27 @@ not at `index.bundle:1:483920`.
   map is missing.
 - Acceptance: a JS throw at a known source line reports that exact `file:line`
   in both the live reply and `verdict.json`.
+
+#### METRO6 outcome (2026-11-28)
+
+- `crates/acos-verify/src/symbolicate.rs`: Metro's `POST /symbolicate` first
+  (0-based columns, Metro's convention), then `GET /index.map?...` decoded here
+  (source map v3, base64 VLQ) and cached per map SHA-256 in
+  `<artifacts>/source-maps/` (`index.json` maps bundle revision + map path to
+  the hash), so an error of the same revision still maps after Metro stopped. A
+  refresh keeps the URL, so the scenario runner renews the revision on every
+  `start` and `edit`, and never maps an older error with a newer bundle. The live
+  `acos_logs` path does not know the revision: it uses no disk cache, remembers
+  results per logged error, and contacts Metro after releasing the session lock
+  (4 s budget per call). Every request has a
+  strict timeout (5 s while Metro runs, 0.5 s after it stopped, 2 s on the live
+  `acos_logs` path); a dead Metro answers within the connect timeout.
+- Honest fallback: frames stay untouched with `symbolicated: false` and a reason
+  (`no metro configured`, `symbolicate_unreachable: HTTP 404`, `no map: ...`).
+  Mapped paths are made relative to the project copy (`App.js`).
+- Applied to `assert_js_error`, to `verdict.json`'s `rn.js_error` (before Metro is
+  stopped) and to the live `acos_logs` reply (Metro port read from the bundle URL
+  the app logged; nothing guessed).
 
 ### METRO7 — the Hermes debugger (optional)
 Attach a debugger to the guest's Hermes runtime over the inspector protocol

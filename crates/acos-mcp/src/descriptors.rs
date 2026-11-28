@@ -1071,7 +1071,11 @@ fn session_tool_spec(name: &str) -> (&'static str, Value) {
              object. The module answers with the op's own value plus compact `modules_summary` \
              (use `acos_services` for the full 28-module catalog): a refused or unknown op is a \
              structured error, never a silent success. Only an attached module answers; a detached \
-             one says so (`attach` it first with `acos_services`).",
+             one says so (`attach` it first with `acos_services`). METRO5: `module: react_native` \
+             is the session's React Native dev-loop control (no attach): `op: reload` broadcasts \
+             `<package>.RELOAD_APP_ACTION` (zero receivers is `UNSUPPORTED_RN`), `op: dev_menu` \
+             sends `KEYCODE_MENU` (the dev menu without a shake); `args: {metro_port}` also sends \
+             Metro's `POST /reload` / `devMenu`.",
             json!({
                 "type": "object",
                 "additionalProperties": false,

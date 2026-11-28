@@ -763,6 +763,7 @@ pub fn run(args: VerifyArgs) -> ExitCode {
                         services: validated_services.clone(),
                         intent: launch_intent,
                         on_started: Some(on_started),
+                        rn_debug_http_host: scenario_debug_http_host(&scenario),
                     },
                 );
                 deferred_art_meta = Some(meta);
@@ -899,6 +900,31 @@ fn scenario_starts_dev_server_before_launch(scenario_path: &Path) -> bool {
         }
     }
     false
+}
+
+/// METRO5: `localhost:<port>` when the scenario's pre-launch
+/// `dev_server: {op: start, debug_http_host: true}` asks the launcher to point
+/// the debug app at that server (validation rejects the flag after a launch).
+fn scenario_debug_http_host(scenario_path: &Path) -> Option<String> {
+    let parsed = acos_protocol::scenario::Scenario::load(scenario_path).ok()?;
+    debug_http_host_of(&parsed)
+}
+
+/// The **latest** explicit request before the first step that can boot the
+/// guest (`start 8081 -> stop -> start 19000 -> launch` points at 19000).
+fn debug_http_host_of(scenario: &acos_protocol::scenario::Scenario) -> Option<String> {
+    let mut requested = None;
+    for step in &scenario.steps {
+        if step.may_boot_guest() {
+            break;
+        }
+        if let Some(dev) = &step.dev_server {
+            if dev.op == acos_protocol::scenario::DevServerOp::Start && dev.debug_http_host == Some(true) {
+                requested = Some(format!("localhost:{}", dev.port.unwrap_or(8081)));
+            }
+        }
+    }
+    requested
 }
 
 /// The verifier reads the guest's log **between steps**, so the entries the
@@ -1699,6 +1725,24 @@ mod final_logd_merge_tests {
         assert!(text.contains("  1234      3  E x: assertion failed: boom"));
         assert!(text.contains("  9999      4  I x: unstamped tail"));
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn metro5_debug_http_host_comes_from_a_pre_launch_start() {
+        let base = "version: 1\nname: d\napp: a.apk\nisolation: process\ndisplay: {mode: offscreen, width: 1080, height: 2400, density_dpi: 420}\nneeds_env: [metro]\nexpectation_reason: metro\nsteps:\n";
+        let parse = |body: &str| {
+            acos_protocol::scenario::Scenario::from_yaml_str_unvalidated(&format!("{base}{body}")).unwrap()
+        };
+        let with = parse("  - dev_server: {op: start, project: p, port: 19000, debug_http_host: true}\n  - launch: {activity: a/.Main}\n");
+        assert_eq!(super::debug_http_host_of(&with).as_deref(), Some("localhost:19000"));
+        let without = parse("  - dev_server: {op: start, project: p, port: 8081}\n  - launch: {activity: a/.Main}\n");
+        assert_eq!(super::debug_http_host_of(&without), None, "opt-in only");
+        let after = parse("  - launch: {activity: a/.Main}\n  - dev_server: {op: start, project: p, port: 8081, debug_http_host: true}\n");
+        assert_eq!(super::debug_http_host_of(&after), None);
+        let restarted = parse("  - dev_server: {op: start, project: p, port: 8081, debug_http_host: true}\n  - dev_server: {op: stop}\n  - dev_server: {op: start, project: p, port: 19000, debug_http_host: true}\n  - launch: {activity: a/.Main}\n");
+        assert_eq!(super::debug_http_host_of(&restarted).as_deref(), Some("localhost:19000"), "the latest request wins");
+        let key_first = parse("  - key: {key: menu}\n  - dev_server: {op: start, project: p, port: 8081, debug_http_host: true}\n");
+        assert_eq!(super::debug_http_host_of(&key_first), None, "a key step already booted the guest");
     }
 
     #[test]

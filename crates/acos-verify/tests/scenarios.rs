@@ -2907,3 +2907,280 @@ steps:
     assert_ne!(outcome.verdict.verdict, Status::Pass);
     assert!(std::net::TcpStream::connect(("127.0.0.1", 18082)).is_err());
 }
+
+// ---------------------------------------------------------------------------
+// METRO4: `assert_js_error` end to end — a JS error is data, an unreachable
+// bundle is a distinct BUNDLE_UNREACHABLE (blocked, never a JS fail), and
+// `none: true` after a reload judges only the lines since the previous step.
+// ---------------------------------------------------------------------------
+
+/// `script[n]` is what the n-th `logs_since` returns, as `(level, tag, message)`.
+struct RnLogs {
+    inner: ScriptedLogs,
+    levels: Vec<Vec<LogLevel>>,
+    /// `Some((dialog, n))`: the backend has a UI tree, and it shows `dialog` on
+    /// the first `n` reads, then an empty screen.
+    screen: Option<(Vec<UiNode>, usize)>,
+}
+
+impl RnLogs {
+    fn new(script: Vec<Vec<(LogLevel, &'static str, &'static str)>>) -> Self {
+        let levels = script
+            .iter()
+            .map(|batch| batch.iter().map(|(level, _, _)| *level).collect())
+            .collect();
+        let lines = script
+            .into_iter()
+            .map(|batch| batch.into_iter().map(|(_, tag, message)| (tag, message)).collect())
+            .collect();
+        RnLogs {
+            inner: ScriptedLogs::new(lines),
+            levels,
+            screen: None,
+        }
+    }
+}
+
+impl Backend for RnLogs {
+    fn id(&self) -> &'static str {
+        "rn-logs"
+    }
+    fn protocol_backend(&self) -> ProtocolBackend {
+        ProtocolBackend::AcosNative
+    }
+    fn fidelity(&self) -> Fidelity {
+        Fidelity::NativeRuntime
+    }
+    fn capabilities(&self) -> Capabilities {
+        Capabilities {
+            ui_tree: self.screen.is_some(),
+            ..self.inner.capabilities()
+        }
+    }
+    fn manifest(&mut self, apk: &Path) -> Result<ManifestInfo, BackendError> {
+        self.inner.manifest(apk)
+    }
+    fn launch(&mut self, request: &LaunchRequest) -> Result<LaunchOutcome, BackendError> {
+        self.inner.launch(request)
+    }
+    fn refresh(&mut self) -> Result<SessionObservation, BackendError> {
+        let mut observation = slice_observation(1, 0, b"", true);
+        if let Some((dialog, reads)) = &mut self.screen {
+            observation.tree.nodes = if *reads > 0 { dialog.clone() } else { vec![] };
+            *reads = reads.saturating_sub(1);
+        }
+        Ok(observation)
+    }
+    fn logs_since(&mut self, since: u64) -> Result<Vec<LogRecord>, BackendError> {
+        let call = self.inner.calls;
+        let mut records = self.inner.logs_since(since)?;
+        if let Some(levels) = self.levels.get(call) {
+            for (record, level) in records.iter_mut().zip(levels) {
+                record.level = *level;
+            }
+        }
+        Ok(records)
+    }
+}
+
+const RN_TYPE_ERROR: &str = "Exception in native call from JS\ncom.facebook.react.common.JavascriptException: TypeError: undefined is not a function, js engine: hermes, stack:\nonPress@1:483920\n\tat com.facebook.react.modules.core.ExceptionsManagerModule.reportException(ExceptionsManagerModule.kt:52)";
+const RN_UNREACHABLE: &str = "Unable to download JS bundle\ncom.facebook.react.common.DebugServerException: Could not connect to development server.\nURL: http://localhost:8081/index.bundle?platform=android&dev=true\nCaused by: java.net.ConnectException: failed to connect to localhost/127.0.0.1 (port 8081): ECONNREFUSED (Connection refused)";
+
+fn js_error_scenario(steps: &str) -> Scenario {
+    let yaml = format!(
+        "version: 1\nname: js-error\napp: fixtures/build/apps/hello-views.apk\nisolation: process\ndisplay: {{mode: offscreen, width: 1080, height: 2400, density_dpi: 420}}\nexpectation: pass\nsteps:\n  - launch: {{activity: dev.acos.fixtures.helloviews/.MainActivity}}\n{steps}"
+    );
+    Scenario::from_yaml_str(&yaml).expect("valid scenario")
+}
+
+#[test]
+fn metro4_assert_js_error_reads_the_error_and_reports_it_in_the_verdict() {
+    let scenario = js_error_scenario(
+        "  - assert_js_error: {name: TypeError, message: not a function, timeout_ms: 2000}\n",
+    );
+    // call 1: launch flush, call 2: the assert's flush, call 3: its first wait poll
+    let mut backend = RnLogs::new(vec![vec![], vec![], vec![(LogLevel::Error, "ReactNative", RN_TYPE_ERROR)]]);
+    let (outcome, artifacts) = run_ordered(&scenario, &mut backend);
+    assert_eq!(outcome.verdict.verdict, Status::Pass, "{:?}", outcome.verdict.failure);
+    let step = &outcome.verdict.steps[1];
+    assert_eq!(step.step, "assert_js_error");
+    assert_eq!(step.assertions[0].kind, "js_error");
+    let rn = outcome.verdict.rn.as_ref().expect("verdict carries the rn block");
+    let error = rn.js_error.as_ref().expect("js_error");
+    assert_eq!(error.name, "TypeError");
+    assert_eq!(error.frames[0].function.as_deref(), Some("onPress"));
+    assert!(!error.symbolicated, "no Metro in this run: never a fake symbolication");
+    assert!(
+        error.symbolication_reason.as_deref().unwrap_or("").contains("no metro configured"),
+        "{:?}",
+        error.symbolication_reason
+    );
+    let json = std::fs::read_to_string(artifacts.join("verdict.json")).unwrap();
+    assert!(json.contains("\"js_error\""), "verdict.json carries js_error");
+    let _ = std::fs::remove_dir_all(&artifacts);
+
+    // Negative: the wrong name is an assertion failure that names what was seen.
+    let scenario = js_error_scenario("  - assert_js_error: {name: SyntaxError, timeout_ms: 2000}\n");
+    let mut backend = RnLogs::new(vec![vec![], vec![(LogLevel::Error, "ReactNative", RN_TYPE_ERROR)]]);
+    let (outcome, artifacts) = run_ordered(&scenario, &mut backend);
+    assert_eq!(outcome.verdict.verdict, Status::Fail);
+    let failure = outcome.verdict.failure.as_ref().unwrap();
+    assert_eq!(failure.code, acos_protocol::ErrorCode::AssertionFailed);
+    assert!(failure.error.message.contains("name is `TypeError`"), "{}", failure.error.message);
+    let _ = std::fs::remove_dir_all(&artifacts);
+}
+
+#[test]
+fn metro4_an_unreachable_bundle_is_blocked_not_a_js_failure() {
+    let scenario = js_error_scenario("  - assert_js_error: {name: TypeError, timeout_ms: 2000}\n");
+    let mut backend = RnLogs::new(vec![vec![], vec![(LogLevel::Error, "ReactNative", RN_UNREACHABLE)]]);
+    let (outcome, artifacts) = run_ordered(&scenario, &mut backend);
+    assert_eq!(outcome.verdict.verdict, Status::Blocked);
+    let failure = outcome.verdict.failure.as_ref().unwrap();
+    assert_eq!(failure.code, acos_protocol::ErrorCode::BundleUnreachable);
+    let rn = outcome.verdict.rn.as_ref().unwrap();
+    assert!(rn.js_error.is_none());
+    let unreachable = rn.bundle_unreachable.as_ref().unwrap();
+    assert_eq!(unreachable.url.as_deref(), Some("http://localhost:8081/index.bundle?platform=android&dev=true"));
+    assert!(unreachable.error.contains("ECONNREFUSED"));
+    let _ = std::fs::remove_dir_all(&artifacts);
+
+    // and `bundle_unreachable: true` is the pass condition when that is the point
+    let scenario = js_error_scenario("  - assert_js_error: {bundle_unreachable: true, timeout_ms: 2000}\n");
+    let mut backend = RnLogs::new(vec![vec![], vec![(LogLevel::Error, "ReactNative", RN_UNREACHABLE)]]);
+    let (outcome, artifacts) = run_ordered(&scenario, &mut backend);
+    assert_eq!(outcome.verdict.verdict, Status::Pass, "{:?}", outcome.verdict.failure);
+    let _ = std::fs::remove_dir_all(&artifacts);
+}
+
+#[test]
+fn metro4_none_true_after_a_reload_judges_only_the_new_lines() {
+    let steps = "  - assert_js_error: {name: TypeError}\n  - wait: {ms: 1}\n  - assert_js_error: {none: true, since_previous_step: true}\n";
+    let mut backend = RnLogs::new(vec![vec![], vec![(LogLevel::Error, "ReactNative", RN_TYPE_ERROR)]]);
+    let (outcome, artifacts) = run_ordered(&js_error_scenario(steps), &mut backend);
+    assert_eq!(outcome.verdict.verdict, Status::Pass, "{:?}", outcome.verdict.failure);
+    assert_eq!(outcome.verdict.steps[3].step, "assert_js_error");
+    let _ = std::fs::remove_dir_all(&artifacts);
+
+    // Without the scope, the old error is still in the run: `none` fails.
+    let steps = "  - assert_js_error: {name: TypeError}\n  - wait: {ms: 1}\n  - assert_js_error: {none: true}\n";
+    let mut backend = RnLogs::new(vec![vec![], vec![(LogLevel::Error, "ReactNative", RN_TYPE_ERROR)]]);
+    let (outcome, artifacts) = run_ordered(&js_error_scenario(steps), &mut backend);
+    assert_eq!(outcome.verdict.verdict, Status::Fail);
+    assert!(outcome.verdict.failure.as_ref().unwrap().error.message.contains("still reported"));
+    let _ = std::fs::remove_dir_all(&artifacts);
+}
+
+/// `since_last_js_assert`: what the fix logged is judged, in whichever step it
+/// was collected; the error the previous assertion judged is not.
+#[test]
+fn metro4_since_last_js_assert_covers_every_step_of_the_recovery() {
+    let steps = "  - assert_js_error: {name: TypeError}\n  - wait: {ms: 1}\n  - wait: {ms: 1}\n  - wait: {ms: 1}\n  - assert_js_error: {none: true, since_last_js_assert: true}\n";
+    let error = || vec![(LogLevel::Error, "ReactNative", RN_TYPE_ERROR)];
+    // call n is step n's flush; the intentional error arrives for step 1
+    let mut backend = RnLogs::new(vec![vec![], error()]);
+    let (outcome, artifacts) = run_ordered(&js_error_scenario(steps), &mut backend);
+    assert_eq!(outcome.verdict.verdict, Status::Pass, "{:?}", outcome.verdict.failure);
+    let _ = std::fs::remove_dir_all(&artifacts);
+
+    // a second error logged during the first recovery step fails it, although
+    // two more steps run before the assertion
+    let mut backend = RnLogs::new(vec![vec![], error(), vec![], error()]);
+    let (outcome, artifacts) = run_ordered(&js_error_scenario(steps), &mut backend);
+    assert_eq!(outcome.verdict.verdict, Status::Fail);
+    let failure = outcome.verdict.failure.as_ref().unwrap();
+    assert_eq!(failure.step_index, Some(5));
+    assert!(failure.error.message.contains("still reported"), "{}", failure.error.message);
+    let _ = std::fs::remove_dir_all(&artifacts);
+}
+
+/// RN 0.81.4 dev: the uncaught error's log line, and its LogBox dialog.
+const RN_BRACKETED: &str = "[ReferenceError: Property 'acosMissingFunction' doesn't exist]";
+
+fn logbox_dialog() -> Vec<UiNode> {
+    let node = |class: &str, children: Vec<UiNode>| {
+        let mut node = UiNode::new("n", class, Bounds::new(0, 0, 100, 100));
+        node.window_type = "TYPE_APPLICATION".to_string();
+        node.children = children;
+        node
+    };
+    let texts = [
+        "Log 1 of 1",
+        "Uncaught Error",
+        "Property 'acosMissingFunction' doesn't exist",
+        "Call Stack",
+        "onPress",
+        "App.js:32:24",
+        "See 16 more frames",
+        "Dismiss",
+        "Minimize",
+    ]
+    .iter()
+    .map(|text| node("com.facebook.react.views.text.ReactTextView", vec![]).with_text(*text))
+    .collect();
+    let root = node("com.facebook.react.ReactRootView", texts);
+    vec![node("android.widget.FrameLayout", vec![root]).with_resource_id("android:id/content")]
+}
+
+#[test]
+fn metro4_the_logbox_frame_reaches_the_assertion_and_outlives_the_dialog() {
+    let steps = "  - assert_js_error: {name: ReferenceError, message: acosMissingFunction, file: App.js, line: 32, symbolicated: true, timeout_ms: 2000}\n  - wait: {ms: 1}\n  - assert_js_error: {none: true, since_last_js_assert: true, timeout_ms: 2000}\n";
+    let mut backend = RnLogs::new(vec![vec![], vec![(LogLevel::Error, "ReactNativeJS", RN_BRACKETED)]]);
+    // the wait's read, the step's read, one more stale read for `none: true`
+    backend.screen = Some((logbox_dialog(), 3));
+    let (outcome, artifacts) = run_ordered(&js_error_scenario(steps), &mut backend);
+    assert_eq!(outcome.verdict.verdict, Status::Pass, "{:?}", outcome.verdict.failure);
+    assert_eq!(backend.screen.as_ref().unwrap().1, 0, "`none: true` waited for the screen to clear");
+    assert!(outcome.verdict.steps[1].duration_ms < 2000, "the wait settles on the dialog");
+    let error = outcome.verdict.rn.as_ref().unwrap().js_error.as_ref().unwrap();
+    assert_eq!(error.kind, "fatal");
+    assert!(error.symbolicated);
+    assert_eq!(error.frames[0].file.as_deref(), Some("App.js"));
+    let _ = std::fs::remove_dir_all(&artifacts);
+}
+
+/// No `assert_js_error` ran (the run may have failed on whatever the dialog
+/// covers): the verdict still reads the frame off the screen.
+#[test]
+fn metro4_the_verdict_reads_the_dialog_for_an_error_logged_without_a_stack() {
+    let mut backend = RnLogs::new(vec![vec![(LogLevel::Error, "ReactNativeJS", RN_BRACKETED)]]);
+    backend.screen = Some((logbox_dialog(), usize::MAX));
+    let (outcome, artifacts) = run_ordered(&js_error_scenario("  - wait: {ms: 1}\n"), &mut backend);
+    let error = outcome.verdict.rn.as_ref().unwrap().js_error.as_ref().unwrap();
+    assert_eq!((error.name.as_str(), error.frames[0].line), ("ReferenceError", Some(32)));
+    let _ = std::fs::remove_dir_all(&artifacts);
+}
+
+#[test]
+fn metro4_a_dialog_still_on_screen_fails_none() {
+    // no new log line in scope: the dialog alone is a JS error
+    let steps = "  - assert_js_error: {none: true, since_previous_step: true, timeout_ms: 50}\n";
+    let mut backend = RnLogs::new(vec![]);
+    backend.screen = Some((logbox_dialog(), usize::MAX));
+    let (outcome, artifacts) = run_ordered(&js_error_scenario(steps), &mut backend);
+    assert_eq!(outcome.verdict.verdict, Status::Fail);
+    assert!(outcome.verdict.failure.as_ref().unwrap().error.message.contains("still reported"));
+    let _ = std::fs::remove_dir_all(&artifacts);
+}
+
+#[test]
+fn metro4_a_logged_error_like_string_below_error_level_never_counts() {
+    let steps = "  - assert_js_error: {none: true, timeout_ms: 50}\n";
+    let mut backend = RnLogs::new(vec![vec![
+        (LogLevel::Info, "ReactNativeJS", RN_BRACKETED),
+        (LogLevel::Warn, "ReactNativeJS", RN_BRACKETED),
+    ]]);
+    let (outcome, artifacts) = run_ordered(&js_error_scenario(steps), &mut backend);
+    assert_eq!(outcome.verdict.verdict, Status::Pass, "{:?}", outcome.verdict.failure);
+    assert!(outcome.verdict.rn.is_none());
+    let _ = std::fs::remove_dir_all(&artifacts);
+}
+
+#[test]
+fn metro4_a_non_rn_run_has_no_rn_block() {
+    let scenario = js_error_scenario("  - wait: {ms: 1}\n");
+    let mut backend = RnLogs::new(vec![vec![(LogLevel::Error, "AcosFixture", "TypeError: app text, stack:\nf@1:1")]]);
+    let (outcome, artifacts) = run_ordered(&scenario, &mut backend);
+    assert!(outcome.verdict.rn.is_none());
+    let _ = std::fs::remove_dir_all(&artifacts);
+}

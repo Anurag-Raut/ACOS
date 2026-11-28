@@ -1,0 +1,136 @@
+version: 1
+name: metro-redbox
+description: >-
+  METRO4/METRO6 acceptance arm: the redbox as data. A debug RN app renders
+  Metro's bundle; a Fast Refresh edit makes the button's onPress call a function
+  that does not exist; the tap throws and `assert_js_error` reads the JS error
+  (ReferenceError) with a frame symbolicated back to App.js. The fix is a second
+  edit; Fast Refresh delivers it (HMRClient dismisses the redbox) and
+  `assert_js_error: {none: true}` over the lines since the fix proves the redbox
+  is gone. Not part of any gate until it has a recorded live run.
+app: fixtures/build/apps/rn-debug.apk
+engine: art
+fallback: report-and-escalate
+api_level: 34
+isolation: process
+display:
+  mode: offscreen
+  width: 1080
+  height: 2400
+  density_dpi: 420
+capabilities:
+  - lifecycle
+  - ui.offscreen
+  - ui.text
+  - input
+services:
+  - id: network
+    profile: real
+expectation: pass
+needs_env: [pasta, metro]
+expectation_reason: >-
+  The Metro dev server runs on the host and reaches the guest through the
+  network:real relay; without pasta or node+Metro the arm cannot be honest.
+budgets:
+  memory_mib: 512
+  wall_ms: 600000
+steps:
+  # A COPY of the fixture project, Metro on 8081, the relay opt-in (the
+  # `adb reverse` equivalent) and RN's own `debug_http_host = localhost:8081`
+  # written before the guest boots.
+  - dev_server:
+      op: start
+      project: fixtures/apps/rn-hello-dev
+      port: 8081
+      debug_http_host: true
+      timeout_ms: 180000
+
+  - launch:
+      activity: dev.acos.fixtures.rnhello/.MainActivity
+      clear_state: true
+      settle_timeout_ms: 120000
+
+  - assert_text:
+      selector: {text: {exact: "Hello ACOS"}}
+      text: {exact: "Hello ACOS"}
+      timeout_ms: 120000
+
+  # The bug: onPress calls an undefined function (a runtime ReferenceError),
+  # paired with a visible marker change so we can wait for the guest to apply
+  # the /hot update before tapping. Editing the marker second also keeps
+  # `fast_refresh`'s bundle probe on plain string text (independent of Babel's
+  # trailing-comma and arrow-parameter formatting).
+  - dev_server:
+      op: edit
+      file: App.js
+      find: "onPress: () => setCount((c) => c + 1)"
+      replace: "onPress: () => acosMissingFunction()"
+  - dev_server:
+      op: edit
+      file: App.js
+      find: "Hello ACOS"
+      replace: "Hello Redbox"
+  - dev_server:
+      op: wait_serves
+      contains: "acosMissingFunction"
+      timeout_ms: 120000
+  - dev_server: {op: fast_refresh, timeout_ms: 120000}
+
+  - assert_text:
+      selector: {text: {exact: "Hello Redbox"}}
+      text: {exact: "Hello Redbox"}
+      timeout_ms: 60000
+
+  - tap:
+      x: 540
+      y: 1277
+
+  # The redbox as data: the error and the source frame an agent can edit.
+  - assert_js_error:
+      name: ReferenceError
+      message: acosMissingFunction
+      file: App.js
+      symbolicated: true
+      timeout_ms: 60000
+
+  # The fix, delivered by Fast Refresh: wait for the restored marker, confirm
+  # the redbox is gone, and prove the button increments the counter again.
+  - dev_server:
+      op: edit
+      file: App.js
+      find: "onPress: () => acosMissingFunction()"
+      replace: "onPress: () => setCount((c) => c + 1)"
+  - dev_server:
+      op: edit
+      file: App.js
+      find: "Hello Redbox"
+      replace: "Hello Fixed"
+  - dev_server:
+      op: wait_serves
+      contains: "setCount"
+      absent: "acosMissingFunction"
+      timeout_ms: 120000
+  - dev_server: {op: fast_refresh, timeout_ms: 120000}
+
+  - assert_text:
+      selector: {text: {exact: "Hello Fixed"}}
+      text: {exact: "Hello Fixed"}
+      timeout_ms: 60000
+
+  # Everything logged since the fix began (both edits, the refresh and the wait
+  # for the marker), but not the intentional ReferenceError judged above.
+  - assert_js_error:
+      none: true
+      since_last_js_assert: true
+      timeout_ms: 30000
+
+  - tap:
+      x: 540
+      y: 1277
+
+  - assert_text:
+      selector: {text: {exact: "count: 1"}}
+      text: {exact: "count: 1"}
+      timeout_ms: 30000
+
+  - dev_server: {op: stop}

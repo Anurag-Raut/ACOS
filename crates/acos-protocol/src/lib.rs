@@ -37,6 +37,7 @@ pub mod launch;
 pub mod mcp;
 pub mod provenance;
 pub mod reply;
+pub mod rn;
 pub mod scenario;
 pub mod schema;
 pub mod ui;
