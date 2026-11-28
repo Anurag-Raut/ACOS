@@ -755,6 +755,20 @@ impl DeclaredComponent {
                                 kind: 2, // PATTERN_SIMPLE_GLOB
                             });
                         }
+                        if let Some(suffix) = d.path_suffix.as_deref() {
+                            paths.push(DataPattern {
+                                pattern: Some(suffix.to_string()),
+                                kind: 4, // PATTERN_SUFFIX
+                            });
+                        }
+                        if let Some(pat) = d.path_advanced_pattern.as_deref() {
+                            // Kept even though the matcher never matches it: an
+                            // empty path list would accept every path.
+                            paths.push(DataPattern {
+                                pattern: Some(pat.to_string()),
+                                kind: 3, // PATTERN_ADVANCED_GLOB
+                            });
+                        }
                     }
                     Filter {
                         actions: f.actions.clone(),
@@ -1179,7 +1193,8 @@ pub struct DataPattern {
     /// `PatternMatcher.mPattern`.
     pub pattern: Option<String>,
     /// `PatternMatcher.mType` (`PATTERN_LITERAL` = 0, `PATTERN_PREFIX` = 1,
-    /// `PATTERN_SIMPLE_GLOB` = 2, `PATTERN_ADVANCED_GLOB` = 3).
+    /// `PATTERN_SIMPLE_GLOB` = 2, `PATTERN_ADVANCED_GLOB` = 3,
+    /// `PATTERN_SUFFIX` = 4).
     pub kind: i32,
 }
 
@@ -1228,6 +1243,9 @@ impl DataAuthority {
             // (`IntentFilter.AuthorityEntry.match` compares against
             // `mHost` = `.example.com`, case-insensitively).
             let suffix = declared.trim_start_matches('*');
+            // Compare bytes: `host` comes from an untrusted URI, and slicing
+            // the `str` at this offset panics inside a multi-byte character.
+            let (host, suffix) = (host.as_bytes(), suffix.as_bytes());
             return host.len() > suffix.len()
                 && host[host.len() - suffix.len()..].eq_ignore_ascii_case(suffix);
         }
@@ -3733,6 +3751,60 @@ fn provider_from_holder(holder: &Parcelable) -> Option<ProviderRecord> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn wildcard_authority_handles_non_ascii_hosts_without_panicking() {
+        let authority = DataAuthority {
+            host: Some("*.a".into()),
+            port: -1,
+            wild: true,
+        };
+        // `.a` starts inside `é`: byte 1 is not a character boundary.
+        assert!(!authority.matches("\u{e9}a", -1));
+        assert!(authority.matches("\u{e9}.A", -1));
+    }
+
+    #[test]
+    fn suffix_and_advanced_path_filters_do_not_accept_every_path() {
+        let data = |suffix: Option<&str>, advanced: Option<&str>| acos_apk::manifest::IntentData {
+            path_suffix: suffix.map(str::to_string),
+            path_advanced_pattern: advanced.map(str::to_string),
+            ..Default::default()
+        };
+        let component = acos_apk::manifest::Component {
+            kind: acos_apk::manifest::ComponentKind::Activity,
+            name: ".Main".into(),
+            authorities: Vec::new(),
+            exported: Some(true),
+            launch_mode: None,
+            process: None,
+            permission: None,
+            grant_uri_permissions: None,
+            label: None,
+            label_ref: None,
+            intent_filters: vec![
+                acos_apk::manifest::IntentFilter {
+                    data: vec![data(Some(".pdf"), None)],
+                    ..Default::default()
+                },
+                acos_apk::manifest::IntentFilter {
+                    data: vec![data(None, Some("/item/[0-9]+"))],
+                    ..Default::default()
+                },
+            ],
+            target_activity: None,
+            enabled: None,
+            meta_data: Vec::new(),
+        };
+        let declared = DeclaredComponent::from_apk("pkg", &component);
+        let suffix = &declared.filters[0].paths;
+        assert_eq!(suffix.len(), 1);
+        assert!(suffix[0].matches("/docs/a.pdf"));
+        assert!(!suffix[0].matches("/admin"));
+        let advanced = &declared.filters[1].paths;
+        assert_eq!(advanced.len(), 1, "an empty list would match any path");
+        assert!(!advanced[0].matches("/admin"));
+    }
 
     fn db_with_fixture() -> ManifestDb {
         let path = crate::workspace_path("fixtures/apps/service-provider/AndroidManifest.xml");
