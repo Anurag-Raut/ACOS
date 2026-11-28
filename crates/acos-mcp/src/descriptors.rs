@@ -1076,8 +1076,9 @@ fn session_tool_spec(name: &str) -> (&'static str, Value) {
              fulfills a captured file/photo picker via `content://com.acos.picker/...` or cancels \
              it with `RESULT_CANCELED`. The module answers with the op's own value plus compact \
              `modules_summary` (use `acos_services` for the full 28-module catalog): a refused or \
-             unknown op is a structured error, never a silent success. Only an attached module \
-             answers; a detached one says so (`attach` it first with `acos_services`).",
+             unknown op is a structured error, never a silent success. `intents` is a core service \
+             and answers without attaching. A detached scripted module says so (`attach` it \
+             first with `acos_services`).",
             json!({
                 "type": "object",
                 "additionalProperties": false,
