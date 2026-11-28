@@ -15297,24 +15297,107 @@ mod service_control_hot_attach_tests {
         assert_eq!(entries[1], "flag=b1");
     }
 
+    fn parse_lines(lines: &str) -> ProbeState {
+        let state = Arc::new(std::sync::Mutex::new(ProbeState::default()));
+        drain_stdout_lines(
+            std::io::Cursor::new(lines.as_bytes().to_vec()),
+            128 * 1024,
+            Arc::clone(&state),
+            None,
+            0,
+        );
+        Arc::try_unwrap(state)
+            .ok()
+            .expect("unique Arc")
+            .into_inner()
+            .unwrap()
+    }
+
+    /// Compile the real `LaunchMain` with `driver` (class `dev.acos.art.<class>`)
+    /// and run it on the host JVM. The driver gets two file paths and writes the
+    /// captured protocol stdout / stderr there. `None` (said on stderr) when the
+    /// Android SDK is not installed.
+    fn run_launch_main_driver(
+        class: &str,
+        driver_source: &str,
+    ) -> Option<(std::process::Output, String, String)> {
+        let sdk = android_sdk().ok();
+        let android_jar = sdk.map(|sdk| sdk.join("platforms/android-34/android.jar"));
+        let Some(android_jar) = android_jar.filter(|jar| jar.is_file()) else {
+            eprintln!("SKIP {class}: no Android SDK platform 34 on this host");
+            return None;
+        };
+        let javac = PathBuf::from(std::env::var("JAVAC").unwrap_or_else(|_| "javac".into()));
+        let java = PathBuf::from(std::env::var("JAVA").unwrap_or_else(|_| "java".into()));
+        struct TempDirGuard(PathBuf);
+        impl Drop for TempDirGuard {
+            fn drop(&mut self) {
+                let _ = fs::remove_dir_all(&self.0);
+            }
+        }
+        let tmp_path = std::env::temp_dir().join(format!("acos-{class}-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&tmp_path);
+        fs::create_dir_all(&tmp_path).expect("create tempdir");
+        let _guard = TempDirGuard(tmp_path.clone());
+
+        let classes = tmp_path.join("classes");
+        fs::create_dir_all(&classes).expect("create classes dir");
+        let driver = tmp_path.join(format!("{class}.java"));
+        fs::write(&driver, driver_source).expect("write driver");
+
+        let src_dir = crate::app::guest_source_dir();
+        let compile = Command::new(&javac)
+            .args(crate::jvm::dump_args())
+            .arg("-source")
+            .arg("11")
+            .arg("-target")
+            .arg("11")
+            .arg("-Xlint:-options")
+            .arg("-cp")
+            .arg(&android_jar)
+            .arg("-d")
+            .arg(&classes)
+            .arg(src_dir.join("dev/acos/art/LaunchMain.java"))
+            .arg(src_dir.join("dev/acos/art/SoftwareKeyStore.java"))
+            .arg(src_dir.join("dev/acos/art/RenderNat.java"))
+            .arg(src_dir.join("dev/acos/art/Nat.java"))
+            .arg(&driver)
+            .output()
+            .expect("run javac");
+        assert!(
+            compile.status.success(),
+            "javac failed:\n{}{}",
+            String::from_utf8_lossy(&compile.stdout),
+            String::from_utf8_lossy(&compile.stderr)
+        );
+
+        let out_file = tmp_path.join("stdout.txt");
+        let err_file = tmp_path.join("stderr.txt");
+        let cp = format!("{}:{}", classes.display(), android_jar.display());
+        let run = Command::new(&java)
+            .arg(format!(
+                "-XX:ErrorFile={}/hs_err_pid%p.log",
+                tmp_path.display()
+            ))
+            .arg(format!(
+                "-XX:ReplayDataFile={}/replay_pid%p.log",
+                tmp_path.display()
+            ))
+            .arg("-cp")
+            .arg(&cp)
+            .arg(format!("dev.acos.art.{class}"))
+            .arg(&out_file)
+            .arg(&err_file)
+            .output()
+            .expect("run java");
+
+        let stdout = fs::read_to_string(&out_file).expect("read captured stdout");
+        let stderr = fs::read_to_string(&err_file).expect("read captured stderr");
+        Some((run, stdout, stderr))
+    }
+
     #[test]
     fn launch_main_preserves_protocol_line_boundaries_after_partial_stdout() {
-        fn parse_lines(lines: &str) -> ProbeState {
-            let state = Arc::new(std::sync::Mutex::new(ProbeState::default()));
-            drain_stdout_lines(
-                std::io::Cursor::new(lines.as_bytes().to_vec()),
-                128 * 1024,
-                Arc::clone(&state),
-                None,
-                0,
-            );
-            Arc::try_unwrap(state)
-                .ok()
-                .expect("unique Arc")
-                .into_inner()
-                .unwrap()
-        }
-
         let src = include_str!("../guest/java/dev/acos/art/LaunchMain.java");
         for required in [
             "private static boolean sOrigOutAtLineStart = true;",
@@ -15346,34 +15429,8 @@ mod service_control_hot_attach_tests {
 
         // When the Android SDK + JDK are available, compile and run the real LaunchMain
         // stream framing on the host JVM to verify partial-line behavior end to end.
-        let Ok(sdk) = android_sdk() else {
-            return;
-        };
-        let android_jar = sdk.join("platforms/android-34/android.jar");
-        if !android_jar.is_file() {
-            return;
-        }
-        let javac = PathBuf::from(std::env::var("JAVAC").unwrap_or_else(|_| "javac".into()));
-        let java = PathBuf::from(std::env::var("JAVA").unwrap_or_else(|_| "java".into()));
-        struct TempDirGuard(PathBuf);
-        impl Drop for TempDirGuard {
-            fn drop(&mut self) {
-                let _ = fs::remove_dir_all(&self.0);
-            }
-        }
-        let tmp_path = std::env::temp_dir().join(format!(
-            "acos-launch-line-boundary-{}",
-            std::process::id()
-        ));
-        let _ = fs::remove_dir_all(&tmp_path);
-        fs::create_dir_all(&tmp_path).expect("create tempdir");
-        let _guard = TempDirGuard(tmp_path.clone());
-
-        let classes = tmp_path.join("classes");
-        fs::create_dir_all(&classes).expect("create classes dir");
-        let driver = tmp_path.join("LineBoundaryDriver.java");
-        fs::write(
-            &driver,
+        let Some((run, stdout, stderr)) = run_launch_main_driver(
+            "LineBoundaryDriver",
             r#"package dev.acos.art;
 import java.io.ByteArrayOutputStream;
 import java.io.FileOutputStream;
@@ -15417,48 +15474,9 @@ public final class LineBoundaryDriver {
     }
 }
 "#,
-        )
-        .expect("write driver");
-
-        let src_dir = crate::app::guest_source_dir();
-        let compile = Command::new(&javac)
-            .args(crate::jvm::dump_args())
-            .arg("-source")
-            .arg("11")
-            .arg("-target")
-            .arg("11")
-            .arg("-Xlint:-options")
-            .arg("-cp")
-            .arg(&android_jar)
-            .arg("-d")
-            .arg(&classes)
-            .arg(src_dir.join("dev/acos/art/LaunchMain.java"))
-            .arg(src_dir.join("dev/acos/art/SoftwareKeyStore.java"))
-            .arg(src_dir.join("dev/acos/art/RenderNat.java"))
-            .arg(src_dir.join("dev/acos/art/Nat.java"))
-            .arg(&driver)
-            .output()
-            .expect("run javac");
-        assert!(
-            compile.status.success(),
-            "javac failed:\n{}{}",
-            String::from_utf8_lossy(&compile.stdout),
-            String::from_utf8_lossy(&compile.stderr)
-        );
-
-        let out_file = tmp_path.join("stdout.txt");
-        let err_file = tmp_path.join("stderr.txt");
-        let cp = format!("{}:{}", classes.display(), android_jar.display());
-        let run = Command::new(&java)
-            .arg(format!("-XX:ErrorFile={}/hs_err_pid%p.log", tmp_path.display()))
-            .arg(format!("-XX:ReplayDataFile={}/replay_pid%p.log", tmp_path.display()))
-            .arg("-cp")
-            .arg(&cp)
-            .arg("dev.acos.art.LineBoundaryDriver")
-            .arg(&out_file)
-            .arg(&err_file)
-            .output()
-            .expect("run java");
+        ) else {
+            return;
+        };
         assert!(
             run.status.success(),
             "LineBoundaryDriver failed:\n{}{}",
@@ -15466,8 +15484,6 @@ public final class LineBoundaryDriver {
             String::from_utf8_lossy(&run.stderr)
         );
 
-        let stdout = fs::read_to_string(&out_file).expect("read captured stdout");
-        let stderr = fs::read_to_string(&err_file).expect("read captured stderr");
         assert_eq!(
             stdout,
             "hello\nACOSPROBE {\"seq\":1,\"tree\":{\"nodes\":[]}}\nfoo bar\npartial\nACOSLAUNCH MARK ok\nACOSSTUCK {}\n"
@@ -15486,6 +15502,269 @@ public final class LineBoundaryDriver {
             parsed.marks
         );
     }
+
+    #[test]
+    fn launch_main_fatal_trace_survives_an_unknown_host_cause() {
+        // The image's `Log` stack formatter returns "" when any link of the cause
+        // chain is an UnknownHostException, so no fatal path may go through it.
+        let src = include_str!("../guest/java/dev/acos/art/LaunchMain.java");
+        assert!(
+            !src.contains("Log.getStackTraceString("),
+            "LaunchMain.java fatal paths must use the unfiltered `stackTraceText`"
+        );
+
+        let Some((run, stdout, stderr)) = run_launch_main_driver(
+            "UnknownHostTraceDriver",
+            r#"package dev.acos.art;
+import java.io.FileOutputStream;
+import java.io.PrintStream;
+public final class UnknownHostTraceDriver {
+    public static void main(String[] args) throws Exception {
+        System.setOut(new PrintStream(new FileOutputStream(args[0]), true, "UTF-8"));
+        System.setErr(new PrintStream(new FileOutputStream(args[1]), true, "UTF-8"));
+        LaunchMain.installRuntimeDiagnostics();
+
+        // The fallback never throws and is never empty.
+        Throwable hostile = new RuntimeException() {
+            @Override
+            public void printStackTrace(java.io.PrintWriter w) {
+                throw new IllegalStateException("no trace");
+            }
+            @Override
+            public String toString() {
+                throw new IllegalStateException("no string");
+            }
+        };
+        LaunchMain.origWrite(LaunchMain.sOrigErr, "null=" + LaunchMain.stackTraceText(null));
+        LaunchMain.origWrite(
+                LaunchMain.sOrigErr,
+                "hostile=" + (LaunchMain.stackTraceText(hostile).length() > 1) + "\n");
+
+        // The real default handler; it ends the process with status 1.
+        Thread.getDefaultUncaughtExceptionHandler().uncaughtException(
+                Thread.currentThread(),
+                new IllegalStateException(
+                        "sync failed",
+                        new RuntimeException(
+                                "fetch failed",
+                                new java.net.UnknownHostException("api.invalid"))));
+    }
 }
+"#,
+        ) else {
+            return;
+        };
+        assert_eq!(
+            run.status.code(),
+            Some(1),
+            "the uncaught handler exits 1:\n{}{}",
+            String::from_utf8_lossy(&run.stdout),
+            String::from_utf8_lossy(&run.stderr)
+        );
+        for needle in [
+            "null=null\nhostile=true\n",
+            "java.lang.IllegalStateException: sync failed\n\tat ",
+            "Caused by: java.lang.RuntimeException: fetch failed",
+            "Caused by: java.net.UnknownHostException: api.invalid",
+        ] {
+            assert!(
+                stderr.contains(needle),
+                "fatal trace must contain {needle:?}:\n{stderr}"
+            );
+        }
+        let record = parse_lines(&stdout)
+            .guest_launch
+            .expect("structured crash record");
+        let detail = guest_crash_detail(Some(&record)).expect("crash record parses");
+        assert_eq!(detail["code"], "GUEST_ERROR");
+        assert_eq!(
+            detail["causes"][1]["class"],
+            "java.net.UnknownHostException"
+        );
+    }
 
+    #[test]
+    fn launch_main_keeps_large_protocol_records_intact_under_concurrent_writes() {
+        const ROUNDS: u64 = 150;
+        let Some((run, stdout, stderr)) = run_launch_main_driver(
+            "ConcurrentRecordDriver",
+            r#"package dev.acos.art;
+import java.io.ByteArrayOutputStream;
+import java.io.FileOutputStream;
+import java.io.PrintStream;
+public final class ConcurrentRecordDriver {
+    static final int ROUNDS = 150;
+    // Well past the 8 KiB encoder buffer of a PrintStream.
+    static final String PAD = new String(new char[20000]).replace('\0', 'x');
 
+    /** Yields on every flush so other writers get in between two drains. */
+    static final class Capture extends ByteArrayOutputStream {
+        @Override
+        public void flush() {
+            Thread.yield();
+        }
+    }
+
+    interface Round {
+        void run(int i);
+    }
+
+    static Thread writer(final Round round) {
+        return new Thread(new Runnable() {
+            @Override
+            public void run() {
+                for (int i = 1; i <= ROUNDS; i++) {
+                    round.run(i);
+                }
+            }
+        });
+    }
+
+    public static void main(String[] args) throws Exception {
+        Capture capOut = new Capture();
+        Capture capErr = new Capture();
+        System.setOut(new PrintStream(capOut, true, "UTF-8"));
+        System.setErr(new PrintStream(capErr, true, "UTF-8"));
+        LaunchMain.installRuntimeDiagnostics();
+
+        // Deterministic: the first chunk of a record is flushed, then a direct write.
+        String split = "ACOSLAUNCH MARK split " + PAD;
+        System.out.write(split.getBytes("UTF-8"), 0, 8192);
+        System.out.flush();
+        LaunchMain.origLine(LaunchMain.sOrigOut, "ACOSLAUNCH MARK between");
+        System.out.println(split.substring(8192));
+        // A commit-text acknowledgment after a flushed partial app write.
+        System.out.print("hello");
+        System.out.flush();
+        System.out.println("ACOSCOMMITTEXT {\"seq\":0,\"ok\":true,\"handled\":true}");
+
+        Thread[] threads = {
+            writer(new Round() {
+                @Override
+                public void run(int i) {
+                    System.out.println("ACOSCOMMITTEXT {\"seq\":" + i
+                            + ",\"ok\":true,\"handled\":true,\"pad\":\"" + PAD + "\"}");
+                }
+            }),
+            writer(new Round() {
+                @Override
+                public void run(int i) {
+                    System.out.println("ACOSLAUNCH MARK redirected-" + i + " " + PAD);
+                }
+            }),
+            writer(new Round() {
+                @Override
+                public void run(int i) {
+                    LaunchMain.origLine(LaunchMain.sOrigOut, "ACOSPROBE {\"seq\":" + i
+                            + ",\"tree\":{\"nodes\":[]},\"pad\":\"" + PAD + "\"}");
+                }
+            }),
+            writer(new Round() {
+                @Override
+                public void run(int i) {
+                    LaunchMain.origLine(LaunchMain.sOrigOut, "ACOSLAUNCH MARK direct-" + i);
+                    LaunchMain.origLineBoth("ACOSSTUCK {\"i\":" + i + "}");
+                    Thread.yield();
+                }
+            }),
+            writer(new Round() {
+                @Override
+                public void run(int i) {
+                    System.out.print("app ");
+                    System.out.flush();
+                    System.out.println(PAD);
+                }
+            }),
+        };
+        for (Thread t : threads) {
+            t.start();
+        }
+        for (Thread t : threads) {
+            t.join(60000);
+            if (t.isAlive()) {
+                Runtime.getRuntime().halt(3); // deadlock
+            }
+        }
+
+        try (FileOutputStream fo = new FileOutputStream(args[0]);
+             FileOutputStream fe = new FileOutputStream(args[1])) {
+            fo.write(capOut.toByteArray());
+            fe.write(capErr.toByteArray());
+        }
+    }
+}
+"#,
+        ) else {
+            return;
+        };
+        assert!(
+            run.status.success(),
+            "ConcurrentRecordDriver failed ({:?}):\n{}{}",
+            run.status.code(),
+            String::from_utf8_lossy(&run.stdout),
+            String::from_utf8_lossy(&run.stderr)
+        );
+
+        let pad = "x".repeat(20000);
+        let mut expected = vec![
+            format!("ACOSLAUNCH MARK split {pad}"),
+            "ACOSLAUNCH MARK between".to_string(),
+            r#"ACOSCOMMITTEXT {"seq":0,"ok":true,"handled":true}"#.to_string(),
+        ];
+        for i in 1..=ROUNDS {
+            expected.push(format!(
+                r#"ACOSCOMMITTEXT {{"seq":{i},"ok":true,"handled":true,"pad":"{pad}"}}"#
+            ));
+            expected.push(format!("ACOSLAUNCH MARK redirected-{i} {pad}"));
+            expected.push(format!(
+                r#"ACOSPROBE {{"seq":{i},"tree":{{"nodes":[]}},"pad":"{pad}"}}"#
+            ));
+            expected.push(format!("ACOSLAUNCH MARK direct-{i}"));
+            expected.push(format!(r#"ACOSSTUCK {{"i":{i}}}"#));
+        }
+        expected.sort();
+
+        // Every line is either one whole protocol record or only app output (a
+        // large app line may be split by a record; a record may never be).
+        let mut records = Vec::new();
+        for (n, line) in stdout.lines().enumerate() {
+            if line.starts_with("ACOS") {
+                records.push(line.to_string());
+            } else {
+                assert!(
+                    line.replace("app ", "")
+                        .replace("hello", "")
+                        .bytes()
+                        .all(|b| b == b'x'),
+                    "line {n} is a broken protocol fragment: {:.160}",
+                    line
+                );
+            }
+        }
+        records.sort();
+        assert_eq!(records.len(), expected.len(), "protocol record count");
+        for (got, want) in records.iter().zip(&expected) {
+            assert!(
+                got == want,
+                "broken record: got {got:.160} want {want:.160}"
+            );
+        }
+        let split_at = stdout.find("ACOSLAUNCH MARK split ").expect("split record");
+        assert!(
+            stdout
+                .find("ACOSLAUNCH MARK between")
+                .expect("direct record")
+                < split_at,
+            "a direct write goes before a record that is still being assembled"
+        );
+        assert_eq!(stderr.lines().count() as u64, ROUNDS);
+
+        let parsed = parse_lines(&stdout);
+        assert_eq!(parsed.bad_probe_lines, 0);
+        assert_eq!(parsed.latest.as_ref().map(|s| s.seq), Some(ROUNDS));
+        assert!(
+            parsed.commit_text_results.contains_key(&0),
+            "commit-text acknowledgment after a partial app write must parse"
+        );
+    }
+}

@@ -126,9 +126,12 @@ public final class LaunchMain {
      * The one lock that serialises every byte reaching {@link #sOrigOut} /
      * {@link #sOrigErr}: the redirected {@code System.out}/{@code System.err}
      * streams write whole lines under it, and every direct protocol write goes
-     * through {@link #origLine}. Nothing but the raw write + flush runs while
-     * it is held, so it is always the innermost guest-side lock (no inversion
-     * with a {@code PrintStream} monitor).
+     * through {@link #origLine}. Lock order is fixed: the redirected stream's
+     * monitors (its {@code PrintStream}, then the
+     * {@link LogRedirectOutputStream}), then this lock, then the original
+     * stream's own monitor. Direct writers start here and never take a
+     * redirected monitor; nothing but the raw write + flush runs while this
+     * lock is held.
      */
     static final Object sOutLock = new Object();
     /**
@@ -435,14 +438,15 @@ public final class LaunchMain {
                 || line.startsWith("ACOSPROBE")
                 || line.startsWith("ACOSTRACE")
                 || line.startsWith("ACOSSTUCK")
-                || line.startsWith("ACOSUNSUPPORTED");
+                || line.startsWith("ACOSUNSUPPORTED")
+                || line.startsWith("ACOSCOMMITTEXT");
     }
 
-    static boolean isAcosProtocolBytes(byte[] bytes) {
-        if (bytes.length < 9) {
+    static boolean isAcosProtocolBytes(byte[] bytes, int length) {
+        if (length < 9) {
             return false;
         }
-        int prefixLen = Math.min(bytes.length, 16);
+        int prefixLen = Math.min(length, 16);
         String prefix = new String(bytes, 0, prefixLen, java.nio.charset.StandardCharsets.UTF_8);
         return isAcosProtocolLine(prefix);
     }
@@ -459,6 +463,17 @@ public final class LaunchMain {
      * host-guest IPC is completely unaffected.
      */
     static final class LogRedirectOutputStream extends java.io.OutputStream {
+        /** A byte buffer that can say whether it starts a protocol record. */
+        private static final class PendingLine extends java.io.ByteArrayOutputStream {
+            PendingLine() {
+                super(256);
+            }
+
+            synchronized boolean isProtocol() {
+                return isAcosProtocolBytes(buf, count);
+            }
+        }
+
         private static final int MAX_LOG_LINE = 4096;
         private static final ThreadLocal<Boolean> IN_LOG = new ThreadLocal<Boolean>();
 
@@ -469,8 +484,7 @@ public final class LaunchMain {
                 new java.io.ByteArrayOutputStream(256);
         private boolean skipCurrentLine = false;
         /** Bytes of the current, not yet newline-terminated line for `orig`. */
-        private final java.io.ByteArrayOutputStream origBuf =
-                new java.io.ByteArrayOutputStream(256);
+        private final PendingLine origBuf = new PendingLine();
         /** A line with no newline past this size is passed through anyway. */
         private static final int MAX_PENDING_ORIG = 1 << 20;
 
@@ -532,9 +546,9 @@ public final class LaunchMain {
             if (origBuf.size() == 0) {
                 return;
             }
+            boolean ensureLineStart = origBuf.isProtocol();
             byte[] bytes = origBuf.toByteArray();
             origBuf.reset();
-            boolean ensureLineStart = isAcosProtocolBytes(bytes);
             synchronized (sOutLock) {
                 writeRawOrigLocked(orig, bytes, ensureLineStart);
                 orig.flush();
@@ -576,12 +590,43 @@ public final class LaunchMain {
             }
         }
 
+        /**
+         * An autoflushing {@code PrintStream} calls this after every encoder
+         * chunk (8 KiB), so an unterminated protocol record stays pending until
+         * its newline: draining it here would let a direct write split it.
+         */
         @Override
         public synchronized void flush() throws java.io.IOException {
-            drainOrigLocked();
+            if (!origBuf.isProtocol()) {
+                drainOrigLocked();
+            }
             synchronized (sOutLock) {
                 orig.flush();
             }
+        }
+    }
+
+    /**
+     * The full stack trace of {@code t}, never empty. Android's {@code Log}
+     * formatter returns "" when any link of the cause chain is an
+     * {@code UnknownHostException}, which would hide an app's crash.
+     */
+    static String stackTraceText(Throwable t) {
+        try {
+            java.io.StringWriter text = new java.io.StringWriter(1024);
+            java.io.PrintWriter writer = new java.io.PrintWriter(text);
+            t.printStackTrace(writer);
+            writer.flush();
+            if (text.getBuffer().length() > 0) {
+                return text.toString();
+            }
+        } catch (Throwable ignored) {
+            // A null or hostile throwable: fall through to the one-line form.
+        }
+        try {
+            return String.valueOf(t) + "\n";
+        } catch (Throwable ignored) {
+            return t.getClass().getName() + "\n";
         }
     }
 
@@ -619,12 +664,12 @@ public final class LaunchMain {
                     msg.append("FATAL EXCEPTION: ").append(threadName).append('\n');
                     msg.append("Process: ").append(sPkg)
                             .append(", PID: ").append(android.os.Process.myPid()).append('\n');
-                    msg.append(android.util.Log.getStackTraceString(cause));
+                    msg.append(stackTraceText(cause));
                     android.util.Log.e("AndroidRuntime", msg.toString());
                 } catch (Throwable ignored) {
                 }
                 try {
-                    origWrite(sOrigErr, android.util.Log.getStackTraceString(cause));
+                    origWrite(sOrigErr, stackTraceText(cause));
                 } catch (Throwable ignored) {
                 }
                 try {
@@ -849,14 +894,14 @@ public final class LaunchMain {
                 msg.append("FATAL EXCEPTION: main\n");
                 msg.append("Process: ").append(sPkg)
                         .append(", PID: ").append(android.os.Process.myPid()).append('\n');
-                msg.append(android.util.Log.getStackTraceString(cause));
+                msg.append(stackTraceText(cause));
                 android.util.Log.e("AndroidRuntime", msg.toString());
             } catch (Throwable ignored) {
             }
             // The stack is the diagnosis of the *next* wall: print it before the
             // one-line outcome so a `--until activity-resumed` run that got past
             // the resume still names what stopped it.
-            origWrite(sOrigOut, android.util.Log.getStackTraceString(cause)
+            origWrite(sOrigOut, stackTraceText(cause)
                     + "ACOSLAUNCH {\"outcome\":\"crash\",\"code\":\"LOOPER_THREW\","
                     + "\"activity_resumed\":" + resumed + ",\"message\":\""
                     + esc(String.valueOf(cause)) + "\""
