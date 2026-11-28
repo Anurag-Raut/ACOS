@@ -971,7 +971,14 @@ const MAX_PREVIEW_SOURCE_BYTES: u64 = 64 * 1024 * 1024;
 /// still matches).
 fn open_file_within_allowed_roots(path: &Path, roots: &[PathBuf]) -> Option<(std::fs::File, u64)> {
     use std::os::unix::io::AsRawFd;
-    let file = std::fs::File::open(path).ok()?;
+    let mut opts = std::fs::OpenOptions::new();
+    opts.read(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        opts.custom_flags(libc::O_NONBLOCK);
+    }
+    let file = opts.open(path).ok()?;
     let meta = file.metadata().ok()?;
     if !meta.is_file() {
         return None;
@@ -1546,6 +1553,26 @@ mod tests {
             !content.iter().any(|c| c["type"] == "resource_link"),
             "symlinked evidence outside allowed roots must not be linked: {content:?}"
         );
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn open_file_within_allowed_roots_rejects_fifo_without_blocking() {
+        use std::ffi::CString;
+        use std::os::unix::ffi::OsStrExt;
+        let base = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../.cache/mcp-fifo-test")
+            .join(std::process::id().to_string());
+        let _ = std::fs::remove_dir_all(&base);
+        std::fs::create_dir_all(&base).unwrap();
+        let fifo = base.join("pipe.png");
+        let c_fifo = CString::new(fifo.as_os_str().as_bytes()).unwrap();
+        let rc = unsafe { libc::mkfifo(c_fifo.as_ptr(), 0o600) };
+        assert_eq!(rc, 0, "mkfifo failed: {}", std::io::Error::last_os_error());
+
+        let result = open_file_within_allowed_roots(&fifo, std::slice::from_ref(&base));
+        assert!(result.is_none(), "FIFO must be rejected without blocking");
         let _ = std::fs::remove_dir_all(&base);
     }
 }
