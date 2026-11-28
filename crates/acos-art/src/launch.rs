@@ -11477,7 +11477,11 @@ fn meta_spec(entries: &[acos_services::pms::MetaDataEntry]) -> String {
                 MetaDataValue::Float(number) => ('f', number.to_string()),
                 MetaDataValue::Reference(id) => ('i', (*id as i32).to_string()),
             };
-            format!("{}={kind}{value}", meta_spec_escape(&entry.name))
+            format!(
+                "{}={kind}{}",
+                meta_spec_escape(&entry.name),
+                meta_spec_escape(&value)
+            )
         })
         .collect::<Vec<_>>()
         .join(";")
@@ -15211,6 +15215,86 @@ mod service_control_hot_attach_tests {
                 ("com.example.LateProvider", "-10"),
             ]
         );
+    }
+
+    #[test]
+    fn provider_spec_of_escapes_metadata_values_and_preserves_init_order() {
+        use acos_services::pms::{MetaDataEntry, MetaDataValue};
+
+        fn meta_unescape(text: &str) -> String {
+            // Mirrors `LaunchMain.metaUnescape`.
+            let mut out = String::with_capacity(text.len());
+            let mut chars = text.chars();
+            while let Some(c) = chars.next() {
+                if c != '\\' {
+                    out.push(c);
+                    continue;
+                }
+                match chars.next() {
+                    Some('p') => out.push('|'),
+                    Some('s') => out.push(';'),
+                    Some('e') => out.push('='),
+                    Some('n') => out.push('\n'),
+                    Some(other) => out.push(other),
+                    None => out.push('\\'),
+                }
+            }
+            out
+        }
+
+        let mut state = acos_services::pms::PmsState::new();
+        let pkg = state.app().package_name.clone();
+        let proc_name = state.app().process_name.clone();
+        let raw_val = "a|b;c=d\\e\nf";
+        state.packages[state.primary].providers = vec![acos_services::pms::ProviderInfo {
+            name: "com.example.MetaProvider".to_string(),
+            package_name: pkg,
+            process_name: proc_name,
+            authority: "com.example.meta".to_string(),
+            read_permission: String::new(),
+            write_permission: String::new(),
+            exported: false,
+            grant_uri_permissions: false,
+            init_order: 500,
+            meta_data: vec![
+                MetaDataEntry {
+                    name: "k|1;2=3".to_string(),
+                    value: MetaDataValue::String(raw_val.to_string()),
+                },
+                MetaDataEntry {
+                    name: "flag".to_string(),
+                    value: MetaDataValue::Boolean(true),
+                },
+            ],
+        }];
+
+        let spec = provider_spec_of(&state);
+        assert_eq!(
+            spec.lines().count(),
+            1,
+            "newlines in metadata value must be escaped: {spec:?}"
+        );
+        let fields: Vec<&str> = spec.split('|').collect();
+        assert_eq!(
+            fields.len(),
+            7,
+            "pipes in metadata value must not split provider fields: {fields:?}"
+        );
+        assert_eq!(fields[0], "com.example.MetaProvider");
+        assert_eq!(fields[6], "500");
+        assert!(spec.ends_with("|500"));
+
+        let entries: Vec<&str> = fields[5].split(';').collect();
+        assert_eq!(
+            entries.len(),
+            2,
+            "semicolons in metadata value must not split entries: {entries:?}"
+        );
+        let (k0, v0) = entries[0].split_once('=').expect("key=type+value");
+        assert_eq!(meta_unescape(k0), "k|1;2=3");
+        assert_eq!(v0.as_bytes()[0] as char, 's');
+        assert_eq!(meta_unescape(&v0[1..]), raw_val);
+        assert_eq!(entries[1], "flag=b1");
     }
 }
 

@@ -161,31 +161,36 @@ impl LogcatMirror {
             max_bytes,
             truncated: false,
         };
-        mirror.write_line("--------- beginning of main\n");
+        mirror.write_line("--------- beginning of main\n").ok()?;
         Some(mirror)
     }
 
     /// Append one complete line, or -- once the cap is reached -- the single
     /// truncation notice and nothing after it.
-    fn write_line(&mut self, line: &str) {
+    ///
+    /// Intentional cap truncation returns `Ok(())` so callers keep treating
+    /// the mirror as active (never overwriting a capped file with an uncapped
+    /// dump); an actual I/O failure returns `Err(...)` so the caller can drop
+    /// the broken handle and fall back to in-memory logcat output.
+    fn write_line(&mut self, line: &str) -> io::Result<()> {
         use std::io::Write as _;
         if self.truncated {
-            return;
+            return Ok(());
         }
         let len = line.len() as u64;
         if self.written.saturating_add(len) > self.max_bytes {
-            self.truncated = true;
             let notice = format!(
                 "--- logcat mirror truncated at {} bytes; in-memory logd capture continues ---\n",
                 self.written
             );
-            let _ = self.file.write_all(notice.as_bytes());
+            self.file.write_all(notice.as_bytes())?;
+            self.truncated = true;
             self.written = self.written.saturating_add(notice.len() as u64);
-            return;
+            return Ok(());
         }
-        if self.file.write_all(line.as_bytes()).is_ok() {
-            self.written = self.written.saturating_add(len);
-        }
+        self.file.write_all(line.as_bytes())?;
+        self.written = self.written.saturating_add(len);
+        Ok(())
     }
 }
 
@@ -205,6 +210,7 @@ pub struct Logd {
     handle: Option<JoinHandle<()>>,
     received: u64,
     mirror: Arc<Mutex<Option<LogcatMirror>>>,
+    mirror_active: Arc<AtomicBool>,
 }
 
 impl Logd {
@@ -242,6 +248,15 @@ impl Logd {
         logcat: Option<&Path>,
         mirror_max_bytes: u64,
     ) -> io::Result<Self> {
+        let initial_mirror = logcat.and_then(|dest| LogcatMirror::open(dest, mirror_max_bytes));
+        Self::start_with_mirror(dir, cap, initial_mirror)
+    }
+
+    fn start_with_mirror(
+        dir: &Path,
+        cap: usize,
+        initial_mirror: Option<LogcatMirror>,
+    ) -> io::Result<Self> {
         std::fs::create_dir_all(dir)?;
         let path = dir.join("logdw");
         let _ = std::fs::remove_file(&path);
@@ -250,9 +265,9 @@ impl Logd {
         // timeout is only a safety bound, not the stop path. 1 s removes a
         // 10/s idle timer per session without delaying teardown.
         sock.set_read_timeout(Some(Duration::from_secs(1)))?;
-        let mirror: Arc<Mutex<Option<LogcatMirror>>> = Arc::new(Mutex::new(
-            logcat.and_then(|dest| LogcatMirror::open(dest, mirror_max_bytes)),
-        ));
+        let mirror_active = Arc::new(AtomicBool::new(initial_mirror.is_some()));
+        let mirror_active_writer = Arc::clone(&mirror_active);
+        let mirror: Arc<Mutex<Option<LogcatMirror>>> = Arc::new(Mutex::new(initial_mirror));
         let mirror_writer = Arc::clone(&mirror);
         let entries: Arc<Mutex<Vec<LogEntry>>> = Arc::new(Mutex::new(Vec::new()));
         let stats = Arc::new(Mutex::new(LogStats {
@@ -301,18 +316,26 @@ impl Logd {
                                 v.drain(..drop_n);
                                 s.dropped = s.dropped.saturating_add(drop_n as u64);
                             }
-                            if let Some(m) = mirror_writer.lock().unwrap().as_mut() {
-                                let level = match entry.prio {
-                                    2 => 'V',
-                                    3 => 'D',
-                                    5 => 'W',
-                                    6 | 7 => 'E',
-                                    _ => 'I',
-                                };
-                                m.write_line(&format!(
-                                    "{:>6}  {:>5}  {} {}: {}\n",
-                                    entry.ts_ms, seq, level, entry.tag, entry.message
-                                ));
+                            {
+                                let mut guard = mirror_writer.lock().unwrap();
+                                if let Some(m) = guard.as_mut() {
+                                    let level = match entry.prio {
+                                        2 => 'V',
+                                        3 => 'D',
+                                        5 => 'W',
+                                        6 | 7 => 'E',
+                                        _ => 'I',
+                                    };
+                                    if m.write_line(&format!(
+                                        "{:>6}  {:>5}  {} {}: {}\n",
+                                        entry.ts_ms, seq, level, entry.tag, entry.message
+                                    ))
+                                    .is_err()
+                                    {
+                                        *guard = None;
+                                        mirror_active_writer.store(false, Ordering::Release);
+                                    }
+                                }
                             }
                             // `ACOS_ART_LOG_TRACE=1` names the flood in-band: this
                             // is how R1's trigger (`ServiceManagerCppClient`
@@ -358,6 +381,7 @@ impl Logd {
             handle: Some(handle),
             received: 0,
             mirror,
+            mirror_active,
         })
     }
 
@@ -370,27 +394,36 @@ impl Logd {
     /// [`Logd::flush_logcat_mirror`] and never rewrite the file themselves.
     #[must_use]
     pub fn live_logcat_mirror(&self) -> Option<PathBuf> {
+        if !self.has_live_logcat_mirror() {
+            return None;
+        }
         self.mirror.lock().unwrap().as_ref().map(|m| m.path.clone())
     }
 
-    /// Whether a live `logs/logcat.txt` mirror is active.
+    /// Whether a live `logs/logcat.txt` mirror is active. Remains `true` after
+    /// intentional cap truncation (so callers do not overwrite the capped file),
+    /// and becomes `false` if a mirror write or flush fails with an I/O error.
     #[must_use]
     pub fn has_live_logcat_mirror(&self) -> bool {
-        self.mirror.lock().unwrap().is_some()
+        self.mirror_active.load(Ordering::Acquire)
     }
 
     /// Flush every line absorbed so far to the mirror file. Lines are written
     /// whole under the mirror lock, so after this returns the file holds every
-    /// entry received before the call. `false` when there is no mirror.
+    /// entry received before the call. `false` when there is no mirror or if
+    /// flushing failed (in which case the mirror is disabled).
     pub fn flush_logcat_mirror(&self) -> bool {
         use std::io::Write as _;
-        match self.mirror.lock().unwrap().as_mut() {
-            Some(m) => {
-                let _ = m.file.flush();
-                true
-            }
-            None => false,
+        let mut guard = self.mirror.lock().unwrap();
+        let Some(m) = guard.as_mut() else {
+            return false;
+        };
+        if m.file.flush().is_err() {
+            *guard = None;
+            self.mirror_active.store(false, Ordering::Release);
+            return false;
         }
+        true
     }
 
     /// Stop the thread and return the retained entries, newest-last.
@@ -642,6 +675,11 @@ mod tests {
             std::thread::sleep(Duration::from_millis(5));
         }
         assert!(logd.flush_logcat_mirror());
+        assert!(
+            logd.has_live_logcat_mirror(),
+            "intentional cap truncation must keep the mirror active"
+        );
+        assert_eq!(logd.live_logcat_mirror().as_deref(), Some(logcat.as_path()));
         let batch = logd.finish_capped();
         assert_eq!(batch.entries.len(), sent, "in-memory capture continues");
         let text = std::fs::read_to_string(&logcat).unwrap();
@@ -655,6 +693,58 @@ mod tests {
             (text.len() as u64) <= max_bytes + notice_len,
             "mirror bounded: {} bytes",
             text.len()
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn live_logcat_mirror_write_failure_disables_mirror() {
+        let dir = std::env::temp_dir().join(format!(
+            "acos-art-logd-mirror-write-err-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let logcat = dir.join("logcat.txt");
+        std::fs::write(&logcat, b"").unwrap();
+        // Open read-only so any `write_all` on the mirror fails with EBADF.
+        let ro_file = std::fs::File::open(&logcat).unwrap();
+        let broken_mirror = LogcatMirror {
+            file: ro_file,
+            path: logcat.clone(),
+            written: 0,
+            max_bytes: LIVE_MIRROR_MAX_BYTES,
+            truncated: false,
+        };
+        let logd = Logd::start_with_mirror(&dir, 100, Some(broken_mirror)).unwrap();
+        assert!(logd.has_live_logcat_mirror());
+        assert_eq!(logd.live_logcat_mirror().as_deref(), Some(logcat.as_path()));
+
+        let s = UnixDatagram::unbound().unwrap();
+        s.connect(logd.path()).unwrap();
+        let tag = b"Tag";
+        let msg = b"hello";
+        let mut f = vec![4u8, tag.len() as u8, 0, msg.len() as u8, 0];
+        f.push(0);
+        f.extend_from_slice(tag);
+        f.extend_from_slice(msg);
+        s.send(&f).unwrap();
+
+        let deadline = std::time::Instant::now() + Duration::from_secs(5);
+        while logd.stats().total < 1 && std::time::Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        assert!(
+            !logd.has_live_logcat_mirror(),
+            "write failure must stop advertising the live mirror"
+        );
+        assert_eq!(logd.live_logcat_mirror(), None);
+        assert!(!logd.flush_logcat_mirror());
+        let batch = logd.finish_capped();
+        assert_eq!(
+            batch.entries.len(),
+            1,
+            "in-memory capture continues after mirror write failure"
         );
         let _ = std::fs::remove_dir_all(&dir);
     }

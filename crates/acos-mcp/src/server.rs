@@ -840,33 +840,34 @@ fn append_evidence_content(
             continue;
         }
         let full = config.artifacts_dir.join(path);
-        if !config
-            .allowed_roots
-            .iter()
-            .any(|root| full.starts_with(root))
-        {
+        // CWE-59 / CWE-367: open once and validate the opened descriptor's real
+        // path against `allowed_roots`, so a symlink under `artifacts_dir`
+        // pointing outside the allowed roots is neither inlined nor linked.
+        let Some((file, len)) = open_file_within_allowed_roots(&full, &config.allowed_roots) else {
             continue;
-        }
-        if !full.is_file() {
-            continue;
-        }
+        };
         // SHOTZ: an image is inlined as a *bounded preview* (long side
         // `ACOS_MCP_PREVIEW_MAX_SIDE`, file `ACOS_MCP_MAX_IMAGE_BYTES`) and the
         // reply still names the lossless file below, because a full-frame PNG in
         // a tool reply is context spent on pixels the agent cannot read.
         if image_mime(path).is_some() {
-            if let Some(preview) =
-                crate::preview::image_preview(&full, config.max_image_side, config.max_image_bytes)
-            {
-                content.push(json!({
-                    "type": "image",
-                    "data": crate::base64::encode(&preview.data),
-                    "mimeType": preview.mime,
-                }));
-                content.push(json!({
-                    "type": "text",
-                    "text": preview_note(kind, &full, &preview),
-                }));
+            if let Some(bytes) = read_opened_preview_bytes(file, len) {
+                if let Some(preview) = crate::preview::image_preview_from_bytes(
+                    &full,
+                    &bytes,
+                    config.max_image_side,
+                    config.max_image_bytes,
+                ) {
+                    content.push(json!({
+                        "type": "image",
+                        "data": crate::base64::encode(&preview.data),
+                        "mimeType": preview.mime,
+                    }));
+                    content.push(json!({
+                        "type": "text",
+                        "text": preview_note(kind, &full, &preview),
+                    }));
+                }
             }
         }
         if supports_structured_content(protocol_version) {
@@ -964,20 +965,15 @@ fn append_screenshot_content(
 /// a PNG frame; anything bigger is not inlined).
 const MAX_PREVIEW_SOURCE_BYTES: u64 = 64 * 1024 * 1024;
 
-/// FB2c / CWE-367: read `path` only if the file actually opened is a regular
-/// file inside one of the server's allowed roots.
-///
-/// The file is opened **once**; the check runs on that descriptor (`fstat` for
-/// the type, `/proc/self/fd/<fd>` for the resolved path, compared against the
-/// canonicalized roots) and the bytes come from the same handle, so a symlink
-/// swapped in between a check and a read cannot smuggle a file out of a root.
-/// A root the user configured through a link still matches.
-fn read_file_within_allowed_roots(path: &Path, roots: &[PathBuf]) -> Option<Vec<u8>> {
-    use std::io::Read as _;
+/// FB2c / CWE-59 / CWE-367: open `path` **once** and verify via `fstat` and
+/// `/proc/self/fd/<fd>` that the opened descriptor refers to a regular file
+/// inside one of `roots` (canonicalized so a root configured through a symlink
+/// still matches).
+fn open_file_within_allowed_roots(path: &Path, roots: &[PathBuf]) -> Option<(std::fs::File, u64)> {
     use std::os::unix::io::AsRawFd;
     let file = std::fs::File::open(path).ok()?;
     let meta = file.metadata().ok()?;
-    if !meta.is_file() || meta.len() > MAX_PREVIEW_SOURCE_BYTES {
+    if !meta.is_file() {
         return None;
     }
     let real = std::fs::read_link(format!("/proc/self/fd/{}", file.as_raw_fd())).ok()?;
@@ -988,11 +984,28 @@ fn read_file_within_allowed_roots(path: &Path, roots: &[PathBuf]) -> Option<Vec<
     if !inside {
         return None;
     }
-    let mut bytes = Vec::with_capacity(meta.len() as usize);
+    Some((file, meta.len()))
+}
+
+/// Read up to [`MAX_PREVIEW_SOURCE_BYTES`] from an already-validated file
+/// descriptor.
+fn read_opened_preview_bytes(file: std::fs::File, len: u64) -> Option<Vec<u8>> {
+    use std::io::Read as _;
+    if len > MAX_PREVIEW_SOURCE_BYTES {
+        return None;
+    }
+    let mut bytes = Vec::with_capacity(len as usize);
     file.take(MAX_PREVIEW_SOURCE_BYTES)
         .read_to_end(&mut bytes)
         .ok()?;
     Some(bytes)
+}
+
+/// FB2c / CWE-367: read `path` only if the file actually opened is a regular
+/// file inside one of the server's allowed roots.
+fn read_file_within_allowed_roots(path: &Path, roots: &[PathBuf]) -> Option<Vec<u8>> {
+    let (file, len) = open_file_within_allowed_roots(path, roots)?;
+    read_opened_preview_bytes(file, len)
 }
 
 /// One line describing the inline image: which file it came from, whether it is
@@ -1491,5 +1504,48 @@ mod tests {
         let guarded = tool_result(&json!(9), &escape, "2025-03-26", &config, &json!({}));
         assert_eq!(guarded["result"]["content"].as_array().unwrap().len(), 1);
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// CWE-59: a symlink inside `<artifacts_dir>/frames/` pointing outside
+    /// `allowed_roots` must neither be inlined as an image nor linked.
+    #[test]
+    fn evidence_symlink_outside_allowed_roots_is_not_inlined() {
+        use acos_protocol::Evidence;
+        let base = std::env::temp_dir().join(format!(
+            "acos-mcp-evidence-symlink-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&base);
+        let artifacts = base.join("artifacts");
+        let outside = base.join("outside");
+        std::fs::create_dir_all(artifacts.join("frames")).unwrap();
+        std::fs::create_dir_all(&outside).unwrap();
+        let secret = outside.join("secret.png");
+        std::fs::write(&secret, tiny_png()).unwrap();
+        std::os::unix::fs::symlink(&secret, artifacts.join("frames/escape.png")).unwrap();
+
+        let config = ServerConfig::for_roots(vec![artifacts.clone()], artifacts.clone());
+        let envelope = Envelope::pass(
+            "req",
+            ProtocolBackend::AcosNative,
+            Fidelity::NativeRuntime,
+            Metrics::wall_ms(1),
+        )
+        .with_evidence(Evidence {
+            screenshot: Some("frames/escape.png".to_string()),
+            ..Evidence::default()
+        });
+
+        let modern = tool_result(&json!(10), &envelope, "2025-06-18", &config, &json!({}));
+        let content = modern["result"]["content"].as_array().unwrap();
+        assert!(
+            !content.iter().any(|c| c["type"] == "image"),
+            "symlinked evidence outside allowed roots must not be inlined: {content:?}"
+        );
+        assert!(
+            !content.iter().any(|c| c["type"] == "resource_link"),
+            "symlinked evidence outside allowed roots must not be linked: {content:?}"
+        );
+        let _ = std::fs::remove_dir_all(&base);
     }
 }
