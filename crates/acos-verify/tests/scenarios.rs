@@ -2918,6 +2918,9 @@ steps:
 struct RnLogs {
     inner: ScriptedLogs,
     levels: Vec<Vec<LogLevel>>,
+    /// `Some((dialog, n))`: the backend has a UI tree, and it shows `dialog` on
+    /// the first `n` reads, then an empty screen.
+    screen: Option<(Vec<UiNode>, usize)>,
 }
 
 impl RnLogs {
@@ -2933,6 +2936,7 @@ impl RnLogs {
         RnLogs {
             inner: ScriptedLogs::new(lines),
             levels,
+            screen: None,
         }
     }
 }
@@ -2948,13 +2952,24 @@ impl Backend for RnLogs {
         Fidelity::NativeRuntime
     }
     fn capabilities(&self) -> Capabilities {
-        self.inner.capabilities()
+        Capabilities {
+            ui_tree: self.screen.is_some(),
+            ..self.inner.capabilities()
+        }
     }
     fn manifest(&mut self, apk: &Path) -> Result<ManifestInfo, BackendError> {
         self.inner.manifest(apk)
     }
     fn launch(&mut self, request: &LaunchRequest) -> Result<LaunchOutcome, BackendError> {
         self.inner.launch(request)
+    }
+    fn refresh(&mut self) -> Result<SessionObservation, BackendError> {
+        let mut observation = slice_observation(1, 0, b"", true);
+        if let Some((dialog, reads)) = &mut self.screen {
+            observation.tree.nodes = if *reads > 0 { dialog.clone() } else { vec![] };
+            *reads = reads.saturating_sub(1);
+        }
+        Ok(observation)
     }
     fn logs_since(&mut self, since: u64) -> Result<Vec<LogRecord>, BackendError> {
         let call = self.inner.calls;
@@ -3076,6 +3091,88 @@ fn metro4_since_last_js_assert_covers_every_step_of_the_recovery() {
     let failure = outcome.verdict.failure.as_ref().unwrap();
     assert_eq!(failure.step_index, Some(5));
     assert!(failure.error.message.contains("still reported"), "{}", failure.error.message);
+    let _ = std::fs::remove_dir_all(&artifacts);
+}
+
+/// RN 0.81.4 dev: the uncaught error's log line, and its LogBox dialog.
+const RN_BRACKETED: &str = "[ReferenceError: Property 'acosMissingFunction' doesn't exist]";
+
+fn logbox_dialog() -> Vec<UiNode> {
+    let node = |class: &str, children: Vec<UiNode>| {
+        let mut node = UiNode::new("n", class, Bounds::new(0, 0, 100, 100));
+        node.window_type = "TYPE_APPLICATION".to_string();
+        node.children = children;
+        node
+    };
+    let texts = [
+        "Log 1 of 1",
+        "Uncaught Error",
+        "Property 'acosMissingFunction' doesn't exist",
+        "Call Stack",
+        "onPress",
+        "App.js:32:24",
+        "See 16 more frames",
+        "Dismiss",
+        "Minimize",
+    ]
+    .iter()
+    .map(|text| node("com.facebook.react.views.text.ReactTextView", vec![]).with_text(*text))
+    .collect();
+    let root = node("com.facebook.react.ReactRootView", texts);
+    vec![node("android.widget.FrameLayout", vec![root]).with_resource_id("android:id/content")]
+}
+
+#[test]
+fn metro4_the_logbox_frame_reaches_the_assertion_and_outlives_the_dialog() {
+    let steps = "  - assert_js_error: {name: ReferenceError, message: acosMissingFunction, file: App.js, line: 32, symbolicated: true, timeout_ms: 2000}\n  - wait: {ms: 1}\n  - assert_js_error: {none: true, since_last_js_assert: true, timeout_ms: 2000}\n";
+    let mut backend = RnLogs::new(vec![vec![], vec![(LogLevel::Error, "ReactNativeJS", RN_BRACKETED)]]);
+    // the wait's read, the step's read, one more stale read for `none: true`
+    backend.screen = Some((logbox_dialog(), 3));
+    let (outcome, artifacts) = run_ordered(&js_error_scenario(steps), &mut backend);
+    assert_eq!(outcome.verdict.verdict, Status::Pass, "{:?}", outcome.verdict.failure);
+    assert_eq!(backend.screen.as_ref().unwrap().1, 0, "`none: true` waited for the screen to clear");
+    assert!(outcome.verdict.steps[1].duration_ms < 2000, "the wait settles on the dialog");
+    let error = outcome.verdict.rn.as_ref().unwrap().js_error.as_ref().unwrap();
+    assert_eq!(error.kind, "fatal");
+    assert!(error.symbolicated);
+    assert_eq!(error.frames[0].file.as_deref(), Some("App.js"));
+    let _ = std::fs::remove_dir_all(&artifacts);
+}
+
+/// No `assert_js_error` ran (the run may have failed on whatever the dialog
+/// covers): the verdict still reads the frame off the screen.
+#[test]
+fn metro4_the_verdict_reads_the_dialog_for_an_error_logged_without_a_stack() {
+    let mut backend = RnLogs::new(vec![vec![(LogLevel::Error, "ReactNativeJS", RN_BRACKETED)]]);
+    backend.screen = Some((logbox_dialog(), usize::MAX));
+    let (outcome, artifacts) = run_ordered(&js_error_scenario("  - wait: {ms: 1}\n"), &mut backend);
+    let error = outcome.verdict.rn.as_ref().unwrap().js_error.as_ref().unwrap();
+    assert_eq!((error.name.as_str(), error.frames[0].line), ("ReferenceError", Some(32)));
+    let _ = std::fs::remove_dir_all(&artifacts);
+}
+
+#[test]
+fn metro4_a_dialog_still_on_screen_fails_none() {
+    // no new log line in scope: the dialog alone is a JS error
+    let steps = "  - assert_js_error: {none: true, since_previous_step: true, timeout_ms: 50}\n";
+    let mut backend = RnLogs::new(vec![]);
+    backend.screen = Some((logbox_dialog(), usize::MAX));
+    let (outcome, artifacts) = run_ordered(&js_error_scenario(steps), &mut backend);
+    assert_eq!(outcome.verdict.verdict, Status::Fail);
+    assert!(outcome.verdict.failure.as_ref().unwrap().error.message.contains("still reported"));
+    let _ = std::fs::remove_dir_all(&artifacts);
+}
+
+#[test]
+fn metro4_a_logged_error_like_string_below_error_level_never_counts() {
+    let steps = "  - assert_js_error: {none: true, timeout_ms: 50}\n";
+    let mut backend = RnLogs::new(vec![vec![
+        (LogLevel::Info, "ReactNativeJS", RN_BRACKETED),
+        (LogLevel::Warn, "ReactNativeJS", RN_BRACKETED),
+    ]]);
+    let (outcome, artifacts) = run_ordered(&js_error_scenario(steps), &mut backend);
+    assert_eq!(outcome.verdict.verdict, Status::Pass, "{:?}", outcome.verdict.failure);
+    assert!(outcome.verdict.rn.is_none());
     let _ = std::fs::remove_dir_all(&artifacts);
 }
 

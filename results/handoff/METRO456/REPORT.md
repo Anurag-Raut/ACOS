@@ -15,7 +15,7 @@ Branch `feat/tier1-metro-polish`. Plan: `docs/METRO_PLAN.md` §§ METRO4–6 (ea
 | METRO5 | `debug_http_host`: `dev_server: {op: start, debug_http_host: true}` (before `launch`) or `ACOS_RN_DEBUG_HTTP_HOST` makes the launcher write RN's own preference before the guest boots (merge, XML-escaped); no `10.0.2.2` emulation | `crates/acos-art/src/rn_prefs.rs`, `crates/acos-cli/src/verify.rs` |
 | METRO5 | `adb reverse` equivalent documented: `acos_net {action: hostport, port}` / `acos-netd hostport add PORT`, app dials `localhost:PORT` | `docs/AGENT_GUIDE.md` |
 | METRO6 | symbolicator: Metro `POST /symbolicate` first, then `index.map` (VLQ source map v3), cached per map SHA-256 under `<artifacts>/source-maps/`; strict timeouts; honest `symbolicated: false` + reason | `crates/acos-verify/src/symbolicate.rs` |
-| acceptance arm | `scenarios/metro-redbox.yaml` (runtime ReferenceError → assert error + App.js frame → fix → `none: true`) | not yet run live |
+| acceptance arm | `scenarios/metro-redbox.yaml` (runtime ReferenceError → assert error + App.js frame → fix → `none: true`) | passes live (see below) |
 
 Zero cost when unused: the parser reads React Native tags only and runs on demand; symbolication runs only for an
 unsymbolicated JS error; `debug_http_host` is written only when asked for; no new process or thread exists unless a
@@ -40,12 +40,14 @@ dev-loop step asks for it.
 
 ## Not done / open
 
-- **`scenarios/metro-redbox.yaml` fails live** (first live run, ART + Metro, RN 0.81.4 debug APK): step 9
-  `assert_js_error: no JS error was reported in scope`. For the uncaught `ReferenceError` the guest logs
-  `E ReactNativeJS: [ReferenceError: Property 'acosMissingFunction' doesn't exist]` (bracketed, no stack) and shows
-  LogBox's JS-drawn overlay ("Uncaught Error", "Call Stack", `App.js:32:24`), not the native redbox. The parser reads
-  neither shape. The parser must learn them (never by weakening the scenario); until then METRO4's live acceptance is
-  not met.
+- Dev-build errors logged as `console.error(error)` get no frames (LogBox shows only a toast), and live `acos_logs`
+  reads the log alone, so it reports name and message without frames for these errors.
+- `throw 'text'`: the message and an empty name, no frames, `kind: soft`. LogBox shows `Unknown` and only React
+  Native's own frames for it, so the dialog is not matched to the log line.
+- The LogBox frames exist only while the dialog is open; a dismissed dialog leaves name and message.
+- LogBox recognition is pinned to React Native 0.81.4's dialog; other versions are unverified. A native (not JS)
+  dialog that puts an RN root view directly in its content and draws LogBox's exact texts would be read as LogBox.
+- `console.error('text', error)` (extra arguments of the app's own) is not read.
 - `react_native` control ops have unit coverage of their outcome logic only (no fake `ArtSession` harness exists).
 - Indexed (`sections`) source maps are refused with a reason; Metro does not emit them for dev bundles.
 
@@ -68,3 +70,57 @@ Live check with an uncommitted variant of the scenario that throws a shape the p
 | probe | pass, 19 steps; `symbolicated: true` by `metro /symbolicate`, `App.js:32`, same answer in `verdict.json` after the fix edits |
 | a second error logged while the fix refreshes | fail (`a JS error is still reported: Error: acosRecoveryProbe`) |
 | the same, with the old `since_previous_step` scope | pass (the false pass the new scope removes) |
+
+## RN 0.81.4 dev errors (fix for the live failure)
+
+What React Native does (`react-native@0.81.4` sources): in `__DEV__`, `ExceptionsManager.reportException` never calls
+the native `NativeExceptionsManager`. It calls `LogBox.addException` and `console.error(e)`; the console polyfill
+prints the object without a stack. So there is no native ExceptionsManager signal and no native redbox. No guest hook
+or protocol change was needed.
+
+| error | `E ReactNativeJS` line (live) | LogBox |
+|---|---|---|
+| uncaught in a handler | `[ReferenceError: Property 'acosMissingFunction' doesn't exist]` | opens, "Uncaught Error" |
+| thrown in render | `{ [TypeError: acosRender]\n  componentStack: '...', isComponentError: true }` | opens |
+| `console.error(error)` in a component | `[RangeError: acosSoft], { [Stack] name: 'Stack' }` (React DevTools appends the second part) | toast only |
+| `throw 'text'` | `{ [acosThrownString] name: '' }` | opens, message "Unknown" |
+
+Signals used (`crates/acos-verify/src/rn_errors.rs`):
+
+1. The log record, only on tag `ReactNativeJS` at level E, and only when the whole record is that object: name,
+   message, component stack.
+2. The LogBox dialog from the UI tree, recognised by structure: a `TYPE_APPLICATION` window whose
+   `android:id/content` holds `ReactRootView` / `ReactSurfaceView` directly, then header, title, message and footer in
+   order. It adds the Metro-symbolicated frames and the fatal kind to the logged error with the same message. LogBox's
+   views have no resource ids (JS `id` props are not in the tree). A dialog with no logged error in scope is itself
+   the error, so `none: true` fails while it is up.
+
+`assert_js_error`'s wait now reads the screen when the log alone does not settle it, and `verdict.json` keeps what the
+step read after the dialog is gone. The native-redbox parser is unchanged.
+
+Negative coverage: error values on `console.log` / `console.warn` or another tag; quoted, array, multi-argument and
+sentence forms; the same dialog texts in the activity window, in an app `<Modal>`, or without the inspector's fixed
+parts.
+
+Verification:
+
+- `cargo test --offline`: `-p acos-verify` 181 lib + 54 `tests/scenarios.rs`; `-p acos-protocol`
+  (`ACOS_ALLOW_ART_SKIP=1`) 136, 42 counted skips; `-p acos-cli --bin acos` 277; `-p acos-mcp --test docs
+  --test guide --test documentation_args` 1 + 14 + 4. All pass.
+- `tools/verify/check-layout.sh`: ok. Clippy: no warning on a changed line.
+
+Live (ART + Metro, RN 0.81.4 debug APK; the three committed scenarios unmodified):
+
+| scenario | result |
+|---|---|
+| `metro-redbox.yaml` | pass, 19 steps; `ReferenceError`, `kind: fatal`, `App.js:32` column 23, `react native logbox`, same in `verdict.json` after the fix |
+| `metro-reload.yaml` | pass, 12 steps, no `rn` block |
+| `metro-reload-full.yaml` | pass, 12 steps, no `rn` block |
+| probe: log/warn of error values + `<Modal>` with LogBox's texts | `none: true` passes |
+| probe: render error | pass; `TypeError`, `App.js:21`, component stack |
+| probe: `throw 'text'` | pass on message; name empty, no frames |
+| probe: `console.error(new RangeError())` | pass on name and message |
+| probe: `none: true` while LogBox is up | fails as intended (`a JS error is still reported`) |
+
+The probes are uncommitted scenario variants.
+

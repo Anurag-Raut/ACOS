@@ -1000,6 +1000,20 @@ Rules and lifecycle guarantees:
   JS error. A Metro build error (`SyntaxError` in a file) *is* a JS error, with
   the source file and line Metro named. Both land in `verdict.json` (`rn`) and in
   the live `acos_logs` reply (`rn`); a non-RN app has no `rn` block at all.
+* **What a dev build reports (verified on React Native 0.81.4).** An uncaught
+  or `console.error`-ed `Error` is one `E ReactNativeJS` line with **no
+  stack**: `[ReferenceError: ...]`, or `{ [TypeError: ...] componentStack: ... }`
+  for a render error. That gives `name` and `message`. The frames, already
+  symbolicated by Metro, and `kind: fatal` come from the **LogBox dialog**,
+  which opens by itself for an uncaught or render error; `assert_js_error` reads
+  it (`symbolication_reason: react native logbox`) and `verdict.json` keeps what
+  it read. Assert while the dialog is open. LogBox is recognised only by its
+  structure (a dialog window whose content view is a React Native root view), so
+  an app screen or `<Modal>` showing the same words is not an error. No frames:
+  `console.error(error)` (LogBox shows only a toast), and the live `acos_logs`
+  reply, which reads the log alone. A thrown non-`Error` (`throw 'text'`) has
+  the text as `message`, an empty `name`, no frames and `kind: soft`.
+  `console.log` / `console.warn` of an error never counts.
 
   ```yaml
   - dev_server: {op: edit, file: App.js, find: "return (", replace: "return (("}

@@ -20,7 +20,7 @@ use acos_protocol::events::{Event, EventBody};
 use acos_protocol::scenario::{
     Expectation, ExpectedError, Scenario, ServiceCtlStep, Step, StepRef, StepSettle, SwipeDirection,
 };
-use acos_protocol::ui::Bounds;
+use acos_protocol::ui::{Bounds, UiTree};
 use acos_protocol::verdict::{
     AppIdentity, ArtifactRef, FailureClassification, Reproducer, ResourceReport, ScenarioIdentity,
     StepAttempt, StepResult, Verdict,
@@ -474,6 +474,12 @@ pub fn run_scenario(
                                 retry_after: SYMBOLICATE_RETRY,
                                 symbols: &mut rn_symbols,
                             },
+                            || {
+                                caps.ui_tree
+                                    .then(|| backend.refresh().ok())
+                                    .flatten()
+                                    .map(|observation| observation.tree)
+                            },
                         );
                         if js_settled || Instant::now() >= deadline {
                             break;
@@ -834,7 +840,27 @@ pub fn run_scenario(
             }
         }
     }
-    let parsed = crate::rn_errors::parse_logs_located(&all_logs);
+    let mut parsed = crate::rn_errors::parse_logs_located(&all_logs);
+    // What an `assert_js_error` step read from the screen about this error (the
+    // dialog may be gone by now). Otherwise the screen is read once, only for an
+    // error the log gave no frames for, or a dev-loop run that logged none.
+    let logged_seq = parsed.js_error_at.map(|at| all_logs[at].seq);
+    match rn_symbols.screen.take() {
+        Some((seq, error)) if seq == logged_seq || logged_seq.is_none() => {
+            parsed.state.js_error = Some(error);
+        }
+        _ => {
+            let wanted = match &parsed.state.js_error {
+                Some(error) => error.frames.is_empty(),
+                None => uses_dev_loop,
+            };
+            if wanted && caps.ui_tree {
+                if let Ok(observation) = backend.refresh() {
+                    crate::rn_errors::merge_screen(&mut parsed, &observation.tree, &all_logs);
+                }
+            }
+        }
+    }
     let mut rn_state = parsed.state;
     if let Some(error) = rn_state.js_error.as_mut() {
         rn_symbols.symbolicate(
@@ -2277,6 +2303,9 @@ struct RnSymbolication {
     /// `(first log index, bundle revision)`, in order: lines from that index on
     /// were collected while the dev server served that revision.
     revisions: Vec<(usize, String)>,
+    /// The error the last `assert_js_error` step completed from the screen, and
+    /// the log `seq` it started at (`None`: only the screen showed it).
+    screen: Option<(Option<u64>, acos_protocol::rn::JsError)>,
 }
 
 impl RnSymbolication {
@@ -2333,13 +2362,22 @@ struct JsStep<'a> {
 }
 
 /// One poll of an `assert_js_error` wait: judge what the step would judge now.
+/// `screen` reads the UI tree; it is asked only when the log alone does not
+/// settle the wait (`none: true` always asks: the screen must be clear too).
 fn js_wait_settled(
     assertion: &acos_protocol::scenario::JsErrorAssertion,
     all_logs: &[LogRecord],
     step: JsStep<'_>,
+    screen: impl FnOnce() -> Option<UiTree>,
 ) -> bool {
     let start = step.scope_start;
     let mut parsed = crate::rn_errors::parse_logs_located(&all_logs[start..]);
+    let from_log = crate::rn_errors::wait_settled(assertion, &parsed.state, parsed.unreachable_last);
+    if !from_log || assertion.none == Some(true) {
+        if let Some(tree) = screen() {
+            crate::rn_errors::merge_screen(&mut parsed, &tree, all_logs);
+        }
+    }
     if crate::rn_errors::needs_mapping(assertion) {
         let origin = parsed
             .js_error_at
@@ -2388,37 +2426,24 @@ fn js_error_step(
 ) -> StepExec {
     use crate::rn_errors::JsCheck;
     let scope_start = js_step.as_ref().map_or(0, |step| step.scope_start);
-    let parsed = crate::rn_errors::parse_logs_located(&all_logs[scope_start..]);
+    let mut parsed = crate::rn_errors::parse_logs_located(&all_logs[scope_start..]);
     let origin = parsed
         .js_error_at
         .map(|at| (scope_start + at, all_logs[scope_start + at].seq));
-    let (mut state, mut unreachable_last) = (parsed.state, parsed.unreachable_last);
-    // The redbox itself, from a **fresh** traversal (after a fix + reload the
-    // previous step's frame may still show it): only fills what the log did
-    // not say (the log carries the frames; the tree proves the dialog is up).
+    // The redbox / LogBox itself, from a **fresh** traversal (after a fix +
+    // reload the previous step's frame may still show it): the log names the
+    // error, the dialog proves it is up and carries what the log did not say.
     // The observation is the step's evidence, so the frame ledger advances to
     // it like any other waited assertion.
     let mut observed: Option<SessionObservation> = None;
+    let mut from_screen = false;
     if caps.ui_tree {
         if let Ok(observation) = backend.refresh() {
-            let nodes: Vec<crate::rn_errors::UiText<'_>> = observation
-                .tree
-                .all_nodes()
-                .into_iter()
-                .filter(|node| node.visible)
-                .map(|node| (node.resource_id.as_str(), node.text.as_str()))
-                .collect();
-            let ui = crate::rn_errors::parse_ui(&nodes);
-            if state.js_error.is_none() && ui.js_error.is_some() {
-                state.js_error = ui.js_error;
-            }
-            if state.bundle_unreachable.is_none() && ui.bundle_unreachable.is_some() {
-                state.bundle_unreachable = ui.bundle_unreachable;
-                unreachable_last = state.js_error.is_none();
-            }
+            from_screen = crate::rn_errors::merge_screen(&mut parsed, &observation.tree, all_logs);
             observed = Some(observation);
         }
     }
+    let (mut state, unreachable_last) = (parsed.state, parsed.unreachable_last);
     if let (Some(error), Some(step)) = (state.js_error.as_mut(), js_step) {
         step.symbols.symbolicate(
             step.symbolicator,
@@ -2427,6 +2452,9 @@ fn js_error_step(
             error,
             step.retry_after,
         );
+        if from_screen {
+            step.symbols.screen = Some((origin.map(|(_, seq)| seq), error.clone()));
+        }
     }
     let expected = serde_json::to_value(assertion).unwrap_or(serde_json::Value::Null);
     let actual = serde_json::to_value(&state).unwrap_or(serde_json::Value::Null);
@@ -7231,17 +7259,17 @@ mod rn_symbolication_tests {
         let mut symbols = RnSymbolication::default();
         let mut logs = vec![thrown(1, 1)];
         for _ in 0..3 {
-            assert!(!js_wait_settled(&assertion, &logs, step(port, None, &mut symbols)));
+            assert!(!js_wait_settled(&assertion, &logs, step(port, None, &mut symbols), || None));
         }
         assert_eq!(*requests.lock().unwrap(), 1, "one request per occurrence");
         logs.push(thrown(2, 2));
-        assert!(js_wait_settled(&assertion, &logs, step(port, None, &mut symbols)));
+        assert!(js_wait_settled(&assertion, &logs, step(port, None, &mut symbols), || None));
         assert_eq!(*requests.lock().unwrap(), 2);
 
         // `symbolicated: false` does not end on a raw view of a mappable error
         let raw: acos_protocol::scenario::JsErrorAssertion =
             serde_json::from_value(serde_json::json!({"symbolicated": false})).unwrap();
-        assert!(!js_wait_settled(&raw, &logs, step(port, None, &mut symbols)));
+        assert!(!js_wait_settled(&raw, &logs, step(port, None, &mut symbols), || None));
     }
 
     #[test]

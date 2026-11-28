@@ -45,10 +45,13 @@ pub struct JsError {
     /// React's component stack (`in App`, `at Counter (App.js:12)`), when reported.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub component_stack: Option<String>,
-    /// `fatal` (redbox, `reportFatalException`), `soft` (`reportSoftException`
-    /// / `console.error`) or `transform` (Metro could not build the bundle).
+    /// `fatal` (redbox, `reportFatalException`, LogBox "Uncaught Error" /
+    /// "Render Error"), `soft` (`reportSoftException` / `console.error`, or a
+    /// logged line that does not say which) or `transform` (Metro could not
+    /// build the bundle).
     pub kind: String,
-    /// Where it was read: `log` (guest logcat) or `ui` (the redbox on screen).
+    /// Where it was read: `log` (guest logcat; the dialog on screen may add
+    /// frames and kind) or `ui` (only the redbox / LogBox on screen).
     pub source: String,
     /// The log lines the error was parsed from (bounded).
     #[serde(default)]
@@ -57,7 +60,7 @@ pub struct JsError {
     pub symbolicated: bool,
     /// Why `symbolicated` is false (`no metro configured`, `symbolicate_unreachable`,
     /// `no map`, ...), or how it became true (`metro /symbolicate`, `source map`,
-    /// `source map (cached)`, `metro transform error`).
+    /// `source map (cached)`, `metro transform error`, `react native logbox`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub symbolication_reason: Option<String>,
 }

@@ -1261,7 +1261,7 @@
           "type": "array"
         },
         "kind": {
-          "description": "`fatal` (redbox, `reportFatalException`), `soft` (`reportSoftException` / `console.error`) or `transform` (Metro could not build the bundle).",
+          "description": "`fatal` (redbox, `reportFatalException`, LogBox \"Uncaught Error\" / \"Render Error\"), `soft` (`reportSoftException` / `console.error`, or a logged line that does not say which) or `transform` (Metro could not build the bundle).",
           "type": "string"
         },
         "log_tail": {
@@ -1281,7 +1281,7 @@
           "type": "string"
         },
         "source": {
-          "description": "Where it was read: `log` (guest logcat) or `ui` (the redbox on screen).",
+          "description": "Where it was read: `log` (guest logcat; the dialog on screen may add frames and kind) or `ui` (only the redbox / LogBox on screen).",
           "type": "string"
         },
         "symbolicated": {
@@ -1289,7 +1289,7 @@
           "type": "boolean"
         },
         "symbolication_reason": {
-          "description": "Why `symbolicated` is false (`no metro configured`, `symbolicate_unreachable`, `no map`, ...), or how it became true (`metro /symbolicate`, `source map`, `source map (cached)`, `metro transform error`).",
+          "description": "Why `symbolicated` is false (`no metro configured`, `symbolicate_unreachable`, `no map`, ...), or how it became true (`metro /symbolicate`, `source map`, `source map (cached)`, `metro transform error`, `react native logbox`).",
           "type": [
             "string",
             "null"

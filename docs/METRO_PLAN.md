@@ -1,6 +1,6 @@
 # METRO — the React Native dev loop on ACOS (v0.5.0)
 
-**Status: METRO1 landed the network leg; METRO2c root-caused the reload leg (RN legacy-arch race + one ACOS pool-leak bug, fixed) and proved Fast Refresh as the deterministic path — `results/handoff/METRO2/REPORT.md`. METRO3 wired the scenario dev loop; METRO4 (redbox as data), METRO5 (dev menu / reload without a shake, `debug_http_host`, `adb reverse` equivalent) and METRO6 (symbolication) are wired with unit + mock-Metro tests (outcomes below; a live-ART redbox scenario is the remaining acceptance run).**
+**Status: METRO1 landed the network leg; METRO2c root-caused the reload leg (RN legacy-arch race + one ACOS pool-leak bug, fixed) and proved Fast Refresh as the deterministic path — `results/handoff/METRO2/REPORT.md`. METRO3 wired the scenario dev loop; METRO4 (redbox as data), METRO5 (dev menu / reload without a shake, `debug_http_host`, `adb reverse` equivalent) and METRO6 (symbolication) are wired with unit + mock-Metro tests; `scenarios/metro-redbox.yaml` passes on live ART with RN 0.81.4 (outcomes below).**
 Owner context: `docs/PLAN_2026-11-16.md` §3.3 (network module, host-port opt-in),
 ADR-0030 (+ amendments 1–3) and `docs/OWNER_DIRECTION_2026-11-18.md`
 (~100 % compatibility, beat the stock emulator, attachable building blocks,
@@ -162,6 +162,15 @@ An error overlay an agent can assert on, not a picture of a red screen.
   `timeout_ms` (the wait ends only when the whole assertion holds). `verdict.json`
   carries `rn: {js_error, bundle_unreachable}`; the live `acos_logs` reply
   carries the same `rn` block. New codes: `JS_ERROR`, `BUNDLE_UNREACHABLE`.
+
+- Live (RN 0.81.4, dev build): `__DEV__` `ExceptionsManager.reportException`
+  never calls the native `ExceptionsManager`, so none of the native shapes above
+  appear for a JS throw, and the native redbox is not shown. The error is one
+  `console.error` line (`[Name: message]`, no stack) plus the LogBox dialog.
+  The log line is the primary signal; the dialog (recognised by view structure,
+  `LogBoxDialog`'s own window holding an RN root view) supplies the symbolicated
+  frames and the fatal kind to the error with the same message. A dialog still
+  on screen fails `none: true`. No guest hook or protocol change.
 
 ### METRO5 — the dev menu without a shake, and the adb-reverse equivalent
 A phone gets the dev menu from a shake/`Ctrl+M` and its debug server from

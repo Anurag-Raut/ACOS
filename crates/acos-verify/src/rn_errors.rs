@@ -21,6 +21,14 @@
 //!   java.net.ConnectException ... ECONNREFUSED`), which is `bundle_unreachable`.
 //! - A structured redbox payload (`{message, stack:[{file, lineNumber, column,
 //!   methodName}], name, componentStack, id}`) printed as JSON.
+//! - **Dev builds, an uncaught or `console.error`-ed `Error` object.** In
+//!   `__DEV__`, `ExceptionsManager.reportException` never calls the native
+//!   `ExceptionsManager`: it hands the error to LogBox and to
+//!   `console.error(e)`, whose polyfill (`@react-native/js-polyfills/console.js`
+//!   `formatError`) prints `[Name: message]` on `E ReactNativeJS`, or
+//!   `{ [Name: message] componentStack: ..., isComponentError: true }` when the
+//!   error has enumerable properties (render errors). No stack is logged: the
+//!   symbolicated frames exist only in the LogBox dialog ([`parse_logbox`]).
 //!
 //! The parser is pure, runs only over log records an agent or verdict asks
 //! about, and returns nothing for an app that never logged on a React Native
@@ -29,6 +37,7 @@
 use std::sync::OnceLock;
 
 use acos_protocol::rn::{BundleUnreachable, JsError, JsFrame, RnDevState};
+use acos_protocol::ui::{UiNode, UiTree};
 use regex::Regex;
 
 use crate::backend::LogRecord;
@@ -352,6 +361,338 @@ pub fn parse_ui(nodes: &[UiText<'_>]) -> RnDevState {
     state
 }
 
+/// Add what the screen shows to the dev-loop state read from the log: React
+/// Native's native redbox ([`parse_ui`]) and its LogBox dialog
+/// ([`parse_logbox`]). `true`: the screen added something.
+///
+/// The log stays primary. The native redbox fills only what the log did not
+/// say. The LogBox dialog adds frames and the error's kind to the logged error
+/// **with the same message**; it never replaces a different one. With no logged
+/// error in scope, the dialog on screen is the error, and its name (which
+/// LogBox does not show) is taken from a line of `history` with the same
+/// message, or left empty.
+pub fn merge_screen(parsed: &mut ParsedLogs, tree: &UiTree, history: &[LogRecord]) -> bool {
+    let nodes: Vec<UiText<'_>> = tree
+        .all_nodes()
+        .into_iter()
+        .filter(|node| node.visible)
+        .map(|node| (node.resource_id.as_str(), node.text.as_str()))
+        .collect();
+    let redbox = parse_ui(&nodes);
+    let mut added = false;
+    if parsed.state.js_error.is_none() && redbox.js_error.is_some() {
+        parsed.state.js_error = redbox.js_error;
+        added = true;
+    }
+    if parsed.state.bundle_unreachable.is_none() && redbox.bundle_unreachable.is_some() {
+        parsed.state.bundle_unreachable = redbox.bundle_unreachable;
+        parsed.unreachable_last = parsed.state.js_error.is_none();
+        added = true;
+    }
+    let Some(mut dialog) = parse_logbox(tree) else {
+        return added;
+    };
+    match parsed.state.js_error.as_mut() {
+        Some(logged) => {
+            if !same_error(logged, &dialog) {
+                return added;
+            }
+            if logged.frames.is_empty() {
+                logged.frames = dialog.frames;
+                logged.symbolicated = dialog.symbolicated;
+                logged.symbolication_reason = dialog.symbolication_reason;
+            }
+            // `console.error` and an uncaught throw log the same line; only
+            // the dialog says which one this was.
+            if dialog.kind != "soft" {
+                logged.kind = dialog.kind;
+            }
+        }
+        None => {
+            if let Some(name) = history
+                .iter()
+                .rev()
+                .filter(|record| record.level == LogLevel::Error && record.tag == JS_TAG)
+                .filter_map(|record| console_error_object(&record.message))
+                .find(|logged| same_error(logged, &dialog))
+                .map(|logged| logged.name)
+            {
+                dialog.name = name;
+            }
+            parsed.state.js_error = Some(dialog);
+        }
+    }
+    true
+}
+
+/// Whether a logged error and the one LogBox shows are the same: the same
+/// message (LogBox may cut a long one, or keep the `Name:` prefix). A Metro
+/// transform error's dialog shows only the part after the file name, which the
+/// logged message contains.
+fn same_error(logged: &JsError, dialog: &JsError) -> bool {
+    let shown = dialog.message.as_str();
+    let shown = shown
+        .strip_prefix(&format!("{}: ", logged.name))
+        .unwrap_or(shown);
+    if shown.is_empty() || logged.message.is_empty() {
+        return false;
+    }
+    if let Some(cut) = shown.strip_suffix(LOGBOX_SEE_MORE) {
+        let cut = cut.trim_end();
+        return !cut.is_empty() && logged.message.starts_with(cut);
+    }
+    shown == logged.message || (dialog.kind == "transform" && logged.message.contains(shown))
+}
+
+/// The tag React Native's JS `console` writes to.
+const JS_TAG: &str = "ReactNativeJS";
+
+/// The root views LogBox's surface is made of (legacy and New Architecture).
+const RN_ROOT_CLASSES: [&str; 2] = [
+    "com.facebook.react.ReactRootView",
+    "com.facebook.react.runtime.ReactSurfaceView",
+];
+
+const LOGBOX_SEE_MORE: &str = "... See More";
+const LOGBOX_NOT_SYMBOLICATED: &str = "This call stack is not symbolicated.";
+
+/// Parse React Native's LogBox error dialog (`Libraries/LogBox/UI`, RN 0.81).
+///
+/// LogBox is drawn by JS, so its views carry no resource ids. It is recognised
+/// by structure no app screen has: `LogBoxDialog` is its own dialog window
+/// (`TYPE_APPLICATION`) whose `android:id/content` holds a React Native root
+/// view **directly** (an app's `<Modal>` holds a `DialogRootViewGroup`, and its
+/// screens live in the activity window). Inside that root the inspector's texts
+/// come in a fixed order: the header (`Log N of M` / `Failed to compile`), the
+/// title, the message; and its footer closes it. Text alone never counts. A
+/// `Console Warning` dialog is not a JS error.
+#[must_use]
+pub fn parse_logbox(tree: &UiTree) -> Option<JsError> {
+    tree.all_nodes()
+        .into_iter()
+        .filter(|node| {
+            node.visible
+                && node.window_type == "TYPE_APPLICATION"
+                && node.resource_id == "android:id/content"
+        })
+        .flat_map(|content| content.children.iter())
+        .filter(|root| root.visible && RN_ROOT_CLASSES.contains(&root.class.as_str()))
+        .find_map(logbox_inspector)
+}
+
+/// The inspector under one LogBox root view.
+fn logbox_inspector(root: &UiNode) -> Option<JsError> {
+    fn collect<'a>(node: &'a UiNode, out: &mut Vec<&'a str>) {
+        let text = node.text.trim();
+        if !text.is_empty() {
+            out.push(text);
+        }
+        for child in &node.children {
+            collect(child, out);
+        }
+    }
+    let mut texts = Vec::new();
+    collect(root, &mut texts);
+    let [header, title, message, rest @ ..] = texts.as_slice() else {
+        return None;
+    };
+    static COUNTER: OnceLock<Regex> = OnceLock::new();
+    let syntax = *header == "Failed to compile";
+    if !syntax && !re(&COUNTER, r"^Log \d+ of \d+$").is_match(header) {
+        return None;
+    }
+    let kind = match (syntax, *title) {
+        (true, "Syntax Error" | "Metro Error") => "transform",
+        (false, "Uncaught Error" | "Render Error") => "fatal",
+        (false, "Console Error") => "soft",
+        _ => return None,
+    };
+    let footer = if syntax {
+        rest.contains(&"This error cannot be dismissed.")
+    } else {
+        rest.ends_with(&["Dismiss", "Minimize"])
+    };
+    if !footer {
+        return None;
+    }
+    let message = strip_engine(message.lines().next().unwrap_or("").trim());
+    // A render error's title does not say whether a boundary caught it.
+    let (name, message) = match split_name(&message) {
+        Some((name, stripped)) if message.starts_with(&format!("{name}: ")) => (name, stripped),
+        _ => (
+            if syntax {
+                "SyntaxError".to_string()
+            } else {
+                String::new()
+            },
+            message,
+        ),
+    };
+    let not_symbolicated = rest
+        .iter()
+        .any(|text| text.starts_with(LOGBOX_NOT_SYMBOLICATED));
+    let frames = if not_symbolicated {
+        Vec::new()
+    } else {
+        logbox_frames(rest)
+    };
+    let symbolicated = frames_are_source(&frames);
+    let reason = if symbolicated {
+        "react native logbox"
+    } else if not_symbolicated {
+        "LogBox has not symbolicated the call stack"
+    } else if frames.is_empty() {
+        "the LogBox dialog shows no source frame"
+    } else {
+        "the LogBox dialog shows bundle positions"
+    };
+    Some(JsError {
+        name,
+        message,
+        frames,
+        component_stack: None,
+        kind: kind.to_string(),
+        source: "ui".to_string(),
+        log_tail: texts
+            .iter()
+            .take(LOG_TAIL_LINES)
+            .map(|text| (*text).to_string())
+            .collect(),
+        symbolicated,
+        symbolication_reason: Some(reason.to_string()),
+    })
+}
+
+/// The frames of the dialog's `Call Stack` section (method, then
+/// `File.js:line[:column]`), or the `Source` code frame's `File.js (line:column)`
+/// when there is no call stack. LogBox prints columns 1-based; [`JsFrame`] keeps
+/// React Native's 0-based ones.
+fn logbox_frames(texts: &[&str]) -> Vec<JsFrame> {
+    static STACK: OnceLock<Regex> = OnceLock::new();
+    static CODE: OnceLock<Regex> = OnceLock::new();
+    static FOOTER: OnceLock<Regex> = OnceLock::new();
+    let frame = |captures: regex::Captures<'_>, function: Option<String>| JsFrame {
+        file: Some(captures["file"].to_string()),
+        line: captures["line"].parse().ok(),
+        column: captures
+            .name("col")
+            .and_then(|col| col.as_str().parse::<u32>().ok())
+            .map(|col| col.saturating_sub(1)),
+        function,
+    };
+    let footer = re(
+        &FOOTER,
+        r"^(?:See (?:all )?\d+ (?:more|collapsed) frames?|Collapse (?:all )?\d+ frames?|Showing all frames|No frames to show|Dismiss)$",
+    );
+    if let Some(start) = texts.iter().position(|text| *text == "Call Stack") {
+        let location = re(&STACK, r"^(?P<file>[^:()]+):(?P<line>\d+)(?::(?P<col>\d+))?$");
+        let mut frames = Vec::new();
+        let mut function: Option<&str> = None;
+        for text in texts[start + 1..]
+            .iter()
+            .take_while(|text| !footer.is_match(text))
+        {
+            match location.captures(text) {
+                Some(captures) => {
+                    frames.push(frame(captures, function.take().map(str::to_string)));
+                }
+                None => function = Some(text),
+            }
+        }
+        return frames;
+    }
+    let Some(start) = texts
+        .iter()
+        .position(|text| *text == "Source" || *text == "Sources")
+    else {
+        return Vec::new();
+    };
+    let location = re(&CODE, r"^(?P<file>[^:()]+) \((?P<line>\d+):(?P<col>\d+)\)$");
+    texts[start + 1..]
+        .iter()
+        .find_map(|text| location.captures(text))
+        .map(|captures| vec![frame(captures, None)])
+        .unwrap_or_default()
+}
+
+/// The line `console.error` prints for an `Error` object: `[Name: message]`, or
+/// `{ [Name: message] key: value, ... }` when it has enumerable properties. The
+/// whole record must be that object: an error quoted inside other text, an array
+/// (`[ ... ]`) or a plain object holding an error is not one. Two things React
+/// Native itself adds are read too: React DevTools appends a fake `Stack` error
+/// to `console.error` calls made inside components, and a thrown non-`Error`
+/// value becomes a `SyntheticError`, printed as `{ [value] name: '' }`.
+fn console_error_object(text: &str) -> Option<JsError> {
+    static PROPERTY: OnceLock<Regex> = OnceLock::new();
+    static DEVTOOLS_STACK: OnceLock<Regex> = OnceLock::new();
+    static UNNAMED: OnceLock<Regex> = OnceLock::new();
+    let mut record = text.trim_end();
+    let appended = re(
+        &DEVTOOLS_STACK,
+        r"(?s), \{ \[Stack(?::[^\]]*)?\]\s+name: 'Stack'.*\}$",
+    );
+    if let Some(found) = appended.find(record) {
+        record = &record[..found.start()];
+    }
+    let (head, properties) = if let Some(rest) = record.strip_prefix("{ [") {
+        let rest = rest.strip_suffix('}')?;
+        let separator = re(&PROPERTY, r"\]\s+(?:[A-Za-z_$][\w$]*|'[^'\n]*'): ").find(rest)?;
+        (&rest[..separator.start()], Some(&rest[separator.start() + 1..]))
+    } else {
+        (record.strip_prefix('[')?.strip_suffix(']')?, None)
+    };
+    // `[A: x] and [y]` is a sentence with two bracketed parts, not one error.
+    let mut depth = 0i32;
+    let mut closed_outer = false;
+    for c in head.chars() {
+        match c {
+            '[' if closed_outer => return None,
+            '[' => depth += 1,
+            ']' => {
+                depth -= 1;
+                closed_outer |= depth < 0;
+            }
+            _ => {}
+        }
+    }
+    let unnamed = properties.is_some_and(|properties| {
+        re(&UNNAMED, r"(?:^|,)\s*name: ''\s*(?:,|$)").is_match(properties)
+    });
+    let (name, message) = match split_name(head) {
+        Some(named) => named,
+        None if unnamed => (
+            String::new(),
+            head.lines().next().unwrap_or("").trim().to_string(),
+        ),
+        None => return None,
+    };
+    Some(JsError {
+        name,
+        message,
+        frames: Vec::new(),
+        component_stack: properties.and_then(inspected_component_stack),
+        kind: "soft".to_string(),
+        source: "log".to_string(),
+        log_tail: tail(text),
+        symbolicated: false,
+        symbolication_reason: Some("React Native logged the error without a stack".to_string()),
+    })
+}
+
+/// `componentStack: '\n    in App ...'` as the console's inspector prints it (a
+/// quoted, escaped string).
+fn inspected_component_stack(properties: &str) -> Option<String> {
+    let start = properties.find("componentStack: '")? + "componentStack: '".len();
+    let body = &properties[start..];
+    let body = &body[..body.find('\'')?];
+    let lines: Vec<&str> = body
+        .split("\\n")
+        .map(str::trim)
+        .filter(|line| line.starts_with("in ") || line.starts_with("at "))
+        .collect();
+    (!lines.is_empty()).then(|| lines.join("\n"))
+}
+
 /// A redbox title that names a thrown JS error. The dev loader's own
 /// `DebugServerException` is the fetch failing, not app JS.
 fn is_js_title(title: &str) -> bool {
@@ -436,6 +777,11 @@ fn classify(block: &Block) -> Option<Event> {
     if !js_exception {
         if let Some(failure) = unreachable_from_text(text) {
             return Some(Event::Unreachable(failure));
+        }
+    }
+    if block.tag == JS_TAG {
+        if let Some(error) = console_error_object(text) {
+            return Some(Event::Js(error));
         }
     }
     if let Some(error) = transform_error(text) {
@@ -834,6 +1180,8 @@ fn unsymbolicated(mut error: JsError) -> JsError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use acos_protocol::frame::FrameMeta;
+    use acos_protocol::ui::Bounds;
 
     fn rec(seq: u64, level: LogLevel, tag: &str, message: &str) -> LogRecord {
         LogRecord {
@@ -1328,5 +1676,268 @@ mod tests {
             check(&assertion("{name: SyntaxError}"), &both, false),
             JsCheck::Pass(_)
         ));
+    }
+
+    // ---- RN 0.81 dev: `console.error(errorObject)` and LogBox --------------
+
+    /// The line the live RN 0.81.4 run logged for an uncaught error.
+    const LIVE_LINE: &str =
+        "[ReferenceError: Property 'acosMissingFunction' doesn't exist]";
+    const LIVE_MESSAGE: &str = "Property 'acosMissingFunction' doesn't exist";
+
+    fn js(level: LogLevel, message: &str) -> Vec<LogRecord> {
+        vec![rec(1, level, "ReactNativeJS", message)]
+    }
+
+    #[test]
+    fn the_bracketed_console_error_line_is_a_js_error() {
+        let error = parse_logs(&js(LogLevel::Error, LIVE_LINE))
+            .js_error
+            .expect("js error");
+        assert_eq!(error.name, "ReferenceError");
+        assert_eq!(error.message, LIVE_MESSAGE);
+        // the line cannot tell an uncaught throw from `console.error(e)`
+        assert_eq!(error.kind, "soft");
+        assert_eq!(error.source, "log");
+        assert!(error.frames.is_empty());
+        assert!(!error.symbolicated);
+        for line in ["[Error]", "[TypeError: Cannot read [0] of x]", "[SyntaxError: JSON Parse error: Unexpected token: ]]"] {
+            assert!(parse_logs(&js(LogLevel::Error, line)).js_error.is_some(), "{line}");
+        }
+    }
+
+    #[test]
+    fn a_render_error_object_keeps_its_component_stack() {
+        let line = "{ [TypeError: boom]\n  componentStack: '\\n    in Broken (at App.js:3)\\n    in App',\n  isComponentError: true }";
+        let error = parse_logs(&js(LogLevel::Error, line)).js_error.expect("js error");
+        assert_eq!((error.name.as_str(), error.message.as_str()), ("TypeError", "boom"));
+        assert_eq!(error.component_stack.as_deref(), Some("in Broken (at App.js:3)\nin App"));
+        let short = parse_logs(&js(LogLevel::Error, "{ [Error: x] code: 1 }")).js_error.expect("js error");
+        assert_eq!(short.message, "x");
+    }
+
+    /// Both lines are from live RN 0.81.4 runs.
+    #[test]
+    fn react_natives_own_additions_to_the_line_are_read() {
+        // `console.error(new RangeError('acosSoft'))` inside a component
+        let soft = parse_logs(&js(LogLevel::Error, "[RangeError: acosSoft], { [Stack] name: 'Stack' }"))
+            .js_error
+            .expect("js error");
+        assert_eq!((soft.name.as_str(), soft.message.as_str()), ("RangeError", "acosSoft"));
+        // `throw 'acosThrownString'`
+        let thrown = parse_logs(&js(LogLevel::Error, "{ [acosThrownString] name: '' }"))
+            .js_error
+            .expect("js error");
+        assert_eq!((thrown.name.as_str(), thrown.message.as_str()), ("", "acosThrownString"));
+        for line in [
+            "[1, 2], { [Stack] name: 'Stack' }",
+            "'text', { [Stack] name: 'Stack' }",
+            "{ [text] name: 'x' }",
+            "{ [text] label: '' }",
+            "{ name: '' }",
+        ] {
+            assert!(parse_logs(&js(LogLevel::Error, line)).is_empty(), "{line}");
+        }
+    }
+
+    #[test]
+    fn error_like_text_is_not_a_console_error_object() {
+        for level in [LogLevel::Verbose, LogLevel::Debug, LogLevel::Info, LogLevel::Warn] {
+            assert!(parse_logs(&js(level, LIVE_LINE)).is_empty(), "{level:?}");
+        }
+        for tag in ["ReactNative", "unknown:ReactNative", "MyApp", "ReactNativeJNI", "AndroidRuntime"] {
+            let logs = vec![rec(1, LogLevel::Error, tag, LIVE_LINE)];
+            assert!(parse_logs(&logs).is_empty(), "{tag}");
+        }
+        for line in [
+            "request failed: [TypeError: x]",
+            " [TypeError: x] ",
+            "[TypeError: x] retrying",
+            "[TypeError: x] and [y]",
+            "[Error: a], [Error: b]",
+            "[ [Error: a] ]",
+            "[ 'TypeError: x' ]",
+            "{ error: [TypeError: x] }",
+            "{ [TypeError: x] }",
+            "'failed', [TypeError: x]",
+            "[object Object]",
+            "[Error handling] done",
+            "[1, 2, 3]",
+            "[MyTag] TypeError: x",
+        ] {
+            assert!(parse_logs(&js(LogLevel::Error, line)).is_empty(), "{line}");
+        }
+    }
+
+    const TEXT: &str = "com.facebook.react.views.text.ReactTextView";
+    const GROUP: &str = "com.facebook.react.views.view.ReactViewGroup";
+    const ROOT: &str = "com.facebook.react.ReactRootView";
+
+    fn node(class: &str, window_type: &str, children: Vec<UiNode>) -> UiNode {
+        let mut node = UiNode::new("n", class, Bounds::new(0, 0, 100, 100));
+        node.window_type = window_type.to_string();
+        node.children = children;
+        node
+    }
+
+    /// A window as the live tree has it: `android:id/content > root > texts`.
+    fn window(window_type: &str, root: &str, texts: &[&str]) -> UiTree {
+        let texts = texts
+            .iter()
+            .map(|text| node(TEXT, window_type, vec![]).with_text(*text))
+            .collect();
+        let inspector = node(GROUP, window_type, texts);
+        let root = node(root, window_type, vec![inspector]);
+        let content = node("android.widget.FrameLayout", window_type, vec![root])
+            .with_resource_id("android:id/content");
+        let frame = FrameMeta::new(1, "2026-11-28T00:00:00.000Z", "t", 1080, 2400, 420, "h", true);
+        UiTree::new(frame, "dev.acos.fixtures.rnhello", vec![content])
+    }
+
+    /// The texts of the live run's LogBox, in document order.
+    const LIVE_DIALOG: &[&str] = &[
+        "Log 1 of 1",
+        "Uncaught Error",
+        LIVE_MESSAGE,
+        "Source",
+        "\u{200e}> 32 |    onPress: () => acosMissingFunction(),",
+        "App.js (32:24)",
+        "Call Stack",
+        "React.createElement$argument_1.onPress",
+        "App.js:32:24",
+        "See 16 more frames",
+        "Dismiss",
+        "Minimize",
+    ];
+
+    fn live_dialog() -> UiTree {
+        window("TYPE_APPLICATION", ROOT, LIVE_DIALOG)
+    }
+
+    #[test]
+    fn the_logbox_dialog_gives_message_kind_and_symbolicated_frame() {
+        for root in RN_ROOT_CLASSES {
+            let error = parse_logbox(&window("TYPE_APPLICATION", root, LIVE_DIALOG)).expect(root);
+            assert_eq!(error.name, "", "LogBox does not show the name");
+            assert_eq!(error.message, LIVE_MESSAGE);
+            assert_eq!(error.kind, "fatal");
+            assert!(error.symbolicated);
+            assert_eq!(
+                error.frames,
+                vec![JsFrame {
+                    file: Some("App.js".to_string()),
+                    line: Some(32),
+                    column: Some(23),
+                    function: Some("React.createElement$argument_1.onPress".to_string()),
+                }]
+            );
+        }
+    }
+
+    #[test]
+    fn logbox_variants() {
+        let dialog = |texts: &[&str]| parse_logbox(&window("TYPE_APPLICATION", ROOT, texts));
+        let unsymbolicated = dialog(&[
+            "Log 1 of 2",
+            "Uncaught Error",
+            "boom",
+            "Call Stack",
+            "Source Map",
+            "This call stack is not symbolicated. Some features are unavailable such as viewing the function name or tapping to open files.",
+            "onPress",
+            "index.bundle:1200:30",
+            "Dismiss",
+            "Minimize",
+        ])
+        .expect("dialog");
+        assert!(unsymbolicated.frames.is_empty() && !unsymbolicated.symbolicated);
+        let soft = dialog(&["Log 1 of 1", "Console Error", "TypeError: x", "Dismiss", "Minimize"]).expect("soft");
+        assert_eq!((soft.kind.as_str(), soft.name.as_str(), soft.message.as_str()), ("soft", "TypeError", "x"));
+        let syntax = dialog(&[
+            "Failed to compile",
+            "Syntax Error",
+            "Unexpected token",
+            "Source",
+            "> 3 | const = 1;",
+            "App.js (3:7)",
+            "This error cannot be dismissed.",
+        ])
+        .expect("syntax");
+        assert_eq!((syntax.kind.as_str(), syntax.name.as_str()), ("transform", "SyntaxError"));
+        assert_eq!((syntax.frames[0].line, syntax.frames[0].column), (Some(3), Some(6)));
+        assert!(dialog(&["Log 1 of 1", "Console Warning", "careful", "Dismiss", "Minimize"]).is_none());
+    }
+
+    #[test]
+    fn app_screens_that_look_like_logbox_are_not_logbox() {
+        // the activity window, the same texts, even an RN root
+        assert!(parse_logbox(&window("TYPE_BASE_APPLICATION", ROOT, LIVE_DIALOG)).is_none());
+        // an app <Modal>: a dialog window, but no RN root directly in content
+        let modal = "com.facebook.react.views.modal.ReactModalHostView$DialogRootViewGroup";
+        assert!(parse_logbox(&window("TYPE_APPLICATION", modal, LIVE_DIALOG)).is_none());
+        assert!(parse_logbox(&window("TYPE_APPLICATION", "android.widget.LinearLayout", LIVE_DIALOG)).is_none());
+        // an RN root in a dialog without the inspector's fixed parts
+        for texts in [
+            &["Uncaught Error", LIVE_MESSAGE, "Dismiss", "Minimize"][..],
+            &["Log 1 of 1", "Something failed", LIVE_MESSAGE, "Dismiss", "Minimize"],
+            &["Log 1 of 1", "Uncaught Error", LIVE_MESSAGE],
+            &["My app", "Log 1 of 1", "Uncaught Error", LIVE_MESSAGE, "Dismiss", "Minimize"],
+        ] {
+            assert!(parse_logbox(&window("TYPE_APPLICATION", ROOT, texts)).is_none(), "{texts:?}");
+        }
+        let mut hidden = live_dialog();
+        hidden.nodes[0].children[0].visible = false;
+        assert!(parse_logbox(&hidden).is_none());
+    }
+
+    #[test]
+    fn the_dialog_completes_the_logged_error_with_the_same_message() {
+        let logs = js(LogLevel::Error, LIVE_LINE);
+        let mut parsed = parse_logs_located(&logs);
+        assert!(merge_screen(&mut parsed, &live_dialog(), &logs));
+        let error = parsed.state.js_error.expect("js error");
+        assert_eq!(error.name, "ReferenceError");
+        assert_eq!(error.kind, "fatal");
+        assert_eq!(error.source, "log");
+        assert!(error.symbolicated);
+        assert_eq!(error.frames[0].line, Some(32));
+        assert_eq!(parsed.js_error_at, Some(0));
+
+        // another error in the log is neither replaced nor given these frames
+        let logs = js(LogLevel::Error, "[TypeError: something else]");
+        let mut parsed = parse_logs_located(&logs);
+        assert!(!merge_screen(&mut parsed, &live_dialog(), &logs));
+        let error = parsed.state.js_error.expect("js error");
+        assert_eq!(error.message, "something else");
+        assert!(error.frames.is_empty());
+    }
+
+    #[test]
+    fn a_dialog_without_a_logged_error_in_scope_takes_its_name_from_history() {
+        let mut parsed = ParsedLogs::default();
+        assert!(merge_screen(&mut parsed, &live_dialog(), &js(LogLevel::Error, LIVE_LINE)));
+        let error = parsed.state.js_error.expect("js error");
+        assert_eq!((error.name.as_str(), error.source.as_str()), ("ReferenceError", "ui"));
+
+        // never logged (`throw 'text'`), or only at another level: no invented name
+        let mut parsed = ParsedLogs::default();
+        merge_screen(&mut parsed, &live_dialog(), &js(LogLevel::Info, LIVE_LINE));
+        assert_eq!(parsed.state.js_error.expect("js error").name, "");
+    }
+
+    #[test]
+    fn a_cut_logbox_message_still_matches_its_log_line() {
+        let long = "x".repeat(400);
+        let logs = js(LogLevel::Error, &format!("[Error: {long}]"));
+        let shown = format!("{}... See More", &long[..300]);
+        let tree = window(
+            "TYPE_APPLICATION",
+            ROOT,
+            &["Log 1 of 1", "Uncaught Error", &shown, "Dismiss", "Minimize"],
+        );
+        let mut parsed = parse_logs_located(&logs);
+        assert!(merge_screen(&mut parsed, &tree, &logs));
+        let error = parsed.state.js_error.expect("js error");
+        assert_eq!((error.message.len(), error.kind.as_str()), (400, "fatal"));
     }
 }
