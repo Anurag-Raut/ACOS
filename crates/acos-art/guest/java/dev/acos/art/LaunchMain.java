@@ -3609,6 +3609,39 @@ public final class LaunchMain {
     static Object sThread;
     /** W38: token of the activity on top of the guest stack (a real Binder). */
     static IBinder sCurrentToken;
+    /**
+     * Request code to the activity of this process that last sent a captured
+     * request with it: where that request's scripted result belongs.
+     */
+    static final java.util.concurrent.ConcurrentHashMap<Integer, IBinder> sResultRequesters =
+            new java.util.concurrent.ConcurrentHashMap<Integer, IBinder>();
+
+    /**
+     * Remember the requester of an implicit share / view / pick intent the host
+     * accepted: `startActivity(…, Intent, resolvedType, IBinder resultTo,
+     * String resultWho, int requestCode, …)`.
+     */
+    static void rememberResultRequester(java.lang.reflect.Method m, Object[] a,
+            android.content.Intent intent) {
+        String action = intent.getAction();
+        if (intent.getComponent() != null || action == null
+                || !action.startsWith("android.intent.action.")) {
+            return;
+        }
+        Class<?>[] types = m.getParameterTypes();
+        boolean afterIntent = false;
+        for (int i = 0; i + 2 < types.length; i++) {
+            if (types[i] == android.content.Intent.class) {
+                afterIntent = true;
+            } else if (afterIntent && types[i] == IBinder.class) {
+                if (a[i] instanceof IBinder && a[i + 2] instanceof Integer
+                        && (Integer) a[i + 2] >= 0) {
+                    sResultRequesters.put((Integer) a[i + 2], (IBinder) a[i]);
+                }
+                return;
+            }
+        }
+    }
 
     /**
      * W27 item 3: replace the cached `IActivityTaskManager` service with a
@@ -3683,6 +3716,7 @@ public final class LaunchMain {
                                     System.out.flush();
                                     return result;
                                 }
+                                rememberResultRequester(m, a, intent);
                                 android.content.ComponentName target = intent.getComponent();
                                 if (target != null
                                         && !sPkg.equals(target.getPackageName())) {
@@ -6550,7 +6584,14 @@ public final class LaunchMain {
                                 }
                             }
                         }
-                        deliverScriptedResult(requestCode, resultCode, data);
+                        if (!deliverScriptedResult(requestCode, resultCode, data)) {
+                            // No ack: the host reports `delivered:false`.
+                            lastSeq = seq;
+                            System.out.println("ACOSLAUNCH MARK activity-result-requester-gone"
+                                    + " seq=" + seq + " request_code=" + requestCode);
+                            System.out.flush();
+                            continue;
+                        }
                         lastSeq = seq;
                         write(ack, "{\"capture_seq\":" + seq
                                 + ",\"utc_ms\":" + System.currentTimeMillis() + "}");
@@ -6579,12 +6620,16 @@ public final class LaunchMain {
     }
 
     /**
-     * Deliver one `ActivityResultItem` for the current Activity through the real
+     * Deliver one `ActivityResultItem` to the Activity that made the request
+     * (the current Activity when none was recorded) through the real
      * `IApplicationThread.scheduleTransaction` (the same path AMS uses).
      */
-    static void deliverScriptedResult(int requestCode, int resultCode,
+    static boolean deliverScriptedResult(int requestCode, int resultCode,
             android.content.Intent data) throws Throwable {
-        IBinder token = sCurrentToken;
+        IBinder token = sResultRequesters.get(requestCode);
+        // Never hand one activity another's result.
+        if (token != null && !activityIsLive(token)) return false;
+        if (token == null) token = sCurrentToken;
         if (token == null) throw new IllegalStateException("no current activity token");
         // `ResultInfo` has no public constructor on this image (only a `Parcel`
         // one, which is package-private for AMS). Build it the way the wire does:
@@ -6637,6 +6682,14 @@ public final class LaunchMain {
         setPrivateField(ctxCls, tx, "mLifecycleStateRequest", null);
         setPrivateFieldIfPresent(ctxCls, tx, "mTransactionItems", callbacks);
         scheduleLocal(tx);
+        return true;
+    }
+
+    /** Whether `ActivityThread` still holds an activity record for `token`. */
+    static boolean activityIsLive(IBinder token) {
+        Object activities = get(sThread, "mActivities");
+        return !(activities instanceof java.util.Map)
+                || ((java.util.Map<?, ?>) activities).containsKey(token);
     }
 
     // ------------------------------------------------------------- helpers

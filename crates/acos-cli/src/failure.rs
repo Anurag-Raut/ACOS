@@ -63,6 +63,8 @@ pub fn map_art_code(code: &str) -> ErrorCode {
         // Bad request shape (caller bug), or a URL/intent no installed
         // activity handles.
         "BAD_REQUEST" | "START_NOT_FOUND" => ErrorCode::InvalidArgument,
+        // A captured request whose result can no longer reach its requester.
+        "PICKER_REQUESTER_GONE" | "PICKER_REQUEST_SUPERSEDED" => ErrorCode::InvalidArgument,
         // ADR-0029 item 4: a module operation the session refuses (attach of an
         // `at-launch` module, unknown profile, unmet `requires`). The message
         // names the refused module and the allowed alternative; the caller
@@ -547,6 +549,8 @@ mod tests {
             ("ART_FATAL_CHECK", ErrorCode::AppCrashed),
             ("BAD_REQUEST", ErrorCode::InvalidArgument),
             ("START_NOT_FOUND", ErrorCode::InvalidArgument),
+            ("PICKER_REQUESTER_GONE", ErrorCode::InvalidArgument),
+            ("PICKER_REQUEST_SUPERSEDED", ErrorCode::InvalidArgument),
             ("HOME_UNAVAILABLE", ErrorCode::UnsupportedAndroidApi),
             // ABIGATE: the launcher's pre-guest ABI gate is its own code, not a
             // guest death.

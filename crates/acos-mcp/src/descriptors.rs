@@ -1074,7 +1074,10 @@ fn session_tool_spec(name: &str) -> (&'static str, Value) {
              `ACTION_VIEW` deep link / App Link (returning `START_NOT_FOUND` if unmatched); \
              `pick_file` (`{path?, cancel?, display_name?, mime_type?, writable?, capture_seq?}`) \
              fulfills a captured file/photo picker via `content://com.acos.picker/...` or cancels \
-             it with `RESULT_CANCELED`. The module answers with the op's own value plus compact \
+             it with `RESULT_CANCELED`. `pick_file` and `result` answer the activity that made \
+             the captured request, in whichever app process (`PICKER_REQUESTER_GONE` / \
+             `PICKER_REQUEST_SUPERSEDED` refuse a reply that cannot reach it). \
+             The module answers with the op's own value plus compact \
              `modules_summary` (use `acos_services` for the full 28-module catalog): a refused or \
              unknown op is a structured error, never a silent success. `intents` is a core service \
              and answers without attaching. A detached scripted module says so (`attach` it \

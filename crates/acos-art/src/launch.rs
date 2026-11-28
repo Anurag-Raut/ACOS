@@ -675,6 +675,12 @@ struct SecondaryGuest {
     argv: Vec<String>,
 }
 
+/// Host path of a secondary guest's `/data/out/launch`: the only tree its
+/// result watcher reads.
+fn secondary_staging(run_root: &Path) -> PathBuf {
+    run_root.join("out").join("launch")
+}
+
 /// Everything a secondary guest needs from the session that is not in its
 /// [`SecondarySpec`]: the shared, read-only sandbox inputs and the shared
 /// sockets.
@@ -913,6 +919,11 @@ fn spawn_secondary(
         fs::create_dir_all(spec.run_root.join(sub))?;
     }
     fs::create_dir_all(spec.run_root.join("app-data").join(&spec.package))?;
+    // A respawn reuses the tag's tree: a result left for the dead instance must
+    // never reach the new one.
+    for stale in ["activity-result.json", "activity-result.ack"] {
+        let _ = fs::remove_file(secondary_staging(&spec.run_root).join(stale));
+    }
     let mut cmd = shared.command(spec, app_meta, providers)?;
     let argv = format!("{cmd:?}");
     let scope_info = std::fs::canonicalize(&spec.run_root)
@@ -1020,6 +1031,9 @@ struct SecondaryPool {
     /// thread blocked in a service handler, a suppressed close, an immediate
     /// respawn under the same tag).
     atms: Arc<std::sync::Mutex<acos_services::atms::AtmsState>>,
+    /// The capture table: a new process instance cannot receive the answers its
+    /// predecessor asked for.
+    intents: Arc<std::sync::Mutex<acos_services::intents::IntentState>>,
     /// SYSUI2: the session's **primary** package (tag 0). A spawn request for it
     /// is a start into a process that already runs, not a package to start.
     primary_package: String,
@@ -1107,6 +1121,7 @@ impl SecondaryPool {
         specs: Vec<SecondarySpec>,
         shared: SecondaryShared,
         atms: Arc<std::sync::Mutex<acos_services::atms::AtmsState>>,
+        intents: Arc<std::sync::Mutex<acos_services::intents::IntentState>>,
         primary_package: String,
         run_root: PathBuf,
         out_dir: PathBuf,
@@ -1121,6 +1136,7 @@ impl SecondaryPool {
             failures: Vec::new(),
             kills: Vec::new(),
             atms,
+            intents,
             primary_package,
             started: Instant::now(),
             run_root,
@@ -1382,6 +1398,10 @@ impl SecondaryPool {
             state.by_process.remove(&spec.tag);
             state.last_raw_seq.remove(&spec.tag);
         }
+        self.intents
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .orphan_process(spec.tag);
         let stderr = Arc::new(std::sync::Mutex::new(TailBuffer::with_cap(1 << 16)));
         match spawn_secondary(
             &self.shared,
@@ -1424,6 +1444,16 @@ impl SecondaryPool {
                 }));
             }
         }
+    }
+
+    /// The result directory of the secondary process `tag`; `None` when the
+    /// pool holds no process with that tag. Takes no lock, so it is safe under
+    /// the capture table's: [`Self::reap`] (which locks the activity manager)
+    /// runs before it.
+    fn result_staging(&self, tag: u32) -> Option<PathBuf> {
+        self.guests
+            .get(&tag)
+            .map(|guest| secondary_staging(&guest.spec.run_root))
     }
 
     /// MPROC5c: kill every lazily spawned process that has held nothing for
@@ -2686,6 +2716,7 @@ pub(crate) fn launch_session(
         secondary_specs,
         secondary_shared,
         Arc::clone(&live.atms),
+        Arc::clone(&live.intents),
         package.clone(),
         run.path().to_path_buf(),
         out.clone(),
@@ -5567,14 +5598,58 @@ fn animations_state() -> Option<&'static str> {
     }
 }
 
-/// MPROC1: one session control op over a session service.
-///
-/// Only the `intents` module exists today (the capture target); any other
-/// `module`/`op` is a structured `UNSUPPORTED_ANDROID_API`, never a silent
-/// no-op. `op:"result"` also writes the scripted answer to
-/// `<staging>/activity-result.json`, which the guest's result watcher delivers
-/// as the framework's own `ActivityResultItem` transaction; the guest's ack is
-/// `<staging>/activity-result.ack`.
+/// Where the answer to capture `seq` must be written: the result directory of
+/// the process that made the request. `Err` is a `(code, message)` refusal for
+/// an answer that cannot reach its requester; nothing has been written then.
+/// An unknown `seq` goes to `primary`, where scripting it reports the error.
+fn result_destination(
+    state: &acos_services::intents::IntentState,
+    seq: Option<u64>,
+    primary: &Path,
+    secondary_staging: impl FnOnce(u32) -> Option<PathBuf>,
+) -> std::result::Result<PathBuf, (&'static str, String)> {
+    use acos_services::intents::ReplyRefusal;
+    let target = match seq {
+        Some(seq) => state.by_seq(seq),
+        None => state.last(),
+    };
+    let Some(target) = target else {
+        return Ok(primary.to_path_buf());
+    };
+    let (seq, tag) = (target.seq, target.origin.process_tag);
+    let gone = || {
+        (
+            "PICKER_REQUESTER_GONE",
+            format!(
+                "capture {seq} was requested by process {tag}, which is no longer running; no \
+                 activity can receive its result"
+            ),
+        )
+    };
+    match state.reply_refusal(seq) {
+        Some(ReplyRefusal::RequesterGone) => return Err(gone()),
+        Some(ReplyRefusal::Superseded { newer }) => {
+            return Err((
+                "PICKER_REQUEST_SUPERSEDED",
+                format!(
+                    "capture {seq} cannot be answered: another activity of process {tag} made a \
+                     newer request with the same request code (capture {newer}); answer that one \
+                     first or repeat the request"
+                ),
+            ))
+        }
+        None => {}
+    }
+    if tag == acos_services::atms::PRIMARY_PROCESS_TAG {
+        return Ok(primary.to_path_buf());
+    }
+    secondary_staging(tag).ok_or_else(gone)
+}
+
+/// Hand a scripted answer to the guest process whose result directory is
+/// `staging`: its watcher delivers `<staging>/activity-result.json` as the
+/// framework's own `ActivityResultItem` transaction to the requesting activity
+/// and acks in `<staging>/activity-result.ack`.
 fn deliver_scripted_result(
     state: &mut acos_services::intents::IntentState,
     scripted: acos_services::intents::ScriptedResult,
@@ -5593,11 +5668,11 @@ fn deliver_scripted_result(
         "flags": scripted.flags,
         "extras": scripted.extras,
     });
-    let written = std::fs::write(&path, serde_json::to_vec(&doc).unwrap_or_default());
     // Bound the wait for the guest's ack: a session whose guest is not
     // running must say `delivered:false` instead of claiming a delivery.
     let ack_path = staging.join("activity-result.ack");
     let _ = std::fs::remove_file(&ack_path);
+    let written = std::fs::write(&path, serde_json::to_vec(&doc).unwrap_or_default());
     let deadline = std::time::Instant::now() + Duration::from_millis(2000);
     let mut delivered = false;
     if written.is_ok() {
@@ -5632,6 +5707,12 @@ fn deliver_scripted_result(
     (result, delivered, path, written.err().map(|e| e.to_string()))
 }
 
+/// MPROC1: one session control op over a session service.
+///
+/// Only the `intents` module exists today (the capture target); any other
+/// `module`/`op` is a structured `UNSUPPORTED_ANDROID_API`, never a silent
+/// no-op. `op:"result"` and `op:"pick_file"` answer the process that made the
+/// captured request (see [`result_destination`]).
 #[allow(clippy::too_many_arguments)]
 fn session_ctl(
     request: &serde_json::Value,
@@ -5760,6 +5841,12 @@ fn session_ctl(
         };
     }
 
+    if matches!(op, "result" | "pick_file") {
+        // Forget exited processes first. The activity manager is locked before
+        // the capture table (a `startActivity` captures under it), never after.
+        let exited = secondary.reap();
+        secondary.records.extend(exited);
+    }
     let mut state = live.intents.lock().unwrap_or_else(|e| e.into_inner());
     match op {
         "last" => serde_json::json!({
@@ -5806,6 +5893,17 @@ fn session_ctl(
                     }
                 }
             }
+            let destination = match result_destination(&state, capture_seq, staging, |tag| {
+                secondary.result_staging(tag)
+            }) {
+                Ok(destination) => destination,
+                Err((code, error)) => {
+                    return serde_json::json!({
+                        "ok": false, "cmd": "ctl", "module": module, "op": op,
+                        "code": code, "error": error,
+                    })
+                }
+            };
             let scripted = match state.script_result_with_flags(
                 capture_seq,
                 result_code,
@@ -5824,7 +5922,7 @@ fn session_ctl(
                 }
             };
             let (result, delivered, path, write_error) =
-                deliver_scripted_result(&mut state, scripted, staging);
+                deliver_scripted_result(&mut state, scripted, &destination);
             serde_json::json!({
                 "ok": true, "cmd": "ctl", "module": module, "op": op,
                 "result": result,
@@ -5856,6 +5954,19 @@ fn session_ctl(
                     },
                 });
             };
+            // Decided before anything is registered or scripted, so a refusal
+            // leaves the session untouched.
+            let destination = match result_destination(&state, Some(target.seq), staging, |tag| {
+                secondary.result_staging(tag)
+            }) {
+                Ok(destination) => destination,
+                Err((code, error)) => {
+                    return serde_json::json!({
+                        "ok": false, "cmd": "ctl", "module": module, "op": op,
+                        "code": code, "error": error,
+                    })
+                }
+            };
             if cancel {
                 let scripted = match state.script_result_with_flags(
                     Some(target.seq),
@@ -5875,7 +5986,7 @@ fn session_ctl(
                     }
                 };
                 let (result, delivered, path, write_error) =
-                    deliver_scripted_result(&mut state, scripted, staging);
+                    deliver_scripted_result(&mut state, scripted, &destination);
                 return serde_json::json!({
                     "ok": true, "cmd": "ctl", "module": module, "op": op,
                     "canceled": true,
@@ -5955,7 +6066,7 @@ fn session_ctl(
                 }
             };
             let (result, delivered, path, write_error) =
-                deliver_scripted_result(&mut state, scripted, staging);
+                deliver_scripted_result(&mut state, scripted, &destination);
             serde_json::json!({
                 "ok": true, "cmd": "ctl", "module": module, "op": op,
                 "canceled": false,
@@ -15436,3 +15547,57 @@ mod service_control_hot_attach_tests {
     }
 }
 
+#[cfg(test)]
+mod picker_routing_tests {
+    use super::*;
+    use acos_services::ams::IntentFacts;
+    use acos_services::intents::{CaptureOrigin, IntentState, ACTION_OPEN_DOCUMENT};
+
+    fn ask(state: &mut IntentState, process_tag: u32, requester: u64) -> u64 {
+        let pick = IntentFacts {
+            action: Some(ACTION_OPEN_DOCUMENT.into()),
+            ..IntentFacts::default()
+        };
+        let origin = CaptureOrigin {
+            process_tag,
+            requester,
+        };
+        state
+            .capture_from(origin, &pick, 0, 7, true, 0)
+            .expect("captured")
+            .seq
+    }
+
+    #[test]
+    fn an_answer_goes_only_to_the_process_that_asked() {
+        let primary = Path::new("/session/out/launch");
+        let secondary = secondary_staging(Path::new("/session/secondary/tag-1"));
+        let running = |tag: u32| (tag == 1).then(|| secondary.clone());
+        let mut state = IntentState::new();
+        let from_primary = ask(&mut state, 0, 10);
+        let from_secondary = ask(&mut state, 1, 20);
+
+        let route = |state: &IntentState, seq| result_destination(state, seq, primary, running);
+        assert_eq!(route(&state, Some(from_primary)).unwrap(), primary);
+        assert_eq!(route(&state, Some(from_secondary)).unwrap(), secondary);
+        // No selector means the newest capture, and its process.
+        assert_eq!(route(&state, None).unwrap(), secondary);
+        // An unknown selector is left for scripting to refuse.
+        assert_eq!(route(&state, Some(99)).unwrap(), primary);
+
+        let (code, _) = result_destination(&state, Some(from_secondary), primary, |_| None)
+            .expect_err("no running process: never the primary's tree");
+        assert_eq!(code, "PICKER_REQUESTER_GONE");
+
+        let newer = ask(&mut state, 1, 21);
+        let (code, message) = route(&state, Some(from_secondary)).expect_err("ambiguous");
+        assert_eq!(code, "PICKER_REQUEST_SUPERSEDED");
+        assert!(message.contains(&format!("capture {newer}")), "{message}");
+
+        // A respawned process under the same tag is a different instance.
+        state.orphan_process(1);
+        let (code, _) = route(&state, Some(newer)).expect_err("instance replaced");
+        assert_eq!(code, "PICKER_REQUESTER_GONE");
+        assert_eq!(route(&state, Some(from_primary)).unwrap(), primary);
+    }
+}
