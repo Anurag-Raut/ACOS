@@ -4,4 +4,5 @@
     <string name="finish">Finish B</string>
     <string name="again">Start B Again</string>
     <string name="idle">B</string>
+    <string name="pick">Pick In B</string>
 </resources>

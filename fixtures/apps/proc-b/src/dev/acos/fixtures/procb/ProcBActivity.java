@@ -61,6 +61,14 @@ public class ProcBActivity extends Activity {
                 startActivity(intent);
             }
         });
+        // A second activity of this process asks for a document (the picker's
+        // answer has to come back to it).
+        ((Button) findViewById(R.id.pick)).setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                startActivity(new Intent(ProcBActivity.this, ProcBPickActivity.class));
+            }
+        });
         String note = getIntent() == null ? null : getIntent().getStringExtra(EXTRA_NOTE);
         String line = "ACOSPROBE b created pkg=" + getPackageName()
                 + " note=" + (note == null ? "none" : note)

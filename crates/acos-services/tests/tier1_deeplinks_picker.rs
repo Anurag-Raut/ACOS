@@ -17,6 +17,7 @@ use acos_services::host::ServiceHost;
 use acos_services::intents::{
     capture_eligible, IntentState, ACTION_CHOOSER, ACTION_CREATE_DOCUMENT, ACTION_GET_CONTENT,
     ACTION_OPEN_DOCUMENT, ACTION_PICK, EXTRA_INTENT, EXTRA_TITLE, FLAG_GRANT_READ_URI_PERMISSION,
+    ReplyRefusal,
 };
 use acos_services::picker_provider::{CONTENT_PROVIDER_DESCRIPTOR, PICKER_AUTHORITY};
 use acos_services::registry::install_with_handles;
@@ -511,4 +512,174 @@ fn picker_content_provider_serves_fd_cursor_and_mime_over_binder() {
     );
 
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// One `ACTION_VIEW` activity of `dev.acos.rank` over `https://example.com`.
+fn view_activity(
+    class: &str,
+    exported: bool,
+    launch_mode: i32,
+    paths: &[(&str, i32)],
+) -> DeclaredComponent {
+    DeclaredComponent {
+        package: "dev.acos.rank".into(),
+        class: format!("dev.acos.rank.{class}"),
+        exported,
+        launch_mode,
+        filters: vec![Filter {
+            actions: vec!["android.intent.action.VIEW".into()],
+            categories: vec![
+                "android.intent.category.DEFAULT".into(),
+                "android.intent.category.BROWSABLE".into(),
+            ],
+            schemes: vec!["https".into()],
+            authorities: vec![DataAuthority {
+                host: Some("example.com".into()),
+                port: -1,
+                wild: false,
+            }],
+            paths: paths
+                .iter()
+                .map(|(pattern, kind)| DataPattern {
+                    pattern: Some((*pattern).into()),
+                    kind: *kind,
+                })
+                .collect(),
+            mime_types: Vec::new(),
+        }],
+    }
+}
+
+fn ams_with(activities: Vec<DeclaredComponent>) -> AmsState {
+    let mut ams = AmsState::new();
+    ams.manifests.packages.push(PackageRecord {
+        package: "dev.acos.rank".into(),
+        uid: 10043,
+        activities,
+        ..Default::default()
+    });
+    ams
+}
+
+#[test]
+fn open_url_ranks_only_the_constraints_that_match_the_url() {
+    // `/admin` is a literal that does not match; it must not lift prefix `/`
+    // above the filter whose prefix `/docs` does match.
+    let broad = view_activity("Broad", true, 0, &[("/", 1), ("/admin", 0)]);
+    let docs = view_activity("Docs", true, 0, &[("/docs", 1)]);
+    let literal = view_activity("Literal", true, 0, &[("/docs/item", 0)]);
+    let intent = IntentFacts {
+        action: Some("android.intent.action.VIEW".into()),
+        data: Some("https://example.com/docs/item".into()),
+        ..IntentFacts::default()
+    };
+    assert_eq!(
+        broad.filters[0].specificity(&intent),
+        docs.filters[0].specificity(&intent),
+        "both are one matching prefix"
+    );
+    assert!(literal.filters[0].specificity(&intent) > docs.filters[0].specificity(&intent));
+
+    // Install order breaks the tie, so the narrower handler comes first.
+    let mut ams = ams_with(vec![docs.clone(), broad.clone()]);
+    let outcome = ams
+        .open_url("https://example.com/docs/item", None, None, 0)
+        .expect("matched");
+    assert_eq!(outcome.class, "dev.acos.rank.Docs");
+    let mut ams = ams_with(vec![broad, docs, literal]);
+    let outcome = ams
+        .open_url("https://example.com/docs/item", None, None, 0)
+        .expect("matched");
+    assert_eq!(outcome.class, "dev.acos.rank.Literal");
+}
+
+#[test]
+fn open_url_never_launches_a_non_exported_activity() {
+    let mut ams = ams_with(vec![view_activity("Private", false, 0, &[])]);
+    let err = ams
+        .open_url("https://example.com/x", None, None, 0)
+        .expect_err("a non-exported activity is not reachable from the host");
+    assert_eq!(err.code(), codes::START_NOT_FOUND);
+    assert!(ams.pending_launches.is_empty());
+
+    // A more specific private filter does not shadow an exported one.
+    let mut ams = ams_with(vec![
+        view_activity("Private", false, 0, &[("/x", 0)]),
+        view_activity("Public", true, 0, &[]),
+    ]);
+    let outcome = ams
+        .open_url("https://example.com/x", None, None, 0)
+        .expect("the exported activity handles it");
+    assert_eq!(outcome.class, "dev.acos.rank.Public");
+}
+
+#[test]
+fn a_new_intent_queued_before_the_launch_is_bound_follows_the_bound_token() {
+    let mut ams = ams_with(vec![view_activity("Single", true, 1, &[])]);
+    let first = ams
+        .open_url("https://example.com/one", None, None, 0)
+        .expect("cold launch");
+    let second = ams
+        .open_url("https://example.com/two", None, None, 0)
+        .expect("same cold singleTop activity");
+    assert_eq!(second.delivery, OpenUrlDelivery::NewIntent);
+    assert_eq!(second.token, first.token);
+    assert!(
+        ams.take_pending_new_intent(0).is_none(),
+        "a placeholder token names no process: the entry waits for the binding"
+    );
+
+    // The host binds the launch to a token of process 2.
+    let bound = (1u64 << 32) | (2u64 << 34) | 7;
+    ams.take_launch(first.token).expect("pending launch");
+    ams.bind_launch_token(first.token, bound);
+    assert!(ams.take_pending_new_intent(0).is_none());
+    let (token, intent) = ams.take_pending_new_intent(2).expect("delivered to tag 2");
+    assert_eq!(token, bound);
+    assert_eq!(intent.data.as_deref(), Some("https://example.com/two"));
+}
+
+#[test]
+fn captures_name_their_requester_and_refuse_answers_that_cannot_reach_it() {
+    const SECONDARY: u32 = 2;
+    let token = |tag: u32, wire: u64| (1u64 << 32) | (u64::from(tag) << 34) | wire;
+    let intents = std::sync::Arc::new(std::sync::Mutex::new(IntentState::new()));
+    let mut ams = AmsState::new();
+    ams.intents = Some(std::sync::Arc::clone(&intents));
+    let pick = IntentFacts {
+        action: Some(ACTION_OPEN_DOCUMENT.into()),
+        ..IntentFacts::default()
+    };
+    let mut ask = |tag: u32, requester: u64, request_code: i32| {
+        ams.start_activity_with_caller(&pick, 0, requester, request_code, None, Some(tag))
+            .expect("captured");
+        intents.lock().unwrap().last().expect("capture").seq
+    };
+    let primary = ask(0, token(0, 1), 7);
+    let secondary = ask(SECONDARY, token(SECONDARY, 1), 7);
+    {
+        let state = intents.lock().unwrap();
+        let capture = state.by_seq(secondary).expect("secondary capture");
+        assert_eq!(capture.origin.process_tag, SECONDARY);
+        assert_eq!(capture.origin.requester, token(SECONDARY, 1));
+        assert_eq!(capture.to_json()["process_tag"], SECONDARY);
+        // The same request code in another process is not ambiguous.
+        assert_eq!(state.reply_refusal(primary), None);
+        assert_eq!(state.reply_refusal(secondary), None);
+    }
+    // Another activity of that process reuses the code.
+    let newer = ask(SECONDARY, token(SECONDARY, 2), 7);
+    assert_eq!(
+        intents.lock().unwrap().reply_refusal(secondary),
+        Some(ReplyRefusal::Superseded { newer })
+    );
+    assert_eq!(intents.lock().unwrap().reply_refusal(newer), None);
+
+    intents.lock().unwrap().orphan_process(SECONDARY);
+    let state = intents.lock().unwrap();
+    assert_eq!(
+        state.reply_refusal(newer),
+        Some(ReplyRefusal::RequesterGone)
+    );
+    assert_eq!(state.reply_refusal(primary), None);
 }
