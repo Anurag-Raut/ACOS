@@ -732,6 +732,8 @@ pub struct ServiceHost {
     /// tombstone or unhandled settings/external intent.
     prompts:
         Option<std::sync::Arc<std::sync::Mutex<crate::capability_prompts::CapabilityPromptState>>>,
+    /// Host-backed File & Photo Picker registry (`content://com.acos.picker/...`).
+    picker: Option<std::sync::Arc<std::sync::Mutex<crate::picker_provider::PickerRegistry>>>,
 }
 
 /// One typed host → guest command queued via [`ServiceHost::push_guest_command`]
@@ -843,6 +845,7 @@ impl ServiceHost {
             compositor: None,
             guest_commands: Vec::new(),
             prompts: None,
+            picker: None,
         }
     }
 
@@ -2615,6 +2618,42 @@ impl ServiceHost {
         atms.replay_saved_intent(intent_id)
     }
 
+    /// Attach the session's shared `PickerRegistry` (`content://com.acos.picker/...`).
+    pub fn set_picker_registry(
+        &mut self,
+        picker: std::sync::Arc<std::sync::Mutex<crate::picker_provider::PickerRegistry>>,
+    ) {
+        self.picker = Some(picker);
+    }
+
+    /// Shared handle to the session's `PickerRegistry`, if wired.
+    #[must_use]
+    pub fn picker_registry(
+        &self,
+    ) -> Option<std::sync::Arc<std::sync::Mutex<crate::picker_provider::PickerRegistry>>> {
+        self.picker.clone()
+    }
+
+    /// Deliver a host-initiated deep link (`ACTION_VIEW`) through ATMS to a
+    /// matching installed activity, failing honestly with `START_NOT_FOUND`
+    /// when no activity matches.
+    pub fn open_url(
+        &mut self,
+        url: &str,
+        package: Option<&str>,
+        mime_type: Option<&str>,
+        flags: i32,
+    ) -> Result<crate::ams::OpenUrlOutcome> {
+        let object = self.ensure("android.app.IActivityTaskManager")?;
+        let atms = object
+            .as_any_mut()
+            .and_then(|any| any.downcast_mut::<crate::atms::AtmsService>())
+            .ok_or_else(|| {
+                ServiceError::Internal("activity task service is not an AtmsService".into())
+            })?;
+        atms.open_url(url, package, mime_type, flags)
+    }
+
     /// The uid the package manager allocated for `package` in this session.
     ///
     /// `None` when the package manager is not registered or the package is not
@@ -2792,6 +2831,40 @@ impl ServiceHost {
         // answered by the object itself, in the framework's own reply shape.
         if self.dynamic.contains_key(&binder.0) {
             data.enforce_interface(&descriptor)?;
+            if descriptor == "android.content.IContentProvider" && code == 1 {
+                let cursor = {
+                    let object = self.dynamic.get_mut(&binder.0).expect("checked above");
+                    object.content_query(&descriptor, data)?
+                };
+                if let Some(cursor) = cursor {
+                    let summary = format!(
+                        "rows={} columns={}",
+                        cursor.rows.len(),
+                        cursor.columns.len()
+                    );
+                    let cursor_binder = self.register_dynamic(
+                        crate::cursor::BULK_CURSOR_DESCRIPTOR,
+                        Box::new(crate::cursor::BulkCursorService::new(cursor.clone())),
+                    );
+                    if oneway {
+                        return Ok(CallInfo {
+                            interface: descriptor,
+                            method: "query".into(),
+                            args: summary,
+                            reply: "<oneway>".into(),
+                        });
+                    }
+                    reply.reset();
+                    write_no_exception(reply);
+                    cursor.write_query_reply(reply, cursor_binder)?;
+                    return Ok(CallInfo {
+                        interface: descriptor,
+                        method: "query".into(),
+                        args: summary.clone(),
+                        reply: summary,
+                    });
+                }
+            }
             let object = self.dynamic.get_mut(&binder.0).expect("checked above");
             let handled = object.raw_transact(&descriptor, code, data, reply)?;
             let finished = object.finished();

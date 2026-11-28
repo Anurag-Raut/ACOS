@@ -34,8 +34,16 @@ use serde_json::json;
 
 pub use hub::{Hub, SessionView};
 
-/// Largest HTTP request head the hub accepts (no bodies are read: GET only).
+/// Largest HTTP request head the hub accepts.
 const MAX_HEAD: usize = 8 * 1024;
+/// Largest JSON body accepted by `POST /api/open_url/<sid>` and JSON cancel on `/api/picker/<sid>`.
+pub const MAX_OPEN_URL_BODY: usize = 16 * 1024;
+/// Largest file upload accepted by `POST /api/picker/<sid>` (25 MiB hard bound).
+pub const MAX_PICKER_UPLOAD: usize = 25 * 1024 * 1024;
+/// Total deadline for reading small JSON POST bodies.
+const BODY_DEADLINE: Duration = Duration::from_secs(10);
+/// Total deadline for streaming a file upload body to disk.
+const UPLOAD_DEADLINE: Duration = Duration::from_secs(30);
 /// How long a browser may stall a single write before its connection is dropped.
 const WRITE_TIMEOUT: Duration = Duration::from_secs(2);
 /// How often an idle stream checks whether the browser went away.
@@ -270,7 +278,9 @@ fn handle(mut connection: TcpStream, token: &str, hub: &Arc<Hub>, port: u16) {
         );
         return;
     }
-    if request.method != "GET" {
+    let is_post = request.method == "POST";
+    let is_get = request.method == "GET";
+    if !is_get && !is_post {
         let _ = respond(
             &mut connection,
             405,
@@ -279,7 +289,19 @@ fn handle(mut connection: TcpStream, token: &str, hub: &Arc<Hub>, port: u16) {
         );
         return;
     }
-    // Every route requires the token, including the page and the streams.
+    let path = request.path.as_str();
+    let is_post_route =
+        path.starts_with("/api/open_url/") || path.starts_with("/api/picker/");
+    if (is_post && !is_post_route) || (is_get && is_post_route) {
+        let _ = respond(
+            &mut connection,
+            405,
+            "text/plain; charset=utf-8",
+            b"405 method not allowed\n",
+        );
+        return;
+    }
+    // Every route requires the token, including the page, streams, and POST APIs.
     let authorized = request
         .param("t")
         .is_some_and(|given| token_matches(token, given.as_bytes()));
@@ -293,7 +315,15 @@ fn handle(mut connection: TcpStream, token: &str, hub: &Arc<Hub>, port: u16) {
         return;
     }
 
-    let path = request.path.as_str();
+    if is_post {
+        if let Some(session_id) = path.strip_prefix("/api/open_url/") {
+            handle_open_url(connection, &request, hub, decode_component(session_id));
+        } else if let Some(session_id) = path.strip_prefix("/api/picker/") {
+            handle_picker(connection, &request, hub, decode_component(session_id));
+        }
+        return;
+    }
+
     if path == "/" || path == "/index.html" {
         let _ = respond(
             &mut connection,
@@ -328,6 +358,562 @@ fn handle(mut connection: TcpStream, token: &str, hub: &Arc<Hub>, port: u16) {
             "text/plain; charset=utf-8",
             b"404 not found\n",
         );
+    }
+}
+
+fn respond_json(connection: &mut TcpStream, status: u16, body: &serde_json::Value) {
+    let text = body.to_string();
+    let _ = respond(
+        connection,
+        status,
+        "application/json; charset=utf-8",
+        text.as_bytes(),
+    );
+}
+
+fn respond_ctl_error(connection: &mut TcpStream, error: hub::ServiceCtlError) {
+    match error {
+        hub::ServiceCtlError::NotFound => respond_json(
+            connection,
+            404,
+            &json!({
+                "ok": false,
+                "code": "SESSION_NOT_FOUND",
+                "error": "no live session for that session_id",
+            }),
+        ),
+        hub::ServiceCtlError::Replaced => respond_json(
+            connection,
+            409,
+            &json!({
+                "ok": false,
+                "code": "SESSION_REPLACED",
+                "error": "session was replaced by a newer guest; reopen detail view",
+            }),
+        ),
+        hub::ServiceCtlError::WatchOnly => respond_json(
+            connection,
+            403,
+            &json!({
+                "ok": false,
+                "code": "WATCH_ONLY",
+                "error": "session is watch-only and refuses interactive control requests",
+            }),
+        ),
+        hub::ServiceCtlError::Unavailable(msg) => respond_json(
+            connection,
+            503,
+            &json!({
+                "ok": false,
+                "code": "UNAVAILABLE",
+                "error": msg,
+            }),
+        ),
+        hub::ServiceCtlError::Daemon { code, message } => {
+            if message.contains("START_NOT_FOUND") {
+                respond_json(
+                    connection,
+                    404,
+                    &json!({
+                        "ok": false,
+                        "code": "START_NOT_FOUND",
+                        "error": message,
+                    }),
+                );
+            } else if matches!(code.as_str(), "INVALID_ARGUMENT" | "BAD_REQUEST") {
+                respond_json(
+                    connection,
+                    400,
+                    &json!({
+                        "ok": false,
+                        "code": code,
+                        "error": message,
+                    }),
+                );
+            } else {
+                respond_json(
+                    connection,
+                    500,
+                    &json!({
+                        "ok": false,
+                        "code": code,
+                        "error": message,
+                    }),
+                );
+            }
+        }
+    }
+}
+
+fn parse_optional_guest_gen(request: &Request) -> Result<Option<u64>, &'static str> {
+    match request.param("g") {
+        None => Ok(None),
+        Some(raw) => raw
+            .trim()
+            .parse::<u64>()
+            .ok()
+            .filter(|&g| g > 0)
+            .map(Some)
+            .ok_or("invalid guest generation parameter g"),
+    }
+}
+
+fn validate_post_length(
+    connection: &mut TcpStream,
+    request: &Request,
+    max_bytes: usize,
+) -> Option<usize> {
+    if request.transfer_encoding.is_some() {
+        respond_json(
+            connection,
+            411,
+            &json!({
+                "ok": false,
+                "code": "LENGTH_REQUIRED",
+                "error": "Transfer-Encoding is not supported; send a fixed Content-Length",
+            }),
+        );
+        return None;
+    }
+    let Some(raw_len) = request.content_length.as_deref() else {
+        respond_json(
+            connection,
+            411,
+            &json!({
+                "ok": false,
+                "code": "LENGTH_REQUIRED",
+                "error": "Content-Length header is required",
+            }),
+        );
+        return None;
+    };
+    let Ok(len) = raw_len.trim().parse::<usize>() else {
+        respond_json(
+            connection,
+            400,
+            &json!({
+                "ok": false,
+                "code": "INVALID_ARGUMENT",
+                "error": "Content-Length must be a non-negative integer",
+            }),
+        );
+        return None;
+    };
+    if len > max_bytes {
+        respond_json(
+            connection,
+            413,
+            &json!({
+                "ok": false,
+                "code": "PAYLOAD_TOO_LARGE",
+                "max_bytes": max_bytes,
+                "error": format!("request body of {len} bytes exceeds limit of {max_bytes} bytes"),
+            }),
+        );
+        return None;
+    }
+    Some(len)
+}
+
+fn read_bounded_body(
+    connection: &mut TcpStream,
+    prefix: &[u8],
+    content_length: usize,
+    deadline_dur: Duration,
+) -> Result<Vec<u8>, String> {
+    let mut out = Vec::with_capacity(content_length);
+    let take_prefix = prefix.len().min(content_length);
+    out.extend_from_slice(&prefix[..take_prefix]);
+    let deadline = Instant::now() + deadline_dur;
+    let mut buf = [0u8; 4096];
+    while out.len() < content_length {
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        if remaining.is_zero() {
+            return Err("timed out reading request body".to_string());
+        }
+        let _ = connection.set_read_timeout(Some(remaining));
+        let want = (content_length - out.len()).min(buf.len());
+        match connection.read(&mut buf[..want]) {
+            Ok(0) => return Err("unexpected EOF while reading request body".to_string()),
+            Ok(n) => out.extend_from_slice(&buf[..n]),
+            Err(e) if e.kind() == ErrorKind::Interrupted => continue,
+            Err(e) => return Err(format!("failed reading request body: {e}")),
+        }
+    }
+    Ok(out)
+}
+
+fn sanitize_upload_filename(raw: Option<&str>) -> String {
+    let candidate = raw
+        .and_then(|s| s.rsplit(['/', '\\']).next())
+        .unwrap_or("")
+        .trim();
+    let cleaned: String = candidate
+        .chars()
+        .filter(|c| !c.is_control() && *c != '/' && *c != '\\' && *c != '\0')
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '_' | ' ') {
+                c
+            } else {
+                '_'
+            }
+        })
+        .take(120)
+        .collect();
+    let trimmed = cleaned.trim().trim_matches('.');
+    if trimmed.is_empty() || trimmed == "." || trimmed == ".." {
+        "picked-file.bin".to_string()
+    } else {
+        trimmed.to_string()
+    }
+}
+
+fn stream_upload_to_file(
+    connection: &mut TcpStream,
+    prefix: &[u8],
+    content_length: usize,
+    upload_dir: &std::path::Path,
+    display_name: &str,
+) -> Result<PathBuf, String> {
+    use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt};
+    static UPLOAD_SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+
+    let mut dir_builder = std::fs::DirBuilder::new();
+    dir_builder.recursive(true).mode(0o700);
+    dir_builder
+        .create(upload_dir)
+        .map_err(|e| format!("cannot create picker upload dir: {e}"))?;
+
+    let seq = UPLOAD_SEQ.fetch_add(1, Ordering::Relaxed);
+    let ts = crate::live_registry::now_ms();
+    let disk_name = format!(
+        "pick-{ts}-{seq}-{}",
+        display_name.replace(' ', "_")
+    );
+    let target = upload_dir.join(disk_name);
+    let mut file = std::fs::OpenOptions::new()
+        .create_new(true)
+        .write(true)
+        .mode(0o600)
+        .open(&target)
+        .map_err(|e| format!("cannot create staged upload file: {e}"))?;
+
+    let write_res = (|| -> Result<(), String> {
+        let mut written = 0usize;
+        let take_prefix = prefix.len().min(content_length);
+        if take_prefix > 0 {
+            file.write_all(&prefix[..take_prefix])
+                .map_err(|e| format!("write staged file: {e}"))?;
+            written += take_prefix;
+        }
+        let deadline = Instant::now() + UPLOAD_DEADLINE;
+        let mut buf = [0u8; 32 * 1024];
+        while written < content_length {
+            let remaining = deadline.saturating_duration_since(Instant::now());
+            if remaining.is_zero() {
+                return Err("timed out receiving uploaded file".to_string());
+            }
+            let _ = connection.set_read_timeout(Some(remaining));
+            let want = (content_length - written).min(buf.len());
+            match connection.read(&mut buf[..want]) {
+                Ok(0) => return Err("unexpected EOF while receiving uploaded file".to_string()),
+                Ok(n) => {
+                    file.write_all(&buf[..n])
+                        .map_err(|e| format!("write staged file: {e}"))?;
+                    written += n;
+                }
+                Err(e) if e.kind() == ErrorKind::Interrupted => continue,
+                Err(e) => return Err(format!("read uploaded file: {e}")),
+            }
+        }
+        file.flush().map_err(|e| format!("flush staged file: {e}"))?;
+        Ok(())
+    })();
+
+    if let Err(err) = write_res {
+        drop(file);
+        let _ = std::fs::remove_file(&target);
+        return Err(err);
+    }
+    Ok(target)
+}
+
+/// `POST /api/open_url/<session_id>?t=<token>[&g=<guest_gen>]`
+///
+/// Delivers a deep link (`ACTION_VIEW`) to the live session through
+/// `acos_service_ctl {module: "intents", op: "open_url"}`. Unmatched links
+/// return HTTP 404 with `code: "START_NOT_FOUND"` (never fabricated).
+fn handle_open_url(
+    mut connection: TcpStream,
+    request: &Request,
+    hub: &Arc<Hub>,
+    session_id: String,
+) {
+    if session_id.is_empty() {
+        respond_json(
+            &mut connection,
+            404,
+            &json!({"ok": false, "code": "SESSION_NOT_FOUND", "error": "missing session_id"}),
+        );
+        return;
+    }
+    let expected_guest_gen = match parse_optional_guest_gen(request) {
+        Ok(g) => g,
+        Err(msg) => {
+            respond_json(
+                &mut connection,
+                400,
+                &json!({"ok": false, "code": "INVALID_ARGUMENT", "error": msg}),
+            );
+            return;
+        }
+    };
+    let Some(content_length) = validate_post_length(&mut connection, request, MAX_OPEN_URL_BODY)
+    else {
+        return;
+    };
+    let body = match read_bounded_body(
+        &mut connection,
+        &request.body_prefix,
+        content_length,
+        BODY_DEADLINE,
+    ) {
+        Ok(b) => b,
+        Err(msg) => {
+            respond_json(
+                &mut connection,
+                400,
+                &json!({"ok": false, "code": "INVALID_ARGUMENT", "error": msg}),
+            );
+            return;
+        }
+    };
+    let parsed: serde_json::Value = match serde_json::from_slice(&body) {
+        Ok(v) => v,
+        Err(e) => {
+            respond_json(
+                &mut connection,
+                400,
+                &json!({"ok": false, "code": "INVALID_ARGUMENT", "error": format!("invalid JSON: {e}")}),
+            );
+            return;
+        }
+    };
+    let Some(url) = parsed
+        .get("url")
+        .and_then(serde_json::Value::as_str)
+        .map(str::trim)
+        .filter(|u| !u.is_empty())
+    else {
+        respond_json(
+            &mut connection,
+            400,
+            &json!({"ok": false, "code": "INVALID_ARGUMENT", "error": "JSON body requires a non-empty string `url`"}),
+        );
+        return;
+    };
+    let mut args = json!({ "url": url });
+    if let Some(pkg) = parsed.get("package").and_then(serde_json::Value::as_str) {
+        args["package"] = json!(pkg);
+    }
+    if let Some(mime) = parsed.get("mime_type").and_then(serde_json::Value::as_str) {
+        args["mime_type"] = json!(mime);
+    }
+    if let Some(flags) = parsed.get("flags").and_then(serde_json::Value::as_i64) {
+        args["flags"] = json!(flags);
+    }
+    match hub.service_ctl(&session_id, expected_guest_gen, "intents", "open_url", args) {
+        Ok(mut result) => {
+            if let Some(obj) = result.as_object_mut() {
+                obj.entry("ok").or_insert_with(|| json!(true));
+            }
+            respond_json(&mut connection, 200, &result);
+        }
+        Err(err) => respond_ctl_error(&mut connection, err),
+    }
+}
+
+/// `POST /api/picker/<session_id>?t=<token>[&g=<guest_gen>][&name=...&seq=...&mime=...]`
+///
+/// Accepts either:
+/// - `Content-Type: application/json` with `{"cancel": true, "capture_seq"?: N}` to
+///   deliver `RESULT_CANCELED`; or
+/// - a raw file body (bounded at [`MAX_PICKER_UPLOAD`], 25 MiB) streamed straight to
+///   `<artifacts_dir>/picker/` and handed to `intents.pick_file`.
+fn handle_picker(
+    mut connection: TcpStream,
+    request: &Request,
+    hub: &Arc<Hub>,
+    session_id: String,
+) {
+    if session_id.is_empty() {
+        respond_json(
+            &mut connection,
+            404,
+            &json!({"ok": false, "code": "SESSION_NOT_FOUND", "error": "missing session_id"}),
+        );
+        return;
+    }
+    let expected_guest_gen = match parse_optional_guest_gen(request) {
+        Ok(g) => g,
+        Err(msg) => {
+            respond_json(
+                &mut connection,
+                400,
+                &json!({"ok": false, "code": "INVALID_ARGUMENT", "error": msg}),
+            );
+            return;
+        }
+    };
+    let is_json_cancel = request
+        .content_type
+        .as_deref()
+        .is_some_and(|ct| ct.to_ascii_lowercase().starts_with("application/json"));
+
+    if is_json_cancel {
+        let Some(content_length) =
+            validate_post_length(&mut connection, request, MAX_OPEN_URL_BODY)
+        else {
+            return;
+        };
+        let body = match read_bounded_body(
+            &mut connection,
+            &request.body_prefix,
+            content_length,
+            BODY_DEADLINE,
+        ) {
+            Ok(b) => b,
+            Err(msg) => {
+                respond_json(
+                    &mut connection,
+                    400,
+                    &json!({"ok": false, "code": "INVALID_ARGUMENT", "error": msg}),
+                );
+                return;
+            }
+        };
+        let parsed: serde_json::Value = match serde_json::from_slice(&body) {
+            Ok(v) => v,
+            Err(e) => {
+                respond_json(
+                    &mut connection,
+                    400,
+                    &json!({"ok": false, "code": "INVALID_ARGUMENT", "error": format!("invalid JSON: {e}")}),
+                );
+                return;
+            }
+        };
+        if parsed.get("cancel").and_then(serde_json::Value::as_bool) != Some(true) {
+            respond_json(
+                &mut connection,
+                400,
+                &json!({"ok": false, "code": "INVALID_ARGUMENT", "error": "JSON picker body must specify {\"cancel\": true}"}),
+            );
+            return;
+        }
+        let mut args = json!({ "cancel": true });
+        if let Some(seq) = parsed
+            .get("capture_seq")
+            .and_then(serde_json::Value::as_u64)
+            .or_else(|| request.param("seq").and_then(|s| s.parse::<u64>().ok()))
+        {
+            args["capture_seq"] = json!(seq);
+        }
+        match hub.service_ctl(
+            &session_id,
+            expected_guest_gen,
+            "intents",
+            "pick_file",
+            args,
+        ) {
+            Ok(mut result) => {
+                if let Some(obj) = result.as_object_mut() {
+                    obj.entry("ok").or_insert_with(|| json!(true));
+                }
+                respond_json(&mut connection, 200, &result);
+            }
+            Err(err) => respond_ctl_error(&mut connection, err),
+        }
+        return;
+    }
+
+    // Raw file upload path: enforce size limit and session authorization BEFORE
+    // reading any body or writing anything to disk.
+    let Some(content_length) = validate_post_length(&mut connection, request, MAX_PICKER_UPLOAD)
+    else {
+        return;
+    };
+    let upload_dir = match hub.picker_upload_dir(&session_id, expected_guest_gen) {
+        Ok(dir) => dir,
+        Err(err) => {
+            respond_ctl_error(&mut connection, err);
+            return;
+        }
+    };
+    let raw_name = request
+        .param("name")
+        .or_else(|| request.x_filename.clone());
+    let display_name = sanitize_upload_filename(raw_name.as_deref());
+    let staged_path = match stream_upload_to_file(
+        &mut connection,
+        &request.body_prefix,
+        content_length,
+        &upload_dir,
+        &display_name,
+    ) {
+        Ok(path) => path,
+        Err(msg) => {
+            respond_json(
+                &mut connection,
+                400,
+                &json!({"ok": false, "code": "UPLOAD_FAILED", "error": msg}),
+            );
+            return;
+        }
+    };
+
+    let mime_type = request
+        .param("mime")
+        .filter(|m| !m.trim().is_empty())
+        .or_else(|| {
+            request
+                .content_type
+                .as_deref()
+                .map(|ct| ct.split(';').next().unwrap_or("").trim().to_string())
+                .filter(|m| !m.is_empty() && m != "application/octet-stream")
+        });
+    let capture_seq = request
+        .param("seq")
+        .and_then(|s| s.trim().parse::<u64>().ok());
+
+    let mut args = json!({
+        "path": staged_path.display().to_string(),
+        "display_name": display_name,
+    });
+    if let Some(mime) = mime_type {
+        args["mime_type"] = json!(mime);
+    }
+    if let Some(seq) = capture_seq {
+        args["capture_seq"] = json!(seq);
+    }
+
+    match hub.service_ctl(
+        &session_id,
+        expected_guest_gen,
+        "intents",
+        "pick_file",
+        args,
+    ) {
+        Ok(mut result) => {
+            if let Some(obj) = result.as_object_mut() {
+                obj.entry("ok").or_insert_with(|| json!(true));
+            }
+            respond_json(&mut connection, 200, &result);
+        }
+        Err(err) => {
+            let _ = std::fs::remove_file(&staged_path);
+            respond_ctl_error(&mut connection, err);
+        }
     }
 }
 
@@ -717,6 +1303,10 @@ fn respond(
         404 => "Not Found",
         405 => "Method Not Allowed",
         409 => "Conflict",
+        411 => "Length Required",
+        413 => "Payload Too Large",
+        500 => "Internal Server Error",
+        503 => "Service Unavailable",
         _ => "Error",
     };
     write!(
@@ -743,6 +1333,11 @@ struct Request {
     connection: Option<String>,
     sec_websocket_key: Option<String>,
     sec_websocket_version: Option<String>,
+    content_length: Option<String>,
+    content_type: Option<String>,
+    transfer_encoding: Option<String>,
+    x_filename: Option<String>,
+    body_prefix: Vec<u8>,
 }
 
 impl Request {
@@ -763,14 +1358,17 @@ fn read_request(connection: &mut TcpStream) -> Option<Request> {
     let mut head = Vec::with_capacity(512);
     let mut buffer = [0u8; 1024];
     let deadline = Instant::now() + HEAD_DEADLINE;
-    loop {
+    let sep = loop {
         // One total deadline for the whole head, not a per-read timeout.
         let remaining = deadline.saturating_duration_since(Instant::now());
         if remaining.is_zero() || connection.set_read_timeout(Some(remaining)).is_err() {
             return None;
         }
-        if head.windows(4).any(|window| window == b"\r\n\r\n") {
-            break;
+        if let Some(pos) = head.windows(4).position(|window| window == b"\r\n\r\n") {
+            if pos > MAX_HEAD {
+                return None;
+            }
+            break pos;
         }
         if head.len() > MAX_HEAD {
             return None;
@@ -781,8 +1379,9 @@ fn read_request(connection: &mut TcpStream) -> Option<Request> {
             Err(error) if error.kind() == ErrorKind::Interrupted => continue,
             Err(_) => return None,
         }
-    }
-    let text = String::from_utf8_lossy(&head);
+    };
+    let body_prefix = head[sep + 4..].to_vec();
+    let text = String::from_utf8_lossy(&head[..sep]);
     let line = text.lines().next()?;
     let mut fields = line.split_whitespace();
     let method = fields.next()?.to_string();
@@ -796,6 +1395,10 @@ fn read_request(connection: &mut TcpStream) -> Option<Request> {
     let mut conn_hdr = None;
     let mut sec_websocket_key = None;
     let mut sec_websocket_version = None;
+    let mut content_length: Option<String> = None;
+    let mut content_type = None;
+    let mut transfer_encoding = None;
+    let mut x_filename = None;
     for header_line in text.lines().skip(1).take_while(|line| !line.is_empty()) {
         let Some((name, value)) = header_line.split_once(':') else {
             continue;
@@ -812,6 +1415,19 @@ fn read_request(connection: &mut TcpStream) -> Option<Request> {
             sec_websocket_key = Some(value);
         } else if name.eq_ignore_ascii_case("sec-websocket-version") {
             sec_websocket_version = Some(value);
+        } else if name.eq_ignore_ascii_case("content-length") {
+            if let Some(prev) = &content_length {
+                if prev != &value {
+                    return None;
+                }
+            }
+            content_length = Some(value);
+        } else if name.eq_ignore_ascii_case("content-type") {
+            content_type = Some(value);
+        } else if name.eq_ignore_ascii_case("transfer-encoding") {
+            transfer_encoding = Some(value);
+        } else if name.eq_ignore_ascii_case("x-filename") {
+            x_filename = Some(value);
         }
     }
     Some(Request {
@@ -823,6 +1439,11 @@ fn read_request(connection: &mut TcpStream) -> Option<Request> {
         connection: conn_hdr,
         sec_websocket_key,
         sec_websocket_version,
+        content_length,
+        content_type,
+        transfer_encoding,
+        x_filename,
+        body_prefix,
     })
 }
 
@@ -1982,6 +2603,362 @@ mod tests {
         );
         drop(conn2);
         drop(conn);
+    }
+
+    fn post_raw(
+        port: u16,
+        path: &str,
+        host: Option<&str>,
+        headers: &[(&str, &str)],
+        body: &[u8],
+    ) -> Vec<u8> {
+        let mut stream = TcpStream::connect((Ipv4Addr::LOCALHOST, port)).expect("connect");
+        let _ = stream.set_read_timeout(Some(Duration::from_secs(5)));
+        let host_val = host
+            .map(str::to_string)
+            .unwrap_or_else(|| format!("127.0.0.1:{port}"));
+        let mut req = format!(
+            "POST {path} HTTP/1.1\r\nHost: {host_val}\r\nConnection: close\r\n"
+        );
+        for (k, v) in headers {
+            req.push_str(&format!("{k}: {v}\r\n"));
+        }
+        req.push_str("\r\n");
+        stream.write_all(req.as_bytes()).expect("write head");
+        if !body.is_empty() {
+            let _ = stream.write_all(body);
+        }
+        let _ = stream.flush();
+        let mut response = Vec::new();
+        let _ = stream.read_to_end(&mut response);
+        response
+    }
+
+    #[test]
+    fn open_url_endpoint_forwards_to_daemon_and_maps_start_not_found() {
+        let server = Server::start("open-url");
+        let serve_sock = server.registry.join("serve.sock");
+        let listener = UnixListener::bind(&serve_sock).expect("bind fake daemon");
+
+        let received = Arc::new(std::sync::Mutex::new(Vec::<serde_json::Value>::new()));
+        let received_bg = Arc::clone(&received);
+        let _daemon = std::thread::spawn(move || {
+            for incoming in listener.incoming().take(4) {
+                let Ok(mut stream) = incoming else { break };
+                let _ = stream.set_read_timeout(Some(Duration::from_secs(2)));
+                let mut reader = std::io::BufReader::new(stream.try_clone().expect("clone"));
+                let mut line = String::new();
+                if reader.read_line(&mut line).unwrap_or(0) == 0 {
+                    continue;
+                }
+                let req: serde_json::Value = serde_json::from_str(&line).expect("req json");
+                received_bg.lock().unwrap().push(req.clone());
+                let url = req
+                    .pointer("/args/args/url")
+                    .and_then(serde_json::Value::as_str)
+                    .unwrap_or("");
+                let reply = if url.contains("missing") {
+                    json!({
+                        "id": req["id"],
+                        "envelope": {
+                            "ok": false,
+                            "error": {
+                                "code": "INVALID_ARGUMENT",
+                                "message": "START_NOT_FOUND: no installed activity matches intent"
+                            }
+                        }
+                    })
+                } else {
+                    json!({
+                        "id": req["id"],
+                        "envelope": {
+                            "ok": true,
+                            "result": {
+                                "component": "com.example.app/.DetailActivity",
+                                "delivery": "on_new_intent",
+                                "frame_advanced": true
+                            }
+                        }
+                    })
+                };
+                let _ = writeln!(stream, "{reply}");
+                let _ = stream.flush();
+            }
+        });
+
+        let live_doc = json!({
+            "v": 1,
+            "session_id": "s_dl",
+            "daemon_pid": std::process::id(),
+            "launcher_pid": std::process::id(),
+            "started_ms": crate::live_registry::now_ms(),
+            "serve_socket": serve_sock.to_string_lossy(),
+            "display": {"w": 1080, "h": 2400},
+        });
+        std::fs::write(server.registry.join("s_dl.json"), live_doc.to_string()).expect("write live");
+
+        let watch_doc = json!({
+            "v": 1,
+            "session_id": "s_ro",
+            "daemon_pid": std::process::id(),
+            "launcher_pid": std::process::id(),
+            "started_ms": crate::live_registry::now_ms(),
+            "watch_only": true,
+            "display": {"w": 1080, "h": 2400},
+        });
+        std::fs::write(server.registry.join("s_ro.json"), watch_doc.to_string()).expect("write ro");
+
+        // Auth, Host, and HTTP method gates.
+        let body = br#"{"url":"myapp://item/42"}"#;
+        let len_s = body.len().to_string();
+        let no_tok = post_raw(
+            server.port,
+            "/api/open_url/s_dl",
+            None,
+            &[("Content-Type", "application/json"), ("Content-Length", &len_s)],
+            body,
+        );
+        assert_eq!(status_of(&no_tok), 403);
+
+        let bad_host = post_raw(
+            server.port,
+            &format!("/api/open_url/s_dl?t={}", server.token),
+            Some(&format!("evil.example:{}", server.port)),
+            &[("Content-Type", "application/json"), ("Content-Length", &len_s)],
+            body,
+        );
+        assert_eq!(status_of(&bad_host), 403);
+
+        let get_post_route = server.raw(&format!("/api/open_url/s_dl?t={}", server.token));
+        assert_eq!(status_of(&get_post_route), 405);
+
+        let post_root = post_raw(
+            server.port,
+            &format!("/?t={}", server.token),
+            None,
+            &[("Content-Length", "0")],
+            b"",
+        );
+        assert_eq!(status_of(&post_root), 405);
+
+        // Missing Content-Length -> 411; oversized body -> 413.
+        let no_len = post_raw(
+            server.port,
+            &format!("/api/open_url/s_dl?t={}", server.token),
+            None,
+            &[("Content-Type", "application/json")],
+            b"",
+        );
+        assert_eq!(status_of(&no_len), 411);
+
+        let too_big_len = (MAX_OPEN_URL_BODY + 1).to_string();
+        let too_big = post_raw(
+            server.port,
+            &format!("/api/open_url/s_dl?t={}", server.token),
+            None,
+            &[
+                ("Content-Type", "application/json"),
+                ("Content-Length", &too_big_len),
+            ],
+            b"",
+        );
+        assert_eq!(status_of(&too_big), 413);
+
+        // Watch-only session -> 403 WATCH_ONLY.
+        let ro_resp = post_raw(
+            server.port,
+            &format!("/api/open_url/s_ro?t={}", server.token),
+            None,
+            &[("Content-Type", "application/json"), ("Content-Length", &len_s)],
+            body,
+        );
+        assert_eq!(status_of(&ro_resp), 403);
+        let ro_json: serde_json::Value = serde_json::from_slice(body_of(&ro_resp)).expect("ro json");
+        assert_eq!(ro_json["code"], "WATCH_ONLY");
+
+        // Valid open_url forwards to daemon and returns 200.
+        let ok_resp = post_raw(
+            server.port,
+            &format!("/api/open_url/s_dl?t={}", server.token),
+            None,
+            &[("Content-Type", "application/json"), ("Content-Length", &len_s)],
+            body,
+        );
+        assert_eq!(status_of(&ok_resp), 200);
+        let ok_json: serde_json::Value = serde_json::from_slice(body_of(&ok_resp)).expect("ok json");
+        assert_eq!(ok_json["ok"], true);
+        assert_eq!(ok_json["delivery"], "on_new_intent");
+
+        // Unmatched URL -> 404 START_NOT_FOUND.
+        let miss_body = br#"{"url":"https://missing.example/nope"}"#;
+        let miss_len = miss_body.len().to_string();
+        let miss_resp = post_raw(
+            server.port,
+            &format!("/api/open_url/s_dl?t={}", server.token),
+            None,
+            &[
+                ("Content-Type", "application/json"),
+                ("Content-Length", &miss_len),
+            ],
+            miss_body,
+        );
+        assert_eq!(status_of(&miss_resp), 404);
+        let miss_json: serde_json::Value =
+            serde_json::from_slice(body_of(&miss_resp)).expect("miss json");
+        assert_eq!(miss_json["code"], "START_NOT_FOUND");
+
+        let log = received.lock().unwrap();
+        assert_eq!(log.len(), 2);
+        assert_eq!(log[0]["tool"], "acos_service_ctl");
+        assert_eq!(log[0]["args"]["module"], "intents");
+        assert_eq!(log[0]["args"]["op"], "open_url");
+        assert_eq!(log[0]["args"]["args"]["url"], "myapp://item/42");
+    }
+
+    #[test]
+    fn picker_endpoint_streams_upload_cancels_and_enforces_limits() {
+        let server = Server::start("picker");
+        let serve_sock = server.registry.join("serve-pk.sock");
+        let artifacts_dir = server.registry.join("artifacts");
+        std::fs::create_dir_all(&artifacts_dir).expect("mkdir artifacts");
+        let listener = UnixListener::bind(&serve_sock).expect("bind fake daemon");
+
+        let received = Arc::new(std::sync::Mutex::new(Vec::<serde_json::Value>::new()));
+        let received_bg = Arc::clone(&received);
+        let _daemon = std::thread::spawn(move || {
+            for incoming in listener.incoming().take(4) {
+                let Ok(mut stream) = incoming else { break };
+                let _ = stream.set_read_timeout(Some(Duration::from_secs(2)));
+                let mut reader = std::io::BufReader::new(stream.try_clone().expect("clone"));
+                let mut line = String::new();
+                if reader.read_line(&mut line).unwrap_or(0) == 0 {
+                    continue;
+                }
+                let req: serde_json::Value = serde_json::from_str(&line).expect("req json");
+                received_bg.lock().unwrap().push(req.clone());
+                let reply = json!({
+                    "id": req["id"],
+                    "envelope": {
+                        "ok": true,
+                        "result": {
+                            "delivered": true
+                        }
+                    }
+                });
+                let _ = writeln!(stream, "{reply}");
+                let _ = stream.flush();
+            }
+        });
+
+        let live_doc = json!({
+            "v": 1,
+            "session_id": "s_pk",
+            "daemon_pid": std::process::id(),
+            "launcher_pid": std::process::id(),
+            "started_ms": crate::live_registry::now_ms(),
+            "serve_socket": serve_sock.to_string_lossy(),
+            "artifacts_dir": artifacts_dir.to_string_lossy(),
+            "display": {"w": 1080, "h": 2400},
+        });
+        std::fs::write(server.registry.join("s_pk.json"), live_doc.to_string()).expect("write live");
+
+        let ro_artifacts = server.registry.join("ro-artifacts");
+        let ro_doc = json!({
+            "v": 1,
+            "session_id": "s_pk_ro",
+            "daemon_pid": std::process::id(),
+            "launcher_pid": std::process::id(),
+            "started_ms": crate::live_registry::now_ms(),
+            "watch_only": true,
+            "artifacts_dir": ro_artifacts.to_string_lossy(),
+            "display": {"w": 1080, "h": 2400},
+        });
+        std::fs::write(server.registry.join("s_pk_ro.json"), ro_doc.to_string()).expect("write ro");
+
+        // 1. Watch-only session refused with 403 before creating any file.
+        let ro_resp = post_raw(
+            server.port,
+            &format!("/api/picker/s_pk_ro?t={}&name=photo.png", server.token),
+            None,
+            &[("Content-Type", "image/png"), ("Content-Length", "4")],
+            b"DATA",
+        );
+        assert_eq!(status_of(&ro_resp), 403);
+        assert!(
+            !ro_artifacts.join("picker").exists(),
+            "watch-only upload must not create staged files"
+        );
+
+        // 2. Oversized Content-Length (> 25 MiB) refused with 413 before creating any file.
+        let over_limit = (MAX_PICKER_UPLOAD + 1).to_string();
+        let big_resp = post_raw(
+            server.port,
+            &format!("/api/picker/s_pk?t={}&name=huge.bin", server.token),
+            None,
+            &[
+                ("Content-Type", "application/octet-stream"),
+                ("Content-Length", &over_limit),
+            ],
+            b"",
+        );
+        assert_eq!(status_of(&big_resp), 413);
+        assert!(
+            !artifacts_dir.join("picker").exists(),
+            "oversized upload must not create staged files"
+        );
+
+        // 3. Valid binary upload streams into <artifacts_dir>/picker/ with sanitized filename.
+        let payload = b"\x89PNG\r\n\x1a\nfake-image-payload";
+        let payload_len = payload.len().to_string();
+        let up_resp = post_raw(
+            server.port,
+            &format!(
+                "/api/picker/s_pk?t={}&name=..%2Fevil%2Fphoto.png&seq=4&mime=image%2Fpng",
+                server.token
+            ),
+            None,
+            &[
+                ("Content-Type", "image/png"),
+                ("Content-Length", &payload_len),
+            ],
+            payload,
+        );
+        assert_eq!(status_of(&up_resp), 200);
+        let up_json: serde_json::Value = serde_json::from_slice(body_of(&up_resp)).expect("up json");
+        assert_eq!(up_json["ok"], true);
+
+        // 4. JSON cancel forwards {"cancel": true, "capture_seq": 4}.
+        let cancel_body = br#"{"cancel":true,"capture_seq":4}"#;
+        let cancel_len = cancel_body.len().to_string();
+        let cancel_resp = post_raw(
+            server.port,
+            &format!("/api/picker/s_pk?t={}", server.token),
+            None,
+            &[
+                ("Content-Type", "application/json"),
+                ("Content-Length", &cancel_len),
+            ],
+            cancel_body,
+        );
+        assert_eq!(status_of(&cancel_resp), 200);
+
+        let log = received.lock().unwrap();
+        assert_eq!(log.len(), 2);
+        let staged_path = log[0]["args"]["args"]["path"]
+            .as_str()
+            .expect("staged path forwarded");
+        assert!(
+            std::path::Path::new(staged_path).starts_with(artifacts_dir.join("picker")),
+            "staged file must live inside <artifacts_dir>/picker, got {staged_path}"
+        );
+        assert_eq!(std::fs::read(staged_path).expect("read staged"), payload);
+        assert_eq!(log[0]["args"]["args"]["display_name"], "photo.png");
+        assert_eq!(log[0]["args"]["args"]["mime_type"], "image/png");
+        assert_eq!(log[0]["args"]["args"]["capture_seq"], 4);
+
+        assert_eq!(log[1]["args"]["op"], "pick_file");
+        assert_eq!(log[1]["args"]["args"]["cancel"], true);
+        assert_eq!(log[1]["args"]["args"]["capture_seq"], 4);
     }
 
     fn send(

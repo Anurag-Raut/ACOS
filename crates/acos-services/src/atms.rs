@@ -2473,6 +2473,29 @@ impl AtmsService {
         Ok(code)
     }
 
+    /// Deliver a host-initiated deep link (`ACTION_VIEW`) to a matching
+    /// installed activity, via `onNewIntent` or fresh launch.
+    pub fn open_url(
+        &mut self,
+        url: &str,
+        package: Option<&str>,
+        mime_type: Option<&str>,
+        flags: i32,
+    ) -> Result<crate::ams::OpenUrlOutcome> {
+        let mut state = self.state.lock().unwrap();
+        let outcome = state.ams.open_url(url, package, mime_type, flags)?;
+        state.enqueue_pending_resumes();
+        if outcome.delivery == crate::ams::OpenUrlDelivery::NewIntent {
+            if let Some(top) = state.top_process.as_ref() {
+                top.store(
+                    process_tag_of(outcome.token),
+                    std::sync::atomic::Ordering::Release,
+                );
+            }
+        }
+        Ok(outcome)
+    }
+
     /// The dynamic receiver registrations recorded so far, oldest first, with
     /// the decoded `IntentFilter` facts (W28).
     #[must_use]

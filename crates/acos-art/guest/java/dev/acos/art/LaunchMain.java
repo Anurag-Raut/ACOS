@@ -6516,8 +6516,14 @@ public final class LaunchMain {
                         if (seq <= 0 || seq == lastSeq) continue;
                         int requestCode = o.optInt("request_code", 0);
                         int resultCode = o.optInt("result_code", 0);
+                        int flags = o.optInt("flags", 0);
+                        org.json.JSONObject extras = o.optJSONObject("extras");
                         android.content.Intent data = null;
-                        if (o.has("data") || o.has("action") || o.has("mime_type")) {
+                        if (!o.isNull("data")
+                                || !o.isNull("action")
+                                || !o.isNull("mime_type")
+                                || flags != 0
+                                || (extras != null && extras.length() > 0)) {
                             data = new android.content.Intent();
                             if (!o.isNull("action")) data.setAction(o.optString("action"));
                             // `setData` and `setType` each clear the other on
@@ -6533,7 +6539,9 @@ public final class LaunchMain {
                             } else if (!o.isNull("mime_type")) {
                                 data.setType(o.optString("mime_type"));
                             }
-                            org.json.JSONObject extras = o.optJSONObject("extras");
+                            if (flags != 0) {
+                                data.addFlags(flags);
+                            }
                             if (extras != null) {
                                 java.util.Iterator<String> keys = extras.keys();
                                 while (keys.hasNext()) {

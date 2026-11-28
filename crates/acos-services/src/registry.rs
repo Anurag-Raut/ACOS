@@ -214,6 +214,8 @@ pub struct LiveHandles {
     /// and agents (MCP / CLI) when an app hits an unattached module or captured intent.
     pub prompts:
         std::sync::Arc<std::sync::Mutex<crate::capability_prompts::CapabilityPromptState>>,
+    /// Host-backed File & Photo Picker registry (`content://com.acos.picker/...`).
+    pub picker: std::sync::Arc<std::sync::Mutex<crate::picker_provider::PickerRegistry>>,
 }
 
 /// Install the standard ACOS service set on `host`.
@@ -372,6 +374,9 @@ pub fn install_with_handles_and_insets(
         crate::capability_prompts::CapabilityPromptState::new(),
     ));
     atms_state.ams.prompts = Some(Arc::clone(&prompts));
+    // Tier 1 Slice B: host-backed File & Photo Picker (`content://com.acos.picker/...`).
+    // Zero guest processes and zero allocations until a file is actually picked.
+    let picker = Arc::new(Mutex::new(crate::picker_provider::PickerRegistry::new()));
     let atms = Arc::new(Mutex::new(atms_state));
     // The handles a live session drives: the same input producer the window
     // sessions use, the compositor state, the window state, the intent capture
@@ -384,8 +389,10 @@ pub fn install_with_handles_and_insets(
         top_process: Arc::clone(&top_process),
         atms: Arc::clone(&atms),
         prompts: Arc::clone(&prompts),
+        picker: Arc::clone(&picker),
     };
     host.set_capability_prompts(Arc::clone(&prompts));
+    host.set_picker_registry(Arc::clone(&picker));
     // MODNOTIF4: the `IIntentSender` node pool. A `PendingIntent` is only a
     // strong binder to one of these (`PendingIntent.writeToParcel`), so the
     // binders exist before any app asks for one; `getIntentSender` fills a slot
@@ -870,9 +877,22 @@ pub fn install_with_handles_and_insets(
         "com.android.server.am.ContentProviderConnection",
         Box::new(crate::provider::ProviderConnectionService),
     );
-    // Serve `settings` from the provider registry: `IActivityManager`
-    // `getContentProvider("settings")` answers with this binder and the
-    // Settings-backed `IContentProvider` behind it.
+    // Register the host-backed File & Photo Picker provider (`com.acos.picker`)
+    // as a dynamic `IContentProvider` node so `ContentResolver` calls against
+    // `content://com.acos.picker/<id>/<name>` resolve via `getContentProvider`
+    // without spawning any guest process.
+    let picker_binder = host.register_dynamic(
+        crate::picker_provider::CONTENT_PROVIDER_DESCRIPTOR,
+        Box::new(crate::picker_provider::PickerProviderService::new(
+            Arc::clone(&picker),
+        )),
+    );
+    let picker_connection = host.register_dynamic(
+        "com.android.server.am.ContentProviderConnection",
+        Box::new(crate::provider::ProviderConnectionService),
+    );
+    // Serve `settings` and `com.acos.picker` from the provider registry:
+    // `IActivityManager.getContentProvider` answers with these binders.
     if let Ok(mut state) = atms.lock() {
         state
             .provider_registry
@@ -891,6 +911,22 @@ pub fn install_with_handles_and_insets(
                 // The provider is served in-process, but the holder still
                 // carries a real connection token so the framework's own
                 // reference counting and release path are exercised.
+                no_release_needed: false,
+            });
+        state
+            .provider_registry
+            .register(crate::provider::ProviderEntry {
+                authority: crate::picker_provider::PICKER_AUTHORITY.into(),
+                package: crate::picker_provider::PICKER_PACKAGE.into(),
+                class: crate::picker_provider::PICKER_CLASS.into(),
+                process_name: crate::picker_provider::PICKER_PROCESS.into(),
+                read_permission: String::new(),
+                write_permission: String::new(),
+                exported: true,
+                grant_uri_permissions: true,
+                init_order: 0,
+                binder: picker_binder.0,
+                connection: picker_connection.0,
                 no_release_needed: false,
             });
     }

@@ -2804,11 +2804,16 @@ impl ArtSession {
                 .unwrap_or("the session refused the control op");
             return Err(BackendError::Failed {
                 code: match code {
-                    "BAD_REQUEST" => acos_protocol::ErrorCode::InvalidArgument,
+                    "BAD_REQUEST" | "START_NOT_FOUND" => acos_protocol::ErrorCode::InvalidArgument,
                     "UNSUPPORTED_ANDROID_API" => acos_protocol::ErrorCode::UnsupportedAndroidApi,
+                    "TIMEOUT" => acos_protocol::ErrorCode::Timeout,
                     _ => acos_protocol::ErrorCode::Internal,
                 },
-                detail: detail.to_string(),
+                detail: if code == "START_NOT_FOUND" && !detail.contains("START_NOT_FOUND") {
+                    format!("START_NOT_FOUND: {detail}")
+                } else {
+                    detail.to_string()
+                },
             });
         }
         Ok(reply)

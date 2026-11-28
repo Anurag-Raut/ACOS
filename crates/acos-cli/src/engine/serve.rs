@@ -349,6 +349,7 @@ impl ServeEngine {
                 .map(|path| path.display().to_string()),
             has_home: session.has_home(),
             launch_token: Some(held.guest_token.clone()),
+            artifacts_dir: Some(held.artifacts.display().to_string()),
         };
         if let Err(error) = self.live.write(&entry) {
             eprintln!(

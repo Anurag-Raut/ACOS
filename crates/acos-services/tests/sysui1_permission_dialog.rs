@@ -53,8 +53,7 @@ fn state_with_controller(store: Arc<Mutex<PermissionStore>>) -> AmsState {
             filters: vec![acos_services::ams::Filter {
                 actions: vec![ACTION_REQUEST_PERMISSIONS.to_string()],
                 categories: vec!["android.intent.category.DEFAULT".to_string()],
-                schemes: Vec::new(),
-                mime_types: Vec::new(),
+                ..Default::default()
             }],
         }],
         ..acos_services::ams::PackageRecord::default()

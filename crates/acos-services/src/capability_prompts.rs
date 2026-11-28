@@ -61,6 +61,11 @@ pub enum PromptOptionKind {
     RelaunchRequired,
     /// Informational / non-mutating (e.g. copy captured URL or `--extra-apk` hint).
     InfoOnly,
+    /// Interactive file/photo upload fulfilling a captured picker intent via
+    /// `content://com.acos.picker/...`.
+    FilePicker,
+    /// Cancel a captured picker intent (`RESULT_CANCELED`).
+    CancelPicker,
 }
 
 impl PromptOptionKind {
@@ -71,6 +76,8 @@ impl PromptOptionKind {
             Self::HotAttach => "hot_attach",
             Self::RelaunchRequired => "relaunch_required",
             Self::InfoOnly => "info_only",
+            Self::FilePicker => "file_picker",
+            Self::CancelPicker => "cancel_picker",
         }
     }
 }
@@ -135,6 +142,10 @@ pub struct PromptOption {
     pub replay_intent: Option<u64>,
     /// Optional URL (for captured `VIEW` intents).
     pub url: Option<String>,
+    /// Captured intent sequence number (for `FilePicker` / `CancelPicker`).
+    pub capture_seq: Option<u64>,
+    /// Optional MIME filter hint for `<input type="file" accept="...">`.
+    pub accept: Option<String>,
 }
 
 impl PromptOption {
@@ -159,6 +170,12 @@ impl PromptOption {
         }
         if let Some(url) = &self.url {
             obj.insert("url".into(), json!(url));
+        }
+        if let Some(seq) = self.capture_seq {
+            obj.insert("capture_seq".into(), json!(seq));
+        }
+        if let Some(accept) = &self.accept {
+            obj.insert("accept".into(), json!(accept));
         }
         Value::Object(obj)
     }
@@ -413,6 +430,8 @@ impl CapabilityPromptState {
                 control: None,
                 replay_intent: Some(intent_id),
                 url: None,
+                capture_seq: None,
+                accept: None,
             });
             if !installed_a11y_services.is_empty() {
                 options.push(PromptOption {
@@ -430,6 +449,8 @@ impl CapabilityPromptState {
                     }),
                     replay_intent: None,
                     url: None,
+                    capture_seq: None,
+                    accept: None,
                 });
             }
         } else {
@@ -444,6 +465,8 @@ impl CapabilityPromptState {
                 control: None,
                 replay_intent: Some(intent_id),
                 url: None,
+                capture_seq: None,
+                accept: None,
             });
         }
 
@@ -527,6 +550,8 @@ impl CapabilityPromptState {
                 control: None,
                 replay_intent: None,
                 url: None,
+                capture_seq: None,
+                accept: None,
             }],
         };
         Some(self.push_prompt(prompt))
@@ -535,7 +560,47 @@ impl CapabilityPromptState {
     /// Record an external intent captured by [`crate::intents::IntentState`].
     pub fn record_captured_intent(&mut self, record: &CapturedIntent) -> CapabilityPrompt {
         let data = record.data.as_deref().unwrap_or("");
-        let (title, message, options) = if let Some(pkg) = parse_store_package(data) {
+        let (title, message, options) = if record.is_picker() {
+            let accept = record.picker_accept_hint();
+            let mime_desc = accept.as_deref().unwrap_or("*/*");
+            let eff_action = record.effective_action();
+            let title = if record.is_create_document() {
+                "Save Document requested".to_string()
+            } else {
+                "File / Photo Picker requested".to_string()
+            };
+            let message = format!(
+                "App requested `{eff_action}` (type `{mime_desc}`). Choose a host file to return as `content://com.acos.picker/...`, or cancel the picker."
+            );
+            (
+                title,
+                message,
+                vec![
+                    PromptOption {
+                        id: "pick_file".into(),
+                        label: "Choose file…".into(),
+                        kind: PromptOptionKind::FilePicker,
+                        modules: Vec::new(),
+                        control: None,
+                        replay_intent: None,
+                        url: None,
+                        capture_seq: Some(record.seq),
+                        accept,
+                    },
+                    PromptOption {
+                        id: "cancel_picker".into(),
+                        label: "Cancel picker".into(),
+                        kind: PromptOptionKind::CancelPicker,
+                        modules: Vec::new(),
+                        control: None,
+                        replay_intent: None,
+                        url: None,
+                        capture_seq: Some(record.seq),
+                        accept: None,
+                    },
+                ],
+            )
+        } else if let Some(pkg) = parse_store_package(data) {
             (
                 format!("Store link captured ({pkg})"),
                 format!(
@@ -549,6 +614,8 @@ impl CapabilityPromptState {
                     control: None,
                     replay_intent: None,
                     url: Some(data.to_string()),
+                    capture_seq: None,
+                    accept: None,
                 }],
             )
         } else {
@@ -569,6 +636,8 @@ impl CapabilityPromptState {
                     control: None,
                     replay_intent: None,
                     url: Some(data.to_string()),
+                    capture_seq: None,
+                    accept: None,
                 });
             }
             (
@@ -582,9 +651,9 @@ impl CapabilityPromptState {
         };
 
         let request = if data.is_empty() {
-            record.action.clone()
+            record.effective_action().to_string()
         } else {
-            format!("{} {data}", record.action)
+            format!("{} {data}", record.effective_action())
         };
 
         self.next_seq += 1;
@@ -692,8 +761,10 @@ mod tests {
             seq: 1,
             utc_ms: 5_000,
             action: "android.intent.action.VIEW".into(),
+            wrapped_action: None,
             data: Some("https://play.google.com/store/apps/details?id=com.ichi2.anki".into()),
             mime_type: None,
+            wrapped_mime_type: None,
             categories: Vec::new(),
             extras: BTreeMap::new(),
             component: "com.acos.capture/.Capture".into(),
@@ -711,5 +782,35 @@ mod tests {
             prompt.options[0].url.as_deref(),
             Some("https://play.google.com/store/apps/details?id=com.ichi2.anki")
         );
+    }
+
+    #[test]
+    fn captured_picker_intent_emits_file_picker_and_cancel_options() {
+        let mut state = CapabilityPromptState::new();
+        let captured = CapturedIntent {
+            seq: 3,
+            utc_ms: 9_000,
+            action: "android.intent.action.OPEN_DOCUMENT".into(),
+            wrapped_action: None,
+            data: None,
+            mime_type: Some("image/*".into()),
+            wrapped_mime_type: None,
+            categories: vec!["android.intent.category.OPENABLE".into()],
+            extras: BTreeMap::new(),
+            component: "com.acos.capture/.Capture".into(),
+            flags: 0,
+            request_code: 42,
+            for_result: true,
+            scripted_result: None,
+        };
+        let prompt = state.record_captured_intent(&captured);
+        assert_eq!(prompt.trigger, PromptTrigger::IntentCaptured);
+        assert_eq!(prompt.title, "File / Photo Picker requested");
+        assert_eq!(prompt.options.len(), 2);
+        assert_eq!(prompt.options[0].kind, PromptOptionKind::FilePicker);
+        assert_eq!(prompt.options[0].capture_seq, Some(3));
+        assert_eq!(prompt.options[0].accept.as_deref(), Some("image/*"));
+        assert_eq!(prompt.options[1].kind, PromptOptionKind::CancelPicker);
+        assert_eq!(prompt.options[1].capture_seq, Some(3));
     }
 }

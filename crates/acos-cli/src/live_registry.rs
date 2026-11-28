@@ -75,6 +75,9 @@ pub struct LiveEntry {
     pub stream_socket: Option<String>,
     /// Whether this session has an installed `CATEGORY_HOME` activity.
     pub has_home: Option<bool>,
+    /// Host-local session artifacts directory (`None` for watch-only verify runs).
+    /// Stays internal to `acos view` (never exposed to browser JSON).
+    pub artifacts_dir: Option<String>,
 }
 
 impl LiveEntry {
@@ -102,6 +105,9 @@ impl LiveEntry {
         });
         if let Some(token) = &self.launch_token {
             doc["launch_token"] = serde_json::json!(token);
+        }
+        if let Some(dir) = &self.artifacts_dir {
+            doc["artifacts_dir"] = serde_json::json!(dir);
         }
         doc
     }
@@ -726,6 +732,7 @@ mod tests {
             stream_socket: Some("/run/user/1000/acos-art-1-0/view.sock".to_string()),
             has_home: Some(false),
             launch_token: None,
+            artifacts_dir: None,
         }
     }
 

@@ -157,6 +157,13 @@ pub const PAGE: &str = r##"<!doctype html>
     .bar .titles { max-width: 180px; }
     aside .note { display: none; }
   }
+  .url-pop { display: flex; align-items: center; gap: 8px; padding: 8px 18px; border-bottom: 1px solid var(--border); background: #13161d; }
+  .url-pop form { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; }
+  .url-pop input[type="text"] { flex: 1; min-width: 180px; max-width: 560px; background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: 7px; padding: 5px 10px; font: 12px/1.3 ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .url-pop input[type="text"]:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  .url-status { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .url-status.ok { color: var(--ok); }
+  .url-status.bad { color: var(--bad); }
   [hidden] { display: none !important; }
 </style>
 </head>
@@ -186,12 +193,21 @@ pub const PAGE: &str = r##"<!doctype html>
       <button id="btn-vol-up" type="button" title="Volume up">Vol+</button>
       <button id="btn-power" type="button" title="Send KEYCODE_POWER key event">Power key</button>
       <span class="sep" aria-hidden="true"></span>
+      <button id="btn-open-url" type="button" aria-expanded="false" title="Open deep link URL">Open URL</button>
       <button id="btn-pinch" type="button" aria-pressed="false" title="Two-finger pinch mode (or Alt + drag, or Ctrl + wheel)">Pinch</button>
       <button id="btn-shot" type="button" title="Save PNG screenshot" disabled>Shot</button>
     </div>
     <span class="spacer"></span>
     <span class="pill" id="dinput">idle</span>
     <span class="pill" id="dstate">stream</span>
+  </div>
+  <div id="open-url-pop" class="url-pop" hidden>
+    <form id="open-url-form">
+      <input id="open-url-input" type="text" placeholder="myapp://path or https://example.com/..." autocomplete="off" spellcheck="false" aria-label="Deep link URL">
+      <button id="open-url-go" type="submit">Open</button>
+      <button id="open-url-close" type="button" title="Close">×</button>
+      <span id="open-url-status" class="url-status"></span>
+    </form>
   </div>
   <div class="stage">
     <div class="screenwrap" id="screenwrap" tabindex="0">
@@ -218,8 +234,10 @@ const $ = (id) => document.getElementById(id);
 const grid = $("grid"), detail = $("detail"), statusPill = $("status");
 const frame = $("frame"), frameCtx = frame.getContext("2d"), screenWrap = $("screenwrap"), gestureSvg = $("gesture-svg"), overlay = $("overlay"), eventsList = $("events"), capTray = $("cap-tray");
 const btnBack = $("btn-back"), btnHome = $("btn-home"), btnRecents = $("btn-recents"), btnRotate = $("btn-rotate");
-const btnVolDown = $("btn-vol-down"), btnVolUp = $("btn-vol-up"), btnPower = $("btn-power"), btnPinch = $("btn-pinch"), btnShot = $("btn-shot");
+const btnVolDown = $("btn-vol-down"), btnVolUp = $("btn-vol-up"), btnPower = $("btn-power"), btnOpenUrl = $("btn-open-url"), btnPinch = $("btn-pinch"), btnShot = $("btn-shot");
+const openUrlPop = $("open-url-pop"), openUrlForm = $("open-url-form"), openUrlInput = $("open-url-input"), openUrlGo = $("open-url-go"), openUrlClose = $("open-url-close"), openUrlStatus = $("open-url-status");
 const verifyBanner = $("verify-banner"), dinput = $("dinput");
+const MAX_PICKER_BYTES = 25 * 1024 * 1024;
 const SVG_NS = "http://www.w3.org/2000/svg";
 const capabilityCards = new Map();
 // prompt_seq of capability actions sent (or queued) but not yet answered.
@@ -352,6 +370,15 @@ function applyToolbarUi() {
 
   btnPower.disabled = inputBlocked;
   btnPower.title = isWatchOnly ? "watch-only: verify run" : "Send KEYCODE_POWER key event";
+
+  if (btnOpenUrl) {
+    btnOpenUrl.disabled = inputBlocked;
+    btnOpenUrl.title = isWatchOnly ? "watch-only: verify run" : "Open deep link URL";
+  }
+  if (inputBlocked && openUrlPop && !openUrlPop.hidden) {
+    openUrlPop.hidden = true;
+    if (btnOpenUrl) btnOpenUrl.setAttribute("aria-expanded", "false");
+  }
 
   if (inputBlocked && pinchMode) {
     pinchMode = false;
@@ -989,6 +1016,16 @@ async function startFrameStream(sid) {
   }
 }
 
+function hideOpenUrlPop() {
+  if (openUrlPop) openUrlPop.hidden = true;
+  if (btnOpenUrl) btnOpenUrl.setAttribute("aria-expanded", "false");
+  if (openUrlStatus) {
+    openUrlStatus.hidden = true;
+    openUrlStatus.textContent = "";
+    openUrlStatus.className = "url-status";
+  }
+}
+
 function openSession(s) {
   closeWs();
   stopFrameStream();
@@ -996,6 +1033,7 @@ function openSession(s) {
   clearFrameCanvas();
   resetPanelTouchState();
   pinchMode = false;
+  hideOpenUrlPop();
   overlay.textContent = "";
   gestureSvg.textContent = "";
   clearCapabilityPrompts();
@@ -1039,6 +1077,7 @@ function closeSession() {
   sessionEverConnected = false;
   disconnectedPolls = 0;
   pinchMode = false;
+  hideOpenUrlPop();
   resetPanelTouchState();
   closeWs();
   stopFrameStream();
@@ -1285,10 +1324,12 @@ function showCapabilityPrompt(prompt) {
     if (oldest === undefined) break;
     dismissCapabilityPrompt(oldest);
   }
+  const opts = Array.isArray(prompt.options) ? prompt.options : [];
+  const isPicker = opts.some((o) => o && (o.kind === "file_picker" || o.kind === "cancel_picker"));
   const isInfo = prompt.trigger === "intent_captured";
   const card = el("div", "cap-card" + (isInfo ? " info" : ""));
   const head = el("div", "cap-head");
-  const badgeLabel = isInfo ? "external intent" : "capability off";
+  const badgeLabel = isPicker ? "file picker" : (isInfo ? "external intent" : "capability off");
   head.appendChild(el("span", "cap-badge", badgeLabel));
   head.appendChild(el("div", "cap-title", prompt.title || "Capability needed"));
   const closeBtn = el("button", "cap-x", "×");
@@ -1309,8 +1350,20 @@ function showCapabilityPrompt(prompt) {
   const statusEl = el("div", "cap-status");
   statusEl.hidden = true;
   const buttons = [];
-  const opts = Array.isArray(prompt.options) ? prompt.options : [];
   let primaryUsed = false;
+
+  const pickerUrl = (params) => {
+    const sid = current ? encodeURIComponent(current.session_id) : "";
+    const qs = new URLSearchParams();
+    if (typeof currentGuestGen === "number" && currentGuestGen > 0) {
+      qs.set("g", String(currentGuestGen));
+    }
+    for (const [k, v] of Object.entries(params || {})) {
+      if (v !== undefined && v !== null && v !== "") qs.set(k, String(v));
+    }
+    const q = qs.toString();
+    return auth("/api/picker/" + sid + (q ? "?" + q : ""));
+  };
 
   for (const opt of opts) {
     if (!opt || typeof opt !== "object") continue;
@@ -1342,6 +1395,121 @@ function showCapabilityPrompt(prompt) {
           for (const b of buttons) b.disabled = !!(current && current.watch_only);
           statusEl.className = "cap-status bad";
           statusEl.textContent = "Could not send request (session not interactive).";
+        }
+      });
+      buttons.push(btn);
+      actions.appendChild(btn);
+    } else if (opt.kind === "file_picker") {
+      const btn = el("button", "cap-btn" + (!primaryUsed ? " primary" : ""), opt.label || "Choose file…");
+      primaryUsed = true;
+      btn.type = "button";
+      const fileInput = document.createElement("input");
+      fileInput.type = "file";
+      fileInput.hidden = true;
+      if (opt.accept) fileInput.accept = opt.accept;
+      if (current && (current.watch_only || sessionEnded)) {
+        btn.disabled = true;
+        btn.title = current.watch_only ? "watch-only: verify run" : "session ended";
+      }
+      btn.addEventListener("click", () => {
+        if (!current || current.watch_only || sessionEnded) return;
+        fileInput.value = "";
+        fileInput.click();
+      });
+      fileInput.addEventListener("change", async () => {
+        const file = fileInput.files && fileInput.files[0];
+        if (!file || !current || current.watch_only || sessionEnded) return;
+        if (file.size > MAX_PICKER_BYTES) {
+          statusEl.hidden = false;
+          statusEl.className = "cap-status bad";
+          statusEl.textContent = "File exceeds the 25 MiB picker upload limit.";
+          return;
+        }
+        const rec = capabilityCards.get(prompt.seq);
+        for (const b of buttons) b.disabled = true;
+        statusEl.hidden = false;
+        statusEl.className = "cap-status";
+        statusEl.textContent = "Uploading " + (file.name || "file") + "…";
+        try {
+          const url = pickerUrl({
+            name: file.name || "picked-file.bin",
+            seq: typeof opt.capture_seq === "number" ? opt.capture_seq : "",
+            mime: file.type || "",
+          });
+          const resp = await fetch(url, {
+            method: "POST",
+            headers: { "Content-Type": file.type || "application/octet-stream" },
+            body: file,
+          });
+          let data = {};
+          try { data = await resp.json(); } catch (_) {}
+          if (!resp.ok || data.ok === false) {
+            throw new Error(data.error || data.code || ("HTTP " + resp.status));
+          }
+          addEvent({
+            source: "panel",
+            cmd: "pick_file",
+            status: "ok",
+            text: file.name || "file",
+            ts_ms: Date.now(),
+          }, "action");
+          statusEl.className = "cap-status ok";
+          statusEl.textContent = "Delivered " + (file.name || "file") + ".";
+          setTimeout(() => {
+            if (capabilityCards.get(prompt.seq) === rec) dismissCapabilityPrompt(prompt.seq);
+          }, 750);
+        } catch (err) {
+          for (const b of buttons) b.disabled = !!(current && (current.watch_only || sessionEnded));
+          statusEl.className = "cap-status bad";
+          statusEl.textContent = (err && err.message) ? err.message : "Failed to deliver file.";
+        }
+      });
+      buttons.push(btn);
+      actions.appendChild(btn);
+      card.appendChild(fileInput);
+    } else if (opt.kind === "cancel_picker") {
+      const btn = el("button", "cap-btn", opt.label || "Cancel picker");
+      btn.type = "button";
+      if (current && (current.watch_only || sessionEnded)) {
+        btn.disabled = true;
+        btn.title = current.watch_only ? "watch-only: verify run" : "session ended";
+      }
+      btn.addEventListener("click", async () => {
+        if (!current || current.watch_only || sessionEnded) return;
+        const rec = capabilityCards.get(prompt.seq);
+        for (const b of buttons) b.disabled = true;
+        statusEl.hidden = false;
+        statusEl.className = "cap-status";
+        statusEl.textContent = "Cancelling picker…";
+        try {
+          const payload = { cancel: true };
+          if (typeof opt.capture_seq === "number") payload.capture_seq = opt.capture_seq;
+          const resp = await fetch(pickerUrl({}), {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          });
+          let data = {};
+          try { data = await resp.json(); } catch (_) {}
+          if (!resp.ok || data.ok === false) {
+            throw new Error(data.error || data.code || ("HTTP " + resp.status));
+          }
+          addEvent({
+            source: "panel",
+            cmd: "pick_file",
+            status: "ok",
+            note: "cancelled",
+            ts_ms: Date.now(),
+          }, "action");
+          statusEl.className = "cap-status ok";
+          statusEl.textContent = "Picker cancelled.";
+          setTimeout(() => {
+            if (capabilityCards.get(prompt.seq) === rec) dismissCapabilityPrompt(prompt.seq);
+          }, 750);
+        } catch (err) {
+          for (const b of buttons) b.disabled = !!(current && (current.watch_only || sessionEnded));
+          statusEl.className = "cap-status bad";
+          statusEl.textContent = (err && err.message) ? err.message : "Failed to cancel picker.";
         }
       });
       buttons.push(btn);
@@ -1785,8 +1953,23 @@ screenWrap.addEventListener("wheel", (e) => {
   });
 }, { passive: false });
 
+function isTextInputFocused() {
+  const active = document.activeElement;
+  if (!active) return false;
+  const tag = active.tagName;
+  if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return true;
+  return !!active.isContentEditable;
+}
+
 document.addEventListener("keydown", (e) => {
   if (!current || detail.hidden || current.watch_only || sessionEnded) return;
+  if (openUrlPop && !openUrlPop.hidden && e.key === "Escape") {
+    e.preventDefault();
+    hideOpenUrlPop();
+    screenWrap.focus({ preventScroll: true });
+    return;
+  }
+  if (isTextInputFocused()) return;
   if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey) {
     if (e.key && e.key.toLowerCase() === "a" && document.activeElement === screenWrap) {
       e.preventDefault();
@@ -1817,6 +2000,7 @@ document.addEventListener("keydown", (e) => {
 
 document.addEventListener("keyup", (e) => {
   if (!current || detail.hidden) return;
+  if (isTextInputFocused() && heldGuestKeys.size === 0) return;
   const kc = KEY_MAP[e.key];
   if (kc && heldGuestKeys.delete(kc)) {
     e.preventDefault();
@@ -1826,6 +2010,7 @@ document.addEventListener("keyup", (e) => {
 
 document.addEventListener("paste", (e) => {
   if (!current || detail.hidden || current.watch_only || sessionEnded) return;
+  if (isTextInputFocused()) return;
   const raw = (e.clipboardData && e.clipboardData.getData("text/plain")) || "";
   if (!raw) return;
   e.preventDefault();
@@ -1866,6 +2051,99 @@ btnRecents.addEventListener("click", () => sendKeyPress("KEYCODE_APP_SWITCH"));
 btnVolDown.addEventListener("click", () => sendKeyPress("KEYCODE_VOLUME_DOWN"));
 btnVolUp.addEventListener("click", () => sendKeyPress("KEYCODE_VOLUME_UP"));
 btnPower.addEventListener("click", () => sendKeyPress("KEYCODE_POWER"));
+if (btnOpenUrl && openUrlPop && openUrlForm && openUrlInput) {
+  btnOpenUrl.addEventListener("click", () => {
+    if (!current || current.watch_only || sessionEnded) return;
+    const willOpen = openUrlPop.hidden;
+    if (willOpen) {
+      openUrlPop.hidden = false;
+      btnOpenUrl.setAttribute("aria-expanded", "true");
+      if (openUrlStatus) {
+        openUrlStatus.hidden = true;
+        openUrlStatus.textContent = "";
+        openUrlStatus.className = "url-status";
+      }
+      openUrlInput.focus();
+      if (typeof openUrlInput.select === "function") openUrlInput.select();
+    } else {
+      hideOpenUrlPop();
+      screenWrap.focus({ preventScroll: true });
+    }
+  });
+  if (openUrlClose) {
+    openUrlClose.addEventListener("click", () => {
+      hideOpenUrlPop();
+      screenWrap.focus({ preventScroll: true });
+    });
+  }
+  openUrlForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    if (!current || current.watch_only || sessionEnded) return;
+    const urlValue = String(openUrlInput.value || "").trim();
+    if (!urlValue) {
+      if (openUrlStatus) {
+        openUrlStatus.hidden = false;
+        openUrlStatus.className = "url-status bad";
+        openUrlStatus.textContent = "Enter a URL (e.g. myapp://item/42 or https://example.com/...).";
+      }
+      return;
+    }
+    const sid = current.session_id;
+    const gParam = (typeof currentGuestGen === "number" && currentGuestGen > 0)
+      ? ("?g=" + encodeURIComponent(currentGuestGen))
+      : "";
+    if (openUrlGo) openUrlGo.disabled = true;
+    if (openUrlStatus) {
+      openUrlStatus.hidden = false;
+      openUrlStatus.className = "url-status";
+      openUrlStatus.textContent = "Opening URL…";
+    }
+    try {
+      const resp = await fetch(auth("/api/open_url/" + encodeURIComponent(sid) + gParam), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: urlValue }),
+      });
+      let data = {};
+      try { data = await resp.json(); } catch (_) {}
+      if (!resp.ok || data.ok === false) {
+        throw new Error(data.error || data.code || ("HTTP " + resp.status));
+      }
+      const delivery = data.delivery ? (" · " + data.delivery) : "";
+      const target = data.component || data.activity || "";
+      addEvent({
+        source: "panel",
+        cmd: "open_url",
+        status: "ok",
+        text: urlValue,
+        note: target + delivery,
+        ts_ms: Date.now(),
+      }, "action");
+      if (openUrlStatus) {
+        openUrlStatus.hidden = false;
+        openUrlStatus.className = "url-status ok";
+        openUrlStatus.textContent = "Opened" + (target ? " → " + target : "") + delivery;
+      }
+    } catch (err) {
+      const msg = (err && err.message) ? err.message : "Failed to open URL.";
+      addEvent({
+        source: "panel",
+        cmd: "open_url",
+        status: "bad",
+        text: urlValue,
+        note: msg,
+        ts_ms: Date.now(),
+      }, "action");
+      if (openUrlStatus) {
+        openUrlStatus.hidden = false;
+        openUrlStatus.className = "url-status bad";
+        openUrlStatus.textContent = msg;
+      }
+    } finally {
+      if (openUrlGo) openUrlGo.disabled = false;
+    }
+  });
+}
 btnPinch.addEventListener("click", () => {
   if (!current || current.watch_only || sessionEnded) return;
   pinchMode = !pinchMode;
@@ -2382,6 +2660,114 @@ assert.equal(h.capTray.children.includes(recC.card), true);
 h.advanceTimers(1);
 assert.equal(h.eval(`capabilityCards.has(1)`), false);
 assert.equal(h.capTray.children.includes(recC.card), false);
+"#,
+        );
+    }
+
+    #[test]
+    fn open_url_popover_submits_and_guards_keyboard_input() {
+        run_page_js_scenario(
+            r#"
+const h = createHarness();
+const fetchCalls = [];
+h.ctx.fetch = async (url, init = {}) => {
+  fetchCalls.push({ url, init });
+  if (String(url).includes("/api/open_url/")) {
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({
+        ok: true,
+        component: "com.example.app/.DetailActivity",
+        delivery: "on_new_intent",
+      }),
+    };
+  }
+  return { ok: true, status: 200, json: async () => ({ sessions: [] }) };
+};
+
+h.eval(`
+  openSession({ session_id: "sess-url", guest_gen: 3, stream: false, watch_only: false });
+  openUrlPop.hidden = true;
+  openUrlInput.tagName = "INPUT";
+`);
+
+h.eval(`btnOpenUrl.click();`);
+assert.equal(h.eval(`openUrlPop.hidden`), false);
+
+// Typing while #open-url-input is focused must not send text to the guest WS.
+h.eval(`
+  document.activeElement = openUrlInput;
+  for (const fn of (document.addEventListener ? [] : [])) {}
+`);
+// Trigger document keydown/paste directly via a small dispatch check:
+assert.equal(h.eval(`isTextInputFocused()`), true);
+
+h.eval(`
+  openUrlInput.value = "myapp://item/42";
+  openUrlForm.dispatchEvent({ type: "submit", preventDefault() {} });
+`);
+
+setImmediate(() => {
+  const openCalls = fetchCalls.filter((c) => String(c.url).includes("/api/open_url/"));
+  assert.equal(openCalls.length, 1);
+  assert.equal(openCalls[0].url, "/api/open_url/sess-url?g=3&t=test-token");
+  assert.equal(openCalls[0].init.method, "POST");
+  assert.deepEqual(JSON.parse(openCalls[0].init.body), { url: "myapp://item/42" });
+  assert.match(h.eval(`openUrlStatus.textContent`), /Opened → com\.example\.app\/\.DetailActivity/);
+});
+"#,
+        );
+    }
+
+    #[test]
+    fn picker_prompt_handles_cancel_and_oversize_client_guard() {
+        run_page_js_scenario(
+            r#"
+const h = createHarness();
+const fetchCalls = [];
+h.ctx.fetch = async (url, init = {}) => {
+  fetchCalls.push({ url, init });
+  if (String(url).includes("/api/picker/")) {
+    return { ok: true, status: 200, json: async () => ({ ok: true }) };
+  }
+  return { ok: true, status: 200, json: async () => ({ sessions: [] }) };
+};
+
+h.eval(`
+  openSession({ session_id: "sess-pk", guest_gen: 5, stream: false, watch_only: false });
+  showCapabilityPrompt({
+    seq: 11,
+    trigger: "intent_captured",
+    title: "App requested a file",
+    options: [
+      { kind: "file_picker", id: "pick", label: "Choose file…", capture_seq: 9, accept: "image/*" },
+      { kind: "cancel_picker", id: "cancel", label: "Cancel", capture_seq: 9 },
+    ],
+  });
+`);
+
+const rec = h.eval(`capabilityCards.get(11)`);
+assert.equal(rec.buttons.length, 2);
+
+// Oversized file is rejected client-side without touching fetch.
+const fileInput = rec.card.children.find((c) => c.tagName === "INPUT");
+assert.ok(fileInput, "hidden file input should be attached to picker card");
+fileInput.files = [{ name: "huge.bin", size: 26 * 1024 * 1024, type: "application/octet-stream" }];
+fileInput.dispatchEvent({ type: "change" });
+assert.match(rec.statusEl.textContent, /25 MiB/);
+assert.equal(fetchCalls.filter((c) => String(c.url).includes("/api/picker/")).length, 0);
+
+// Clicking cancel posts {"cancel":true,"capture_seq":9} to /api/picker/sess-pk.
+rec.buttons[1].click();
+setImmediate(() => {
+  const pkCalls = fetchCalls.filter((c) => String(c.url).includes("/api/picker/"));
+  assert.equal(pkCalls.length, 1);
+  assert.equal(pkCalls[0].url, "/api/picker/sess-pk?g=5&t=test-token");
+  assert.equal(pkCalls[0].init.method, "POST");
+  assert.deepEqual(JSON.parse(pkCalls[0].init.body), { cancel: true, capture_seq: 9 });
+  assert.equal(rec.statusEl.textContent, "Picker cancelled.");
+});
 "#,
         );
     }

@@ -5569,11 +5569,75 @@ fn animations_state() -> Option<&'static str> {
 /// `<staging>/activity-result.json`, which the guest's result watcher delivers
 /// as the framework's own `ActivityResultItem` transaction; the guest's ack is
 /// `<staging>/activity-result.ack`.
+fn deliver_scripted_result(
+    state: &mut acos_services::intents::IntentState,
+    scripted: acos_services::intents::ScriptedResult,
+    staging: &Path,
+) -> (serde_json::Value, bool, PathBuf, Option<String>) {
+    // Hand it to the guest: the result file is the session's control
+    // channel (the guest reads only this run's own tree).
+    let path = staging.join("activity-result.json");
+    let doc = serde_json::json!({
+        "capture_seq": scripted.capture_seq,
+        "request_code": scripted.request_code,
+        "result_code": scripted.result_code,
+        "action": scripted.action,
+        "data": scripted.data,
+        "mime_type": scripted.mime_type,
+        "flags": scripted.flags,
+        "extras": scripted.extras,
+    });
+    let written = std::fs::write(&path, serde_json::to_vec(&doc).unwrap_or_default());
+    // Bound the wait for the guest's ack: a session whose guest is not
+    // running must say `delivered:false` instead of claiming a delivery.
+    let ack_path = staging.join("activity-result.ack");
+    let _ = std::fs::remove_file(&ack_path);
+    let deadline = std::time::Instant::now() + Duration::from_millis(2000);
+    let mut delivered = false;
+    if written.is_ok() {
+        while std::time::Instant::now() < deadline {
+            if let Ok(text) = std::fs::read_to_string(&ack_path) {
+                if serde_json::from_str::<serde_json::Value>(&text)
+                    .ok()
+                    .and_then(|v| v.get("capture_seq").and_then(serde_json::Value::as_u64))
+                    == Some(scripted.capture_seq)
+                {
+                    delivered = true;
+                    break;
+                }
+            }
+            std::thread::sleep(Duration::from_millis(20));
+        }
+    }
+    if delivered {
+        let _ = std::fs::remove_file(&path);
+        state.mark_delivered(scripted.capture_seq, acos_services::intents::now_ms());
+    }
+    // The reply names the record *after* the delivery mark, so a caller
+    // that only reads this reply sees the same `delivered`/`delivered_utc_ms`
+    // as a later `op:"last"`.
+    let mut result = state
+        .list()
+        .into_iter()
+        .find(|capture| capture.seq == scripted.capture_seq)
+        .and_then(|capture| capture.scripted_result.as_ref().map(|r| r.to_json()))
+        .unwrap_or_else(|| scripted.to_json());
+    result["delivered"] = serde_json::json!(delivered);
+    (result, delivered, path, written.err().map(|e| e.to_string()))
+}
+
+#[allow(clippy::too_many_arguments)]
 fn session_ctl(
     request: &serde_json::Value,
-    intents: &Arc<std::sync::Mutex<acos_services::intents::IntentState>>,
+    live: &acos_services::registry::LiveHandles,
     staging: &Path,
     secondary: &mut SecondaryPool,
+    control: &ServiceControl,
+    pending_spawns: &Arc<
+        std::sync::Mutex<std::collections::VecDeque<acos_services::ams::ProcessSpawnRequest>>,
+    >,
+    probe_state: &Arc<std::sync::Mutex<ProbeState>>,
+    frame_wait: Duration,
 ) -> serde_json::Value {
     let module = request.get("module").and_then(|v| v.as_str()).unwrap_or("");
     let op = request.get("op").and_then(|v| v.as_str()).unwrap_or("");
@@ -5613,7 +5677,84 @@ fn session_ctl(
         .get("args")
         .cloned()
         .unwrap_or(serde_json::Value::Null);
-    let mut state = intents.lock().unwrap_or_else(|e| e.into_inner());
+    if op == "open_url" {
+        let Some(url) = args
+            .get("url")
+            .and_then(serde_json::Value::as_str)
+            .map(str::trim)
+            .filter(|u| !u.is_empty())
+        else {
+            return serde_json::json!({
+                "ok": false, "cmd": "ctl", "module": module, "op": op,
+                "code": "BAD_REQUEST",
+                "error": "intents.open_url requires a non-empty string `url`",
+            });
+        };
+        let mut forward = serde_json::json!({
+            "op": "open_url",
+            "url": url,
+        });
+        if let Some(pkg) = args.get("package").and_then(serde_json::Value::as_str) {
+            forward["package"] = serde_json::json!(pkg);
+        }
+        if let Some(mime) = args.get("mime_type").and_then(serde_json::Value::as_str) {
+            forward["mime_type"] = serde_json::json!(mime);
+        }
+        if let Some(flags) = args.get("flags").and_then(serde_json::Value::as_i64) {
+            forward["flags"] = serde_json::json!(flags);
+        }
+        let g0 = latest_generation(live);
+        return match control.submit(forward, Duration::from_secs(10)) {
+            Some(ServiceControlReply { mut reply, .. }) => {
+                let ok = reply
+                    .get("ok")
+                    .and_then(serde_json::Value::as_bool)
+                    .unwrap_or(false);
+                if ok {
+                    drain_pending_spawns(
+                        Some((pending_spawns, secondary)),
+                        probe_state,
+                        &live.compositor,
+                    );
+                    let deadline = Instant::now() + frame_wait.min(Duration::from_secs(3));
+                    let mut frame_advanced = false;
+                    while Instant::now() < deadline {
+                        drain_pending_spawns(
+                            Some((pending_spawns, secondary)),
+                            probe_state,
+                            &live.compositor,
+                        );
+                        if latest_generation(live) > g0 {
+                            frame_advanced = true;
+                            break;
+                        }
+                        std::thread::sleep(Duration::from_millis(15));
+                    }
+                    if let Some(obj) = reply.as_object_mut() {
+                        obj.insert("cmd".into(), serde_json::json!("ctl"));
+                        obj.insert("module".into(), serde_json::json!(module));
+                        obj.insert("op".into(), serde_json::json!(op));
+                        obj.insert("frame_advanced".into(), serde_json::json!(frame_advanced));
+                    }
+                    reply
+                } else {
+                    if let Some(obj) = reply.as_object_mut() {
+                        obj.insert("cmd".into(), serde_json::json!("ctl"));
+                        obj.insert("module".into(), serde_json::json!(module));
+                        obj.insert("op".into(), serde_json::json!(op));
+                    }
+                    reply
+                }
+            }
+            None => serde_json::json!({
+                "ok": false, "cmd": "ctl", "module": module, "op": op,
+                "code": "TIMEOUT",
+                "error": "timed out waiting for the binder peer to resolve open_url",
+            }),
+        };
+    }
+
+    let mut state = live.intents.lock().unwrap_or_else(|e| e.into_inner());
     match op {
         "last" => serde_json::json!({
             "ok": true, "cmd": "ctl", "module": module, "op": op,
@@ -5640,6 +5781,11 @@ fn session_ctl(
                 .get("result_code")
                 .and_then(serde_json::Value::as_i64)
                 .and_then(|v| i32::try_from(v).ok());
+            let flags = args
+                .get("flags")
+                .and_then(serde_json::Value::as_i64)
+                .and_then(|v| i32::try_from(v).ok())
+                .unwrap_or(0);
             let mut extras = std::collections::BTreeMap::new();
             if let Some(map) = args.get("extras").and_then(serde_json::Value::as_object) {
                 for (key, value) in map {
@@ -5654,12 +5800,13 @@ fn session_ctl(
                     }
                 }
             }
-            let scripted = match state.script_result(
+            let scripted = match state.script_result_with_flags(
                 capture_seq,
                 result_code,
                 str_arg("data"),
                 str_arg("mime_type"),
                 str_arg("action"),
+                flags,
                 extras,
             ) {
                 Ok(scripted) => scripted,
@@ -5670,67 +5817,154 @@ fn session_ctl(
                     })
                 }
             };
-            // Hand it to the guest: the result file is the session's control
-            // channel (the guest reads only this run's own tree).
-            let path = staging.join("activity-result.json");
-            let doc = serde_json::json!({
-                "capture_seq": scripted.capture_seq,
-                "request_code": scripted.request_code,
-                "result_code": scripted.result_code,
-                "action": scripted.action,
-                "data": scripted.data,
-                "mime_type": scripted.mime_type,
-                "extras": scripted.extras,
-            });
-            let written = std::fs::write(&path, serde_json::to_vec(&doc).unwrap_or_default());
-            // Bound the wait for the guest's ack: a session whose guest is not
-            // running must say `delivered:false` instead of claiming a delivery.
-            let ack_path = staging.join("activity-result.ack");
-            let _ = std::fs::remove_file(&ack_path);
-            let deadline = std::time::Instant::now() + Duration::from_millis(2000);
-            let mut delivered = false;
-            if written.is_ok() {
-                while std::time::Instant::now() < deadline {
-                    if let Ok(text) = std::fs::read_to_string(&ack_path) {
-                        if serde_json::from_str::<serde_json::Value>(&text)
-                            .ok()
-                            .and_then(|v| v.get("capture_seq").and_then(serde_json::Value::as_u64))
-                            == Some(scripted.capture_seq)
-                        {
-                            delivered = true;
-                            break;
-                        }
-                    }
-                    std::thread::sleep(Duration::from_millis(20));
-                }
-            }
-            if delivered {
-                let _ = std::fs::remove_file(&path);
-                state.mark_delivered(scripted.capture_seq, acos_services::intents::now_ms());
-            }
-            // The reply names the record *after* the delivery mark, so a caller
-            // that only reads this reply sees the same `delivered`/`delivered_utc_ms`
-            // as a later `op:"last"`.
-            let mut result = state
-                .list()
-                .into_iter()
-                .find(|capture| capture.seq == scripted.capture_seq)
-                .and_then(|capture| capture.scripted_result.as_ref().map(|r| r.to_json()))
-                .unwrap_or_else(|| scripted.to_json());
-            result["delivered"] = serde_json::json!(delivered);
+            let (result, delivered, path, write_error) =
+                deliver_scripted_result(&mut state, scripted, staging);
             serde_json::json!({
                 "ok": true, "cmd": "ctl", "module": module, "op": op,
                 "result": result,
                 "delivered": delivered,
                 "control_file": path.display().to_string(),
-                "error": written.err().map(|e| e.to_string()),
+                "error": write_error,
+            })
+        }
+        "pick_file" => {
+            let capture_seq = args.get("capture_seq").and_then(serde_json::Value::as_u64);
+            let cancel = args
+                .get("cancel")
+                .and_then(serde_json::Value::as_bool)
+                .unwrap_or(false);
+            let target_capture = match capture_seq {
+                Some(seq) => state.by_seq(seq).cloned(),
+                None => state
+                    .last_picker()
+                    .or_else(|| state.last())
+                    .cloned(),
+            };
+            let Some(target) = target_capture else {
+                return serde_json::json!({
+                    "ok": false, "cmd": "ctl", "module": module, "op": op,
+                    "code": "BAD_REQUEST",
+                    "error": match capture_seq {
+                        Some(seq) => format!("no captured intent with seq {seq}"),
+                        None => "no captured picker intent to answer".to_string(),
+                    },
+                });
+            };
+            if cancel {
+                let scripted = match state.script_result_with_flags(
+                    Some(target.seq),
+                    Some(0), // Activity.RESULT_CANCELED
+                    None,
+                    None,
+                    None,
+                    0,
+                    std::collections::BTreeMap::new(),
+                ) {
+                    Ok(scripted) => scripted,
+                    Err(error) => {
+                        return serde_json::json!({
+                            "ok": false, "cmd": "ctl", "module": module, "op": op,
+                            "code": "BAD_REQUEST", "error": error.to_string(),
+                        })
+                    }
+                };
+                let (result, delivered, path, write_error) =
+                    deliver_scripted_result(&mut state, scripted, staging);
+                return serde_json::json!({
+                    "ok": true, "cmd": "ctl", "module": module, "op": op,
+                    "canceled": true,
+                    "capture_seq": target.seq,
+                    "result": result,
+                    "delivered": delivered,
+                    "control_file": path.display().to_string(),
+                    "error": write_error,
+                });
+            }
+            let Some(host_path) = args
+                .get("path")
+                .and_then(serde_json::Value::as_str)
+                .map(str::trim)
+                .filter(|p| !p.is_empty())
+            else {
+                return serde_json::json!({
+                    "ok": false, "cmd": "ctl", "module": module, "op": op,
+                    "code": "BAD_REQUEST",
+                    "error": "intents.pick_file requires either `path` (host file path) or `cancel: true`",
+                });
+            };
+            let display_name = args
+                .get("display_name")
+                .and_then(serde_json::Value::as_str)
+                .filter(|s| !s.is_empty());
+            let mime_type = args
+                .get("mime_type")
+                .and_then(serde_json::Value::as_str)
+                .filter(|s| !s.is_empty());
+            let writable = args
+                .get("writable")
+                .and_then(serde_json::Value::as_bool)
+                .unwrap_or_else(|| target.is_create_document());
+            let entry = {
+                let mut picker = live.picker.lock().unwrap_or_else(|e| e.into_inner());
+                match picker.register_file(
+                    Path::new(host_path),
+                    display_name,
+                    mime_type,
+                    writable,
+                ) {
+                    Ok(entry) => entry,
+                    Err(error) => {
+                        return serde_json::json!({
+                            "ok": false, "cmd": "ctl", "module": module, "op": op,
+                            "code": "BAD_REQUEST", "error": error.to_string(),
+                        })
+                    }
+                }
+            };
+            let mut flags = acos_services::intents::FLAG_GRANT_READ_URI_PERMISSION;
+            if entry.writable {
+                flags |= acos_services::intents::FLAG_GRANT_WRITE_URI_PERMISSION;
+            }
+            let scripted = match state.script_result_with_flags(
+                Some(target.seq),
+                Some(-1), // Activity.RESULT_OK
+                Some(entry.uri.clone()),
+                Some(entry.mime_type.clone()),
+                None,
+                flags,
+                std::collections::BTreeMap::new(),
+            ) {
+                Ok(scripted) => scripted,
+                Err(error) => {
+                    return serde_json::json!({
+                        "ok": false, "cmd": "ctl", "module": module, "op": op,
+                        "code": "BAD_REQUEST", "error": error.to_string(),
+                    })
+                }
+            };
+            let (result, delivered, path, write_error) =
+                deliver_scripted_result(&mut state, scripted, staging);
+            serde_json::json!({
+                "ok": true, "cmd": "ctl", "module": module, "op": op,
+                "canceled": false,
+                "capture_seq": target.seq,
+                "uri": entry.uri,
+                "display_name": entry.display_name,
+                "mime_type": entry.mime_type,
+                "size": entry.size_bytes(),
+                "writable": entry.writable,
+                "flags": flags,
+                "result": result,
+                "delivered": delivered,
+                "control_file": path.display().to_string(),
+                "error": write_error,
             })
         }
         other => serde_json::json!({
             "ok": false, "cmd": "ctl", "module": module, "op": other,
             "code": "BAD_REQUEST",
             "error": format!(
-                "intents control op {other:?} does not exist (ops: last, list, clear, result)"
+                "intents control op {other:?} does not exist (ops: last, list, clear, result, open_url, pick_file)"
             ),
         }),
     }
@@ -10896,7 +11130,16 @@ fn interactive_serve(
             // "clear"|"result"}`. It never fabricates a handler: a capture says
             // `handled_by:"captured"`.
             "ctl" => {
-                let reply = session_ctl(&request, &live.intents, &staging, secondary);
+                let reply = session_ctl(
+                    &request,
+                    live,
+                    &staging,
+                    secondary,
+                    control,
+                    &pending_spawns,
+                    probe_state,
+                    frame_wait,
+                );
                 protocol_write(&reply);
                 evidence.push(reply);
             }
@@ -11828,6 +12071,35 @@ fn service_request(
                         "error": format!(
                             "replayed intent {intent_id} was not resolved (start_result={code})"
                         ),
+                    });
+                }
+                Err(error) => Err(error),
+            }
+        }
+        "open_url" => {
+            let Some(url) = request.get("url").and_then(|v| v.as_str()) else {
+                return serde_json::json!({
+                    "ok": false, "cmd": "services", "op": "open_url", "code": "BAD_REQUEST",
+                    "error": "open_url needs a string `url`",
+                });
+            };
+            let package = request.get("package").and_then(|v| v.as_str());
+            let mime_type = request.get("mime_type").and_then(|v| v.as_str());
+            let flags = request
+                .get("flags")
+                .and_then(|v| v.as_i64())
+                .and_then(|v| i32::try_from(v).ok())
+                .unwrap_or(0);
+            match peer.host_mut().open_url(url, package, mime_type, flags) {
+                Ok(outcome) => Ok(outcome.to_json()),
+                Err(acos_services::ServiceError::StartNotFound { detail }) => {
+                    return serde_json::json!({
+                        "ok": false,
+                        "cmd": "services",
+                        "op": "open_url",
+                        "code": "START_NOT_FOUND",
+                        "start_result": acos_services::ams::START_NOT_FOUND,
+                        "error": detail,
                     });
                 }
                 Err(error) => Err(error),

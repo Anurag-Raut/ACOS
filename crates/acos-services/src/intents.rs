@@ -52,6 +52,50 @@ pub const CAPTURE_PACKAGE: &str = "com.acos.capture";
 /// Class of the synthetic capture component.
 pub const CAPTURE_CLASS: &str = "com.acos.capture.Capture";
 
+/// Storage Access Framework document open action.
+pub const ACTION_OPEN_DOCUMENT: &str = "android.intent.action.OPEN_DOCUMENT";
+/// Storage Access Framework document create action.
+pub const ACTION_CREATE_DOCUMENT: &str = "android.intent.action.CREATE_DOCUMENT";
+/// Generic content picker action.
+pub const ACTION_GET_CONTENT: &str = "android.intent.action.GET_CONTENT";
+/// Legacy gallery/content pick action.
+pub const ACTION_PICK: &str = "android.intent.action.PICK";
+/// Chooser wrapper action (`Intent.createChooser`).
+pub const ACTION_CHOOSER: &str = "android.intent.action.CHOOSER";
+/// Wrapped target intent extra inside `ACTION_CHOOSER`.
+pub const EXTRA_INTENT: &str = "android.intent.extra.INTENT";
+/// Suggested file name / chooser title extra.
+pub const EXTRA_TITLE: &str = "android.intent.extra.TITLE";
+/// Optional list of acceptable MIME types on document/content pickers.
+pub const EXTRA_MIME_TYPES: &str = "android.intent.extra.MIME_TYPES";
+
+/// `Intent.FLAG_GRANT_READ_URI_PERMISSION`.
+pub const FLAG_GRANT_READ_URI_PERMISSION: i32 = 0x0000_0001;
+/// `Intent.FLAG_GRANT_WRITE_URI_PERMISSION`.
+pub const FLAG_GRANT_WRITE_URI_PERMISSION: i32 = 0x0000_0002;
+
+/// True when `action` is one of Android's file/photo picker actions.
+#[must_use]
+pub fn is_picker_action(action: &str) -> bool {
+    matches!(
+        action,
+        ACTION_OPEN_DOCUMENT | ACTION_CREATE_DOCUMENT | ACTION_GET_CONTENT | ACTION_PICK
+    )
+}
+
+/// Unwrap the target `Intent` from an `Intent.ACTION_CHOOSER` wrapper, if
+/// present and decodable.
+#[must_use]
+pub fn unwrap_chooser(facts: &IntentFacts) -> Option<IntentFacts> {
+    if facts.action.as_deref() != Some(ACTION_CHOOSER) {
+        return None;
+    }
+    match facts.extras.get(EXTRA_INTENT)? {
+        Extra::Parcelable(parcelable) => Some(IntentFacts::from_parcelable(parcelable)),
+        _ => None,
+    }
+}
+
 /// The component name the caller sees (`com.acos.capture/.Capture`).
 #[must_use]
 pub fn capture_component() -> String {
@@ -70,10 +114,14 @@ pub struct CapturedIntent {
     pub utc_ms: u64,
     /// `Intent.getAction()`.
     pub action: String,
+    /// When `action` is `ACTION_CHOOSER`, the wrapped `EXTRA_INTENT`'s action.
+    pub wrapped_action: Option<String>,
     /// `Intent.getDataString()` (a URI string, when present).
     pub data: Option<String>,
     /// `Intent.getType()` (the MIME type).
     pub mime_type: Option<String>,
+    /// When `action` is `ACTION_CHOOSER`, the wrapped `EXTRA_INTENT`'s MIME type.
+    pub wrapped_mime_type: Option<String>,
     /// `Intent.getCategories()`.
     pub categories: Vec<String>,
     /// `Intent.getExtras()`: string/int/bool values; other types are recorded
@@ -108,6 +156,8 @@ pub struct ScriptedResult {
     pub data: Option<String>,
     /// `Intent.getType()` of the result data.
     pub mime_type: Option<String>,
+    /// `Intent.getFlags()` on the result data Intent (e.g. `FLAG_GRANT_READ_URI_PERMISSION`).
+    pub flags: i32,
     /// String extras on the result data Intent.
     pub extras: BTreeMap<String, String>,
     /// When the launcher handed it to the guest (host wall clock, ms).
@@ -125,6 +175,7 @@ impl ScriptedResult {
             "action": self.action,
             "data": self.data,
             "mime_type": self.mime_type,
+            "flags": self.flags,
             "extras": self.extras,
             "delivered": self.delivered_utc_ms.is_some(),
             "delivered_utc_ms": self.delivered_utc_ms,
@@ -133,6 +184,60 @@ impl ScriptedResult {
 }
 
 impl CapturedIntent {
+    /// Effective action: the wrapped target action for `ACTION_CHOOSER`, else `self.action`.
+    #[must_use]
+    pub fn effective_action(&self) -> &str {
+        self.wrapped_action.as_deref().unwrap_or(&self.action)
+    }
+
+    /// Effective MIME type: the wrapped target MIME type for `ACTION_CHOOSER`, else `self.mime_type`.
+    #[must_use]
+    pub fn effective_mime_type(&self) -> Option<&str> {
+        self.wrapped_mime_type
+            .as_deref()
+            .or(self.mime_type.as_deref())
+    }
+
+    /// True when this captured intent is a file/photo picker request.
+    #[must_use]
+    pub fn is_picker(&self) -> bool {
+        is_picker_action(self.effective_action())
+    }
+
+    /// True when this captured intent is `ACTION_CREATE_DOCUMENT` (writable target).
+    #[must_use]
+    pub fn is_create_document(&self) -> bool {
+        self.effective_action() == ACTION_CREATE_DOCUMENT
+    }
+
+    /// Suggested filename from `EXTRA_TITLE` (e.g. `ACTION_CREATE_DOCUMENT`).
+    #[must_use]
+    pub fn suggested_filename(&self) -> Option<&str> {
+        match self.extras.get(EXTRA_TITLE) {
+            Some(Extra::String(name)) if !name.trim().is_empty() => Some(name.as_str()),
+            _ => None,
+        }
+    }
+
+    /// Acceptable MIME types for an HTML `<input type="file" accept="...">` hint.
+    #[must_use]
+    pub fn picker_accept_hint(&self) -> Option<String> {
+        if let Some(Extra::Strings(list)) = self.extras.get(EXTRA_MIME_TYPES) {
+            let filtered: Vec<&str> = list
+                .iter()
+                .map(String::as_str)
+                .filter(|s| !s.trim().is_empty())
+                .collect();
+            if !filtered.is_empty() {
+                return Some(filtered.join(","));
+            }
+        }
+        self.effective_mime_type()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(ToString::to_string)
+    }
+
     /// The capture as reply JSON: exactly the payload the agent asserts on.
     #[must_use]
     pub fn to_json(&self) -> serde_json::Value {
@@ -168,7 +273,7 @@ impl CapturedIntent {
                 (key.clone(), value)
             })
             .collect();
-        serde_json::json!({
+        let mut obj = serde_json::json!({
             "seq": self.seq,
             "utc_ms": self.utc_ms,
             "action": self.action,
@@ -180,9 +285,19 @@ impl CapturedIntent {
             "flags": self.flags,
             "request_code": self.request_code,
             "for_result": self.for_result,
+            "is_picker": self.is_picker(),
             "handled_by": "captured",
             "scripted_result": self.scripted_result.as_ref().map(ScriptedResult::to_json),
-        })
+        });
+        if let Some(map) = obj.as_object_mut() {
+            if let Some(ref wrapped) = self.wrapped_action {
+                map.insert("wrapped_action".into(), serde_json::json!(wrapped));
+            }
+            if let Some(ref wrapped_mime) = self.wrapped_mime_type {
+                map.insert("wrapped_mime_type".into(), serde_json::json!(wrapped_mime));
+            }
+        }
+        obj
     }
 }
 
@@ -194,9 +309,11 @@ impl CapturedIntent {
 ///
 /// | action | condition |
 /// |---|---|
-/// | `SEND` / `SEND_MULTIPLE` | a `text/*`, `image/*` or `*/*` type |
+/// | `SEND` / `SEND_MULTIPLE` | empty, `text/*`, `image/*` or `*/*` type |
 /// | `VIEW` | an `http`/`https` data URI |
-/// | `PICK` / `GET_CONTENT` | a type (an image picker) |
+/// | `OPEN_DOCUMENT` / `CREATE_DOCUMENT` | always (SAF document picker) |
+/// | `PICK` / `GET_CONTENT` | a MIME type, `EXTRA_MIME_TYPES`, or data URI |
+/// | `CHOOSER` | when the wrapped `EXTRA_INTENT` is capture-eligible |
 ///
 /// Everything else is not captured. Returning `false` leaves the caller's
 /// `START_NOT_FOUND`, so nothing is ever invented for an unknown action.
@@ -218,7 +335,13 @@ pub fn capture_eligible(facts: &IntentFacts) -> bool {
             Some(uri) => uri.starts_with("http://") || uri.starts_with("https://"),
             None => false,
         },
-        "android.intent.action.PICK" | "android.intent.action.GET_CONTENT" => !mime.is_empty(),
+        ACTION_OPEN_DOCUMENT | ACTION_CREATE_DOCUMENT => true,
+        ACTION_PICK | ACTION_GET_CONTENT => {
+            !mime.is_empty()
+                || facts.data.is_some()
+                || facts.extras.contains_key(EXTRA_MIME_TYPES)
+        }
+        ACTION_CHOOSER => unwrap_chooser(facts).is_some_and(|inner| capture_eligible(&inner)),
         _ => false,
     }
 }
@@ -251,15 +374,30 @@ impl IntentState {
         if !capture_eligible(facts) {
             return None;
         }
+        let wrapped = unwrap_chooser(facts);
+        let wrapped_action = wrapped.as_ref().and_then(|w| w.action.clone());
+        let wrapped_mime_type = wrapped.as_ref().and_then(|w| w.mime_type.clone());
+        let mut extras = facts.extras.clone();
+        if let Some(inner) = wrapped.as_ref() {
+            for key in [EXTRA_TITLE, EXTRA_MIME_TYPES] {
+                if !extras.contains_key(key) {
+                    if let Some(val) = inner.extras.get(key) {
+                        extras.insert(key.to_string(), val.clone());
+                    }
+                }
+            }
+        }
         self.next_seq += 1;
         let record = CapturedIntent {
             seq: self.next_seq,
             utc_ms,
             action: facts.action.clone().unwrap_or_default(),
+            wrapped_action,
             data: facts.data.clone(),
             mime_type: facts.mime_type.clone(),
+            wrapped_mime_type,
             categories: facts.categories.clone(),
-            extras: facts.extras.clone(),
+            extras,
             component: capture_component(),
             flags,
             request_code,
@@ -277,6 +415,18 @@ impl IntentState {
     #[must_use]
     pub fn last(&self) -> Option<&CapturedIntent> {
         self.captures.back()
+    }
+
+    /// Look up a capture by sequence number.
+    #[must_use]
+    pub fn by_seq(&self, seq: u64) -> Option<&CapturedIntent> {
+        self.captures.iter().find(|c| c.seq == seq)
+    }
+
+    /// The newest captured picker intent, if any.
+    #[must_use]
+    pub fn last_picker(&self) -> Option<&CapturedIntent> {
+        self.captures.iter().rev().find(|c| c.is_picker())
     }
 
     /// Every capture, oldest first.
@@ -306,6 +456,30 @@ impl IntentState {
         action: Option<String>,
         extras: BTreeMap<String, String>,
     ) -> Result<ScriptedResult> {
+        self.script_result_with_flags(
+            capture_seq,
+            result_code,
+            data,
+            mime_type,
+            action,
+            0,
+            extras,
+        )
+    }
+
+    /// Like [`Self::script_result`], with explicit Intent flags (e.g.
+    /// [`FLAG_GRANT_READ_URI_PERMISSION`] for picker `content://` results).
+    #[allow(clippy::too_many_arguments)]
+    pub fn script_result_with_flags(
+        &mut self,
+        capture_seq: Option<u64>,
+        result_code: Option<i32>,
+        data: Option<String>,
+        mime_type: Option<String>,
+        action: Option<String>,
+        flags: i32,
+        extras: BTreeMap<String, String>,
+    ) -> Result<ScriptedResult> {
         let seq = capture_seq.or_else(|| self.captures.back().map(|c| c.seq));
         let Some(seq) = seq else {
             return Err(ServiceError::BadRequest {
@@ -328,6 +502,7 @@ impl IntentState {
             action,
             data,
             mime_type,
+            flags,
             extras,
             delivered_utc_ms: None,
         };
