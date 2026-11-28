@@ -736,8 +736,8 @@ fn handle_open_url(
 /// `POST /api/picker/<session_id>?t=<token>[&g=<guest_gen>][&name=...&seq=...&mime=...]`
 ///
 /// Accepts either:
-/// - `Content-Type: application/json` with `{"cancel": true, "capture_seq"?: N}` to
-///   deliver `RESULT_CANCELED`; or
+/// - `Content-Type: application/json` with `{"cancel": true, "capture_seq"?: N}`
+///   and no file name (`name` / `X-Filename`) to deliver `RESULT_CANCELED`; or
 /// - a raw file body (bounded at [`MAX_PICKER_UPLOAD`], 25 MiB) streamed straight to
 ///   `<artifacts_dir>/picker/` and handed to `intents.pick_file`.
 fn handle_picker(
@@ -765,10 +765,29 @@ fn handle_picker(
             return;
         }
     };
-    let is_json_cancel = request
-        .content_type
-        .as_deref()
-        .is_some_and(|ct| ct.to_ascii_lowercase().starts_with("application/json"));
+    // A present but malformed selector must never fall back to "the newest
+    // capture", so it is refused before any file or daemon call.
+    let query_seq = match request.param("seq").map(|s| s.trim().parse::<u64>()) {
+        None => None,
+        Some(Ok(seq)) => Some(seq),
+        Some(Err(_)) => {
+            respond_json(
+                &mut connection,
+                400,
+                &json!({"ok": false, "code": "INVALID_ARGUMENT", "error": "query `seq` must be an unsigned integer"}),
+            );
+            return;
+        }
+    };
+    let raw_name = request
+        .form_param("name")
+        .or_else(|| request.x_filename.clone());
+    // A named body is an upload even when the file itself is JSON.
+    let is_json_cancel = raw_name.is_none()
+        && request
+            .content_type
+            .as_deref()
+            .is_some_and(|ct| ct.to_ascii_lowercase().starts_with("application/json"));
 
     if is_json_cancel {
         let Some(content_length) =
@@ -811,12 +830,20 @@ fn handle_picker(
             );
             return;
         }
+        let body_seq = match parsed.get("capture_seq").map(serde_json::Value::as_u64) {
+            None => None,
+            Some(Some(seq)) => Some(seq),
+            Some(None) => {
+                respond_json(
+                    &mut connection,
+                    400,
+                    &json!({"ok": false, "code": "INVALID_ARGUMENT", "error": "`capture_seq` must be an unsigned integer"}),
+                );
+                return;
+            }
+        };
         let mut args = json!({ "cancel": true });
-        if let Some(seq) = parsed
-            .get("capture_seq")
-            .and_then(serde_json::Value::as_u64)
-            .or_else(|| request.param("seq").and_then(|s| s.parse::<u64>().ok()))
-        {
+        if let Some(seq) = body_seq.or(query_seq) {
             args["capture_seq"] = json!(seq);
         }
         match hub.service_ctl(
@@ -850,9 +877,6 @@ fn handle_picker(
             return;
         }
     };
-    let raw_name = request
-        .param("name")
-        .or_else(|| request.x_filename.clone());
     let display_name = sanitize_upload_filename(raw_name.as_deref());
     let staged_path = match stream_upload_to_file(
         &mut connection,
@@ -882,18 +906,16 @@ fn handle_picker(
                 .map(|ct| ct.split(';').next().unwrap_or("").trim().to_string())
                 .filter(|m| !m.is_empty() && m != "application/octet-stream")
         });
-    let capture_seq = request
-        .param("seq")
-        .and_then(|s| s.trim().parse::<u64>().ok());
-
+    // `staged` lets the session delete this copy once nothing serves it.
     let mut args = json!({
         "path": staged_path.display().to_string(),
         "display_name": display_name,
+        "staged": true,
     });
     if let Some(mime) = mime_type {
         args["mime_type"] = json!(mime);
     }
-    if let Some(seq) = capture_seq {
+    if let Some(seq) = query_seq {
         args["capture_seq"] = json!(seq);
     }
 
@@ -1342,15 +1364,21 @@ struct Request {
 
 impl Request {
     fn param(&self, name: &str) -> Option<String> {
-        for pair in self.query.split('&') {
-            let Some((key, value)) = pair.split_once('=') else {
-                continue;
-            };
-            if key == name {
-                return Some(decode_component(value));
-            }
-        }
-        None
+        self.raw_param(name).map(decode_component)
+    }
+
+    /// [`Self::param`] for a form-encoded value (`URLSearchParams`), where a
+    /// literal `+` is a space and a plus sign arrives as `%2B`.
+    fn form_param(&self, name: &str) -> Option<String> {
+        self.raw_param(name)
+            .map(|value| decode_component(&value.replace('+', " ")))
+    }
+
+    fn raw_param(&self, name: &str) -> Option<&str> {
+        self.query
+            .split('&')
+            .filter_map(|pair| pair.split_once('='))
+            .find_map(|(key, value)| (key == name).then_some(value))
     }
 }
 
@@ -2857,6 +2885,7 @@ mod tests {
             "launcher_pid": std::process::id(),
             "started_ms": crate::live_registry::now_ms(),
             "serve_socket": serve_sock.to_string_lossy(),
+            "launch_token": "tok-pk",
             "artifacts_dir": artifacts_dir.to_string_lossy(),
             "display": {"w": 1080, "h": 2400},
         });
@@ -2942,8 +2971,59 @@ mod tests {
         );
         assert_eq!(status_of(&cancel_resp), 200);
 
+        // 5. A present but malformed selector is refused before anything is
+        //    staged or sent to the daemon.
+        let staged_count = || {
+            std::fs::read_dir(artifacts_dir.join("picker"))
+                .expect("picker dir")
+                .count()
+        };
+        let before = staged_count();
+        for (query, content_type, body) in [
+            ("&name=a.bin&seq=4x", "application/octet-stream", &b"DATA"[..]),
+            ("&seq=-1", "application/json", &br#"{"cancel":true}"#[..]),
+            ("", "application/json", &br#"{"cancel":true,"capture_seq":"4"}"#[..]),
+        ] {
+            let length = body.len().to_string();
+            let resp = post_raw(
+                server.port,
+                &format!("/api/picker/s_pk?t={}{query}", server.token),
+                None,
+                &[("Content-Type", content_type), ("Content-Length", &length)],
+                body,
+            );
+            assert_eq!(status_of(&resp), 400, "{query} {content_type}");
+            let json: serde_json::Value =
+                serde_json::from_slice(body_of(&resp)).expect("error json");
+            assert_eq!(json["code"], "INVALID_ARGUMENT");
+        }
+        assert_eq!(staged_count(), before);
+
+        // 6. A named JSON file is an upload, not a cancellation, and a
+        //    form-encoded space survives in its name.
+        let file_body = br#"{"cancel":true}"#;
+        let file_len = file_body.len().to_string();
+        let json_up = post_raw(
+            server.port,
+            &format!(
+                "/api/picker/s_pk?t={}&name=my+settings.json&seq=4&mime=application%2Fjson",
+                server.token
+            ),
+            None,
+            &[
+                ("Content-Type", "application/json"),
+                ("Content-Length", &file_len),
+            ],
+            file_body,
+        );
+        assert_eq!(status_of(&json_up), 200);
+
         let log = received.lock().unwrap();
-        assert_eq!(log.len(), 2);
+        assert_eq!(log.len(), 3);
+        assert_eq!(log[2]["args"]["args"]["display_name"], "my settings.json");
+        assert_eq!(log[2]["args"]["args"]["mime_type"], "application/json");
+        assert_eq!(log[2]["args"]["args"]["staged"], true);
+        assert!(log[2]["args"]["args"].get("cancel").is_none());
         let staged_path = log[0]["args"]["args"]["path"]
             .as_str()
             .expect("staged path forwarded");
@@ -2956,6 +3036,7 @@ mod tests {
         assert_eq!(log[0]["args"]["args"]["mime_type"], "image/png");
         assert_eq!(log[0]["args"]["args"]["capture_seq"], 4);
 
+        assert_eq!(log[0]["args"]["expected_launch_token"], "tok-pk");
         assert_eq!(log[1]["args"]["op"], "pick_file");
         assert_eq!(log[1]["args"]["args"]["cancel"], true);
         assert_eq!(log[1]["args"]["args"]["capture_seq"], 4);

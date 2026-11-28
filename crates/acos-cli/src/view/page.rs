@@ -245,6 +245,7 @@ const pendingCapabilities = new Set();
 
 let sessions = [];
 let current = null;
+let detailView = 0;
 let currentGuestGen = null;
 let source = null;       // EventSource
 let display = { w: 0, h: 0 };
@@ -1026,7 +1027,14 @@ function hideOpenUrlPop() {
   }
 }
 
+// A late reply must not write into whichever detail view is open by then.
+function beginDetailView() {
+  detailView += 1;
+  if (openUrlGo) openUrlGo.disabled = false;
+}
+
 function openSession(s) {
+  beginDetailView();
   closeWs();
   stopFrameStream();
   if (source) { source.close(); source = null; }
@@ -1073,6 +1081,7 @@ function openSession(s) {
 }
 
 function closeSession() {
+  beginDetailView();
   sessionEnded = false;
   sessionEverConnected = false;
   disconnectedPolls = 0;
@@ -1426,6 +1435,7 @@ function showCapabilityPrompt(prompt) {
           return;
         }
         const rec = capabilityCards.get(prompt.seq);
+        const view = detailView;
         for (const b of buttons) b.disabled = true;
         statusEl.hidden = false;
         statusEl.className = "cap-status";
@@ -1438,7 +1448,8 @@ function showCapabilityPrompt(prompt) {
           });
           const resp = await fetch(url, {
             method: "POST",
-            headers: { "Content-Type": file.type || "application/octet-stream" },
+            // The file's own type travels as `mime`.
+            headers: { "Content-Type": "application/octet-stream" },
             body: file,
           });
           let data = {};
@@ -1446,13 +1457,15 @@ function showCapabilityPrompt(prompt) {
           if (!resp.ok || data.ok === false) {
             throw new Error(data.error || data.code || ("HTTP " + resp.status));
           }
-          addEvent({
-            source: "panel",
-            cmd: "pick_file",
-            status: "ok",
-            text: file.name || "file",
-            ts_ms: Date.now(),
-          }, "action");
+          if (view === detailView) {
+            addEvent({
+              source: "panel",
+              cmd: "pick_file",
+              status: "ok",
+              text: file.name || "file",
+              ts_ms: Date.now(),
+            }, "action");
+          }
           statusEl.className = "cap-status ok";
           statusEl.textContent = "Delivered " + (file.name || "file") + ".";
           setTimeout(() => {
@@ -1477,6 +1490,7 @@ function showCapabilityPrompt(prompt) {
       btn.addEventListener("click", async () => {
         if (!current || current.watch_only || sessionEnded) return;
         const rec = capabilityCards.get(prompt.seq);
+        const view = detailView;
         for (const b of buttons) b.disabled = true;
         statusEl.hidden = false;
         statusEl.className = "cap-status";
@@ -1494,13 +1508,15 @@ function showCapabilityPrompt(prompt) {
           if (!resp.ok || data.ok === false) {
             throw new Error(data.error || data.code || ("HTTP " + resp.status));
           }
-          addEvent({
-            source: "panel",
-            cmd: "pick_file",
-            status: "ok",
-            note: "cancelled",
-            ts_ms: Date.now(),
-          }, "action");
+          if (view === detailView) {
+            addEvent({
+              source: "panel",
+              cmd: "pick_file",
+              status: "ok",
+              note: "cancelled",
+              ts_ms: Date.now(),
+            }, "action");
+          }
           statusEl.className = "cap-status ok";
           statusEl.textContent = "Picker cancelled.";
           setTimeout(() => {
@@ -2089,6 +2105,7 @@ if (btnOpenUrl && openUrlPop && openUrlForm && openUrlInput) {
       return;
     }
     const sid = current.session_id;
+    const view = detailView;
     const gParam = (typeof currentGuestGen === "number" && currentGuestGen > 0)
       ? ("?g=" + encodeURIComponent(currentGuestGen))
       : "";
@@ -2109,6 +2126,7 @@ if (btnOpenUrl && openUrlPop && openUrlForm && openUrlInput) {
       if (!resp.ok || data.ok === false) {
         throw new Error(data.error || data.code || ("HTTP " + resp.status));
       }
+      if (view !== detailView) return;
       const delivery = data.delivery ? (" · " + data.delivery) : "";
       const target = data.component || data.activity || "";
       addEvent({
@@ -2125,6 +2143,7 @@ if (btnOpenUrl && openUrlPop && openUrlForm && openUrlInput) {
         openUrlStatus.textContent = "Opened" + (target ? " → " + target : "") + delivery;
       }
     } catch (err) {
+      if (view !== detailView) return;
       const msg = (err && err.message) ? err.message : "Failed to open URL.";
       addEvent({
         source: "panel",
@@ -2140,7 +2159,7 @@ if (btnOpenUrl && openUrlPop && openUrlForm && openUrlInput) {
         openUrlStatus.textContent = msg;
       }
     } finally {
-      if (openUrlGo) openUrlGo.disabled = false;
+      if (openUrlGo && view === detailView) openUrlGo.disabled = false;
     }
   });
 }
@@ -2767,6 +2786,65 @@ setImmediate(() => {
   assert.equal(pkCalls[0].init.method, "POST");
   assert.deepEqual(JSON.parse(pkCalls[0].init.body), { cancel: true, capture_seq: 9 });
   assert.equal(rec.statusEl.textContent, "Picker cancelled.");
+});
+"#,
+        );
+    }
+
+    #[test]
+    fn late_picker_and_open_url_replies_stay_out_of_the_next_session() {
+        run_page_js_scenario(
+            r#"
+const h = createHarness();
+const pending = [];
+h.ctx.fetch = (url) => {
+  if (String(url).includes("/api/picker/") || String(url).includes("/api/open_url/")) {
+    return new Promise((resolve) => pending.push(resolve));
+  }
+  return Promise.resolve({ ok: true, status: 200, json: async () => ({ sessions: [] }) });
+};
+const reply = { ok: true, status: 200, json: async () => ({ ok: true, component: "a/.B" }) };
+const open = (sid) => h.eval(`
+  openSession({ session_id: "${sid}", guest_gen: 1, stream: false, watch_only: false });
+  openUrlInput.value = "myapp://item/1";
+`);
+const submitUrl = () => h.eval(`
+  openUrlForm.dispatchEvent({ type: "submit", preventDefault() {} });
+`);
+const logged = () => h.eval(`eventsList.children.length`);
+
+open("sess-a");
+h.eval(`
+  showCapabilityPrompt({
+    seq: 1,
+    trigger: "intent_captured",
+    options: [{ kind: "cancel_picker", id: "cancel", capture_seq: 1 }],
+  });
+`);
+h.eval(`capabilityCards.get(1)`).buttons[0].click();
+submitUrl();
+assert.equal(h.eval(`openUrlGo.disabled`), true);
+assert.equal(pending.length, 2);
+
+open("sess-b");
+assert.equal(h.eval(`openUrlGo.disabled`), false);
+const statusInB = h.eval(`openUrlStatus.textContent`);
+for (const resolve of pending.splice(0)) resolve(reply);
+
+setImmediate(() => {
+  assert.equal(logged(), 0);
+  assert.equal(h.eval(`openUrlStatus.textContent`), statusInB);
+
+  // The same view still gets its result and its button back. (Reopened because
+  // the page's initial empty session poll may have ended the mock session.)
+  open("sess-c");
+  submitUrl();
+  pending.shift()(reply);
+  setImmediate(() => {
+    assert.equal(logged(), 1);
+    assert.equal(h.eval(`openUrlGo.disabled`), false);
+    assert.match(h.eval(`openUrlStatus.textContent`), /Opened/);
+  });
 });
 "#,
         );
