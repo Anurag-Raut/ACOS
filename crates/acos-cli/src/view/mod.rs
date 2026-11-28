@@ -400,7 +400,7 @@ fn respond_ctl_error(connection: &mut TcpStream, error: hub::ServiceCtlError) {
                 "error": "session is watch-only and refuses interactive control requests",
             }),
         ),
-        hub::ServiceCtlError::Unavailable(msg) => respond_json(
+        hub::ServiceCtlError::Unavailable { message: msg, .. } => respond_json(
             connection,
             503,
             &json!({
@@ -409,7 +409,7 @@ fn respond_ctl_error(connection: &mut TcpStream, error: hub::ServiceCtlError) {
                 "error": msg,
             }),
         ),
-        hub::ServiceCtlError::Daemon { code, message } => {
+        hub::ServiceCtlError::Daemon { code, message, .. } => {
             if message.contains("START_NOT_FOUND") {
                 respond_json(
                     connection,
@@ -933,7 +933,11 @@ fn handle_picker(
             respond_json(&mut connection, 200, &result);
         }
         Err(err) => {
-            let _ = std::fs::remove_file(&staged_path);
+            // After a lost or timed-out reply the session may already serve
+            // this file under a picker URI, so only a refusal removes it.
+            if err.is_definite_refusal() {
+                let _ = std::fs::remove_file(&staged_path);
+            }
             respond_ctl_error(&mut connection, err);
         }
     }
@@ -3040,6 +3044,88 @@ mod tests {
         assert_eq!(log[1]["args"]["op"], "pick_file");
         assert_eq!(log[1]["args"]["args"]["cancel"], true);
         assert_eq!(log[1]["args"]["args"]["capture_seq"], 4);
+    }
+
+    /// `/api/picker` keeps the staged upload unless the daemon certainly did
+    /// not run `pick_file`: a lost or timed-out reply may follow a
+    /// registration whose URI the app already holds.
+    #[test]
+    fn picker_upload_survives_ambiguous_replies_and_is_removed_on_refusal() {
+        use std::io::BufRead;
+
+        let server = Server::start("picker-ambiguous");
+        let artifacts_dir = server.registry.join("artifacts");
+        std::fs::create_dir_all(&artifacts_dir).expect("mkdir artifacts");
+        let serve_sock = server.registry.join("serve.sock");
+        let listener = UnixListener::bind(&serve_sock).expect("bind");
+
+        // One reply per request, in order; `None` closes the connection (EOF).
+        let error = |code: &str| {
+            Some(json!({"ok": false, "error": {"code": code, "message": code}}))
+        };
+        let replies = [
+            None,
+            error("TIMEOUT"),
+            error("APP_NOT_RESPONDING"),
+            error("INTERNAL"),
+            error("INVALID_ARGUMENT"),
+        ];
+        let expected_kept = [true, true, true, true, false];
+        let script = replies.clone();
+        std::thread::spawn(move || {
+            for reply in script {
+                let Ok((mut stream, _)) = listener.accept() else {
+                    return;
+                };
+                let mut line = String::new();
+                let mut reader =
+                    std::io::BufReader::new(stream.try_clone().expect("clone stream"));
+                if reader.read_line(&mut line).unwrap_or(0) == 0 {
+                    return;
+                }
+                if let Some(envelope) = reply {
+                    let _ = writeln!(stream, "{}", json!({"id": 1, "envelope": envelope}));
+                }
+            }
+        });
+        let live_doc = json!({
+            "v": 1,
+            "session_id": "s_amb",
+            "daemon_pid": std::process::id(),
+            "launcher_pid": std::process::id(),
+            "started_ms": crate::live_registry::now_ms(),
+            "serve_socket": serve_sock.to_string_lossy(),
+            "launch_token": "tok-amb",
+            "artifacts_dir": artifacts_dir.to_string_lossy(),
+            "display": {"w": 1080, "h": 2400},
+        });
+        std::fs::write(server.registry.join("s_amb.json"), live_doc.to_string()).expect("live");
+
+        let staged = || -> usize {
+            std::fs::read_dir(artifacts_dir.join("picker"))
+                .map(Iterator::count)
+                .unwrap_or(0)
+        };
+        for (index, kept) in expected_kept.into_iter().enumerate() {
+            let before = staged();
+            let response = post_raw(
+                server.port,
+                &format!("/api/picker/s_amb?t={}&name=a.bin", server.token),
+                None,
+                &[
+                    ("Content-Type", "application/octet-stream"),
+                    ("Content-Length", "4"),
+                ],
+                b"DATA",
+            );
+            assert_ne!(status_of(&response), 200, "reply {index}");
+            assert_eq!(
+                staged(),
+                before + usize::from(kept),
+                "reply {index}: {:?}",
+                replies[index]
+            );
+        }
     }
 
     fn send(

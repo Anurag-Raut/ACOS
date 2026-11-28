@@ -7504,7 +7504,7 @@ fn processes_mentioning(dir: &Path) -> Vec<u32> {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
 
     /// REL3H2: the guest and the verifier must name the same settle reason. The
@@ -8165,7 +8165,7 @@ mod tests {
     /// prove `reset` really starts a new guest. Each process restarts its own
     /// frame sequence at 1 and reports one log line, so a reset that reused the
     /// old guest would be visible as a non-advancing engine sequence.
-    fn fake_art_binary(dir: &Path) -> PathBuf {
+    pub(crate) fn fake_art_binary(dir: &Path) -> PathBuf {
         use std::os::unix::fs::PermissionsExt;
         let png = dir.join("tiny.png");
         std::fs::write(&png, super::super::fake::TINY_PNG).unwrap();
@@ -9073,7 +9073,7 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
-    fn art_bin_env_lock() -> std::sync::MutexGuard<'static, ()> {
+    pub(crate) fn art_bin_env_lock() -> std::sync::MutexGuard<'static, ()> {
         static LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
         LOCK.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
     }

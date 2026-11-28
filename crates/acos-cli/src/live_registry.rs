@@ -193,6 +193,33 @@ impl LiveRegistry {
         Ok(path)
     }
 
+    /// Replace the session's entry only while it still carries
+    /// `expected_launch_token`, serialized with `write`/`remove_if_token`: a
+    /// late republish cannot recreate a destroyed entry or overwrite a
+    /// replacement session's.
+    pub fn replace_if_token(
+        &self,
+        entry: &LiveEntry,
+        expected_launch_token: &str,
+    ) -> io::Result<bool> {
+        let _guard = self.io_lock.lock().unwrap_or_else(|e| e.into_inner());
+        let path = self
+            .dir
+            .join(self.file_name(&entry.session_id, entry.daemon_pid));
+        let current = std::fs::read_to_string(&path)
+            .ok()
+            .and_then(|text| serde_json::from_str::<serde_json::Value>(&text).ok());
+        let token = current
+            .as_ref()
+            .and_then(|doc| doc.get("launch_token"))
+            .and_then(serde_json::Value::as_str);
+        if token != Some(expected_launch_token) {
+            return Ok(false);
+        }
+        write_atomic(&path, &entry.to_json().to_string())?;
+        Ok(true)
+    }
+
     /// Update `activity` in an existing entry (no-op when the file is gone).
     #[cfg_attr(not(test), allow(dead_code))]
     pub fn update_activity(&self, session_id: &str, activity: Option<&str>) -> io::Result<bool> {

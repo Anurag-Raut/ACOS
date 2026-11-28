@@ -83,13 +83,14 @@ struct HeldArtSession {
     /// replaced by another one can tell that the session is no longer its guest
     /// (and must not destroy it on exit).
     launch_token: Mutex<String>,
-    /// Immutable per-guest-instance token published in `LiveEntry.launch_token`.
-    /// Unlike `launch_token` (which renews on idempotent relaunch of the same
-    /// live guest), `guest_token` changes only when a brand-new guest process
-    /// replaces the session id, letting interactive `acos view` sockets reject
-    /// commands targeted at a replaced guest (`SESSION_REPLACED`) without
-    /// breaking live viewers on idempotent relaunch.
-    guest_token: String,
+    /// Per-guest-instance token published in `LiveEntry.launch_token`. Unlike
+    /// `launch_token` (which renews on idempotent relaunch of the same live
+    /// guest), `guest_token` changes only when a brand-new guest process takes
+    /// over the session id (a replacement launch or `acos_reset`), letting
+    /// interactive `acos view` sockets reject commands targeted at a replaced
+    /// guest (`SESSION_REPLACED`) without breaking live viewers on idempotent
+    /// relaunch. Read and rotated only under `session`.
+    guest_token: Mutex<String>,
     /// Default verb settle inherited by `observe*`/input verbs when `settle`
     /// is omitted (`"content"` if launched with `settle: "content"`, else `"strict"`).
     default_settle: Mutex<&'static str>,
@@ -147,6 +148,21 @@ impl HeldArtSession {
             .lock()
             .unwrap_or_else(|e| e.into_inner());
         crate::live_registry::now_ms().saturating_sub(started) / 1000
+    }
+
+    fn guest_token(&self) -> String {
+        self.guest_token
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
+    }
+
+    /// Give the next guest instance a new identity; returns the old one.
+    fn rotate_guest_token(&self) -> String {
+        std::mem::replace(
+            &mut self.guest_token.lock().unwrap_or_else(|e| e.into_inner()),
+            new_launch_token(),
+        )
     }
 
     /// Renew and return this session's launch token (SERVELEAK2/F3).
@@ -352,8 +368,23 @@ impl ServeEngine {
 
     /// VIEW1a: publish one ready session to the live-view registry.
     fn publish_live(&self, id: &str, held: &HeldArtSession, session: &ArtSession) {
+        if let Err(error) = self.live.write(&self.live_entry(id, held, session)) {
+            eprintln!(
+                "acos serve: live view: cannot publish session {id} to {}: {error}",
+                self.live.dir().display()
+            );
+        }
+    }
+
+    /// The registry entry describing `session` as it is now.
+    fn live_entry(
+        &self,
+        id: &str,
+        held: &HeldArtSession,
+        session: &ArtSession,
+    ) -> crate::live_registry::LiveEntry {
         let (client_name, client_version) = self.live.client();
-        let entry = crate::live_registry::LiveEntry {
+        crate::live_registry::LiveEntry {
             session_id: id.to_string(),
             daemon_pid: std::process::id(),
             launcher_pid: session.launcher_pid(),
@@ -376,7 +407,7 @@ impl ServeEngine {
                 .stream_socket()
                 .map(|path| path.display().to_string()),
             has_home: session.has_home(),
-            launch_token: Some(held.guest_token.clone()),
+            launch_token: Some(held.guest_token()),
             // `acos view` runs in its own working directory, so a relative
             // `ACOS_SERVE_ARTIFACTS` must be resolved here.
             artifacts_dir: Some(
@@ -385,20 +416,37 @@ impl ServeEngine {
                     .display()
                     .to_string(),
             ),
-        };
-        if let Err(error) = self.live.write(&entry) {
-            eprintln!(
-                "acos serve: live view: cannot publish session {id} to {}: {error}",
-                self.live.dir().display()
-            );
         }
+    }
+
+    /// `acos_reset`: the guest process is replaced in place, so it gets a new
+    /// identity and a new registry entry (its pid and stream socket changed).
+    /// The caller holds `held.session`, so a control op validated against the
+    /// old guest is refused once it gets the lock.
+    fn reset_guest(
+        &self,
+        id: &str,
+        held: &HeldArtSession,
+        session: &mut ArtSession,
+        args: &Value,
+    ) -> Result<Value, BackendError> {
+        // A refused request never touches the guest, so it keeps its identity.
+        reset_bind(args)?;
+        let old = held.rotate_guest_token();
+        let outcome = reset(session, &held.artifacts, args);
+        // Also after a failed relaunch: the old guest is gone either way.
+        let entry = self.live_entry(id, held, session);
+        if let Err(error) = self.live.replace_if_token(&entry, &old) {
+            eprintln!("acos serve: live view: cannot republish session {id}: {error}");
+        }
+        outcome
     }
 
     /// VIEW1a: refresh a session's `activity` in the registry.
     fn refresh_live_activity(&self, id: &str, held: &HeldArtSession, session: &ArtSession) {
         if let Err(error) =
             self.live
-                .update_activity_if_token(id, Some(&held.guest_token), session.activity())
+                .update_activity_if_token(id, Some(&held.guest_token()), session.activity())
         {
             eprintln!("acos serve: live view: cannot update session {id} activity: {error}");
         }
@@ -1162,7 +1210,7 @@ impl ServeEngine {
                     device_name: Mutex::new(device_name),
                     started_ms: Mutex::new(0),
                     launch_token: Mutex::new(String::new()),
-                    guest_token: new_launch_token(),
+                    guest_token: Mutex::new(new_launch_token()),
                     default_settle: Mutex::new(default_settle),
                     session: Mutex::new(session),
                 });
@@ -1224,7 +1272,7 @@ impl ServeEngine {
             // first, and gate removal by `guest_token` so a concurrent
             // replacement session's registry entry is never deleted.
             let mut session = held.session.lock().unwrap_or_else(|e| e.into_inner());
-            self.live.remove_if_token(id, Some(&held.guest_token));
+            self.live.remove_if_token(id, Some(&held.guest_token()));
             let report = session.teardown();
             // GL1: name the destruction path and prove the *session*, not just
             // the spawned process group, is gone. `lifecycle` = the guest ended
@@ -1359,16 +1407,17 @@ impl ServeEngine {
         args: &Value,
     ) -> Envelope {
         let trust = held.trust;
+        let mut session = held.session.lock().unwrap_or_else(|e| e.into_inner());
         // A control op may carry the guest identity its caller validated
-        // (`acos view` does): it must never run on a replacement guest.
+        // (`acos view` does): it must never run on a replacement guest. Checked
+        // under the session lock, so a reset cannot slip in between.
         if tool == "acos_service_ctl" {
             if let Some(refusal) =
-                replaced_guest_refusal(request_id, id, trust, &held.guest_token, tool, args)
+                replaced_guest_refusal(request_id, id, trust, &held.guest_token(), tool, args)
             {
                 return refusal;
             }
         }
-        let mut session = held.session.lock().unwrap_or_else(|e| e.into_inner());
         // REL3A: every serve verb starts from the strict observation rule. Serve
         // never asks for a content observation (its tree verbs select
         // `settle: strict|fast|content` explicitly through `tree_with_settle`),
@@ -1422,7 +1471,7 @@ impl ServeEngine {
             // MPROC1: session control ops (`acos_service_ctl`). The module and
             // op are the session's own vocabulary; nothing is translated here.
             "acos_service_ctl" => service_ctl(&mut session, args),
-            "acos_reset" => reset(&mut session, &held.artifacts, args),
+            "acos_reset" => self.reset_guest(id, held, &mut session, args),
             "acos_swipe" => swipe(&mut session, args),
             "acos_action" => action(&mut session, args),
             // NET2/NET4: the session's own network controls (the module wraps
@@ -1523,12 +1572,12 @@ impl ServeEngine {
         args: &Value,
     ) -> Envelope {
         let trust = held.trust;
+        let mut session = held.session.lock().unwrap_or_else(|e| e.into_inner());
         if let Some(refusal) =
-            replaced_guest_refusal(request_id, id, trust, &held.guest_token, tool, args)
+            replaced_guest_refusal(request_id, id, trust, &held.guest_token(), tool, args)
         {
             return refusal;
         }
-        let mut session = held.session.lock().unwrap_or_else(|e| e.into_inner());
         if let Some(exit) = session.liveness() {
             return guest_exit_envelope(request_id, id, held, &mut session, tool, &exit);
         }
@@ -1799,7 +1848,7 @@ impl ServeEngine {
                 if tool == "panel_rotate" {
                     let _ = self.live.update_display_if_token(
                         id,
-                        Some(&held.guest_token),
+                        Some(&held.guest_token()),
                         session.display_size(),
                     );
                 }
@@ -6563,6 +6612,101 @@ mod tests {
             acos_runtime::session::SessionOptions::default(),
         ));
         ServeEngine::new(legacy, Engine::Art, 4, artifacts_root)
+    }
+
+    /// `acos_reset` replaces the guest, so a control op validated against the
+    /// old one (`expected_launch_token`) is refused, including one that was
+    /// already waiting for the session when the reset ran.
+    #[test]
+    fn a_reset_refuses_control_ops_bound_to_the_replaced_guest() {
+        use crate::engine::art::tests::{art_bin_env_lock, fake_art_binary};
+
+        let dir = fb2_scratch("serve-reset-token");
+        let script = fake_art_binary(&dir);
+        let apk = dir.join("fake.apk");
+        std::fs::write(&apk, b"not-a-real-apk").unwrap();
+        let _art_bin = art_bin_env_lock();
+        std::env::set_var("ACOS_ART_BIN", &script);
+        let mut engine = test_serve_engine(dir.join("art-sessions"));
+        engine.live = crate::live_registry::LiveRegistry::at(dir.join("live"));
+        let session = ArtSession::start(&apk, &dir).expect("fake session starts");
+        let held = Arc::new(HeldArtSession {
+            apk: apk.clone(),
+            artifacts: dir.clone(),
+            trust: Trust::Trusted,
+            label: Mutex::new(String::new()),
+            device_name: Mutex::new(None),
+            started_ms: Mutex::new(0),
+            launch_token: Mutex::new(String::new()),
+            guest_token: Mutex::new(new_launch_token()),
+            default_settle: Mutex::new("strict"),
+            session: Mutex::new(session),
+        });
+        engine.publish_live("s_reset", &held, &held.session.lock().unwrap());
+        let published = || -> String {
+            let reads = crate::live_registry::read_entries(&dir.join("live"));
+            assert_eq!(reads.len(), 1);
+            reads[0].doc["launch_token"].as_str().unwrap().to_string()
+        };
+        let ctl = |token: &str| {
+            let envelope = engine.call_art(
+                "r",
+                "s_reset",
+                &held,
+                "acos_service_ctl",
+                &json!({"module": "intents", "op": "list", "expected_launch_token": token}),
+            );
+            serde_json::to_string(&envelope).unwrap()
+        };
+        let first = published();
+        assert!(!ctl(&first).contains("SESSION_REPLACED"));
+
+        // A refused reset leaves the guest, and its identity, alone.
+        let refused = engine.call_art(
+            "r",
+            "s_reset",
+            &held,
+            "acos_reset",
+            &json!({"settle": "content"}),
+        );
+        assert!(!refused.ok());
+        assert_eq!(published(), first);
+
+        let reset = engine.call_art("r", "s_reset", &held, "acos_reset", &json!({}));
+        assert!(reset.ok(), "{reset:?}");
+        let second = published();
+        assert_ne!(second, first);
+        assert_eq!(second, held.guest_token());
+        assert!(ctl(&first).contains("SESSION_REPLACED"));
+        assert!(!ctl(&second).contains("SESSION_REPLACED"));
+
+        // An op that arrives while the session is busy resetting.
+        std::thread::scope(|scope| {
+            let mut session = held.session.lock().unwrap();
+            let waiting = scope.spawn(|| ctl(&second));
+            std::thread::sleep(std::time::Duration::from_millis(200));
+            engine
+                .reset_guest("s_reset", &held, &mut session, &json!({}))
+                .expect("reset");
+            drop(session);
+            assert!(waiting.join().unwrap().contains("SESSION_REPLACED"));
+        });
+
+        // A destroyed entry is not recreated by a late republish.
+        engine.live.remove_if_token("s_reset", Some(&held.guest_token()));
+        engine
+            .reset_guest(
+                "s_reset",
+                &held,
+                &mut held.session.lock().unwrap(),
+                &json!({}),
+            )
+            .expect("reset");
+        assert!(crate::live_registry::read_entries(&dir.join("live")).is_empty());
+
+        held.session.lock().unwrap().close().expect("close");
+        std::env::remove_var("ACOS_ART_BIN");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     fn test_call_ctx(dir: &Path) -> CallContext {

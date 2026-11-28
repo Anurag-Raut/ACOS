@@ -267,9 +267,48 @@ pub enum ServiceCtlError {
     /// Session is watch-only (e.g. `acos verify`) or has no interactive daemon socket.
     WatchOnly,
     /// Could not connect to or communicate with the session daemon.
-    Unavailable(String),
-    /// The session daemon rejected the control op with a structured code/message.
-    Daemon { code: String, message: String },
+    Unavailable {
+        message: String,
+        /// The request reached the daemon but its outcome is unknown.
+        may_have_applied: bool,
+    },
+    /// The session daemon answered with a structured code/message.
+    Daemon {
+        code: String,
+        message: String,
+        /// The error does not say whether the op ran (a timeout).
+        may_have_applied: bool,
+    },
+}
+
+impl ServiceCtlError {
+    /// `true` only when the op certainly did not run. A lost or timed-out
+    /// reply, and any error that can follow the op, answer `false`.
+    #[must_use]
+    pub fn is_definite_refusal(&self) -> bool {
+        match self {
+            Self::NotFound | Self::Replaced | Self::WatchOnly => true,
+            Self::Unavailable {
+                may_have_applied, ..
+            } => !may_have_applied,
+            Self::Daemon {
+                code,
+                may_have_applied,
+                ..
+            } => {
+                !may_have_applied
+                    && matches!(
+                        code.as_str(),
+                        "INVALID_ARGUMENT"
+                            | "BAD_REQUEST"
+                            | "UNSUPPORTED_ANDROID_API"
+                            | "UNSUPPORTED_BACKEND"
+                            | "INSUFFICIENT_HOST_EVIDENCE"
+                            | "PERMISSION_DENIED"
+                    )
+            }
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -672,7 +711,10 @@ impl Hub {
     ) -> Result<Value, ServiceCtlError> {
         let (entry, socket) = self.resolve_ctl_target(session_id, expected_guest_gen)?;
         let mut conn = DaemonConn::connect(&socket)
-            .map_err(|(_code, msg)| ServiceCtlError::Unavailable(msg))?;
+            .map_err(|(_code, message)| ServiceCtlError::Unavailable {
+                message,
+                may_have_applied: false,
+            })?;
         // Deep-link / picker operations may wait up to ~3s for guest ack or
         // frame advance, so give the daemon read timeout ample headroom.
         let _ = conn
@@ -695,15 +737,25 @@ impl Hub {
             daemon_args["expected_launch_token"] = json!(token);
         }
         conn.call("acos_service_ctl", daemon_args).map_err(|err| {
-            let (code, message, _ambiguous) = err.into_outcome();
+            let (code, message, may_have_applied) = err.into_outcome();
             if code == "SESSION_REPLACED" {
                 ServiceCtlError::Replaced
             } else if code == "SESSION_NOT_FOUND" {
                 ServiceCtlError::NotFound
             } else if matches!(code.as_str(), "INPUT_UNAVAILABLE" | "IO_ERROR" | "EOF") {
-                ServiceCtlError::Unavailable(message)
+                // An I/O error or EOF the daemon itself reports can follow
+                // the op, like a lost reply.
+                let may_have_applied = may_have_applied || code != "INPUT_UNAVAILABLE";
+                ServiceCtlError::Unavailable {
+                    message,
+                    may_have_applied,
+                }
             } else {
-                ServiceCtlError::Daemon { code, message }
+                ServiceCtlError::Daemon {
+                    code,
+                    message,
+                    may_have_applied,
+                }
             }
         })
     }
