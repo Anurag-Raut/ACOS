@@ -2792,31 +2792,9 @@ impl ArtSession {
             "op": op,
             "args": args,
         });
-        let reply = self.command(request)?;
-        if reply.get("ok").and_then(serde_json::Value::as_bool) != Some(true) {
-            let code = reply
-                .get("code")
-                .and_then(serde_json::Value::as_str)
-                .unwrap_or("INTERNAL");
-            let detail = reply
-                .get("error")
-                .and_then(serde_json::Value::as_str)
-                .unwrap_or("the session refused the control op");
-            return Err(BackendError::Failed {
-                code: match code {
-                    "BAD_REQUEST" | "START_NOT_FOUND" => acos_protocol::ErrorCode::InvalidArgument,
-                    "UNSUPPORTED_ANDROID_API" => acos_protocol::ErrorCode::UnsupportedAndroidApi,
-                    "TIMEOUT" => acos_protocol::ErrorCode::Timeout,
-                    _ => acos_protocol::ErrorCode::Internal,
-                },
-                detail: if code == "START_NOT_FOUND" && !detail.contains("START_NOT_FOUND") {
-                    format!("START_NOT_FOUND: {detail}")
-                } else {
-                    detail.to_string()
-                },
-            });
-        }
-        Ok(reply)
+        // A refusal (`ok != true`) is already an error here, classified by
+        // `failure::map_art_code`.
+        self.command(request)
     }
 
     /// W7: the app-window inset model this guest was launched with.

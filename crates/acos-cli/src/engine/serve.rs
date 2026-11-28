@@ -164,6 +164,34 @@ impl HeldArtSession {
     }
 }
 
+/// `SESSION_REPLACED` when `args.expected_launch_token` names another guest
+/// instance than `guest_token`. `None` when it matches or is absent.
+fn replaced_guest_refusal(
+    request_id: &str,
+    id: &str,
+    trust: Trust,
+    guest_token: &str,
+    tool: &str,
+    args: &Value,
+) -> Option<Envelope> {
+    let expected = args.get("expected_launch_token").and_then(Value::as_str)?;
+    if expected == guest_token {
+        return None;
+    }
+    Some(art_failure(
+        request_id,
+        Some(id),
+        trust,
+        ErrorCode::SessionNotFound,
+        format!("SESSION_REPLACED: session `{id}` was replaced by a newer guest"),
+        json!({
+            "reason": "SESSION_REPLACED",
+            "tool": tool,
+            "expected_launch_token": expected,
+        }),
+    ))
+}
+
 /// A fresh per-launch identity (SERVELEAK2/F3).
 fn new_launch_token() -> String {
     let mut bytes = [0u8; 8];
@@ -349,7 +377,14 @@ impl ServeEngine {
                 .map(|path| path.display().to_string()),
             has_home: session.has_home(),
             launch_token: Some(held.guest_token.clone()),
-            artifacts_dir: Some(held.artifacts.display().to_string()),
+            // `acos view` runs in its own working directory, so a relative
+            // `ACOS_SERVE_ARTIFACTS` must be resolved here.
+            artifacts_dir: Some(
+                std::path::absolute(&held.artifacts)
+                    .unwrap_or_else(|_| held.artifacts.clone())
+                    .display()
+                    .to_string(),
+            ),
         };
         if let Err(error) = self.live.write(&entry) {
             eprintln!(
@@ -1324,6 +1359,15 @@ impl ServeEngine {
         args: &Value,
     ) -> Envelope {
         let trust = held.trust;
+        // A control op may carry the guest identity its caller validated
+        // (`acos view` does): it must never run on a replacement guest.
+        if tool == "acos_service_ctl" {
+            if let Some(refusal) =
+                replaced_guest_refusal(request_id, id, trust, &held.guest_token, tool, args)
+            {
+                return refusal;
+            }
+        }
         let mut session = held.session.lock().unwrap_or_else(|e| e.into_inner());
         // REL3A: every serve verb starts from the strict observation rule. Serve
         // never asks for a content observation (its tree verbs select
@@ -1479,21 +1523,10 @@ impl ServeEngine {
         args: &Value,
     ) -> Envelope {
         let trust = held.trust;
-        if let Some(expected) = args.get("expected_launch_token").and_then(Value::as_str) {
-            if expected != held.guest_token {
-                return art_failure(
-                    request_id,
-                    Some(id),
-                    trust,
-                    ErrorCode::SessionNotFound,
-                    format!("SESSION_REPLACED: session `{id}` was replaced by a newer guest"),
-                    json!({
-                        "reason": "SESSION_REPLACED",
-                        "tool": tool,
-                        "expected_launch_token": expected,
-                    }),
-                );
-            }
+        if let Some(refusal) =
+            replaced_guest_refusal(request_id, id, trust, &held.guest_token, tool, args)
+        {
+            return refusal;
         }
         let mut session = held.session.lock().unwrap_or_else(|e| e.into_inner());
         if let Some(exit) = session.liveness() {
@@ -5269,8 +5302,20 @@ mod tests {
     }
 
     use super::*;
+
     use acos_protocol::ui::Bounds;
 
+    #[test]
+    fn a_stale_launch_token_is_refused_as_session_replaced() {
+        let refusal = |args: Value| {
+            replaced_guest_refusal("r", "s1", Trust::Trusted, "new", "acos_service_ctl", &args)
+        };
+        assert!(refusal(json!({})).is_none());
+        assert!(refusal(json!({"expected_launch_token": "new"})).is_none());
+        let envelope = refusal(json!({"expected_launch_token": "old"})).expect("refused");
+        let wire = serde_json::to_string(&envelope).expect("serialize");
+        assert!(wire.contains("SESSION_REPLACED"), "{wire}");
+    }
     fn node(id: &str, text: &str, children: Vec<UiNode>) -> UiNode {
         let mut node = UiNode::new("n0", "android.widget.TextView", Bounds::new(0, 0, 10, 10))
             .with_resource_id(id)

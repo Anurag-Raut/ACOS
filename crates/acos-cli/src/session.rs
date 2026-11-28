@@ -1443,7 +1443,14 @@ fn build_pick_file_ctl_args(args: &SessionPickFileArgs) -> Result<Value, String>
                     .unwrap_or_else(|_| path.clone())
             }
         });
-        let mut obj = json!({ "path": abs.display().to_string() });
+        // The daemon takes the path as JSON text. A lossy conversion could
+        // name a different file, so refuse instead.
+        let Some(text) = abs.to_str() else {
+            return Err(format!(
+                "file path {abs:?} is not valid UTF-8; rename or copy the file to a UTF-8 path"
+            ));
+        };
+        let mut obj = json!({ "path": text });
         if let Some(name) = args
             .display_name
             .as_deref()
@@ -1726,6 +1733,24 @@ mod tests {
             json: false,
         };
         assert!(build_pick_file_ctl_args(&conflict).is_err());
+
+        let non_utf8 = SessionPickFileArgs {
+            session: "s_cli".to_string(),
+            path: Some(PathBuf::from(
+                <std::ffi::OsString as std::os::unix::ffi::OsStringExt>::from_vec(
+                    b"/nonexistent-pick-\xff.pdf".to_vec(),
+                ),
+            )),
+            path_flag: None,
+            cancel: false,
+            display_name: None,
+            mime_type: None,
+            writable: false,
+            capture_seq: None,
+            json: false,
+        };
+        let refusal = build_pick_file_ctl_args(&non_utf8).unwrap_err();
+        assert!(refusal.contains("not valid UTF-8"), "{refusal}");
 
         let file = SessionPickFileArgs {
             session: "s_cli".to_string(),

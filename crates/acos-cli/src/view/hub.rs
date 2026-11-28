@@ -670,7 +670,7 @@ impl Hub {
         op: &str,
         args: Value,
     ) -> Result<Value, ServiceCtlError> {
-        let (_entry, socket) = self.resolve_ctl_target(session_id, expected_guest_gen)?;
+        let (entry, socket) = self.resolve_ctl_target(session_id, expected_guest_gen)?;
         let mut conn = DaemonConn::connect(&socket)
             .map_err(|(_code, msg)| ServiceCtlError::Unavailable(msg))?;
         // Deep-link / picker operations may wait up to ~3s for guest ack or
@@ -680,7 +680,7 @@ impl Hub {
             .get_ref()
             .set_read_timeout(Some(Duration::from_secs(15)));
         let req_id = format!("view_ctl_{}", live_registry::now_ms());
-        let daemon_args = json!({
+        let mut daemon_args = json!({
             "base": {
                 "request_id": req_id,
                 "session_id": session_id,
@@ -689,6 +689,11 @@ impl Hub {
             "op": op,
             "args": args,
         });
+        // The daemon re-checks this before dispatch: the id may be replaced
+        // between the check above and the call.
+        if let Some(token) = entry.launch_token.as_deref() {
+            daemon_args["expected_launch_token"] = json!(token);
+        }
         conn.call("acos_service_ctl", daemon_args).map_err(|err| {
             let (code, message, _ambiguous) = err.into_outcome();
             if code == "SESSION_REPLACED" {

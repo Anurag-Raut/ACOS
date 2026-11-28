@@ -298,6 +298,8 @@ fn art_agent_loop_over_the_socket() {
         acos_test_support::require_prereq(false, "art_agent_loop_over_the_socket", "counter.apk or release acos-art missing");
         return;
     }
+    // The daemon refuses a launch path with a `..` component.
+    let apk = apk.canonicalize().expect("canonical counter.apk");
     let daemon = Daemon::start("art-loop", &[]);
     let mut conn = daemon.connect();
     let b = base("s_w50_art_loop");
@@ -337,6 +339,28 @@ fn art_agent_loop_over_the_socket() {
     assert_eq!(asserted["ok"], json!(true), "{asserted:#?}");
     assert_eq!(asserted["result"]["assert"], json!(true));
 
+    // An unmatched deep link is the caller's error, with its marker.
+    let unmatched = conn.call(
+        "acos_service_ctl",
+        json!({"base": b, "module": "intents", "op": "open_url",
+               "args": {"url": "acos-nobody://handles/this"}}),
+    );
+    assert_eq!(
+        unmatched["error"]["code"],
+        json!("INVALID_ARGUMENT"),
+        "{unmatched:#?}"
+    );
+    assert!(unmatched.to_string().contains("START_NOT_FOUND"), "{unmatched:#?}");
+
+    // A control op bound to another guest instance never reaches this one.
+    let stale = conn.call(
+        "acos_service_ctl",
+        json!({"base": b, "module": "intents", "op": "list",
+               "expected_launch_token": "not-this-guest"}),
+    );
+    assert_eq!(stale["ok"], json!(false), "{stale:#?}");
+    assert!(stale.to_string().contains("SESSION_REPLACED"), "{stale:#?}");
+
     // The server-side assert must fail, not pass, on the wrong expectation.
     let refused = conn.call(
         "acos_assert",
@@ -344,7 +368,11 @@ fn art_agent_loop_over_the_socket() {
     );
     assert_eq!(refused["error"]["code"], json!("ASSERTION_FAILED"));
 
-    let shot_path = daemon.dir.join("shot.png");
+    // A screenshot path must lie inside the session's artifacts directory.
+    let artifacts = launch["result"]["artifacts_dir"]
+        .as_str()
+        .expect("artifacts_dir");
+    let shot_path = Path::new(artifacts).join("shot.png");
     let shot = conn.call(
         "acos_observe",
         json!({"base": b, "tree": false, "png": true, "screenshot": shot_path}),
@@ -410,7 +438,8 @@ fn art_agent_loop_over_the_socket() {
 }
 
 fn find_node<'a>(nodes: &'a Value, resource: &str) -> Option<&'a Value> {
-    let array = nodes.as_array()?;
+    // Verb replies wrap the node list: `tree: {compact, nodes: [...]}`.
+    let array = nodes.get("nodes").unwrap_or(nodes).as_array()?;
     for node in array {
         let rid = node
             .get("resource_id")
